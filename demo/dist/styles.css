@@ -567,9 +567,6 @@
   .mb-12 {
     margin-bottom: calc(var(--spacing) * 12);
   }
-  .mb-\[calc\(0\.75rem\+env\(safe-area-inset-bottom\,0px\)\)\] {
-    margin-bottom: calc(0.75rem + env(safe-area-inset-bottom,0px));
-  }
   .-ml-1 {
     margin-left: calc(var(--spacing) * -1);
   }
@@ -797,9 +794,6 @@
   .h-\[3px\] {
     height: 3px;
   }
-  .h-\[100dvh\] {
-    height: 100dvh;
-  }
   .h-\[300px\] {
     height: 300px;
   }
@@ -848,14 +842,8 @@
   .max-h-\[60vh\] {
     max-height: 60vh;
   }
-  .max-h-\[85dvh\] {
-    max-height: 85dvh;
-  }
   .max-h-dvh {
     max-height: 100dvh;
-  }
-  .max-h-none {
-    max-height: none;
   }
   .min-h-0 {
     min-height: 0px;
@@ -1004,9 +992,6 @@
   .w-\[640px\] {
     width: 640px;
   }
-  .w-\[calc\(100\%-1\.5rem\)\] {
-    width: calc(100% - 1.5rem);
-  }
   .w-\[calc\(100\%-2rem\)\] {
     width: calc(100% - 2rem);
   }
@@ -1039,9 +1024,6 @@
   }
   .max-w-\[75\%\] {
     max-width: 75%;
-  }
-  .max-w-\[480px\] {
-    max-width: 480px;
   }
   .max-w-\[calc\(100vw-2rem\)\] {
     max-width: calc(100vw - 2rem);
@@ -1577,10 +1559,6 @@
   .rounded-xl {
     border-radius: var(--radius-xl);
   }
-  .rounded-t-2xl {
-    border-top-left-radius: var(--radius-2xl);
-    border-top-right-radius: var(--radius-2xl);
-  }
   .rounded-l-2xl {
     border-top-left-radius: var(--radius-2xl);
     border-bottom-left-radius: var(--radius-2xl);
@@ -1712,12 +1690,6 @@
   }
   .bg-black {
     background-color: var(--color-black);
-  }
-  .bg-black\/50 {
-    background-color: color-mix(in srgb, #000 50%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(in oklab, var(--color-black) 50%, transparent);
-    }
   }
   .bg-border {
     background-color: var(--color-border);
@@ -2254,9 +2226,6 @@
   .pb-8 {
     padding-bottom: calc(var(--spacing) * 8);
   }
-  .pb-\[env\(safe-area-inset-bottom\,0px\)\] {
-    padding-bottom: env(safe-area-inset-bottom,0px);
-  }
   .pl-0 {
     padding-left: 0px;
   }
@@ -2560,20 +2529,8 @@
     --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, rgb(0 0 0 / 0.25));
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
-  .shadow-\[0_1px_20px_-4px_rgb\(0_0_0\/0\.3\)\,0_0_7px_0_rgb\(0_0_0\/0\.1\)\] {
-    --tw-shadow: 0 1px 20px -4px var(--tw-shadow-color, rgb(0 0 0/0.3)), 0 0 7px 0 var(--tw-shadow-color, rgb(0 0 0/0.1));
-    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
-  }
-  .shadow-\[0_60px_0_0_var\(--color-surface\)\,0_1px_20px_-4px_rgb\(0_0_0\/0\.3\)\,0_0_7px_0_rgb\(0_0_0\/0\.1\)\] {
-    --tw-shadow: 0 60px 0 0 var(--tw-shadow-color, var(--color-surface)), 0 1px 20px -4px var(--tw-shadow-color, rgb(0 0 0/0.3)), 0 0 7px 0 var(--tw-shadow-color, rgb(0 0 0/0.1));
-    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
-  }
   .shadow-\[inset_0_-1px_0_var\(--color-border\)\] {
     --tw-shadow: inset 0 -1px 0 var(--tw-shadow-color, var(--color-border));
-    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
-  }
-  .shadow-\[…\] {
-    --tw-shadow: …;
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
   .shadow-lg {
@@ -2654,11 +2611,6 @@
   }
   .backdrop-blur {
     --tw-backdrop-blur: blur(8px);
-    -webkit-backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
-    backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
-  }
-  .backdrop-blur-sm {
-    --tw-backdrop-blur: blur(var(--blur-sm));
     -webkit-backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
     backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
   }
@@ -2809,6 +2761,24 @@
   .select-none {
     -webkit-user-select: none;
     user-select: none;
+  }
+  .\[--bs-handle-color\:var\(--color-faint\)\] {
+    --bs-handle-color: var(--color-faint);
+  }
+  .\[--bs-handle-height\:0px\] {
+    --bs-handle-height: 0px;
+  }
+  .\[--bs-handle-width\:0px\] {
+    --bs-handle-width: 0px;
+  }
+  .\[--bs-overlay-background\:rgb\(0_0_0_\/_0\.5\)\] {
+    --bs-overlay-background: rgb(0 0 0 / 0.5);
+  }
+  .\[--bs-overlay-blur\:8px\] {
+    --bs-overlay-blur: 8px;
+  }
+  .\[--bs-panel-background\:var\(--color-surface\)\] {
+    --bs-panel-background: var(--color-surface);
   }
   .\[--sheet-handle-color\:var\(--color-faint\)\] {
     --sheet-handle-color: var(--color-faint);
@@ -3503,9 +3473,6 @@
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-black) 50%, transparent);
     }
-  }
-  .\[\&\:\:backdrop\]\:bg-transparent::backdrop {
-    background-color: transparent;
   }
   .\[\&\:\:backdrop\]\:backdrop-blur-sm::backdrop {
     --tw-backdrop-blur: blur(var(--blur-sm));
@@ -4217,6 +4184,162 @@
       --sheet-morph-duration: 0s;
       --sheet-trigger-return-duration: 0s;
     }
+  }
+  :root {
+    --bs-panel-background: white;
+    --bs-panel-max-height: 85vh;
+    --bs-panel-border-radius: 25px;
+    --bs-panel-inset-x: 12px;
+    --bs-panel-inset-bottom: 12px;
+    --bs-panel-bleed: 60px;
+    --bs-panel-hidden-offset: 20px;
+    --bs-panel-box-shadow: 0 1px 20px -4px #0000004d, 0 0 7px 0 #0000001a;
+    --bs-handle-color: #bbb;
+    --bs-handle-width: 50px;
+    --bs-handle-height: 5px;
+    --bs-content-padding: 20px;
+    --bs-content-padding-block: 0;
+    --bs-transition-duration: .4s;
+    --bs-transition-timing: cubic-bezier(.32, .72, 0, 1);
+    --bs-snap-duration: .4s;
+    --bs-snap-timing: cubic-bezier(.2, 1.25, .3, 1);
+    --bs-overlay-background: #00000080;
+    --bs-overlay-blur: 5px;
+  }
+  dialog-panel:has(bottom-sheet) > dialog {
+    background: var(--bs-panel-background);
+    box-sizing: border-box;
+    border-top-left-radius: var(--bs-panel-border-radius);
+    border-top-right-radius: var(--bs-panel-border-radius);
+    width: 100%;
+    max-width: 100%;
+    max-height: var(--bs-panel-max-height);
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 var(--bs-panel-bleed) 0 0 var(--bs-panel-background),	var(--bs-panel-box-shadow);
+    will-change: transform;
+    border: none;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+    flex-direction: column;
+    margin: 0;
+    transition: none;
+    position: fixed;
+    inset: auto 0 0;
+    overflow: hidden;
+  }
+  dialog-panel:has(bottom-sheet) > dialog[open] {
+    display: flex;
+  }
+  dialog-panel:has(bottom-sheet-footer) > dialog {
+    padding-bottom: 0;
+  }
+  dialog-panel[state="hidden"]:has(bottom-sheet) > dialog {
+    opacity: 1;
+    transform: translate3d(0, calc(100% + var(--bs-panel-hidden-offset)), 0);
+  }
+  dialog-panel[state="showing"]:has(bottom-sheet) > dialog {
+    opacity: 1;
+    transform: translate3d(0, calc(100% + var(--bs-panel-hidden-offset)), 0);
+  }
+  dialog-panel[state="shown"]:has(bottom-sheet) > dialog {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  dialog-panel[state="hiding"]:has(bottom-sheet) > dialog {
+    opacity: 1;
+    transform: translate3d(0, calc(100% + var(--bs-panel-hidden-offset)), 0);
+    transition: transform var(--bs-transition-duration) var(--bs-transition-timing);
+  }
+  dialog-panel:has(bottom-sheet) > dialog.transitioning {
+    transition: transform var(--bs-transition-duration) var(--bs-transition-timing),	height var(--bs-transition-duration) var(--bs-transition-timing);
+  }
+  dialog-panel:has(bottom-sheet) > dialog.transitioning.snapping {
+    transition: transform var(--bs-snap-duration) var(--bs-snap-timing),	height var(--bs-snap-duration) var(--bs-snap-timing);
+  }
+  dialog-panel:has(bottom-sheet[snap-points]) > dialog {
+    max-height: none;
+  }
+  dialog-panel:has(bottom-sheet[snap-points]) > dialog bottom-sheet {
+    max-height: none;
+    height: 100%;
+  }
+  dialog-panel:has(bottom-sheet[inset]) > dialog {
+    left: var(--bs-panel-inset-x);
+    right: var(--bs-panel-inset-x);
+    border-radius: var(--bs-panel-border-radius);
+    width: auto;
+    max-width: none;
+    margin-bottom: calc(var(--bs-panel-inset-bottom) + env(safe-area-inset-bottom, 0px));
+    box-shadow: var(--bs-panel-box-shadow);
+    padding-bottom: 0;
+  }
+  dialog-panel:has(bottom-sheet[inset]) bottom-sheet-footer {
+    padding-bottom: var(--bs-footer-padding, var(--bs-content-padding));
+  }
+  :is(dialog-panel[state="hidden"]:has(bottom-sheet[inset]) > dialog, dialog-panel[state="showing"]:has(bottom-sheet[inset]) > dialog, dialog-panel[state="hiding"]:has(bottom-sheet[inset]) > dialog) {
+    transform: translate3d(0,	calc(100% + var(--bs-panel-inset-bottom) + env(safe-area-inset-bottom, 0px) +	var(--bs-panel-hidden-offset)),	0);
+  }
+  dialog-panel:has(bottom-sheet) > dialog-backdrop {
+    display: none;
+  }
+  dialog-panel:has(bottom-sheet) > dialog::backdrop {
+    background: var(--bs-overlay-background);
+    -webkit-backdrop-filter: blur(var(--bs-overlay-blur));
+    backdrop-filter: blur(var(--bs-overlay-blur));
+    opacity: 0;
+  }
+  dialog-panel[state="shown"]:has(bottom-sheet) > dialog::backdrop {
+    opacity: 1;
+    transition: opacity var(--bs-transition-duration) var(--bs-transition-timing);
+  }
+  dialog-panel[state="hiding"]:has(bottom-sheet) > dialog::backdrop {
+    opacity: 0;
+    transition: opacity var(--bs-transition-duration) var(--bs-transition-timing);
+  }
+  bottom-sheet {
+    max-height: var(--bs-panel-max-height);
+    flex-direction: column;
+    display: flex;
+    overflow: hidden;
+  }
+  bottom-sheet-header {
+    padding: 0 var(--bs-content-padding);
+    touch-action: none;
+    flex-shrink: 0;
+    position: relative;
+  }
+  bottom-sheet-header:before {
+    content: "";
+    background: var(--bs-handle-color);
+    height: var(--bs-handle-height);
+    width: var(--bs-handle-width);
+    border-radius: var(--bs-handle-height);
+    display: block;
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  bottom-sheet-footer {
+    box-sizing: border-box;
+    padding: var(--bs-footer-padding, var(--bs-content-padding));
+    padding-bottom: calc(var(--bs-footer-padding, var(--bs-content-padding)) + env(safe-area-inset-bottom, 0px));
+    background: var(--bs-footer-background, transparent);
+    touch-action: none;
+    flex-shrink: 0;
+    display: block;
+  }
+  bottom-sheet-content {
+    box-sizing: border-box;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    padding: var(--bs-content-padding-block, 0) var(--bs-content-padding);
+    flex: 1;
+    min-height: 0;
+    display: block;
+    overflow-y: scroll;
   }
 }
 :root {

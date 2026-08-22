@@ -84,7 +84,7 @@ export const SECTIONS = [
 		{ name: "alert-dialog", title: "Alert Dialog", path: "/components/alert-dialog",
 			description: "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — no backdrop dismiss, no close X, Escape cancels, initial focus on Cancel" },
 		{ name: "bottom-sheet", title: "Bottom Sheet", path: "/components/bottom-sheet",
-			description: "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state" },
+			description: "Native-dialog bottom sheet dragged, flicked and dismissed with a finger, with optional height snap points that settle on a velocity-aware spring, a pinned footer, inset mode and a dismissal-tracking scrim; wraps the @magic-spells/bottom-sheet web component rather than porting it" },
 		{ name: "command", title: "Command", path: "/components/command",
 			description: "Command palette — filtered, grouped, keyboard-driven quick actions in a modal" },
 		{ name: "context-menu", title: "Context Menu", path: "/components/context-menu",

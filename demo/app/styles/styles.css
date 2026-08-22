@@ -29,6 +29,15 @@
 @import "@magic-spells/sheet/css" layer(components);
 
 /*
+ * bottom-sheet is the third wrapper over the same family and shares the
+ * dialog-panel transport imported just above — one copy, imported once. Its own
+ * stylesheet carries the panel geometry, the grabber, the snap-point heights
+ * and the scrim, so it goes after dialog-panel for the same reason sheet.css
+ * does.
+ */
+@import "@magic-spells/bottom-sheet/css" layer(components);
+
+/*
  * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
  * and JS so the utility classes they use are generated. Paths are relative to
  * this stylesheet (app/styles/), so "../" is the app root.

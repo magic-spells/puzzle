@@ -1681,8 +1681,8 @@ var init_frame_engine_esm = __esm({
             }
             let c3 = r[e3.includes(":") ? e3.substring(e3.indexOf(":") + 1) : e3];
             if (c3) for (let e4 of s3) e4.value = Math.min(c3[1], Math.max(c3[0], e4.value));
-            let f2 = { args: s3 };
-            (u3.color || d.color) && (f2.color = this.lerpColor(u3.color || i, d.color || i, l)), a2[e3] = f2;
+            let f3 = { args: s3 };
+            (u3.color || d.color) && (f3.color = this.lerpColor(u3.color || i, d.color || i, l)), a2[e3] = f3;
             continue;
           }
           if (u3 && "value" in u3) {
@@ -1798,7 +1798,7 @@ function lerpShadow(fromShadow, toShadow, p) {
   });
   const start = fromShadow || zeroed(toShadow);
   const end = toShadow || zeroed(fromShadow);
-  const lerp = (a2, b3) => a2 + (b3 - a2) * p;
+  const lerp = (a2, b4) => a2 + (b4 - a2) * p;
   return `${round(lerp(start.x, end.x))}px ${round(lerp(start.y, end.y))}px ${round(Math.max(0, lerp(start.blur, end.blur)))}px ${round(lerp(start.spread, end.spread))}px rgba(${Math.round(clamp(lerp(start.color.red, end.color.red), 0, 255))}, ${Math.round(clamp(lerp(start.color.green, end.color.green), 0, 255))}, ${Math.round(clamp(lerp(start.color.blue, end.color.blue), 0, 255))}, ${round(clamp(lerp(start.color.alpha, end.color.alpha), 0, 1))})`;
 }
 var EventEmitter, TRAVEL, SETTLE_POSITION_EPSILON, SETTLE_DELTA_EPSILON, DEFAULT_STYLE_PROPERTIES, BORDER_SIDES, CLAMP_POSITIVE, MANAGED_PROPERTIES, COLOR_PATTERN, MorphEngine;
@@ -3848,12 +3848,12 @@ var require_core = __commonJS({
           (name) => _highlight(name, code2, false)
         );
         results.unshift(plaintext);
-        const sorted = results.sort((a2, b3) => {
-          if (a2.relevance !== b3.relevance) return b3.relevance - a2.relevance;
-          if (a2.language && b3.language) {
-            if (getLanguage(a2.language).supersetOf === b3.language) {
+        const sorted = results.sort((a2, b4) => {
+          if (a2.relevance !== b4.relevance) return b4.relevance - a2.relevance;
+          if (a2.language && b4.language) {
+            if (getLanguage(a2.language).supersetOf === b4.language) {
               return 1;
-            } else if (getLanguage(b3.language).supersetOf === a2.language) {
+            } else if (getLanguage(b4.language).supersetOf === a2.language) {
               return -1;
             }
           }
@@ -4075,6 +4075,1398 @@ var require_core = __commonJS({
     module.exports = highlight2;
     highlight2.HighlightJS = highlight2;
     highlight2.default = highlight2;
+  }
+});
+
+// node_modules/@magic-spells/dialog-panel/dist/dialog-panel.esm.js
+var dialog_panel_esm_exports = {};
+__export(dialog_panel_esm_exports, {
+  DialogBackdrop: () => DialogBackdrop,
+  DialogPanel: () => DialogPanel
+});
+var DialogPanel, DialogBackdrop;
+var init_dialog_panel_esm = __esm({
+  "node_modules/@magic-spells/dialog-panel/dist/dialog-panel.esm.js"() {
+    DialogPanel = class _DialogPanel extends HTMLElement {
+      // Private fields
+      #state = "hidden";
+      #triggerElement = null;
+      #dialog = null;
+      #result = null;
+      #hideTriggerElement = null;
+      #morphEngine = null;
+      #morphListenersAttached = false;
+      // Event handler references for cleanup
+      #handlers = {
+        click: null,
+        dialogClick: null,
+        cancel: null,
+        close: null,
+        morphReveal: null,
+        morphShown: null,
+        morphHidden: null,
+        morphStop: null
+      };
+      // Animation cleanup references
+      #pendingRAF = null;
+      #pendingTimeout = null;
+      // Fallback timeout for transitionend (in ms)
+      static TRANSITION_FALLBACK_TIMEOUT = 700;
+      connectedCallback() {
+        const _2 = this;
+        _2.#dialog = _2.querySelector("dialog");
+        if (!_2.#dialog) {
+          console.warn(
+            "DialogPanel: No <dialog> element found inside <dialog-panel>"
+          );
+          return;
+        }
+        if (!_2.querySelector("dialog-backdrop")) {
+          const backdrop = document.createElement("dialog-backdrop");
+          _2.insertBefore(backdrop, _2.firstChild);
+        }
+        _2.#setState("hidden");
+        _2.#bindEvents();
+        _2.#wireMorphEngine();
+      }
+      disconnectedCallback() {
+        const _2 = this;
+        if (_2.#pendingRAF) {
+          cancelAnimationFrame(_2.#pendingRAF);
+          _2.#pendingRAF = null;
+        }
+        if (_2.#pendingTimeout) {
+          clearTimeout(_2.#pendingTimeout);
+          _2.#pendingTimeout = null;
+        }
+        _2.#unwireMorphEngine();
+        if (_2.#handlers.click) {
+          _2.removeEventListener("click", _2.#handlers.click);
+        }
+        if (_2.#dialog) {
+          if (_2.#handlers.dialogClick) {
+            _2.#dialog.removeEventListener(
+              "click",
+              _2.#handlers.dialogClick
+            );
+          }
+          if (_2.#handlers.cancel) {
+            _2.#dialog.removeEventListener("cancel", _2.#handlers.cancel);
+          }
+          if (_2.#handlers.close) {
+            _2.#dialog.removeEventListener("close", _2.#handlers.close);
+          }
+        }
+      }
+      /**
+       * Bind event listeners for close buttons, backdrop, and escape key
+       * @private
+       */
+      #bindEvents() {
+        const _2 = this;
+        _2.#handlers.click = (e2) => {
+          const trigger = e2.target.closest("[data-action-hide-dialog]");
+          if (trigger) {
+            e2.stopPropagation();
+            _2.hide(trigger);
+          }
+        };
+        _2.addEventListener("click", _2.#handlers.click);
+        _2.#handlers.dialogClick = (e2) => {
+          const rect = _2.#dialog.getBoundingClientRect();
+          const clickedOutside = e2.clientX < rect.left || e2.clientX > rect.right || e2.clientY < rect.top || e2.clientY > rect.bottom;
+          if (clickedOutside) {
+            e2.stopPropagation();
+            _2.hide();
+          }
+        };
+        _2.#dialog.addEventListener("click", _2.#handlers.dialogClick);
+        _2.#handlers.cancel = (e2) => {
+          e2.preventDefault();
+          e2.stopPropagation();
+          _2.hide();
+        };
+        _2.#dialog.addEventListener("cancel", _2.#handlers.cancel);
+        _2.#handlers.close = () => {
+          const forceClosedDirect = (_2.#state === "showing" || _2.#state === "shown") && _2.#morphEngine?.animatesDialog && !_2.#dialog.open;
+          if (forceClosedDirect) {
+            _2.#result = _2.#dialog.returnValue || _2.#result;
+            _2.#morphEngine.stop();
+            if (_2.#state !== "hidden") _2.#finalizeHidden();
+            return;
+          }
+          const forceClosedShown = _2.#state === "shown" && !_2.#dialog.open;
+          const forceClosedShowing = _2.#state === "showing" && _2.#pendingRAF !== null && !_2.#dialog.open;
+          if (!forceClosedShown && !forceClosedShowing) return;
+          if (_2.#pendingRAF) {
+            cancelAnimationFrame(_2.#pendingRAF);
+            _2.#pendingRAF = null;
+          }
+          if (_2.#morphEngine?.state === "shown") {
+            _2.hide();
+            return;
+          }
+          _2.#result = _2.#dialog.returnValue || _2.#result;
+          _2.#finalizeHidden();
+        };
+        _2.#dialog.addEventListener("close", _2.#handlers.close);
+      }
+      /**
+       * Wire morph engine lifecycle listeners
+       * @private
+       */
+      #wireMorphEngine() {
+        const _2 = this;
+        if (!_2.#morphEngine || _2.#morphListenersAttached) return;
+        if (!_2.#handlers.morphShown) {
+          _2.#handlers.morphReveal = _2.#handleMorphReveal.bind(_2);
+          _2.#handlers.morphShown = _2.#handleMorphShown.bind(_2);
+          _2.#handlers.morphHidden = _2.#handleMorphHidden.bind(_2);
+          _2.#handlers.morphStop = _2.#handleMorphStop.bind(_2);
+        }
+        _2.#morphEngine.on("reveal", _2.#handlers.morphReveal);
+        _2.#morphEngine.on("shown", _2.#handlers.morphShown);
+        _2.#morphEngine.on("hidden", _2.#handlers.morphHidden);
+        _2.#morphEngine.on("stop", _2.#handlers.morphStop);
+        _2.#morphListenersAttached = true;
+      }
+      /**
+       * Promote a proxy engine's target at its reveal point — the target is
+       * still at opacity 0 and the scrim only partially faded, so the top-layer
+       * insertion (dialog + ::backdrop) lands over the least visible glass.
+       * Promoting at settle instead inserts above a fully visible
+       * backdrop-filter layer, which the compositor re-rasterizes — a visible
+       * shimmer on GPU-heavy pages.
+       * @param {Object} detail - Reveal event detail
+       * @private
+       */
+      #handleMorphReveal(detail) {
+        const _2 = this;
+        if (_2.#state === "showing" && detail?.to === _2.#dialog && !_2.#dialog.open) {
+          _2.#dialog.showModal();
+        }
+      }
+      /**
+       * Unwire morph engine lifecycle listeners
+       * @private
+       */
+      #unwireMorphEngine() {
+        const _2 = this;
+        if (!_2.#morphEngine || !_2.#morphListenersAttached) return;
+        _2.#morphEngine.off("reveal", _2.#handlers.morphReveal);
+        _2.#morphEngine.off("shown", _2.#handlers.morphShown);
+        _2.#morphEngine.off("hidden", _2.#handlers.morphHidden);
+        _2.#morphEngine.off("stop", _2.#handlers.morphStop);
+        _2.#morphListenersAttached = false;
+      }
+      /**
+       * Promote the settled morph target into the dialog top layer
+       * @private
+       */
+      #handleMorphShown() {
+        const _2 = this;
+        if (!_2.#dialog.open) _2.#dialog.showModal();
+        _2.#setState("shown");
+        _2.#emit("shown");
+      }
+      /**
+       * Finalize a settled morph hide
+       * @private
+       */
+      #handleMorphHidden() {
+        this.#finalizeHidden();
+      }
+      /**
+       * Finalize an interrupted morph as hidden
+       * @private
+       */
+      #handleMorphStop() {
+        this.#finalizeHidden();
+      }
+      /**
+       * Close out to the hidden state without an exit animation — shared by a
+       * settled or interrupted morph and by the force-close repair, both of
+       * which arrive with nothing left to animate
+       * @private
+       */
+      #finalizeHidden() {
+        const _2 = this;
+        if (_2.#dialog.open) _2.#dialog.close();
+        _2.#setState("hidden");
+        _2.#emit("hidden", {
+          result: _2.#result,
+          triggerElement: _2.#hideTriggerElement
+        });
+        if (_2.#triggerElement) _2.#triggerElement.focus();
+        _2.#triggerElement = null;
+        _2.#hideTriggerElement = null;
+        _2.#result = null;
+      }
+      /**
+       * Show the dialog with animation
+       * @param {HTMLElement} [triggerEl=null] - The element that triggered the show
+       * @returns {boolean} False if show was prevented via beforeShow event
+       */
+      show(triggerEl = null) {
+        const _2 = this;
+        const engine = _2.#morphEngine;
+        const direct = !!engine?.animatesDialog;
+        if (_2.#state === "showing" || _2.#state === "shown") return true;
+        const reversingMorph = _2.#state === "hiding" && engine?.state === "hiding";
+        if (_2.#state === "hiding" && !reversingMorph) return false;
+        if (!reversingMorph) _2.#triggerElement = triggerEl || null;
+        if (!_2.#emit("beforeShow", { cancelable: true })) return false;
+        if (reversingMorph) {
+          _2.#hideTriggerElement = null;
+          _2.#result = null;
+        }
+        _2.#setState("showing");
+        if (engine && (direct || triggerEl || reversingMorph)) {
+          engine.show({
+            from: _2.#triggerElement,
+            to: _2.#dialog,
+            display: _2.getAttribute("morph-display") || "block"
+          });
+          if (direct && !_2.#dialog.open) {
+            _2.#dialog.showModal();
+          }
+          if (direct && engine.state === "shown" && _2.#state === "showing") {
+            _2.#handleMorphShown();
+          }
+          return true;
+        }
+        _2.#dialog.showModal();
+        _2.#pendingRAF = requestAnimationFrame(() => {
+          _2.#pendingRAF = requestAnimationFrame(() => {
+            _2.#pendingRAF = null;
+            _2.#setState("shown");
+            _2.#waitForTransition(() => {
+              _2.#emit("shown");
+            });
+          });
+        });
+        return true;
+      }
+      /**
+       * Hide the dialog with animation
+       * @param {HTMLElement} [triggerEl=null] - The element that triggered the hide
+       * @returns {boolean} False if hide was prevented via beforeHide event
+       */
+      hide(triggerEl = null) {
+        const _2 = this;
+        const engine = _2.#morphEngine;
+        const direct = !!engine?.animatesDialog;
+        if (_2.#state === "hiding" || _2.#state === "hidden") return true;
+        const reversingMorph = _2.#state === "showing" && engine?.state === "showing";
+        if (_2.#state === "showing" && !reversingMorph && !direct) {
+          return false;
+        }
+        _2.#result = triggerEl?.dataset?.result ?? null;
+        if (!_2.#emit("beforeHide", {
+          cancelable: true,
+          result: _2.#result,
+          triggerElement: triggerEl
+        })) {
+          return false;
+        }
+        if (direct) {
+          _2.#hideTriggerElement = triggerEl;
+          if (engine.state !== "showing" && engine.state !== "shown") {
+            _2.#finalizeHidden();
+            return true;
+          }
+          engine.hide();
+          _2.#setState("hiding");
+          return true;
+        }
+        if (reversingMorph || engine?.state === "shown") {
+          _2.#hideTriggerElement = triggerEl;
+          if (_2.#dialog.open) _2.#dialog.close();
+          engine.hide();
+          _2.#setState("hiding");
+          return true;
+        }
+        _2.#setState("hiding");
+        _2.#waitForTransition(() => {
+          _2.#dialog.close();
+          _2.#setState("hidden");
+          _2.#emit("hidden", {
+            result: _2.#result,
+            triggerElement: triggerEl
+          });
+          if (_2.#triggerElement) _2.#triggerElement.focus();
+          _2.#triggerElement = null;
+          _2.#result = null;
+        });
+        return true;
+      }
+      /**
+       * Wait for CSS transition to complete with fallback timeout
+       * @param {Function} callback - Called when transition completes
+       * @private
+       */
+      #waitForTransition(callback) {
+        const _2 = this;
+        let called = false;
+        let timerId = null;
+        const done = () => {
+          if (called) return;
+          called = true;
+          _2.#dialog.removeEventListener("transitionend", onTransitionEnd);
+          clearTimeout(timerId);
+          if (_2.#pendingTimeout === timerId) _2.#pendingTimeout = null;
+          callback();
+        };
+        const onTransitionEnd = (e2) => {
+          if (e2.target === _2.#dialog) done();
+        };
+        _2.#dialog.addEventListener("transitionend", onTransitionEnd);
+        timerId = setTimeout(done, _DialogPanel.TRANSITION_FALLBACK_TIMEOUT);
+        _2.#pendingTimeout = timerId;
+      }
+      /**
+       * Set the component state
+       * @param {string} newState - The new state
+       * @private
+       */
+      #setState(newState) {
+        this.#state = newState;
+        this.setAttribute("state", newState);
+      }
+      /**
+       * Emit a custom event
+       * @param {string} name - Event name
+       * @param {Object} options - Event options
+       * @returns {boolean} False if event was cancelled
+       * @private
+       */
+      #emit(name, options = {}) {
+        const _2 = this;
+        const { cancelable = false, ...detail } = options;
+        const event = new CustomEvent(name, {
+          bubbles: true,
+          composed: true,
+          cancelable,
+          detail: {
+            triggerElement: _2.#triggerElement,
+            result: _2.#result,
+            state: _2.#state,
+            ...detail
+          }
+        });
+        return _2.dispatchEvent(event);
+      }
+      /**
+       * Optional morph transition transport
+       * @returns {Object|null} The attached morph engine
+       */
+      get morphEngine() {
+        return this.#morphEngine;
+      }
+      /**
+       * Attach or remove a duck-typed morph transition engine
+       * @param {Object|null} engine - Engine with show, hide, state, on, and off
+       */
+      set morphEngine(engine) {
+        const _2 = this;
+        if (_2.#morphEngine === engine) return;
+        if (_2.#morphEngine && _2.#state !== "hidden") {
+          _2.#morphEngine.stop();
+          if (_2.#state !== "hidden") _2.#finalizeHidden();
+        }
+        _2.#unwireMorphEngine();
+        _2.#morphEngine = engine || null;
+        if (_2.#morphEngine) {
+          _2.setAttribute("morph", "");
+          _2.#wireMorphEngine();
+        } else {
+          _2.removeAttribute("morph");
+        }
+      }
+      // Read-only properties
+      get state() {
+        return this.#state;
+      }
+      get dialog() {
+        return this.#dialog;
+      }
+      get isOpen() {
+        return this.#state === "showing" || this.#state === "shown";
+      }
+      get triggerElement() {
+        return this.#triggerElement;
+      }
+    };
+    DialogBackdrop = class extends HTMLElement {
+      #panel = null;
+      #handlers = {
+        click: null
+      };
+      connectedCallback() {
+        const _2 = this;
+        _2.#panel = _2.closest("dialog-panel");
+        if (!_2.#panel) {
+          console.warn(
+            "DialogBackdrop: Must be inside a <dialog-panel> element"
+          );
+          return;
+        }
+        _2.#handlers.click = () => {
+          _2.#panel.hide();
+        };
+        _2.addEventListener("click", _2.#handlers.click);
+      }
+      disconnectedCallback() {
+        const _2 = this;
+        if (_2.#handlers.click) {
+          _2.removeEventListener("click", _2.#handlers.click);
+        }
+      }
+    };
+    if (!customElements.get("dialog-backdrop")) {
+      customElements.define("dialog-backdrop", DialogBackdrop);
+    }
+    if (!customElements.get("dialog-panel")) {
+      customElements.define("dialog-panel", DialogPanel);
+    }
+  }
+});
+
+// node_modules/@magic-spells/bottom-sheet/dist/bottom-sheet.esm.js
+var bottom_sheet_esm_exports = {};
+__export(bottom_sheet_esm_exports, {
+  BottomSheet: () => BottomSheet,
+  BottomSheetContent: () => BottomSheetContent,
+  BottomSheetFooter: () => BottomSheetFooter,
+  BottomSheetHeader: () => BottomSheetHeader
+});
+var f2, b2, VelocityTracker, SLOP, DragGesture, parseSnapPoints, resolveSnapTarget, FRAME_MS, VELOCITY_BOOST, BottomSheet, BottomSheetContent, BottomSheetHeader, BottomSheetFooter;
+var init_bottom_sheet_esm = __esm({
+  "node_modules/@magic-spells/bottom-sheet/dist/bottom-sheet.esm.js"() {
+    f2 = class {
+      #t;
+      constructor() {
+        this.#t = /* @__PURE__ */ new Map();
+      }
+      /**
+      * Binds a listener to an event.
+      * @param {string} event - The event to bind the listener to.
+      * @param {Function} listener - The listener function to bind.
+      * @returns {EventEmitter} The current instance for chaining.
+      * @throws {TypeError} If the listener is not a function.
+      */
+      on(t2, i3) {
+        if (typeof i3 != "function") throw new TypeError("Listener must be a function");
+        const s2 = this.#t.get(t2) || [];
+        return s2.includes(i3) || s2.push(i3), this.#t.set(t2, s2), this;
+      }
+      /**
+      * Unbinds a listener from an event.
+      * @param {string} event - The event to unbind the listener from.
+      * @param {Function} listener - The listener function to unbind.
+      * @returns {EventEmitter} The current instance for chaining.
+      */
+      off(t2, i3) {
+        const s2 = this.#t.get(t2);
+        if (!s2) return this;
+        const e2 = s2.indexOf(i3);
+        return e2 !== -1 && (s2.splice(e2, 1), s2.length === 0 ? this.#t.delete(t2) : this.#t.set(t2, s2)), this;
+      }
+      /**
+      * Triggers an event and calls all bound listeners.
+      * @param {string} event - The event to trigger.
+      * @param {...*} args - Arguments to pass to the listener functions.
+      * @returns {boolean} True if the event had listeners, false otherwise.
+      */
+      emit(t2, ...i3) {
+        const s2 = this.#t.get(t2);
+        if (!s2 || s2.length === 0) return false;
+        const e2 = s2.slice();
+        for (let n2 = 0, r2 = e2.length; n2 < r2; ++n2) try {
+          e2[n2].apply(this, i3);
+        } catch (h2) {
+          console.error(`Error in listener for event '${t2}':`, h2);
+        }
+        return true;
+      }
+      /**
+      * Removes all listeners for a specific event or all events.
+      * @param {string} [event] - The event to remove listeners from. If not provided, removes all listeners.
+      * @returns {EventEmitter} The current instance for chaining.
+      */
+      removeAllListeners(t2) {
+        return t2 ? this.#t.delete(t2) : this.#t.clear(), this;
+      }
+    };
+    b2 = class extends f2 {
+      #t;
+      #m;
+      #o;
+      #n;
+      #s;
+      #e;
+      #r;
+      #h;
+      #i;
+      /**
+      * Creates an instance of PhysicsEngine.
+      * @param {number} [attraction=0.026] - The attraction value for physics-based animation (0 < attraction < 1).
+      * @param {number} [friction=0.28] - The friction value for physics-based animation (0 < friction < 1).
+      */
+      constructor({ attraction: t2 = 0.026, friction: i3 = 0.28 } = {}) {
+        if (super(), !Number.isFinite(t2) || t2 <= 0 || t2 >= 1) throw new Error("Attraction must be a number between 0 and 1 (exclusive).");
+        if (!Number.isFinite(i3) || i3 <= 0 || i3 >= 1) throw new Error("Friction must be a number between 0 and 1 (exclusive).");
+        this.#t = t2, this.#m = i3, this.#o = 1 - i3, this.#n = 0, this.#s = 0, this.#e = 0, this.isAnimating = false, this.#r = null, this.#h = 0, this.#i = null;
+      }
+      /**
+      * Animates from a start value to an end value.
+      * @param {number} startValue - The starting value.
+      * @param {number} endValue - The target value.
+      * @param {number} [velocity=0] - Initial velocity.
+      * @returns {Promise} Resolves when animation completes or is stopped.
+      */
+      animateTo(t2, i3, s2 = 0) {
+        if (!Number.isFinite(t2)) throw new Error("startValue must be a finite number.");
+        if (!Number.isFinite(i3)) throw new Error("endValue must be a finite number.");
+        if (!Number.isFinite(s2)) throw new Error("velocity must be a finite number.");
+        if (this.isAnimating && this.#u(), t2 === i3 && s2 === 0) return this.emit("change", {
+          position: i3,
+          progress: 1
+        }), this.emit("complete", {
+          position: i3,
+          progress: 1
+        }), Promise.resolve();
+        this.#s = t2, this.#e = i3, this.#n = s2, this.isAnimating = true, this.#r = null;
+        const e2 = ++this.#h;
+        return new Promise((n2) => {
+          this.#i = n2;
+          const r2 = (h2) => {
+            if (e2 !== this.#h || !this.isAnimating) return;
+            if (this.#r === null) {
+              this.#r = h2, requestAnimationFrame(r2);
+              return;
+            }
+            const o2 = Math.min(h2 - this.#r, 64) / 16.66;
+            this.#r = h2;
+            const l = (this.#e - this.#s) * this.#t;
+            this.#n += l * o2, this.#n *= Math.pow(this.#o, o2), this.#s += this.#n * o2;
+            const m2 = this.#e - t2;
+            let u3 = 0;
+            if (m2 !== 0 && (u3 = (this.#s - t2) / m2), this.emit("change", {
+              position: this.#s,
+              progress: u3
+            }), Math.abs(this.#s - this.#e) < 0.01 && Math.abs(this.#n) < 0.01) {
+              this.isAnimating = false;
+              const c2 = this.#i;
+              this.#i = null, this.emit("change", {
+                position: this.#e,
+                progress: 1
+              }), this.emit("complete", {
+                position: this.#e,
+                progress: 1
+              }), c2();
+              return;
+            }
+            requestAnimationFrame(r2);
+          };
+          requestAnimationFrame(r2);
+        });
+      }
+      /**
+      * Internal stop — resolves Promise without emitting 'stop'.
+      * Used when a new animateTo supersedes the current one.
+      */
+      #u() {
+        this.isAnimating = false, this.#i && (this.#i(), this.#i = null);
+      }
+      /**
+      * Stops the ongoing animation.
+      * Emits 'stop' event and resolves the pending Promise.
+      */
+      stop() {
+        if (!this.isAnimating) return;
+        this.isAnimating = false, this.#h++;
+        const t2 = this.#i;
+        this.#i = null, this.emit("stop", { position: this.#s }), t2 && t2();
+      }
+      /**
+      * Sets the attraction value
+      * @param {number} attraction - The attraction value for physics-based animation (0 < attraction < 1).
+      */
+      setAttraction(t2) {
+        if (!Number.isFinite(t2) || t2 <= 0 || t2 >= 1) throw new Error("Attraction must be a number between 0 and 1 (exclusive).");
+        this.#t = t2;
+      }
+      /**
+      * Sets the friction value
+      * @param {number} friction - The friction value for physics-based animation (0 < friction < 1).
+      */
+      setFriction(t2) {
+        if (!Number.isFinite(t2) || t2 <= 0 || t2 >= 1) throw new Error("Friction must be a number between 0 and 1 (exclusive).");
+        this.#m = t2, this.#o = 1 - t2;
+      }
+    };
+    VelocityTracker = class {
+      #samples = [];
+      #windowMs;
+      constructor(windowMs = 100) {
+        this.#windowMs = windowMs;
+      }
+      add(y2, t2) {
+        const _2 = this;
+        _2.#samples.push({
+          y: y2,
+          t: t2
+        });
+        const cutoff = t2 - _2.#windowMs;
+        while (_2.#samples.length > 2 && _2.#samples[0].t < cutoff) _2.#samples.shift();
+      }
+      get velocity() {
+        const samples = this.#samples;
+        if (samples.length < 2) return 0;
+        const last = samples[samples.length - 1];
+        let direction = 0;
+        let start = samples.length - 1;
+        while (start > 0) {
+          const step = Math.sign(samples[start].y - samples[start - 1].y);
+          if (step !== 0) {
+            if (direction === 0) direction = step;
+            else if (step !== direction) break;
+          }
+          start--;
+        }
+        const first2 = samples[start];
+        const deltaTime = last.t - first2.t;
+        return deltaTime === 0 ? 0 : (last.y - first2.y) / deltaTime;
+      }
+      reset() {
+        this.#samples = [];
+      }
+    };
+    SLOP = 5;
+    DragGesture = class {
+      #active = false;
+      #captured = false;
+      #el;
+      #handlers;
+      #onStart;
+      #onMove;
+      #onEnd;
+      #pointerId = null;
+      #startY = 0;
+      #lastY = 0;
+      #startTime = 0;
+      #tracker = new VelocityTracker();
+      constructor(el, { onStart, onMove, onEnd } = {}) {
+        const _2 = this;
+        _2.#el = el;
+        _2.#onStart = onStart;
+        _2.#onMove = onMove;
+        _2.#onEnd = onEnd;
+        _2.#handlers = {
+          pointerdown: _2.#handlePointerDown.bind(_2),
+          pointermove: _2.#handlePointerMove.bind(_2),
+          pointerup: (event) => _2.#handlePointerEnd(event, false),
+          pointercancel: (event) => _2.#handlePointerEnd(event, true)
+        };
+        for (const [type, handler] of Object.entries(_2.#handlers)) el.addEventListener(type, handler);
+      }
+      #handlePointerDown(event) {
+        const _2 = this;
+        if (!event.isPrimary || _2.#active && _2.#captured) return;
+        _2.#active = true;
+        _2.#captured = false;
+        _2.#pointerId = event.pointerId;
+        _2.#startY = event.clientY;
+        _2.#lastY = event.clientY;
+        _2.#startTime = event.timeStamp;
+        _2.#tracker.reset();
+        _2.#tracker.add(event.clientY, event.timeStamp);
+        _2.#onStart?.({
+          event,
+          y: event.clientY
+        });
+      }
+      #handlePointerMove(event) {
+        const _2 = this;
+        if (!_2.#active || event.pointerId !== _2.#pointerId) return;
+        const deltaY = event.clientY - _2.#startY;
+        const moveY = event.clientY - _2.#lastY;
+        _2.#lastY = event.clientY;
+        if (!_2.#captured && Math.abs(deltaY) > SLOP) {
+          _2.#captured = true;
+          _2.#el.setPointerCapture?.(event.pointerId);
+        }
+        _2.#tracker.add(event.clientY, event.timeStamp);
+        _2.#onMove?.({
+          event,
+          deltaY,
+          moveY,
+          direction: deltaY < 0 ? "up" : "down",
+          velocityY: _2.#tracker.velocity
+        });
+      }
+      #handlePointerEnd(event, cancelled) {
+        const _2 = this;
+        if (!_2.#active || event.pointerId !== _2.#pointerId) return;
+        _2.#active = false;
+        _2.#captured = false;
+        _2.#tracker.add(event.clientY, event.timeStamp);
+        _2.#onEnd?.({
+          event,
+          deltaY: event.clientY - _2.#startY,
+          velocityY: cancelled ? 0 : _2.#tracker.velocity,
+          duration: event.timeStamp - _2.#startTime,
+          cancelled
+        });
+        _2.#pointerId = null;
+      }
+      /**
+      * Abandons a gesture in place, leaving the element ready for a fresh one.
+      *
+      * Deliberately silent: onEnd is never fired. This exists for a teardown the
+      * user did not ask for — the surface is being closed out from under a finger
+      * that has not lifted — and every release rule downstream would otherwise act
+      * on a lift that never happened.
+      */
+      cancel() {
+        const _2 = this;
+        if (_2.#captured && _2.#pointerId !== null) try {
+          _2.#el.releasePointerCapture?.(_2.#pointerId);
+        } catch {
+        }
+        _2.#active = false;
+        _2.#captured = false;
+        _2.#pointerId = null;
+        _2.#tracker.reset();
+      }
+      destroy() {
+        const _2 = this;
+        for (const [type, handler] of Object.entries(_2.#handlers)) _2.#el.removeEventListener(type, handler);
+        _2.cancel();
+      }
+    };
+    parseSnapPoints = (value) => {
+      if (!value) return [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const token of String(value).split(/[\s,]+/)) {
+        if (token === "") continue;
+        const parsed = Number(token);
+        if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 100) continue;
+        seen.add(parsed);
+      }
+      return [...seen].sort((a2, b4) => a2 - b4);
+    };
+    resolveSnapTarget = ({ currentPx, velocityY, snapsPx, flickVelocity }) => {
+      if (!snapsPx.length) return null;
+      if (velocityY > flickVelocity) {
+        const below = snapsPx.filter((px) => px < currentPx - 1);
+        return below.length ? below[below.length - 1] : null;
+      }
+      if (velocityY < -flickVelocity) return snapsPx.find((px) => px > currentPx + 1) ?? snapsPx[snapsPx.length - 1];
+      return snapsPx.reduce((best, px) => Math.abs(px - currentPx) < Math.abs(best - currentPx) ? px : best);
+    };
+    FRAME_MS = 16.66;
+    VELOCITY_BOOST = 1.1;
+    BottomSheet = class extends HTMLElement {
+      #handlers = {};
+      #gestures = [];
+      #drag = { active: false };
+      #scrollVeto = null;
+      #overscrollResistance = 0.1;
+      #dragThreshold = 100;
+      #flickVelocity = 0.5;
+      #maxDisplayWidth = Infinity;
+      #snapPoints = [];
+      #snap = null;
+      #engine = null;
+      #springTarget = null;
+      #reflectingSnap = false;
+      #panelRef = null;
+      #dialogRef = null;
+      /**
+      * Define which attributes should be observed for changes
+      * @returns {string[]} List of attribute names to observe
+      */
+      static get observedAttributes() {
+        return [
+          "max-display-width",
+          "snap-points",
+          "snap",
+          "spring"
+        ];
+      }
+      /**
+      * Called when observed attributes change
+      * @param {string} name - The name of the attribute that changed
+      * @param {string} oldValue - The previous value of the attribute
+      * @param {string} newValue - The new value of the attribute
+      */
+      attributeChangedCallback(name, oldValue, newValue) {
+        const _2 = this;
+        if (oldValue === newValue) return;
+        if (name === "max-display-width") {
+          if (newValue === null || newValue === "none") _2.maxDisplayWidth = Infinity;
+          else {
+            const trimmed = newValue.trim();
+            const parsed = Number(trimmed);
+            _2.maxDisplayWidth = trimmed === "" || !Number.isFinite(parsed) ? Infinity : parsed;
+          }
+          return;
+        }
+        if (name === "snap-points") {
+          _2.#snapPoints = parseSnapPoints(newValue);
+          if (newValue !== null && _2.#snapPoints.length === 0) {
+            _2.removeAttribute("snap-points");
+            return;
+          }
+          _2.#supersedeSettle();
+          return;
+        }
+        if (name === "snap") {
+          const parsed = Number(newValue);
+          _2.#snap = newValue !== null && Number.isFinite(parsed) ? parsed : null;
+          if (_2.#reflectingSnap) _2.#applyRestingHeight();
+          else _2.#supersedeSettle();
+          return;
+        }
+        if (name === "spring") {
+          _2.#supersedeSettle();
+          _2.#engine = null;
+        }
+      }
+      /**
+      * Whether the sheet settles on a spring. On by default — `spring="none"`
+      * is the opt-out, matching how `max-display-width` spells the same idea.
+      * @returns {boolean}
+      */
+      get #springEnabled() {
+        return this.getAttribute("spring") !== "none";
+      }
+      /**
+      * The engine, built on first use and rebuilt whenever the tuning changes.
+      * Lazy rather than eager because `snap-points` can be set at any time, and
+      * a sheet that never settles should never construct one.
+      * @returns {PhysicsEngine}
+      */
+      #ensureEngine() {
+        const _2 = this;
+        if (_2.#engine) return _2.#engine;
+        const [attraction, friction] = String(_2.getAttribute("spring") ?? "").split(/[\s,]+/).map(Number);
+        const options = {
+          attraction: 0.065,
+          friction: 0.3
+        };
+        if (Number.isFinite(attraction) && attraction > 0 && attraction < 1) options.attraction = attraction;
+        if (Number.isFinite(friction) && friction > 0 && friction < 1) options.friction = friction;
+        _2.#engine = new b2(options);
+        _2.#engine.on("change", ({ position }) => {
+          const dialog = _2.dialog;
+          if (dialog && !_2.#drag.active) dialog.style.height = `${position}px`;
+        });
+        _2.#engine.on("complete", () => {
+          if (_2.#springTarget === null) return;
+          _2.#springTarget = null;
+          _2.#applyRestingHeight();
+        });
+        return _2.#engine;
+      }
+      /**
+      * Halts a running settle without letting its completion write a height
+      */
+      #stopSpring() {
+        this.#springTarget = null;
+        this.#engine?.stop();
+      }
+      /**
+      * Hands a settle back to the resting snap because external state has moved
+      * out from under it.
+      *
+      * The engine emits `stop` rather than `complete` when it is halted, so
+      * nothing restores the height on its own — stopping alone stranded the sheet
+      * at whatever pixel the last frame happened to write, with `snap` reporting
+      * a value the sheet was not at. Finishing on the CSS clock keeps the
+      * interruption visible rather than teleporting.
+      */
+      #supersedeSettle() {
+        const _2 = this;
+        const wasSettling = _2.#springTarget !== null;
+        _2.#stopSpring();
+        if (wasSettling) _2.dialog?.classList.add("transitioning", "snapping");
+        _2.#applyRestingHeight();
+      }
+      /**
+      * Get the maximum display width
+      * @returns {number} The maximum width in pixels where the bottom sheet is shown
+      */
+      get maxDisplayWidth() {
+        return this.#maxDisplayWidth;
+      }
+      /**
+      * Set the maximum display width and reflect to attribute
+      * @param {number} value - The maximum width in pixels where the bottom sheet is shown
+      */
+      set maxDisplayWidth(value) {
+        const _2 = this;
+        _2.#maxDisplayWidth = value;
+        if (value === Infinity) _2.removeAttribute("max-display-width");
+        else _2.setAttribute("max-display-width", value);
+      }
+      /**
+      * Get the declared snap points
+      * @returns {number[]} Ascending dvh percentages; empty when the sheet is binary
+      */
+      get snapPoints() {
+        return [...this.#snapPoints];
+      }
+      /**
+      * Set the snap points and reflect to attribute
+      * @param {number[]|string|null} value - Percentages of the viewport height
+      */
+      set snapPoints(value) {
+        const _2 = this;
+        const list = Array.isArray(value) ? value.join(",") : value ?? "";
+        if (String(list).trim() === "") _2.removeAttribute("snap-points");
+        else _2.setAttribute("snap-points", list);
+      }
+      /**
+      * Get the snap the sheet is currently resting at. Reflects only on commit,
+      * so it holds the last settled value for the duration of a drag.
+      * @returns {number|null} The snap in dvh percent, or null when the sheet is binary
+      */
+      get snap() {
+        return this.#activeSnap;
+      }
+      /**
+      * Set the resting snap and reflect to attribute
+      * @param {number|null} value - A declared snap in dvh percent
+      */
+      set snap(value) {
+        const _2 = this;
+        if (value === null) _2.removeAttribute("snap");
+        else _2.setAttribute("snap", value);
+      }
+      /**
+      * Animates the sheet to a declared snap point. Undeclared values are ignored.
+      * @param {number} value - A snap in dvh percent
+      */
+      snapTo(value) {
+        const _2 = this;
+        const target = Number(value);
+        if (!_2.#snapPoints.includes(target)) return;
+        _2.dialog?.classList.add("transitioning");
+        _2.#commitSnap(target);
+      }
+      /**
+      * The snap currently in effect, falling back to the shortest declared snap
+      * when the author has not pinned one
+      * @returns {number|null}
+      */
+      get #activeSnap() {
+        const _2 = this;
+        if (!_2.#snapPoints.length) return null;
+        if (_2.#snap !== null && _2.#snapPoints.includes(_2.#snap)) return _2.#snap;
+        return _2.#snapPoints[0];
+      }
+      /**
+      * Find parent dialog-panel element
+      * @returns {HTMLElement|null}
+      */
+      get panel() {
+        return this.closest("dialog-panel");
+      }
+      /**
+      * Get the dialog element
+      * @returns {HTMLDialogElement|null}
+      */
+      get dialog() {
+        return this.closest("dialog");
+      }
+      /**
+      * Get the header element
+      * @returns {HTMLElement|null}
+      */
+      get header() {
+        return this.querySelector("bottom-sheet-header");
+      }
+      /**
+      * Get the content element
+      * @returns {HTMLElement|null}
+      */
+      get content() {
+        return this.querySelector("bottom-sheet-content");
+      }
+      /**
+      * Get the footer element
+      * @returns {HTMLElement|null}
+      */
+      get footer() {
+        return this.querySelector("bottom-sheet-footer");
+      }
+      /**
+      * Get the backdrop element from dialog-panel
+      * @returns {HTMLElement|null}
+      */
+      get backdrop() {
+        return this.panel?.querySelector("dialog-backdrop");
+      }
+      constructor() {
+        super();
+        const _2 = this;
+        _2.#handlers = {
+          transitionEnd: _2.#handleTransitionEnd.bind(_2),
+          windowResize: () => {
+            if (window.innerWidth > _2.maxDisplayWidth && _2.panel?.isOpen) _2.hide();
+          },
+          beforeShow: () => {
+            _2.#applyRestingHeight();
+            _2.dialog?.classList.remove("snapping");
+            _2.dialog?.classList.add("transitioning");
+          },
+          beforeHide: () => {
+            queueMicrotask(() => {
+              if (_2.#panelRef?.getAttribute("state") !== "hiding") return;
+              _2.#teardownForClose();
+            });
+          }
+        };
+      }
+      /**
+      * Shows the bottom sheet via dialog-panel
+      * @param {HTMLElement} [triggerEl] - The element that triggered the show
+      */
+      show(triggerEl) {
+        const _2 = this;
+        if (window.innerWidth > _2.maxDisplayWidth) return;
+        _2.panel?.show(triggerEl);
+      }
+      /**
+      * Hides the bottom sheet via dialog-panel.
+      *
+      * The panel is asked first, because it can refuse — a `beforeHide` handler
+      * may cancel, and it also rejects a close that arrives while the sheet is
+      * still opening. Tearing the settle down before asking left a refused close
+      * with a dead spring and the drag's inline pixels still on the dialog, so
+      * the sheet stayed frozen wherever the last frame had painted it.
+      *
+      * @returns {boolean} False if the panel refused the close
+      */
+      hide() {
+        const _2 = this;
+        if (_2.panel?.hide() === false) {
+          if (_2.dialog && _2.#springTarget === null) {
+            _2.dialog.classList.add("transitioning");
+            _2.dialog.style.transform = "";
+          }
+          if (_2.#springTarget === null) _2.#applyRestingHeight();
+          return false;
+        }
+        _2.#stopSpring();
+        if (_2.dialog) {
+          _2.dialog.style.transform = "";
+          _2.dialog.classList.remove("snapping");
+        }
+        return true;
+      }
+      /**
+      * Hands the sheet back to the panel for a close it did not start.
+      *
+      * Idempotent by construction — stopping a stopped spring, clearing a cleared
+      * transform and removing an absent class are all no-ops — because a close
+      * that does come through hide() fires `beforeHide` as well and runs this a
+      * second time.
+      *
+      * `transitioning` is deliberately left alone: the [state='hiding'] rule
+      * carries its own transition, and removing the class mid-close would strand
+      * a snap-back that was already running under it.
+      */
+      #teardownForClose() {
+        const _2 = this;
+        _2.#stopSpring();
+        for (const gesture of _2.#gestures) gesture.cancel();
+        _2.#drag = { active: false };
+        if (_2.dialog) {
+          _2.dialog.style.transform = "";
+          _2.dialog.classList.remove("snapping");
+        }
+      }
+      connectedCallback() {
+        const _2 = this;
+        _2.#panelRef = _2.panel;
+        _2.#dialogRef = _2.dialog;
+        window.addEventListener("resize", _2.#handlers.windowResize);
+        if (_2.header) _2.#gestures.push(new DragGesture(_2.header, _2.#surfaceCallbacks("header")));
+        if (_2.footer) _2.#gestures.push(new DragGesture(_2.footer, _2.#surfaceCallbacks("footer")));
+        if (_2.content) {
+          _2.#gestures.push(new DragGesture(_2.content, _2.#surfaceCallbacks("content")));
+          _2.#scrollVeto = (event) => {
+            if (_2.#drag.active && _2.#drag.claimed && event.cancelable) event.preventDefault();
+          };
+          _2.content.addEventListener("touchmove", _2.#scrollVeto, { passive: false });
+        }
+        _2.#panelRef?.addEventListener("beforeShow", _2.#handlers.beforeShow);
+        _2.#panelRef?.addEventListener("beforeHide", _2.#handlers.beforeHide);
+        if (_2.#dialogRef) _2.#dialogRef.addEventListener("transitionend", _2.#handlers.transitionEnd);
+        _2.#applyRestingHeight();
+      }
+      disconnectedCallback() {
+        const _2 = this;
+        window.removeEventListener("resize", _2.#handlers.windowResize);
+        for (const gesture of _2.#gestures) gesture.destroy();
+        _2.#gestures = [];
+        if (_2.content && _2.#scrollVeto) _2.content.removeEventListener("touchmove", _2.#scrollVeto);
+        _2.#scrollVeto = null;
+        _2.#drag = { active: false };
+        _2.#stopSpring();
+        _2.#engine?.removeAllListeners();
+        _2.#engine = null;
+        _2.#panelRef?.removeEventListener("beforeShow", _2.#handlers.beforeShow);
+        _2.#panelRef?.removeEventListener("beforeHide", _2.#handlers.beforeHide);
+        if (_2.#dialogRef) _2.#dialogRef.removeEventListener("transitionend", _2.#handlers.transitionEnd);
+        _2.#panelRef = null;
+        _2.#dialogRef = null;
+      }
+      /**
+      * Writes the current snap to the dialog as a dvh height. Keeping the resting
+      * value in dvh rather than pixels is what makes viewport resizes free.
+      */
+      #applyRestingHeight() {
+        const _2 = this;
+        const dialog = _2.dialog;
+        if (!dialog) return;
+        if (_2.#springTarget !== null) return;
+        const snap2 = _2.#activeSnap;
+        dialog.style.height = snap2 === null ? "" : `${snap2}dvh`;
+      }
+      /**
+      * Resolves the declared snaps to pixels against the current viewport
+      * @returns {number[]} Ascending snap heights in pixels
+      */
+      #snapsPx() {
+        return this.#snapPoints.map((value) => value / 100 * window.innerHeight);
+      }
+      #surfaceCallbacks(surface) {
+        const _2 = this;
+        return {
+          onStart: () => _2.#dragStart(),
+          onMove: (info) => _2.#dragMove(surface, info),
+          onEnd: (info) => _2.#dragEnd(surface, info)
+        };
+      }
+      #dragStart() {
+        const _2 = this;
+        const state = _2.panel?.getAttribute("state");
+        if (_2.panel?.hasAttribute("morph") && (state === "showing" || state === "hiding")) return;
+        _2.#stopSpring();
+        const dialog = _2.dialog;
+        const startHeight = dialog?.getBoundingClientRect().height ?? 0;
+        if (dialog && _2.#snapPoints.length) dialog.style.height = `${startHeight}px`;
+        const computedTransform = dialog && typeof window.getComputedStyle === "function" ? window.getComputedStyle(dialog).transform : "";
+        const normalizedTransform = computedTransform?.replace(/\s+/g, "");
+        if (dialog && computedTransform && ![
+          "none",
+          "matrix(1,0,0,1,0,0)",
+          "matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1)"
+        ].includes(normalizedTransform)) dialog.style.transform = computedTransform;
+        _2.#drag = {
+          active: true,
+          claimed: false,
+          claimOffset: 0,
+          startHeight,
+          belowLowest: 0
+        };
+        dialog?.classList.remove("transitioning", "snapping");
+      }
+      /**
+      * Applies resistance to a drag value to create a rubber-band effect
+      * @param {number} value - The raw drag distance
+      * @returns {number} The drag with resistance applied
+      */
+      #applyResistance(value) {
+        return Math.sqrt(value) * 10 * this.#overscrollResistance;
+      }
+      /**
+      * Decides whether the panel takes a gesture over from the content scroller.
+      * Re-evaluated on every move until it succeeds, so the handoff can happen
+      * part way through a single continuous drag.
+      * @param {string} surface - The surface the gesture started on
+      * @param {number} moveY - Instantaneous travel, positive downward
+      * @returns {boolean}
+      */
+      #shouldClaim(surface, moveY) {
+        const _2 = this;
+        if (surface !== "content") return true;
+        if (moveY === 0) return false;
+        if (moveY > 0) return _2.content?.scrollTop === 0;
+        const snaps = _2.#snapPoints;
+        return snaps.length > 0 && _2.#activeSnap < snaps[snaps.length - 1];
+      }
+      #dragMove(surface, { deltaY, moveY }) {
+        const _2 = this;
+        const drag = _2.#drag;
+        if (!drag.active) return;
+        if (!drag.claimed) {
+          if (!_2.#shouldClaim(surface, moveY)) return;
+          drag.claimed = true;
+          drag.claimOffset = deltaY;
+        }
+        const travel = deltaY - drag.claimOffset;
+        if (_2.#snapPoints.length) _2.#moveBySnap(travel);
+        else _2.#moveByTransform(travel);
+      }
+      /**
+      * Drives a snapping sheet by its height, so the footer stays pinned and the
+      * scroll region always matches what is actually on screen
+      * @param {number} travel - Claimed drag distance, positive downward
+      */
+      #moveBySnap(travel) {
+        const _2 = this;
+        const dialog = _2.dialog;
+        if (!dialog) return;
+        const snapsPx = _2.#snapsPx();
+        const minPx = snapsPx[0];
+        const maxPx = snapsPx[snapsPx.length - 1];
+        const height = _2.#drag.startHeight - travel;
+        if (height > maxPx) {
+          dialog.style.height = `${maxPx + _2.#applyResistance(height - maxPx)}px`;
+          dialog.style.transform = "";
+          _2.#drag.belowLowest = 0;
+          return;
+        }
+        if (height < minPx) {
+          const below = minPx - height;
+          dialog.style.height = `${minPx}px`;
+          dialog.style.transform = `translate3d(0, ${below}px, 0)`;
+          _2.#drag.belowLowest = below;
+          return;
+        }
+        dialog.style.height = `${height}px`;
+        dialog.style.transform = "";
+        _2.#drag.belowLowest = 0;
+      }
+      /**
+      * Drives a binary sheet by transform alone
+      * @param {number} travel - Claimed drag distance, positive downward
+      */
+      #moveByTransform(travel) {
+        const _2 = this;
+        const dialog = _2.dialog;
+        if (!dialog) return;
+        if (travel < 0) {
+          const resisted = _2.#applyResistance(-travel);
+          dialog.style.transform = `translate3d(0, ${-resisted}px, 0)`;
+        } else dialog.style.transform = `translate3d(0, ${travel}px, 0)`;
+      }
+      #dragEnd(surface, { deltaY, velocityY, cancelled }) {
+        const _2 = this;
+        const drag = _2.#drag;
+        if (!drag.active) return;
+        _2.#drag = { active: false };
+        _2.dialog?.classList.add("transitioning");
+        if (!drag.claimed) {
+          if (_2.dialog) _2.dialog.style.transform = "";
+          _2.#applyRestingHeight();
+          return;
+        }
+        if (_2.#snapPoints.length) {
+          _2.#releaseToSnap(drag, velocityY, cancelled);
+          return;
+        }
+        const travel = deltaY - drag.claimOffset;
+        const flick = !cancelled && velocityY > _2.#flickVelocity;
+        const pastThreshold = !cancelled && travel > _2.#dragThreshold && velocityY > -0.05;
+        if (flick || pastThreshold) _2.hide();
+        else if (_2.dialog) _2.dialog.style.transform = "";
+      }
+      /**
+      * Settles a snapping sheet after release
+      * @param {Object} drag - The drag state as it stood at release
+      * @param {number} velocityY - Release velocity in px/ms, positive downward
+      * @param {boolean} cancelled - Whether the pointer was cancelled
+      */
+      #releaseToSnap(drag, velocityY, cancelled) {
+        const _2 = this;
+        if (cancelled) {
+          _2.#commitSnap(_2.#activeSnap);
+          return;
+        }
+        if (drag.belowLowest > 0) {
+          const flick = velocityY > _2.#flickVelocity;
+          const pastThreshold = drag.belowLowest > _2.#dragThreshold && velocityY > -0.05;
+          if (flick || pastThreshold) _2.hide();
+          else _2.#commitSnap(_2.#snapPoints[0], velocityY);
+          return;
+        }
+        const snapsPx = _2.#snapsPx();
+        const targetPx = resolveSnapTarget({
+          currentPx: _2.dialog?.getBoundingClientRect().height ?? 0,
+          velocityY,
+          snapsPx,
+          flickVelocity: _2.#flickVelocity
+        });
+        if (targetPx === null) {
+          _2.hide();
+          return;
+        }
+        _2.#commitSnap(_2.#snapPoints[snapsPx.indexOf(targetPx)], velocityY);
+      }
+      /**
+      * Settles the sheet on a snap, reflects it, and announces the change
+      * @param {number} value - The snap in dvh percent
+      */
+      #commitSnap(value, velocityY = 0) {
+        const _2 = this;
+        const from2 = _2.#activeSnap;
+        const dialog = _2.dialog;
+        const targetPx = value / 100 * window.innerHeight;
+        const startPx = dialog?.getBoundingClientRect().height ?? targetPx;
+        const heightAtTarget = Math.abs(startPx - targetPx) <= 1;
+        if (dialog && _2.#springEnabled && !heightAtTarget) {
+          const engine = _2.#ensureEngine();
+          dialog.classList.remove("transitioning", "snapping");
+          dialog.style.transform = "";
+          _2.#springTarget = targetPx;
+          const seed = -velocityY * FRAME_MS * VELOCITY_BOOST;
+          engine.animateTo(startPx, targetPx, seed);
+        } else if (dialog) {
+          dialog.classList.add("snapping");
+          dialog.style.transform = "";
+          dialog.style.height = `${value}dvh`;
+        }
+        _2.#snap = value;
+        _2.#reflectingSnap = true;
+        _2.setAttribute("snap", value);
+        _2.#reflectingSnap = false;
+        if (from2 !== value) _2.dispatchEvent(new CustomEvent("snapChange", {
+          bubbles: true,
+          detail: {
+            from: from2,
+            to: value
+          }
+        }));
+      }
+      /**
+      * Runs when a CSS transition finishes
+      * @param {TransitionEvent} e - The transition event
+      */
+      #handleTransitionEnd(e2) {
+        const _2 = this;
+        if (e2.target === _2.dialog && (e2.propertyName === "transform" || e2.propertyName === "height")) {
+          if (e2.propertyName === "height" && _2.panel?.getAttribute("state") === "hiding") return;
+          _2.dialog.classList.remove("transitioning", "snapping");
+        }
+      }
+    };
+    BottomSheetContent = class extends HTMLElement {
+    };
+    BottomSheetHeader = class extends HTMLElement {
+    };
+    BottomSheetFooter = class extends HTMLElement {
+    };
+    if (!customElements.get("bottom-sheet")) customElements.define("bottom-sheet", BottomSheet);
+    if (!customElements.get("bottom-sheet-content")) customElements.define("bottom-sheet-content", BottomSheetContent);
+    if (!customElements.get("bottom-sheet-header")) customElements.define("bottom-sheet-header", BottomSheetHeader);
+    if (!customElements.get("bottom-sheet-footer")) customElements.define("bottom-sheet-footer", BottomSheetFooter);
   }
 });
 
@@ -4677,455 +6069,6 @@ var init_scroll_stack_esm = __esm({
   }
 });
 
-// node_modules/@magic-spells/dialog-panel/dist/dialog-panel.esm.js
-var DialogPanel, DialogBackdrop;
-var init_dialog_panel_esm = __esm({
-  "node_modules/@magic-spells/dialog-panel/dist/dialog-panel.esm.js"() {
-    DialogPanel = class _DialogPanel extends HTMLElement {
-      // Private fields
-      #state = "hidden";
-      #triggerElement = null;
-      #dialog = null;
-      #result = null;
-      #hideTriggerElement = null;
-      #morphEngine = null;
-      #morphListenersAttached = false;
-      // Event handler references for cleanup
-      #handlers = {
-        click: null,
-        dialogClick: null,
-        cancel: null,
-        close: null,
-        morphReveal: null,
-        morphShown: null,
-        morphHidden: null,
-        morphStop: null
-      };
-      // Animation cleanup references
-      #pendingRAF = null;
-      #pendingTimeout = null;
-      // Fallback timeout for transitionend (in ms)
-      static TRANSITION_FALLBACK_TIMEOUT = 700;
-      connectedCallback() {
-        const _2 = this;
-        _2.#dialog = _2.querySelector("dialog");
-        if (!_2.#dialog) {
-          console.warn(
-            "DialogPanel: No <dialog> element found inside <dialog-panel>"
-          );
-          return;
-        }
-        if (!_2.querySelector("dialog-backdrop")) {
-          const backdrop = document.createElement("dialog-backdrop");
-          _2.insertBefore(backdrop, _2.firstChild);
-        }
-        _2.#setState("hidden");
-        _2.#bindEvents();
-        _2.#wireMorphEngine();
-      }
-      disconnectedCallback() {
-        const _2 = this;
-        if (_2.#pendingRAF) {
-          cancelAnimationFrame(_2.#pendingRAF);
-          _2.#pendingRAF = null;
-        }
-        if (_2.#pendingTimeout) {
-          clearTimeout(_2.#pendingTimeout);
-          _2.#pendingTimeout = null;
-        }
-        _2.#unwireMorphEngine();
-        if (_2.#handlers.click) {
-          _2.removeEventListener("click", _2.#handlers.click);
-        }
-        if (_2.#dialog) {
-          if (_2.#handlers.dialogClick) {
-            _2.#dialog.removeEventListener(
-              "click",
-              _2.#handlers.dialogClick
-            );
-          }
-          if (_2.#handlers.cancel) {
-            _2.#dialog.removeEventListener("cancel", _2.#handlers.cancel);
-          }
-          if (_2.#handlers.close) {
-            _2.#dialog.removeEventListener("close", _2.#handlers.close);
-          }
-        }
-      }
-      /**
-       * Bind event listeners for close buttons, backdrop, and escape key
-       * @private
-       */
-      #bindEvents() {
-        const _2 = this;
-        _2.#handlers.click = (e2) => {
-          const trigger = e2.target.closest("[data-action-hide-dialog]");
-          if (trigger) {
-            e2.stopPropagation();
-            _2.hide(trigger);
-          }
-        };
-        _2.addEventListener("click", _2.#handlers.click);
-        _2.#handlers.dialogClick = (e2) => {
-          const rect = _2.#dialog.getBoundingClientRect();
-          const clickedOutside = e2.clientX < rect.left || e2.clientX > rect.right || e2.clientY < rect.top || e2.clientY > rect.bottom;
-          if (clickedOutside) {
-            e2.stopPropagation();
-            _2.hide();
-          }
-        };
-        _2.#dialog.addEventListener("click", _2.#handlers.dialogClick);
-        _2.#handlers.cancel = (e2) => {
-          e2.preventDefault();
-          e2.stopPropagation();
-          _2.hide();
-        };
-        _2.#dialog.addEventListener("cancel", _2.#handlers.cancel);
-        _2.#handlers.close = () => {
-          const forceClosedDirect = (_2.#state === "showing" || _2.#state === "shown") && _2.#morphEngine?.animatesDialog && !_2.#dialog.open;
-          if (forceClosedDirect) {
-            _2.#result = _2.#dialog.returnValue || _2.#result;
-            _2.#morphEngine.stop();
-            if (_2.#state !== "hidden") _2.#finalizeHidden();
-            return;
-          }
-          const forceClosedShown = _2.#state === "shown" && !_2.#dialog.open;
-          const forceClosedShowing = _2.#state === "showing" && _2.#pendingRAF !== null && !_2.#dialog.open;
-          if (!forceClosedShown && !forceClosedShowing) return;
-          if (_2.#pendingRAF) {
-            cancelAnimationFrame(_2.#pendingRAF);
-            _2.#pendingRAF = null;
-          }
-          if (_2.#morphEngine?.state === "shown") {
-            _2.hide();
-            return;
-          }
-          _2.#result = _2.#dialog.returnValue || _2.#result;
-          _2.#finalizeHidden();
-        };
-        _2.#dialog.addEventListener("close", _2.#handlers.close);
-      }
-      /**
-       * Wire morph engine lifecycle listeners
-       * @private
-       */
-      #wireMorphEngine() {
-        const _2 = this;
-        if (!_2.#morphEngine || _2.#morphListenersAttached) return;
-        if (!_2.#handlers.morphShown) {
-          _2.#handlers.morphReveal = _2.#handleMorphReveal.bind(_2);
-          _2.#handlers.morphShown = _2.#handleMorphShown.bind(_2);
-          _2.#handlers.morphHidden = _2.#handleMorphHidden.bind(_2);
-          _2.#handlers.morphStop = _2.#handleMorphStop.bind(_2);
-        }
-        _2.#morphEngine.on("reveal", _2.#handlers.morphReveal);
-        _2.#morphEngine.on("shown", _2.#handlers.morphShown);
-        _2.#morphEngine.on("hidden", _2.#handlers.morphHidden);
-        _2.#morphEngine.on("stop", _2.#handlers.morphStop);
-        _2.#morphListenersAttached = true;
-      }
-      /**
-       * Promote a proxy engine's target at its reveal point — the target is
-       * still at opacity 0 and the scrim only partially faded, so the top-layer
-       * insertion (dialog + ::backdrop) lands over the least visible glass.
-       * Promoting at settle instead inserts above a fully visible
-       * backdrop-filter layer, which the compositor re-rasterizes — a visible
-       * shimmer on GPU-heavy pages.
-       * @param {Object} detail - Reveal event detail
-       * @private
-       */
-      #handleMorphReveal(detail) {
-        const _2 = this;
-        if (_2.#state === "showing" && detail?.to === _2.#dialog && !_2.#dialog.open) {
-          _2.#dialog.showModal();
-        }
-      }
-      /**
-       * Unwire morph engine lifecycle listeners
-       * @private
-       */
-      #unwireMorphEngine() {
-        const _2 = this;
-        if (!_2.#morphEngine || !_2.#morphListenersAttached) return;
-        _2.#morphEngine.off("reveal", _2.#handlers.morphReveal);
-        _2.#morphEngine.off("shown", _2.#handlers.morphShown);
-        _2.#morphEngine.off("hidden", _2.#handlers.morphHidden);
-        _2.#morphEngine.off("stop", _2.#handlers.morphStop);
-        _2.#morphListenersAttached = false;
-      }
-      /**
-       * Promote the settled morph target into the dialog top layer
-       * @private
-       */
-      #handleMorphShown() {
-        const _2 = this;
-        if (!_2.#dialog.open) _2.#dialog.showModal();
-        _2.#setState("shown");
-        _2.#emit("shown");
-      }
-      /**
-       * Finalize a settled morph hide
-       * @private
-       */
-      #handleMorphHidden() {
-        this.#finalizeHidden();
-      }
-      /**
-       * Finalize an interrupted morph as hidden
-       * @private
-       */
-      #handleMorphStop() {
-        this.#finalizeHidden();
-      }
-      /**
-       * Close out to the hidden state without an exit animation — shared by a
-       * settled or interrupted morph and by the force-close repair, both of
-       * which arrive with nothing left to animate
-       * @private
-       */
-      #finalizeHidden() {
-        const _2 = this;
-        if (_2.#dialog.open) _2.#dialog.close();
-        _2.#setState("hidden");
-        _2.#emit("hidden", {
-          result: _2.#result,
-          triggerElement: _2.#hideTriggerElement
-        });
-        if (_2.#triggerElement) _2.#triggerElement.focus();
-        _2.#triggerElement = null;
-        _2.#hideTriggerElement = null;
-        _2.#result = null;
-      }
-      /**
-       * Show the dialog with animation
-       * @param {HTMLElement} [triggerEl=null] - The element that triggered the show
-       * @returns {boolean} False if show was prevented via beforeShow event
-       */
-      show(triggerEl = null) {
-        const _2 = this;
-        const engine = _2.#morphEngine;
-        const direct = !!engine?.animatesDialog;
-        if (_2.#state === "showing" || _2.#state === "shown") return true;
-        const reversingMorph = _2.#state === "hiding" && engine?.state === "hiding";
-        if (_2.#state === "hiding" && !reversingMorph) return false;
-        if (!reversingMorph) _2.#triggerElement = triggerEl || null;
-        if (!_2.#emit("beforeShow", { cancelable: true })) return false;
-        if (reversingMorph) {
-          _2.#hideTriggerElement = null;
-          _2.#result = null;
-        }
-        _2.#setState("showing");
-        if (engine && (direct || triggerEl || reversingMorph)) {
-          engine.show({
-            from: _2.#triggerElement,
-            to: _2.#dialog,
-            display: _2.getAttribute("morph-display") || "block"
-          });
-          if (direct && !_2.#dialog.open) {
-            _2.#dialog.showModal();
-          }
-          if (direct && engine.state === "shown" && _2.#state === "showing") {
-            _2.#handleMorphShown();
-          }
-          return true;
-        }
-        _2.#dialog.showModal();
-        _2.#pendingRAF = requestAnimationFrame(() => {
-          _2.#pendingRAF = requestAnimationFrame(() => {
-            _2.#pendingRAF = null;
-            _2.#setState("shown");
-            _2.#waitForTransition(() => {
-              _2.#emit("shown");
-            });
-          });
-        });
-        return true;
-      }
-      /**
-       * Hide the dialog with animation
-       * @param {HTMLElement} [triggerEl=null] - The element that triggered the hide
-       * @returns {boolean} False if hide was prevented via beforeHide event
-       */
-      hide(triggerEl = null) {
-        const _2 = this;
-        const engine = _2.#morphEngine;
-        const direct = !!engine?.animatesDialog;
-        if (_2.#state === "hiding" || _2.#state === "hidden") return true;
-        const reversingMorph = _2.#state === "showing" && engine?.state === "showing";
-        if (_2.#state === "showing" && !reversingMorph && !direct) {
-          return false;
-        }
-        _2.#result = triggerEl?.dataset?.result ?? null;
-        if (!_2.#emit("beforeHide", {
-          cancelable: true,
-          result: _2.#result,
-          triggerElement: triggerEl
-        })) {
-          return false;
-        }
-        if (direct) {
-          _2.#hideTriggerElement = triggerEl;
-          if (engine.state !== "showing" && engine.state !== "shown") {
-            _2.#finalizeHidden();
-            return true;
-          }
-          engine.hide();
-          _2.#setState("hiding");
-          return true;
-        }
-        if (reversingMorph || engine?.state === "shown") {
-          _2.#hideTriggerElement = triggerEl;
-          if (_2.#dialog.open) _2.#dialog.close();
-          engine.hide();
-          _2.#setState("hiding");
-          return true;
-        }
-        _2.#setState("hiding");
-        _2.#waitForTransition(() => {
-          _2.#dialog.close();
-          _2.#setState("hidden");
-          _2.#emit("hidden", {
-            result: _2.#result,
-            triggerElement: triggerEl
-          });
-          if (_2.#triggerElement) _2.#triggerElement.focus();
-          _2.#triggerElement = null;
-          _2.#result = null;
-        });
-        return true;
-      }
-      /**
-       * Wait for CSS transition to complete with fallback timeout
-       * @param {Function} callback - Called when transition completes
-       * @private
-       */
-      #waitForTransition(callback) {
-        const _2 = this;
-        let called = false;
-        let timerId = null;
-        const done = () => {
-          if (called) return;
-          called = true;
-          _2.#dialog.removeEventListener("transitionend", onTransitionEnd);
-          clearTimeout(timerId);
-          if (_2.#pendingTimeout === timerId) _2.#pendingTimeout = null;
-          callback();
-        };
-        const onTransitionEnd = (e2) => {
-          if (e2.target === _2.#dialog) done();
-        };
-        _2.#dialog.addEventListener("transitionend", onTransitionEnd);
-        timerId = setTimeout(done, _DialogPanel.TRANSITION_FALLBACK_TIMEOUT);
-        _2.#pendingTimeout = timerId;
-      }
-      /**
-       * Set the component state
-       * @param {string} newState - The new state
-       * @private
-       */
-      #setState(newState) {
-        this.#state = newState;
-        this.setAttribute("state", newState);
-      }
-      /**
-       * Emit a custom event
-       * @param {string} name - Event name
-       * @param {Object} options - Event options
-       * @returns {boolean} False if event was cancelled
-       * @private
-       */
-      #emit(name, options = {}) {
-        const _2 = this;
-        const { cancelable = false, ...detail } = options;
-        const event = new CustomEvent(name, {
-          bubbles: true,
-          composed: true,
-          cancelable,
-          detail: {
-            triggerElement: _2.#triggerElement,
-            result: _2.#result,
-            state: _2.#state,
-            ...detail
-          }
-        });
-        return _2.dispatchEvent(event);
-      }
-      /**
-       * Optional morph transition transport
-       * @returns {Object|null} The attached morph engine
-       */
-      get morphEngine() {
-        return this.#morphEngine;
-      }
-      /**
-       * Attach or remove a duck-typed morph transition engine
-       * @param {Object|null} engine - Engine with show, hide, state, on, and off
-       */
-      set morphEngine(engine) {
-        const _2 = this;
-        if (_2.#morphEngine === engine) return;
-        if (_2.#morphEngine && _2.#state !== "hidden") {
-          _2.#morphEngine.stop();
-          if (_2.#state !== "hidden") _2.#finalizeHidden();
-        }
-        _2.#unwireMorphEngine();
-        _2.#morphEngine = engine || null;
-        if (_2.#morphEngine) {
-          _2.setAttribute("morph", "");
-          _2.#wireMorphEngine();
-        } else {
-          _2.removeAttribute("morph");
-        }
-      }
-      // Read-only properties
-      get state() {
-        return this.#state;
-      }
-      get dialog() {
-        return this.#dialog;
-      }
-      get isOpen() {
-        return this.#state === "showing" || this.#state === "shown";
-      }
-      get triggerElement() {
-        return this.#triggerElement;
-      }
-    };
-    DialogBackdrop = class extends HTMLElement {
-      #panel = null;
-      #handlers = {
-        click: null
-      };
-      connectedCallback() {
-        const _2 = this;
-        _2.#panel = _2.closest("dialog-panel");
-        if (!_2.#panel) {
-          console.warn(
-            "DialogBackdrop: Must be inside a <dialog-panel> element"
-          );
-          return;
-        }
-        _2.#handlers.click = () => {
-          _2.#panel.hide();
-        };
-        _2.addEventListener("click", _2.#handlers.click);
-      }
-      disconnectedCallback() {
-        const _2 = this;
-        if (_2.#handlers.click) {
-          _2.removeEventListener("click", _2.#handlers.click);
-        }
-      }
-    };
-    if (!customElements.get("dialog-backdrop")) {
-      customElements.define("dialog-backdrop", DialogBackdrop);
-    }
-    if (!customElements.get("dialog-panel")) {
-      customElements.define("dialog-panel", DialogPanel);
-    }
-  }
-});
-
 // node_modules/@magic-spells/sheet/dist/sheet.esm.js
 var sheet_esm_exports = {};
 __export(sheet_esm_exports, {
@@ -5296,7 +6239,7 @@ function assembleKeyframes(profile2, restFrame, from2, to) {
   });
   const at = (percent2, overrides) => {
     const factor = percent2 / 100;
-    const lerp = (a2, b3) => a2 + (b3 - a2) * factor;
+    const lerp = (a2, b4) => a2 + (b4 - a2) * factor;
     return frame({
       x: lerp(from2.x, to.x),
       y: lerp(from2.y, to.y),
@@ -5397,7 +6340,7 @@ function buildRestKeyframes(profile2, fromSize, toSize, restSize, lowestSize = 0
   return keyframes;
 }
 function normalizeSnaps(snaps) {
-  return [...new Set(snaps.map(Number).filter((value) => Number.isFinite(value) && value > 0).sort((a2, b3) => a2 - b3))];
+  return [...new Set(snaps.map(Number).filter((value) => Number.isFinite(value) && value > 0).sort((a2, b4) => a2 - b4))];
 }
 function fingerFromAway(position, awayDirection) {
   return position === "left" ? -awayDirection : awayDirection;
@@ -5455,7 +6398,7 @@ function resolveSnapPoints(value, { viewportHeight, viewportWidth = viewportHeig
     if (unit === "rem") return number * rootFontSize;
     if (unit === "%") return number / 100 * percentageBase;
     return number / 100 * viewportHeight;
-  }).filter((number) => Number.isFinite(number) && number > 0).map((number) => Math.round(number * 100) / 100).sort((a2, b3) => a2 - b3);
+  }).filter((number) => Number.isFinite(number) && number > 0).map((number) => Math.round(number * 100) / 100).sort((a2, b4) => a2 - b4);
   return [...new Set(pixels)];
 }
 function resolveInitialSnap(value, snaps) {
@@ -5531,7 +6474,7 @@ function reflectString(element, name, value) {
   if (value === null || value === void 0 || value === "") element.removeAttribute(name);
   else element.setAttribute(name, String(value));
 }
-var VelocityTracker2, SLOP2, DragGesture, EventEmitter3, FRAME_MS2, VELOCITY_BOOST2, SETTLE_POSITION_EPSILON2, SETTLE_DELTA_EPSILON2, CLAMP_POSITIVE2, MANAGED_PROPERTIES2, EFFECT_BLUR, SPRING_PRESETS, SNAP_VELOCITY_LIMIT, EXIT_VELOCITY_LIMIT, MIN_SPRING, MAX_SPRING, DISMISS_ROUTES, DEFAULT_REVEAL_PERCENT, SheetEngine, SIMPLE_LENGTH, POSITIONS, MODES2, EFFECTS, PROFILE_ATTRIBUTES, EFFECT_ATTRIBUTES, RESIZE_THROTTLE_MS, FLICK_VELOCITY2, OVERSCROLL_RESISTANCE, SCROLLABLE_OVERFLOW, SCRIM_PRESS_NONE, SCRIM_PRESS_SCRIM, SCRIM_PRESS_INSIDE, MORPH_PROPERTIES, MORPH_TRANSITION_PROPERTIES, MORPH_TIMEOUT_PADDING_MS, SheetPanel, SheetHeader, SheetContent, SheetFooter;
+var VelocityTracker2, SLOP2, DragGesture2, EventEmitter3, FRAME_MS2, VELOCITY_BOOST2, SETTLE_POSITION_EPSILON2, SETTLE_DELTA_EPSILON2, CLAMP_POSITIVE2, MANAGED_PROPERTIES2, EFFECT_BLUR, SPRING_PRESETS, SNAP_VELOCITY_LIMIT, EXIT_VELOCITY_LIMIT, MIN_SPRING, MAX_SPRING, DISMISS_ROUTES, DEFAULT_REVEAL_PERCENT, SheetEngine, SIMPLE_LENGTH, POSITIONS, MODES2, EFFECTS, PROFILE_ATTRIBUTES, EFFECT_ATTRIBUTES, RESIZE_THROTTLE_MS, FLICK_VELOCITY, OVERSCROLL_RESISTANCE, SCROLLABLE_OVERFLOW, SCRIM_PRESS_NONE, SCRIM_PRESS_SCRIM, SCRIM_PRESS_INSIDE, MORPH_PROPERTIES, MORPH_TRANSITION_PROPERTIES, MORPH_TIMEOUT_PADDING_MS, SheetPanel, SheetHeader, SheetContent, SheetFooter;
 var init_sheet_esm = __esm({
   "node_modules/@magic-spells/sheet/dist/sheet.esm.js"() {
     init_dialog_panel_esm();
@@ -5586,7 +6529,7 @@ var init_sheet_esm = __esm({
       }
     };
     SLOP2 = 5;
-    DragGesture = class {
+    DragGesture2 = class {
       #active = false;
       #captured = false;
       #el;
@@ -6840,7 +7783,7 @@ var init_sheet_esm = __esm({
       "desktop-exit-effect"
     ]);
     RESIZE_THROTTLE_MS = 100;
-    FLICK_VELOCITY2 = 0.5;
+    FLICK_VELOCITY = 0.5;
     OVERSCROLL_RESISTANCE = 0.2;
     SCROLLABLE_OVERFLOW = /* @__PURE__ */ new Set(["auto", "scroll"]);
     SCRIM_PRESS_NONE = "none";
@@ -7447,7 +8390,7 @@ var init_sheet_esm = __esm({
       }
       #bindSurface(element, surface) {
         if (!element) return;
-        this.#gestures.push(new DragGesture(element, this.#surfaceCallbacks(surface)));
+        this.#gestures.push(new DragGesture2(element, this.#surfaceCallbacks(surface)));
       }
       #surfaceCallbacks(surface) {
         const _2 = this;
@@ -7535,7 +8478,7 @@ var init_sheet_esm = __esm({
           currentSize: _2.#engine.currentSize,
           velocityAway,
           snaps: _2.#snaps,
-          flickVelocity: FLICK_VELOCITY2
+          flickVelocity: FLICK_VELOCITY
         });
         let prevented = resolved === null && !_2.dismissPolicy.swipe;
         let target = prevented ? _2.#engine.activeSnap : resolved;
@@ -7567,7 +8510,7 @@ var init_sheet_esm = __esm({
           composed: true,
           detail: {
             velocity,
-            flick: Math.abs(velocity) > FLICK_VELOCITY2,
+            flick: Math.abs(velocity) > FLICK_VELOCITY,
             direction: velocity > 0 ? "away" : velocity < 0 ? "toward" : "none",
             size: _2.#engine.currentSize,
             target,
@@ -10436,9 +11379,9 @@ var manifest_default = { escape };
 
 // node_modules/@magic-spells/puzzle/client-runtime/formatters.js
 var requiredBuiltins = { escape, raw, noescape };
-function editDistance(a2, b3) {
+function editDistance(a2, b4) {
   const m2 = a2.length;
-  const n2 = b3.length;
+  const n2 = b4.length;
   if (m2 === 0) return n2;
   if (n2 === 0) return m2;
   let prev = new Array(n2 + 1);
@@ -10447,7 +11390,7 @@ function editDistance(a2, b3) {
   for (let i3 = 1; i3 <= m2; i3++) {
     curr[0] = i3;
     for (let j2 = 1; j2 <= n2; j2++) {
-      const cost = a2[i3 - 1] === b3[j2 - 1] ? 0 : 1;
+      const cost = a2[i3 - 1] === b4[j2 - 1] ? 0 : 1;
       curr[j2] = Math.min(prev[j2] + 1, curr[j2 - 1] + 1, prev[j2 - 1] + cost);
     }
     const tmp = prev;
@@ -11322,16 +12265,16 @@ function patchComponent(oldVnode, newVnode) {
   child.applyParentUpdate({ props, children: newVnode.children });
   newVnode.el = child.element;
 }
-function sameNode(a2, b3) {
-  return a2.tag === b3.tag && (a2.key === b3.key || a2.key !== a2.key && b3.key !== b3.key);
+function sameNode(a2, b4) {
+  return a2.tag === b4.tag && (a2.key === b4.key || a2.key !== a2.key && b4.key !== b4.key);
 }
-function shallowEqual(a2, b3) {
-  if (a2 === b3) return true;
-  if (!a2 || !b3) return false;
+function shallowEqual(a2, b4) {
+  if (a2 === b4) return true;
+  if (!a2 || !b4) return false;
   const ak = Object.keys(a2);
-  if (ak.length !== Object.keys(b3).length) return false;
+  if (ak.length !== Object.keys(b4).length) return false;
   for (const k2 of ak) {
-    if (a2[k2] !== b3[k2]) return false;
+    if (a2[k2] !== b4[k2]) return false;
   }
   return true;
 }
@@ -12364,9 +13307,9 @@ var Router = class {
     let keep = 0;
     if (cur && !cur.chainInvalid) {
       const a2 = cur.entry.chain;
-      const b3 = entry.chain;
-      const max = Math.min(a2.length, b3.length);
-      while (keep < max && a2[keep] === b3[keep]) keep++;
+      const b4 = entry.chain;
+      const max = Math.min(a2.length, b4.length);
+      while (keep < max && a2[keep] === b4[keep]) keep++;
     }
     let pendingLayoutOut = false;
     if (this.#pendingOut && cur) {
@@ -13548,9 +14491,9 @@ function normalizeBase(base2) {
   if (base2.includes("#") || base2.includes("?")) {
     throw new Error(`[puzzle] router base must not contain "#" or "?": "${base2}"`);
   }
-  let b3 = base2[0] === "/" ? base2 : "/" + base2;
-  b3 = b3.replace(/\/+$/, "");
-  return normalizeRoutePath(b3);
+  let b4 = base2[0] === "/" ? base2 : "/" + base2;
+  b4 = b4.replace(/\/+$/, "");
+  return normalizeRoutePath(b4);
 }
 function encodeURL(path, mode, base2) {
   if (typeof path !== "string") {
@@ -16629,7 +17572,7 @@ var SECTIONS = [
         name: "bottom-sheet",
         title: "Bottom Sheet",
         path: "/components/bottom-sheet",
-        description: "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state"
+        description: "Native-dialog bottom sheet dragged, flicked and dismissed with a finger, with optional height snap points that settle on a velocity-aware spring, a pinned footer, inset mode and a dismissal-tracking scrim; wraps the @magic-spells/bottom-sheet web component rather than porting it"
       },
       {
         name: "command",
@@ -17242,7 +18185,7 @@ function searchDocs(query, limit = 12) {
     }
     if (matchedAll) hits.push({ entry, score: total });
   }
-  hits.sort((a2, b3) => b3.score - a2.score || a2.entry._title.localeCompare(b3.entry._title));
+  hits.sort((a2, b4) => b4.score - a2.score || a2.entry._title.localeCompare(b4.entry._title));
   return hits.slice(0, limit).map(({ entry }) => ({
     title: entry.title,
     path: entry.path,
@@ -22171,11 +23114,11 @@ var asNumber = (v2) => {
   }
   return NaN;
 };
-var compareCells = (a2, b3) => {
+var compareCells = (a2, b4) => {
   const an = asNumber(a2);
-  const bn = asNumber(b3);
+  const bn = asNumber(b4);
   if (!Number.isNaN(an) && !Number.isNaN(bn)) return an - bn;
-  return String(a2 == null ? "" : a2).localeCompare(String(b3 == null ? "" : b3));
+  return String(a2 == null ? "" : a2).localeCompare(String(b4 == null ? "" : b4));
 };
 var DataTable = class extends PuzzleView {
   created() {
@@ -22248,12 +23191,12 @@ var DataTable = class extends PuzzleView {
     const sortDir = sort && sort.dir === "desc" ? "desc" : "asc";
     let sortedRaw = rawRows;
     if (sortKey != null) {
-      sortedRaw = rawRows.map((r2, i3) => [r2, i3]).sort((a2, b3) => {
+      sortedRaw = rawRows.map((r2, i3) => [r2, i3]).sort((a2, b4) => {
         const av = a2[0] == null ? void 0 : a2[0][sortKey];
-        const bv = b3[0] == null ? void 0 : b3[0][sortKey];
+        const bv = b4[0] == null ? void 0 : b4[0][sortKey];
         const d = compareCells(av, bv);
         const signed = sortDir === "desc" ? -d : d;
-        return signed !== 0 ? signed : a2[1] - b3[1];
+        return signed !== 0 ? signed : a2[1] - b4[1];
       }).map((pair) => pair[0]);
     }
     const columns = rawColumns.map((col, i3) => {
@@ -25290,7 +26233,7 @@ var AdminDemo = class extends PuzzleView {
         (p) => p.title.toLowerCase().includes(q2) || p.vendor.toLowerCase().includes(q2)
       );
     }
-    const restockList = this._liveProducts().filter((p) => p.status === "Active").sort((a2, b3) => a2.inventory - b3.inventory).slice(0, 4).map((p, i3) => ({
+    const restockList = this._liveProducts().filter((p) => p.status === "Active").sort((a2, b4) => a2.inventory - b4.inventory).slice(0, 4).map((p, i3) => ({
       id: p.id,
       title: p.title,
       vendor: p.vendor,
@@ -27911,7 +28854,7 @@ var PieChart = class extends PuzzleView {
     })).filter((d) => Number.isFinite(d.value) && d.value > 0);
     if (items.length > 8) {
       const keep = new Set(
-        items.map((d, idx) => ({ idx, value: d.value })).sort((a2, b3) => b3.value - a2.value).slice(0, 7).map((o2) => o2.idx)
+        items.map((d, idx) => ({ idx, value: d.value })).sort((a2, b4) => b4.value - a2.value).slice(0, 7).map((o2) => o2.idx)
       );
       const kept = [];
       let otherVal = 0;
@@ -28469,14 +29412,14 @@ function addMonths(parts, amount) {
   const day = Math.min(parts.day, daysInMonth(year, month));
   return { year, month, day };
 }
-function isSameDay(a2, b3) {
-  if (!a2 || !b3) return false;
-  return a2.year === b3.year && a2.month === b3.month && a2.day === b3.day;
+function isSameDay(a2, b4) {
+  if (!a2 || !b4) return false;
+  return a2.year === b4.year && a2.month === b4.month && a2.day === b4.day;
 }
-function compareDates(a2, b3) {
-  if (a2.year !== b3.year) return a2.year < b3.year ? -1 : 1;
-  if (a2.month !== b3.month) return a2.month < b3.month ? -1 : 1;
-  if (a2.day !== b3.day) return a2.day < b3.day ? -1 : 1;
+function compareDates(a2, b4) {
+  if (a2.year !== b4.year) return a2.year < b4.year ? -1 : 1;
+  if (a2.month !== b4.month) return a2.month < b4.month ? -1 : 1;
+  if (a2.day !== b4.day) return a2.day < b4.day ? -1 : 1;
   return 0;
 }
 function clampDate(parts, min, max) {
@@ -37736,997 +38679,400 @@ BarChartDoc.prototype.render = function() {
 BarChartDoc.__pzlModule = "app/views/components/BarChartDoc.pzl";
 
 // app/components/ui/BottomSheet.pzl
-init_physics_engine_esm();
-
-// app/lib/sheet-math.js
-var SNAP_EPSILON = 1;
-var SPRING_DEFAULTS = { attraction: 0.065, friction: 0.3 };
-var FRAME_MS = 16.66;
-var VELOCITY_BOOST = 1.1;
-function parseSnapPoints(value) {
-  if (!value) return [];
-  const tokens = Array.isArray(value) ? value : String(value).split(/[\s,]+/);
-  const seen = /* @__PURE__ */ new Set();
-  for (const token of tokens) {
-    if (token === "") continue;
-    const parsed = Number(token);
-    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 100) continue;
-    seen.add(parsed);
-  }
-  return [...seen].sort((a2, b3) => a2 - b3);
-}
-function resolveSnapTarget({ currentPx, velocityY, snapsPx, flickVelocity }) {
-  if (!snapsPx.length) return null;
-  if (velocityY > flickVelocity) {
-    const below = snapsPx.filter((px) => px < currentPx - SNAP_EPSILON);
-    return below.length ? below[below.length - 1] : null;
-  }
-  if (velocityY < -flickVelocity) {
-    const above = snapsPx.find((px) => px > currentPx + SNAP_EPSILON);
-    return above ?? snapsPx[snapsPx.length - 1];
-  }
-  return snapsPx.reduce(
-    (best, px) => Math.abs(px - currentPx) < Math.abs(best - currentPx) ? px : best
-  );
-}
-function dismissProgress(visibleExtent, restExtent) {
-  if (!Number.isFinite(restExtent) || restExtent <= 0) return 1;
-  if (!Number.isFinite(visibleExtent)) return 1;
-  return Math.min(1, Math.max(0, visibleExtent / restExtent));
-}
-var VelocityTracker = class {
-  #samples = [];
-  #windowMs;
-  constructor(windowMs = 100) {
-    this.#windowMs = windowMs;
-  }
-  add(y2, t2) {
-    this.#samples.push({ y: y2, t: t2 });
-    const cutoff = t2 - this.#windowMs;
-    while (this.#samples.length > 2 && this.#samples[0].t < cutoff) {
-      this.#samples.shift();
-    }
-  }
-  get velocity() {
-    const samples = this.#samples;
-    if (samples.length < 2) return 0;
-    const last = samples[samples.length - 1];
-    let direction = 0;
-    let start = samples.length - 1;
-    while (start > 0) {
-      const step = Math.sign(samples[start].y - samples[start - 1].y);
-      if (step !== 0) {
-        if (direction === 0) direction = step;
-        else if (step !== direction) break;
-      }
-      start--;
-    }
-    const first2 = samples[start];
-    const deltaTime = last.t - first2.t;
-    return deltaTime === 0 ? 0 : (last.y - first2.y) / deltaTime;
-  }
-  reset() {
-    this.#samples = [];
-  }
-};
-function applyResistance(v2) {
-  return Math.sqrt(v2) * 10 * 0.1;
-}
-function seedVelocity(velocityY) {
-  return -velocityY * FRAME_MS * VELOCITY_BOOST;
-}
-
-// app/components/ui/BottomSheet.pzl
 var uid20 = 0;
-var ENTER_DURATION = 400;
-var EXIT_DURATION = 400;
-var MOTION_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
-var SNAP_EASING = "cubic-bezier(0.2, 1.25, 0.3, 1)";
-var HIDDEN_OFFSET = 20;
-var SLOP = 5;
-var DRAG_THRESHOLD2 = 100;
-var FLICK_VELOCITY = 0.5;
-var DIALOG = "fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 open:flex flex-col justify-end overflow-hidden text-body [&::backdrop]:bg-transparent";
-var BACKDROP = "absolute inset-0 bg-black/50 backdrop-blur-sm touch-pinch-zoom";
-var PANEL_WIDTH_CAP = "max-w-[480px]";
-var CALLER_MAX_WIDTH = /(?:^|\s)\S*max-w-/;
-var PANEL_BASE5 = "relative z-10 mx-auto flex flex-col overflow-hidden bg-surface will-change-transform";
-var PANEL_EDGE = "w-full rounded-t-2xl border-t border-border pb-[env(safe-area-inset-bottom,0px)] shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
-var PANEL_INSET = "mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] w-[calc(100%-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
-var HEADER = "shrink-0 touch-pinch-zoom select-none px-4";
-var CONTENT = "min-h-0 flex-1 touch-manipulation overflow-y-auto overscroll-contain px-4";
-var FOOTER = "shrink-0 touch-pinch-zoom bg-surface p-4 empty:hidden";
-var BottomSheet = class extends PuzzleView {
-  #enter = null;
-  #exit = null;
-  #move = null;
-  #scrimReturn = null;
-  // Last opacity written to the backdrop, so a frame that computes the same
-  // number does not touch the DOM. null means no inline value is set.
-  #scrimOpacity = null;
-  #snapAnimation = null;
-  #settleTarget = null;
-  #engine = null;
-  #springTarget = null;
-  #springSpec = null;
-  #carriedVelocity = 0;
-  #drag = { active: false };
-  #snapPoints = [];
-  #localSnap = null;
-  #committedSnap = null;
-  // dialog.close() queues its event. A counter survives that gap and overlapping
-  // internal closes without misreporting them as native user closes.
-  #expectedCloses = 0;
-  #nativeClosed = false;
-  data(params, props) {
-    const id = this._id ??= `pp-bottom-sheet-${++uid20}`;
-    const title = props.title || "";
-    const inset = !!props.inset;
-    const callerClass = props.class || "";
-    this.#snapPoints = parseSnapPoints(props.snapPoints);
-    const hasSnaps = this.#snapPoints.length > 0;
-    return {
-      // Read imperatively in syncOpen(); returned so prop changes still drive
-      // the update cycle that calls afterUpdate().
-      open: !!props.open,
-      title,
-      titleId: `${id}-title`,
-      labelledby: props.labelledby || (title ? `${id}-title` : false),
-      showGrabber: props.dismissible !== false && props.showGrabber !== false,
-      dialogClass: DIALOG,
-      backdropClass: [
-        BACKDROP,
-        props.dismissible === false ? "" : "cursor-grab",
-        props.backdropClass || ""
-      ].filter(Boolean).join(" "),
-      panelClass: [
-        PANEL_BASE5,
-        inset ? PANEL_INSET : PANEL_EDGE,
-        hasSnaps ? "max-h-none" : "max-h-[85dvh]",
-        // Yield the default cap outright when the caller sets their own width.
-        CALLER_MAX_WIDTH.test(callerClass) ? "" : PANEL_WIDTH_CAP,
-        callerClass
-      ].filter(Boolean).join(" "),
-      headerClass: [HEADER, props.dismissible === false ? "" : "cursor-grab"].filter(Boolean).join(" "),
-      contentClass: CONTENT,
-      footerClass: [FOOTER, props.dismissible === false ? "" : "cursor-grab"].filter(Boolean).join(" ")
-    };
-  }
-  #reducedMotion() {
-    return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  }
-  #lockBody() {
-    this.element?.setAttribute("data-scroll-lock", "");
-    document.body.style.overflow = "hidden";
-  }
-  #unlockBody() {
-    this.element?.removeAttribute("data-scroll-lock");
-    if (!document.querySelector("[data-scroll-lock]")) {
-      document.body.style.overflow = "";
-    }
-  }
-  #hiddenDistance() {
-    const panel = this.refs.panel;
-    if (!panel) return HIDDEN_OFFSET;
-    const gapBelow = Math.max(0, window.innerHeight - panel.getBoundingClientRect().bottom);
-    return panel.offsetHeight + gapBelow + HIDDEN_OFFSET;
-  }
-  #cancelAnimations() {
-    if (this.#enter) {
-      this.#enter.panel.cancel();
-      this.#enter.backdrop.cancel();
-      this.#enter = null;
-    }
-    if (this.#exit) {
-      this.#exit.panel.cancel();
-      this.#exit.backdrop.cancel();
-      this.#exit = null;
-    }
-    if (this.#move) {
-      this.#move.cancel();
-      this.#move = null;
-    }
-    if (this.#scrimReturn) {
-      this.#scrimReturn.cancel();
-      this.#scrimReturn = null;
-    }
-    if (this.#snapAnimation) {
-      this.#snapAnimation.cancel();
-      this.#snapAnimation = null;
-      this.#settleTarget = null;
-    }
-    this.#stopSpring();
-  }
-  // ---- scrim ----------------------------------------------------------------
-  /**
-   * Publishes how much of the sheet is still on screen as the backdrop's
-   * opacity. Only a live drag calls this — a spring settle never needs to, since
-   * the engine only runs when there is HEIGHT left to travel and height travel
-   * only exists at or above the shortest snap, where progress is pinned at 1.
-   *
-   * Saturation CLEARS the inline value rather than writing '1'. The resting
-   * opacity already is 1, and an absent inline style is what lets the enter and
-   * exit animations own the property without fighting a stale write.
-   * @param {number|null} progress - 1 fully on screen, 0 gone; null to release
-   */
-  #syncScrim(progress) {
-    const backdrop = this.refs.backdrop;
-    if (!backdrop) return;
-    if (progress === null || !(progress < 1)) {
-      if (this.#scrimOpacity === null) return;
-      this.#scrimOpacity = null;
-      backdrop.style.opacity = "";
-      return;
-    }
-    const value = Math.max(0, progress).toFixed(3);
-    if (value === this.#scrimOpacity) return;
-    this.#scrimOpacity = value;
-    backdrop.style.opacity = value;
-  }
-  /**
-   * Rides the scrim back to full after a release that keeps the sheet. The
-   * source hands this to a re-armed CSS transition; there is no stylesheet here,
-   * so the return is its own animation on the settle's clock.
-   */
-  #returnScrim() {
-    const backdrop = this.refs.backdrop;
-    const from2 = this.#scrimOpacity;
-    if (!backdrop || from2 === null) return;
-    if (this.#reducedMotion()) {
-      this.#syncScrim(null);
-      return;
-    }
-    this.#syncScrim(null);
-    const anim = backdrop.animate([{ opacity: from2 }, { opacity: 1 }], {
-      duration: EXIT_DURATION,
-      easing: MOTION_EASING
+function attr(value) {
+  return value === void 0 || value === null || value === "" ? false : String(value);
+}
+var THEME = "[--bs-panel-background:var(--color-surface)] [--bs-handle-color:var(--color-faint)] [--bs-overlay-background:rgb(0_0_0_/_0.5)] [--bs-overlay-blur:8px]";
+var NO_GRABBER = "[--bs-handle-height:0px] [--bs-handle-width:0px]";
+var PANEL2 = "text-body";
+var HEADER = "pt-6";
+var HEADER_NO_GRABBER = "pt-4";
+var TITLE = "pb-3 text-base font-semibold text-ink text-center";
+var BottomSheet2 = class extends PuzzleView {
+  #id = `bottom-sheet-${++uid20}`;
+  #panel = null;
+  #sheet = null;
+  #live = false;
+  #ready = false;
+  #lastOpen = false;
+  #lastSnap;
+  #onShown = () => {
+    this.props.show?.();
+  };
+  #onHidden = (event) => {
+    const detail = event.detail || {};
+    this.props.hide?.({
+      result: detail.result ?? null,
+      triggerElement: detail.triggerElement ?? null
     });
-    this.#scrimReturn = anim;
-    anim.onfinish = () => {
-      if (this.#scrimReturn !== anim) return;
-      this.#scrimReturn = null;
+  };
+  // Upstream spells this event in camelCase, so the listener has to as well —
+  // addEventListener is case-sensitive and a lowercase name silently never
+  // fires.
+  #onSnapChange = (event) => {
+    const to = event.detail?.to;
+    if (typeof to !== "number") return;
+    this.#lastSnap = to;
+    this.props.snapChange?.(to);
+  };
+  data(params, props) {
+    const title = props.title || "";
+    const snapPoints = Array.isArray(props.snapPoints) ? props.snapPoints.join(",") : props.snapPoints;
+    const grabber = props.showGrabber !== false;
+    return {
+      title,
+      titleId: `${this.#id}-title`,
+      titleClass: TITLE,
+      labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
+      rootClass: THEME,
+      backdropClass: attr(props.backdropClass),
+      headerClass: grabber ? HEADER : HEADER_NO_GRABBER,
+      panelClass: [PANEL2, grabber ? "" : NO_GRABBER, props.class].filter(Boolean).join(" "),
+      panelStyle: attr(props.style),
+      snapPointsAttr: attr(snapPoints),
+      springAttr: attr(props.spring),
+      maxDisplayWidthAttr: attr(props.maxDisplayWidth),
+      // A boolean attribute: presence alone detaches the sheet from the edges.
+      insetAttr: props.inset ? true : false
     };
-  }
-  #finishClose(dialog) {
-    this.refs.panel.style.transform = "";
-    this.refs.backdrop.style.opacity = "";
-    this.#scrimOpacity = null;
-    this.#closeDialog(dialog);
-    this.#unlockBody();
-    const { hidden } = this.props;
-    if (typeof hidden === "function") hidden();
-  }
-  #closeDialog(dialog = this.element) {
-    if (!dialog?.open) return;
-    this.#expectedCloses += 1;
-    dialog.close();
-  }
-  #playEnter() {
-    const panel = this.refs.panel;
-    const backdrop = this.refs.backdrop;
-    panel.style.transform = "";
-    backdrop.style.opacity = "";
-    this.#scrimOpacity = null;
-    if (this.#reducedMotion()) {
-      const { shown } = this.props;
-      if (typeof shown === "function") shown();
-      return;
-    }
-    const distance = this.#hiddenDistance();
-    const panelAnim = panel.animate(
-      [
-        { transform: `translate3d(0, ${distance}px, 0)` },
-        { transform: "translate3d(0, 0, 0)" }
-      ],
-      { duration: ENTER_DURATION, easing: MOTION_EASING }
-    );
-    const backdropAnim = backdrop.animate(
-      [{ opacity: 0 }, { opacity: 1 }],
-      { duration: ENTER_DURATION, easing: MOTION_EASING }
-    );
-    const entry = { panel: panelAnim, backdrop: backdropAnim };
-    this.#enter = entry;
-    panelAnim.onfinish = () => {
-      if (this.#enter !== entry) return;
-      this.#enter = null;
-      const { shown } = this.props;
-      if (typeof shown === "function") shown();
-    };
-  }
-  #playExit(dialog) {
-    if (this.#reducedMotion()) {
-      this.#finishClose(dialog);
-      return;
-    }
-    const panel = this.refs.panel;
-    const backdrop = this.refs.backdrop;
-    const from2 = panel.style.transform || "translate3d(0, 0, 0)";
-    const fromOpacity = this.#scrimOpacity ?? 1;
-    this.#scrimOpacity = null;
-    const distance = this.#hiddenDistance();
-    const panelAnim = panel.animate(
-      [
-        { transform: from2 },
-        { transform: `translate3d(0, ${distance}px, 0)` }
-      ],
-      { duration: EXIT_DURATION, easing: MOTION_EASING, fill: "forwards" }
-    );
-    const backdropAnim = backdrop.animate(
-      [{ opacity: fromOpacity }, { opacity: 0 }],
-      { duration: EXIT_DURATION, easing: MOTION_EASING, fill: "forwards" }
-    );
-    const exit = { panel: panelAnim, backdrop: backdropAnim };
-    this.#exit = exit;
-    panelAnim.onfinish = () => {
-      if (this.#exit !== exit) return;
-      this.#exit = null;
-      this.#finishClose(dialog);
-      panelAnim.cancel();
-      backdropAnim.cancel();
-    };
-  }
-  // Reconciles the native element to the controlled open prop. The dialog stays
-  // open through its exit animation; a reopen cancels that exit in place.
-  syncOpen() {
-    const dialog = this.element;
-    if (!dialog) return;
-    const shouldOpen = !!this.props.open;
-    if (!shouldOpen) this.#nativeClosed = false;
-    if (shouldOpen) {
-      if (this.#nativeClosed) return;
-      if (this.#exit) {
-        this.#exit.panel.cancel();
-        this.#exit.backdrop.cancel();
-        this.#exit = null;
-        this.refs.panel.style.transform = "";
-        this.refs.backdrop.style.opacity = "";
-        this.#applyRestingHeight();
-      }
-      if (!dialog.open) {
-        this.#applyRestingHeight();
-        this.#lockBody();
-        dialog.showModal();
-        this.#playEnter();
-      }
-      return;
-    }
-    this.#abandonDrag();
-    if (this.#move) {
-      this.#move.cancel();
-      this.#move = null;
-    }
-    if (this.#scrimReturn) {
-      this.#scrimReturn.cancel();
-      this.#scrimReturn = null;
-    }
-    if (this.#snapAnimation) this.#haltSnapSettle(true);
-    if (this.#springTarget !== null) this.#haltSpring(true);
-    if (this.#enter) {
-      this.#enter.panel.cancel();
-      this.#enter.backdrop.cancel();
-      this.#enter = null;
-    }
-    if (dialog.open && !this.#exit) this.#playExit(dialog);
-  }
-  /**
-   * Drops a live gesture in place without running any release rule.
-   *
-   * Deliberately NOT the same thing as a pointercancel: that one is a reported
-   * release and dragEnd is entitled to resolve it. This is for a close the user
-   * never asked the gesture for, where acting on a lift that never happened is
-   * the bug. The pointer's own pointerup then finds an inactive drag and returns.
-   */
-  #abandonDrag() {
-    const drag = this.#drag;
-    if (!drag.active) return;
-    this.#releasePointer(drag);
-    this.#drag = { active: false };
   }
   mounted() {
-    this.#springSpec = this.#springValue();
-    this.#committedSnap = this.#desiredSnap();
-    this.#applyRestingHeight();
-    this.syncOpen();
+    if (typeof window === "undefined") return;
+    this.#live = true;
+    this.#panel = this.refs.panel;
+    this.#sheet = this.refs.sheet;
+    this.#lastOpen = !!this.props.open;
+    this.#lastSnap = this.props.snap;
+    if (this.#lastSnap !== void 0 && this.#lastSnap !== null) {
+      this.#sheet?.setAttribute("snap", String(this.#lastSnap));
+    }
+    this.#panel?.addEventListener("shown", this.#onShown);
+    this.#panel?.addEventListener("hidden", this.#onHidden);
+    this.#sheet?.addEventListener("snapChange", this.#onSnapChange);
+    Promise.all([Promise.resolve().then(() => (init_dialog_panel_esm(), dialog_panel_esm_exports)), Promise.resolve().then(() => (init_bottom_sheet_esm(), bottom_sheet_esm_exports))]).then(() => {
+      if (!this.#live) return;
+      this.#ready = true;
+      this.#sync();
+    }).catch((error) => {
+      console.error(
+        "[BottomSheet] failed to load @magic-spells/bottom-sheet \u2014 the sheet will not open.",
+        error
+      );
+    });
   }
   afterUpdate() {
-    this.#reconcileSpring();
-    this.#reconcileSnap();
-    this.syncOpen();
+    if (!this.#live) return;
+    const open = !!this.props.open;
+    if (open !== this.#lastOpen) {
+      this.#lastOpen = open;
+      this.#sync();
+    }
+    const snap2 = this.props.snap;
+    if (snap2 !== void 0 && snap2 !== this.#lastSnap) {
+      this.#lastSnap = snap2;
+      if (this.#ready) this.#sheet?.snapTo?.(Number(snap2));
+    }
   }
   destroyed() {
-    this.#cancelAnimations();
-    this.#drag = { active: false };
-    this.#scrimOpacity = null;
-    this.#engine?.removeAllListeners();
-    this.#engine = null;
-    this.#closeDialog();
-    this.#unlockBody();
+    this.#live = false;
+    this.#panel?.removeEventListener("shown", this.#onShown);
+    this.#panel?.removeEventListener("hidden", this.#onHidden);
+    this.#sheet?.removeEventListener("snapChange", this.#onSnapChange);
+    if (this.#panel?.isOpen) this.#sheet?.hide?.();
+    this.#panel = null;
+    this.#sheet = null;
   }
-  // ---- drag gesture ---------------------------------------------------------
-  #capturePointer(event) {
-    const drag = this.#drag;
-    try {
-      drag.captureEl.setPointerCapture(event.pointerId);
-    } catch (_2) {
-    }
-    drag.captured = true;
-  }
-  #releasePointer(drag) {
-    if (!drag.captured || !drag.captureEl) return;
-    try {
-      drag.captureEl.releasePointerCapture(drag.pointerId);
-    } catch (_2) {
+  // Edge-triggered, never level-triggered: called only when `open` actually
+  // changed (or when the module finally landed on a sheet that mounted open).
+  // The isOpen guards make a redundant edge — the parent flipping `open` false
+  // inside @hide, for a sheet that already closed itself — a no-op.
+  #sync() {
+    if (!this.#ready || !this.#panel || !this.#sheet) return;
+    if (this.#lastOpen) {
+      if (!this.#panel.isOpen) this.#sheet.show(this.#trigger());
+    } else if (this.#panel.isOpen) {
+      this.#sheet.hide();
     }
   }
-  #shouldClaim(surface, moveY) {
-    if (surface !== "content") return true;
-    if (moveY === 0) return false;
-    if (moveY > 0) return this.refs.content.scrollTop === 0;
-    const current = this.#currentSnap();
-    return this.#snapPoints.length > 0 && current < this.#snapPoints[this.#snapPoints.length - 1];
+  // The element show() returns focus to. Whatever the user was on when the
+  // parent opened the sheet is the honest answer, and it keeps focus return
+  // working with no prop to pass.
+  #trigger() {
+    const active = document.activeElement;
+    return active && active !== document.body && active.focus ? active : void 0;
   }
-  #moveByTransform(travel) {
-    const panel = this.refs.panel;
-    if (travel < 0) {
-      panel.style.transform = `translate3d(0, ${-applyResistance(-travel)}px, 0)`;
-      this.#syncScrim(1);
-    } else {
-      panel.style.transform = `translate3d(0, ${travel}px, 0)`;
-      this.#syncScrim(dismissProgress(this.#drag.startHeight - travel, this.#drag.startHeight));
-    }
-  }
-  #moveBySnap(travel) {
-    const panel = this.refs.panel;
-    const snapsPx = this.#snapsPx();
-    const minPx = snapsPx[0];
-    const maxPx = snapsPx[snapsPx.length - 1];
-    const height = this.#drag.startHeight - travel;
-    if (height > maxPx) {
-      panel.style.height = `${maxPx + applyResistance(height - maxPx)}px`;
-      panel.style.transform = "";
-      this.#drag.belowLowest = 0;
-      this.#syncScrim(1);
-      return;
-    }
-    if (height < minPx) {
-      const below = minPx - height;
-      panel.style.height = `${minPx}px`;
-      panel.style.transform = `translate3d(0, ${below}px, 0)`;
-      this.#drag.belowLowest = below;
-      this.#syncScrim(dismissProgress(minPx - below, minPx));
-      return;
-    }
-    panel.style.height = `${height}px`;
-    panel.style.transform = "";
-    this.#drag.belowLowest = 0;
-    this.#syncScrim(1);
-  }
-  #settleTransform(fromTransform = null) {
-    const panel = this.refs.panel;
-    const from2 = fromTransform ?? panel.style.transform;
-    if (!from2 || this.#reducedMotion()) {
-      panel.style.transform = "";
-      return;
-    }
-    panel.style.transform = "";
-    const anim = panel.animate(
-      [{ transform: from2 }, { transform: "translate3d(0, 0, 0)" }],
-      { duration: EXIT_DURATION, easing: MOTION_EASING }
-    );
-    this.#move = anim;
-    anim.onfinish = () => {
-      if (this.#move !== anim) return;
-      this.#move = null;
-    };
-  }
-  #requestClose(reason) {
-    const { close: close2 } = this.props;
-    if (typeof close2 === "function") close2(reason);
-  }
-  /**
-   * Takes the panel and backdrop back from a still-running open.
-   *
-   * A live WAAPI animation OVERRIDES inline style, so until the 400ms enter
-   * finishes every transform and opacity the gesture writes is discarded and the
-   * sheet simply ignores the finger. Cancelling hands both properties back.
-   *
-   * Called on the CLAIM, not on pointerdown — same reason the source component
-   * adds its `dragging` class there: a stray press that never becomes a drag must
-   * not kill the open.
-   *
-   * `shown` is fired here because cancel() suppresses onfinish, and a parent
-   * waiting on that callback would otherwise wait forever. The sheet does step to
-   * the finger rather than easing across; taking over an in-flight open means the
-   * enter's remaining distance is given up, which is the point of the takeover.
-   */
-  #adoptFromEnter() {
-    if (!this.#enter) return;
-    this.#enter.panel.cancel();
-    this.#enter.backdrop.cancel();
-    this.#enter = null;
-    const { shown } = this.props;
-    if (typeof shown === "function") shown();
-  }
-  // ---- snap points ----------------------------------------------------------
-  #controlledSnap() {
-    return this.props.snap !== void 0;
-  }
-  #desiredSnap() {
-    if (!this.#snapPoints.length) return null;
-    const raw2 = this.#controlledSnap() ? this.props.snap : this.#localSnap;
-    const value = Number(raw2);
-    return Number.isFinite(value) && this.#snapPoints.includes(value) ? value : this.#snapPoints[0];
-  }
-  #currentSnap() {
-    return this.#snapPoints.includes(this.#committedSnap) ? this.#committedSnap : this.#desiredSnap();
-  }
-  #snapsPx() {
-    return this.#snapPoints.map((value) => value / 100 * window.innerHeight);
-  }
-  #applyRestingHeight() {
-    if (this.#settleTarget !== null || this.#springTarget !== null) return;
-    const snap2 = this.#currentSnap();
-    this.refs.panel.style.height = snap2 === null ? "" : `${snap2}dvh`;
-  }
-  #haltSnapSettle(pinPainted) {
-    if (!this.#snapAnimation) return;
-    const height = this.refs.panel.getBoundingClientRect().height;
-    this.#snapAnimation.cancel();
-    this.#snapAnimation = null;
-    this.#settleTarget = null;
-    if (pinPainted) this.refs.panel.style.height = `${height}px`;
-  }
-  #settleToSnap(value, velocityY = 0, forceWAAPI = false) {
-    const panel = this.refs.panel;
-    const startPx = panel.getBoundingClientRect().height;
-    const targetPx = value / 100 * window.innerHeight;
-    const fromTransform = panel.style.transform;
-    if (this.#move) {
-      this.#move.cancel();
-      this.#move = null;
-    }
-    if (this.#snapAnimation) this.#haltSnapSettle(true);
-    this.#carriedVelocity = 0;
-    if (this.#springTarget !== null) this.#haltSpring(true);
-    panel.style.transform = "";
-    const springSeed = velocityY !== 0 ? seedVelocity(velocityY) : this.#carriedVelocity;
-    if (this.#reducedMotion()) {
-      this.#settleTarget = null;
-      this.#springTarget = null;
-      panel.style.height = `${value}dvh`;
-      return;
-    }
-    if (this.#springEnabled() && !forceWAAPI) {
-      if (Math.abs(startPx - targetPx) < 0.5 && springSeed === 0) {
-        panel.style.height = `${value}dvh`;
-        return;
-      }
-      const engine = this.#ensureEngine();
-      panel.style.height = `${startPx}px`;
-      this.#springTarget = targetPx;
-      engine.animateTo(startPx, targetPx, springSeed);
-      this.#settleTransform(fromTransform);
-      return;
-    }
-    if (Math.abs(startPx - targetPx) < 0.5 && !fromTransform) {
-      panel.style.height = `${value}dvh`;
-      return;
-    }
-    panel.style.height = `${value}dvh`;
-    const anim = panel.animate(
-      [
-        {
-          height: `${startPx}px`,
-          transform: fromTransform || "translate3d(0, 0, 0)"
-        },
-        {
-          height: `${targetPx}px`,
-          transform: "translate3d(0, 0, 0)"
-        }
-      ],
-      { duration: EXIT_DURATION, easing: SNAP_EASING }
-    );
-    this.#snapAnimation = anim;
-    this.#settleTarget = targetPx;
-    anim.onfinish = () => {
-      if (this.#snapAnimation !== anim) return;
-      this.#snapAnimation = null;
-      this.#settleTarget = null;
-      this.#applyRestingHeight();
-    };
-  }
-  #commitSnap(value, velocityY = 0) {
-    if (!this.#snapPoints.includes(value)) return;
-    const from2 = this.#currentSnap();
-    if (!this.#controlledSnap()) this.#localSnap = value;
-    this.#committedSnap = value;
-    this.#settleToSnap(value, velocityY);
-    if (from2 !== value) {
-      const { snapChange } = this.props;
-      if (typeof snapChange === "function") snapChange(value);
-    }
-  }
-  /**
-   * @returns {boolean} true when the release asked the parent to close, which is
-   *   what tells dragEnd to hand the scrim to the exit rather than ride it home
-   */
-  #releaseToSnap(drag, velocityY, cancelled) {
-    if (cancelled) {
-      this.#commitSnap(this.#currentSnap());
-      return false;
-    }
-    if (drag.belowLowest > 0) {
-      const flick = velocityY > FLICK_VELOCITY;
-      const pastThreshold = drag.belowLowest > DRAG_THRESHOLD2 && velocityY > -0.05;
-      if (flick || pastThreshold) {
-        this.#requestClose("drag");
-        return true;
-      }
-      this.#commitSnap(this.#snapPoints[0], velocityY);
-      return false;
-    }
-    const snapsPx = this.#snapsPx();
-    const targetPx = resolveSnapTarget({
-      currentPx: this.refs.panel.getBoundingClientRect().height,
-      velocityY,
-      snapsPx,
-      flickVelocity: FLICK_VELOCITY
-    });
-    if (targetPx === null) {
-      this.#requestClose("drag");
-      return true;
-    }
-    this.#commitSnap(this.#snapPoints[snapsPx.indexOf(targetPx)], velocityY);
-    return false;
-  }
-  #reconcileSnap() {
-    if (!this.#snapPoints.length) {
-      if (this.#snapAnimation) this.#haltSnapSettle(false);
-      this.#stopSpring();
-      this.#committedSnap = null;
-      this.refs.panel.style.height = "";
-      this.refs.panel.style.transform = "";
-      return;
-    }
-    const desired = this.#desiredSnap();
-    if (this.#committedSnap === null) {
-      this.#committedSnap = desired;
-      this.#applyRestingHeight();
-      return;
-    }
-    if (desired !== this.#committedSnap) {
-      this.#committedSnap = desired;
-      if (this.element.open) this.#settleToSnap(desired);
-      else {
-        if (this.#snapAnimation) this.#haltSnapSettle(false);
-        this.#applyRestingHeight();
-      }
-    }
-  }
-  // ---- spring settling ------------------------------------------------------
-  #springValue() {
-    return this.props.spring === void 0 ? "" : String(this.props.spring);
-  }
-  #springEnabled() {
-    return this.props.spring !== "none";
-  }
-  #ensureEngine() {
-    if (this.#engine) return this.#engine;
-    const [attraction, friction] = this.#springValue().split(/[\s,]+/).map(Number);
-    const options = { ...SPRING_DEFAULTS };
-    if (Number.isFinite(attraction) && attraction > 0 && attraction < 1) {
-      options.attraction = attraction;
-    }
-    if (Number.isFinite(friction) && friction > 0 && friction < 1) {
-      options.friction = friction;
-    }
-    const engine = new b(options);
-    engine.on("change", ({ position }) => {
-      if (!this.#drag.active && this.#springTarget !== null) {
-        this.refs.panel.style.height = `${position}px`;
-      }
-    });
-    engine.on("complete", () => {
-      if (this.#springTarget === null) return;
-      this.#springTarget = null;
-      this.#applyRestingHeight();
-    });
-    this.#engine = engine;
-    return engine;
-  }
-  #stopSpring() {
-    this.#springTarget = null;
-    this.#engine?.stop();
-  }
-  #haltSpring(pinPainted) {
-    if (this.#springTarget === null) return false;
-    const height = this.refs.panel.getBoundingClientRect().height;
-    this.#carriedVelocity = typeof this.#engine?.getVelocity === "function" ? this.#engine.getVelocity() : 0;
-    this.#stopSpring();
-    if (pinPainted) this.refs.panel.style.height = `${height}px`;
-    return true;
-  }
-  #reconcileSpring() {
-    const next = this.#springValue();
-    if (next === this.#springSpec) return;
-    const target = this.#committedSnap;
-    const wasSpringing = this.#haltSpring(true);
-    const wasWAAPI = !!this.#snapAnimation;
-    if (wasWAAPI) this.#haltSnapSettle(true);
-    this.#engine?.removeAllListeners();
-    this.#engine = null;
-    this.#springSpec = next;
-    if ((wasSpringing || wasWAAPI) && this.#snapPoints.includes(target)) {
-      this.#settleToSnap(target, 0, true);
-    }
-  }
-  events = {
-    handleCancel: (event) => {
-      event.preventDefault();
-      if (this.props.dismissible === false) return;
-      this.#requestClose("escape");
-    },
-    handleClose: () => {
-      if (this.#expectedCloses > 0) {
-        this.#expectedCloses -= 1;
-        return;
-      }
-      this.#nativeClosed = true;
-      this.#cancelAnimations();
-      this.#abandonDrag();
-      this.refs.panel.style.transform = "";
-      this.refs.backdrop.style.opacity = "";
-      this.#scrimOpacity = null;
-      this.#unlockBody();
-      this.#requestClose("close");
-      const { hidden } = this.props;
-      if (typeof hidden === "function") hidden();
-    },
-    dragStart: (event) => {
-      if (this.props.dismissible === false) return;
-      if (!event.isPrimary) return;
-      if (event.pointerType === "mouse" && event.button !== 0) return;
-      if (this.#drag.active && this.#drag.captured) return;
-      if (this.#move) {
-        this.#move.cancel();
-        this.#move = null;
-        this.refs.panel.style.transform = "";
-      }
-      if (this.#scrimReturn) {
-        this.#scrimReturn.cancel();
-        this.#scrimReturn = null;
-      }
-      const startHeight = this.refs.panel.getBoundingClientRect().height;
-      if (this.#snapAnimation) this.#haltSnapSettle(true);
-      if (this.#springTarget !== null) this.#haltSpring(true);
-      this.#carriedVelocity = 0;
-      if (this.#snapPoints.length) {
-        this.refs.panel.style.height = `${startHeight}px`;
-      }
-      const tracker = new VelocityTracker();
-      tracker.add(event.clientY, event.timeStamp);
-      this.#drag = {
-        active: true,
-        claimed: false,
-        captured: false,
-        captureEl: event.currentTarget,
-        pointerId: event.pointerId,
-        surface: event.currentTarget.dataset.bsSurface,
-        startY: event.clientY,
-        lastY: event.clientY,
-        startTime: event.timeStamp,
-        claimOffset: 0,
-        startHeight,
-        belowLowest: 0,
-        tracker
-      };
-    },
-    dragMove: (event) => {
-      const drag = this.#drag;
-      if (!drag.active || event.pointerId !== drag.pointerId) return;
-      const deltaY = event.clientY - drag.startY;
-      const moveY = event.clientY - drag.lastY;
-      drag.lastY = event.clientY;
-      drag.tracker.add(event.clientY, event.timeStamp);
-      if (!drag.captured && Math.abs(deltaY) > SLOP) {
-        this.#capturePointer(event);
-      }
-      if (!drag.claimed) {
-        if (!this.#shouldClaim(drag.surface, moveY)) return;
-        drag.claimed = true;
-        drag.claimOffset = deltaY;
-        this.#adoptFromEnter();
-      }
-      const travel = deltaY - drag.claimOffset;
-      if (this.#snapPoints.length) this.#moveBySnap(travel);
-      else this.#moveByTransform(travel);
-    },
-    dragEnd: (event) => {
-      const drag = this.#drag;
-      if (!drag.active || event.pointerId !== drag.pointerId) return;
-      drag.tracker.add(event.clientY, event.timeStamp);
-      const cancelled = event.type === "pointercancel";
-      const deltaY = event.clientY - drag.startY;
-      const velocityY = cancelled ? 0 : drag.tracker.velocity;
-      const duration = event.timeStamp - drag.startTime;
-      this.#releasePointer(drag);
-      this.#drag = { active: false };
-      if (drag.surface === "backdrop" && !cancelled && Math.abs(deltaY) < 10 && duration < 300) {
-        this.#requestClose("backdrop");
-        return;
-      }
-      if (!drag.claimed) return;
-      if (this.#snapPoints.length) {
-        if (!this.#releaseToSnap(drag, velocityY, cancelled)) this.#returnScrim();
-        return;
-      }
-      const travel = deltaY - drag.claimOffset;
-      const flick = !cancelled && velocityY > FLICK_VELOCITY;
-      const pastThreshold = !cancelled && travel > DRAG_THRESHOLD2 && velocityY > -0.05;
-      if (flick || pastThreshold) {
-        this.#requestClose("drag");
-        return;
-      }
-      this.#settleTransform();
-      this.#returnScrim();
-    },
-    scrollVeto: (event) => {
-      if (this.#drag.active && this.#drag.claimed && event.cancelable) {
-        event.preventDefault();
-      }
-    }
-  };
 };
-BottomSheet.prototype.render = function() {
+BottomSheet2.prototype.render = function() {
   const __d = this.getData();
-  return new ViewNode("dialog", {
-    class: __d.dialogClass,
-    "aria-labelledby": __d.labelledby,
-    "@cancel": (this.__h ??= {})[0] ??= (event) => this.events.handleCancel(event),
-    "@close": (this.__h ??= {})[1] ??= (event) => this.events.handleClose(event)
+  return new ViewNode("dialog-panel", {
+    ref: this.__ref("panel"),
+    class: __d.rootClass
   }, [
-    new ViewNode("div", {
-      ref: this.__ref("backdrop"),
-      "data-bs-surface": "backdrop",
-      class: __d.backdropClass,
-      "@pointerdown": (this.__h ??= {})[2] ??= (event) => this.events.dragStart(event),
-      "@pointermove": (this.__h ??= {})[3] ??= (event) => this.events.dragMove(event),
-      "@pointerup": (this.__h ??= {})[4] ??= (event) => this.events.dragEnd(event),
-      "@pointercancel": (this.__h ??= {})[5] ??= (event) => this.events.dragEnd(event)
-    }, []),
-    new ViewNode("div", {
-      ref: this.__ref("panel"),
-      class: __d.panelClass
-    }, [
-      new ViewNode("div", {
-        "data-bs-surface": "header",
-        class: __d.headerClass,
-        "@pointerdown": (this.__h ??= {})[6] ??= (event) => this.events.dragStart(event),
-        "@pointermove": (this.__h ??= {})[7] ??= (event) => this.events.dragMove(event),
-        "@pointerup": (this.__h ??= {})[8] ??= (event) => this.events.dragEnd(event),
-        "@pointercancel": (this.__h ??= {})[9] ??= (event) => this.events.dragEnd(event)
+    new ViewNode("dialog-backdrop", { class: __d.backdropClass }, []),
+    new ViewNode("dialog", { "aria-labelledby": __d.labelledby }, [
+      new ViewNode("bottom-sheet", {
+        ref: this.__ref("sheet"),
+        class: __d.panelClass,
+        style: __d.panelStyle,
+        "snap-points": __d.snapPointsAttr,
+        spring: __d.springAttr,
+        "max-display-width": __d.maxDisplayWidthAttr,
+        inset: __d.insetAttr
       }, [
-        ...__d.showGrabber ? [
-          new ViewNode("div", {
-            class: "mx-auto my-3 h-1 w-10 rounded-full bg-faint",
-            "aria-hidden": "true"
-          }, [])
-        ] : [
-          new ViewNode("#")
-        ],
-        new ViewNode(SLOT_TAG, { name: "header" }, [
-          ...__d.title ? [
-            new ViewNode("h2", {
-              id: __d.titleId,
-              class: "pb-3 text-center text-base font-semibold text-ink"
-            }, [
-              new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
-            ])
-          ] : [
-            new ViewNode("#")
-          ]
+        new ViewNode("bottom-sheet-header", { class: __d.headerClass }, [
+          new ViewNode(SLOT_TAG, { name: "header" }, [
+            ...__d.title ? [
+              new ViewNode("h2", {
+                id: __d.titleId,
+                class: __d.titleClass
+              }, [
+                new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
+              ])
+            ] : [
+              new ViewNode("#")
+            ]
+          ])
+        ]),
+        new ViewNode("bottom-sheet-content", {}, [
+          new ViewNode(SLOT_TAG)
+        ]),
+        new ViewNode("bottom-sheet-footer", { class: "empty:hidden" }, [
+          new ViewNode(SLOT_TAG, { name: "footer" })
         ])
-      ]),
-      new ViewNode("div", {
-        ref: this.__ref("content"),
-        "data-bs-surface": "content",
-        class: __d.contentClass,
-        "@pointerdown": (this.__h ??= {})[10] ??= (event) => this.events.dragStart(event),
-        "@pointermove": (this.__h ??= {})[11] ??= (event) => this.events.dragMove(event),
-        "@pointerup": (this.__h ??= {})[12] ??= (event) => this.events.dragEnd(event),
-        "@pointercancel": (this.__h ??= {})[13] ??= (event) => this.events.dragEnd(event),
-        "@touchmove": (this.__h ??= {})[14] ??= (event) => this.events.scrollVeto(event)
-      }, [
-        new ViewNode(SLOT_TAG)
-      ]),
-      new ViewNode("div", {
-        "data-bs-surface": "footer",
-        class: __d.footerClass,
-        "@pointerdown": (this.__h ??= {})[15] ??= (event) => this.events.dragStart(event),
-        "@pointermove": (this.__h ??= {})[16] ??= (event) => this.events.dragMove(event),
-        "@pointerup": (this.__h ??= {})[17] ??= (event) => this.events.dragEnd(event),
-        "@pointercancel": (this.__h ??= {})[18] ??= (event) => this.events.dragEnd(event)
-      }, [
-        new ViewNode(SLOT_TAG, { name: "footer" })
       ])
     ])
   ]);
 };
-BottomSheet.__pzlModule = "app/components/ui/BottomSheet.pzl";
+BottomSheet2.__pzlModule = "app/components/ui/BottomSheet.pzl";
 
 // app/views/components/BottomSheetDoc.pzl
 var installCmd10 = "puzzle add piece bottom-sheet";
+var installDep = `npm install @magic-spells/bottom-sheet
+# Yarn 1 only \u2014 npm 7+ and pnpm install the peer for you
+# yarn add @magic-spells/bottom-sheet @magic-spells/dialog-panel`;
+var installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dialog-panel/css" layer(components);
+@import "@magic-spells/bottom-sheet/css" layer(components);`;
 var usageImport10 = `import BottomSheet from '@/components/ui/BottomSheet.pzl';`;
-var usageMarkup10 = `<BottomSheet
-  open={ open }
-  title="Filters"
-  snapPoints={ [40, 70, 100] }
-  snap={ snap }
-  @snapChange={ setSnap }
-  @close={ close }>
+var usageMarkup10 = `<BottomSheet open={ filtersOpen } title="Filters" @hide={ () => this.setData('filtersOpen', false) }>
   <FilterList/>
-  <Button slot="footer" @press={ close }>Apply</Button>
-</BottomSheet>`;
+  <Button slot="footer" @press={ apply }>Apply</Button>
+</BottomSheet>
+
+// open is EDGE-TRIGGERED: only a change to it acts. The sheet dismisses
+// itself on Escape, a backdrop tap, a downward flick, or any
+// [data-action-hide-dialog] descendant, then reports through @hide \u2014
+// where you flip open back to false so the next open is a fresh edge.`;
+var closeButtonClass = "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2";
+var cancelButtonClass = "flex-1 cursor-pointer rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
+var deleteButtonClass = "flex-1 cursor-pointer rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-ink transition-colors outline-ring hover:bg-danger-dark focus-visible:outline-2 focus-visible:outline-offset-2";
+var SNAP_STEP = "cursor-pointer rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
+var SNAP_STEPS = [40, 70, 90].map((value) => ({
+  value,
+  label: `${value}%`,
+  class: SNAP_STEP
+}));
 var codeHero10 = `<Button variant="outline" @press={ openSheet }>Open snapping sheet</Button>
+<span class="text-sm text-muted">snap: { snap }</span>
+
 <BottomSheet
   open={ sheetOpen }
   title="Filters"
-  snapPoints={ [40, 70, 100] }
+  snapPoints="40,70,90"
   snap={ snap }
   @snapChange={ (value) => this.setData('snap', value) }
-  @close={ () => this.setData('sheetOpen', false) }>
+  @hide={ () => this.setData('sheetOpen', false) }>
+
+  <div class="flex gap-2">
+    <button type="button" class="\u2026" @click={ setSnap(40) }>40%</button>
+    <button type="button" class="\u2026" @click={ setSnap(70) }>70%</button>
+    <button type="button" class="\u2026" @click={ setSnap(90) }>90%</button>
+  </div>
   <FilterList/>
-  <Button slot="footer" @press={ apply }>Apply filters</Button>
-</BottomSheet>`;
-var codeBinary = `<BottomSheet open={ open } title="Quick actions" @close={ close }>
+  <Button slot="footer" class="w-full" @press={ apply }>Apply filters</Button>
+</BottomSheet>
+
+// Those buttons only write snap; the piece sees the prop change and calls
+// snapTo() for you. They sit INSIDE the sheet because showModal() makes
+// everything outside the dialog inert.
+// snapPoints are percentages of the viewport HEIGHT, comma or space
+// separated, or an array of numbers. Each one is the sheet's height at that
+// rung, which is what keeps the footer pinned and the scroll region exactly
+// as tall as the visible area.
+// snap is optional-controlled and is a VALUE, not an index: pass it with
+// @snapChange to own the committed rung, or omit it and the sheet tracks its
+// own. Set at mount it is also the opening rung; otherwise the sheet opens
+// at the shortest snap. snapChange fires on commit only, never mid-drag.
+// No header slot: title alone gets the heading, the generated id and
+// aria-labelledby wired for you \u2014 plus the component's grabber pill.`;
+var codeBinary = `<BottomSheet open={ open } title="Quick actions" @hide={ close }>
   <QuickActions/>
-</BottomSheet>`;
+  <Button slot="footer" variant="secondary" class="w-full" @press={ close }>Done</Button>
+</BottomSheet>
+
+// No snapPoints: content height, capped by --bs-panel-max-height (85vh).
+// Dismiss rules with no snaps to land on \u2014 a downward flick faster than
+// 0.5 px/ms, or a drag past 100px that was not meaningfully reversed.`;
 var codeInset = `<BottomSheet
   open={ open }
   title="Delivery options"
   snapPoints="45,80"
   spring="none"
   inset
-  @close={ close }>
+  @hide={ close }>
   <DeliveryOptions/>
-</BottomSheet>`;
+</BottomSheet>
+
+// inset detaches the sheet from all three edges and rounds every corner \u2014
+// pure CSS, with the off-screen position corrected so the exit clears the gap.
+// spring="none" settles onto a snap on --bs-snap-duration / --bs-snap-timing
+// instead of the velocity-seeded spring. Tune the spring instead of dropping
+// it with spring="attraction,friction", both dials in (0, 1).`;
+var codeResult = `<Button variant="outline" @press={ openConfirm }>Delete project</Button>
+<span class="text-sm text-muted">last result: { lastResult }</span>
+
+<BottomSheet open={ confirmOpen } title="Delete project?" @hide={ finishConfirm }>
+  <p>This cannot be undone.</p>
+
+  <div slot="footer" class="flex gap-3">
+    <button type="button" data-action-hide-dialog data-result="cancel" class="\u2026">Cancel</button>
+    <button type="button" data-action-hide-dialog data-result="delete" class="\u2026">Delete project</button>
+  </div>
+</BottomSheet>
+
+// events = {
+//   finishConfirm: ({ result }) => {
+//     this.setData({ confirmOpen: false, lastResult: result ?? 'dismissed' });
+//     if (result === 'delete') this.deleteProject();
+//   },
+// };
+
+// data-action-hide-dialog closes the sheet through the component; the
+// button's data-result rides along in the @hide detail, so one handler can
+// tell which answer was given. Escape, a backdrop tap and a flick all report
+// null. A bottom sheet has no dismiss policy \u2014 those three are always open,
+// so a question that must be answered belongs in a Dialog, not here.
+// The footer slot takes a single direct child, so two buttons share a
+// wrapper div that carries slot="footer".`;
+var codeHeader = `<BottomSheet
+  open={ open }
+  labelledby="bottom-sheet-promo-title"
+  snapPoints="50,85"
+  showGrabber={ showGrabber }
+  @hide={ close }>
+  <div slot="header" class="pb-3">
+    <div class="relative flex h-8 items-center gap-2 pr-9">
+      <h2 id="bottom-sheet-promo-title" class="text-base font-semibold text-ink">Summer promo</h2>
+      <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink">New</span>
+      <button
+        type="button"
+        data-action-hide-dialog
+        aria-label="Close"
+        class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2">\xD7</button>
+    </div>
+  </div>
+  <PromoDetails/>
+</BottomSheet>
+
+// A filled header slot replaces the stock title, so it must bring its own
+// heading and point labelledby at that heading's id. The grabber is a
+// pseudo-element floating in the header's padding, so it survives any header
+// content \u2014 the piece pads the header's top to leave room for it.
+// slot="header" must sit on a direct child of the BottomSheet tag.
+// showGrabber={ false } zeroes the pill; the drag surfaces are unchanged.`;
 var BottomSheetDoc = class extends PuzzleView {
   created() {
     this.setData({
-      snappingOpen: false,
+      heroOpen: false,
       binaryOpen: false,
       insetOpen: false,
-      snap: 70
+      confirmOpen: false,
+      headerOpen: false,
+      headerGrabber: true,
+      snap: 70,
+      lastResult: "\u2014"
     });
   }
   data(params, props) {
     return {
       ...this.getData(),
       installCmd: installCmd10,
+      installDep,
+      installCss,
       usageImport: usageImport10,
       usageMarkup: usageMarkup10,
+      closeButtonClass,
+      cancelButtonClass,
+      deleteButtonClass,
       codeHero: codeHero10,
       codeBinary,
       codeInset,
-      snapPoints: [40, 70, 100],
+      codeResult,
+      codeHeader,
+      snapSteps: SNAP_STEPS,
       paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
+      propRows: [
+        { name: "open", desc: "Controlled, and EDGE-TRIGGERED: only a change acts. true opens, false closes. An unrelated re-render never re-opens a sheet the user already dismissed." },
+        { name: "title", desc: "Heading text rendered by the stock header, which also generates its id and wires aria-labelledby. Ignored once the header slot is filled." },
+        { name: "labelledby", desc: "Id of the labelling heading when the header slot is filled." },
+        { name: "snapPoints", desc: "Comma- or space-separated percentages of the viewport height, or an array of numbers. Each is a HEIGHT, which is what pins the footer at every rung. Sorted and deduped; anything outside 0\u2013100 is dropped. Omit for the two-state sheet." },
+        { name: "snap", desc: "Optional-controlled resting snap in dvh percent \u2014 a VALUE, not an index. Set at mount it is also the opening rung; changed later it calls snapTo(). Undeclared values are ignored, not clamped. Pair with @snapChange." },
+        { name: "spring", desc: '"attraction,friction" override for the snap settle, both dials in (0, 1); "none" settles on the CSS curve instead. Governs the SETTLE only \u2014 opening, closing and every sheet without snapPoints stay on plain transitions.' },
+        { name: "inset", desc: "Detaches the sheet from all three edges and rounds every corner. CSS only; the off-screen position is corrected so the exit still clears the gap." },
+        { name: "maxDisplayWidth", desc: "Largest viewport width where the sheet may open. It also closes an open sheet when a resize crosses the limit. Above it show() returns early and no event fires." },
+        { name: "showGrabber", desc: "Default true. false zeroes the handle pill. CSS only; the header is a drag surface either way." },
+        { name: "class", desc: "Merged onto the bottom-sheet element." },
+        { name: "backdropClass", desc: "Merged onto the dialog-backdrop element. Inert on bottom-sheet 2.0.2, which still paints the scrim on the dialog's native ::backdrop." },
+        { name: "style", desc: "Merged onto the bottom-sheet element after the piece's own classes." }
+      ],
+      callbackRows: [
+        { name: "@hide(detail)", desc: "The exit finished. detail is { result, triggerElement }: result is the data-result of the [data-action-hide-dialog] button that closed it, and null for Escape, a backdrop tap or a flick. Flip open back to false here." },
+        { name: "@show()", desc: "The entrance settled and the native dialog is in the top layer." },
+        { name: "@snapChange(value)", desc: "A release committed a different snap; the value is the new resting rung in dvh percent. Fires on commit only, never mid-drag, and never when the sheet settles back where it started." }
+      ],
+      slotRows: [
+        { name: "header", desc: "Fills bottom-sheet-header, replacing the title heading entirely; a filled header brings its own heading and points labelledby at it. The grabber is a pseudo-element and survives it. Always a drag surface." },
+        { name: "footer", desc: "Fills bottom-sheet-footer, pinned below the content at every snap and hidden while empty. Also a drag surface. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute." },
+        { name: "default", desc: "Untagged children become bottom-sheet-content, the scrollable region." }
+      ],
+      cssRows: [
+        { name: "--bs-panel-max-height", desc: "Cap on a sheet with no snap points (85vh). Inert once snapPoints is set \u2014 the tallest snap is the cap." },
+        { name: "--bs-panel-border-radius", desc: "Top corner radius (25px), or all four with inset." },
+        { name: "--bs-content-padding", desc: "Horizontal header/content inset (20px). --bs-content-padding-block adds a vertical one; --bs-footer-padding follows it, plus the safe area." },
+        { name: "--bs-panel-hidden-offset", desc: "Extra travel past the bottom edge when hidden (20px), so the close does not read as cut short. Applied to the hidden, showing and hiding transforms alike." },
+        { name: "--bs-transition-duration", desc: 'Open, close and backdrop fade (400ms), on --bs-transition-timing. The snap settle keeps its own pair, --bs-snap-duration and --bs-snap-timing, which only reach the sheet with spring="none".' },
+        { name: "--bs-panel-inset-x", desc: "Side gap in inset mode (12px); --bs-panel-inset-bottom (12px) is the gap below, added on top of the safe area." },
+        { name: "--bs-panel-bleed", desc: "Off-screen fill of panel colour below an edge-anchored sheet (60px), so an upward rubber-band drag never reveals the page beneath." },
+        { name: "--bs-footer-background", desc: "Footer fill (transparent, so the panel shows through). --bs-handle-width sizes the grabber the piece already colours." }
+      ],
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
         { label: "Binary sheet", href: "#binary" },
-        { label: "Inset without spring", href: "#inset" },
-        { label: "Behavior notes", href: "#behavior" }
+        { label: "Inset", href: "#inset" },
+        { label: "Footer results", href: "#result" },
+        { label: "Custom header", href: "#header-slot" },
+        { label: "Reference", href: "#reference" }
       ]
     };
   }
   events = {
-    openSnapping: () => this.setData("snappingOpen", true),
-    closeSnapping: () => this.setData("snappingOpen", false),
+    openHero: () => this.setData("heroOpen", true),
+    closeHero: () => this.setData("heroOpen", false),
     setSnap: (value) => this.setData("snap", value),
     openBinary: () => this.setData("binaryOpen", true),
     closeBinary: () => this.setData("binaryOpen", false),
     openInset: () => this.setData("insetOpen", true),
-    closeInset: () => this.setData("insetOpen", false)
+    closeInset: () => this.setData("insetOpen", false),
+    openConfirm: () => this.setData("confirmOpen", true),
+    // The one handler that reads the @hide detail: data-result tells a deliberate
+    // answer apart from a dismissal, which reports null.
+    closeConfirm: (detail) => this.setData({ confirmOpen: false, lastResult: detail?.result ?? "dismissed" }),
+    openHeader: () => this.setData("headerOpen", true),
+    closeHeader: () => this.setData("headerOpen", false),
+    toggleHeaderGrabber: (event) => this.setData("headerGrabber", !!event.target.checked)
   };
 };
 BottomSheetDoc.prototype.render = function() {
@@ -38739,38 +39085,111 @@ BottomSheetDoc.prototype.render = function() {
             new ViewNode("text", { value: "Bottom Sheet" })
           ]),
           new ViewNode("p", { class: "mt-2 text-body" }, [
-            new ViewNode("text", { value: "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, a dismissal-tracking scrim, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state." })
+            new ViewNode("text", { value: "A native-dialog sheet that rises from the bottom edge, dragged and flicked with a finger, optionally resting on snap points that settle on a velocity-aware spring, with a pinned footer and a scrim that tracks the dismissal rather than the drag." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-body" }, [
+            new ViewNode("text", { value: "This piece is a " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "wrapper" })
+            ]),
+            new ViewNode("text", { value: ", not a port: it renders the real" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: displayValue("<dialog-panel>", true ? "'<dialog-panel>'" : 0) })
+            ]),
+            new ViewNode("text", { value: "and" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: displayValue("<bottom-sheet>", true ? "'<bottom-sheet>'" : 0) })
+            ]),
+            new ViewNode("text", { value: "custom elements from" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "@magic-spells/bottom-sheet" })
+            ]),
+            new ViewNode("text", { value: "and binds attributes to them. The value here is motion \u2014 the gesture policy that decides whether a finger belongs to the sheet or to the list inside it, the velocity rules that tell a dismissal from a resize \u2014 and none of that is worth forking. The design-system bridge is four CSS custom properties." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "The sheet closes " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "itself" })
+            ]),
+            new ViewNode("text", { value: " on Escape, a backdrop tap, a downward flick, or any" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "data-action-hide-dialog" })
+            ]),
+            new ViewNode("text", { value: "button, and reports through" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "@hide" })
+            ]),
+            new ViewNode("text", { value: ". Your job is to flip " }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "open" })
+            ]),
+            new ViewNode("text", { value: "back to false there \u2014 see " }),
+            new ViewNode("a", {
+              class: "text-brand underline underline-offset-2",
+              href: "#usage"
+            }, [
+              new ViewNode("text", { value: "Usage" })
+            ]),
+            new ViewNode("text", { value: "." })
           ])
         ]),
         new ViewNode(ExampleBox, { code: __d.codeHero }, [
-          new ViewNode(Button, {
-            variant: "outline",
-            press: (this.__h ??= {})[0] ??= (event) => this.events.openSnapping(event)
-          }, [
-            new ViewNode("text", { value: "Open snapping sheet" })
+          new ViewNode("div", { class: "flex flex-col items-center gap-2" }, [
+            new ViewNode(Button, {
+              variant: "outline",
+              press: (this.__h ??= {})[0] ??= (event) => this.events.openHero(event)
+            }, [
+              new ViewNode("text", { value: "Open snapping sheet" })
+            ]),
+            new ViewNode("span", { class: "text-sm text-muted" }, [
+              new ViewNode("text", { value: "snap: " + displayValue(__d.snap, true ? "snap" : 0) })
+            ])
           ]),
-          new ViewNode(BottomSheet, {
-            open: __d.snappingOpen,
+          new ViewNode(BottomSheet2, {
+            open: __d.heroOpen,
             title: "Filters",
-            snapPoints: __d.snapPoints,
+            snapPoints: "40,70,90",
             snap: __d.snap,
             snapChange: (this.__h ??= {})[1] ??= (event) => this.events.setSnap(event),
-            close: (this.__h ??= {})[2] ??= (event) => this.events.closeSnapping(event)
+            hide: (this.__h ??= {})[2] ??= (event) => this.events.closeHero(event)
           }, [
-            new ViewNode("div", { class: "space-y-4 py-4 text-sm text-body" }, [
+            new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+              new ViewNode(
+                "div",
+                { class: "flex gap-2" },
+                __d.snapSteps.map(
+                  (step) => new ViewNode("button", {
+                    key: step.value,
+                    type: "button",
+                    class: step.class,
+                    "@click": (event) => this.events.setSnap(step.value)
+                  }, [
+                    new ViewNode("text", { value: displayValue(step.label, true ? "step.label" : 0) })
+                  ])
+                )
+              ),
               new ViewNode("p", {}, [
-                new ViewNode("text", { value: "Drag the header, footer, or backdrop. Slow releases choose the nearest snap; a flick moves exactly one step." })
+                new ViewNode("text", { value: "Those three buttons write the snap prop, and the piece calls snapTo() for you \u2014 that is the whole controlled path. They live inside the sheet because showModal() makes everything outside it inert." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "Each snap is a HEIGHT in dvh percent, not a distance to push the sheet down by. That is what keeps the footer pinned to the bottom edge and the scrollable region exactly as tall as the visible area at every rung." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "This one keeps the zero-config chrome: pass title and the stock header renders a heading, generates its id and wires aria-labelledby for you. The grabber pill above it comes from the component." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "A slow release settles on the nearest snap; a flick steps exactly one snap in its direction, measured from wherever the sheet actually is. Drag below the shortest rung and the gesture stops being a resize and becomes the ordinary dismiss." })
               ]),
               ...__d.paragraphs.map(
                 (n2) => new ViewNode("p", { key: n2 }, [
-                  new ViewNode("text", { value: "Filter group " + displayValue(n2, true ? "n" : 0) + " \u2014 scroll this content, then return to the top before dragging downward from the content surface." })
+                  new ViewNode("text", { value: "Filter group " + displayValue(n2, true ? "n" : 0) + " \u2014 scroll this list, then lift your finger and start a second gesture at the top to drag the sheet itself." })
                 ])
               )
             ]),
             new ViewNode(Button, {
               slot: "footer",
               class: "w-full",
-              press: (this.__h ??= {})[3] ??= (event) => this.events.closeSnapping(event)
+              press: (this.__h ??= {})[3] ??= (event) => this.events.closeHero(event)
             }, [
               new ViewNode("text", { value: "Apply filters" })
             ])
@@ -38784,11 +39203,38 @@ BottomSheetDoc.prototype.render = function() {
             new ViewNode("text", { value: "Installation" })
           ]),
           new ViewNode("p", { class: "mb-3 text-sm text-body" }, [
-            new ViewNode("text", { value: "Copy the piece and its math helper into your app:" })
+            new ViewNode("text", { value: "Copy the piece into your app \u2014 it compiles with your build and the code is yours:" })
           ]),
           new ViewNode(CodeBlock, { code: __d.installCmd }, []),
+          new ViewNode("p", { class: "mb-3 mt-4 text-sm text-body" }, [
+            new ViewNode("text", { value: "Like Sheet and Scroll Stack, this piece has a runtime dependency: the web component it wraps." }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "@magic-spells/dialog-panel" })
+            ]),
+            new ViewNode("text", { value: "is a peer that npm 7+ and pnpm install for you; Yarn 1 only warns, so install it explicitly there. If you already use the Sheet piece it is the same peer, installed once." })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.installDep }, []),
+          new ViewNode("p", { class: "mb-3 mt-4 text-sm text-body" }, [
+            new ViewNode("text", { value: "Then merge " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "both" })
+            ]),
+            new ViewNode("text", { value: " stylesheets into your app's style entry (" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "app/styles/styles.css" })
+            ]),
+            new ViewNode("text", { value: "). dialog-panel owns the dialog and overlay transport; bottom-sheet.css layers the panel geometry, the grabber, the snap heights and the scrim on top of it. Without them the sheet is an unstyled full-bleed native dialog:" })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.installCss }, []),
           new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
-            new ViewNode("text", { value: "The manifest also declares @magic-spells/physics-engine. Install the package printed by the Puzzle CLI and merge the pieces.css tokens into your app styles." })
+            new ViewNode("text", { value: "Order matters \u2014 dialog-panel first, because bottom-sheet.css deliberately overrides several of its rules. So does" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "layer(components)" })
+            ]),
+            new ViewNode("text", { value: ": both stylesheets use plain element selectors, and an unlayered import would outrank every Tailwind utility you put on the panel." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "Requires the pieces.css tokens merged into your app styles (see Introduction)." })
           ])
         ]),
         new ViewNode("section", {
@@ -38802,7 +39248,20 @@ BottomSheetDoc.prototype.render = function() {
           new ViewNode(CodeBlock, {
             code: __d.usageMarkup,
             class: "mt-3"
-          }, [])
+          }, []),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "open" })
+            ]),
+            new ViewNode("text", { value: "is " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "edge-triggered" })
+            ]),
+            new ViewNode("text", { value: ": only a change to it acts. That is what makes a self-closing sheet safe \u2014 an unrelated re-render never re-opens a sheet the user just flicked away while your state still says it is open." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "Coming from the ported piece: @close(reason) is gone. The sheet reports through @hide, whose detail carries result and triggerElement \u2014 result names the button that closed it and is null for every dismissal. dismissible has no equivalent upstream; a bottom sheet is always dismissible." })
+          ])
         ]),
         new ViewNode("div", { class: "mt-12 space-y-12" }, [
           new ViewNode(ExampleBox, {
@@ -38816,17 +39275,20 @@ BottomSheetDoc.prototype.render = function() {
             }, [
               new ViewNode("text", { value: "Open binary sheet" })
             ]),
-            new ViewNode(BottomSheet, {
+            new ViewNode(BottomSheet2, {
               open: __d.binaryOpen,
               title: "Quick actions",
-              close: (this.__h ??= {})[5] ??= (event) => this.events.closeBinary(event)
+              hide: (this.__h ??= {})[5] ??= (event) => this.events.closeBinary(event)
             }, [
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "Without snapPoints, the sheet uses its content height." })
+                  new ViewNode("text", { value: "Without snapPoints the sheet takes its content height, capped by --bs-panel-max-height (85vh), and has exactly two states: open and gone." })
                 ]),
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "Drag down more than 100px or flick downward to dismiss. A shorter drag returns to rest." })
+                  new ViewNode("text", { value: "Drag it down more than 100px, or flick it downward faster than 0.5 px/ms, and it dismisses. A shorter drag springs back. Upward drags never dismiss \u2014 they rubber-band with resistance and return." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Every rule about snap release is inert here. There is nothing to resize to, so the whole downward drag counts as the dismissal and the scrim fades with it." })
                 ])
               ]),
               new ViewNode(Button, {
@@ -38841,7 +39303,7 @@ BottomSheetDoc.prototype.render = function() {
           ]),
           new ViewNode(ExampleBox, {
             id: "inset",
-            title: "Inset without spring",
+            title: "Inset, and the settle without a spring",
             code: __d.codeInset
           }, [
             new ViewNode(Button, {
@@ -38850,43 +39312,273 @@ BottomSheetDoc.prototype.render = function() {
             }, [
               new ViewNode("text", { value: "Open inset sheet" })
             ]),
-            new ViewNode(BottomSheet, {
+            new ViewNode(BottomSheet2, {
               open: __d.insetOpen,
               title: "Delivery options",
               snapPoints: "45,80",
               spring: "none",
               inset: true,
-              close: (this.__h ??= {})[8] ??= (event) => this.events.closeInset(event)
+              hide: (this.__h ??= {})[8] ??= (event) => this.events.closeInset(event)
             }, [
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "Inset detaches the panel from the viewport edges and rounds all four corners." })
+                  new ViewNode("text", { value: "inset detaches the sheet from the screen edges: all four corners take the panel radius and a gap opens on three sides. It is pure CSS \u2014 no script reads the attribute \u2014 and the off-screen position is corrected to match, so the exit still clears the gap instead of stopping short." })
                 ]),
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: 'spring="none" keeps the tuned overshooting arrival, but runs it on a fixed 400ms WAAPI clock.' })
+                  new ViewNode("text", { value: "A detached sheet at a given snap sits slightly higher than an edge-anchored one: the snap describes the sheet, not the gap beneath it." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: 'spring="none" opts the snap settle out of the physics and back onto a CSS curve. It changes which clock runs the settle more than how the settle reads \u2014 the default curve overshoots by about what the spring produces at its default tuning.' })
+                ])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "result",
+            title: "A footer that answers",
+            code: __d.codeResult
+          }, [
+            new ViewNode("div", { class: "flex flex-col items-center gap-2" }, [
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[9] ??= (event) => this.events.openConfirm(event)
+              }, [
+                new ViewNode("text", { value: "Delete project" })
+              ]),
+              new ViewNode("span", { class: "text-sm text-muted" }, [
+                new ViewNode("text", { value: "last result: " + displayValue(__d.lastResult, true ? "lastResult" : 0) })
+              ])
+            ]),
+            new ViewNode(BottomSheet2, {
+              open: __d.confirmOpen,
+              title: "Delete project?",
+              hide: (this.__h ??= {})[10] ??= (event) => this.events.closeConfirm(event)
+            }, [
+              new ViewNode("div", { class: "space-y-2 py-2 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "This cannot be undone." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Each button carries data-action-hide-dialog and a data-result, so @hide receives which one closed the sheet. The readout next to the trigger is that value. Escape, a backdrop tap and a flick all report null \u2014 that is how a dismissal is told apart from an answer." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Neither button has a click handler. The component closes the sheet through the panel and the page catches up in @hide, which is the one place that has to flip open back to false." })
+                ])
+              ]),
+              new ViewNode("div", {
+                slot: "footer",
+                class: "flex gap-3"
+              }, [
+                new ViewNode("button", {
+                  type: "button",
+                  "data-action-hide-dialog": true,
+                  "data-result": "cancel",
+                  class: __d.cancelButtonClass
+                }, [
+                  new ViewNode("text", { value: "Cancel" })
+                ]),
+                new ViewNode("button", {
+                  type: "button",
+                  "data-action-hide-dialog": true,
+                  "data-result": "delete",
+                  class: __d.deleteButtonClass
+                }, [
+                  new ViewNode("text", { value: "Delete project" })
+                ])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "header-slot",
+            title: "Custom header and the grabber",
+            code: __d.codeHeader
+          }, [
+            new ViewNode("div", { class: "flex flex-col items-center gap-3" }, [
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[11] ??= (event) => this.events.openHeader(event)
+              }, [
+                new ViewNode("text", { value: "Open with custom header" })
+              ]),
+              new ViewNode("label", { class: "flex cursor-pointer items-center gap-2 text-sm text-muted" }, [
+                new ViewNode("input", {
+                  type: "checkbox",
+                  class: "size-4 accent-brand",
+                  checked: __d.headerGrabber,
+                  "@change": (this.__h ??= {})[12] ??= (event) => this.events.toggleHeaderGrabber(event)
+                }, []),
+                new ViewNode("text", { value: "showGrabber" })
+              ])
+            ]),
+            new ViewNode(BottomSheet2, {
+              open: __d.headerOpen,
+              labelledby: "bottom-sheet-promo-title",
+              snapPoints: "50,85",
+              showGrabber: __d.headerGrabber,
+              hide: (this.__h ??= {})[13] ??= (event) => this.events.closeHeader(event)
+            }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-3"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center gap-2 pr-9" }, [
+                  new ViewNode("h2", {
+                    id: "bottom-sheet-promo-title",
+                    class: "text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Summer promo" })
+                  ]),
+                  new ViewNode("span", {
+                    class: "rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink"
+                  }, [
+                    new ViewNode("text", { value: "New" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "data-action-hide-dialog": true,
+                    "aria-label": "Close",
+                    class: __d.closeButtonClass
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Filling the header slot replaces the stock title entirely, so a custom header brings its own heading and points labelledby at it. There is no is-slot-filled probe \u2014 the piece cannot render the fallback alongside your markup." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "The grabber is not part of that trade. It is a pseudo-element floating inside the header's padding rather than a box in the flow, so it survives any header content; the piece pads the header's top so your markup clears it. Toggle showGrabber next to the trigger to see the pill go \u2014 the drag surfaces are unchanged either way." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "The header is always a drag surface, and so is the footer. Only the content region has to decide: it hands the gesture over the moment the list runs out." })
                 ])
               ])
             ])
           ]),
           new ViewNode("section", {
-            id: "behavior",
+            id: "reference",
             class: "scroll-mt-20"
           }, [
             new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
-              new ViewNode("text", { value: "Behavior notes" })
+              new ViewNode("text", { value: "Reference" })
+            ]),
+            new ViewNode("h3", { class: "mb-2 mt-6 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Props" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.propRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Callbacks" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.callbackRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Slots" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.slotRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "CSS custom properties" })
+            ]),
+            new ViewNode("p", { class: "mb-3 text-sm text-body" }, [
+              new ViewNode("text", { value: "Everything the ported piece exposed as tuning constants \u2014 durations, easings, the hidden-offset overshoot, the inset gaps \u2014 is a custom property on the component, tunable from your own CSS with no prop at all. The piece bridges four of them onto the design tokens (" }),
+              new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+                new ViewNode("text", { value: "--bs-panel-background" })
+              ]),
+              new ViewNode("text", { value: "," }),
+              new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+                new ViewNode("text", { value: "--bs-handle-color" })
+              ]),
+              new ViewNode("text", { value: ", and the two overlay tokens) and leaves the rest at the component's defaults:" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.cssRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-56 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+              new ViewNode("text", { value: "The full list lives in the component's README \u2014 these are the ones a piece consumer reaches for most." })
+            ]),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Known gaps" })
             ]),
             new ViewNode("div", { class: "space-y-3 text-sm text-body" }, [
               new ViewNode("p", {}, [
-                new ViewNode("text", { value: "The parent owns open. Escape, a short backdrop tap, or an accepted drag calls @close with escape, backdrop, or drag; the piece never mutates open. Set dismissible to false to disable all three paths and hide the grabber." })
+                new ViewNode("text", { value: "Touch cannot hand a scroll to the sheet mid-gesture. The content scrolls natively, and Pointer Events do not let a gesture change owner once the browser has started panning with it, so reaching the top of a list and continuing into a drag takes two gestures: lift, then drag. A mouse or pen can reverse mid-gesture. This is the component's deliberate trade, not a piece limitation." })
               ]),
               new ViewNode("p", {}, [
-                new ViewNode("text", { value: "snap is optional-controlled. Pass it with @snapChange to own the committed snap, or omit it and the sheet keeps the current snap locally. snapChange fires only when a release commits, never during pointer movement." })
+                new ViewNode("text", { value: "A " }),
+                new ViewNode("strong", { class: "font-medium text-ink" }, [
+                  new ViewNode("text", { value: "keyboard" })
+                ]),
+                new ViewNode("text", { value: " activation of a data-action-hide-dialog button closes the sheet but reports result: null. A pointerless click carries coordinates of 0,0, which dialog-panel reads as a tap outside the dialog before the delegated handler runs. A mouse click reports the data-result correctly. Fix pending upstream in dialog-panel." })
               ]),
               new ViewNode("p", {}, [
-                new ViewNode("text", { value: "The scrim tracks the dismissal, not the drag. It holds full through snap-to-snap travel and upward overscroll \u2014 a resize is not a dismissal \u2014 and only fades once the sheet drops below the shortest snap. A sheet with no snapPoints treats its whole downward drag as the dismissal." })
+                new ViewNode("text", { value: "On the currently published pair \u2014 bottom-sheet 2.0.2 with dialog-panel 2.0.1 \u2014 two overlays paint at once, so the scrim reads darker than the 50% the piece sets: 2.0.2 still paints its scrim on the dialog's native ::backdrop and tries to hide dialog-panel's own backdrop element with a rule that loses on specificity. It is cosmetic, backdropClass has nothing visible to style until it is settled, and the component's main branch already moves the scrim onto the element." })
               ]),
-              new ViewNode("p", { class: "text-muted" }, [
-                new ViewNode("text", { value: "Mouse and pen can hand a content drag to the sheet when scrollTop reaches zero mid-gesture. Native touch scrolling cannot change pointer owner after a pan begins, so touch requires lifting and starting a second gesture at the top. This matches the source component." })
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "An unfilled footer slot leaves no visible bar, but the component's :has() rule still sees the empty element and drops the dialog's own safe-area padding \u2014 so a footerless sheet loses that inset on a notched phone." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "maxDisplayWidth refuses the open silently: show() returns early and no event fires, so opening above the ceiling leaves your state out of sync until you flip the flag back yourself." })
               ])
             ])
           ])
@@ -40786,7 +41478,7 @@ var ChatAttachmentDoc = class extends PuzzleView {
     };
   }
   events = {
-    removeFile: (name) => this.setData({ files: this.getData().files.filter((f2) => f2.name !== name) }),
+    removeFile: (name) => this.setData({ files: this.getData().files.filter((f3) => f3.name !== name) }),
     resetFiles: () => this.setData({ files: INITIAL_FILES.slice() })
   };
 };
@@ -41984,7 +42676,7 @@ var uid22 = 0;
 var INPUT_BASE6 = "h-9 w-full rounded-lg border bg-surface pl-3 pr-9 text-sm text-ink placeholder:text-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:pointer-events-none";
 var INPUT_OK3 = "border-border outline-ring focus-visible:outline-ring";
 var INPUT_ERROR3 = "border-danger outline-danger focus-visible:outline-danger";
-var PANEL_BASE6 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
+var PANEL_BASE5 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
 var PANEL_PLACEMENT2 = { bottom: "top-full mt-1", top: "bottom-full mb-1" };
 var OPTION_BASE2 = "relative flex items-center gap-2 px-3 py-1.5 text-sm select-none";
 var GROUP_CLASS2 = "px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none";
@@ -42134,7 +42826,7 @@ var Combobox = class extends PuzzleView {
         order: i3
       });
     });
-    matched.sort((a2, b3) => a2.tier - b3.tier || a2.order - b3.order);
+    matched.sort((a2, b4) => a2.tier - b4.tier || a2.order - b4.order);
     const ungrouped = [];
     const groupOrder = [];
     const groupMap = /* @__PURE__ */ new Map();
@@ -42238,7 +42930,7 @@ var Combobox = class extends PuzzleView {
       hiddenValue: selectedOpt ? selectedOpt.value : "",
       rootClass: props.class || "",
       inputClass: [INPUT_BASE6, error ? INPUT_ERROR3 : INPUT_OK3].join(" "),
-      panelClass: [PANEL_BASE6, PANEL_PLACEMENT2[placement]].filter(Boolean).join(" "),
+      panelClass: [PANEL_BASE5, PANEL_PLACEMENT2[placement]].filter(Boolean).join(" "),
       panelStyle: prev.maxHeight ? `max-height:${prev.maxHeight}px;` : ""
     };
   }
@@ -43042,7 +43734,7 @@ ComboboxDoc.__pzlModule = "app/views/components/ComboboxDoc.pzl";
 
 // app/components/ui/Command.pzl
 var uid23 = 0;
-var PANEL_BASE7 = "m-auto mt-[15vh] w-full max-w-lg rounded-xl border border-border bg-surface p-0 text-body shadow-xl overflow-hidden [&::backdrop]:bg-black/50";
+var PANEL_BASE6 = "m-auto mt-[15vh] w-full max-w-lg rounded-xl border border-border bg-surface p-0 text-body shadow-xl overflow-hidden [&::backdrop]:bg-black/50";
 var OPTION_BASE3 = "flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm select-none";
 var GROUP_CLS = "px-2 pt-2 pb-1 text-xs font-medium text-muted";
 function wordPrefix2(text, q2) {
@@ -43090,7 +43782,7 @@ var Command = class extends PuzzleView {
         order: i3
       });
     });
-    matched.sort((a2, b3) => a2.tier - b3.tier || a2.order - b3.order);
+    matched.sort((a2, b4) => a2.tier - b4.tier || a2.order - b4.order);
     const ungrouped = [];
     const groupOrder = [];
     const groupMap = /* @__PURE__ */ new Map();
@@ -43164,7 +43856,7 @@ var Command = class extends PuzzleView {
       placeholder: props.placeholder || "Type a command or search\u2026",
       emptyText: props.emptyText || "No results found.",
       ariaLabel: props.label || "Command palette",
-      panelClass: [PANEL_BASE7, props.class || ""].join(" ")
+      panelClass: [PANEL_BASE6, props.class || ""].join(" ")
     };
   }
   // ---- open / close (native <dialog> reconciled with the `open` prop) -------
@@ -45774,10 +46466,10 @@ var Dropzone2 = class extends PuzzleView {
     const hasRejections = rejectionMessages.length > 0;
     const described = !!(error || hint || hasRejections);
     const files = Array.isArray(props.files) ? props.files : [];
-    const fileRows = files.map((f2) => ({
-      name: f2.name || "",
-      size: formatBytes(f2.size),
-      type: f2.type && !String(f2.type).includes("/") ? f2.type : ""
+    const fileRows = files.map((f3) => ({
+      name: f3.name || "",
+      size: formatBytes(f3.size),
+      type: f3.type && !String(f3.type).includes("/") ? f3.type : ""
     }));
     const ZONE_BASE = "relative flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors focus-within:outline-2 focus-within:outline-offset-2";
     const zoneClass = [
@@ -45818,22 +46510,22 @@ var Dropzone2 = class extends PuzzleView {
     const maxSize = props.maxSize != null ? Number(props.maxSize) : null;
     const accepted = [];
     const rejected = [];
-    for (const f2 of list) {
-      if (!acceptsFile(f2, accept)) {
-        rejected.push({ file: f2, reason: "file-invalid-type", message: `${f2.name} is not an accepted file type.` });
+    for (const f3 of list) {
+      if (!acceptsFile(f3, accept)) {
+        rejected.push({ file: f3, reason: "file-invalid-type", message: `${f3.name} is not an accepted file type.` });
         continue;
       }
-      if (maxSize != null && !Number.isNaN(maxSize) && typeof f2.size === "number" && f2.size > maxSize) {
-        rejected.push({ file: f2, reason: "file-too-large", message: `${f2.name} is larger than the maximum size.` });
+      if (maxSize != null && !Number.isNaN(maxSize) && typeof f3.size === "number" && f3.size > maxSize) {
+        rejected.push({ file: f3, reason: "file-too-large", message: `${f3.name} is larger than the maximum size.` });
         continue;
       }
-      accepted.push(f2);
+      accepted.push(f3);
     }
     const existing = Array.isArray(props.files) ? props.files : [];
     let next;
     if (props.multiple) {
-      const seen = new Set(existing.map((f2) => `${f2.name}::${f2.size ?? ""}`));
-      const add = accepted.filter((f2) => !seen.has(`${f2.name}::${f2.size ?? ""}`));
+      const seen = new Set(existing.map((f3) => `${f3.name}::${f3.size ?? ""}`));
+      const add = accepted.filter((f3) => !seen.has(`${f3.name}::${f3.size ?? ""}`));
       next = existing.concat(add);
     } else {
       next = accepted.slice(0, 1);
@@ -45885,7 +46577,7 @@ var Dropzone2 = class extends PuzzleView {
     onRemove: (name, event) => {
       if (this.props.disabled) return;
       const existing = Array.isArray(this.props.files) ? this.props.files : [];
-      const next = existing.filter((f2) => (f2.name || "") !== name);
+      const next = existing.filter((f3) => (f3.name || "") !== name);
       const { change } = this.props;
       if (typeof change === "function") change(next, event);
     }
@@ -45953,11 +46645,11 @@ Dropzone2.prototype.render = function() {
         "ul",
         { class: "mt-3 flex flex-col gap-2" },
         __d.fileRows.map(
-          (f2) => new ViewNode("li", { key: ViewNode.keyOf(f2) }, [
+          (f3) => new ViewNode("li", { key: ViewNode.keyOf(f3) }, [
             new ViewNode(ChatAttachment, {
-              name: f2.name,
-              size: f2.size,
-              type: f2.type,
+              name: f3.name,
+              size: f3.size,
+              type: f3.type,
               removable: true,
               disabled: __d.disabled,
               class: "flex w-full max-w-full",
@@ -49873,7 +50565,7 @@ var EmojiPicker = class extends PuzzleView {
       else continue;
       out.push({ entry: e2, tier });
     }
-    out.sort((a2, b3) => a2.tier - b3.tier || a2.entry.order - b3.entry.order);
+    out.sort((a2, b4) => a2.tier - b4.tier || a2.entry.order - b4.entry.order);
     return out.map((m2) => m2.entry);
   }
   // Partition the matched entries under their group headers in first-appearance
@@ -51516,7 +52208,7 @@ function tickValues(cfg, spec, tickStep) {
       if (entry.labelClass !== void 0) prev.labelClass = entry.labelClass;
       byValue.set(value, prev);
     }
-    return [...byValue.values()].sort((a2, b3) => a2.value - b3.value);
+    return [...byValue.values()].sort((a2, b4) => a2.value - b4.value);
   }
   const span = cfg.max - cfg.min;
   if (!(span > 0)) return [{ value: cfg.min }];
@@ -51542,7 +52234,7 @@ function edgeShift(percent2) {
 }
 
 // app/components/ui/Fader.pzl
-var DRAG_THRESHOLD3 = 3;
+var DRAG_THRESHOLD2 = 3;
 var NO_PAIR = Object.freeze({});
 function flipShift(shift2) {
   return shift2 === "0%" ? "0%" : shift2.slice(1);
@@ -51822,7 +52514,7 @@ var Fader = class extends PuzzleView {
         this._teardownGesture();
         return;
       }
-      if (deltaMain <= DRAG_THRESHOLD3) return;
+      if (deltaMain <= DRAG_THRESHOLD2) return;
       drag.startValue = this._committed(props, cfg);
       drag.dragging = true;
       this._suppressClick = true;
@@ -52585,7 +53277,7 @@ FieldDoc.__pzlModule = "app/views/components/FieldDoc.pzl";
 
 // app/components/ui/HoverCard.pzl
 var uid27 = 0;
-var PANEL_BASE8 = "absolute z-50 w-72 rounded-lg border border-border bg-surface p-4 shadow-md text-sm text-body";
+var PANEL_BASE7 = "absolute z-50 w-72 rounded-lg border border-border bg-surface p-4 shadow-md text-sm text-body";
 var ALIGN5 = {
   start: "left-0",
   center: "left-1/2 -translate-x-1/2",
@@ -52646,7 +53338,7 @@ var HoverCard = class extends PuzzleView {
       label: props.label != null ? String(props.label) : "",
       panelId: props.id || `pieces-hover-card-${this._uid}`,
       panelClass: [
-        PANEL_BASE8,
+        PANEL_BASE7,
         placement === "top" ? "bottom-full mb-2" : "top-full mt-2",
         ALIGN5[align],
         props.class || ""
@@ -55131,16 +55823,16 @@ ${c2}` : c2;
         let h2 = s2.at(-1);
         if (h2?.type === "code") break;
         if (h2?.type === "blockquote") {
-          let R = h2, f2 = R.raw + `
+          let R = h2, f3 = R.raw + `
 ` + n2.join(`
-`), S = this.blockquote(f2);
+`), S = this.blockquote(f3);
           s2[s2.length - 1] = S, r2 = r2.substring(0, r2.length - R.raw.length) + S.raw, i3 = i3.substring(0, i3.length - R.text.length) + S.text;
           break;
         } else if (h2?.type === "list") {
-          let R = h2, f2 = R.raw + `
+          let R = h2, f3 = R.raw + `
 ` + n2.join(`
-`), S = this.list(f2);
-          s2[s2.length - 1] = S, r2 = r2.substring(0, r2.length - h2.raw.length) + S.raw, i3 = i3.substring(0, i3.length - R.raw.length) + S.raw, n2 = f2.substring(s2.at(-1).raw.length).split(`
+`), S = this.list(f3);
+          s2[s2.length - 1] = S, r2 = r2.substring(0, r2.length - h2.raw.length) + S.raw, i3 = i3.substring(0, i3.length - R.raw.length) + S.raw, n2 = f3.substring(s2.at(-1).raw.length).split(`
 `);
           continue;
         }
@@ -55160,23 +55852,23 @@ ${c2}` : c2;
         p = t2[0], e2 = e2.substring(p.length);
         let d = ge(t2[2].split(`
 `, 1)[0], t2[1].length), h2 = e2.split(`
-`, 1)[0], R = !d.trim(), f2 = 0;
-        if (this.options.pedantic ? (f2 = 2, c2 = d.trimStart()) : R ? f2 = t2[1].length + 1 : (f2 = d.search(this.rules.other.nonSpaceChar), f2 = f2 > 4 ? 1 : f2, c2 = d.slice(f2), f2 += t2[1].length), R && this.rules.other.blankLine.test(h2) && (p += h2 + `
+`, 1)[0], R = !d.trim(), f3 = 0;
+        if (this.options.pedantic ? (f3 = 2, c2 = d.trimStart()) : R ? f3 = t2[1].length + 1 : (f3 = d.search(this.rules.other.nonSpaceChar), f3 = f3 > 4 ? 1 : f3, c2 = d.slice(f3), f3 += t2[1].length), R && this.rules.other.blankLine.test(h2) && (p += h2 + `
 `, e2 = e2.substring(h2.length + 1), l = true), !l) {
-          let S = this.rules.other.nextBulletRegex(f2), Y = this.rules.other.hrRegex(f2), ee = this.rules.other.fencesBeginRegex(f2), te = this.rules.other.headingBeginRegex(f2), me = this.rules.other.htmlBeginRegex(f2), xe = this.rules.other.blockquoteBeginRegex(f2);
+          let S = this.rules.other.nextBulletRegex(f3), Y = this.rules.other.hrRegex(f3), ee = this.rules.other.fencesBeginRegex(f3), te = this.rules.other.headingBeginRegex(f3), me = this.rules.other.htmlBeginRegex(f3), xe = this.rules.other.blockquoteBeginRegex(f3);
           for (; e2; ) {
             let Z = e2.split(`
 `, 1)[0], A;
             if (h2 = Z, this.options.pedantic ? (h2 = h2.replace(this.rules.other.listReplaceNesting, "  "), A = h2) : A = h2.replace(this.rules.other.tabCharGlobal, "    "), ee.test(h2) || te.test(h2) || me.test(h2) || xe.test(h2) || S.test(h2) || Y.test(h2)) break;
-            if (A.search(this.rules.other.nonSpaceChar) >= f2 || !h2.trim()) c2 += `
-` + A.slice(f2);
+            if (A.search(this.rules.other.nonSpaceChar) >= f3 || !h2.trim()) c2 += `
+` + A.slice(f3);
             else {
               if (R || d.replace(this.rules.other.tabCharGlobal, "    ").search(this.rules.other.nonSpaceChar) >= 4 || ee.test(d) || te.test(d) || Y.test(d)) break;
               c2 += `
 ` + h2;
             }
             R = !h2.trim(), p += Z + `
-`, e2 = e2.substring(Z.length + 1), d = A.slice(f2);
+`, e2 = e2.substring(Z.length + 1), d = A.slice(f3);
           }
         }
         i3.loose || (a2 ? i3.loose = true : this.rules.other.doubleBlankLine.test(p) && (a2 = true)), i3.items.push({ type: "list_item", raw: p, task: !!this.options.gfm && this.rules.other.listIsTask.test(c2), loose: false, text: c2, tokens: [] }), i3.raw += p;
@@ -55315,8 +56007,8 @@ ${c2}` : c2;
         o2 = Math.min(o2, o2 + l + p);
         let d = [...r2[0]][0].length, h2 = e2.slice(0, s2 + r2.index + d + o2);
         if (Math.min(s2, o2) % 2) {
-          let f2 = h2.slice(1, -1);
-          return { type: "em", raw: h2, text: f2, tokens: this.lexer.inlineTokens(f2) };
+          let f3 = h2.slice(1, -1);
+          return { type: "em", raw: h2, text: f3, tokens: this.lexer.inlineTokens(f3) };
         }
         let R = h2.slice(2, -2);
         return { type: "strong", raw: h2, text: R, tokens: this.lexer.inlineTokens(R) };
@@ -55741,7 +56433,7 @@ var $ = class {
     return e2;
   }
 };
-var b2 = class u2 {
+var b3 = class u2 {
   options;
   renderer;
   textRenderer;
@@ -55917,7 +56609,7 @@ var P = class {
     return e2 ? x.lex : x.lexInline;
   }
   provideParser(e2 = this.block) {
-    return e2 ? b2.parse : b2.parseInline;
+    return e2 ? b3.parse : b3.parseInline;
   }
 };
 var D = class {
@@ -55925,7 +56617,7 @@ var D = class {
   options = this.setOptions;
   parse = this.parseMarkdown(true);
   parseInline = this.parseMarkdown(false);
-  Parser = b2;
+  Parser = b3;
   Renderer = y;
   TextRenderer = $;
   Lexer = x;
@@ -56044,7 +56736,7 @@ var D = class {
     return x.lex(e2, t2 ?? this.defaults);
   }
   parser(e2, t2) {
-    return b2.parse(e2, t2 ?? this.defaults);
+    return b3.parse(e2, t2 ?? this.defaults);
   }
   parseMarkdown(e2) {
     return (n2, r2) => {
@@ -56055,14 +56747,14 @@ var D = class {
       if (s2.hooks && (s2.hooks.options = s2, s2.hooks.block = e2), s2.async) return (async () => {
         let o2 = s2.hooks ? await s2.hooks.preprocess(n2) : n2, p = await (s2.hooks ? await s2.hooks.provideLexer(e2) : e2 ? x.lex : x.lexInline)(o2, s2), c2 = s2.hooks ? await s2.hooks.processAllTokens(p) : p;
         s2.walkTokens && await Promise.all(this.walkTokens(c2, s2.walkTokens));
-        let h2 = await (s2.hooks ? await s2.hooks.provideParser(e2) : e2 ? b2.parse : b2.parseInline)(c2, s2);
+        let h2 = await (s2.hooks ? await s2.hooks.provideParser(e2) : e2 ? b3.parse : b3.parseInline)(c2, s2);
         return s2.hooks ? await s2.hooks.postprocess(h2) : h2;
       })().catch(a2);
       try {
         s2.hooks && (n2 = s2.hooks.preprocess(n2));
         let l = (s2.hooks ? s2.hooks.provideLexer(e2) : e2 ? x.lex : x.lexInline)(n2, s2);
         s2.hooks && (l = s2.hooks.processAllTokens(l)), s2.walkTokens && this.walkTokens(l, s2.walkTokens);
-        let c2 = (s2.hooks ? s2.hooks.provideParser(e2) : e2 ? b2.parse : b2.parseInline)(l, s2);
+        let c2 = (s2.hooks ? s2.hooks.provideParser(e2) : e2 ? b3.parse : b3.parseInline)(l, s2);
         return s2.hooks && (c2 = s2.hooks.postprocess(c2)), c2;
       } catch (o2) {
         return a2(o2);
@@ -56097,8 +56789,8 @@ g.walkTokens = function(u3, e2) {
   return L.walkTokens(u3, e2);
 };
 g.parseInline = L.parseInline;
-g.Parser = b2;
-g.parser = b2.parse;
+g.Parser = b3;
+g.parser = b3.parse;
 g.Renderer = y;
 g.TextRenderer = $;
 g.Lexer = x;
@@ -56111,7 +56803,7 @@ var jt = g.setOptions;
 var Ft = g.use;
 var Ut = g.walkTokens;
 var Kt = g.parseInline;
-var Xt = b2.parse;
+var Xt = b3.parse;
 var Jt = x.lex;
 
 // app/lib/markdown-doc.js
@@ -56724,9 +57416,9 @@ OrderedMap.prototype = {
   // :: ((key: string, value: any))
   // Call the given function for each key/value pair in the map, in
   // order.
-  forEach: function(f2) {
+  forEach: function(f3) {
     for (var i3 = 0; i3 < this.content.length; i3 += 2)
-      f2(this.content[i3], this.content[i3 + 1]);
+      f3(this.content[i3], this.content[i3 + 1]);
   },
   // :: (union<Object, OrderedMap>) → OrderedMap
   // Create a new map by prepending the keys in this map that don't
@@ -56778,11 +57470,11 @@ OrderedMap.from = function(value) {
 var dist_default = OrderedMap;
 
 // node_modules/prosemirror-model/dist/index.js
-function findDiffStart(a2, b3, pos) {
+function findDiffStart(a2, b4, pos) {
   for (let i3 = 0; ; i3++) {
-    if (i3 == a2.childCount || i3 == b3.childCount)
-      return a2.childCount == b3.childCount ? null : pos;
-    let childA = a2.child(i3), childB = b3.child(i3);
+    if (i3 == a2.childCount || i3 == b4.childCount)
+      return a2.childCount == b4.childCount ? null : pos;
+    let childA = a2.child(i3), childB = b4.child(i3);
     if (childA == childB) {
       pos += childA.nodeSize;
       continue;
@@ -56805,11 +57497,11 @@ function findDiffStart(a2, b3, pos) {
     pos += childA.nodeSize;
   }
 }
-function findDiffEnd(a2, b3, posA, posB) {
-  for (let iA = a2.childCount, iB = b3.childCount; ; ) {
+function findDiffEnd(a2, b4, posA, posB) {
+  for (let iA = a2.childCount, iB = b4.childCount; ; ) {
     if (iA == 0 || iB == 0)
       return iA == iB ? null : { a: posA, b: posB };
-    let childA = a2.child(--iA), childB = b3.child(--iB), size = childA.nodeSize;
+    let childA = a2.child(--iA), childB = b4.child(--iB), size = childA.nodeSize;
     if (childA == childB) {
       posA -= size;
       posB -= size;
@@ -56862,12 +57554,12 @@ var Fragment = class _Fragment {
   positions (relative to start of this fragment). Doesn't descend
   into a node when the callback returns `false`.
   */
-  nodesBetween(from2, to, f2, nodeStart = 0, parent) {
+  nodesBetween(from2, to, f3, nodeStart = 0, parent) {
     for (let i3 = 0, pos = 0; pos < to; i3++) {
       let child = this.content[i3], end = pos + child.nodeSize;
-      if (end > from2 && f2(child, nodeStart + pos, parent || null, i3) !== false && child.content.size) {
+      if (end > from2 && f3(child, nodeStart + pos, parent || null, i3) !== false && child.content.size) {
         let start = pos + 1;
-        child.nodesBetween(Math.max(0, from2 - start), Math.min(child.content.size, to - start), f2, nodeStart + start);
+        child.nodesBetween(Math.max(0, from2 - start), Math.min(child.content.size, to - start), f3, nodeStart + start);
       }
       pos = end;
     }
@@ -56877,8 +57569,8 @@ var Fragment = class _Fragment {
   relative to the start of the fragment. The callback may return
   `false` to prevent traversal of a given node's children.
   */
-  descendants(f2) {
-    this.nodesBetween(0, this.size, f2);
+  descendants(f3) {
+    this.nodesBetween(0, this.size, f3);
   }
   /**
   Extract the text between `from` and `to`. See the same method on
@@ -57026,10 +57718,10 @@ var Fragment = class _Fragment {
   Call `f` for every child node, passing the node, its offset
   into this parent node, and its index.
   */
-  forEach(f2) {
+  forEach(f3) {
     for (let i3 = 0, p = 0; i3 < this.content.length; i3++) {
       let child = this.content[i3];
-      f2(child, p, i3);
+      f3(child, p, i3);
       p += child.nodeSize;
     }
   }
@@ -57145,25 +57837,25 @@ function retIndex(index, offset) {
   found.offset = offset;
   return found;
 }
-function compareDeep(a2, b3) {
-  if (a2 === b3)
+function compareDeep(a2, b4) {
+  if (a2 === b4)
     return true;
-  if (!(a2 && typeof a2 == "object") || !(b3 && typeof b3 == "object"))
+  if (!(a2 && typeof a2 == "object") || !(b4 && typeof b4 == "object"))
     return false;
   let array = Array.isArray(a2);
-  if (Array.isArray(b3) != array)
+  if (Array.isArray(b4) != array)
     return false;
   if (array) {
-    if (a2.length != b3.length)
+    if (a2.length != b4.length)
       return false;
     for (let i3 = 0; i3 < a2.length; i3++)
-      if (!compareDeep(a2[i3], b3[i3]))
+      if (!compareDeep(a2[i3], b4[i3]))
         return false;
   } else {
     for (let p in a2)
-      if (!(p in b3) || !compareDeep(a2[p], b3[p]))
+      if (!(p in b4) || !compareDeep(a2[p], b4[p]))
         return false;
-    for (let p in b3)
+    for (let p in b4)
       if (!(p in a2))
         return false;
   }
@@ -57265,13 +57957,13 @@ var Mark = class _Mark2 {
   /**
   Test whether two sets of marks are identical.
   */
-  static sameSet(a2, b3) {
-    if (a2 == b3)
+  static sameSet(a2, b4) {
+    if (a2 == b4)
       return true;
-    if (a2.length != b3.length)
+    if (a2.length != b4.length)
       return false;
     for (let i3 = 0; i3 < a2.length; i3++)
-      if (!a2[i3].eq(b3[i3]))
+      if (!a2[i3].eq(b4[i3]))
         return false;
     return true;
   }
@@ -57285,7 +57977,7 @@ var Mark = class _Mark2 {
     if (marks instanceof _Mark2)
       return [marks];
     let copy2 = marks.slice();
-    copy2.sort((a2, b3) => a2.type.rank - b3.type.rank);
+    copy2.sort((a2, b4) => a2.type.rank - b4.type.rank);
     return copy2;
   }
 };
@@ -57873,8 +58565,8 @@ var Node = class _Node2 {
   Call `f` for every child node, passing the node, its offset
   into this parent node, and its index.
   */
-  forEach(f2) {
-    this.content.forEach(f2);
+  forEach(f3) {
+    this.content.forEach(f3);
   }
   /**
   Invoke a callback for all descendant nodes recursively overlapping
@@ -57887,15 +58579,15 @@ var Node = class _Node2 {
   recursed over. The last parameter can be used to specify a
   starting position to count from.
   */
-  nodesBetween(from2, to, f2, startPos = 0) {
-    this.content.nodesBetween(from2, to, f2, startPos, this);
+  nodesBetween(from2, to, f3, startPos = 0) {
+    this.content.nodesBetween(from2, to, f3, startPos, this);
   }
   /**
   Call the given callback for every descendant node. Doesn't
   descend into a node when the callback returns `false`.
   */
-  descendants(f2) {
-    this.nodesBetween(0, this.content.size, f2);
+  descendants(f3) {
+    this.nodesBetween(0, this.content.size, f3);
   }
   /**
   Concatenates all the text nodes found in this fragment and its
@@ -58617,8 +59309,8 @@ function nfa(expr) {
     }
   }
 }
-function cmp(a2, b3) {
-  return b3 - a2;
+function cmp(a2, b4) {
+  return b4 - a2;
 }
 function nullFrom(nfa2, node) {
   let result = [];
@@ -58683,10 +59375,10 @@ function checkForDeadEnds(match, stream) {
 function defaultAttrs(attrs) {
   let defaults2 = /* @__PURE__ */ Object.create(null);
   for (let attrName in attrs) {
-    let attr3 = attrs[attrName];
-    if (!attr3.hasDefault)
+    let attr4 = attrs[attrName];
+    if (!attr4.hasDefault)
       return null;
-    defaults2[attrName] = attr3.default;
+    defaults2[attrName] = attr4.default;
   }
   return defaults2;
 }
@@ -58695,9 +59387,9 @@ function computeAttrs(attrs, value) {
   for (let name in attrs) {
     let given = value && value[name];
     if (given === void 0) {
-      let attr3 = attrs[name];
-      if (attr3.hasDefault)
-        given = attr3.default;
+      let attr4 = attrs[name];
+      if (attr4.hasDefault)
+        given = attr4.default;
       else
         throw new RangeError("No value supplied for attribute " + name);
     }
@@ -58706,12 +59398,12 @@ function computeAttrs(attrs, value) {
   return built;
 }
 function checkAttrs(attrs, values, type, name) {
-  for (let attr3 in values)
-    if (!(attr3 in attrs))
-      throw new RangeError(`Unsupported attribute ${attr3} for ${type} of type ${name}`);
-  for (let attr3 in attrs) {
-    if (attrs[attr3].validate)
-      attrs[attr3].validate(values[attr3]);
+  for (let attr4 in values)
+    if (!(attr4 in attrs))
+      throw new RangeError(`Unsupported attribute ${attr4} for ${type} of type ${name}`);
+  for (let attr4 in attrs) {
+    if (attrs[attr4].validate)
+      attrs[attr4].validate(values[attr4]);
   }
 }
 function initAttrs(typeName, attrs) {
@@ -60122,12 +60814,12 @@ var StepMap = class _StepMap {
   Calls the given function on each of the changed ranges included in
   this map.
   */
-  forEach(f2) {
+  forEach(f3) {
     let oldIndex = this.inverted ? 2 : 1, newIndex = this.inverted ? 1 : 2;
     for (let i3 = 0, diff = 0; i3 < this.ranges.length; i3 += 3) {
       let start = this.ranges[i3], oldStart = start - (this.inverted ? diff : 0), newStart = start + (this.inverted ? 0 : diff);
       let oldSize = this.ranges[i3 + oldIndex], newSize = this.ranges[i3 + newIndex];
-      f2(oldStart, oldStart + oldSize, newStart, newStart + newSize);
+      f3(oldStart, oldStart + oldSize, newStart, newStart + newSize);
       diff += newSize - oldSize;
     }
   }
@@ -60356,14 +61048,14 @@ var StepResult = class _StepResult {
     }
   }
 };
-function mapFragment(fragment, f2, parent) {
+function mapFragment(fragment, f3, parent) {
   let mapped = [];
   for (let i3 = 0; i3 < fragment.childCount; i3++) {
     let child = fragment.child(i3);
     if (child.content.size)
-      child = child.copy(mapFragment(child.content, f2, child));
+      child = child.copy(mapFragment(child.content, f3, child));
     if (child.isInline)
-      child = f2(child, parent, i3);
+      child = f3(child, parent, i3);
     mapped.push(child);
   }
   return Fragment.fromArray(mapped);
@@ -60996,13 +61688,13 @@ function canJoin(doc3, pos) {
   let $pos = doc3.resolve(pos), index = $pos.index();
   return joinable2($pos.nodeBefore, $pos.nodeAfter) && $pos.parent.canReplace(index, index + 1);
 }
-function canAppendWithSubstitutedLinebreaks(a2, b3) {
-  if (!b3.content.size)
-    a2.type.compatibleContent(b3.type);
+function canAppendWithSubstitutedLinebreaks(a2, b4) {
+  if (!b4.content.size)
+    a2.type.compatibleContent(b4.type);
   let match = a2.contentMatchAt(a2.childCount);
   let { linebreakReplacement } = a2.type.schema;
-  for (let i3 = 0; i3 < b3.childCount; i3++) {
-    let child = b3.child(i3);
+  for (let i3 = 0; i3 < b4.childCount; i3++) {
+    let child = b4.child(i3);
     let type = child.type == linebreakReplacement ? a2.type.schema.nodes.text : child.type;
     match = match.matchType(type);
     if (!match)
@@ -61012,8 +61704,8 @@ function canAppendWithSubstitutedLinebreaks(a2, b3) {
   }
   return match.validEnd;
 }
-function joinable2(a2, b3) {
-  return !!(a2 && b3 && !a2.isLeaf && canAppendWithSubstitutedLinebreaks(a2, b3));
+function joinable2(a2, b4) {
+  return !!(a2 && b4 && !a2.isLeaf && canAppendWithSubstitutedLinebreaks(a2, b4));
 }
 function joinPoint(doc3, pos, dir = -1) {
   let $pos = doc3.resolve(pos);
@@ -61495,10 +62187,10 @@ var AttrStep = class _AttrStep extends Step {
   /**
   Construct an attribute step.
   */
-  constructor(pos, attr3, value) {
+  constructor(pos, attr4, value) {
     super();
     this.pos = pos;
-    this.attr = attr3;
+    this.attr = attr4;
     this.value = value;
   }
   apply(doc3) {
@@ -61536,9 +62228,9 @@ var DocAttrStep = class _DocAttrStep extends Step {
   /**
   Construct an attribute step.
   */
-  constructor(attr3, value) {
+  constructor(attr4, value) {
     super();
-    this.attr = attr3;
+    this.attr = attr4;
     this.value = value;
   }
   apply(doc3) {
@@ -61773,15 +62465,15 @@ var Transform = class {
   The `pos` addresses the document content. Use `setDocAttribute`
   to set attributes on the document itself.
   */
-  setNodeAttribute(pos, attr3, value) {
-    this.step(new AttrStep(pos, attr3, value));
+  setNodeAttribute(pos, attr4, value) {
+    this.step(new AttrStep(pos, attr4, value));
     return this;
   }
   /**
   Set a single attribute on the document to a new value.
   */
-  setDocAttribute(attr3, value) {
-    this.step(new DocAttrStep(attr3, value));
+  setDocAttribute(attr4, value) {
+    this.step(new DocAttrStep(attr4, value));
     return this;
   }
   /**
@@ -62482,8 +63174,8 @@ var Transaction = class extends Transform {
     return (this.updated & UPDATED_SCROLL) > 0;
   }
 };
-function bind(f2, self) {
-  return !self || !f2 ? f2 : f2.bind(self);
+function bind(f3, self) {
+  return !self || !f3 ? f3 : f3.bind(self);
 }
 var FieldDesc = class {
   constructor(name, desc, self) {
@@ -63976,14 +64668,14 @@ function flattenH(rect, top) {
   let y2 = top ? rect.top : rect.bottom;
   return { top: y2, bottom: y2, left: rect.left, right: rect.right };
 }
-function withFlushedState(view, state, f2) {
+function withFlushedState(view, state, f3) {
   let viewState2 = view.state, active = view.root.activeElement;
   if (viewState2 != state)
     view.updateState(state);
   if (active != view.dom)
     view.focus();
   try {
-    return f2();
+    return f3();
   } finally {
     if (viewState2 != state)
       view.updateState(viewState2);
@@ -65018,11 +65710,11 @@ function patchAttributes(dom, prev, cur) {
 function applyOuterDeco(dom, deco, node) {
   return patchOuterDeco(dom, dom, noDeco, computeOuterDeco(deco, node, dom.nodeType != 1));
 }
-function sameOuterDeco(a2, b3) {
-  if (a2.length != b3.length)
+function sameOuterDeco(a2, b4) {
+  if (a2.length != b4.length)
     return false;
   for (let i3 = 0; i3 < a2.length; i3++)
-    if (!a2[i3].type.eq(b3[i3].type))
+    if (!a2[i3].type.eq(b4[i3].type))
       return false;
   return true;
 }
@@ -65292,8 +65984,8 @@ function preMatch(frag, parentDesc) {
   }
   return { index: fI, matched, matches: matches2.reverse() };
 }
-function compareSide(a2, b3) {
-  return a2.type.side - b3.type.side;
+function compareSide(a2, b4) {
+  return a2.type.side - b4.type.side;
 }
 function iterDeco(parent, deco, onWidget, onNode) {
   let locals = deco.locals(parent), offset = 0;
@@ -65585,7 +66277,7 @@ function clearNodeSelection(view) {
   }
 }
 function selectionBetween(view, $anchor, $head, bias) {
-  return view.someProp("createSelectionBetween", (f2) => f2(view, $anchor, $head)) || TextSelection.between($anchor, $head, bias);
+  return view.someProp("createSelectionBetween", (f3) => f3(view, $anchor, $head)) || TextSelection.between($anchor, $head, bias);
 }
 function hasFocusAndSelection(view) {
   if (view.editable && !view.hasFocus())
@@ -65933,8 +66625,8 @@ function captureKeyDown(view, event) {
   return false;
 }
 function serializeForClipboard(view, slice2) {
-  view.someProp("transformCopied", (f2) => {
-    slice2 = f2(slice2, view);
+  view.someProp("transformCopied", (f3) => {
+    slice2 = f3(slice2, view);
   });
   let context = [], { content, openStart, openEnd } = slice2;
   while (openStart > 1 && openEnd > 1 && content.childCount == 1 && content.firstChild.childCount == 1) {
@@ -65960,7 +66652,7 @@ function serializeForClipboard(view, slice2) {
   }
   if (firstChild && firstChild.nodeType == 1)
     firstChild.setAttribute("data-pm-slice", `${openStart} ${openEnd}${wrappers ? ` -${wrappers}` : ""} ${JSON.stringify(context)}`);
-  let text = view.someProp("clipboardTextSerializer", (f2) => f2(slice2, view)) || slice2.content.textBetween(0, slice2.content.size, "\n\n");
+  let text = view.someProp("clipboardTextSerializer", (f3) => f3(slice2, view)) || slice2.content.textBetween(0, slice2.content.size, "\n\n");
   return { dom: wrap3, text, slice: slice2 };
 }
 function parseFromClipboard(view, text, html, plainText, $context) {
@@ -65970,17 +66662,17 @@ function parseFromClipboard(view, text, html, plainText, $context) {
     return null;
   let asText = !!text && (plainText || inCode || !html);
   if (asText) {
-    view.someProp("transformPastedText", (f2) => {
-      text = f2(text, inCode || plainText, view);
+    view.someProp("transformPastedText", (f3) => {
+      text = f3(text, inCode || plainText, view);
     });
     if (inCode) {
       slice2 = new Slice(Fragment.from(view.state.schema.text(text.replace(/\r\n?/g, "\n"))), 0, 0);
-      view.someProp("transformPasted", (f2) => {
-        slice2 = f2(slice2, view, true);
+      view.someProp("transformPasted", (f3) => {
+        slice2 = f3(slice2, view, true);
       });
       return slice2;
     }
-    let parsed = view.someProp("clipboardTextParser", (f2) => f2(text, $context, plainText, view));
+    let parsed = view.someProp("clipboardTextParser", (f3) => f3(text, $context, plainText, view));
     if (parsed) {
       slice2 = parsed;
     } else {
@@ -65994,8 +66686,8 @@ function parseFromClipboard(view, text, html, plainText, $context) {
       });
     }
   } else {
-    view.someProp("transformPastedHTML", (f2) => {
-      html = f2(html, view);
+    view.someProp("transformPastedHTML", (f3) => {
+      html = f3(html, view);
     });
     dom = readHTML(html);
     if (webkit)
@@ -66037,8 +66729,8 @@ function parseFromClipboard(view, text, html, plainText, $context) {
       slice2 = closeSlice(slice2, openStart, openEnd);
     }
   }
-  view.someProp("transformPasted", (f2) => {
-    slice2 = f2(slice2, view, asText);
+  view.someProp("transformPasted", (f3) => {
+    slice2 = f3(slice2, view, asText);
   });
   return slice2;
 }
@@ -66285,11 +66977,11 @@ editHandlers.keydown = (view, _event) => {
     view.input.lastIOSEnter = now2;
     view.input.lastIOSEnterFallbackTimeout = setTimeout(() => {
       if (view.input.lastIOSEnter == now2) {
-        view.someProp("handleKeyDown", (f2) => f2(view, keyEvent(13, "Enter")));
+        view.someProp("handleKeyDown", (f3) => f3(view, keyEvent(13, "Enter")));
         view.input.lastIOSEnter = 0;
       }
     }, 200);
-  } else if (view.someProp("handleKeyDown", (f2) => f2(view, event)) || captureKeyDown(view, event)) {
+  } else if (view.someProp("handleKeyDown", (f3) => f3(view, event)) || captureKeyDown(view, event)) {
     event.preventDefault();
   } else {
     setSelectionOrigin(view, "key");
@@ -66303,7 +66995,7 @@ editHandlers.keypress = (view, _event) => {
   let event = _event;
   if (inOrNearComposition(view) || !event.charCode || event.ctrlKey && !event.altKey || mac2 && event.metaKey)
     return;
-  if (view.someProp("handleKeyPress", (f2) => f2(view, event))) {
+  if (view.someProp("handleKeyPress", (f3) => f3(view, event))) {
     event.preventDefault();
     return;
   }
@@ -66311,7 +67003,7 @@ editHandlers.keypress = (view, _event) => {
   if (!(sel instanceof TextSelection) || !sel.$from.sameParent(sel.$to)) {
     let text = String.fromCharCode(event.charCode);
     let deflt = () => view.state.tr.insertText(text).scrollIntoView();
-    if (!/[\r\n]/.test(text) && !view.someProp("handleTextInput", (f2) => f2(view, sel.$from.pos, sel.$to.pos, text, deflt)))
+    if (!/[\r\n]/.test(text) && !view.someProp("handleTextInput", (f3) => f3(view, sel.$from.pos, sel.$to.pos, text, deflt)))
       view.dispatch(deflt());
     event.preventDefault();
   }
@@ -66328,7 +67020,7 @@ function runHandlerOnContext(view, propName, pos, inside, event) {
     return false;
   let $pos = view.state.doc.resolve(inside);
   for (let i3 = $pos.depth + 1; i3 > 0; i3--) {
-    if (view.someProp(propName, (f2) => i3 > $pos.depth ? f2(view, pos, $pos.nodeAfter, $pos.before(i3), event, true) : f2(view, pos, $pos.node(i3), $pos.before(i3), event, false)))
+    if (view.someProp(propName, (f3) => i3 > $pos.depth ? f3(view, pos, $pos.nodeAfter, $pos.before(i3), event, true) : f3(view, pos, $pos.node(i3), $pos.before(i3), event, false)))
       return true;
   }
   return false;
@@ -66378,13 +67070,13 @@ function selectClickedNode(view, inside) {
   }
 }
 function handleSingleClick(view, pos, inside, event, selectNode) {
-  return runHandlerOnContext(view, "handleClickOn", pos, inside, event) || view.someProp("handleClick", (f2) => f2(view, pos, event)) || (selectNode ? selectClickedNode(view, inside) : selectClickedLeaf(view, inside));
+  return runHandlerOnContext(view, "handleClickOn", pos, inside, event) || view.someProp("handleClick", (f3) => f3(view, pos, event)) || (selectNode ? selectClickedNode(view, inside) : selectClickedLeaf(view, inside));
 }
 function handleDoubleClick(view, pos, inside, event) {
-  return runHandlerOnContext(view, "handleDoubleClickOn", pos, inside, event) || view.someProp("handleDoubleClick", (f2) => f2(view, pos, event));
+  return runHandlerOnContext(view, "handleDoubleClickOn", pos, inside, event) || view.someProp("handleDoubleClick", (f3) => f3(view, pos, event));
 }
 function handleTripleClick(view, pos, inside, event) {
-  return runHandlerOnContext(view, "handleTripleClickOn", pos, inside, event) || view.someProp("handleTripleClick", (f2) => f2(view, pos, event)) || defaultTripleClick(view, inside, event);
+  return runHandlerOnContext(view, "handleTripleClickOn", pos, inside, event) || view.someProp("handleTripleClick", (f3) => f3(view, pos, event)) || defaultTripleClick(view, inside, event);
 }
 function defaultTripleClick(view, inside, event) {
   if (event.button != 0)
@@ -66773,7 +67465,7 @@ function capturePaste(view, event) {
 }
 function doPaste(view, text, html, preferPlain, event) {
   let slice2 = parseFromClipboard(view, text, html, preferPlain, view.state.selection.$from);
-  if (view.someProp("handlePaste", (f2) => f2(view, event, slice2 || Slice.empty)))
+  if (view.someProp("handlePaste", (f3) => f3(view, event, slice2 || Slice.empty)))
     return true;
   if (!slice2)
     return false;
@@ -66867,14 +67559,14 @@ function handleDrop(view, event, dragging) {
   let $mouse = view.state.doc.resolve(eventPos.pos);
   let slice2 = dragging && dragging.slice;
   if (slice2) {
-    view.someProp("transformPasted", (f2) => {
-      slice2 = f2(slice2, view, false);
+    view.someProp("transformPasted", (f3) => {
+      slice2 = f3(slice2, view, false);
     });
   } else {
     slice2 = parseFromClipboard(view, getText(event.dataTransfer), brokenClipboardAPI ? null : event.dataTransfer.getData("text/html"), false, $mouse);
   }
   let move = !!(dragging && dragMoves(view, event));
-  if (view.someProp("handleDrop", (f2) => f2(view, event, slice2 || Slice.empty, move))) {
+  if (view.someProp("handleDrop", (f3) => f3(view, event, slice2 || Slice.empty, move))) {
     event.preventDefault();
     return;
   }
@@ -66946,7 +67638,7 @@ handlers.beforeinput = (view, _event) => {
         return;
       view.dom.blur();
       view.focus();
-      if (view.someProp("handleKeyDown", (f2) => f2(view, keyEvent(8, "Backspace"))))
+      if (view.someProp("handleKeyDown", (f3) => f3(view, keyEvent(8, "Backspace"))))
         return;
       let { $cursor } = view.state.selection;
       if ($cursor && $cursor.pos > 0)
@@ -66956,13 +67648,13 @@ handlers.beforeinput = (view, _event) => {
 };
 for (let prop in editHandlers)
   handlers[prop] = editHandlers[prop];
-function compareObjs(a2, b3) {
-  if (a2 == b3)
+function compareObjs(a2, b4) {
+  if (a2 == b4)
     return true;
   for (let p in a2)
-    if (a2[p] !== b3[p])
+    if (a2[p] !== b4[p])
       return false;
-  for (let p in b3)
+  for (let p in b4)
     if (!(p in a2))
       return false;
   return true;
@@ -67324,8 +68016,8 @@ var DecorationSet = class _DecorationSet {
     }
     return result;
   }
-  forEachSet(f2) {
-    f2(this);
+  forEachSet(f3) {
+    f3(this);
   }
 };
 DecorationSet.empty = new DecorationSet([], []);
@@ -67393,9 +68085,9 @@ var DecorationGroup = class _DecorationGroup {
         return new _DecorationGroup(members.every((m2) => m2 instanceof DecorationSet) ? members : members.reduce((r2, m2) => r2.concat(m2 instanceof DecorationSet ? m2 : m2.members), []));
     }
   }
-  forEachSet(f2) {
+  forEachSet(f3) {
     for (let i3 = 0; i3 < this.members.length; i3++)
-      this.members[i3].forEachSet(f2);
+      this.members[i3].forEachSet(f3);
   }
 };
 function mapChildren(oldChildren, newLocal, mapping, node, offset, oldOffset, options) {
@@ -67534,8 +68226,8 @@ function buildTree(spans, node, offset, options) {
     }
   return locals.length || children.length ? new DecorationSet(locals, children) : empty;
 }
-function byPos(a2, b3) {
-  return a2.from - b3.from || a2.to - b3.to;
+function byPos(a2, b4) {
+  return a2.from - b4.from || a2.to - b4.to;
 }
 function removeOverlap(spans) {
   let working = spans;
@@ -67572,8 +68264,8 @@ function insertAhead(array, i3, deco) {
 }
 function viewDecorations(view) {
   let found2 = [];
-  view.someProp("decorations", (f2) => {
-    let result = f2(view.state);
+  view.someProp("decorations", (f3) => {
+    let result = f3(view.state);
     if (result && result != empty)
       found2.push(result);
   });
@@ -67765,9 +68457,9 @@ var DOMObserver = class {
     } else if (gecko && added.length) {
       let brs = added.filter((n2) => n2.nodeName == "BR");
       if (brs.length == 2) {
-        let [a2, b3] = brs;
-        if (a2.parentNode && a2.parentNode.parentNode == b3.parentNode)
-          b3.remove();
+        let [a2, b4] = brs;
+        if (a2.parentNode && a2.parentNode.parentNode == b4.parentNode)
+          b4.remove();
         else
           a2.remove();
       } else {
@@ -67991,7 +68683,7 @@ function readDOMChange(view, from2, to, typeOver, addedNodes) {
     let origin = view.input.lastSelectionTime > Date.now() - 50 ? view.input.lastSelectionOrigin : null;
     let newSel = selectionFromDOM(view, origin);
     if (newSel && !view.state.selection.eq(newSel)) {
-      if (chrome && android && view.input.lastKeyCode === 13 && Date.now() - 100 < view.input.lastKeyCodeTime && view.someProp("handleKeyDown", (f2) => f2(view, keyEvent(13, "Enter"))))
+      if (chrome && android && view.input.lastKeyCode === 13 && Date.now() - 100 < view.input.lastKeyCodeTime && view.someProp("handleKeyDown", (f3) => f3(view, keyEvent(13, "Enter"))))
         return;
       let tr2 = view.state.tr.setSelection(newSel);
       if (origin == "pointer")
@@ -68023,7 +68715,7 @@ function readDOMChange(view, from2, to, typeOver, addedNodes) {
   let change = findDiff(compare.content, parse.doc.content, parse.from, preferredPos, preferredSide);
   if (change)
     view.input.domChangeCount++;
-  if ((ios && view.input.lastIOSEnter > Date.now() - 225 || android) && addedNodes.some((n2) => n2.nodeType == 1 && !isInline.test(n2.nodeName)) && (!change || change.endA >= change.endB) && view.someProp("handleKeyDown", (f2) => f2(view, keyEvent(13, "Enter")))) {
+  if ((ios && view.input.lastIOSEnter > Date.now() - 225 || android) && addedNodes.some((n2) => n2.nodeType == 1 && !isInline.test(n2.nodeName)) && (!change || change.endA >= change.endB) && view.someProp("handleKeyDown", (f3) => f3(view, keyEvent(13, "Enter")))) {
     view.input.lastIOSEnter = 0;
     return;
   }
@@ -68060,11 +68752,11 @@ function readDOMChange(view, from2, to, typeOver, addedNodes) {
   let $to = parse.doc.resolveNoCache(change.endB - parse.from);
   let $fromA = doc3.resolve(change.start);
   let inlineChange = $from.sameParent($to) && $from.parent.inlineContent && $fromA.end() >= change.endA;
-  if ((ios && view.input.lastIOSEnter > Date.now() - 225 && (!inlineChange || addedNodes.some((n2) => n2.nodeName == "DIV" || n2.nodeName == "P")) || !inlineChange && $from.pos < parse.doc.content.size && (!$from.sameParent($to) || !$from.parent.inlineContent) && $from.pos < $to.pos && !/\S/.test(parse.doc.textBetween($from.pos, $to.pos, "", ""))) && view.someProp("handleKeyDown", (f2) => f2(view, keyEvent(13, "Enter")))) {
+  if ((ios && view.input.lastIOSEnter > Date.now() - 225 && (!inlineChange || addedNodes.some((n2) => n2.nodeName == "DIV" || n2.nodeName == "P")) || !inlineChange && $from.pos < parse.doc.content.size && (!$from.sameParent($to) || !$from.parent.inlineContent) && $from.pos < $to.pos && !/\S/.test(parse.doc.textBetween($from.pos, $to.pos, "", ""))) && view.someProp("handleKeyDown", (f3) => f3(view, keyEvent(13, "Enter")))) {
     view.input.lastIOSEnter = 0;
     return;
   }
-  if (view.state.selection.anchor > change.start && looksLikeBackspace(doc3, change.start, change.endA, $from, $to) && view.someProp("handleKeyDown", (f2) => f2(view, keyEvent(8, "Backspace")))) {
+  if (view.state.selection.anchor > change.start && looksLikeBackspace(doc3, change.start, change.endA, $from, $to) && view.someProp("handleKeyDown", (f3) => f3(view, keyEvent(8, "Backspace")))) {
     if (android && chrome)
       view.domObserver.suppressSelectionUpdates();
     return;
@@ -68075,8 +68767,8 @@ function readDOMChange(view, from2, to, typeOver, addedNodes) {
     change.endB -= 2;
     $to = parse.doc.resolveNoCache(change.endB - parse.from);
     setTimeout(() => {
-      view.someProp("handleKeyDown", function(f2) {
-        return f2(view, keyEvent(13, "Enter"));
+      view.someProp("handleKeyDown", function(f3) {
+        return f3(view, keyEvent(13, "Enter"));
       });
     }, 20);
   }
@@ -68117,7 +68809,7 @@ function readDOMChange(view, from2, to, typeOver, addedNodes) {
     } else if ($from.parent.child($from.index()).isText && $from.index() == $to.index() - ($to.textOffset ? 0 : 1)) {
       let text = $from.parent.textBetween($from.parentOffset, $to.parentOffset);
       let deflt = () => mkTr(view.state.tr.insertText(text, chFrom, chTo));
-      if (!view.someProp("handleTextInput", (f2) => f2(view, chFrom, chTo, text, deflt)))
+      if (!view.someProp("handleTextInput", (f3) => f3(view, chFrom, chTo, text, deflt)))
         view.dispatch(deflt());
     } else {
       view.dispatch(mkTr());
@@ -68190,11 +68882,11 @@ function skipClosingAndOpening($pos, fromEnd, mayOpen) {
   }
   return end;
 }
-function findDiff(a2, b3, pos, preferredPos, preferredSide) {
-  let start = a2.findDiffStart(b3, pos), lenA = pos + a2.size, lenB = pos + b3.size;
+function findDiff(a2, b4, pos, preferredPos, preferredSide) {
+  let start = a2.findDiffStart(b4, pos), lenA = pos + a2.size, lenB = pos + b4.size;
   if (start == null)
     return null;
-  let { a: endA, b: endB } = a2.findDiffEnd(b3, lenA, lenB);
+  let { a: endA, b: endB } = a2.findDiffEnd(b4, lenA, lenB);
   if (preferredSide == "end") {
     let adjust = Math.max(0, start - Math.min(endA, endB));
     preferredPos -= endA + adjust - start;
@@ -68381,7 +69073,7 @@ var EditorView = class {
   scrollToSelection() {
     let startDOM = this.domSelectionRange().focusNode;
     if (!startDOM || !this.dom.contains(startDOM.nodeType == 1 ? startDOM : startDOM.parentNode)) ;
-    else if (this.someProp("handleScrollToSelection", (f2) => f2(this))) ;
+    else if (this.someProp("handleScrollToSelection", (f3) => f3(this))) ;
     else if (this.state.selection instanceof NodeSelection) {
       let target = this.docView.domAfterPos(this.state.selection.from);
       if (target.nodeType == 1)
@@ -68430,20 +69122,20 @@ var EditorView = class {
     }
     this.dragging = new Dragging(dragging.slice, dragging.move, found2 < 0 ? void 0 : NodeSelection.create(this.state.doc, found2));
   }
-  someProp(propName, f2) {
+  someProp(propName, f3) {
     let prop = this._props && this._props[propName], value;
-    if (prop != null && (value = f2 ? f2(prop) : prop))
+    if (prop != null && (value = f3 ? f3(prop) : prop))
       return value;
     for (let i3 = 0; i3 < this.directPlugins.length; i3++) {
       let prop2 = this.directPlugins[i3].props[propName];
-      if (prop2 != null && (value = f2 ? f2(prop2) : prop2))
+      if (prop2 != null && (value = f3 ? f3(prop2) : prop2))
         return value;
     }
     let plugins = this.state.plugins;
     if (plugins)
       for (let i3 = 0; i3 < plugins.length; i3++) {
         let prop2 = plugins[i3].props[propName];
-        if (prop2 != null && (value = f2 ? f2(prop2) : prop2))
+        if (prop2 != null && (value = f3 ? f3(prop2) : prop2))
           return value;
       }
   }
@@ -68667,13 +69359,13 @@ function computeDocDeco(view) {
     if (typeof value == "function")
       value = value(view.state);
     if (value)
-      for (let attr3 in value) {
-        if (attr3 == "class")
-          attrs.class += " " + value[attr3];
-        else if (attr3 == "style")
-          attrs.style = (attrs.style ? attrs.style + ";" : "") + value[attr3];
-        else if (!attrs[attr3] && attr3 != "contenteditable" && attr3 != "nodeName")
-          attrs[attr3] = String(value[attr3]);
+      for (let attr4 in value) {
+        if (attr4 == "class")
+          attrs.class += " " + value[attr4];
+        else if (attr4 == "style")
+          attrs.style = (attrs.style ? attrs.style + ";" : "") + value[attr4];
+        else if (!attrs[attr4] && attr4 != "contenteditable" && attr4 != "nodeName")
+          attrs[attr4] = String(value[attr4]);
       }
   });
   if (!attrs.translate)
@@ -68709,14 +69401,14 @@ function buildNodeViews(view) {
   view.someProp("markViews", add);
   return result;
 }
-function changedNodeViews(a2, b3) {
+function changedNodeViews(a2, b4) {
   let nA = 0, nB = 0;
   for (let prop in a2) {
-    if (a2[prop] != b3[prop])
+    if (a2[prop] != b4[prop])
       return true;
     nA++;
   }
-  for (let _2 in b3)
+  for (let _2 in b4)
     nB++;
   return nA != nB;
 }
@@ -69865,7 +70557,7 @@ var keyboardShortcut = (name) => ({ editor, view, tr: tr2, dispatch }) => {
     cancelable: true
   });
   const capturedTransaction = editor.captureTransaction(() => {
-    view.someProp("handleKeyDown", (f2) => f2(view, event));
+    view.someProp("handleKeyDown", (f3) => f3(view, event));
   });
   capturedTransaction == null ? void 0 : capturedTransaction.steps.forEach((step) => {
     const newStep = step.map(tr2.mapping);
@@ -70574,9 +71266,9 @@ function findDuplicates(items) {
 }
 function sortExtensions(extensions) {
   const defaultPriority = 100;
-  return extensions.sort((a2, b3) => {
+  return extensions.sort((a2, b4) => {
     const priorityA = getExtensionField(a2, "priority") || defaultPriority;
-    const priorityB = getExtensionField(b3, "priority") || defaultPriority;
+    const priorityB = getExtensionField(b4, "priority") || defaultPriority;
     if (priorityA > priorityB) {
       return -1;
     }
@@ -71859,7 +72551,7 @@ function getRebuildRanges(tr2, doc3) {
       ranges.push(blockRange);
     }
   }
-  ranges.sort((a2, b3) => a2.from - b3.from);
+  ranges.sort((a2, b4) => a2.from - b4.from);
   const merged = [];
   for (const range2 of ranges) {
     const last = merged[merged.length - 1];
@@ -72247,20 +72939,20 @@ var DecorationManager = class {
     return mergeDecorationSets(tr2.doc, decorationSetsByExtension);
   }
 };
-function attrsEqual(a2, b3) {
-  if (a2 === b3) {
+function attrsEqual(a2, b4) {
+  if (a2 === b4) {
     return true;
   }
-  if (!a2 || !b3) {
+  if (!a2 || !b4) {
     return false;
   }
   const keysA = Object.keys(a2);
-  const keysB = Object.keys(b3);
+  const keysB = Object.keys(b4);
   if (keysA.length !== keysB.length) {
     return false;
   }
   return keysA.every(
-    (key) => Object.prototype.hasOwnProperty.call(b3, key) && Object.is(a2[key], b3[key])
+    (key) => Object.prototype.hasOwnProperty.call(b4, key) && Object.is(a2[key], b4[key])
   );
 }
 function canInsertNode(state, nodeType) {
@@ -72357,9 +73049,9 @@ function parseAttributes(attrString) {
   const cleanString = tempString.replace(/(?:^|\s)\.([\w-]+)/g, "").replace(/(?:^|\s)#([\w-]+)/g, "").replace(/([a-zA-Z][\w-]*)\s*=\s*__QUOTED_\d+__/g, "").trim();
   if (cleanString) {
     const booleanAttrs = cleanString.split(/\s+/).filter(Boolean);
-    booleanAttrs.forEach((attr3) => {
-      if (attr3.match(/^[a-zA-Z][\w-]*$/)) {
-        attributes[attr3] = true;
+    booleanAttrs.forEach((attr4) => {
+      if (attr4.match(/^[a-zA-Z][\w-]*$/)) {
+        attributes[attr4] = true;
       }
     });
   }
@@ -72614,9 +73306,9 @@ function createInlineMarkdownSpec(options) {
       return attrs;
     }
     const filtered = {};
-    allowedAttributes.forEach((attr3) => {
-      const attrName = typeof attr3 === "string" ? attr3 : attr3.name;
-      const skipIfDefault = typeof attr3 === "string" ? void 0 : attr3.skipIfDefault;
+    allowedAttributes.forEach((attr4) => {
+      const attrName = typeof attr4 === "string" ? attr4 : attr4.name;
+      const skipIfDefault = typeof attr4 === "string" ? void 0 : attr4.skipIfDefault;
       if (attrName in attrs) {
         const value = attrs[attrName];
         if (skipIfDefault !== void 0 && value === skipIfDefault) {
@@ -72799,14 +73491,14 @@ ${indentedChild}`;
 function markTypeName(mark) {
   return typeof mark.type === "string" ? mark.type : mark.type.name;
 }
-function marksEqual(a2, b3) {
-  if (a2.length !== b3.length) {
+function marksEqual(a2, b4) {
+  if (a2.length !== b4.length) {
     return false;
   }
-  const consumed = Array.from({ length: b3.length }, () => false);
+  const consumed = Array.from({ length: b4.length }, () => false);
   return a2.every((markA) => {
     const nameA = markTypeName(markA);
-    const idx = b3.findIndex(
+    const idx = b4.findIndex(
       (markB, i3) => !consumed[i3] && nameA === markTypeName(markB) && attrsEqual(markA.attrs, markB.attrs)
     );
     if (idx === -1) {
@@ -73861,7 +74553,7 @@ var ClipboardTextSerializer = Extension.create({
               ...blockSeparator !== void 0 ? { blockSeparator } : {},
               textSerializers
             };
-            const sortedRanges = [...selection.ranges].sort((a2, b3) => a2.$from.pos - b3.$from.pos);
+            const sortedRanges = [...selection.ranges].sort((a2, b4) => a2.$from.pos - b4.$from.pos);
             return sortedRanges.map(
               ({ $from, $to }) => getTextBetween(doc3, { from: $from.pos, to: $to.pos }, options)
             ).join(blockSeparator != null ? blockSeparator : "\n\n");
@@ -76737,7 +77429,7 @@ function init$2(customSchemes = []) {
     slashscheme: true,
     ascii: true
   }, groups);
-  customSchemes = customSchemes.sort((a2, b3) => a2[0] > b3[0] ? 1 : -1);
+  customSchemes = customSchemes.sort((a2, b4) => a2[0] > b4[0] ? 1 : -1);
   for (let i3 = 0; i3 < customSchemes.length; i3++) {
     const sch = customSchemes[i3][0];
     const optionalSlashSlash = customSchemes[i3][1];
@@ -77623,8 +78315,8 @@ function toRuleMatch(match) {
     }
   };
 }
-function matchesOverlap(a2, b3) {
-  return a2.index < b3.index + b3.text.length && b3.index < a2.index + a2.text.length;
+function matchesOverlap(a2, b4) {
+  return a2.index < b4.index + b4.text.length && b4.index < a2.index + a2.text.length;
 }
 function getMarkdownLinkAttributes(match) {
   var _a, _b, _c;
@@ -80219,21 +80911,21 @@ RopeSequence.prototype.get = function get(i3) {
   }
   return this.getInner(i3);
 };
-RopeSequence.prototype.forEach = function forEach2(f2, from2, to) {
+RopeSequence.prototype.forEach = function forEach2(f3, from2, to) {
   if (from2 === void 0) from2 = 0;
   if (to === void 0) to = this.length;
   if (from2 <= to) {
-    this.forEachInner(f2, from2, to, 0);
+    this.forEachInner(f3, from2, to, 0);
   } else {
-    this.forEachInvertedInner(f2, from2, to, 0);
+    this.forEachInvertedInner(f3, from2, to, 0);
   }
 };
-RopeSequence.prototype.map = function map(f2, from2, to) {
+RopeSequence.prototype.map = function map(f3, from2, to) {
   if (from2 === void 0) from2 = 0;
   if (to === void 0) to = this.length;
   var result = [];
   this.forEach(function(elt, i3) {
-    return result.push(f2(elt, i3));
+    return result.push(f3(elt, i3));
   }, from2, to);
   return result;
 };
@@ -80264,16 +80956,16 @@ var Leaf = /* @__PURE__ */ (function(RopeSequence3) {
   Leaf2.prototype.getInner = function getInner(i3) {
     return this.values[i3];
   };
-  Leaf2.prototype.forEachInner = function forEachInner(f2, from2, to, start) {
+  Leaf2.prototype.forEachInner = function forEachInner(f3, from2, to, start) {
     for (var i3 = from2; i3 < to; i3++) {
-      if (f2(this.values[i3], start + i3) === false) {
+      if (f3(this.values[i3], start + i3) === false) {
         return false;
       }
     }
   };
-  Leaf2.prototype.forEachInvertedInner = function forEachInvertedInner(f2, from2, to, start) {
+  Leaf2.prototype.forEachInvertedInner = function forEachInvertedInner(f3, from2, to, start) {
     for (var i3 = from2 - 1; i3 >= to; i3--) {
-      if (f2(this.values[i3], start + i3) === false) {
+      if (f3(this.values[i3], start + i3) === false) {
         return false;
       }
     }
@@ -80315,21 +81007,21 @@ var Append = /* @__PURE__ */ (function(RopeSequence3) {
   Append2.prototype.getInner = function getInner(i3) {
     return i3 < this.left.length ? this.left.get(i3) : this.right.get(i3 - this.left.length);
   };
-  Append2.prototype.forEachInner = function forEachInner(f2, from2, to, start) {
+  Append2.prototype.forEachInner = function forEachInner(f3, from2, to, start) {
     var leftLen = this.left.length;
-    if (from2 < leftLen && this.left.forEachInner(f2, from2, Math.min(to, leftLen), start) === false) {
+    if (from2 < leftLen && this.left.forEachInner(f3, from2, Math.min(to, leftLen), start) === false) {
       return false;
     }
-    if (to > leftLen && this.right.forEachInner(f2, Math.max(from2 - leftLen, 0), Math.min(this.length, to) - leftLen, start + leftLen) === false) {
+    if (to > leftLen && this.right.forEachInner(f3, Math.max(from2 - leftLen, 0), Math.min(this.length, to) - leftLen, start + leftLen) === false) {
       return false;
     }
   };
-  Append2.prototype.forEachInvertedInner = function forEachInvertedInner(f2, from2, to, start) {
+  Append2.prototype.forEachInvertedInner = function forEachInvertedInner(f3, from2, to, start) {
     var leftLen = this.left.length;
-    if (from2 > leftLen && this.right.forEachInvertedInner(f2, from2 - leftLen, Math.max(to, leftLen) - leftLen, start + leftLen) === false) {
+    if (from2 > leftLen && this.right.forEachInvertedInner(f3, from2 - leftLen, Math.max(to, leftLen) - leftLen, start + leftLen) === false) {
       return false;
     }
-    if (to < leftLen && this.left.forEachInvertedInner(f2, Math.min(from2, leftLen), to, start) === false) {
+    if (to < leftLen && this.left.forEachInvertedInner(f3, Math.min(from2, leftLen), to, start) === false) {
       return false;
     }
   };
@@ -81078,7 +81770,7 @@ function mergeRanges(ranges) {
   if (ranges.length === 0) {
     return [];
   }
-  const sorted = [...ranges].sort((a2, b3) => a2.from - b3.from);
+  const sorted = [...ranges].sort((a2, b4) => a2.from - b4.from);
   const merged = [{ ...sorted[0] }];
   for (let i3 = 1; i3 < sorted.length; i3 += 1) {
     const last = merged[merged.length - 1];
@@ -81205,8 +81897,8 @@ function createPlaceholderStateField({
     }
   };
 }
-function preparePlaceholderAttribute(attr3) {
-  return attr3.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").replace(/^[0-9-]+/, "").replace(/^-+/, "").toLowerCase();
+function preparePlaceholderAttribute(attr4) {
+  return attr4.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").replace(/^[0-9-]+/, "").replace(/^-+/, "").toLowerCase();
 }
 function createPlaceholderPlugin({ editor, options }) {
   const dataAttribute = options.dataAttribute ? `data-${preparePlaceholderAttribute(options.dataAttribute)}` : `data-${DEFAULT_DATA_ATTRIBUTE}`;
@@ -81533,9 +82225,9 @@ var TableMap = class {
       return this.map[left + this.width * (dir < 0 ? top - 1 : bottom)];
     }
   }
-  rectBetween(a2, b3) {
+  rectBetween(a2, b4) {
     const { left: leftA, right: rightA, top: topA, bottom: bottomA } = this.findCell(a2);
-    const { left: leftB, right: rightB, top: topB, bottom: bottomB } = this.findCell(b3);
+    const { left: leftB, right: rightB, top: topB, bottom: bottomB } = this.findCell(b4);
     return {
       left: Math.min(leftA, leftB),
       top: Math.min(topA, topB),
@@ -81861,12 +82553,12 @@ var CellSelection = class CellSelection2 extends Selection {
   replaceWith(tr2, node) {
     this.replace(tr2, new Slice(Fragment.from(node), 0, 0));
   }
-  forEachCell(f2) {
+  forEachCell(f3) {
     const table = this.$anchorCell.node(-1);
     const map2 = TableMap.get(table);
     const tableStart = this.$anchorCell.start(-1);
     const cells = map2.cellsInRect(map2.rectBetween(this.$anchorCell.pos - tableStart, this.$headCell.pos - tableStart));
-    for (let i3 = 0; i3 < cells.length; i3++) f2(table.nodeAt(cells[i3]), tableStart + cells[i3]);
+    for (let i3 = 0; i3 < cells.length; i3++) f3(table.nodeAt(cells[i3]), tableStart + cells[i3]);
   }
   isColSelection() {
     const anchorTop = this.$anchorCell.index(-1);
@@ -82013,7 +82705,7 @@ function normalizeSelection(state, tr2, allowTableNodeSelection) {
   return tr2;
 }
 var fixTablesKey = new PluginKey("fix-tables");
-function changedDescendants(old, cur, offset, f2) {
+function changedDescendants(old, cur, offset, f3) {
   const oldSize = old.childCount, curSize = cur.childCount;
   outer: for (let i3 = 0, j2 = 0; i3 < curSize; i3++) {
     const child = cur.child(i3);
@@ -82022,9 +82714,9 @@ function changedDescendants(old, cur, offset, f2) {
       offset += child.nodeSize;
       continue outer;
     }
-    f2(child, offset);
-    if (j2 < oldSize && old.child(j2).sameMarkup(child)) changedDescendants(old.child(j2), child, offset + 1, f2);
-    else child.nodesBetween(0, child.content.size, f2, offset + 1);
+    f3(child, offset);
+    if (j2 < oldSize && old.child(j2).sameMarkup(child)) changedDescendants(old.child(j2), child, offset + 1, f3);
+    else child.nodesBetween(0, child.content.size, f3, offset + 1);
     offset += child.nodeSize;
   }
 }
@@ -85223,7 +85915,7 @@ var MarkdownManager = class {
             }
           });
           const activeMarkKeys = Array.from(activeMarks.keys());
-          const activeMarksClosingHereLifo = activeMarksClosingHere.slice().sort((a2, b3) => activeMarkKeys.indexOf(b3) - activeMarkKeys.indexOf(a2));
+          const activeMarksClosingHereLifo = activeMarksClosingHere.slice().sort((a2, b4) => activeMarkKeys.indexOf(b4) - activeMarkKeys.indexOf(a2));
           marksToCloseAtEnd = [
             ...marksToOpen.map((m2) => m2.type),
             // inner (opened here) — close first
@@ -85405,14 +86097,14 @@ var MarkdownManager = class {
     }
     const nextMarks = (nextNode == null ? void 0 : nextNode.marks) || [];
     const continuesInNextNode = (markType, attrs) => nextMarks.some((m2) => m2.type === markType && attrsEqual(m2.attrs, attrs));
-    const byRankInnerFirst = (a2, b3) => {
+    const byRankInnerFirst = (a2, b4) => {
       var _a, _b;
       const rankA = (_a = this.extensionRanks.get(a2.type)) != null ? _a : Number.MAX_SAFE_INTEGER;
-      const rankB = (_b = this.extensionRanks.get(b3.type)) != null ? _b : Number.MAX_SAFE_INTEGER;
+      const rankB = (_b = this.extensionRanks.get(b4.type)) != null ? _b : Number.MAX_SAFE_INTEGER;
       if (rankA !== rankB) {
         return rankB - rankA;
       }
-      return a2.type.localeCompare(b3.type);
+      return a2.type.localeCompare(b4.type);
     };
     const endingHere = marksToOpen.filter((mark) => !continuesInNextNode(mark.type, mark.mark.attrs)).sort(byRankInnerFirst);
     const continuing = marksToOpen.filter((mark) => continuesInNextNode(mark.type, mark.mark.attrs)).sort(byRankInnerFirst);
@@ -87975,7 +88667,7 @@ var CONTROL_ERROR2 = "border-danger outline-danger focus-within:outline-danger";
 var INPUT_BASE8 = "h-7 min-w-[4rem] flex-1 bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none disabled:cursor-not-allowed";
 var CHIP_CLASS2 = "inline-flex max-w-full items-center gap-1 rounded-full bg-brand-tint py-0.5 pl-2 pr-1 text-xs font-medium text-brand";
 var CHIP_REMOVE_CLASS2 = "inline-flex size-4 shrink-0 items-center justify-center rounded-full text-brand transition-colors hover:bg-brand hover:text-brand-ink disabled:pointer-events-none";
-var PANEL_BASE9 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
+var PANEL_BASE8 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
 var PANEL_PLACEMENT3 = { bottom: "top-full mt-1", top: "bottom-full mb-1" };
 var OPTION_BASE4 = "relative flex items-center gap-2 px-3 py-1.5 text-sm select-none";
 var GROUP_CLASS3 = "px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none";
@@ -88159,7 +88851,7 @@ var MultiSelect = class extends PuzzleView {
         order: i3
       });
     });
-    matched.sort((a2, b3) => a2.tier - b3.tier || a2.order - b3.order);
+    matched.sort((a2, b4) => a2.tier - b4.tier || a2.order - b4.order);
     const ungrouped = [];
     const groupOrder = [];
     const groupMap = /* @__PURE__ */ new Map();
@@ -88268,7 +88960,7 @@ var MultiSelect = class extends PuzzleView {
         disabled ? "opacity-50 pointer-events-none" : ""
       ].filter(Boolean).join(" "),
       inputClass: INPUT_BASE8,
-      panelClass: [PANEL_BASE9, PANEL_PLACEMENT3[placement]].filter(Boolean).join(" "),
+      panelClass: [PANEL_BASE8, PANEL_PLACEMENT3[placement]].filter(Boolean).join(" "),
       panelStyle: prev.maxHeight ? `max-height:${prev.maxHeight}px;` : ""
     };
   }
@@ -89100,7 +89792,7 @@ var TRIGGER_BASE5 = "inline-flex items-center gap-1 whitespace-nowrap select-non
 var LINK_BASE = "inline-flex items-center whitespace-nowrap select-none rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
 var LINK_ACTIVE = "text-ink underline decoration-2 underline-offset-8 decoration-brand";
 var LINK_INACTIVE = "text-body hover:text-ink";
-var PANEL_BASE10 = "absolute left-0 top-full mt-2 z-40 w-max max-w-lg rounded-lg border border-border bg-surface p-2 shadow-md";
+var PANEL_BASE9 = "absolute left-0 top-full mt-2 z-40 w-max max-w-lg rounded-lg border border-border bg-surface p-2 shadow-md";
 var CARD_BASE2 = "block rounded-md p-3 transition-colors hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
 var CARD_LABEL = "block text-sm font-medium text-ink";
 var CARD_LABEL_ACTIVE = "underline decoration-2 underline-offset-4 decoration-brand";
@@ -89158,7 +89850,7 @@ var NavigationMenu = class extends PuzzleView {
         triggerId: `nav-trigger-${seed}-${i3}`,
         panelId: `nav-panel-${seed}-${i3}`,
         triggerClass: TRIGGER_BASE5,
-        panelClass: [PANEL_BASE10, grid].join(" ")
+        panelClass: [PANEL_BASE9, grid].join(" ")
       };
     });
     const prev = this.getData();
@@ -90170,8 +90862,8 @@ PaginationDoc.__pzlModule = "app/views/components/PaginationDoc.pzl";
 // app/components/ui/PanelStack.pzl
 var ROOT5 = "relative block w-full h-full overflow-hidden rounded-[inherit] touch-manipulation";
 var FOCUSABLE = 'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"]):not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])';
-function sameStack(a2, b3) {
-  return a2.length === b3.length && a2.every((handle, index) => handle === b3[index]);
+function sameStack(a2, b4) {
+  return a2.length === b4.length && a2.every((handle, index) => handle === b4[index]);
 }
 function isPrefix(prefix, stack) {
   return prefix.every((handle, index) => handle === stack[index]);
@@ -91486,7 +92178,7 @@ PopconfirmDoc.__pzlModule = "app/views/components/PopconfirmDoc.pzl";
 // app/components/ui/Popover.pzl
 var uid34 = 0;
 var TRIGGER_BASE6 = "inline-flex items-center gap-1 text-sm text-body cursor-pointer transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
-var PANEL_BASE11 = "absolute z-50 w-max max-w-xs rounded-lg border border-border bg-surface p-4 shadow-lg text-sm text-body";
+var PANEL_BASE10 = "absolute z-50 w-max max-w-xs rounded-lg border border-border bg-surface p-4 shadow-lg text-sm text-body";
 var ALIGN6 = {
   start: "left-0",
   center: "left-1/2 -translate-x-1/2",
@@ -91524,7 +92216,7 @@ var Popover = class extends PuzzleView {
       panelId: props.id || `pieces-popover-${this._uid}`,
       triggerClass: [TRIGGER_BASE6, props.triggerClass || ""].join(" "),
       panelClass: [
-        PANEL_BASE11,
+        PANEL_BASE10,
         placement === "top" ? "bottom-full mb-1" : "top-full mt-1",
         ALIGN6[align],
         props.class || ""
@@ -94834,7 +95526,7 @@ ScrollAreaDoc.prototype.render = function() {
 ScrollAreaDoc.__pzlModule = "app/views/components/ScrollAreaDoc.pzl";
 
 // app/components/ui/ScrollStack.pzl
-function attr(value) {
+function attr2(value) {
   return value === void 0 || value === null || value === "" ? false : String(value);
 }
 function oneOf(value, allowed) {
@@ -94857,14 +95549,14 @@ var ScrollStack2 = class extends PuzzleView {
         "none"
       ]),
       pinAttr: oneOf(props.pin, ["start", "end", "both", "none"]),
-      zoneAttr: attr(props.zone),
+      zoneAttr: attr2(props.zone),
       edgesAttr: oneOf(props.edges, ["both", "start", "end"]),
       // presence alone means "snap to starts"; normalize `true` to the explicit
       // value so the attribute never renders empty
       snapAttr: props.snap === true ? "start" : oneOf(props.snap, ["start", "center", "proximity"]),
-      perViewAttr: attr(props.perView),
-      itemMinAttr: attr(props.itemMin),
-      itemMaxAttr: attr(props.itemMax),
+      perViewAttr: attr2(props.perView),
+      itemMinAttr: attr2(props.itemMin),
+      itemMaxAttr: attr2(props.itemMax),
       easingAttr: oneOf(props.easing, [
         "linear",
         "ease-in",
@@ -94913,8 +95605,8 @@ ScrollStack2.__pzlModule = "app/components/ui/ScrollStack.pzl";
 
 // app/views/components/ScrollStackDoc.pzl
 var installCmd69 = "puzzle add piece scroll-stack";
-var installDep = "npm install @magic-spells/scroll-stack";
-var installCss = `/* app/styles/styles.css */
+var installDep2 = "npm install @magic-spells/scroll-stack";
+var installCss2 = `/* app/styles/styles.css */
 @import "tailwindcss";
 @import "@magic-spells/scroll-stack/css" layer(components);`;
 var usageImport69 = `import ScrollStack from '@/components/ui/ScrollStack.pzl';`;
@@ -95056,8 +95748,8 @@ var ScrollStackDoc = class extends PuzzleView {
       cards: CARDS2,
       tiles: TILES,
       installCmd: installCmd69,
-      installDep,
-      installCss,
+      installDep: installDep2,
+      installCss: installCss2,
       usageImport: usageImport69,
       usageMarkup: usageMarkup69,
       codeHero: codeHero69,
@@ -96190,7 +96882,7 @@ SeparatorDoc.__pzlModule = "app/views/components/SeparatorDoc.pzl";
 
 // app/components/ui/Sheet.pzl
 var uid37 = 0;
-function attr2(value) {
+function attr3(value) {
   return value === void 0 || value === null || value === "" ? false : String(value);
 }
 function oneOf2(value, allowed) {
@@ -96199,10 +96891,10 @@ function oneOf2(value, allowed) {
 var POSITIONS2 = ["bottom", "left", "right", "center"];
 var MODES3 = ["edge", "card"];
 var EFFECTS2 = ["slide", "fade-scale", "slide-fade"];
-var THEME = "[--sheet-panel-background:var(--color-surface)] [--sheet-handle-color:var(--color-faint)] [--sheet-overlay-background:rgb(0_0_0_/_0.5)] [--sheet-overlay-blur:8px]";
-var NO_GRABBER = "[--sheet-handle-height:0px] [--sheet-handle-side-thickness:0px] [--sheet-handle-inset:var(--sheet-content-padding)] [--sheet-handle-side-inset:0px]";
-var PANEL2 = "text-body";
-var TITLE = "pb-3 text-base font-semibold text-ink text-center [[data-position=left]_&]:text-left [[data-position=right]_&]:text-left";
+var THEME2 = "[--sheet-panel-background:var(--color-surface)] [--sheet-handle-color:var(--color-faint)] [--sheet-overlay-background:rgb(0_0_0_/_0.5)] [--sheet-overlay-blur:8px]";
+var NO_GRABBER2 = "[--sheet-handle-height:0px] [--sheet-handle-side-thickness:0px] [--sheet-handle-inset:var(--sheet-content-padding)] [--sheet-handle-side-inset:0px]";
+var PANEL3 = "text-body";
+var TITLE2 = "pb-3 text-base font-semibold text-ink text-center [[data-position=left]_&]:text-left [[data-position=right]_&]:text-left";
 var Sheet = class extends PuzzleView {
   #id = `sheet-${++uid37}`;
   #panel = null;
@@ -96233,17 +96925,17 @@ var Sheet = class extends PuzzleView {
     return {
       title,
       titleId: `${this.#id}-title`,
-      titleClass: TITLE,
+      titleClass: TITLE2,
       labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
-      rootClass: THEME,
-      backdropClass: attr2(props.backdropClass),
-      panelClass: [PANEL2, props.showGrabber === false ? NO_GRABBER : "", props.class].filter(Boolean).join(" "),
-      panelStyle: attr2(props.style),
-      snapPointsAttr: attr2(snapPoints),
-      initialSnapAttr: attr2(props.initialSnap),
+      rootClass: THEME2,
+      backdropClass: attr3(props.backdropClass),
+      panelClass: [PANEL3, props.showGrabber === false ? NO_GRABBER2 : "", props.class].filter(Boolean).join(" "),
+      panelStyle: attr3(props.style),
+      snapPointsAttr: attr3(snapPoints),
+      initialSnapAttr: attr3(props.initialSnap),
       positionAttr: oneOf2(props.position, POSITIONS2),
       modeAttr: oneOf2(props.mode, MODES3),
-      breakpointAttr: attr2(props.breakpoint),
+      breakpointAttr: attr3(props.breakpoint),
       desktopPositionAttr: oneOf2(props.desktopPosition, POSITIONS2),
       desktopModeAttr: oneOf2(props.desktopMode, MODES3),
       effectAttr: oneOf2(props.effect, EFFECTS2),
@@ -96253,8 +96945,8 @@ var Sheet = class extends PuzzleView {
       // Read live by every dismiss guard, so it is never observed — an empty
       // string is the meaningful "refuse everything" value and must survive.
       dismissAttr: props.dismiss === void 0 || props.dismiss === null ? false : String(props.dismiss),
-      maxDisplayWidthAttr: attr2(props.maxDisplayWidth),
-      springAttr: attr2(props.spring),
+      maxDisplayWidthAttr: attr3(props.maxDisplayWidth),
+      springAttr: attr3(props.spring),
       // A boolean attribute: presence alone opts into the trigger morph.
       morphTriggerAttr: props.morphTrigger ? true : false
     };
@@ -96384,10 +97076,10 @@ Sheet.__pzlModule = "app/components/ui/Sheet.pzl";
 
 // app/views/components/SheetDoc.pzl
 var installCmd73 = "puzzle add piece sheet";
-var installDep2 = `npm install @magic-spells/sheet
+var installDep3 = `npm install @magic-spells/sheet
 # Yarn 1 only \u2014 npm 7+ and pnpm install the peer for you
 # yarn add @magic-spells/sheet @magic-spells/dialog-panel`;
-var installCss2 = `/* app/styles/styles.css */
+var installCss3 = `/* app/styles/styles.css */
 @import "tailwindcss";
 @import "@magic-spells/dialog-panel/css" layer(components);
 @import "@magic-spells/sheet/css" layer(components);`;
@@ -96401,15 +97093,15 @@ var usageMarkup73 = `<Sheet open={ cartOpen } title="Your cart" @hide={ () => th
 // itself on Escape, a backdrop tap, an allowed swipe, or any
 // [data-action-hide-dialog] descendant, then reports through @hide \u2014
 // where you flip open back to false so the next open is a fresh edge.`;
-var closeButtonClass = "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2";
-var cancelButtonClass = "flex-1 cursor-pointer rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
-var SNAP_STEP = "cursor-pointer rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
-var SNAP_STEPS = ["25vh", "55vh", "85vh"].map((label, index) => ({
+var closeButtonClass2 = "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2";
+var cancelButtonClass2 = "flex-1 cursor-pointer rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
+var SNAP_STEP2 = "cursor-pointer rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
+var SNAP_STEPS2 = ["25vh", "55vh", "85vh"].map((label, index) => ({
   index,
   label,
-  class: SNAP_STEP
+  class: SNAP_STEP2
 }));
-var deleteButtonClass = "flex-1 cursor-pointer rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-ink transition-colors outline-ring hover:bg-danger-dark focus-visible:outline-2 focus-visible:outline-offset-2";
+var deleteButtonClass2 = "flex-1 cursor-pointer rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-ink transition-colors outline-ring hover:bg-danger-dark focus-visible:outline-2 focus-visible:outline-offset-2";
 var codeHero73 = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
 <Sheet
   open={ sheetOpen }
@@ -96635,7 +97327,7 @@ var codeSpring = `<Sheet open={ sheetOpen } labelledby="sheet-spring-title" spri
 
 // spring="attraction friction", both dials exclusive of 0 and 1.
 // Overrides the entrance only; exits and snaps keep their presets.`;
-var codeHeader = `<Sheet
+var codeHeader2 = `<Sheet
   open={ sheetOpen }
   labelledby="sheet-promo-title"
   desktopPosition="right"
@@ -96687,13 +97379,13 @@ var SheetDoc = class extends PuzzleView {
     return {
       ...state,
       installCmd: installCmd73,
-      installDep: installDep2,
-      installCss: installCss2,
+      installDep: installDep3,
+      installCss: installCss3,
       usageImport: usageImport73,
       usageMarkup: usageMarkup73,
-      closeButtonClass,
-      cancelButtonClass,
-      deleteButtonClass,
+      closeButtonClass: closeButtonClass2,
+      cancelButtonClass: cancelButtonClass2,
+      deleteButtonClass: deleteButtonClass2,
       codeHero: codeHero73,
       codeSnaps,
       codeResponsive: codeResponsive2,
@@ -96703,9 +97395,9 @@ var SheetDoc = class extends PuzzleView {
       codeMorphTrigger,
       codeDismiss,
       codeSpring,
-      codeHeader,
+      codeHeader: codeHeader2,
       paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
-      snapSteps: SNAP_STEPS,
+      snapSteps: SNAP_STEPS2,
       propRows: [
         { name: "open", desc: "Controlled, and EDGE-TRIGGERED: only a change acts. true opens, false closes. An unrelated re-render never re-opens a sheet the user already dismissed." },
         { name: "title", desc: "Heading text rendered by the stock header, which also generates its id and wires aria-labelledby. Ignored once the header slot is filled." },
@@ -98524,7 +99216,7 @@ SkeletonDoc.prototype.render = function() {
 SkeletonDoc.__pzlModule = "app/views/components/SkeletonDoc.pzl";
 
 // app/components/ui/Slider.pzl
-var DRAG_THRESHOLD4 = 3;
+var DRAG_THRESHOLD3 = 3;
 var EPS = 1e-9;
 var MAX_LABELS = 11;
 var ROOT_BASE6 = "relative flex w-full min-h-11 touch-pan-y select-none items-center";
@@ -98890,7 +99582,7 @@ var Slider = class extends PuzzleView {
         this._teardownGesture();
         return;
       }
-      if (deltaX <= DRAG_THRESHOLD4) return;
+      if (deltaX <= DRAG_THRESHOLD3) return;
       drag.thumb = this._nearestThumb(this._percentFromClientX(event.clientX), committed, cfg);
       drag.startValue = this._channel(committed, drag.thumb);
       drag.dragging = true;
@@ -98904,7 +99596,7 @@ var Slider = class extends PuzzleView {
       const el = this.element && this.element.querySelector(`[data-thumb="${drag.thumb}"]`);
       if (el) el.focus({ preventScroll: true });
     }
-    if (Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD4) this._suppressClick = true;
+    if (Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD3) this._suppressClick = true;
     const raw2 = percentToValue(this._percentFromClientX(event.clientX), cfg);
     const nv = normalize2(raw2, drag.thumb, cfg, committed);
     const d = this.getData();
@@ -100390,8 +101082,8 @@ function normalizePair(raw2, fallback) {
   const normalizedFirst = roundShare(first2 / total * 100);
   return [normalizedFirst, roundShare(100 - normalizedFirst)];
 }
-function samePair(a2, b3) {
-  return !!a2 && !!b3 && a2[0] === b3[0] && a2[1] === b3[1];
+function samePair(a2, b4) {
+  return !!a2 && !!b4 && a2[0] === b4[0] && a2[1] === b4[1];
 }
 function formatConstraint(raw2) {
   if (raw2 == null || raw2 === "") return "";
@@ -103145,8 +103837,8 @@ function snap(v2, step) {
 }
 function meridiemLabels(locale) {
   try {
-    const f2 = new Intl.DateTimeFormat(locale, { hour: "numeric", hour12: true });
-    const pick2 = (h2) => f2.formatToParts(new Date(2e3, 0, 1, h2)).find((p) => p.type === "dayPeriod")?.value;
+    const f3 = new Intl.DateTimeFormat(locale, { hour: "numeric", hour12: true });
+    const pick2 = (h2) => f3.formatToParts(new Date(2e3, 0, 1, h2)).find((p) => p.type === "dayPeriod")?.value;
     return { am: pick2(9) || "AM", pm: pick2(21) || "PM" };
   } catch (e2) {
     return { am: "AM", pm: "PM" };

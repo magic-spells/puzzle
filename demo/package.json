@@ -9,6 +9,7 @@
     "build": "puzzle build"
   },
   "dependencies": {
+    "@magic-spells/bottom-sheet": "^2.0.2",
     "@magic-spells/dialog-panel": "^2.0.1",
     "@magic-spells/frame-engine": "^1.0.1",
     "@magic-spells/morph-engine": "^0.1.2",

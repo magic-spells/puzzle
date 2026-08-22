@@ -1,1123 +1,373 @@
 <puzzle-view>
-  <dialog
-    class={ dialogClass }
-    aria-labelledby={ labelledby }
-    @cancel={ handleCancel }
-    @close={ handleClose }>
+  <dialog-panel ref="panel" class={ rootClass }>
+    <dialog-backdrop class={ backdropClass }></dialog-backdrop>
 
-    <div
-      ref="backdrop"
-      data-bs-surface="backdrop"
-      class={ backdropClass }
-      @pointerdown={ dragStart }
-      @pointermove={ dragMove }
-      @pointerup={ dragEnd }
-      @pointercancel={ dragEnd }></div>
+    <dialog aria-labelledby={ labelledby }>
+      <bottom-sheet
+        ref="sheet"
+        class={ panelClass }
+        style={ panelStyle }
+        snap-points={ snapPointsAttr }
+        spring={ springAttr }
+        max-display-width={ maxDisplayWidthAttr }
+        inset={ insetAttr }>
 
-    <div ref="panel" class={ panelClass }>
-      <div
-        data-bs-surface="header"
-        class={ headerClass }
-        @pointerdown={ dragStart }
-        @pointermove={ dragMove }
-        @pointerup={ dragEnd }
-        @pointercancel={ dragEnd }>
-        {#if showGrabber}
-          <div class="mx-auto my-3 h-1 w-10 rounded-full bg-faint" aria-hidden="true"></div>
-        {/if}
-        <Slot name="header">
-          {#if title}
-            <h2 id={ titleId } class="pb-3 text-center text-base font-semibold text-ink">{ title }</h2>
-          {/if}
-        </Slot>
-      </div>
+        <bottom-sheet-header class={ headerClass }>
+          <Slot name="header">
+            {#if title}
+              <h2 id={ titleId } class={ titleClass }>{ title }</h2>
+            {/if}
+          </Slot>
+        </bottom-sheet-header>
 
-      <div
-        ref="content"
-        data-bs-surface="content"
-        class={ contentClass }
-        @pointerdown={ dragStart }
-        @pointermove={ dragMove }
-        @pointerup={ dragEnd }
-        @pointercancel={ dragEnd }
-        @touchmove={ scrollVeto }>
-        <Children/>
-      </div>
+        <bottom-sheet-content>
+          <Children/>
+        </bottom-sheet-content>
 
-      <div
-        data-bs-surface="footer"
-        class={ footerClass }
-        @pointerdown={ dragStart }
-        @pointermove={ dragMove }
-        @pointerup={ dragEnd }
-        @pointercancel={ dragEnd }>
-        <Slot name="footer"/>
-      </div>
-    </div>
-  </dialog>
+        <bottom-sheet-footer class="empty:hidden">
+          <Slot name="footer"/>
+        </bottom-sheet-footer>
+      </bottom-sheet>
+    </dialog>
+  </dialog-panel>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import PhysicsEngine from '@magic-spells/physics-engine';
-import {
-  SPRING_DEFAULTS,
-  VelocityTracker,
-  applyResistance,
-  dismissProgress,
-  parseSnapPoints,
-  resolveSnapTarget,
-  seedVelocity,
-} from '../../lib/sheet-math.js';
 
-// BottomSheet — a gesture-driven native <dialog> overlay ported from
-// @magic-spells/bottom-sheet v2. The full-viewport dialog owns the top layer,
-// focus trap, and page inerting; a real backdrop element inside it restores
-// backdrop dragging, while the panel carries the sheet presentation.
+// BottomSheet — a native-dialog sheet that rises from the bottom edge, dragged
+// and flicked with a finger, optionally resting on snap points that settle on a
+// velocity-aware spring, with a pinned footer and a scrim that tracks the
+// dismissal rather than the drag.
 //
-// CONTROLLED BY THE PARENT. `open` is required and never mutated here.
-// User-driven dismissal calls @close(reason), where reason is 'escape',
-// 'backdrop', 'drag', or 'close' for a native close the piece did not drive; the
-// parent flips `open` and syncOpen() reconciles the native dialog. Native
-// `cancel` is always preventDefault'd so the browser cannot close behind Puzzle's
-// vdom.
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <dialog-panel> /
+// <bottom-sheet> custom elements from @magic-spells/bottom-sheet (plus its
+// @magic-spells/dialog-panel peer) and binds attributes to them. It replaces a
+// 1,100-line port plus a copied math lib. Why:
 //
-// SNAP CONTRACT. `snapPoints` accepts percentages as an array or a comma/space
-// string. `snap` is optional-controlled: pass it and the parent owns the current
-// snap through @snapChange(value); omit it and the piece keeps committed snaps
-// locally. Snapping drives panel HEIGHT, not transform, so the footer remains
-// pinned and the content viewport always equals the visible sheet.
+//   1. The value here is motion, not markup. The gesture policy that decides
+//      whether a finger belongs to the sheet or to the list inside it, the
+//      velocity rules that tell a dismissal from a resize, and the spring that
+//      makes a hard throw arrive differently from a slow drag are all subtle,
+//      load-bearing and maintained upstream. A fork of that is a liability, and
+//      an upstream fix reaches every consumer through a version bump instead of
+//      a re-port.
+//   2. There is nothing token-styled to own. The panel's own chrome is one
+//      background, one radius and one handle pill, all already published as CSS
+//      custom properties — so the whole design-system bridge is four variables
+//      set on the root element (see THEME below).
 //
-// SLOTS. The named header slot replaces the title fallback entirely. A custom
-// header must provide its own accessible heading and pass `labelledby`. The
-// footer wrapper disappears when empty. Default call-site content renders
-// through <Children/>.
+//   <BottomSheet open={ filtersOpen } title="Filters" snapPoints="40,70,90"
+//     @hide={ closeFilters }>
+//     <FilterList/>
+//     <Button slot="footer" data-action-hide-dialog data-result="apply">Apply</Button>
+//   </BottomSheet>
 //
-// SCRIM. The backdrop tracks the DISMISSAL, never the drag. Rest is the SHORTEST
-// snap, not the one the gesture started at, so snap-to-snap travel and upward
-// rubber-band overscroll never touch it — a resize is not a dismissal. Only the
-// transform path below the shortest snap moves it, and a binary sheet's resting
-// height IS its shortest snap, so the same formula covers both with no branch.
+// OPEN IS EDGE-TRIGGERED, AND THE SHEET CLOSES ITSELF. The parent owns `open`,
+// but only a CHANGE to it acts: true → show(), false → hide(). An unrelated
+// re-render never re-opens a sheet the user just swiped away while the parent's
+// state still says open. The sheet dismisses itself on Escape, a backdrop tap,
+// a downward flick or drag, or any [data-action-hide-dialog] descendant, and
+// REPORTS through @hide; the parent's job is to flip `open` back to false there
+// so the next open is a fresh edge. Nothing here calls preventDefault on
+// `cancel` — dialog-panel already owns that.
 //
-// Opacity is written straight onto the backdrop element. The source component's
-// public --bs-backdrop-progress CSS token is deliberately dropped, the same way
-// Sheet.pzl drops --sheet-backdrop-progress: a piece has no stylesheet to read a
-// token from, and the element it would feed is the one being written anyway.
+//   @show()                        the entrance settled
+//   @hide({ result, triggerElement })
+//                                  the exit finished. `result` is the
+//                                  data-result of the [data-action-hide-dialog]
+//                                  button that closed it, and null for Escape,
+//                                  a backdrop tap or a swipe. That is how a
+//                                  footer answers a question:
+//                                    <Button slot="footer"
+//                                      data-action-hide-dialog
+//                                      data-result="delete">Delete</Button>
+//                                  and the parent reads detail.result in @hide.
+//   @snapChange(value)             a release committed a different snap. The
+//                                  value is the new resting snap in dvh percent
+//                                  — the same number you wrote in snapPoints,
+//                                  NOT an index.
 //
-// TOUCH HANDOFF. Content claims a downward mouse/pen drag when scrollTop reaches
-// zero during the gesture. Touch scrolling cannot change pointer owner after the
-// browser starts a pan, so reaching the top and dragging the sheet takes a second
-// touch. This matches the source component intentionally.
+// Props (every attribute prop renders NO attribute when unset, so the
+// component's own defaults apply — see its README for the full semantics)
+//   open           bool, edge-triggered as above
+//   title          stock header heading; generates its id and wires
+//                  aria-labelledby. Ignored once the header slot is filled.
+//   labelledby     id of the labelling heading, for a filled header slot
+//   snapPoints     comma- or space-separated percentages of the viewport
+//                  height, or an array of numbers. Each one is a HEIGHT, which
+//                  is what keeps the footer pinned at every snap. Omit it for
+//                  the two-state sheet: content height, drag down to dismiss.
+//   snap           optional-controlled resting snap, in dvh percent. Set at
+//                  mount it is also the opening rung; changed later it calls
+//                  snapTo(). Undeclared values are ignored, not clamped. Pair
+//                  it with @snapChange.
+//   spring         '<attraction>,<friction>' snap-settle override, both dials
+//                  in (0, 1); 'none' settles on the CSS curve instead. It
+//                  governs the SETTLE only — opening, closing and every sheet
+//                  without snapPoints stay on plain transitions.
+//   inset          detaches the sheet from all three edges and rounds every
+//                  corner. CSS only; the off-screen position is corrected to
+//                  match, so the exit still clears the gap.
+//   maxDisplayWidth  largest viewport width where the sheet may open. It also
+//                  closes an open sheet when a resize crosses the limit.
+//   showGrabber    false zeroes the handle pill. CSS only; the header is a drag
+//                  surface either way.
+//   class          merged onto <bottom-sheet>
+//   backdropClass  merged onto <dialog-backdrop>
+//   style          merged onto <bottom-sheet> after the piece's own classes
 //
-// WIDTH. The sheet is full-bleed up to 480px and centred beyond it, so it reads
-// as a sheet on phones and as a bottom-anchored card on desktop. `class` merges
-// onto the PANEL (not the full-viewport dialog root), and any max-width utility
-// in it REPLACES the 480px default rather than competing with it — so a plain
-// utility works and no important modifier is ever required.
+// MARKUP CONTRACT. <bottom-sheet-header> always renders — it hosts the grabber
+// pseudo-element and is an unconditional drag surface, and the piece pads its
+// top so header content clears the pill. The header slot's fallback body is the
+// `title` heading, so a FILLED header slot replaces it entirely and must bring
+// its own heading plus a matching `labelledby` (there is no is-slot-filled
+// probe). Untagged children become the scrollable <bottom-sheet-content>. The
+// footer slot fills <bottom-sheet-footer>, which is `empty:hidden` so an
+// unfilled slot leaves no visible bar. A slot="…" attribute must sit on a
+// DIRECT child of the <BottomSheet> tag, so wrap two footer buttons in one div.
 //
-// IMPERATIVE WRITES. The panel and backdrop deliberately declare no `style`
-// attribute: drag, spring, and WAAPI code own their inline styles between
-// renders. A dynamic style binding would let patchAttrs wipe an animation frame.
+// LOADING. BOTH packages are imported, and both in mounted(). The bundle keeps
+// its dialog-panel peer external and never imports it — bottom-sheet.show()
+// delegates straight to the parent <dialog-panel>, which is a plain unknown
+// element until its own module registers it — so loading only the one package
+// leaves a sheet that cannot open. (The sheet piece needs one import for the
+// same pair; its bundle side-effect-imports the peer. Do not copy that shape
+// here.) And they load in mounted() rather than at module scope because each
+// registers custom elements with `class extends HTMLElement`, a ReferenceError
+// under Node that would crash the prerender pass of any app on static or hybrid
+// output. Markup prerenders correctly either way: an un-upgraded <dialog> is
+// closed, so a closed sheet is invisible before the JS lands, and an `open`
+// that is already true when the view mounts is remembered and applied the
+// moment the modules arrive.
+//
+// STYLESHEETS. This piece needs TWO, neither of which is part of the copied
+// file. Add them once to your app's style entry:
+//   @import "@magic-spells/dialog-panel/css" layer(components);
+//   @import "@magic-spells/bottom-sheet/css" layer(components);
+// dialog-panel first — bottom-sheet.css deliberately overrides some of its
+// rules. The layer is not optional cosmetics: both stylesheets use plain
+// element selectors, and an unlayered import would outrank every Tailwind
+// utility on the elements.
+//
+// THEME. The design-system bridge is four custom properties set on the ROOT
+// <dialog-panel> as arbitrary-property utilities — no <style> block, no hex.
+// The root rather than the panel because the overlay is a SIBLING of the dialog
+// (and, on the currently published release, the dialog's own ::backdrop), so it
+// reads the overlay tokens by inheritance either way. Everything else (radius,
+// bleed, content padding, transition duration and curve) keeps the component's
+// own defaults; retune those from your app CSS, or change the token VALUES in
+// theme/pieces.css to move every piece at once.
+//
+// KNOWN GAPS, all upstream:
+//   * TWO overlays paint at once on the published pair (bottom-sheet 2.0.2 +
+//     dialog-panel 2.0.1), verified in the browser. 2.0.2 still paints the
+//     scrim on the dialog's native ::backdrop and tries to hide
+//     <dialog-backdrop> with a selector that dialog-panel's own
+//     [state='shown'] rule outranks on specificity — so dialog-panel's 30%
+//     backdrop paints beneath this piece's 50% one and the overlay reads
+//     darker than the token says, while backdropClass has nothing visible to
+//     style. Cosmetic, and already fixed on the component's main branch, which
+//     moves the scrim onto <dialog-backdrop> the way sheet.css does.
+//   * `empty:hidden` hides an unfilled footer, but the component's
+//     `:has(bottom-sheet-footer)` rule still matches it and drops the dialog's
+//     own safe-area padding, so a footerless sheet loses that inset on a
+//     notched phone.
+//   * The `hidden` detail carries no reason, so @hide cannot tell Escape from a
+//     backdrop tap from a swipe. Only a [data-action-hide-dialog] close is
+//     distinguishable, through `result` — and a KEYBOARD activation of such a
+//     button reports null, because dialog-panel reads a pointerless click at
+//     (0,0) as a backdrop tap before the delegated handler runs.
+//   * maxDisplayWidth refuses the open silently: show() returns early and no
+//     event fires, so a parent that set open={true} above the ceiling stays out
+//     of sync until it flips the flag back.
 let uid = 0;
 
-const ENTER_DURATION = 400;
-const EXIT_DURATION = 400;
-const MOTION_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
-const SNAP_EASING = 'cubic-bezier(0.2, 1.25, 0.3, 1)';
-const HIDDEN_OFFSET = 20;
-const SLOP = 5;
-const DRAG_THRESHOLD = 100;
-const FLICK_VELOCITY = 0.5;
+// A prop that was not passed renders no attribute — `false` is the compiler's
+// omit sentinel, so the component's own default stands.
+function attr(value) {
+  return value === undefined || value === null || value === '' ? false : String(value);
+}
 
-const DIALOG =
-  'fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 ' +
-  'open:flex flex-col justify-end overflow-hidden text-body [&::backdrop]:bg-transparent';
+// The whole design-token bridge. Panel and handle map onto pieces.css tokens so
+// the sheet follows the app's theme in light and dark; the overlay reproduces
+// the look the ported piece had (black at 50%, blurred) rather than the
+// component's slightly lighter default.
+const THEME =
+  '[--bs-panel-background:var(--color-surface)] ' +
+  '[--bs-handle-color:var(--color-faint)] ' +
+  '[--bs-overlay-background:rgb(0_0_0_/_0.5)] ' +
+  '[--bs-overlay-blur:8px]';
 
-// `touch-pinch-zoom` rather than `touch-none`, here and on every other rigid
-// drag surface below. The two are not the same refusal: `none` also refuses a
-// two-finger pinch, and the UA refuses it before the drag-claim logic is ever
-// consulted, so a low-vision user could not enlarge a form in the sheet (WCAG
-// 1.4.4). A pinch cannot collide with the single-finger drag being protected.
-const BACKDROP =
-  'absolute inset-0 bg-black/50 backdrop-blur-sm touch-pinch-zoom';
+// showGrabber={false}, expressed entirely in CSS. The pill is a pseudo-element
+// sized by these two properties alone, so zeroing them paints nothing; it is
+// absolutely positioned, so nothing reflows when it goes.
+const NO_GRABBER = '[--bs-handle-height:0px] [--bs-handle-width:0px]';
 
-// Caps the sheet on wide viewports; below the cap it stays full-bleed, so phones
-// are unaffected. Centring lives in PANEL_BASE as an auto inline margin (the
-// inset variant used to carry a fixed one) — auto margins centre a flex item on
-// the cross axis of the dialog's column, and the inset gutter comes from the
-// width calc instead.
-//
-// The cap is a DEFAULT the caller REPLACES, not one they have to fight. The
-// registry has no class-merge resolution, and Tailwind emits these rules sorted
-// alphabetically by escaped selector, so an arbitrary-value cap sorts AFTER the
-// digit-leading scale names but BEFORE the letter-leading ones — a plain caller
-// override would win for some names and silently lose for others. Dropping ours
-// whenever the caller supplies any max-width utility makes every name behave
-// identically, so the important modifier is never needed.
-//
-// Names are written as placeholders on purpose: Tailwind scans the WHOLE file,
-// comments included, so spelling real utilities here would mint dead CSS rules.
-const PANEL_WIDTH_CAP = 'max-w-[480px]';
+// The panel paints --color-surface, so its text has to come from the same token
+// family rather than inheriting whatever the page behind it had.
+const PANEL = 'text-body';
 
-// Matches a max-width utility anywhere in the caller's string, including variant
-// prefixes (`sm:max-w-<name>`) and the important modifier (`max-w-<name>!`).
-const CALLER_MAX_WIDTH = /(?:^|\s)\S*max-w-/;
+// The component gives the header horizontal padding only, and floats the
+// grabber inside it at top: 8px. Header content has to clear that pill itself —
+// including a filled header slot, which is why the padding lives on the element
+// rather than on the stock heading.
+const HEADER = 'pt-6';
+const HEADER_NO_GRABBER = 'pt-4';
 
-const PANEL_BASE =
-  'relative z-10 mx-auto flex flex-col overflow-hidden bg-surface will-change-transform';
-
-// A shadow is always transparent BLACK, never a theme colour. `--color-faint` is
-// a TEXT token (disabled text, separators) and resolves LIGHT in dark mode, so
-// using it here painted a white glow above the sheet's top edge. Both recipes
-// carry the source component's --bs-panel-box-shadow pair verbatim.
-//
-// These strings must stay LITERAL — Tailwind's scan reads source text, so a
-// template-literal interpolation inside shadow-[…] would silently generate no
-// rule at all. Shared values are duplicated on purpose; don't factor them out.
-//
-// The bleed skirt on the edge variant is the ONE colour-token layer, and it has
-// to be: it stands in for the panel's own background below the fold so an upward
-// rubber-band drag doesn't reveal the backdrop through the gap. A spread-less
-// offset shadow paints outside the border box, so the panel's own
-// overflow-hidden cannot clip it. Listed first so it paints over the ambient one.
-const PANEL_EDGE =
-  'w-full rounded-t-2xl border-t border-border pb-[env(safe-area-inset-bottom,0px)] ' +
-  'shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
-
-const PANEL_INSET =
-  'mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] ' +
-  'w-[calc(100%-1.5rem)] rounded-2xl border border-border ' +
-  'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
-
-const HEADER = 'shrink-0 touch-pinch-zoom select-none px-4';
-const CONTENT = 'min-h-0 flex-1 touch-manipulation overflow-y-auto overscroll-contain px-4';
-const FOOTER = 'shrink-0 touch-pinch-zoom bg-surface p-4 empty:hidden';
+// Centred, which is what the grabber and the drag axis both point at.
+const TITLE = 'pb-3 text-base font-semibold text-ink text-center';
 
 export default class BottomSheet extends PuzzleView {
-  #enter = null;
-  #exit = null;
-  #move = null;
-  #scrimReturn = null;
-  // Last opacity written to the backdrop, so a frame that computes the same
-  // number does not touch the DOM. null means no inline value is set.
-  #scrimOpacity = null;
-  #snapAnimation = null;
-  #settleTarget = null;
-  #engine = null;
-  #springTarget = null;
-  #springSpec = null;
-  #carriedVelocity = 0;
-  #drag = { active: false };
-  #snapPoints = [];
-  #localSnap = null;
-  #committedSnap = null;
-  // dialog.close() queues its event. A counter survives that gap and overlapping
-  // internal closes without misreporting them as native user closes.
-  #expectedCloses = 0;
-  #nativeClosed = false;
+  #id = `bottom-sheet-${++uid}`;
+  #panel = null;
+  #sheet = null;
+  #live = false;
+  #ready = false;
+  #lastOpen = false;
+  #lastSnap;
+
+  #onShown = () => {
+    this.props.show?.();
+  };
+
+  #onHidden = (event) => {
+    const detail = event.detail || {};
+    this.props.hide?.({
+      result: detail.result ?? null,
+      triggerElement: detail.triggerElement ?? null,
+    });
+  };
+
+  // Upstream spells this event in camelCase, so the listener has to as well —
+  // addEventListener is case-sensitive and a lowercase name silently never
+  // fires.
+  #onSnapChange = (event) => {
+    const to = event.detail?.to;
+    if (typeof to !== 'number') return;
+    // Record before announcing: a controlled parent echoing the same value back
+    // through `snap` must not read as a fresh request and re-run snapTo().
+    this.#lastSnap = to;
+    this.props.snapChange?.(to);
+  };
 
   data(params, props) {
-    const id = (this._id ??= `pp-bottom-sheet-${++uid}`);
     const title = props.title || '';
-    const inset = !!props.inset;
-    const callerClass = props.class || '';
-    this.#snapPoints = parseSnapPoints(props.snapPoints);
-    const hasSnaps = this.#snapPoints.length > 0;
+    const snapPoints = Array.isArray(props.snapPoints)
+      ? props.snapPoints.join(',')
+      : props.snapPoints;
+    const grabber = props.showGrabber !== false;
+
     return {
-      // Read imperatively in syncOpen(); returned so prop changes still drive
-      // the update cycle that calls afterUpdate().
-      open: !!props.open,
       title,
-      titleId: `${id}-title`,
-      labelledby: props.labelledby || (title ? `${id}-title` : false),
-      showGrabber: props.dismissible !== false && props.showGrabber !== false,
-      dialogClass: DIALOG,
-      backdropClass: [
-        BACKDROP,
-        props.dismissible === false ? '' : 'cursor-grab',
-        props.backdropClass || '',
-      ]
-        .filter(Boolean)
-        .join(' '),
-      panelClass: [
-        PANEL_BASE,
-        inset ? PANEL_INSET : PANEL_EDGE,
-        hasSnaps ? 'max-h-none' : 'max-h-[85dvh]',
-        // Yield the default cap outright when the caller sets their own width.
-        CALLER_MAX_WIDTH.test(callerClass) ? '' : PANEL_WIDTH_CAP,
-        callerClass,
-      ]
-        .filter(Boolean)
-        .join(' '),
-      headerClass: [HEADER, props.dismissible === false ? '' : 'cursor-grab']
-        .filter(Boolean)
-        .join(' '),
-      contentClass: CONTENT,
-      footerClass: [FOOTER, props.dismissible === false ? '' : 'cursor-grab']
-        .filter(Boolean)
-        .join(' '),
+      titleId: `${this.#id}-title`,
+      titleClass: TITLE,
+      labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
+      rootClass: THEME,
+      backdropClass: attr(props.backdropClass),
+      headerClass: grabber ? HEADER : HEADER_NO_GRABBER,
+      panelClass: [PANEL, grabber ? '' : NO_GRABBER, props.class].filter(Boolean).join(' '),
+      panelStyle: attr(props.style),
+      snapPointsAttr: attr(snapPoints),
+      springAttr: attr(props.spring),
+      maxDisplayWidthAttr: attr(props.maxDisplayWidth),
+      // A boolean attribute: presence alone detaches the sheet from the edges.
+      insetAttr: props.inset ? true : false,
     };
-  }
-
-  #reducedMotion() {
-    return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  }
-
-  #lockBody() {
-    this.element?.setAttribute('data-scroll-lock', '');
-    document.body.style.overflow = 'hidden';
-  }
-
-  #unlockBody() {
-    this.element?.removeAttribute('data-scroll-lock');
-    if (!document.querySelector('[data-scroll-lock]')) {
-      document.body.style.overflow = '';
-    }
-  }
-
-  #hiddenDistance() {
-    const panel = this.refs.panel;
-    if (!panel) return HIDDEN_OFFSET;
-    const gapBelow = Math.max(0, window.innerHeight - panel.getBoundingClientRect().bottom);
-    return panel.offsetHeight + gapBelow + HIDDEN_OFFSET;
-  }
-
-  #cancelAnimations() {
-    if (this.#enter) {
-      this.#enter.panel.cancel();
-      this.#enter.backdrop.cancel();
-      this.#enter = null;
-    }
-    if (this.#exit) {
-      this.#exit.panel.cancel();
-      this.#exit.backdrop.cancel();
-      this.#exit = null;
-    }
-    if (this.#move) {
-      this.#move.cancel();
-      this.#move = null;
-    }
-    if (this.#scrimReturn) {
-      this.#scrimReturn.cancel();
-      this.#scrimReturn = null;
-    }
-    if (this.#snapAnimation) {
-      this.#snapAnimation.cancel();
-      this.#snapAnimation = null;
-      this.#settleTarget = null;
-    }
-    this.#stopSpring();
-  }
-
-  // ---- scrim ----------------------------------------------------------------
-
-  /**
-   * Publishes how much of the sheet is still on screen as the backdrop's
-   * opacity. Only a live drag calls this — a spring settle never needs to, since
-   * the engine only runs when there is HEIGHT left to travel and height travel
-   * only exists at or above the shortest snap, where progress is pinned at 1.
-   *
-   * Saturation CLEARS the inline value rather than writing '1'. The resting
-   * opacity already is 1, and an absent inline style is what lets the enter and
-   * exit animations own the property without fighting a stale write.
-   * @param {number|null} progress - 1 fully on screen, 0 gone; null to release
-   */
-  #syncScrim(progress) {
-    const backdrop = this.refs.backdrop;
-    if (!backdrop) return;
-
-    if (progress === null || !(progress < 1)) {
-      if (this.#scrimOpacity === null) return;
-      this.#scrimOpacity = null;
-      backdrop.style.opacity = '';
-      return;
-    }
-
-    const value = Math.max(0, progress).toFixed(3);
-    if (value === this.#scrimOpacity) return;
-    this.#scrimOpacity = value;
-    backdrop.style.opacity = value;
-  }
-
-  /**
-   * Rides the scrim back to full after a release that keeps the sheet. The
-   * source hands this to a re-armed CSS transition; there is no stylesheet here,
-   * so the return is its own animation on the settle's clock.
-   */
-  #returnScrim() {
-    const backdrop = this.refs.backdrop;
-    const from = this.#scrimOpacity;
-    if (!backdrop || from === null) return;
-
-    if (this.#reducedMotion()) {
-      this.#syncScrim(null);
-      return;
-    }
-
-    // Clear first: the animation interpolates from the value it was given, and
-    // leaving the inline style behind would pin the scrim once it finishes.
-    this.#syncScrim(null);
-    const anim = backdrop.animate([{ opacity: from }, { opacity: 1 }], {
-      duration: EXIT_DURATION,
-      easing: MOTION_EASING,
-    });
-    this.#scrimReturn = anim;
-    anim.onfinish = () => {
-      if (this.#scrimReturn !== anim) return;
-      this.#scrimReturn = null;
-    };
-  }
-
-  #finishClose(dialog) {
-    this.refs.panel.style.transform = '';
-    this.refs.backdrop.style.opacity = '';
-    this.#scrimOpacity = null;
-    this.#closeDialog(dialog);
-    this.#unlockBody();
-    const { hidden } = this.props;
-    if (typeof hidden === 'function') hidden();
-  }
-
-  #closeDialog(dialog = this.element) {
-    if (!dialog?.open) return;
-    this.#expectedCloses += 1;
-    dialog.close();
-  }
-
-  #playEnter() {
-    const panel = this.refs.panel;
-    const backdrop = this.refs.backdrop;
-    panel.style.transform = '';
-    backdrop.style.opacity = '';
-    // A sheet reopened after a drag-dismiss fades in from nothing. Without this
-    // the memo still holds the dismissing drag's last value and the first frame
-    // of the next drag would compare against it and skip its own write.
-    this.#scrimOpacity = null;
-
-    if (this.#reducedMotion()) {
-      const { shown } = this.props;
-      if (typeof shown === 'function') shown();
-      return;
-    }
-
-    const distance = this.#hiddenDistance();
-    const panelAnim = panel.animate(
-      [
-        { transform: `translate3d(0, ${distance}px, 0)` },
-        { transform: 'translate3d(0, 0, 0)' },
-      ],
-      { duration: ENTER_DURATION, easing: MOTION_EASING }
-    );
-    const backdropAnim = backdrop.animate(
-      [{ opacity: 0 }, { opacity: 1 }],
-      { duration: ENTER_DURATION, easing: MOTION_EASING }
-    );
-    const entry = { panel: panelAnim, backdrop: backdropAnim };
-    this.#enter = entry;
-    panelAnim.onfinish = () => {
-      if (this.#enter !== entry) return;
-      this.#enter = null;
-      const { shown } = this.props;
-      if (typeof shown === 'function') shown();
-    };
-  }
-
-  #playExit(dialog) {
-    if (this.#reducedMotion()) {
-      this.#finishClose(dialog);
-      return;
-    }
-
-    const panel = this.refs.panel;
-    const backdrop = this.refs.backdrop;
-    const from = panel.style.transform || 'translate3d(0, 0, 0)';
-    // A drag-dismiss hands the scrim over mid-fade, so the exit starts from
-    // wherever the gesture left it rather than jumping back to full first.
-    const fromOpacity = this.#scrimOpacity ?? 1;
-    this.#scrimOpacity = null;
-    const distance = this.#hiddenDistance();
-    const panelAnim = panel.animate(
-      [
-        { transform: from },
-        { transform: `translate3d(0, ${distance}px, 0)` },
-      ],
-      { duration: EXIT_DURATION, easing: MOTION_EASING, fill: 'forwards' }
-    );
-    const backdropAnim = backdrop.animate(
-      [{ opacity: fromOpacity }, { opacity: 0 }],
-      { duration: EXIT_DURATION, easing: MOTION_EASING, fill: 'forwards' }
-    );
-    const exit = { panel: panelAnim, backdrop: backdropAnim };
-    this.#exit = exit;
-    panelAnim.onfinish = () => {
-      if (this.#exit !== exit) return;
-      this.#exit = null;
-      this.#finishClose(dialog);
-      panelAnim.cancel();
-      backdropAnim.cancel();
-    };
-  }
-
-  // Reconciles the native element to the controlled open prop. The dialog stays
-  // open through its exit animation; a reopen cancels that exit in place.
-  syncOpen() {
-    const dialog = this.element;
-    if (!dialog) return;
-    const shouldOpen = !!this.props.open;
-    if (!shouldOpen) this.#nativeClosed = false;
-
-    if (shouldOpen) {
-      // Keep native reality stable until the controlled parent acknowledges the
-      // close; otherwise any unrelated update would immediately showModal().
-      if (this.#nativeClosed) return;
-      if (this.#exit) {
-        this.#exit.panel.cancel();
-        this.#exit.backdrop.cancel();
-        this.#exit = null;
-        this.refs.panel.style.transform = '';
-        this.refs.backdrop.style.opacity = '';
-        this.#applyRestingHeight();
-      }
-      if (!dialog.open) {
-        this.#applyRestingHeight();
-        this.#lockBody();
-        dialog.showModal();
-        this.#playEnter();
-      }
-      return;
-    }
-
-    // Escape reaches here with the finger still down: handleCancel asks the
-    // parent to close and the close comes back through this method while the
-    // gesture is live. Left active, its next move would write a transform over
-    // the exit and its release would ride the scrim back to full on a sheet that
-    // is already leaving. A close the gesture did not ask for abandons it.
-    this.#abandonDrag();
-    if (this.#move) {
-      this.#move.cancel();
-      this.#move = null;
-    }
-    if (this.#scrimReturn) {
-      this.#scrimReturn.cancel();
-      this.#scrimReturn = null;
-    }
-    if (this.#snapAnimation) this.#haltSnapSettle(true);
-    if (this.#springTarget !== null) this.#haltSpring(true);
-    if (this.#enter) {
-      this.#enter.panel.cancel();
-      this.#enter.backdrop.cancel();
-      this.#enter = null;
-    }
-    if (dialog.open && !this.#exit) this.#playExit(dialog);
-  }
-
-  /**
-   * Drops a live gesture in place without running any release rule.
-   *
-   * Deliberately NOT the same thing as a pointercancel: that one is a reported
-   * release and dragEnd is entitled to resolve it. This is for a close the user
-   * never asked the gesture for, where acting on a lift that never happened is
-   * the bug. The pointer's own pointerup then finds an inactive drag and returns.
-   */
-  #abandonDrag() {
-    const drag = this.#drag;
-    if (!drag.active) return;
-    this.#releasePointer(drag);
-    this.#drag = { active: false };
   }
 
   mounted() {
-    this.#springSpec = this.#springValue();
-    this.#committedSnap = this.#desiredSnap();
-    this.#applyRestingHeight();
-    this.syncOpen();
+    // Browser-only by construction — see LOADING above. The guard is belt and
+    // braces for any host that runs lifecycle hooks outside a document.
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#panel = this.refs.panel;
+    this.#sheet = this.refs.sheet;
+    this.#lastOpen = !!this.props.open;
+    this.#lastSnap = this.props.snap;
+
+    // `snap` is deliberately NOT a bound attribute: the component reflects the
+    // committed snap back into it on every settle, and a bound one would be
+    // rewritten by the next render — superseding a settle that is still in
+    // flight. Written once here instead, where it is the opening rung, and
+    // driven by snapTo() from then on.
+    if (this.#lastSnap !== undefined && this.#lastSnap !== null) {
+      this.#sheet?.setAttribute('snap', String(this.#lastSnap));
+    }
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this.#panel?.addEventListener('shown', this.#onShown);
+    this.#panel?.addEventListener('hidden', this.#onHidden);
+    this.#sheet?.addEventListener('snapChange', this.#onSnapChange);
+
+    // Both, in parallel: neither module reads the other at module scope, and
+    // the sheet is only usable once both have registered.
+    Promise.all([import('@magic-spells/dialog-panel'), import('@magic-spells/bottom-sheet')])
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+        // A sheet that mounted already open opens now, at the first moment the
+        // elements can honour it.
+        this.#sync();
+      })
+      .catch((error) => {
+        console.error(
+          '[BottomSheet] failed to load @magic-spells/bottom-sheet — the sheet will not open.',
+          error
+        );
+      });
   }
 
   afterUpdate() {
-    this.#reconcileSpring();
-    this.#reconcileSnap();
-    this.syncOpen();
+    if (!this.#live) return;
+
+    const open = !!this.props.open;
+    if (open !== this.#lastOpen) {
+      this.#lastOpen = open;
+      this.#sync();
+    }
+
+    const snap = this.props.snap;
+    if (snap !== undefined && snap !== this.#lastSnap) {
+      this.#lastSnap = snap;
+      if (this.#ready) this.#sheet?.snapTo?.(Number(snap));
+    }
   }
 
   destroyed() {
-    this.#cancelAnimations();
-    this.#drag = { active: false };
-    this.#scrimOpacity = null;
-    this.#engine?.removeAllListeners();
-    this.#engine = null;
-    this.#closeDialog();
-    this.#unlockBody();
+    this.#live = false;
+    this.#panel?.removeEventListener('shown', this.#onShown);
+    this.#panel?.removeEventListener('hidden', this.#onHidden);
+    this.#sheet?.removeEventListener('snapChange', this.#onSnapChange);
+    // Unbind FIRST: this close is a teardown, not a user dismissal, and must not
+    // call back into a parent that is being torn down with us. Everything else —
+    // the top-layer dialog, the scroll lock, the resize listener — is released
+    // by the elements' own disconnectedCallback when Puzzle removes them.
+    if (this.#panel?.isOpen) this.#sheet?.hide?.();
+    this.#panel = null;
+    this.#sheet = null;
   }
 
-  // ---- drag gesture ---------------------------------------------------------
-
-  #capturePointer(event) {
-    const drag = this.#drag;
-    try {
-      drag.captureEl.setPointerCapture(event.pointerId);
-    } catch (_) {
-      // Pointer capture is best-effort; matching by pointerId still protects
-      // the state machine if a browser refuses it.
-    }
-    drag.captured = true;
-  }
-
-  #releasePointer(drag) {
-    if (!drag.captured || !drag.captureEl) return;
-    try {
-      drag.captureEl.releasePointerCapture(drag.pointerId);
-    } catch (_) {
-      // The browser may already have released capture on pointercancel.
+  // Edge-triggered, never level-triggered: called only when `open` actually
+  // changed (or when the module finally landed on a sheet that mounted open).
+  // The isOpen guards make a redundant edge — the parent flipping `open` false
+  // inside @hide, for a sheet that already closed itself — a no-op.
+  #sync() {
+    if (!this.#ready || !this.#panel || !this.#sheet) return;
+    if (this.#lastOpen) {
+      if (!this.#panel.isOpen) this.#sheet.show(this.#trigger());
+    } else if (this.#panel.isOpen) {
+      this.#sheet.hide();
     }
   }
 
-  #shouldClaim(surface, moveY) {
-    if (surface !== 'content') return true;
-    if (moveY === 0) return false;
-    if (moveY > 0) return this.refs.content.scrollTop === 0;
-
-    const current = this.#currentSnap();
-    return (
-      this.#snapPoints.length > 0 &&
-      current < this.#snapPoints[this.#snapPoints.length - 1]
-    );
+  // The element show() returns focus to. Whatever the user was on when the
+  // parent opened the sheet is the honest answer, and it keeps focus return
+  // working with no prop to pass.
+  #trigger() {
+    const active = document.activeElement;
+    return active && active !== document.body && active.focus ? active : undefined;
   }
-
-  #moveByTransform(travel) {
-    const panel = this.refs.panel;
-    if (travel < 0) {
-      panel.style.transform = `translate3d(0, ${-applyResistance(-travel)}px, 0)`;
-      this.#syncScrim(1);
-    } else {
-      panel.style.transform = `translate3d(0, ${travel}px, 0)`;
-      // A binary sheet has no snaps, so its resting height IS the shortest one
-      // and the whole downward drag is the dismissal zone. Same formula as the
-      // snapping path below, no special case.
-      this.#syncScrim(dismissProgress(this.#drag.startHeight - travel, this.#drag.startHeight));
-    }
-  }
-
-  #moveBySnap(travel) {
-    const panel = this.refs.panel;
-    const snapsPx = this.#snapsPx();
-    const minPx = snapsPx[0];
-    const maxPx = snapsPx[snapsPx.length - 1];
-    const height = this.#drag.startHeight - travel;
-
-    if (height > maxPx) {
-      panel.style.height = `${maxPx + applyResistance(height - maxPx)}px`;
-      panel.style.transform = '';
-      this.#drag.belowLowest = 0;
-      this.#syncScrim(1);
-      return;
-    }
-
-    if (height < minPx) {
-      const below = minPx - height;
-      panel.style.height = `${minPx}px`;
-      panel.style.transform = `translate3d(0, ${below}px, 0)`;
-      this.#drag.belowLowest = below;
-      // The only branch that moves the scrim. Rest is the SHORTEST snap, not the
-      // one the drag started at, so travel between snaps above never reaches
-      // here and never touches the overlay.
-      this.#syncScrim(dismissProgress(minPx - below, minPx));
-      return;
-    }
-
-    panel.style.height = `${height}px`;
-    panel.style.transform = '';
-    this.#drag.belowLowest = 0;
-    this.#syncScrim(1);
-  }
-
-  #settleTransform(fromTransform = null) {
-    const panel = this.refs.panel;
-    const from = fromTransform ?? panel.style.transform;
-    if (!from || this.#reducedMotion()) {
-      panel.style.transform = '';
-      return;
-    }
-
-    panel.style.transform = '';
-    const anim = panel.animate(
-      [{ transform: from }, { transform: 'translate3d(0, 0, 0)' }],
-      { duration: EXIT_DURATION, easing: MOTION_EASING }
-    );
-    this.#move = anim;
-    anim.onfinish = () => {
-      if (this.#move !== anim) return;
-      this.#move = null;
-    };
-  }
-
-  #requestClose(reason) {
-    const { close } = this.props;
-    if (typeof close === 'function') close(reason);
-  }
-
-  /**
-   * Takes the panel and backdrop back from a still-running open.
-   *
-   * A live WAAPI animation OVERRIDES inline style, so until the 400ms enter
-   * finishes every transform and opacity the gesture writes is discarded and the
-   * sheet simply ignores the finger. Cancelling hands both properties back.
-   *
-   * Called on the CLAIM, not on pointerdown — same reason the source component
-   * adds its `dragging` class there: a stray press that never becomes a drag must
-   * not kill the open.
-   *
-   * `shown` is fired here because cancel() suppresses onfinish, and a parent
-   * waiting on that callback would otherwise wait forever. The sheet does step to
-   * the finger rather than easing across; taking over an in-flight open means the
-   * enter's remaining distance is given up, which is the point of the takeover.
-   */
-  #adoptFromEnter() {
-    if (!this.#enter) return;
-    this.#enter.panel.cancel();
-    this.#enter.backdrop.cancel();
-    this.#enter = null;
-    const { shown } = this.props;
-    if (typeof shown === 'function') shown();
-  }
-
-  // ---- snap points ----------------------------------------------------------
-
-  #controlledSnap() {
-    return this.props.snap !== undefined;
-  }
-
-  #desiredSnap() {
-    if (!this.#snapPoints.length) return null;
-    const raw = this.#controlledSnap() ? this.props.snap : this.#localSnap;
-    const value = Number(raw);
-    return Number.isFinite(value) && this.#snapPoints.includes(value)
-      ? value
-      : this.#snapPoints[0];
-  }
-
-  #currentSnap() {
-    return this.#snapPoints.includes(this.#committedSnap)
-      ? this.#committedSnap
-      : this.#desiredSnap();
-  }
-
-  #snapsPx() {
-    return this.#snapPoints.map((value) => (value / 100) * window.innerHeight);
-  }
-
-  #applyRestingHeight() {
-    if (this.#settleTarget !== null || this.#springTarget !== null) return;
-    const snap = this.#currentSnap();
-    this.refs.panel.style.height = snap === null ? '' : `${snap}dvh`;
-  }
-
-  #haltSnapSettle(pinPainted) {
-    if (!this.#snapAnimation) return;
-    const height = this.refs.panel.getBoundingClientRect().height;
-    this.#snapAnimation.cancel();
-    this.#snapAnimation = null;
-    this.#settleTarget = null;
-    if (pinPainted) this.refs.panel.style.height = `${height}px`;
-  }
-
-  #settleToSnap(value, velocityY = 0, forceWAAPI = false) {
-    const panel = this.refs.panel;
-    const startPx = panel.getBoundingClientRect().height;
-    const targetPx = (value / 100) * window.innerHeight;
-    const fromTransform = panel.style.transform;
-
-    if (this.#move) {
-      this.#move.cancel();
-      this.#move = null;
-    }
-    if (this.#snapAnimation) this.#haltSnapSettle(true);
-    // Halting records #carriedVelocity, so read the seed AFTER it, never before.
-    this.#carriedVelocity = 0;
-    if (this.#springTarget !== null) this.#haltSpring(true);
-    panel.style.transform = '';
-
-    // A gesture-driven settle seeds from the finger. An author-driven one
-    // (velocityY 0) inherits whatever the interrupted settle was still carrying,
-    // so re-aiming mid-flight re-aims instead of stalling and re-accelerating.
-    // #carriedVelocity is ALREADY in the engine's unit — it must not go through
-    // seedVelocity(), which converts from px/ms.
-    const springSeed = velocityY !== 0 ? seedVelocity(velocityY) : this.#carriedVelocity;
-
-    if (this.#reducedMotion()) {
-      this.#settleTarget = null;
-      this.#springTarget = null;
-      panel.style.height = `${value}dvh`;
-      return;
-    }
-
-    if (this.#springEnabled() && !forceWAAPI) {
-      if (Math.abs(startPx - targetPx) < 0.5 && springSeed === 0) {
-        panel.style.height = `${value}dvh`;
-        return;
-      }
-      // Resolve the lazy engine BEFORE assigning the target. Reversing this
-      // order lets engine construction clear the very first target and makes
-      // animateTo throw only on the first settle.
-      const engine = this.#ensureEngine();
-      panel.style.height = `${startPx}px`;
-      this.#springTarget = targetPx;
-      engine.animateTo(startPx, targetPx, springSeed);
-      // The spring drives HEIGHT only, so a gesture that ended below the
-      // shortest snap still carries an inline transform. Ease it out alongside
-      // the spring instead of dropping it in one frame.
-      this.#settleTransform(fromTransform);
-      return;
-    }
-
-    if (Math.abs(startPx - targetPx) < 0.5 && !fromTransform) {
-      panel.style.height = `${value}dvh`;
-      return;
-    }
-
-    // The resting dvh is already underneath the animation. When WAAPI releases
-    // its frames, viewport-relative sizing takes over without a resize listener.
-    panel.style.height = `${value}dvh`;
-    const anim = panel.animate(
-      [
-        {
-          height: `${startPx}px`,
-          transform: fromTransform || 'translate3d(0, 0, 0)',
-        },
-        {
-          height: `${targetPx}px`,
-          transform: 'translate3d(0, 0, 0)',
-        },
-      ],
-      { duration: EXIT_DURATION, easing: SNAP_EASING }
-    );
-    this.#snapAnimation = anim;
-    this.#settleTarget = targetPx;
-    anim.onfinish = () => {
-      if (this.#snapAnimation !== anim) return;
-      this.#snapAnimation = null;
-      this.#settleTarget = null;
-      this.#applyRestingHeight();
-    };
-  }
-
-  #commitSnap(value, velocityY = 0) {
-    if (!this.#snapPoints.includes(value)) return;
-    const from = this.#currentSnap();
-
-    if (!this.#controlledSnap()) this.#localSnap = value;
-    this.#committedSnap = value;
-    this.#settleToSnap(value, velocityY);
-
-    if (from !== value) {
-      const { snapChange } = this.props;
-      if (typeof snapChange === 'function') snapChange(value);
-    }
-  }
-
-  /**
-   * @returns {boolean} true when the release asked the parent to close, which is
-   *   what tells dragEnd to hand the scrim to the exit rather than ride it home
-   */
-  #releaseToSnap(drag, velocityY, cancelled) {
-    if (cancelled) {
-      this.#commitSnap(this.#currentSnap());
-      return false;
-    }
-
-    if (drag.belowLowest > 0) {
-      const flick = velocityY > FLICK_VELOCITY;
-      const pastThreshold =
-        drag.belowLowest > DRAG_THRESHOLD && velocityY > -0.05;
-
-      if (flick || pastThreshold) {
-        this.#requestClose('drag');
-        return true;
-      }
-      this.#commitSnap(this.#snapPoints[0], velocityY);
-      return false;
-    }
-
-    const snapsPx = this.#snapsPx();
-    const targetPx = resolveSnapTarget({
-      currentPx: this.refs.panel.getBoundingClientRect().height,
-      velocityY,
-      snapsPx,
-      flickVelocity: FLICK_VELOCITY,
-    });
-
-    if (targetPx === null) {
-      this.#requestClose('drag');
-      return true;
-    }
-
-    this.#commitSnap(this.#snapPoints[snapsPx.indexOf(targetPx)], velocityY);
-    return false;
-  }
-
-  #reconcileSnap() {
-    if (!this.#snapPoints.length) {
-      if (this.#snapAnimation) this.#haltSnapSettle(false);
-      this.#stopSpring();
-      this.#committedSnap = null;
-      this.refs.panel.style.height = '';
-      this.refs.panel.style.transform = '';
-      return;
-    }
-
-    const desired = this.#desiredSnap();
-    if (this.#committedSnap === null) {
-      this.#committedSnap = desired;
-      this.#applyRestingHeight();
-      return;
-    }
-
-    if (desired !== this.#committedSnap) {
-      this.#committedSnap = desired;
-      if (this.element.open) this.#settleToSnap(desired);
-      else {
-        if (this.#snapAnimation) this.#haltSnapSettle(false);
-        this.#applyRestingHeight();
-      }
-    }
-  }
-
-  // ---- spring settling ------------------------------------------------------
-
-  #springValue() {
-    return this.props.spring === undefined ? '' : String(this.props.spring);
-  }
-
-  #springEnabled() {
-    return this.props.spring !== 'none';
-  }
-
-  #ensureEngine() {
-    if (this.#engine) return this.#engine;
-
-    const [attraction, friction] = this.#springValue()
-      .split(/[\s,]+/)
-      .map(Number);
-    const options = { ...SPRING_DEFAULTS };
-    if (Number.isFinite(attraction) && attraction > 0 && attraction < 1) {
-      options.attraction = attraction;
-    }
-    if (Number.isFinite(friction) && friction > 0 && friction < 1) {
-      options.friction = friction;
-    }
-
-    const engine = new PhysicsEngine(options);
-    engine.on('change', ({ position }) => {
-      if (!this.#drag.active && this.#springTarget !== null) {
-        this.refs.panel.style.height = `${position}px`;
-      }
-    });
-    engine.on('complete', () => {
-      if (this.#springTarget === null) return;
-      // Clear first: resting-height reflection is deliberately blocked while
-      // the spring owns the panel frame by frame.
-      this.#springTarget = null;
-      this.#applyRestingHeight();
-    });
-    this.#engine = engine;
-    return engine;
-  }
-
-  #stopSpring() {
-    this.#springTarget = null;
-    this.#engine?.stop();
-  }
-
-  #haltSpring(pinPainted) {
-    if (this.#springTarget === null) return false;
-    const height = this.refs.panel.getBoundingClientRect().height;
-    // Capture the in-flight momentum for whoever settles next. getVelocity() is
-    // FEATURE-DETECTED on purpose: piece.json has no version field, so it cannot
-    // express "physics-engine >= 1.0.1" — a consumer pinned to 1.0.0 must still
-    // work, just without the carry. stop() does not zero #velocity, so reading
-    // before or after it is equivalent; reading here keeps it next to the halt.
-    this.#carriedVelocity =
-      typeof this.#engine?.getVelocity === 'function' ? this.#engine.getVelocity() : 0;
-    // stop() emits `stop`, not `complete`, so the target must be cleared and
-    // the visible position deliberately handed to the next owner.
-    this.#stopSpring();
-    if (pinPainted) this.refs.panel.style.height = `${height}px`;
-    return true;
-  }
-
-  #reconcileSpring() {
-    const next = this.#springValue();
-    if (next === this.#springSpec) return;
-
-    const target = this.#committedSnap;
-    const wasSpringing = this.#haltSpring(true);
-    const wasWAAPI = !!this.#snapAnimation;
-    if (wasWAAPI) this.#haltSnapSettle(true);
-
-    this.#engine?.removeAllListeners();
-    this.#engine = null;
-    this.#springSpec = next;
-
-    // An interrupted settle must finish visibly. Use the tuned WAAPI path for
-    // this one handoff; the next independent settle constructs the new engine.
-    if ((wasSpringing || wasWAAPI) && this.#snapPoints.includes(target)) {
-      this.#settleToSnap(target, 0, true);
-    }
-  }
-
-  events = {
-    handleCancel: (event) => {
-      event.preventDefault();
-      if (this.props.dismissible === false) return;
-      this.#requestClose('escape');
-    },
-    handleClose: () => {
-      if (this.#expectedCloses > 0) {
-        this.#expectedCloses -= 1;
-        return;
-      }
-      this.#nativeClosed = true;
-      this.#cancelAnimations();
-      this.#abandonDrag();
-      this.refs.panel.style.transform = '';
-      this.refs.backdrop.style.opacity = '';
-      this.#scrimOpacity = null;
-      this.#unlockBody();
-      this.#requestClose('close');
-      const { hidden } = this.props;
-      if (typeof hidden === 'function') hidden();
-    },
-    dragStart: (event) => {
-      if (this.props.dismissible === false) return;
-      if (!event.isPrimary) return;
-      if (event.pointerType === 'mouse' && event.button !== 0) return;
-
-      // An uncaptured pointer can disappear outside its surface. A captured
-      // gesture is guaranteed its pointerup, so only that one blocks restart.
-      if (this.#drag.active && this.#drag.captured) return;
-
-      if (this.#move) {
-        this.#move.cancel();
-        this.#move = null;
-        this.refs.panel.style.transform = '';
-      }
-      // A live WAAPI animation OVERRIDES inline style, so a scrim still riding
-      // home from the last release would swallow every write this gesture makes.
-      // Cancelling drops the backdrop to its resting opacity, which is exactly
-      // where an unmoved sheet's scrim belongs.
-      if (this.#scrimReturn) {
-        this.#scrimReturn.cancel();
-        this.#scrimReturn = null;
-      }
-
-      const startHeight = this.refs.panel.getBoundingClientRect().height;
-      if (this.#snapAnimation) this.#haltSnapSettle(true);
-      if (this.#springTarget !== null) this.#haltSpring(true);
-      // The finger owns momentum from here. Discard what the halted settle was
-      // carrying, or releasing without moving (grab a settling sheet, hold still,
-      // let go) would resume the old motion instead of staying put — the tracker
-      // reports exactly 0 for a still pointer, which is indistinguishable from an
-      // author-driven settle unless we clear it here.
-      this.#carriedVelocity = 0;
-      if (this.#snapPoints.length) {
-        this.refs.panel.style.height = `${startHeight}px`;
-      }
-
-      const tracker = new VelocityTracker();
-      tracker.add(event.clientY, event.timeStamp);
-      this.#drag = {
-        active: true,
-        claimed: false,
-        captured: false,
-        captureEl: event.currentTarget,
-        pointerId: event.pointerId,
-        surface: event.currentTarget.dataset.bsSurface,
-        startY: event.clientY,
-        lastY: event.clientY,
-        startTime: event.timeStamp,
-        claimOffset: 0,
-        startHeight,
-        belowLowest: 0,
-        tracker,
-      };
-    },
-    dragMove: (event) => {
-      const drag = this.#drag;
-      if (!drag.active || event.pointerId !== drag.pointerId) return;
-
-      const deltaY = event.clientY - drag.startY;
-      const moveY = event.clientY - drag.lastY;
-      drag.lastY = event.clientY;
-      drag.tracker.add(event.clientY, event.timeStamp);
-
-      if (!drag.captured && Math.abs(deltaY) > SLOP) {
-        this.#capturePointer(event);
-      }
-
-      // The surface is whichever one pointerdown landed on, NOT wherever the
-      // pointer currently is. Capture only engages past SLOP, so until then a
-      // move can be delivered to a SIBLING surface's listener — a content drag
-      // straying onto the header would otherwise claim instantly (header always
-      // claims) instead of scrolling.
-      if (!drag.claimed) {
-        if (!this.#shouldClaim(drag.surface, moveY)) return;
-        drag.claimed = true;
-        drag.claimOffset = deltaY;
-        this.#adoptFromEnter();
-      }
-
-      const travel = deltaY - drag.claimOffset;
-      if (this.#snapPoints.length) this.#moveBySnap(travel);
-      else this.#moveByTransform(travel);
-    },
-    dragEnd: (event) => {
-      const drag = this.#drag;
-      if (!drag.active || event.pointerId !== drag.pointerId) return;
-
-      drag.tracker.add(event.clientY, event.timeStamp);
-      const cancelled = event.type === 'pointercancel';
-      const deltaY = event.clientY - drag.startY;
-      const velocityY = cancelled ? 0 : drag.tracker.velocity;
-      const duration = event.timeStamp - drag.startTime;
-      this.#releasePointer(drag);
-      this.#drag = { active: false };
-
-      if (
-        drag.surface === 'backdrop' &&
-        !cancelled &&
-        Math.abs(deltaY) < 10 &&
-        duration < 300
-      ) {
-        this.#requestClose('backdrop');
-        return;
-      }
-
-      if (!drag.claimed) return;
-
-      // The two verdicts split the scrim. A sheet that stays rides back to full
-      // on the settle's clock; a dismissal deliberately LEAVES the painted value
-      // so #playExit can carry the fade the rest of the way down from it.
-      if (this.#snapPoints.length) {
-        if (!this.#releaseToSnap(drag, velocityY, cancelled)) this.#returnScrim();
-        return;
-      }
-
-      const travel = deltaY - drag.claimOffset;
-      const flick = !cancelled && velocityY > FLICK_VELOCITY;
-      const pastThreshold =
-        !cancelled && travel > DRAG_THRESHOLD && velocityY > -0.05;
-
-      if (flick || pastThreshold) {
-        this.#requestClose('drag');
-        return;
-      }
-      this.#settleTransform();
-      this.#returnScrim();
-    },
-    scrollVeto: (event) => {
-      if (this.#drag.active && this.#drag.claimed && event.cancelable) {
-        event.preventDefault();
-      }
-    },
-  };
 }
 </script>
