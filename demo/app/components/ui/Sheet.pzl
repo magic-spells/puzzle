@@ -69,7 +69,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 //   <Sheet open={ cartOpen } title="Your cart" @hide={ closeCart }>
 //     <CartLines/>
-//     <Button slot="footer" data-action-hide-dialog data-result="checkout">Checkout</Button>
+//     <button slot="footer" data-action-hide-dialog data-result="checkout">Checkout</button>
 //   </Sheet>
 //
 // OPEN IS EDGE-TRIGGERED, AND THE SHEET CLOSES ITSELF. The parent owns `open`,
@@ -88,9 +88,9 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                                  button that closed it, and null for Escape,
 //                                  a backdrop tap or a swipe. That is how a
 //                                  footer answers a question:
-//                                    <Button slot="footer"
+//                                    <button slot="footer"
 //                                      data-action-hide-dialog
-//                                      data-result="delete">Delete</Button>
+//                                      data-result="delete">Delete</button>
 //                                  and the parent reads detail.result in @hide.
 //   @snapChange(index)             a release committed a different snap
 //
@@ -240,11 +240,19 @@ export default class Sheet extends PuzzleView {
   #lastProp;
   #pending = [];
 
-  #onShown = () => {
+  // dialog-panel's events bubble, so a nested overlay's close would otherwise
+  // reach this panel's listeners too — and be reported as this sheet's own.
+  #mine(event) {
+    return event.target === this.#panel;
+  }
+
+  #onShown = (event) => {
+    if (!this.#mine(event)) return;
     this.props.show?.();
   };
 
   #onHidden = (event) => {
+    if (!this.#mine(event)) return;
     const detail = event.detail || {};
     this.props.hide?.({
       result: detail.result ?? null,
