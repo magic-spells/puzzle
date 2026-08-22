@@ -14,10 +14,20 @@ notes:
       Sheet's motion core lives in registry/lib/sheet-engine.js — a verbatim port of the source web
       component's spring-keyframe engine — plus sheet-policy.js and sheet-drag.js, all pinned by the
       repo-root `npm test` suite (133 tests, including exact-number motion assertions and
-      registry↔demo parity coverage). Unlike
-      bottom-sheet's height-driven WAAPI/spring hybrid, sheet's engine drives full keyframe
-      choreography per profile/effect. bottom-sheet deliberately remains the lighter-weight piece;
-      sheet supersedes only the old drag-to-dismiss Sheet.pzl.
+      registry↔demo parity coverage). Unlike bottom-sheet's height-driven WAAPI/spring hybrid,
+      sheet's engine drives full keyframe choreography per profile/effect. bottom-sheet deliberately
+      remains the lighter-weight piece; sheet supersedes only the old drag-to-dismiss Sheet.pzl.
+  - kind: state
+    text: >-
+      2026-08-22 — the earlier state note about the rebuilt `sheet` piece (frame-engine as second
+      engine dep, registry/lib/sheet-engine.js + policy + drag, 133 pinned tests) is now HISTORY:
+      sheet became a wrapper over @magic-spells/sheet (commit 1093ded, feat/sheet-wrapper) and those
+      libs, tests and the registry's direct physics/frame-engine devDeps are gone. physics-engine
+      remains a registry dependency only through bottom-sheet (still the height-driven port
+      described by this card) — and phase 2 of notes/2026-08-22-sheet-wrapper-plan.md converts
+      bottom-sheet to a wrapper over @magic-spells/bottom-sheet too, at which point this decision's
+      subject (spring physics as a direct dependency of a PORTED sheet) stops applying and the card
+      can be deleted or rewritten as 'engines arrive transitively through wrapped packages'.
 ---
 
 # Spring physics is a registry dependency for snapping sheets

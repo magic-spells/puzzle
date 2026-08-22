@@ -6,6 +6,18 @@ connections:
   - DOC-REGISTRY
   - DECISION-SPRING-PHYSICS
   - PLAN-PROJECT
+notes:
+  - kind: state
+    text: >-
+      SUPERSEDED 2026-08-22 — the three libs this feature ported (registry/lib/sheet-engine.js,
+      sheet-policy.js, sheet-drag.js) and their five Node suites were REMOVED when the sheet piece
+      became a thin wrapper over @magic-spells/sheet (DECISION-WRAP-WEB-COMPONENTS; commit 1093ded
+      on feat/sheet-wrapper). The motion, gesture and snap policy now run from the npm package and
+      are tested upstream; the only sheet-related test left in this repo is
+      test/sheet-wrapper.test.js (static wiring guards). sheet-math.js survives only because
+      bottom-sheet (still a port at that point) imports it — it goes when bottom-sheet is converted
+      (phase 2 of notes/2026-08-22-sheet-wrapper-plan.md). This card is history for how the port was
+      built, not a description of current code.
 ---
 
 # Port DOM-free sheet motion libraries
