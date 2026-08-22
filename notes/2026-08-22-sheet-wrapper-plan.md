@@ -314,3 +314,16 @@ delegation (`data-result` → `hidden.detail.result`). CSS: 287 lines, one var
   AlertDialog — update those call sites in the site phase.
 - Nothing else in the registry imports `Dialog.pzl` (only the old Sheet port mentioned
   it in a comment), so no composite piece breaks.
+
+## Status (2026-08-22, end of day)
+
+- puzzle-pieces: phases 1–3 + hardening done and verified on `feat/sheet-wrapper`;
+  **PR #10 → `release/0.7.0`**: https://github.com/magic-spells/puzzle-pieces/pull/10
+  (trial merge clean). `release/0.7.0` = `release/0.6.0` + version bump `43bc862`.
+- magic-spells-puzzle-site: synced on `feat/sheet-wrapper` (commit `0e97a72`, off
+  `feat/open-sourcery-library`); **PR #10 → `feat/open-sourcery-library`**:
+  https://github.com/magic-spells/magic-spells-puzzle-site/pull/10. SSG build green
+  (147 pages). SheetDemo lost its `top` chip until `top` lands upstream.
+- Open for the owner: (1) port `top` to `../sheet` from `wip/sheet-top-position` and
+  publish; (2) publish bottom-sheet 2.0.3; (3) the dialog-panel `detail === 0` fix;
+  (4) repro the Puzzle slot-fallback gap; (5) next conversions per the assessment.
