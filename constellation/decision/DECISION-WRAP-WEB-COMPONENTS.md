@@ -44,6 +44,22 @@ notes:
       dialog-backdrop loses on specificity to dialog-panel 2.0.1's [state='shown'] rule, so two
       overlays paint at once (cosmetic; fixed on the component's main branch, which needs a 2.0.3
       publish).
+  - kind: state
+    text: >-
+      2026-08-22 — all four overlay pieces are wrappers now on feat/sheet-wrapper (→ release/0.7.0):
+      sheet (1093ded), bottom-sheet (140dd60), dialog + alert-dialog (5da6c6a), each over the real
+      @magic-spells/dialog-panel family (sheet/bottom-sheet add their own package;
+      dialog/alert-dialog use dialog-panel alone). Shared contract: edge-triggered `open`, @show /
+      @hide({ result, triggerElement }), buttons close via a real <button data-action-hide-dialog
+      data-result>, dynamic import in mounted(), theme bridge via custom properties/utilities,
+      #mine(event) target guard against nested overlays' bubbling events. Controlled `snap` (sheet
+      index / bottom-sheet dvh value) is edge-triggered on the parent's value with announced rungs
+      absorbed as echoes — test/snap-echo.test.js — which is what the ported sheet's flick-bounce
+      bug was. Findings logged in notes/2026-08-22-sheet-wrapper-plan.md: dialog-panel dialogClick
+      misreads keyboard (detail===0) clicks as backdrop taps (upstream), bottom-sheet 2.0.2 double
+      overlay (upstream, fixed on main), and a Puzzle gap reported by the phase-3 agent — named-slot
+      FALLBACK bodies render once and are never patched (needs a minimal repro in ../puzzle). Site
+      sync (../magic-spells-puzzle-site) in progress.
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work
