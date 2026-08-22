@@ -18,6 +18,17 @@
 @import "@magic-spells/scroll-stack/css" layer(components);
 
 /*
+ * The sheet piece wraps @magic-spells/sheet the same way, and that one needs
+ * TWO stylesheets: its dialog-panel peer owns the <dialog>/<dialog-backdrop>
+ * transport, and sheet.css layers the panel geometry, the handle and the
+ * overlay on top of it. dialog-panel FIRST — sheet.css deliberately overrides
+ * several of its rules and an inverted order would undo them. Same
+ * `layer(components)` reasoning as above.
+ */
+@import "@magic-spells/dialog-panel/css" layer(components);
+@import "@magic-spells/sheet/css" layer(components);
+
+/*
  * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
  * and JS so the utility classes they use are generated. Paths are relative to
  * this stylesheet (app/styles/), so "../" is the app root.

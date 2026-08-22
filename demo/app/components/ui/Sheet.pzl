@@ -1,2412 +1,388 @@
 <puzzle-view>
-  <dialog
-    class={ dialogClass }
-    aria-labelledby={ labelledby }
-    @cancel={ handleCancel }
-    @close={ handleClose }>
+  <dialog-panel ref="panel" class={ rootClass }>
+    <dialog-backdrop class={ backdropClass }></dialog-backdrop>
 
-    <div
-      ref="backdrop"
-      data-sheet-surface="backdrop"
-      class={ backdropClass }></div>
+    <dialog aria-labelledby={ labelledby }>
+      <sheet-panel
+        ref="sheet"
+        class={ panelClass }
+        style={ panelStyle }
+        snap-points={ snapPointsAttr }
+        initial-snap={ initialSnapAttr }
+        position={ positionAttr }
+        mode={ modeAttr }
+        breakpoint={ breakpointAttr }
+        desktop-position={ desktopPositionAttr }
+        desktop-mode={ desktopModeAttr }
+        effect={ effectAttr }
+        exit-effect={ exitEffectAttr }
+        desktop-effect={ desktopEffectAttr }
+        desktop-exit-effect={ desktopExitEffectAttr }
+        dismiss={ dismissAttr }
+        max-display-width={ maxDisplayWidthAttr }
+        spring={ springAttr }
+        morph-trigger={ morphTriggerAttr }>
 
-    <div ref="panel" data-sheet-surface="panel" class={ panelClass }>
-      {#if showGrabber}
-        <div class={ grabberClass } aria-hidden="true"></div>
-      {/if}
+        <sheet-header>
+          <Slot name="header">
+            {#if title}
+              <h2 id={ titleId } class={ titleClass }>{ title }</h2>
+            {/if}
+          </Slot>
+        </sheet-header>
 
-      <div
-        ref="header"
-        data-sheet-surface="header"
-        class={ headerClass }>
-        <Slot name="header">
-          {#if title}
-            <h2 id={ titleId } class={ titleClass }>{ title }</h2>
-          {/if}
-        </Slot>
-      </div>
+        <sheet-content>
+          <Children/>
+        </sheet-content>
 
-      <div
-        ref="content"
-        data-sheet-surface="content"
-        class={ contentClass }
-        @touchmove={ scrollVeto }>
-        <Children/>
-      </div>
-
-      <div
-        ref="footer"
-        data-sheet-surface="footer"
-        class={ footerClass }>
-        <Slot name="footer"/>
-      </div>
-    </div>
-  </dialog>
+        <sheet-footer class="empty:hidden">
+          <Slot name="footer"/>
+        </sheet-footer>
+      </sheet-panel>
+    </dialog>
+  </dialog-panel>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import { MorphEngine } from '@magic-spells/morph-engine';
-import {
-  awayOffset,
-  dismissAxis,
-  EXIT_CUSHION,
-  parseDismiss,
-  parseSpring,
-  resizesWithSnaps,
-  SheetEngine,
-} from '../../lib/sheet-engine.js';
-import {
-  contentClaimDirection,
-  normalizeScrollLeft,
-  resolveInitialSnap,
-  resolveSnapPoints,
-  resolveSnapTarget,
-} from '../../lib/sheet-policy.js';
-import { DragGesture } from '../../lib/sheet-drag.js';
 
-// Sheet — a one-component Puzzle port of the @magic-spells/sheet web-component
-// family. The native <dialog> is a transparent, full-viewport top-layer shell;
-// the engine animates the inner panel div, and a real backdrop div makes the
-// overlay a gesture surface while the native ::backdrop remains transparent.
+// Sheet — one component that is a snap-point bottom sheet on a phone and, past
+// the breakpoint, a side drawer or a centred dialog, morphing between the two
+// live while open. Spring physics, drag/flick gestures, a dismiss policy, and
+// an optional container-transform flight out of the trigger that opened it.
 //
-// CONTROLLED CONTRACT. `open` is required and is never mutated here. Escape,
-// a backdrop tap, an allowed swipe, or a native close calls @close(reason),
-// where reason is 'escape', 'backdrop', 'swipe', or 'close'. The parent flips
-// `open`; syncOpen() then
-// asks SheetEngine to hide, and only the engine's `hidden` event closes the
-// native dialog. Native `cancel` is always preventDefault'd. maxDisplayWidth is
-// an opening ceiling: above it a closed open intent is suppressed without
-// manufacturing a user-dismissal reason. It never tears down an already-open
-// controlled sheet; shrinking below the ceiling opens while `open` remains true.
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <dialog-panel> /
+// <sheet-panel> custom elements from @magic-spells/sheet (plus its
+// @magic-spells/dialog-panel peer) and binds attributes to them. It replaces a
+// 2,400-line port plus three copied lib files. Why:
 //
-// SNAP CONTRACT. `snapPoints` accepts a space-separated CSS-length string or an
-// array of CSS lengths; default '85vh'. A hidden browser probe resolves every
-// top-level token independently while preserving whitespace inside functions,
-// so viewport-unit variants and expressions such as calc(100dvh - 4rem),
-// min(), clamp(), and var() keep their native CSS semantics. Invalid or
-// zero-height tokens are discarded. `snapPoints` is a MOBILE-PROFILE prop and
-// nothing else: only a bottom sheet below the breakpoint reads it, and it uses
-// the full ascending list. Every other profile sizes itself by measurement —
-// sides take their measured fixed width, and center at any width AND bottom
-// past the breakpoint take their measured intrinsic content height (both are
-// dismiss-only, so there is nothing to snap to). Mobile and desktop are
-// therefore independent resting geometries that the breakpoint FLIPs between,
-// and a content-sized desktop bottom panel may stand TALLER than the largest
-// mobile snap — the recipe's max-h is its only ceiling. `snap` is
-// optional-controlled: when
-// present, the parent owns the index through @snapChange(index); when absent, the
-// piece commits releases locally. `initialSnap` selects the first uncontrolled
-// index on every open and defaults to largest.
+//   1. The value here is motion, not markup. Spring integration, snap release
+//      policy, the scroll-chain handoff that decides whether a finger belongs to
+//      the sheet or to a nested scroller, the profile morph across the
+//      breakpoint, and the trigger-morph transport are all subtle, load-bearing
+//      and maintained upstream. A fork of that is a liability, and an upstream
+//      fix reaches every consumer through a version bump instead of a re-port.
+//   2. There is nothing token-styled to own. The panel's own chrome is one
+//      background, one radius and one handle pill, all already published as CSS
+//      custom properties — so the whole design-system bridge is four variables
+//      set on the root element (see THEME below).
 //
-// SLOTS. The named header slot replaces the stock header fallback — the title.
-// Because Puzzle has no slot-filled probe, a custom header must bring its own
-// accessible heading and pass `labelledby`; otherwise the title fallback
-// supplies the generated heading id. The grabber pill is deliberately NOT in
-// that fallback for any position (see the fifth surface below): it is hosted on
-// the panel and floats, so it survives any header content and a custom header
-// never re-adds it. The header wrapper owns the top padding and is
-// `empty:hidden`; the footer wrapper is `empty:hidden`. Untagged call-site
-// content renders through <Children/>.
+//   <Sheet open={ cartOpen } title="Your cart" @hide={ closeCart }>
+//     <CartLines/>
+//     <Button slot="footer" data-action-hide-dialog data-result="checkout">Checkout</Button>
+//   </Sheet>
 //
-// The footer wrapper's emptiness is load-bearing beyond hiding it: the panel's
-// safe-area rules key off `:not(:empty)` on it, which is this port's stand-in
-// for the source's `:has(sheet-footer)` — Puzzle has no is-slot-filled probe.
-// That works only because the compiler emits no whitespace text nodes inside an
-// element, so an unfilled Slot leaves the div genuinely childless. Wrapping the
-// Slot in anything, or introducing a placeholder child, silently hands the
-// inset to two owners at once.
+// OPEN IS EDGE-TRIGGERED, AND THE SHEET CLOSES ITSELF. The parent owns `open`,
+// but only a CHANGE to it acts: true → show(), false → hide(). An unrelated
+// re-render never re-opens a sheet the user just swiped away while the parent's
+// state still says open. The sheet dismisses itself on Escape, a backdrop tap,
+// an allowed swipe, or any [data-action-hide-dialog] descendant, and REPORTS
+// through @hide; the parent's job is to flip `open` back to false there so the
+// next open is a fresh edge. Nothing here calls preventDefault on `cancel` —
+// dialog-panel already owns that.
 //
-// MEASUREMENT. prepareOpen() lays out the real panel (temporarily display:flex +
-// visibility:hidden while the dialog is closed), then reads
-// getBoundingClientRect(). Side width, center height, and every card-mode edge
-// inset therefore match the caller's actual Tailwind overrides exactly. Bottom
-// snaps use a hidden CSS measurement probe. Numeric props replace the remaining
-// probes: exitCushion defaults to 28px;
-// morphDuration defaults to 600ms and collapses to 0 under reduced motion.
+//   @show()                        the entrance settled
+//   @hide({ result, triggerElement })
+//                                  the exit finished. `result` is the
+//                                  data-result of the [data-action-hide-dialog]
+//                                  button that closed it, and null for Escape,
+//                                  a backdrop tap or a swipe. That is how a
+//                                  footer answers a question:
+//                                    <Button slot="footer"
+//                                      data-action-hide-dialog
+//                                      data-result="delete">Delete</Button>
+//                                  and the parent reads detail.result in @hide.
+//   @snapChange(index)             a release committed a different snap
 //
-// GESTURES AND DISMISS POLICY. Five DragGesture instances preserve the source's
-// continuous tracking, independent axes, rolling velocity, and deferred pointer
-// capture. Header/footer/backdrop always claim; content snapshots its complete
-// scroll chain at pointerdown and delegates the finger-space decision to
-// sheet-policy. The one template touchmove listener prevents native scrolling
-// only after the sheet claims. `dismiss` is parsed LIVE at every escape,
-// backdrop, and swipe guard. A refused swipe is redirected to the active snap
-// and reports snapRelease({ prevented: true }); an allowed swipe queues release
-// velocity on SheetEngine before asking the parent to close.
+// Props (every attribute prop renders NO attribute when unset, so the
+// component's own defaults apply — see its README for the full semantics)
+//   open           bool, edge-triggered as above
+//   title          stock header heading; generates its id and wires
+//                  aria-labelledby. Ignored once the header slot is filled.
+//   labelledby     id of the labelling heading, for a filled header slot
+//   snapPoints     space-separated CSS lengths, or an array of them. MOBILE
+//                  BOTTOM ONLY — no other profile reads it.
+//   initialSnap    zero-based opening snap index
+//   position       'bottom' (default) | 'left' | 'right' | 'center'
+//   mode           'edge' (default) | 'card'
+//   breakpoint     desktop threshold in px (default 768)
+//   desktopPosition / desktopMode / desktopEffect / desktopExitEffect
+//                  the wide profile. Each falls back to its mobile twin except:
+//                  a bottom sheet fans out to `center`, and desktopMode is
+//                  always `card` unless you say otherwise.
+//   effect         'slide' (default) | 'fade-scale' | 'slide-fade'
+//   exitEffect     leaving effect; falls back to `effect`
+//   dismiss        which of `swipe backdrop escape` may dismiss; 'none' locks it
+//   maxDisplayWidth  largest viewport width where opening is allowed
+//   spring         '<attraction> <friction>' entrance override
+//   morphTrigger   CSS selector or Element the panel grows out of and shrinks
+//                  back into. Also the focus-return target. Without it the sheet
+//                  still returns focus — document.activeElement at open time is
+//                  passed to show() — it simply does not morph.
+//   snap           optional-controlled snap index; a change calls snapTo().
+//                  Pair it with @snapChange. It does not seed the opening index
+//                  — use initialSnap for that.
+//   showGrabber    false zeroes the handle pill and the room reserved for it.
+//                  CSS only; the drag surfaces are unaffected.
+//   class          merged onto <sheet-panel>
+//   backdropClass  merged onto <dialog-backdrop>
+//   style          merged onto <sheet-panel> AFTER the piece's own classes. It
+//                  must not CHANGE between renders: the component writes
+//                  --sheet-active-size into that same style attribute every
+//                  frame, and a changing binding rewrites the whole attribute.
 //
-// THE FIFTH SURFACE. The panel itself is the fifth gesture, and it exists for one
-// region: a side sheet's handle strip. Side profiles reserve the pill's own 12px
-// footprint as panel padding no child surface covers, the pill floats over it as
-// a pointer-events-none panel child, and the panel takes touch-action:
-// pinch-zoom so no native PAN can begin on the strip while a two-finger zoom
-// still can (the content's own `manipulation` keeps nested scrolling working
-// below it). It claims rigidly, like the header.
+// MARKUP CONTRACT. <sheet-header> always renders — it hosts the grabber
+// pseudo-element and is an unconditional drag surface. The header slot's
+// fallback body is the `title` heading, so a FILLED header slot replaces it
+// entirely and must bring its own heading plus a matching `labelledby` (there is
+// no is-slot-filled probe). Untagged children become the scrollable
+// <sheet-content>. The footer slot fills <sheet-footer>, which is `empty:hidden`
+// so an unfilled slot leaves no visible bar. A slot="…" attribute must sit on a
+// DIRECT child of the <Sheet> tag, so wrap two footer buttons in one div.
 //
-// An earlier port put the side pill inside the header slot fallback instead. That
-// made the pill itself live — it is a header descendant, and the header always
-// claims — but it did not satisfy the invariant: the claim surface was a 4px x
-// 40px sliver rather than a full-height edge strip, the region beside the pill
-// belonged to the content and so deferred to its scroll chain, and a caller
-// filling the header slot deleted the side sheet's advertised swipe outright.
-// Hosting the pill on the panel, as the source deliberately does, fixes all
-// three.
+// LOADING. The package registers its custom elements at module scope with
+// `class extends HTMLElement`, a ReferenceError under Node — so a top-level
+// import would crash the prerender pass of any app on static or hybrid output.
+// The import lives in mounted() instead, which never runs server-side. Markup
+// prerenders correctly either way: an un-upgraded <dialog> is closed, so a
+// closed sheet is invisible before the JS lands, and an `open` that is already
+// true when the view mounts is remembered and applied the moment the module
+// arrives.
 //
-// The trap is bubbling: every child surface's pointerdown reaches the panel's
-// DragGesture too, and one that merely ignored the callbacks would still capture
-// the pointer at slop and starve the surface that owns it. #dragStart therefore
-// REFUSES any hit whose target is not the panel directly, via DragGesture's
-// return-false seam, which leaves the refused gesture fully inert — no capture,
-// no further callbacks. Desktop and fine-pointer profiles drop the strip and the
-// pill, so there the panel is fully covered and every hit is refused.
+// STYLESHEETS. This piece needs TWO, neither of which is part of the copied
+// file. Add them once to your app's style entry:
+//   @import "@magic-spells/dialog-panel/css" layer(components);
+//   @import "@magic-spells/sheet/css" layer(components);
+// dialog-panel first — sheet.css deliberately overrides some of its rules. The
+// layer is not optional cosmetics: both stylesheets use plain element selectors,
+// and an unlayered import would outrank every Tailwind utility on the elements.
 //
-// DESKTOP FALLBACK. Past `breakpoint` (default 768) the desktop* props take
-// over, and each falls back to its mobile twin — except `desktopPosition` when
-// `position` is bottom, which defaults to 'center' so a wide sheet sizes to its
-// content instead of standing as a full-width 85vh slab. Pass
-// desktopPosition="bottom" to opt back in. See #resolveProfile.
+// THEME. The design-system bridge is four custom properties set on the ROOT
+// <dialog-panel> as arbitrary-property utilities — no <style> block, no hex. The
+// root rather than the panel because <dialog-backdrop> is a SIBLING of the
+// dialog and reads the overlay tokens by inheritance. Everything else (radii,
+// card margin, shadow, content padding, spring feel) keeps the component's own
+// defaults; retune those from your app CSS, or change the token VALUES in
+// theme/pieces.css to move every piece at once.
 //
-// PROFILE MORPH. A breakpoint/profile-key crossing while open is a synchronous
-// FLIP split across Puzzle's patcher: beginMorph() parks the spring and pins the
-// backdrop; the live FROM box is read; new literal class maps are patched; then
-// afterUpdate() measures the unpinned TO box and transitions explicit
-// top/left/width/height/border-radius pixels. transitionend and a duration+120ms
-// timeout share one teardown. Re-entrant crossings always retarget from the
-// currently painted box. Same-profile resizes remeasure without morphing —
-// unless one arrives mid-morph, which retargets the flight synchronously
-// (#retargetMorph) rather than waiting for it to land somewhere stale.
-//
-// TRIGGER MORPH. `morphTrigger` (a CSS selector or an Element) makes the sheet
-// grow out of the thing that opened it and shrink back into it: a MorphEngine
-// blob — a body child at `blobZIndex` (1002, above the dialog+scrim at 1000 and
-// the panel at 1001) — flies between the trigger's box and the panel's, while
-// the real dialog stays demoted and invisible. Named `morphTrigger` rather than
-// `morph` because this component already owns the `morph*` namespace for the
-// PROFILE FLIP above, which is an unrelated feature.
-//
-// The two features share one dial on purpose: `morphDuration` is both the
-// profile-morph duration AND the trigger morph's on/off switch. Zero disables
-// both, so `prefers-reduced-motion` (which zeroes it in #morphDuration) is the
-// entire reduced-motion policy for this component in one read, with the
-// ordinary spring entrance and exit left standing.
-//
-// The transport is classified EXACTLY ONCE per open, in syncOpen()'s fresh-open
-// branch, before anything paints — see #beginOpenTransport. Puzzle's
-// afterUpdate() runs repeatedly and re-reading engine.animatesPanel mid-flight
-// would promote a dialog whose blob is still flying, or demote one mid-exit.
-//
-//   open with a usable trigger  → proxy: NO showModal here; the dialog is only
-//                                 display-forced, and the engine's `reveal`
-//                                 (75% of the blob flight, panel still
-//                                 invisible) promotes it. That promotion is
-//                                 also the focus event, which is why deferring
-//                                 it gets focus timing right for free.
-//   open with no usable trigger → direct: showModal() immediately.
-//   deliberate close, trigger still usable → demote FIRST (close() before
-//                                 engine.hide(), in the same task), because a
-//                                 top-layer dialog paints over a body-child
-//                                 blob whatever the z-index. The force-paint
-//                                 before close() keeps the panel laid out so
-//                                 MorphEngine can measure it inside hide().
-//   swipe dismissal / trigger detached or scrolled away → direct spring exit;
-//                                 the engine hands the trigger back at the
-//                                 hidden settle and `triggerreturn` plays the
-//                                 pop (#playTriggerReturn) via WAAPI.
-//
-// TWO CONSTRAINTS WITH NO CODE FIX.
-//
-//   Ancestor transforms. `fixed inset-0` resolves against the viewport UNLESS
-//   an ancestor carries `transform`, `filter`, `backdrop-filter`, `perspective`,
-//   `contain: paint`, or `will-change` on any of those — that ancestor becomes
-//   the containing block. In the top layer the dialog ignores its ancestors;
-//   demoted (which is exactly what a proxy flight does) it does not. So a
-//   transformed page wrapper makes the panel JUMP at the reveal promotion and
-//   again at the hide demotion. Keep the sheet out of transformed wrappers.
-//
-//   Known gap, matching upstream: a reverse flight stays bound to the trigger
-//   it was armed with. Flipping `open` true again with a DIFFERENT morphTrigger
-//   while the morph-back is still flying reopens with the new content but
-//   morphs into the OLD box. Upstream deliberately deferred that fix (the
-//   classification point would have to move); do not attempt it here.
-//
-// IMPERATIVE INLINE STYLES. The panel and backdrop deliberately have NO
-// `style={}` bindings and there is no <style> block. SheetEngine/DragGesture/
-// morph code own panel inline styles between renders; the engine change listener
-// alone writes backdrop opacity. The source's public --sheet-progress and
-// --sheet-backdrop-progress CSS tokens are deliberately dropped: the real
-// backdrop consumes engine.backdropProgress directly.
+// KNOWN GAPS, all upstream and all cosmetic:
+//   * `empty:hidden` hides an unfilled footer but the component's
+//     `sheet-panel:has(sheet-footer)` safe-area rules still match it, so a
+//     footerless sheet reserves a footer's inset on a notched phone.
+//   * The `hidden` detail carries no reason, so @hide cannot tell Escape from a
+//     backdrop tap from a swipe. Only a [data-action-hide-dialog] close is
+//     distinguishable, through `result`.
+//   * There is no `top` position, and no handle="none" — hence showGrabber
+//     being CSS-only.
+//   * maxDisplayWidth refuses the open silently: show() returns false and no
+//     event fires, so a parent that set open={true} above the ceiling stays out
+//     of sync until it flips the flag back.
 let uid = 0;
 
-const POSITIONS = new Set(['bottom', 'left', 'right', 'center']);
-const MODES = new Set(['edge', 'card']);
-const EFFECTS = new Set(['slide', 'fade-scale', 'slide-fade']);
-const SCROLLABLE_OVERFLOW = new Set(['auto', 'scroll']);
-
-const RESIZE_THROTTLE_MS = 100;
-const FLICK_VELOCITY = 0.5;
-const OVERSCROLL_RESISTANCE = 0.2;
-// How long a swipe dismissal waits for the parent to answer before concluding it
-// was refused. The source reads a synchronous `beforeHide` veto; a controlled
-// Puzzle piece cannot, because the answer is a prop flip that arrives through
-// the framework's own scheduler — PuzzleView.#scheduleRender and the data
-// store's flush are both requestAnimationFrame, and the store additionally arms
-// a 220ms fallback for the visibility boundary. A microtask therefore ALWAYS
-// observes the sheet still shown and would report every dismissal as refused.
-// This deadline clears the slowest of those paths (220ms + a frame) with margin;
-// a parent that accepts resolves the release on the frame it re-renders, so the
-// timer only ever fires on the rare genuine refusal.
-const DISMISS_ACK_MS = 250;
-const MORPH_TIMEOUT_PADDING_MS = 120;
-const DEFAULT_MORPH_DURATION = 600;
-const DEFAULT_MORPH_EASING = 'cubic-bezier(0.34, 1.32, 0.52, 1)';
-
-// Scrim and dialog sit at 1000, the panel at 1001 (PANEL_BASE's z-10 inside the
-// dialog's own stacking context), and the blob at 1002 as a body child. Five- and
-// six-digit z-indexes are banned across the library — Dialog.pzl's 10000 is a
-// known bug there and must not be copied.
-const DEFAULT_BLOB_Z_INDEX = 1002;
-
-// The pop the trigger plays when it is handed back WITHOUT a reverse morph — a
-// swipe dismissal, or a close after the trigger detached. No <style> block here,
-// so upstream's `[sheet-return]` + @keyframes becomes a WAAPI animation, the
-// same precedent Dialog.pzl's playEnter/playExit set.
-const TRIGGER_RETURN_KEYFRAMES = [
-  { opacity: 0, transform: 'scale(0.86)' },
-  { opacity: 1, transform: 'scale(1.04)', offset: 0.6 },
-  { opacity: 1, transform: 'scale(1)' },
-];
-const DEFAULT_TRIGGER_RETURN_DURATION = 280;
-const DEFAULT_TRIGGER_RETURN_EASING = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
-
-// z-[1000] is a no-op while the dialog is in the top layer, which is most of the
-// time. It matters for the window a proxy trigger morph opens: there the dialog
-// is demoted into normal flow, and without this it would be `z-index: auto` and
-// its order against the blob (1002) an accident of document order.
-const DIALOG =
-  'fixed inset-0 z-[1000] m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 ' +
-  'open:flex overflow-hidden text-body [&::backdrop]:bg-transparent';
-
-const DIALOG_PROFILE = {
-  bottom: 'flex-col justify-end',
-  left: 'flex-row justify-start',
-  right: 'flex-row justify-end',
-  center: 'items-center justify-center',
-};
-
-// `touch-pinch-zoom` rather than `touch-none`, here and on every other rigid
-// drag surface below. The two are not the same refusal: `none` also refuses a
-// two-finger pinch, and the UA refuses it before the drag-claim logic is ever
-// consulted, so a low-vision user could not enlarge a form in any sheet
-// (WCAG 1.4.4). A pinch is two-finger and cannot collide with the single-finger
-// drag these surfaces are protecting.
-const BACKDROP =
-  'absolute inset-0 bg-black/50 backdrop-blur-sm touch-pinch-zoom';
-
-// SAFE AREA. env(safe-area-inset-*) measures from the SCREEN edge, so how much
-// of it a surface must reserve depends on how far the panel's own box already
-// floats from that edge. The source states that distance once as a
-// --_sheet-safe-float custom property; this port has no custom properties and no
-// <style> block, so it is baked into two literal spellings of every rule and
-// selected by mode:
-//
-//   edge   — the panel is welded to the edge and floats by nothing.
-//   float  — card mode AND center. A card floats by the 0.75rem card margin on
-//            every side it touches. A centred dialog floats by its own centring
-//            rather than by a margin, but its max-height cap is
-//            100dvh - 2 * 0.75rem, so its gap to the bottom edge is that margin
-//            at the cap and strictly more below it — the same number is the
-//            tightest value that can never under-reserve.
-//
-// Discounting the float is what stops a card measuring from the wrong edge: a
-// card 12px above the screen needs 22px of a 34px inset, not all 34.
-//
-// The panel owns its edge inset only while there is no footer to own it, which
-// is the source's `:has(sheet-footer)` reset stated as a Tailwind variant. It
-// keys off the footer wrapper's existing empty:hidden convention — an unfilled
-// Slot renders no children at all, so `:not(:empty)` is exactly "a footer
-// exists". The variant's :has() argument carries its own specificity, so the
-// reset outranks the base padding whatever the stylesheet's source order.
-const PANEL_SAFE_BOTTOM =
-  'pb-[env(safe-area-inset-bottom,0px)] ' +
-  'has-[[data-sheet-surface=footer]:not(:empty)]:pb-0';
-const PANEL_SAFE_LEFT =
-  'pl-[env(safe-area-inset-left,0px)] ' +
-  'has-[[data-sheet-surface=footer]:not(:empty)]:pl-0';
-const PANEL_SAFE_RIGHT =
-  'pr-[env(safe-area-inset-right,0px)] ' +
-  'has-[[data-sheet-surface=footer]:not(:empty)]:pr-0';
-
-// A side sheet's axis inset runs the panel's WHOLE height, unlike a bottom
-// sheet's, whose only edge is the one the footer already covers. So handing that
-// edge to the footer leaves the header and content at their bare 1rem gutter,
-// under a landscape notch. They take the same reservation, gated on the same
-// footer, because without one the panel above still holds the padding for the
-// whole thing and these would double-count it.
-//
-// Every entry below is ONE class and must stay one unbroken string literal:
-// Tailwind's scanner reads the raw source text, so a candidate split across a
-// `+` concatenation is never generated. Same rule as the shadow recipes above.
-const PANEL_SIDE_SAFE = {
-  'left:edge':
-    'has-[[data-sheet-surface=footer]:not(:empty)]:[&>[data-sheet-surface=header],&>[data-sheet-surface=content]]:pl-[calc(1rem+env(safe-area-inset-left,0px))]',
-  'left:float':
-    'has-[[data-sheet-surface=footer]:not(:empty)]:[&>[data-sheet-surface=header],&>[data-sheet-surface=content]]:pl-[calc(1rem+max(0px,env(safe-area-inset-left,0px)-0.75rem))]',
-  'right:edge':
-    'has-[[data-sheet-surface=footer]:not(:empty)]:[&>[data-sheet-surface=header],&>[data-sheet-surface=content]]:pr-[calc(1rem+env(safe-area-inset-right,0px))]',
-  'right:float':
-    'has-[[data-sheet-surface=footer]:not(:empty)]:[&>[data-sheet-surface=header],&>[data-sheet-surface=content]]:pr-[calc(1rem+max(0px,env(safe-area-inset-right,0px)-0.75rem))]',
-};
-
-const PANEL_BASE =
-  'relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface will-change-transform';
-
-// A shadow is always transparent BLACK, never a theme colour. `--color-faint`
-// is a text token and becomes light in dark mode, which paints a white halo.
-// These recipes keep the source/BottomSheet ambient pair literally visible to
-// Tailwind's scanner. The edge recipes add a surface-colour bleed skirt so
-// rubber-band travel cannot expose the backdrop past a flush screen edge.
-const PANEL_BOTTOM_EDGE =
-  'max-h-[100dvh] rounded-t-2xl border-t border-border ' +
-  PANEL_SAFE_BOTTOM +
-  ' shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
-
-// The card floats by the bare card margin and reserves NOTHING for the home
-// indicator itself, exactly like the source's `inset: auto 12px 12px` plus
-// `padding-bottom: 0`. Its footer then reserves the remainder — 22px of a 34px
-// inset — which is the arithmetic the float discount exists for. Folding the
-// inset into this margin instead (the port's first cut) floated the card clear
-// of the safe area on its own, which double-counted the moment the footer
-// discount below was added AND left max-h under-stated by the same amount, so a
-// notched device could size the card past the viewport.
-const PANEL_BOTTOM_CARD =
-  'mx-auto mb-[0.75rem] max-h-[calc(100dvh-1.5rem)] ' +
-  'rounded-2xl border border-border ' +
-  'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
-
-// The bottom recipes deliberately carry NO height: mobile and desktop are two
-// independent resting geometries and the height is the thing that differs.
-// Mobile takes a snap point, so the class is the 85dvh fallback the snap
-// resolution then overwrites; desktop ignores snapPoints entirely and measures
-// its own content, exactly like center. These are appended rather than layered
-// over a base height because registry class strings have no conflict resolver —
-// stacking h-[85dvh] and h-fit would let Tailwind's stylesheet order decide,
-// not the attribute order. The max-h caps stay on the recipes: they bound both
-// profiles, and on desktop the cap is the ONLY ceiling, so a content-sized
-// panel can legitimately stand taller than the largest mobile snap.
-//
-// The ceiling IS card geometry, so unlike the height it has to be said per
-// mode — and the two spellings live on PANEL_BOTTOM_EDGE (100dvh) and
-// PANEL_BOTTOM_CARD (100dvh minus two card margins), which PANEL_PROFILE
-// selects between and can never both apply. Declared once on a mode-agnostic
-// recipe and overridden, it would subtract two margins from a panel welded to
-// the bottom edge and leave a 24px strip of scrim above it, with source order
-// deciding which of the two won.
-const BOTTOM_HEIGHT_MOBILE = 'h-[85dvh]';
-const BOTTOM_HEIGHT_DESKTOP = 'h-fit';
-
-// The two profiles whose height IS their content: center at any width, and
-// bottom past the breakpoint. Both resolve their single snap by measurement and
-// both need the content-resize observer.
-const CONTENT_SIZED = (profile) =>
-  profile.position === 'center' ||
-  (profile.position === 'bottom' && profile.desktop);
-
-const PANEL_LEFT_EDGE =
-  'h-full rounded-r-2xl border-r border-border ' +
-  PANEL_SAFE_LEFT +
-  ' shadow-[-120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
-
-const PANEL_RIGHT_EDGE =
-  'h-full rounded-l-2xl border-l border-border ' +
-  PANEL_SAFE_RIGHT +
-  ' shadow-[120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
-
-const PANEL_LEFT_CARD =
-  'my-[0.75rem] ml-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] ' +
-  'rounded-2xl border border-border ' +
-  'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
-
-const PANEL_RIGHT_CARD =
-  'my-[0.75rem] mr-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] ' +
-  'rounded-2xl border border-border ' +
-  'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
-
-const PANEL_CENTER =
-  'm-auto h-fit max-h-[calc(100dvh-1.5rem)] ' +
-  'rounded-2xl border border-border ' +
-  'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
-
-const PANEL_PROFILE = {
-  'bottom:edge': PANEL_BOTTOM_EDGE,
-  'bottom:card': PANEL_BOTTOM_CARD,
-  'left:edge': PANEL_LEFT_EDGE,
-  'left:card': PANEL_LEFT_CARD,
-  'right:edge': PANEL_RIGHT_EDGE,
-  'right:card': PANEL_RIGHT_CARD,
-};
-
-const PANEL_WIDTH = {
-  'bottom:edge': 'w-full',
-  'bottom:card': 'w-[calc(100%-1.5rem)]',
-  'left:edge': 'w-[min(26rem,90vw)]',
-  'left:card': 'w-[min(26rem,90vw)]',
-  'right:edge': 'w-[min(26rem,90vw)]',
-  'right:card': 'w-[min(26rem,90vw)]',
-  center: 'w-[min(28rem,calc(100vw-1.5rem))]',
-};
-
-// Desktop bottom cards yield this default cap outright when the caller supplies
-// any max-width utility. Registry class strings have no conflict resolver, and
-// Tailwind's generated selector order otherwise makes a plain override win for
-// some utility spellings and lose for others.
-const PANEL_WIDTH_CAP = 'max-w-[26rem]';
-const CALLER_MAX_WIDTH = /(?:^|\s)\S*max-w-/;
-const CALLER_WIDTH = /(?:^|\s)(?:[\w-]+:)*w-/;
-
-// pt-4 is unconditional so the header sits the same distance from the top edge
-// on touch and on desktop. The pills float inside that padding instead of
-// occupying flow, so hiding them (fine pointer, or desktop) cannot reflow the
-// header. empty:hidden keeps a title-less, slot-less sheet from reserving it.
-//
-// The side gutters are spelled as the physical `pl-4 pr-4` rather than `px-4`
-// so PANEL_SIDE_SAFE's override competes longhand-against-longhand on plain
-// specificity. `px-4` compiles to the logical `padding-inline` shorthand, and
-// leaving a physical longhand to out-cascade a logical shorthand is a rule
-// nothing here needs to depend on.
-const HEADER = 'shrink-0 touch-pinch-zoom select-none pl-4 pr-4 pt-4 empty:hidden';
-const HEADER_HANDLE = 'shrink-0 touch-pinch-zoom select-none pl-4 pr-4 pt-4';
-// `manipulation` is exactly `pan-x pan-y pinch-zoom`, and the third keyword is
-// the point: it is NOT implied by the first two, so the pair the claim logic
-// wanted also refused every two-finger zoom inside the sheet, before the claim
-// logic saw the gesture at all. Arbitration belongs to the claim policy and the
-// non-passive touchmove veto, not to touch-action.
-const CONTENT =
-  'min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain touch-manipulation pl-4 pr-4 py-4';
-
-// EVERY profile's footer is the bottom-most surface of a column-flex panel, so
-// it — not the panel — is what stands between a button and the home indicator,
-// whichever edge the sheet is dragged from. Keying this to the dismiss axis
-// instead left a full-height side sheet reserving nothing at all in portrait,
-// where safe-area-inset-left is 0, and dropped its footer buttons into the 34px
-// band whose lower half the system swipe-up eats.
-//
-// The four sides are spelled as longhands and exactly one of each is ever
-// emitted, so no two utilities here ever set the same property: `p-4` plus a
-// `pb-[...]` longhand would be equal-specificity and leave Tailwind's own
-// utility order to decide the winner.
-const FOOTER = 'shrink-0 touch-pinch-zoom bg-surface pt-4 empty:hidden';
-const FOOTER_SAFE_BOTTOM = {
-  edge: 'pb-[calc(1rem+env(safe-area-inset-bottom,0px))]',
-  float: 'pb-[calc(1rem+max(0px,env(safe-area-inset-bottom,0px)-0.75rem))]',
-};
-const FOOTER_SAFE_LEFT = {
-  edge: 'pl-[calc(1rem+env(safe-area-inset-left,0px))]',
-  float: 'pl-[calc(1rem+max(0px,env(safe-area-inset-left,0px)-0.75rem))]',
-};
-const FOOTER_SAFE_RIGHT = {
-  edge: 'pr-[calc(1rem+env(safe-area-inset-right,0px))]',
-  float: 'pr-[calc(1rem+max(0px,env(safe-area-inset-right,0px)-0.75rem))]',
-};
-
-// Every pill is hosted on the PANEL and is `pointer-events-none` exactly like
-// the source's `sheet-panel::before`: it floats over the space its neighbours
-// already reserve, so a pointerdown there hits the panel itself — the fifth drag
-// surface — rather than a 4px sliver of pill. Nothing here is in flow and
-// nothing carries a margin: a pill appears and disappears (fine pointer, or
-// desktop) without moving a single header pixel. The bottom pill rides inside
-// the header's own pt-4, so it needs no reserved strip; the sides still get one
-// because their pill sits beside the content rather than above it.
-const GRABBER_BOTTOM =
-  'pointer-fine:hidden pointer-events-none absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-faint';
-const GRABBER_LEFT =
-  'pointer-fine:hidden pointer-events-none absolute right-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint';
-const GRABBER_RIGHT =
-  'pointer-fine:hidden pointer-events-none absolute left-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint';
-
-// The strip reserves only the pill's own footprint — 8px offset + 4px thickness
-// = 12px — and nothing more: breathing room on top of it shifts every child over
-// and reads as lopsided padding on a narrow panel, and the children's own px-4
-// gutter already provides the clearance. Desktop drops the strip in JS (no touch
-// swipes above the breakpoint, and a desktop sheet is dismiss-only); a fine
-// pointer drops it in CSS, matching the two places the source hides the handle.
-const PANEL_SIDE_STRIP = {
-  left: 'pr-3 pointer-fine:pr-0',
-  right: 'pl-3 pointer-fine:pl-0',
-};
-
-// HEADER owns the top padding for all three, so a title only spells out the gap
-// below itself.
-const TITLE_BOTTOM = 'pb-3 text-center text-base font-semibold text-ink';
-const TITLE_SIDE = 'pb-4 text-left text-base font-semibold text-ink';
-const TITLE_CENTER = 'text-center text-base font-semibold text-ink';
-
-const MORPH_PROPERTIES = [
-  'position',
-  'top',
-  'left',
-  'right',
-  'bottom',
-  'width',
-  'height',
-  'maxWidth',
-  'maxHeight',
-  'margin',
-  'borderRadius',
-  'transition',
-];
-
-const MORPH_TRANSITION_PROPERTIES = [
-  'top',
-  'left',
-  'width',
-  'height',
-  'border-radius',
-];
-
-function scrollMetrics(element) {
-  const rtl = getComputedStyle(element).direction === 'rtl';
-  return {
-    scrollTop: element.scrollTop,
-    scrollLeft: normalizeScrollLeft(
-      element.scrollLeft,
-      element.scrollWidth,
-      element.clientWidth,
-      rtl
-    ),
-    scrollHeight: element.scrollHeight,
-    scrollWidth: element.scrollWidth,
-    clientHeight: element.clientHeight,
-    clientWidth: element.clientWidth,
-  };
+// A prop that was not passed renders no attribute — `false` is the compiler's
+// omit sentinel, so the component's own default stands.
+function attr(value) {
+  return value === undefined || value === null || value === '' ? false : String(value);
 }
 
-function scrollsOnAxis(element, axis) {
-  const style = getComputedStyle(element);
-  return SCROLLABLE_OVERFLOW.has(axis === 'x' ? style.overflowX : style.overflowY);
+function oneOf(value, allowed) {
+  return allowed.includes(value) ? value : false;
 }
 
-/**
- * Whether the page — as opposed to a live morph — is hiding this trigger.
- *
- * Only meaningful while the engine is hidden; see the state gate in
- * #usableTriggerBox for why.
- * @param {Element} element - Candidate morph trigger.
- * @returns {boolean} True when the element is not hidden by style.
- */
-function triggerIsVisible(element) {
-  const style = getComputedStyle(element);
-  if (style.visibility === 'hidden' || style.display === 'none') return false;
-  const opacity = Number.parseFloat(style.opacity);
-  return !(Number.isFinite(opacity) && opacity === 0);
-}
+const POSITIONS = ['bottom', 'left', 'right', 'center'];
+const MODES = ['edge', 'card'];
+const EFFECTS = ['slide', 'fade-scale', 'slide-fade'];
+
+// The whole design-token bridge. Panel and handle map onto pieces.css tokens so
+// the sheet follows the app's theme in light and dark; the overlay reproduces
+// the look the ported piece had (black at 50%, blurred) rather than the
+// component's slightly lighter default.
+const THEME =
+  '[--sheet-panel-background:var(--color-surface)] ' +
+  '[--sheet-handle-color:var(--color-faint)] ' +
+  '[--sheet-overlay-background:rgb(0_0_0_/_0.5)] ' +
+  '[--sheet-overlay-blur:8px]';
+
+// showGrabber={false}, expressed entirely in CSS. Zeroing the pill's own
+// dimensions makes it paint nothing; the two *-inset properties are what the
+// header and the side strip reserve for it, and they are computed on :root from
+// the pair above, so they have to be collapsed here as well or the panel keeps
+// padding for a handle that is not there. Same values the component's own
+// desktop and fine-pointer rules use.
+const NO_GRABBER =
+  '[--sheet-handle-height:0px] [--sheet-handle-side-thickness:0px] ' +
+  '[--sheet-handle-inset:var(--sheet-content-padding)] [--sheet-handle-side-inset:0px]';
+
+// The panel paints --color-surface, so its text has to come from the same token
+// family rather than inheriting whatever the page behind it had.
+const PANEL = 'text-body';
+
+// Centred on a bottom sheet, which is what the grabber and the drag axis both
+// point at; flush with the reading edge on a side drawer, where a centred
+// heading floats in the middle of a tall column. data-position is reflected by
+// the component from the RESOLVED profile, so this follows the breakpoint too.
+const TITLE =
+  'pb-3 text-base font-semibold text-ink text-center ' +
+  '[[data-position=left]_&]:text-left [[data-position=right]_&]:text-left';
 
 export default class Sheet extends PuzzleView {
-  #mounted = false;
-  #engine = null;
-  #gestures = [];
-  #profile = null;
-  #renderProfile = null;
-  #queuedProfile = null;
-  #snaps = [];
-  #drag = { active: false };
-  #pendingDismissal = null;
-  #morphInline = null;
-  #localSnap = null;
-  #settleTarget = null;
-  #programmaticSnap = null;
-  #snapRun = 0;
-  #returnFocus = null;
-  #resizeHandler = null;
-  #resizeTimer = null;
-  #centerObserver = null;
-  #centerTimer = null;
-  #pendingMorph = null;
-  #pendingMeasure = null;
-  #morph = null;
-  #measureSignature = null;
-  #needsRemeasure = false;
-  #springSignature = null;
-  #appliedProfileSignature = null;
-  // Set only by this run's `reveal`, so it means "the current proxy flight has
-  // already promoted the dialog" — the precondition for handleClose's
-  // force-close repair, and nothing weaker.
-  #proxyRevealed = false;
-  #triggerReturn = null;
-  #dialogPaintHeld = false;
-  // dialog.close() QUEUES its close event rather than firing it synchronously,
-  // so a boolean cleared right after the call is already gone by the time the
-  // handler runs. A counter survives the gap, and survives two of them
-  // overlapping.
-  #expectedCloses = 0;
-  #blobDeferredProfile = null;
+  #id = `sheet-${++uid}`;
+  #panel = null;
+  #sheet = null;
+  #live = false;
+  #ready = false;
+  #lastOpen = false;
+  #lastSnap;
 
-  #engineChange = ({ backdropProgress }) => {
-    if (this.refs.backdrop) {
-      const value = Number.isFinite(backdropProgress) ? backdropProgress : 0;
-      this.refs.backdrop.style.opacity = String(Math.min(1, Math.max(0, value)));
-    }
+  #onShown = () => {
+    this.props.show?.();
   };
 
-  #engineShown = () => {
-    if (this.refs.backdrop) this.refs.backdrop.style.opacity = '1';
-    // Before the observer sync: the flush may rebuild or morph the profile, and
-    // #prepareOpen re-runs #syncCenterObserver against whatever it lands on.
-    this.#flushBlobProfile();
-    this.#syncCenterObserver();
-    const { shown } = this.props;
-    if (typeof shown === 'function') shown();
+  #onHidden = (event) => {
+    const detail = event.detail || {};
+    this.props.hide?.({
+      result: detail.result ?? null,
+      triggerElement: detail.triggerElement ?? null,
+    });
   };
 
-  #engineHidden = () => {
-    // Backstop accept: any route that hid the sheet without passing one of the
-    // named accept sites still resolves a banked dismissal truthfully.
-    this.#acceptDismissal();
-    this.#closeDialog();
-    this.#releaseDialogPaint();
-    if (this.refs.backdrop) this.refs.backdrop.style.opacity = '0';
-    this.#drag = { active: false };
-    this.#localSnap = null;
-    this.#settleTarget = null;
-    this.#programmaticSnap = null;
-    this.#proxyRevealed = false;
-    this.#blobDeferredProfile = null;
-    // The classification this run was given dies with the run; leaving it armed
-    // would make the NEXT deliberate close take the direct spring exit instead
-    // of morphing back into its trigger.
-    this.#engine?.cancelGestureExit();
-    this.#syncCenterObserver();
-    this.#unlockBody();
-    this.#restoreFocus();
-    const { hidden } = this.props;
-    if (typeof hidden === 'function') hidden();
-  };
-
-  // Only a proxy run emits `reveal`, so this is exactly "the blob has
-  // established the geometry and the real dialog may now be promoted". The
-  // props.open guard matters because `reveal` is asynchronous: a flight resumed
-  // after the parent already flipped `open` false must not wedge a modal open.
-  // This showModal() is also where focus (and any `autofocus`) enters.
-  #engineReveal = () => {
-    this.#proxyRevealed = true;
-    const dialog = this.element;
-    if (dialog && !dialog.open && this.props.open) dialog.showModal();
-  };
-
-  #engineTriggerReturn = ({ trigger }) => {
-    this.#playTriggerReturn(trigger);
-  };
-
-  #engineSnapChange = (detail) => {
-    const to = detail.to;
-    const programmatic = this.#programmaticSnap === to;
-    this.#settleTarget = null;
-    this.#programmaticSnap = null;
-
-    if (!this.#controlledSnap()) this.#localSnap = to;
-    if (!programmatic) {
-      const { snapChange } = this.props;
-      if (typeof snapChange === 'function') snapChange(to);
-    }
+  #onSnapChange = (event) => {
+    const to = event.detail?.to;
+    if (typeof to !== 'number') return;
+    // Record before announcing: a controlled parent echoing the same index back
+    // through `snap` must not read as a fresh request and re-run snapTo().
+    this.#lastSnap = to;
+    this.props.snapChange?.(to);
   };
 
   data(params, props) {
-    const id = (this._id ??= `pp-sheet-${++uid}`);
-    const requestedProfile = this.#resolveProfile(props);
-    let renderedProfile = requestedProfile;
-
-    if (!this.#renderProfile) {
-      this.#renderProfile = requestedProfile;
-    } else if (this.#engine?.blobFlight) {
-      // MorphEngine measured both endpoints at launch and owns every panel
-      // style until its terminal event. Swapping the class map underneath that
-      // snapshot creates two geometry owners, so keep the rendered profile and
-      // queue one latest-value flush for `shown`.
-      this.#blobDeferredProfile = requestedProfile;
-      renderedProfile = this.#renderProfile;
-    } else if (
-      this.#mounted &&
-      this.element?.open &&
-      !!props.open &&
-      this.#profileKey(requestedProfile) !== this.#profileKey(this.#renderProfile)
-    ) {
-      // Keep the old geometry through this patch. afterUpdate() reads its live
-      // box, then performs a second class-only patch for the FLIP destination.
-      this.#queuedProfile = requestedProfile;
-      renderedProfile = this.#renderProfile;
-    } else if (this.#pendingMorph || this.#morph) {
-      renderedProfile = this.#renderProfile;
-    } else {
-      this.#renderProfile = requestedProfile;
-    }
-
-    const signature = this.#measurementSignature(props);
-    if (this.#mounted && this.#measureSignature !== signature) {
-      this.#needsRemeasure = true;
-    }
-    this.#measureSignature = signature;
-
     const title = props.title || '';
+    const snapPoints = Array.isArray(props.snapPoints)
+      ? props.snapPoints.join(' ')
+      : props.snapPoints;
+
     return {
-      // Read imperatively by syncOpen(); returned so a prop flip still schedules
-      // the afterUpdate reconciliation.
-      open: !!props.open,
       title,
-      titleId: `${id}-title`,
-      labelledby: props.labelledby || (title ? `${id}-title` : false),
-      ...this.#classData(renderedProfile, props),
-    };
-  }
-
-  #classData(profile, props = this.props) {
-    const callerClass = props.class || '';
-    const position = profile.position;
-    const cardKey = `${position}:${profile.mode}`;
-    const side = position === 'left' || position === 'right';
-    const showGrabber =
-      props.showGrabber !== false && !profile.desktop && position !== 'center';
-    const desktopBottomCap =
-      profile.desktop && position === 'bottom' && profile.mode === 'card';
-    // How far this profile's own box already floats from the screen edges an
-    // env(safe-area-inset-*) is measured from — see the SAFE AREA note above.
-    // Center is `float` at any mode: it rests against no edge at all.
-    const floatKey =
-      profile.mode === 'card' || position === 'center' ? 'float' : 'edge';
-
-    let grabberClass = GRABBER_BOTTOM;
-    if (position === 'left') grabberClass = GRABBER_LEFT;
-    if (position === 'right') grabberClass = GRABBER_RIGHT;
-
-    let titleClass = TITLE_BOTTOM;
-    if (position === 'left' || position === 'right') titleClass = TITLE_SIDE;
-    if (position === 'center') titleClass = TITLE_CENTER;
-
-    return {
-      // Every pill belongs to the panel, not the header fallback, so it survives
-      // any header content — see the fifth-surface note above.
-      showGrabber,
-      dialogClass: [DIALOG, DIALOG_PROFILE[position]].filter(Boolean).join(' '),
-      backdropClass: [BACKDROP, props.backdropClass || ''].filter(Boolean).join(' '),
-      panelClass: [
-        PANEL_BASE,
-        position === 'center' ? PANEL_CENTER : PANEL_PROFILE[cardKey],
-        CALLER_WIDTH.test(callerClass)
-          ? ''
-          : PANEL_WIDTH[position === 'center' ? 'center' : cardKey],
-        // The bottom recipes carry no height of their own — see the note above.
-        position === 'bottom'
-          ? profile.desktop
-            ? BOTTOM_HEIGHT_DESKTOP
-            : BOTTOM_HEIGHT_MOBILE
-          : '',
-        // A side panel is itself a rigid drag surface, so no native pan may begin
-        // on it. Scroll containers inside the content declare their own pans
-        // below this element, so nested scrolling is unaffected. `pinch-zoom`
-        // rather than `none` for the WCAG 1.4.4 reason recorded on BACKDROP: this
-        // element backs a side sheet whose content may be too short to scroll, so
-        // `none` here made the whole panel a region the page could not be
-        // enlarged in at all.
-        side ? 'touch-pinch-zoom' : '',
-        side && !profile.desktop ? PANEL_SIDE_STRIP[position] : '',
-        // A side sheet's axis inset runs the panel's whole height, so its header
-        // and content take the same reservation the footer does — but only while
-        // there IS a footer, or they double-count the panel's own padding above.
-        side ? PANEL_SIDE_SAFE[`${position}:${floatKey}`] : '',
-        desktopBottomCap && !CALLER_MAX_WIDTH.test(callerClass)
-          ? PANEL_WIDTH_CAP
-          : '',
-        callerClass,
-      ]
+      titleId: `${this.#id}-title`,
+      titleClass: TITLE,
+      labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
+      rootClass: THEME,
+      backdropClass: attr(props.backdropClass),
+      panelClass: [PANEL, props.showGrabber === false ? NO_GRABBER : '', props.class]
         .filter(Boolean)
         .join(' '),
-      headerClass: position === 'bottom' && showGrabber ? HEADER_HANDLE : HEADER,
-      contentClass: CONTENT,
-      footerClass: [
-        FOOTER,
-        FOOTER_SAFE_BOTTOM[floatKey],
-        position === 'left' ? FOOTER_SAFE_LEFT[floatKey] : 'pl-4',
-        position === 'right' ? FOOTER_SAFE_RIGHT[floatKey] : 'pr-4',
-      ].join(' '),
-      grabberClass,
-      titleClass,
+      panelStyle: attr(props.style),
+      snapPointsAttr: attr(snapPoints),
+      initialSnapAttr: attr(props.initialSnap),
+      positionAttr: oneOf(props.position, POSITIONS),
+      modeAttr: oneOf(props.mode, MODES),
+      breakpointAttr: attr(props.breakpoint),
+      desktopPositionAttr: oneOf(props.desktopPosition, POSITIONS),
+      desktopModeAttr: oneOf(props.desktopMode, MODES),
+      effectAttr: oneOf(props.effect, EFFECTS),
+      exitEffectAttr: oneOf(props.exitEffect, EFFECTS),
+      desktopEffectAttr: oneOf(props.desktopEffect, EFFECTS),
+      desktopExitEffectAttr: oneOf(props.desktopExitEffect, EFFECTS),
+      // Read live by every dismiss guard, so it is never observed — an empty
+      // string is the meaningful "refuse everything" value and must survive.
+      dismissAttr: props.dismiss === undefined || props.dismiss === null
+        ? false
+        : String(props.dismiss),
+      maxDisplayWidthAttr: attr(props.maxDisplayWidth),
+      springAttr: attr(props.spring),
+      // A boolean attribute: presence alone opts into the trigger morph.
+      morphTriggerAttr: props.morphTrigger ? true : false,
     };
-  }
-
-  #resolveProfile(props = this.props) {
-    const position = POSITIONS.has(props.position) ? props.position : 'bottom';
-    const mode = MODES.has(props.mode) ? props.mode : 'edge';
-    const effect = EFFECTS.has(props.effect) ? props.effect : 'slide';
-    const breakpointValue = Number(props.breakpoint);
-    const breakpoint = Number.isFinite(breakpointValue) ? breakpointValue : 768;
-    const desktop =
-      typeof window !== 'undefined' && window.innerWidth >= breakpoint;
-    // Bottom is the one position whose desktop fallback is NOT itself. A bottom
-    // panel takes its height from a snap point, so on a large display a sheet
-    // holding one paragraph is still a full-width 85vh slab of mostly empty
-    // surface. Center is the conventional wide answer and the only profile that
-    // sizes to its content, so bottom fans out to it by default. Every other
-    // position already reads the same at both widths and falls back to itself.
-    // Pass desktopPosition="bottom" to keep a bottom sheet bottom on desktop.
-    const desktopPosition = POSITIONS.has(props.desktopPosition)
-      ? props.desktopPosition
-      : position === 'bottom'
-        ? 'center'
-        : position;
-    const desktopMode = MODES.has(props.desktopMode)
-      ? props.desktopMode
-      : 'card';
-    const explicitDesktopEffect = EFFECTS.has(props.desktopEffect)
-      ? props.desktopEffect
-      : null;
-    const desktopEffect =
-      explicitDesktopEffect ||
-      (desktopPosition === 'center' ? 'fade-scale' : effect);
-    const exitEffect = EFFECTS.has(props.exitEffect)
-      ? props.exitEffect
-      : effect;
-    let desktopExitEffect;
-    if (EFFECTS.has(props.desktopExitEffect)) {
-      desktopExitEffect = props.desktopExitEffect;
-    } else if (EFFECTS.has(props.exitEffect)) {
-      desktopExitEffect = props.exitEffect;
-    } else {
-      desktopExitEffect = desktopEffect;
-    }
-    const cushion = Number(props.exitCushion);
-
-    return {
-      desktop,
-      position: desktop ? desktopPosition : position,
-      mode: desktop ? desktopMode : mode,
-      effect: desktop ? desktopEffect : effect,
-      exitEffect: desktop ? desktopExitEffect : exitEffect,
-      edgeInset: 0,
-      exitCushion:
-        Number.isFinite(cushion) && cushion >= 0 ? cushion : EXIT_CUSHION,
-      viewportWidth:
-        typeof window === 'undefined' ? 0 : window.innerWidth,
-      viewportHeight:
-        typeof window === 'undefined' ? 0 : window.innerHeight,
-    };
-  }
-
-  // What a PROFILE MORPH is keyed off: the three things that change the panel's
-  // resting geometry. `effect` is deliberately absent. An entrance or exit
-  // effect changes no resting box, so morphing on one runs a FLIP whose `from`
-  // and `to` are identical — a measure that answers nothing, never fires
-  // transitionend for an unchanged property, and parks the engine until the
-  // safety timeout. A resize cannot change an effect on its own either: crossing
-  // the breakpoint is the only way it resolves a different one, and that already
-  // moves `desktop`, while position-derived defaults already move `position`.
-  //
-  // An effect prop change therefore falls through to #syncProfileWithoutMeasure,
-  // which is why #profileSignature below carries `effect` explicitly: that is
-  // what makes the new choreography reach the engine immediately instead of
-  // being dropped along with the morph.
-  #profileKey(profile) {
-    return `${profile.desktop}:${profile.position}:${profile.mode}`;
-  }
-
-  #profileSignature(profile) {
-    return [
-      this.#profileKey(profile),
-      profile.effect,
-      profile.exitEffect,
-      profile.edgeInset,
-      profile.exitCushion,
-      profile.viewportWidth,
-      profile.viewportHeight,
-    ].join(':');
-  }
-
-  #measurementSignature(props = this.props) {
-    const snaps = Array.isArray(props.snapPoints)
-      ? JSON.stringify(props.snapPoints)
-      : String(props.snapPoints ?? '85vh');
-    return [
-      snaps,
-      props.initialSnap ?? '',
-      props.class || '',
-      props.exitCushion ?? '',
-    ].join('|');
-  }
-
-  #withinMaxDisplayWidth() {
-    if (typeof window === 'undefined') return true;
-    const raw = this.props.maxDisplayWidth;
-    if (
-      raw === undefined ||
-      raw === null ||
-      raw === '' ||
-      raw === 'none' ||
-      raw === Infinity
-    ) {
-      return true;
-    }
-    const value = Number(raw);
-    return !Number.isFinite(value) || window.innerWidth <= value;
-  }
-
-  #shouldDisplayOpen() {
-    if (!this.props.open) return false;
-    // The controlled contract wins once the native dialog is open. There is no
-    // resize close reason in the public callback union, so crossing the display
-    // ceiling must not close behind the parent's still-true `open` prop.
-    if (this.element?.open) return true;
-    return this.#withinMaxDisplayWidth();
-  }
-
-  #reducedMotion() {
-    return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  }
-
-  #morphDuration() {
-    if (this.#reducedMotion()) return 0;
-    const value = Number(this.props.morphDuration);
-    return Number.isFinite(value) && value >= 0
-      ? value
-      : DEFAULT_MORPH_DURATION;
-  }
-
-  #morphEasing() {
-    return this.props.morphEasing || DEFAULT_MORPH_EASING;
-  }
-
-  #triggerReturnDuration() {
-    if (this.#reducedMotion()) return 0;
-    const value = Number(this.props.triggerReturnDuration);
-    return Number.isFinite(value) && value >= 0
-      ? value
-      : DEFAULT_TRIGGER_RETURN_DURATION;
-  }
-
-  #triggerReturnEasing() {
-    return this.props.triggerReturnEasing || DEFAULT_TRIGGER_RETURN_EASING;
-  }
-
-  #blobZIndex() {
-    const value = Number(this.props.blobZIndex);
-    return Number.isFinite(value) ? value : DEFAULT_BLOB_Z_INDEX;
-  }
-
-  /** @returns {Element|null} The configured morph trigger, if it resolves. */
-  #morphTriggerElement() {
-    const value = this.props.morphTrigger;
-    if (!value) return null;
-    if (typeof value === 'string') {
-      return typeof document === 'undefined'
-        ? null
-        : document.querySelector(value);
-    }
-    return value instanceof Element ? value : null;
-  }
-
-  /**
-   * Whether this trigger is still a usable morph source AND reverse
-   * destination. Doubles as the engine's `triggerProbe`, which is what routes a
-   * trigger that vanished while the sheet was open to the direct spring exit.
-   *
-   * THE STATE GATE ON THE VISIBILITY CHECK IS LOAD-BEARING — do not "simplify"
-   * it away. MorphEngine hides the source element for the whole flight AND for
-   * as long as the panel is shown, so from the launch onward a hidden trigger is
-   * the MORPH's own doing and says nothing about what the page wants. Checking
-   * it unconditionally therefore refuses EVERY reverse morph: the feature looks
-   * like it works on open and silently never morphs back. `hidden` is the one
-   * moment the answer is honest, and it is the moment that decides whether the
-   * flight happens at all.
-   *
-   * The geometry gates below stay live in both states, because the blob moves
-   * nothing — a trigger that detaches or scrolls out of the viewport while the
-   * sheet is open really has stopped being a place to fly back to.
-   * @param {Element|null} trigger - Candidate trigger.
-   * @returns {Object|null} Its viewport box, or null when it is unusable.
-   */
-  #usableTriggerBox(trigger) {
-    if (!(trigger instanceof Element) || !trigger.isConnected) return null;
-    if (
-      (this.#engine?.state ?? 'hidden') === 'hidden' &&
-      !triggerIsVisible(trigger)
-    ) {
-      return null;
-    }
-    // getClientRects is the ancestor-aware half of the same question:
-    // getComputedStyle above reports the element's OWN display, so a trigger
-    // inside a `display: none` subtree still reads visible and would hand the
-    // blob a collapsed box to fly out of.
-    if (typeof trigger.getClientRects === 'function') {
-      if (trigger.getClientRects().length === 0) return null;
-    }
-    const box = trigger.getBoundingClientRect();
-    if (box.width <= 0 || box.height <= 0) return null;
-    if (
-      box.left >= window.innerWidth ||
-      box.top >= window.innerHeight ||
-      box.left + box.width <= 0 ||
-      box.top + box.height <= 0
-    ) {
-      return null;
-    }
-    return box;
-  }
-
-  /**
-   * Arms a trigger morph for the run syncOpen() is about to start.
-   *
-   * Every gate resolves here, in one place, because the transport bit is read
-   * once immediately afterwards and never again for this run: the opt-in prop,
-   * a non-zero morphDuration (which is also the reduced-motion policy), and a
-   * usable trigger box.
-   * @returns {Element|null} The armed trigger, or null for the direct spring.
-   */
-  #armTriggerMorph() {
-    const trigger = this.#morphTriggerElement();
-    if (!trigger) return null;
-    // This trigger is being used to REOPEN the sheet, so its return pop is moot
-    // — and left running it is actively harmful: getComputedStyle reflects WAAPI
-    // values, so the opacity check in #usableTriggerBox would read the pop's own
-    // `from: 0` frame as a trigger the page had hidden and silently drop the
-    // morph on a rapid reopen. Same reasoning as the state gate there.
-    if (this.#triggerReturn?.trigger === trigger) this.#clearTriggerReturn();
-    if (this.#morphDuration() <= 0) return null;
-    if (!this.#usableTriggerBox(trigger)) return null;
-    if (!this.#engine.armMorph(trigger, { zIndex: this.#blobZIndex() })) {
-      return null;
-    }
-    return trigger;
-  }
-
-  /**
-   * Selects and starts the open transport. THE ONE CLASSIFICATION POINT.
-   *
-   * engine.animatesPanel is read exactly once, here, before anything paints.
-   * Puzzle's afterUpdate() runs repeatedly, and re-reading it mid-flight would
-   * promote a dialog whose blob is still flying or demote one mid-exit.
-   * @param {HTMLElement} dialog - The native dialog element.
-   */
-  #beginOpenTransport(dialog) {
-    const trigger = this.#armTriggerMorph();
-    const proxy = !!trigger && !this.#engine.animatesPanel;
-    // An arm the engine then declines to fly must not stay armed: engine.show()
-    // keys the blob branch off the trigger alone, so the two would disagree
-    // about which transport this run is using.
-    if (trigger && !proxy) this.#engine.disarmMorph();
-    if (proxy) {
-      // Focus return falls back to the trigger when nothing else had focus —
-      // a pointer-driven open leaves document.activeElement on <body>.
-      this.#returnFocus ??= trigger;
-      // NO showModal() here. The dialog stays demoted and merely display-forced
-      // so the panel has layout for MorphEngine to measure and fly to; the
-      // engine's `reveal` promotes it mid-flight, still invisible.
-      this.#forceDialogPaint();
-    } else {
-      dialog.showModal();
-    }
-    this.refs.backdrop.style.opacity = '0';
-    this.#engine
-      .show({ to: this.refs.panel, display: 'flex' })
-      .then(() => this.#reconcileSnap());
-    this.refs.backdrop.style.opacity = String(this.#engine.backdropProgress);
-  }
-
-  /**
-   * Leaves through whichever transport the engine now declares.
-   *
-   * A proxy reverse demotes the dialog FIRST and in the same synchronous task,
-   * because the blob is a body child at z 1002 and a top-layer dialog paints
-   * over it whatever the z-index. The force-paint has to precede the close so
-   * the panel keeps its layout — MorphEngine measures it inside engine.hide().
-   */
-  #hideThroughEngine() {
-    if (!this.#engine.animatesPanel) {
-      this.#forceDialogPaint();
-      this.#closeDialog();
-    }
-    this.#engine.hide();
-  }
-
-  /**
-   * Holds the dialog painting while it is out of the top layer. A closed dialog
-   * is display:none, which would leave the panel with no box for MorphEngine to
-   * measure or fly to. Idempotent, and released by #releaseDialogPaint.
-   */
-  #forceDialogPaint() {
-    const dialog = this.element;
-    if (!dialog || this.#dialogPaintHeld) return;
-    this.#dialogPaintHeld = true;
-    dialog.style.display = 'flex';
-  }
-
-  /**
-   * Drops the hold. A CLOSED dialog must go back to the UA's display:none, or
-   * it paints its panel at CSS rest over the page.
-   */
-  #releaseDialogPaint() {
-    if (!this.#dialogPaintHeld) return;
-    this.#dialogPaintHeld = false;
-    if (this.element) this.element.style.display = '';
-  }
-
-  /**
-   * Closes the native dialog and records that this component asked for it, so
-   * the queued `close` event is not mistaken for an app-level force close.
-   */
-  #closeDialog() {
-    const dialog = this.element;
-    if (!dialog?.open) return;
-    this.#expectedCloses += 1;
-    dialog.close();
-  }
-
-  /**
-   * Plays the hand-back pop on a trigger that was never morphed into.
-   *
-   * The ordering invariant upstream states in the engine survives structurally:
-   * the engine emits `triggerreturn` BEFORE it restores the source, and
-   * element.animate() enters the timeline immediately, so the `opacity: 0` frame
-   * is already winning (animation origin beats author inline) by the time
-   * MorphEngine clears its `visibility: hidden`. No frame exists in which the
-   * trigger is visible and undecorated.
-   * @param {Element} trigger - The trigger being handed back.
-   */
-  #playTriggerReturn(trigger) {
-    if (!trigger?.isConnected || typeof trigger.animate !== 'function') return;
-    const duration = this.#triggerReturnDuration();
-    // Zero creates NO animation rather than a zero-length one, which makes the
-    // opt-out and reduced motion the same code path — and matches how a zeroed
-    // profile morph swaps instantly instead of awaiting a transition that will
-    // never run.
-    if (duration <= 0) return;
-    this.#clearTriggerReturn();
-    const animation = trigger.animate(TRIGGER_RETURN_KEYFRAMES, {
-      duration,
-      easing: this.#triggerReturnEasing(),
-      fill: 'both',
-    });
-    this.#triggerReturn = { trigger, animation };
-    // cancel() rejects `finished`; swallow it. No safety timeout is needed —
-    // unlike the CSS version there is no animationend-never-fires hole.
-    animation.finished?.then(
-      () => {
-        if (this.#triggerReturn?.animation === animation) {
-          this.#clearTriggerReturn();
-        }
-      },
-      () => {}
-    );
-  }
-
-  /**
-   * The single teardown site for the pop — reached by its own completion, by a
-   * re-arm of the same trigger, and by destroyed().
-   */
-  #clearTriggerReturn() {
-    const state = this.#triggerReturn;
-    if (!state) return;
-    this.#triggerReturn = null;
-    state.animation?.cancel();
-  }
-
-  /**
-   * Applies the profile rebuild a blob flight deferred. Runs from `shown`,
-   * where MorphEngine has released the panel and the sheet owns it again.
-   */
-  #flushBlobProfile() {
-    const next = this.#blobDeferredProfile;
-    if (!next) return;
-    this.#blobDeferredProfile = null;
-    if (!this.element?.open || !this.#profile) return;
-    if (this.#profileKey(next) !== this.#profileKey(this.#profile)) {
-      this.#startProfileMorph(next);
-      return;
-    }
-    this.#renderProfile = next;
-    this.setData(this.#classData(next));
-    this.#prepareOpen(next);
-  }
-
-  #lockBody() {
-    this.element?.setAttribute('data-scroll-lock', '');
-    document.body.style.overflow = 'hidden';
-  }
-
-  #unlockBody() {
-    this.element?.removeAttribute('data-scroll-lock');
-    if (!document.querySelector('[data-scroll-lock]')) {
-      document.body.style.overflow = '';
-    }
-  }
-
-  #restoreFocus() {
-    const target = this.#returnFocus;
-    this.#returnFocus = null;
-    if (!target?.isConnected || typeof target.focus !== 'function') return;
-    target.focus({ preventScroll: true });
-  }
-
-  #requestClose(reason) {
-    const { close } = this.props;
-    if (typeof close === 'function') close(reason);
-  }
-
-  #dismissPolicy() {
-    // Deliberately parsed at the event site. `dismiss` is live policy, not
-    // configuration cached at mount/profile resolution time.
-    return parseDismiss(this.props.dismiss);
-  }
-
-  #syncSpring() {
-    if (!this.#engine) return;
-    let parsed = null;
-    const value = this.props.spring;
-    if (typeof value === 'string') {
-      parsed = parseSpring(value);
-    } else if (value && typeof value === 'object') {
-      parsed = parseSpring(`${value.attraction} ${value.friction}`);
-    }
-    const signature = parsed
-      ? `${parsed.attraction}:${parsed.friction}`
-      : 'presets';
-    if (signature === this.#springSignature) return;
-    this.#springSignature = signature;
-    this.#engine.setSpring(parsed);
-  }
-
-  #snapPointValue() {
-    const value = this.props.snapPoints ?? '85vh';
-    return Array.isArray(value) ? value.join(' ') : String(value);
-  }
-
-  #resolveBottomSnaps() {
-    const viewportHeight = window.innerHeight;
-    const viewportWidth = window.innerWidth;
-    const rootFontSize =
-      Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const probe = document.createElement('div');
-    Object.assign(probe.style, {
-      position: 'fixed',
-      visibility: 'hidden',
-      pointerEvents: 'none',
-      boxSizing: 'border-box',
-    });
-    document.body.append(probe);
-    const measure = (token) => {
-      probe.style.height = '';
-      probe.style.height = token;
-      const height = probe.getBoundingClientRect().height;
-      return Number.isFinite(height) && height > 0 ? height : 0;
-    };
-
-    let snaps;
-    try {
-      snaps = resolveSnapPoints(this.#snapPointValue(), {
-        viewportHeight,
-        viewportWidth,
-        rootFontSize,
-        percentageBase: viewportHeight,
-        measure,
-      });
-      if (!snaps.length) {
-        snaps = resolveSnapPoints('85vh', {
-          viewportHeight,
-          viewportWidth,
-          rootFontSize,
-          percentageBase: viewportHeight,
-          measure,
-        });
-      }
-    } finally {
-      probe.remove();
-    }
-    return snaps;
-  }
-
-  #controlledSnap() {
-    return this.props.snap !== undefined;
-  }
-
-  #desiredSnap(snaps = this.#snaps) {
-    if (!snaps.length) return -1;
-    if (this.#controlledSnap()) {
-      return resolveInitialSnap(this.props.snap, snaps);
-    }
-    if (this.#localSnap === null) {
-      this.#localSnap = resolveInitialSnap(this.props.initialSnap, snaps);
-    }
-    this.#localSnap = resolveInitialSnap(this.#localSnap, snaps);
-    return this.#localSnap;
-  }
-
-  #measurePanelBox() {
-    const dialog = this.element;
-    const panel = this.refs.panel;
-    if (!dialog || !panel) {
-      return {
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        width: 0,
-        height: 0,
-        borderRadius: '0px',
-      };
-    }
-
-    const closed = !dialog.open;
-    const savedDisplay = dialog.style.display;
-    const savedVisibility = dialog.style.visibility;
-    const savedTransform = panel.style.transform;
-    if (closed) {
-      dialog.style.display = 'flex';
-      dialog.style.visibility = 'hidden';
-    }
-    // getBoundingClientRect reports the TRANSFORMED box, and the engine owns an
-    // inline transform on this element for the whole entrance. A resize landing
-    // during a fade-scale entrance would otherwise read the 0.95-scaled height
-    // and publish it as the profile's intrinsic resting size. Neutralised for
-    // the read and restored immediately, so no frame ever sees it.
-    panel.style.transform = 'none';
-
-    const rect = panel.getBoundingClientRect();
-    const borderRadius = getComputedStyle(panel).borderRadius;
-
-    panel.style.transform = savedTransform;
-    if (closed) {
-      dialog.style.display = savedDisplay;
-      dialog.style.visibility = savedVisibility;
-    }
-
-    return {
-      top: rect.top,
-      left: rect.left,
-      right: rect.right,
-      bottom: rect.bottom,
-      width: rect.width,
-      height: rect.height,
-      borderRadius,
-    };
-  }
-
-  #edgeInset(profile, box) {
-    if (profile.mode !== 'card') return 0;
-    if (profile.position === 'bottom') {
-      return Math.max(0, profile.viewportHeight - box.bottom);
-    }
-    if (profile.position === 'left') return Math.max(0, box.left);
-    if (profile.position === 'right') {
-      return Math.max(0, profile.viewportWidth - box.right);
-    }
-    return 0;
-  }
-
-  #prepareOpen(requestedProfile = this.#resolveProfile()) {
-    if (!this.#engine) return;
-
-    const previous = this.#profile;
-    const box = this.#measurePanelBox();
-    const profile = {
-      ...requestedProfile,
-      edgeInset: this.#edgeInset(requestedProfile, box),
-    };
-    this.#profile = profile;
-    this.#engine.setProfile(profile);
-
-    let snaps;
-    if (profile.position === 'bottom' && !profile.desktop) {
-      snaps = this.#resolveBottomSnaps();
-    } else if (CONTENT_SIZED(profile)) {
-      // Desktop bottom and center share one rule: the panel is whatever height
-      // its content is, so the single "snap" is the measured box. snapPoints is
-      // a MOBILE-profile prop and has no say here — the two profiles are
-      // independent resting geometries, and a desktop bottom panel may well
-      // stand taller than the largest mobile snap. Only the recipe's max-h caps
-      // it. The fallback matters when the panel measures 0 (never laid out).
-      snaps = [
-        box.height > 0
-          ? box.height
-          : Math.max(1, profile.viewportHeight * 0.5),
-      ];
-    } else {
-      snaps = [
-        box.width > 0
-          ? box.width
-          : Math.max(1, Math.min(26 * 16, profile.viewportWidth * 0.9)),
-      ];
-    }
-
-    const alreadyOpen =
-      this.element?.open && this.#engine.state !== 'hidden';
-    let active = 0;
-    if (profile.position === 'bottom' && !profile.desktop) {
-      // The engine's live index is only meaningful while it names a spot in a
-      // snap list of the same SHAPE. A same-profile resize re-measures the
-      // heights and must keep the snap the user chose; every other profile
-      // carries exactly one snap, so its index is always 0, and inheriting that
-      // across a breakpoint or position morph lands the panel on the LOWEST
-      // mobile snap while a fresh open resolves initialSnap to the highest.
-      const carrySnap = alreadyOpen && !!previous && resizesWithSnaps(previous);
-      active = carrySnap
-        ? Math.min(this.#engine.activeSnap, snaps.length - 1)
-        : this.#desiredSnap(snaps);
-    }
-
-    this.#snaps = snaps;
-    this.#engine.setSnaps(snaps, active);
-    // While beginMorph() has the engine parked, setSnaps() deliberately writes
-    // no frame. A bottom destination still needs its resolved height pinned
-    // under the TO measurement — the mobile 85dvh class fallback on one side,
-    // the measured content height on the other — otherwise the FLIP measures
-    // the wrong box and endMorph() snaps to the real value after it lands.
-    // #stripMorphPins clears this height again at teardown, which is what lets
-    // a desktop bottom panel go back to being sized by h-fit.
-    if (this.#engine.morphing && profile.position === 'bottom') {
-      this.refs.panel.style.height = `${snaps[active]}px`;
-    }
-    this.#appliedProfileSignature = this.#profileSignature(profile);
-    this.#needsRemeasure = false;
-    this.#syncCenterObserver();
-  }
-
-  #syncProfileWithoutMeasure(profile) {
-    if (!this.#engine || !this.#profile) return;
-    const next = { ...profile, edgeInset: this.#profile.edgeInset };
-    const signature = this.#profileSignature(next);
-    if (signature === this.#appliedProfileSignature) return;
-    this.#profile = next;
-    this.#engine.setProfile(next);
-    this.#appliedProfileSignature = signature;
-  }
-
-  #reconcileSnap() {
-    const profile = this.#profile;
-    if (
-      !profile ||
-      profile.position !== 'bottom' ||
-      profile.desktop ||
-      !this.element?.open ||
-      this.#engine?.state !== 'shown' ||
-      this.#engine.morphing ||
-      this.#drag.active
-    ) {
-      return;
-    }
-
-    const desired = this.#desiredSnap();
-    if (
-      desired < 0 ||
-      desired === this.#engine.activeSnap ||
-      desired === this.#settleTarget
-    ) {
-      return;
-    }
-
-    this.#settleTarget = desired;
-    this.#programmaticSnap = desired;
-    const run = ++this.#snapRun;
-    this.#engine.settleTo(desired, 0).then(() => {
-      if (run !== this.#snapRun) return;
-      this.#settleTarget = null;
-      this.#programmaticSnap = null;
-    });
-  }
-
-  // BRANCHES ON engine.state, NOT dialog.open. A proxy reverse demotes the
-  // dialog at hide-start, so a reopen landing mid-morph-back sees
-  // dialog.open === false; keying off that would read as a fresh open and start
-  // a SECOND blob flight over a live one. The engine is the only thing that
-  // knows a transport is running.
-  syncOpen() {
-    const dialog = this.element;
-    if (!dialog || !this.#engine) return;
-    const shouldOpen = this.#shouldDisplayOpen();
-    const state = this.#engine.state;
-
-    if (shouldOpen) {
-      if (state === 'shown' || state === 'showing') return;
-      // 'hiding' is the reversal; `dialog.open` with a hidden engine is the
-      // force-close repair — the transport was stopped out from under a dialog
-      // the browser still has open, so re-show without a second showModal().
-      if (state === 'hiding' || dialog.open) {
-        this.#engine
-          .show({ to: this.refs.panel, display: 'flex' })
-          .then(() => this.#reconcileSnap());
-        this.refs.backdrop.style.opacity = String(
-          this.#engine.backdropProgress
-        );
-        return;
-      }
-
-      const profile = this.#resolveProfile();
-      this.#renderProfile = profile;
-      // Before #forceDialogPaint: this toggles display and visibility to
-      // measure, and would otherwise clobber the held value.
-      this.#prepareOpen(profile);
-      this.#returnFocus =
-        document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null;
-      this.#lockBody();
-      this.#proxyRevealed = false;
-
-      // Whichever transport is selected, its promotion (or its deliberate
-      // non-promotion) and the synchronous frame-0 write inside engine.show()
-      // stay in this task, so the browser never paints the resting panel first.
-      this.#beginOpenTransport(dialog);
-      this.#syncCenterObserver();
-      return;
-    }
-
-    if (state === 'hidden') {
-      // Nothing is in flight, so no `hidden` event is coming to finalize. A
-      // force close (engine.stop(), or an app-level close) can leave the dialog
-      // open or the paint hold set, and a closed dialog still carrying inline
-      // display:flex paints its panel at CSS rest over the page. Every call
-      // here is idempotent, so the repair costs nothing on the common path.
-      this.#finishMorph();
-      this.#drag = { active: false };
-      this.#acceptDismissal();
-      this.#closeDialog();
-      this.#releaseDialogPaint();
-      return;
-    }
-
-    this.#finishMorph();
-    this.#drag = { active: false };
-    this.#acceptDismissal();
-    this.#hideThroughEngine();
   }
 
   mounted() {
-    this.#mounted = true;
-    this.#engine = new SheetEngine({
-      // The engine stays DOM-free: the component supplies the geometry policy
-      // and the blob factory it deliberately does not import.
-      triggerProbe: (trigger) => !!this.#usableTriggerBox(trigger),
-      createMorphEngine: (options) => new MorphEngine(options),
-    });
-    this.#engine.on('change', this.#engineChange);
-    this.#engine.on('shown', this.#engineShown);
-    this.#engine.on('hidden', this.#engineHidden);
-    this.#engine.on('snapchange', this.#engineSnapChange);
-    this.#engine.on('reveal', this.#engineReveal);
-    this.#engine.on('triggerreturn', this.#engineTriggerReturn);
-    this.#syncSpring();
+    // Browser-only by construction — see LOADING above. The guard is belt and
+    // braces for any host that runs lifecycle hooks outside a document.
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#panel = this.refs.panel;
+    this.#sheet = this.refs.sheet;
+    this.#lastOpen = !!this.props.open;
+    this.#lastSnap = this.props.snap;
 
-    for (const [surface, element] of [
-      ['backdrop', this.refs.backdrop],
-      ['header', this.refs.header],
-      ['content', this.refs.content],
-      ['footer', this.refs.footer],
-      // The panel itself hosts a side sheet's handle: the pill is
-      // pointer-events-none and floats over the strip the panel reserves in its
-      // own padding, which no child surface covers. Without this binding the one
-      // element that advertises the swipe is the one place a swipe is dead.
-      // #dragStart refuses any hit that is not the panel directly, so gestures
-      // bubbling up from the surfaces above stay owned by them.
-      ['panel', this.refs.panel],
-    ]) {
-      this.#gestures.push(
-        new DragGesture(element, this.#surfaceCallbacks(surface))
-      );
-    }
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this.#panel?.addEventListener('shown', this.#onShown);
+    this.#panel?.addEventListener('hidden', this.#onHidden);
+    this.#sheet?.addEventListener('snapchange', this.#onSnapChange);
 
-    this.#resizeHandler = () => {
-      if (this.#resizeTimer !== null) return;
-      this.#resizeTimer = setTimeout(() => {
-        this.#resizeTimer = null;
-        this.#handleResize();
-      }, RESIZE_THROTTLE_MS);
-    };
-    window.addEventListener('resize', this.#resizeHandler);
-    this.syncOpen();
+    import('@magic-spells/sheet')
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+        // A sheet that mounted already open opens now, at the first moment the
+        // elements can honour it.
+        this.#sync();
+      })
+      .catch((error) => {
+        console.error(
+          '[Sheet] failed to load @magic-spells/sheet — the sheet will not open.',
+          error
+        );
+      });
   }
 
   afterUpdate() {
-    if (!this.#mounted) return;
-    this.#syncSpring();
+    if (!this.#live) return;
 
-    if (!this.#shouldDisplayOpen()) {
-      this.#queuedProfile = null;
-      this.#pendingMeasure = null;
-      this.#blobDeferredProfile = null;
-      this.syncOpen();
-      return;
+    const open = !!this.props.open;
+    if (open !== this.#lastOpen) {
+      this.#lastOpen = open;
+      this.#sync();
     }
 
-    // MorphEngine owns every panel style until its terminal event. Queue one
-    // latest-value rebuild for `shown` rather than creating a second geometry
-    // owner mid-flight; data() defers the class map for the same reason.
-    if (this.#engine?.blobFlight) {
-      this.#blobDeferredProfile = this.#resolveProfile();
-      return;
+    const snap = this.props.snap;
+    if (snap !== undefined && snap !== this.#lastSnap) {
+      this.#lastSnap = snap;
+      if (this.#ready) this.#sheet?.snapTo?.(Number(snap));
     }
-
-    if (this.#pendingMorph) {
-      this.#continueMorph();
-      return;
-    }
-
-    if (this.#pendingMeasure) {
-      const profile = this.#pendingMeasure;
-      this.#pendingMeasure = null;
-      this.#prepareOpen(profile);
-    }
-
-    if (this.#queuedProfile && this.element?.open) {
-      const next = this.#queuedProfile;
-      this.#queuedProfile = null;
-      this.#startProfileMorph(next);
-      return;
-    }
-
-    const next = this.#resolveProfile();
-    if (
-      this.element?.open &&
-      this.#profile &&
-      this.#profileKey(next) !== this.#profileKey(this.#profile)
-    ) {
-      this.#startProfileMorph(next);
-      return;
-    }
-
-    if (
-      this.#needsRemeasure &&
-      this.element?.open &&
-      !this.#drag.active &&
-      !this.#engine.morphing
-    ) {
-      this.#prepareOpen(next);
-    } else if (this.element?.open && this.#profile) {
-      this.#syncProfileWithoutMeasure(next);
-    }
-
-    this.#reconcileSnap();
-    this.syncOpen();
   }
 
   destroyed() {
-    this.#mounted = false;
-    window.removeEventListener('resize', this.#resizeHandler);
-    if (this.#resizeTimer !== null) clearTimeout(this.#resizeTimer);
-    this.#resizeTimer = null;
-    this.#resizeHandler = null;
-
-    if (this.#centerTimer !== null) clearTimeout(this.#centerTimer);
-    this.#centerTimer = null;
-    this.#centerObserver?.disconnect();
-    this.#centerObserver = null;
-
-    this.#finishMorph();
-    this.#clearDismissal();
-    for (const gesture of this.#gestures) gesture.destroy();
-    this.#gestures = [];
-    this.#drag = { active: false };
-
-    this.#blobDeferredProfile = null;
-
-    if (this.#engine) {
-      this.#engine.off('change', this.#engineChange);
-      this.#engine.off('shown', this.#engineShown);
-      this.#engine.off('hidden', this.#engineHidden);
-      this.#engine.off('snapchange', this.#engineSnapChange);
-      this.#engine.off('reveal', this.#engineReveal);
-      this.#engine.off('triggerreturn', this.#engineTriggerReturn);
-      // THE WORST FAILURE MODE THIS FEATURE HAS. MorphEngine holds the trigger
-      // at `visibility: hidden` for the whole flight and the whole shown period,
-      // and Puzzle has terminal routes the upstream web component does not — a
-      // view teardown, a route change unmounting the sheet mid-flight. destroy()
-      // routes through the engine's stop(), which stops the blob and hands the
-      // trigger back unannounced; skipping it would leave a consumer's button
-      // permanently invisible, in markup this component does not own.
-      this.#engine.destroy();
-      this.#engine = null;
-    }
-    this.#clearTriggerReturn();
-
-    if (this.refs.backdrop) this.refs.backdrop.style.opacity = '';
-    this.#closeDialog();
-    this.#releaseDialogPaint();
-    this.#unlockBody();
-    this.#restoreFocus();
+    this.#live = false;
+    this.#panel?.removeEventListener('shown', this.#onShown);
+    this.#panel?.removeEventListener('hidden', this.#onHidden);
+    this.#sheet?.removeEventListener('snapchange', this.#onSnapChange);
+    // Unbind FIRST: this close is a teardown, not a user dismissal, and must not
+    // call back into a parent that is being torn down with us. Everything else —
+    // the top-layer dialog, the scroll lock, a blob still in flight and the
+    // trigger it is holding invisible — is released by the elements' own
+    // disconnectedCallback when Puzzle removes them.
+    if (this.#panel?.isOpen) this.#sheet?.hide?.();
+    this.#panel = null;
+    this.#sheet = null;
   }
 
-  #surfaceCallbacks(surface) {
-    return {
-      onStart: (info) => this.#dragStart(surface, info?.event),
-      onMove: (info) => this.#dragMove(surface, info),
-      onEnd: (info) => this.#dragEnd(surface, info),
-    };
-  }
-
-  #dragStart(surface, event) {
-    // The panel surface exists for the side handle strip — the only region where
-    // the panel itself is the hit target. Every child surface's pointerdown
-    // bubbles through the panel's gesture too, and it must be refused outright
-    // (not merely ignored): DragGesture would otherwise capture the pointer at
-    // slop and starve the surface that owns it. Returning false is that refusal,
-    // and it leaves the refused gesture fully inert.
-    if (surface === 'panel' && event?.target !== this.refs.panel) return false;
-    // A fresh grab retires any exit classification a previous release armed.
-    // Left standing it would send the NEXT deliberate close out through the
-    // direct spring instead of morphing back into its trigger.
-    this.#engine?.cancelGestureExit();
-    // blobFlight is refused alongside morphing and for the same reason: while
-    // the blob is up, MorphEngine owns every panel style and a drag would be
-    // painting against a snapshot it cannot see.
-    if (
-      this.#engine?.state !== 'shown' ||
-      this.#engine.morphing ||
-      this.#engine.blobFlight
-    ) {
-      this.#drag = { active: false };
-      return false;
-    }
-    // A fresh grab supersedes a swipe still waiting on its answer. Left banked,
-    // the deadline would fire under this finger — settling the panel back
-    // mid-drag and reporting a dismissal the user has already moved past. The
-    // report is still owed, so this refuses rather than drops it, but the new
-    // gesture owns the pose from here and there is nothing to settle.
-    this.#refuseDismissal(false);
-    this.#settleTarget = null;
-    this.#programmaticSnap = null;
-    this.#drag = {
-      active: true,
-      claimed: false,
-      direction: 0,
-      scrollChain: this.#scrollChain(event?.target),
-    };
-  }
-
-  #scrollChain(target) {
-    const content = this.refs.content;
-    if (!content) return [];
-
-    const axis = dismissAxis(this.#profile.position);
-    const chain = [];
-    let node = target instanceof Element ? target : null;
-    while (node && node !== content && content.contains(node)) {
-      if (scrollsOnAxis(node, axis)) chain.push(scrollMetrics(node));
-      node = node.parentElement;
-    }
-    if (scrollsOnAxis(content, axis)) chain.push(scrollMetrics(content));
-    return chain;
-  }
-
-  #matchesActiveAxis(direction) {
-    if (dismissAxis(this.#profile.position) === 'y') {
-      return direction === 'up' || direction === 'down';
-    }
-    return direction === 'left' || direction === 'right';
-  }
-
-  #dragMove(surface, info) {
-    const drag = this.#drag;
-    if (!drag.active) return;
-
-    const offset = awayOffset(
-      this.#profile.position,
-      info.deltaX,
-      info.deltaY
-    );
-    if (!drag.claimed) {
-      if (surface === 'content') {
-        if (!this.#matchesActiveAxis(info.direction)) return;
-        const position = this.#profile.position;
-        const direction = contentClaimDirection(
-          drag.scrollChain,
-          dismissAxis(position),
-          position,
-          offset
-        );
-        if (!direction) return;
-        drag.direction = direction;
-      } else {
-        if (!offset) return;
-        drag.direction = Math.sign(offset);
-      }
-      drag.claimed = true;
-    }
-
-    this.#applyLiveOffset(offset);
-  }
-
-  #applyLiveOffset(offset) {
-    const activeSize = this.#snaps[this.#engine.activeSnap];
-    if (!Number.isFinite(activeSize)) return;
-    // The gesture's base pose is the size actually painted when the drag
-    // claimed, not the active snap's rest. #activeSnap still names the snap an
-    // interrupted settle STARTED from — it only advances when a settle
-    // completes — so basing the pose on its rest teleported a mid-settle claim
-    // back to the previous position and re-transitioned from there: every quick
-    // second flick jumped before it moved. At rest the painted size IS the
-    // active snap size, so an ordinary drag is unchanged.
-    const drag = this.#drag;
-    if (drag.base === undefined) drag.base = this.#engine.currentSize;
-    const maximum = this.#snaps[this.#snaps.length - 1];
-    let size = drag.base - offset;
-    if (size > maximum) {
-      size =
-        maximum +
-        Math.sqrt(size - maximum) * 10 * OVERSCROLL_RESISTANCE;
-    }
-    if (size < 0) {
-      size = -Math.sqrt(-size) * 10 * OVERSCROLL_RESISTANCE;
-    }
-    this.#engine.dragBy(activeSize - size);
-  }
-
-  #settleBack() {
-    if (this.#profile.position === 'bottom') {
-      this.#engine.settleTo(this.#engine.activeSnap, 0);
-    } else {
-      this.#engine.returnToRest(0);
+  // Edge-triggered, never level-triggered: called only when `open` actually
+  // changed (or when the module finally landed on a sheet that mounted open).
+  // The isOpen guards make a redundant edge — the parent flipping `open` false
+  // inside @hide, for a sheet that already closed itself — a no-op.
+  #sync() {
+    if (!this.#ready || !this.#panel || !this.#sheet) return;
+    if (this.#lastOpen) {
+      if (!this.#panel.isOpen) this.#sheet.show(this.#trigger());
+    } else if (this.#panel.isOpen) {
+      this.#sheet.hide();
     }
   }
 
-  /**
-   * Announces a touch release decision. `target` reports the snap actually
-   * taken, never merely the one resolved, so a dismissal that did not happen
-   * reads as the snap the panel landed on with `prevented: true`.
-   */
-  #emitSnapRelease(velocity, size, target, prevented) {
-    const { snapRelease } = this.props;
-    if (typeof snapRelease !== 'function') return;
-    snapRelease({
-      velocity,
-      flick: Math.abs(velocity) > FLICK_VELOCITY,
-      direction: velocity > 0 ? 'away' : velocity < 0 ? 'toward' : 'none',
-      size,
-      target,
-      prevented,
-    });
-  }
-
-  // A DISMISSAL IS NOT REPORTED UNTIL IT IS ANSWERED.
-  //
-  // The source reads the answer straight out of `panel.hide()` — a consumer's
-  // cancelable `beforeHide` returns false and #dismiss() reports the snap the
-  // panel landed on instead. A controlled Puzzle piece has no such return
-  // value: `open` belongs to the parent, and its answer arrives as a prop flip
-  // through the framework's own scheduler, which is requestAnimationFrame in
-  // both PuzzleView.#scheduleRender and the data store's flush. A microtask
-  // check therefore always observes the sheet still shown and would brand every
-  // dismissal `prevented`. So the release is banked, and settled by whichever
-  // arrives first:
-  //
-  //   accept  — syncOpen()/handleClose reaching engine.hide(), or the hidden
-  //             event: the sheet is genuinely leaving, so `target: null`.
-  //   refuse  — DISMISS_ACK_MS with the engine still shown: nothing took the
-  //             close, so the panel settles back (otherwise it freezes at its
-  //             dragged, half-faded pose) and reports the active snap with
-  //             `prevented: true`, exactly as a policy-refused swipe does.
-  #bankDismissal(velocity, size) {
-    this.#clearDismissal();
-    this.#pendingDismissal = {
-      velocity,
-      size,
-      timer: setTimeout(() => this.#refuseDismissal(), DISMISS_ACK_MS),
-    };
-  }
-
-  #acceptDismissal() {
-    const pending = this.#pendingDismissal;
-    if (!pending) return;
-    clearTimeout(pending.timer);
-    this.#pendingDismissal = null;
-    this.#emitSnapRelease(pending.velocity, pending.size, null, false);
-  }
-
-  #refuseDismissal(settle = true) {
-    const pending = this.#pendingDismissal;
-    if (!pending) return;
-    // The deadline is a backstop, not an oracle: if the sheet did leave without
-    // passing an accept site, the honest report is still the dismissal.
-    if (!this.#engine || this.#engine.state !== 'shown') {
-      this.#acceptDismissal();
-      return;
+  // The element show() flies out of and returns focus to. morphTrigger names it
+  // explicitly; otherwise whatever the user was on when the parent opened the
+  // sheet is the honest answer, and it keeps focus return working with no prop.
+  #trigger() {
+    const value = this.props.morphTrigger;
+    if (value && typeof value === 'object' && value.nodeType === 1) return value;
+    if (typeof value === 'string' && value) {
+      const found = document.querySelector(value);
+      if (found) return found;
     }
-    clearTimeout(pending.timer);
-    this.#pendingDismissal = null;
-    // The queued velocity would otherwise leak into the next hide, and so would
-    // the direct-exit classification the release armed — this refusal is the
-    // controlled analogue of upstream's vetoed `beforeHide`, which cancels both.
-    this.#engine.setDismissVelocity(0);
-    this.#engine.cancelGestureExit();
-    // `settle` is false only when a new gesture is taking the panel over, which
-    // makes the settle-back both unnecessary and a fight with the live drag.
-    if (settle) this.#settleBack();
-    this.#emitSnapRelease(
-      pending.velocity,
-      pending.size,
-      this.#engine.activeSnap,
-      true
-    );
+    const active = document.activeElement;
+    return active && active !== document.body && active.focus ? active : undefined;
   }
-
-  #clearDismissal() {
-    if (!this.#pendingDismissal) return;
-    clearTimeout(this.#pendingDismissal.timer);
-    this.#pendingDismissal = null;
-  }
-
-  #dragEnd(surface, info) {
-    const drag = this.#drag;
-    if (!drag.active) return;
-    this.#drag = { active: false };
-
-    if (
-      !info.cancelled &&
-      surface === 'backdrop' &&
-      Math.hypot(info.deltaX, info.deltaY) < 10 &&
-      info.duration < 300
-    ) {
-      if (this.#dismissPolicy().backdrop) {
-        this.#requestClose('backdrop');
-      } else if (drag.claimed) {
-        this.#settleBack();
-      }
-      return;
-    }
-    if (!drag.claimed) return;
-
-    if (info.cancelled) {
-      this.#settleBack();
-      return;
-    }
-
-    const velocityAway = awayOffset(
-      this.#profile.position,
-      info.velocityX,
-      info.velocityY
-    );
-    const releasedSize = this.#engine.currentSize;
-    const resolved = resolveSnapTarget({
-      currentSize: releasedSize,
-      velocityAway,
-      snaps: this.#snaps,
-      flickVelocity: FLICK_VELOCITY,
-    });
-    // A locked sheet refuses the dismissal but still has to land somewhere, so
-    // the refusal is redirected to the active snap rather than vetoed later.
-    // This one is answerable synchronously, so it emits with the rest.
-    const prevented = resolved === null && !this.#dismissPolicy().swipe;
-    const target = prevented ? this.#engine.activeSnap : resolved;
-
-    if (target === null) {
-      // The OTHER way a resolved dismissal fails to happen: the parent owns
-      // `open` and may simply not flip it. Emitting `target: null` here — before
-      // anyone has answered — was the bug: a consumer listening for it to tear
-      // down (clearing a draft, releasing a camera stream, logging a dismissal)
-      // did all of it while the sheet stayed open and interactive. So the
-      // release is banked and reported by whichever comes first, the accept or
-      // the deadline. See #bankDismissal.
-      this.#engine.setDismissVelocity(Math.max(0, velocityAway));
-      this.#bankDismissal(velocityAway, releasedSize);
-      // Classification has to precede the close request: the parent may flip
-      // `open` synchronously, and #hideThroughEngine reads animatesPanel at the
-      // top of the very next task. A swipe always leaves by the direct spring —
-      // a panel flying home to a button under the user's own finger reads as the
-      // gesture being undone.
-      this.#engine.armGestureExit();
-      this.#requestClose('swipe');
-      // A parent that answers synchronously is answered synchronously back.
-      if (this.#engine.state !== 'shown') this.#acceptDismissal();
-      return;
-    }
-
-    this.#emitSnapRelease(velocityAway, releasedSize, target, prevented);
-
-    this.#settleTarget = target;
-    const run = ++this.#snapRun;
-    let settle;
-    if (this.#profile.position === 'bottom') {
-      settle = this.#engine.settleTo(target, -velocityAway);
-    } else {
-      settle = this.#engine.returnToRest(-velocityAway);
-    }
-    settle.then(() => {
-      if (run === this.#snapRun) {
-        this.#settleTarget = null;
-        this.#reconcileSnap();
-      }
-    });
-  }
-
-  #handleResize() {
-    if (!this.#mounted) return;
-    if (!this.#shouldDisplayOpen()) {
-      this.syncOpen();
-      return;
-    }
-
-    const next = this.#resolveProfile();
-    // Ahead of the closed-dialog branch, not after it: during a forward blob
-    // flight the dialog is deliberately still closed, so that branch would
-    // happily patch a new class map onto the panel MorphEngine is flying.
-    if (this.#engine?.blobFlight) {
-      this.#blobDeferredProfile = next;
-      return;
-    }
-    if (!this.element?.open) {
-      this.#renderProfile = next;
-      this.setData(this.#classData(next));
-      return;
-    }
-
-    // The dialog stays open for the whole exit flight — it is closed from the
-    // engine's `hidden` event, not at hide-start. A resize landing in that
-    // window must not rebuild the profile underneath it: setSnaps/setProfile
-    // would re-measure and repaint geometry the exit is already animating away
-    // from, and a profile crossing would start a FLIP on a panel mid-flight.
-    // The next open re-measures anyway.
-    if (this.#engine.state === 'hiding') return;
-
-    if (
-      this.#profile &&
-      this.#profileKey(next) !== this.#profileKey(this.#profile)
-    ) {
-      this.#startProfileMorph(next);
-      return;
-    }
-    if (this.#drag.active) return;
-
-    if (this.#engine?.morphing) {
-      this.#retargetMorph(next);
-      return;
-    }
-
-    this.#renderProfile = next;
-    this.#prepareOpen(next);
-  }
-
-  // Mid-morph, the instant remeasure above would read pinned, interpolating
-  // geometry — a centre profile would publish the animating height as its
-  // intrinsic one. But simply waiting leaves the morph flying toward a
-  // destination measured at the crossing tick, and when the pins strip the panel
-  // snaps to wherever the still-moving window ended up. So retarget instead.
-  //
-  // Unlike #startProfileMorph this must NOT route through setData: the profile
-  // key has not changed, so the class data is identical and the patcher may not
-  // schedule an update at all — which would strand #pendingMorph and leave the
-  // engine parked forever. The FLIP is therefore re-entered synchronously.
-  #retargetMorph(profile) {
-    const panel = this.refs.panel;
-    if (!panel || !this.#engine?.morphing) return;
-    this.#snapshotMorphInline(panel);
-    // Read before the pins go: the animated rect is the exact starting point.
-    const from = this.#readBox(panel);
-    this.#clearMorphTimers();
-    this.#stripMorphPins(panel);
-    this.#renderProfile = profile;
-    this.#pendingMorph = { from, profile };
-    this.#continueMorph();
-  }
-
-  #startProfileMorph(next) {
-    const panel = this.refs.panel;
-    if (!panel || !this.#engine || !this.element?.open) {
-      this.#deferMeasure(next);
-      return;
-    }
-
-    this.#drag = { active: false };
-    let from;
-    if (this.#engine.morphing) {
-      // Read before removing an active transition: the animated rect is the
-      // exact re-entrant starting point.
-      from = this.#readBox(panel);
-      this.#clearMorphTimers();
-      this.#pendingMorph = null;
-    } else {
-      if (!this.#engine.beginMorph()) {
-        this.#deferMeasure(next);
-        return;
-      }
-      from = this.#readBox(panel);
-    }
-
-    this.refs.backdrop.style.opacity = '1';
-    // Taken here rather than at the top: the beginMorph() branch above can bail
-    // to #deferMeasure without ever pinning, and a snapshot with no FLIP behind
-    // it is a restore waiting to happen. Nothing before this line writes a
-    // MORPH_PROPERTY, so this is still ahead of every pin.
-    this.#snapshotMorphInline(panel);
-    this.#stripMorphPins(panel);
-    this.#pendingMorph = { from, profile: next };
-    this.#renderProfile = next;
-    this.setData(this.#classData(next));
-  }
-
-  #deferMeasure(profile) {
-    this.#renderProfile = profile;
-    this.#pendingMeasure = profile;
-    this.setData(this.#classData(profile));
-  }
-
-  #continueMorph() {
-    const pending = this.#pendingMorph;
-    if (!pending) return;
-    this.#pendingMorph = null;
-
-    const panel = this.refs.panel;
-    this.#prepareOpen(pending.profile);
-    const to = this.#readBox(panel);
-    const duration = this.#morphDuration();
-    const finish = () => {
-      this.#finishMorph();
-      this.#reconcileSnap();
-    };
-    if (duration <= 0) {
-      finish();
-      return;
-    }
-
-    this.#pinBox(panel, pending.from);
-    void panel.offsetWidth;
-
-    const easing = this.#morphEasing();
-    panel.style.transition = MORPH_TRANSITION_PROPERTIES.map(
-      (property) => `${property} ${duration}ms ${easing}`
-    ).join(', ');
-    this.#pinBox(panel, to);
-
-    const onEnd = (event) => {
-      if (
-        event.target === panel &&
-        MORPH_TRANSITION_PROPERTIES.includes(event.propertyName)
-      ) {
-        finish();
-      }
-    };
-    this.#morph = {
-      panel,
-      onEnd,
-      timer: setTimeout(
-        finish,
-        duration + MORPH_TIMEOUT_PADDING_MS
-      ),
-    };
-    panel.addEventListener('transitionend', onEnd);
-  }
-
-  #readBox(panel) {
-    const rect = panel.getBoundingClientRect();
-    return {
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      borderRadius: getComputedStyle(panel).borderRadius,
-    };
-  }
-
-  #pinBox(panel, box) {
-    Object.assign(panel.style, {
-      position: 'fixed',
-      top: `${box.top}px`,
-      left: `${box.left}px`,
-      right: 'auto',
-      bottom: 'auto',
-      width: `${box.width}px`,
-      height: `${box.height}px`,
-      maxWidth: 'none',
-      maxHeight: 'none',
-      margin: '0',
-      borderRadius: box.borderRadius,
-    });
-  }
-
-  /**
-   * Snapshots the consumer's own inline geometry once per FLIP, before any pin
-   * is written.
-   *
-   * Stripping used to blank MORPH_PROPERTIES outright, which erased styles the
-   * component never owned — a consumer's inline `height` or `margin` is
-   * indistinguishable from a pin once both are inline.
-   *
-   * The null guard is the re-entrant case and is load-bearing: a window edge
-   * dragged back and forth re-enters the FLIP with the previous run's pins still
-   * on the element, and re-snapshotting would promote that scaffolding to "what
-   * the consumer had", permanently. The snapshot therefore survives every
-   * retarget and is released only by #releaseMorphPins.
-   */
-  #snapshotMorphInline(panel) {
-    if (this.#morphInline !== null) return;
-    // `height` is the one property on the list the ENGINE also writes inline,
-    // and only for a snap-resized bottom sheet. That painted value is not the
-    // consumer's, and restoring it would pin the incoming profile — which paints
-    // no height at all — to the outgoing one's snap, exactly the stale survivor
-    // the blanking teardown existed to prevent. A consumer's own inline height
-    // on such a profile is already overwritten every frame, so nothing is lost.
-    const engineOwnsHeight = this.#profile
-      ? resizesWithSnaps(this.#profile)
-      : false;
-    this.#morphInline = {};
-    for (const property of MORPH_PROPERTIES) {
-      const owned = engineOwnsHeight && property === 'height';
-      this.#morphInline[property] = owned ? '' : (panel.style[property] ?? '');
-    }
-  }
-
-  /**
-   * Unpins the panel back to whatever inline geometry the consumer had.
-   *
-   * Restores rather than blanks — see #snapshotMorphInline. With no snapshot
-   * taken (teardown before any morph ran) blanking is still the right answer,
-   * since only a pin could have put a value there.
-   *
-   * Deliberately does NOT clear the snapshot: the FLIP strips mid-run so the
-   * destination is measured against the consumer's real geometry rather than a
-   * blanked box, and the same snapshot has to survive to the strip that ends it.
-   */
-  #stripMorphPins(panel) {
-    const saved = this.#morphInline;
-    for (const property of MORPH_PROPERTIES) {
-      panel.style[property] = saved?.[property] ?? '';
-    }
-  }
-
-  /**
-   * Unpins and releases the snapshot — the single site every path that ends a
-   * FLIP passes through.
-   *
-   * A null snapshot means no FLIP ever pinned, and the write would only blank
-   * inline styles the consumer owns. #finishMorph runs from syncOpen(),
-   * handleClose and destroyed() whether a morph ran or not, which is exactly how
-   * often that blank used to land.
-   */
-  #releaseMorphPins() {
-    if (this.#morphInline === null) return;
-    if (this.refs.panel) this.#stripMorphPins(this.refs.panel);
-    this.#morphInline = null;
-  }
-
-  #clearMorphTimers() {
-    if (!this.#morph) return;
-    clearTimeout(this.#morph.timer);
-    this.#morph.panel.removeEventListener(
-      'transitionend',
-      this.#morph.onEnd
-    );
-    this.#morph = null;
-  }
-
-  #finishMorph() {
-    const ran =
-      !!this.#pendingMorph || !!this.#morph || !!this.#engine?.morphing;
-    this.#pendingMorph = null;
-    this.#clearMorphTimers();
-    // Unconditional, and the only release site. Normal completion, the safety
-    // timeout, a zero morph duration, the close interruption and destroyed() all
-    // arrive here; a null snapshot makes it a no-op, so calling it on a run that
-    // never morphed costs nothing and forgetting it strands a pin forever.
-    this.#releaseMorphPins();
-    if (!ran) return;
-    if (this.#engine?.morphing) this.#engine.endMorph();
-    if (this.refs.backdrop && this.element?.open) {
-      this.refs.backdrop.style.opacity = '1';
-    }
-  }
-
-  #syncCenterObserver() {
-    const want =
-      !!this.#profile &&
-      CONTENT_SIZED(this.#profile) &&
-      !!this.element?.open &&
-      typeof ResizeObserver === 'function';
-    if (want && !this.#centerObserver) {
-      this.#centerObserver = new ResizeObserver(() => {
-        this.#scheduleCenterRemeasure();
-      });
-      this.#centerObserver.observe(this.refs.panel);
-    } else if (!want && this.#centerObserver) {
-      this.#centerObserver.disconnect();
-      this.#centerObserver = null;
-      if (this.#centerTimer !== null) clearTimeout(this.#centerTimer);
-      this.#centerTimer = null;
-    }
-  }
-
-  #scheduleCenterRemeasure() {
-    if (this.#centerTimer !== null) clearTimeout(this.#centerTimer);
-    this.#centerTimer = setTimeout(() => {
-      this.#centerTimer = null;
-      if (
-        !this.#profile ||
-        !CONTENT_SIZED(this.#profile) ||
-        !this.element?.open
-      ) {
-        return;
-      }
-      if (
-        this.#drag.active ||
-        this.#engine?.morphing ||
-        this.#engine?.state !== 'shown' ||
-        this.#settleTarget !== null
-      ) {
-        this.#scheduleCenterRemeasure();
-        return;
-      }
-      const height = this.#measurePanelBox().height;
-      if (Math.abs(height - (this.#snaps[0] ?? 0)) <= 1) return;
-      this.#prepareOpen(this.#resolveProfile());
-    }, RESIZE_THROTTLE_MS);
-  }
-
-  events = {
-    handleCancel: (event) => {
-      event.preventDefault();
-      if (!this.#dismissPolicy().escape) return;
-      this.#requestClose('escape');
-    },
-    handleClose: () => {
-      // A counter, not a flag: dialog.close() QUEUES its close event, so a
-      // boolean cleared right after the call would already be gone by the time
-      // this handler runs — and a proxy reverse closes the dialog one full task
-      // before the engine reports hidden.
-      if (this.#expectedCloses > 0) {
-        this.#expectedCloses -= 1;
-        return;
-      }
-      const engine = this.#engine;
-      const dialog = this.element;
-      // Force-close repair, scoped to the FORWARD proxy flight: something closed
-      // the dialog natively between the reveal promotion and the blob settle (a
-      // <form method="dialog"> submit, an app-level close). Left alone the blob
-      // would land and re-show a dialog the user explicitly closed.
-      // #proxyRevealed is the staleness token — only this run's reveal sets it —
-      // and `!dialog.open` distinguishes it from a reverse flight reversed back
-      // into a show, which re-promotes at its reveal re-emit.
-      if (
-        dialog &&
-        !dialog.open &&
-        this.#proxyRevealed &&
-        engine?.state === 'showing' &&
-        engine.blobFlight
-      ) {
-        engine.stop();
-        this.#releaseDialogPaint();
-        this.#requestClose('close');
-        return;
-      }
-      const state = engine?.state;
-      if (
-        !state ||
-        state === 'hidden' ||
-        state === 'hiding' ||
-        state === 'showing'
-      ) {
-        return;
-      }
-      this.#finishMorph();
-      this.#drag = { active: false };
-      this.#acceptDismissal();
-      this.#hideThroughEngine();
-      this.#requestClose('close');
-    },
-    scrollVeto: (event) => {
-      if (this.#drag.active && this.#drag.claimed && event.cancelable) {
-        event.preventDefault();
-      }
-    },
-  };
 }
 </script>
