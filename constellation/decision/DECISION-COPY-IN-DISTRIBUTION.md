@@ -28,6 +28,7 @@ Pieces are distributed as **source copied into the consumer's `app/components/ui
 
 ## Consequences
 
+
 - The repo is shaped as a registry from day one ([[DECISION-REGISTRY-SHAPED-REPO]]); the [[FEATURE-ADD-CLI]] is a copier, not a bundler.
 - Copied code is the user's to restyle and fork — updates are a future `diff`/`update` concern, not an npm bump.
-- Two lineages coexist: the `@magic-spells/*` web components keep shipping via npm for non-Puzzle contexts; puzzle-pieces is a deliberate fork (see [[DECISION-NATIVE-REBUILD]]).
+- Two lineages coexist: the `@magic-spells/*` web components keep shipping via npm for non-Puzzle contexts. A *wrapped* piece consumes that npm package directly (the `.pzl` is a thin copied shell; behavior updates arrive by version bump); a *ported* piece is a deliberate fork. Which a piece is follows [[DECISION-WRAP-WEB-COMPONENTS]] — wrap whenever possible.

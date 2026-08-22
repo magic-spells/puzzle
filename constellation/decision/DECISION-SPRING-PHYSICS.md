@@ -3,7 +3,7 @@ name: Spring physics is a registry dependency for snapping sheets
 status: built
 connections:
   - DOC-REGISTRY
-  - DECISION-NATIVE-REBUILD
+  - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-COPY-IN-DISTRIBUTION
   - PLAN-PROJECT
 notes:
@@ -37,6 +37,7 @@ cannot express that layout contract.
 
 ## Decision
 
+
 `@magic-spells/physics-engine` is the registry's third npm dependency and its
 first engine dependency used for behavior other than morphing. The
 `bottom-sheet` manifest declares it directly; the engine is constructed lazily
@@ -45,8 +46,12 @@ the tuned WAAPI fallback via `spring="none"`.
 
 Snapping is height-driven. Dragging and settling write the panel's height, then
 return the resting value to `dvh`; transform is reserved for motion below the
-shortest snap and final dismissal. This is a native `.pzl` rebuild under
-[[DECISION-NATIVE-REBUILD]], not a wrapper over the source web component.
+shortest snap and final dismissal. This is a native `.pzl` rebuild, not a
+wrapper over the source web component — built under the original
+rebuild-everything rule, before [[DECISION-WRAP-WEB-COMPONENTS]] flipped the
+default to wrapping (2026-08-22). `bottom-sheet` stays a port until there is a
+reason to rework it; `sheet` is the first piece scheduled for conversion to a
+wrapper.
 
 ## Alternatives
 
