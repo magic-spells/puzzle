@@ -199,6 +199,22 @@ web-component users, decide separately). The wrapper must work against 0.1.1 as-
   The wrapper imports both packages in `mounted()`; upstream could add the import for parity
   with sheet so consumers of the plain component get one-import installs too.
 
+### The original bug, and the hardening it led to (2026-08-22)
+
+Cory's symptom on the ported sheet: flick up then back down and it would sometimes keep
+switching between rungs, moving up or down again with a delay. Reproduced the CLASS of
+failure deterministically against the wrappers' controlled `snap` path (`test/snap-echo.test.js`):
+a parent render that lands late — Puzzle's patch deferred by a frame or its visibility
+fallback — carrying a rung the user already left (either a stale echo of an earlier
+`@snapChange`, or simply the parent's PREVIOUS value on an unrelated re-render) re-drove
+`snapTo()` and bounced the sheet, which then bounced again when the next render landed.
+Fix in both wrappers (commit on feat/sheet-wrapper): `snap` is now edge-triggered on the
+PARENT's value exactly like `open` — only a change acts — and a change that writes back a
+rung the component announced through `@snapChange` is absorbed (a small pending-announcement
+queue, cleared by a genuine parent-driven request). Live Playwright flicks on the demo at
+430px: up/down, rapid up-then-down, button-driven 85vh then a flick — zero wrapper `snapTo()`
+calls, every commit reflected in the readout, no oscillation.
+
 ## Verification (Claude, not the implementing agent)
 
 Diff review; `npm test` green at the root; demo build; browser smoke of every SheetDoc

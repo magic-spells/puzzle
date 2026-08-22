@@ -920,7 +920,7 @@ export default class SheetDoc extends PuzzleView {
         { name: 'desktopExitEffect', desc: 'Desktop exit; falls back to exitEffect, then desktopEffect.' },
         { name: 'snapPoints', desc: 'Space-separated CSS heights, or an array of them. A MOBILE BOTTOM prop only — every other profile sizes itself by measurement. Default "85vh".' },
         { name: 'initialSnap', desc: 'Zero-based snap index the sheet opens at. Default: the largest.' },
-        { name: 'snap', desc: 'Optional-controlled snap index; a change calls snapTo(). Pair with @snapChange. It does not seed the opening index — use initialSnap.' },
+        { name: 'snap', desc: 'Optional-controlled snap index. Only a change calls snapTo(), and a change that writes back a rung the sheet itself announced through @snapChange is absorbed — a late render can never drag the sheet back to a rung the user already left. Pair with @snapChange. It does not seed the opening index — use initialSnap.' },
         { name: 'dismiss', desc: 'Which of swipe, backdrop, escape may dismiss. Absent or "all" opens all three; "none" refuses all three. A refused sheet still tracks your finger and springs back.' },
         { name: 'maxDisplayWidth', desc: 'Largest viewport width where opening is allowed. Above it show() refuses silently, so open={true} there leaves the page out of sync until you flip it back.' },
         { name: 'spring', desc: '"attraction friction" entrance override, both dials in (0, 1).' },

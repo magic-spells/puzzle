@@ -119,9 +119,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                  back into. Also the focus-return target. Without it the sheet
 //                  still returns focus — document.activeElement at open time is
 //                  passed to show() — it simply does not morph.
-//   snap           optional-controlled snap index; a change calls snapTo().
-//                  Pair it with @snapChange. It does not seed the opening index
-//                  — use initialSnap for that.
+//   snap           optional-controlled snap index. Only a CHANGE in it calls
+//                  snapTo(), and a change that writes back a rung the sheet
+//                  itself announced through @snapChange is absorbed — so a
+//                  render that lands late can never drag the sheet back to a
+//                  rung the user already left. Pair it with @snapChange. It
+//                  does not seed the opening index — use initialSnap for that.
 //   showGrabber    false zeroes the handle pill and the room reserved for it.
 //                  CSS only; the drag surfaces are unaffected.
 //   class          merged onto <sheet-panel>
@@ -232,7 +235,10 @@ export default class Sheet extends PuzzleView {
   #live = false;
   #ready = false;
   #lastOpen = false;
-  #lastSnap;
+  // The parent's last rendered `snap`, and the rungs the component announced
+  // through @snapChange that the parent has not written back yet.
+  #lastProp;
+  #pending = [];
 
   #onShown = () => {
     this.props.show?.();
@@ -249,9 +255,12 @@ export default class Sheet extends PuzzleView {
   #onSnapChange = (event) => {
     const to = event.detail?.to;
     if (typeof to !== 'number') return;
-    // Record before announcing: a controlled parent echoing the same index back
-    // through `snap` must not read as a fresh request and re-run snapTo().
-    this.#lastSnap = to;
+    // Remember the announcement before making it: when the parent writes this
+    // rung back into `snap` — immediately, or in a render that lands late — it
+    // is an echo to absorb, not a request to run snapTo() against a sheet that
+    // has moved on. Capped so a parent that never echoes cannot grow it.
+    this.#pending.push(to);
+    if (this.#pending.length > 16) this.#pending.shift();
     this.props.snapChange?.(to);
   };
 
@@ -303,7 +312,7 @@ export default class Sheet extends PuzzleView {
     this.#panel = this.refs.panel;
     this.#sheet = this.refs.sheet;
     this.#lastOpen = !!this.props.open;
-    this.#lastSnap = this.props.snap;
+    this.#lastProp = this.props.snap;
 
     // Bound before the upgrade on purpose: addEventListener works on an
     // un-upgraded element, so no dispatch can be missed in the gap.
@@ -336,10 +345,24 @@ export default class Sheet extends PuzzleView {
       this.#sync();
     }
 
+    // Edge-triggered on the PARENT's value, exactly like `open`: a render that
+    // carries the same `snap` as the last one is not a request — even when the
+    // component has since moved — so a render Puzzle defers by a frame (or by
+    // its visibility fallback) can never drag the sheet back to a rung the user
+    // already left. A changed value that merely echoes an announced rung is
+    // absorbed; anything else is a genuine request and supersedes every
+    // announcement still in flight.
     const snap = this.props.snap;
-    if (snap !== undefined && snap !== this.#lastSnap) {
-      this.#lastSnap = snap;
-      if (this.#ready) this.#sheet?.snapTo?.(Number(snap));
+    if (snap !== this.#lastProp) {
+      this.#lastProp = snap;
+      const echo =
+        snap === undefined || snap === null ? -1 : this.#pending.indexOf(Number(snap));
+      if (echo !== -1) {
+        this.#pending.splice(0, echo + 1);
+      } else if (snap !== undefined && snap !== null) {
+        this.#pending.length = 0;
+        if (this.#ready) this.#sheet?.snapTo?.(Number(snap));
+      }
     }
   }
 

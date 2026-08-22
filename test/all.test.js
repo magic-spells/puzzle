@@ -6,3 +6,4 @@ import './rich-text-parity.test.js';
 import './markdown-doc.test.js';
 import './markdown-walker.test.js';
 import './markdown-parity.test.js';
+import './snap-echo.test.js';
