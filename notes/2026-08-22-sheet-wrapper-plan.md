@@ -215,6 +215,29 @@ queue, cleared by a genuine parent-driven request). Live Playwright flicks on th
 430px: up/down, rapid up-then-down, button-driven 85vh then a flick — zero wrapper `snapTo()`
 calls, every commit reflected in the readout, no oscillation.
 
+### Phase 3 findings (2026-08-22)
+
+- Both Dialog and AlertDialog landed as wrappers (commits 5da6c6a / bf98011). AlertDialog's
+  Escape-vs-backdrop split works via a capture-phase `cancel` listener on the `<dialog>`.
+- **Puzzle framework gap, reported by the phase-3 agent and verified by it in the browser
+  (NOT yet independently reproduced):** a named slot's FALLBACK body renders once and is
+  never patched — a `title`/`description` bound to changing state keeps its mount-time text
+  inside `<Slot name="header">…fallback…</Slot>`. All four overlay wrappers (and the six
+  trigger pieces using D141 fallbacks) have that shape. Needs a minimal repro and a fix in
+  `../puzzle` (viewManager `expandNode` / D141). DialogDoc's Sizes example was changed to a
+  constant title because of it.
+- `m-auto` is load-bearing on a modal `<dialog>`: Tailwind's preflight zeroes the UA
+  `margin: auto` that centres it; without it the panel pins to the top-left.
+- dialog-panel's `block` attribute (assumed in the Phase 3 sketch) does not exist at 2.0.1;
+  only `morph-display` and `position` are read. `position` is deliberately not exposed.
+- Keyboard-activated `[data-action-hide-dialog]` buttons: beyond losing `data-result`, they
+  reach `beforeHide` with no trigger, so a `dismissible={false}` Dialog / AlertDialog would
+  have refused the close outright — the wrappers carry a capture-phase click guard that
+  flags the intent for one macrotask. Upstream fix (ignore `detail === 0` in `dialogClick`)
+  would remove the need for it.
+- `#mine(event)` target guard (nested overlays' bubbling dialog-panel events) added to all
+  four wrappers (f6dc916 for Sheet/BottomSheet).
+
 ## Verification (Claude, not the implementing agent)
 
 Diff review; `npm test` green at the root; demo build; browser smoke of every SheetDoc
