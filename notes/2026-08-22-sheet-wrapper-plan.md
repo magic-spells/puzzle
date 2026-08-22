@@ -204,3 +204,46 @@ one copy, guarded registration), dep `@magic-spells/physics-engine`. Elements:
   build + smoke. CLAUDE.md: the bottom-sheet/physics-engine dependency example.
 - Site phase then syncs BOTH pieces in one pass (copy, delete stale libs incl.
   `sheet-math.js`, port docs, deps, two+one stylesheet imports, build, smoke).
+
+## Phase 3 — dialog (+ alert-dialog) → wrapper over `@magic-spells/dialog-panel` (after phase 2)
+
+Decided 2026-08-22 (owner): the `dialog` piece is based directly on dialog-panel too, so
+all three overlays (sheet, bottom-sheet, dialog) share one upstream base, one loaded
+module, and one close/notify contract. Upstream `@magic-spells/dialog-panel@2.0.1`
+(npm == `../dialog-panel` — verify HEAD hasn't drifted; publish first if it has).
+Elements `dialog-panel` + `dialog-backdrop`; attrs `block`, `morph-display`; methods
+`show(triggerEl)` / `hide(triggerEl)`; events `beforeShow` / `shown` / `beforeHide`
+(cancelable, `{ result, triggerElement }`) / `hidden`; `state` attribute drives the CSS
+transitions; scroll lock; focus return to the trigger; `[data-action-hide-dialog]`
+delegation (`data-result` → `hidden.detail.result`). CSS: 287 lines, one var
+(`--dialog-backdrop-z-index`), backdrop `rgba(0,0,0,.3)`.
+
+- `Dialog.pzl` (296 lines today, `@magic-spells/morph-engine` dep) → wrapper:
+  `<dialog-panel><dialog-backdrop/><dialog aria-labelledby aria-describedby>` with the
+  piece's title / description / footer slots and close X, same edge-triggered `open`,
+  `@show` / `@hide({ result, triggerElement })` contract as the Sheet wrapper. Panel
+  chrome (bg-surface, radius, shadow, max-w, padding) stays Tailwind on the `<dialog>`;
+  read `dialog-panel.css` first and do NOT set `transform` / `opacity` / `transition` /
+  `display` on the dialog — those belong to dialog-panel's state machine.
+- `dismissible={ false }`: dialog-panel has no backdrop/Escape opt-out → the wrapper
+  cancels `beforeHide` when `detail.triggerElement` is null AND the hide was not its own
+  (set a flag around its own `hide()` call). A `reason` in the upstream detail is the
+  cleaner follow-up.
+- `morph` prop: morph-engine has NO dialog-panel seam (the sheet implements dialog-
+  panel's duck-typed `{show, hide, state, on, off}` seam inside its own engine).
+  RECOMMENDED: drop `morph` from Dialog — a morphing centered dialog IS
+  `<Sheet position="center" morphTrigger="…">`; say so in DialogDoc. Alternative if
+  the owner wants it kept: a ~40-line adapter implementing the seam over MorphEngine,
+  assigned to `panel.morphEngine`. OWNER TO CONFIRM before phase 3 starts.
+- `AlertDialog.pzl` (164 lines, no deps): a thin variant of the Dialog wrapper —
+  `role="alertdialog"`, backdrop does not dismiss, Escape still cancels. Escape vs
+  backdrop can't be told apart from `beforeHide` alone → listen to the `<dialog>`'s
+  `cancel` event in the CAPTURE phase (it runs before dialog-panel's handler) to flag
+  an escape. If that glue gets ugly, keep AlertDialog as a port for now and say so.
+- Manifests: `dependencies: ["@magic-spells/dialog-panel"]` (drop morph-engine if
+  `morph` is dropped). Demo: make dialog-panel a direct dep; rewrite `DialogDoc.pzl`
+  (9 examples) and `AlertDialogDoc.pzl`; the dialog-panel stylesheet import is already
+  there from phase 1. Site: `app/views/examples/BankingDemo.pzl` uses Dialog /
+  AlertDialog — update those call sites in the site phase.
+- Nothing else in the registry imports `Dialog.pzl` (only the old Sheet port mentioned
+  it in a comment), so no composite piece breaks.
