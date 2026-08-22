@@ -8,7 +8,11 @@ implements: `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md` (CLAUDE.md
 
 ## Branches
 
-- puzzle-pieces: `feat/sheet-wrapper` off `release/0.6.0` → PR into `release/0.6.0`.
+- puzzle-pieces: `feat/sheet-wrapper` (branched from `release/0.6.0` HEAD `fdcb110`) → PR into
+  **`release/0.7.0`** — Pieces tracks the framework, and Puzzle moved to its 0.7.0 line on
+  2026-08-22 (owner). `release/0.7.0` = `fdcb110` + the version bump `43bc862` (root + demo
+  package versions and the header badge → 0.7.0; the demo's `@magic-spells/puzzle` range stays
+  `^0.6.0` until the framework publishes 0.7.0).
   The uncommitted `top`-position work on the ported sheet is parked on
   `wip/sheet-top-position` (commit 9e8cd38). It is NOT in scope — `top` belongs upstream
   in `../sheet`.
