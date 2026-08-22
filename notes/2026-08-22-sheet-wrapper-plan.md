@@ -176,3 +176,31 @@ web-component users, decide separately). The wrapper must work against 0.1.1 as-
 Diff review; `npm test` green at the root; demo build; browser smoke of every SheetDoc
 example (open/close, Escape, backdrop, snap buttons, desktop profile switch, morph
 trigger, `data-result`); site build + smoke; parity `cmp`.
+
+## Phase 2 — bottom-sheet → wrapper (same branch, AFTER the sheet wrapper is reviewed)
+
+Decided 2026-08-22 (owner): `bottom-sheet` also becomes a wrapper, over
+`@magic-spells/bottom-sheet` (npm 2.0.2 == `../bottom-sheet`; HEAD has two small
+post-bump commits — ask the owner to publish 2.0.3 before pinning if they matter).
+Peer `@magic-spells/dialog-panel >=2 <3` (the SAME module the sheet wrapper loads —
+one copy, guarded registration), dep `@magic-spells/physics-engine`. Elements:
+`bottom-sheet`, `bottom-sheet-header`, `bottom-sheet-content`, `bottom-sheet-footer`.
+
+- Template the wrapper on the finished `Sheet.pzl`: same loading (dynamic import in
+  `mounted()`), same edge-triggered `open`, same `@show` / `@hide({ result,
+  triggerElement })` contract via dialog-panel's events, same theme-bridge approach
+  (read `../bottom-sheet/src/bottom-sheet.css` for its `--bottom-sheet-*` vars), same
+  `title` / `labelledby` / header + footer slots. Map attributes from
+  `../bottom-sheet/src/bottom-sheet.js` observedAttributes; map snap events/methods.
+- Delete `BottomSheet.pzl`'s port, `registry/lib/sheet-math.js` (bottom-sheet is its
+  only consumer) and `test/sheet-math.test.js`; trim the remaining rows from
+  `sheet-parity.test.js` (or delete it if empty) and `all.test.js`; extend the static
+  guard test. Root devDeps: drop physics/frame-engine if nothing imports them.
+- `piece.json` / `registry.json`: `registryDependencies: []`, `dependencies:
+  ["@magic-spells/bottom-sheet", "@magic-spells/dialog-panel"]`.
+- Demo: dep `@magic-spells/bottom-sheet ^2.0.2`; one more stylesheet import
+  (`@magic-spells/bottom-sheet/css` — verify the export name in its package.json) in
+  `layer(components)`; rewrite `BottomSheetDoc.pzl` (7 examples) to the new API;
+  build + smoke. CLAUDE.md: the bottom-sheet/physics-engine dependency example.
+- Site phase then syncs BOTH pieces in one pass (copy, delete stale libs incl.
+  `sheet-math.js`, port docs, deps, two+one stylesheet imports, build, smoke).
