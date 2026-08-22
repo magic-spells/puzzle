@@ -4,10 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const copies = [
 	['Sheet.pzl', '../registry/ui/sheet/Sheet.pzl', '../demo/app/components/ui/Sheet.pzl'],
-	['sheet-engine.js', '../registry/lib/sheet-engine.js', '../demo/app/lib/sheet-engine.js'],
-	['sheet-policy.js', '../registry/lib/sheet-policy.js', '../demo/app/lib/sheet-policy.js'],
 	['sheet-math.js', '../registry/lib/sheet-math.js', '../demo/app/lib/sheet-math.js'],
-	['sheet-drag.js', '../registry/lib/sheet-drag.js', '../demo/app/lib/sheet-drag.js'],
 	[
 		'BottomSheet.pzl',
 		'../registry/ui/bottom-sheet/BottomSheet.pzl',

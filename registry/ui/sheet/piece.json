@@ -1,16 +1,8 @@
 {
   "name": "sheet",
-  "description": "One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, an optional container-transform flight out of the trigger that opened it, entrance and exit effects, a dismiss policy, and parent-controlled open state",
+  "description": "One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, drag and flick gestures, a dismiss policy, entrance and exit effects, and an optional container-transform flight out of the trigger that opened it; wraps the @magic-spells/sheet web component rather than porting it",
   "files": ["Sheet.pzl"],
-  "registryDependencies": [
-    "lib/sheet-engine.js",
-    "lib/sheet-policy.js",
-    "lib/sheet-drag.js"
-  ],
-  "dependencies": [
-    "@magic-spells/physics-engine",
-    "@magic-spells/frame-engine",
-    "@magic-spells/morph-engine"
-  ],
+  "registryDependencies": [],
+  "dependencies": ["@magic-spells/sheet", "@magic-spells/dialog-panel"],
   "targetDir": "app/components/ui"
 }

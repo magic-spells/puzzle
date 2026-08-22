@@ -171,6 +171,20 @@ smoke at 3080; `cmp` registry↔site copies byte-identical.
 stripping the color defaults from `sheet.css` (owner preference — breaking for plain
 web-component users, decide separately). The wrapper must work against 0.1.1 as-is.
 
+### Found during verification (2026-08-22) — upstream, not the wrapper
+
+- **Keyboard activation of a `[data-action-hide-dialog]` button loses its `data-result`.**
+  Mouse click on "Delete project" → `hidden.detail.result === 'delete'`; Tab + Enter on the
+  same button → the sheet closes but `result === null`. Cause: a keyboard click has
+  `clientX/Y = 0,0` and `event.detail === 0`; `sheet.js` `outsideGuard` (~L430-452)
+  deliberately lets it through so keyboard users can close, but dialog-panel's `dialogClick`
+  on the `<dialog>` (bubble, BELOW the delegated `[data-action-hide-dialog]` handler on
+  `<dialog-panel>`) reads (0,0) as outside, calls `hide()` with no trigger and
+  `stopPropagation()`s — so the delegated handler that would have passed the trigger never
+  runs. One-line fix in `dialog-panel.js` `#bindEvents` `dialogClick`: ignore clicks with
+  `detail === 0` (a pointerless click can never be a scrim tap); the sheet's pointerless
+  guard then only has to protect non-closing controls. Affects the plain web component too.
+
 ## Verification (Claude, not the implementing agent)
 
 Diff review; `npm test` green at the root; demo build; browser smoke of every SheetDoc

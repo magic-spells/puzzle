@@ -66,8 +66,10 @@ Rules that follow from this:
 - `registryDependencies` — other registry files pulled in transitively: `lib/*.js` files go
   to `app/lib/`; sibling pieces (e.g. DatePicker → `calendar`) go to their own targetDir.
 - `dependencies` — **real npm packages, plain JS only.** `.pzl` never ships via npm, so it
-  never appears here. Examples: morph pieces → `@magic-spells/morph-engine`, sheet /
-  bottom-sheet → `@magic-spells/physics-engine`, the rich-text/markdown editors →
+  never appears here. Examples: morph pieces → `@magic-spells/morph-engine`, `sheet` →
+  `@magic-spells/sheet` + `@magic-spells/dialog-panel` (it wraps the web component; the
+  second is its peer, which yarn 1 will not install on its own), `bottom-sheet` →
+  `@magic-spells/physics-engine` (still a port), the rich-text/markdown editors →
   `@tiptap/*`, `code` → `highlight.js`, `markdown` → `marked`.
 
 ## Versioning
@@ -100,15 +102,15 @@ CLI — it is unrelated and must not be bumped along with the release.
   are taken by sibling projects). Browser-smoke interactive pieces in a FOREGROUNDED tab —
   Puzzle's rAF-based view scheduler stalls re-renders in a hidden/backgrounded tab.
 - **Node tests:** `npm test` at the repo root runs the DOM-free suites in `test/` against
-  `registry/lib/`: the sheet motion libs (engine, math, snap points, drag, scroll policy),
-  the markdown and rich-text document models, an InputOTP suite, and parity suites that
-  assert the demo copies are byte-identical to their `registry/` sources. These are
-  repo-internal — nothing under `test/` or the root `package.json` is ever copied to a
-  consumer. The sheet assertions are ported byte-identical from the source
-  `@magic-spells/sheet` repo and pin exact numbers, not bounds; any edit to
-  `registry/lib/sheet-*.js` requires the suite green, and porting upstream changes means
-  copying their new tests with only the import paths adjusted — never loosening an
-  assertion to make a port fit.
+  `registry/lib/`: `sheet-math.js` (bottom-sheet's dismissal math), the markdown and
+  rich-text document models, an InputOTP suite, static wiring guards for the `sheet`
+  wrapper piece, and parity suites that assert the demo copies are byte-identical to their
+  `registry/` sources. These are repo-internal — nothing under `test/` or the root
+  `package.json` is ever copied to a consumer. The sheet MOTION suites (engine, drag,
+  snap points, scroll policy) are gone with the sheet port — that behavior now lives in
+  `@magic-spells/sheet` and is tested there; `sheet-math.js` stays because `bottom-sheet`
+  is still a port and still imports it. Its assertions are ported byte-identical from the
+  source repo and pin exact numbers, not bounds — never loosen one to make a port fit.
 
 ## Piece conventions
 
@@ -119,14 +121,15 @@ CLI — it is unrelated and must not be bumped along with the release.
 - **Wrap @magic-spells web components directly whenever possible; port only when
   wrapping genuinely can't work** (rule set 2026-08-19 as "wrap when simple", strengthened
   2026-08-22 — see `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md`; `scroll-stack`
-  is the exemplar, `sheet` is the first scheduled conversion). A wrapper piece renders the
+  is the exemplar; `sheet` was the first conversion, 2026-08-22). A wrapper piece renders the
   custom element's markup around `<Slot/>`, binds props to attributes, declares the npm
   package in `piece.json.dependencies`, and upgrades it via **dynamic import in
   `mounted()`** — never a top-level import, because the package's `class extends
   HTMLElement` crashes Node prerendering. The component's stylesheet is imported at the
   app entry in `layer(components)` (e.g. `@import "@magic-spells/scroll-stack/css"
   layer(components)`) so utilities on the host still win; document it in the piece's
-  installation section. Why wrap: a port is a fork — every upstream fix has to be
+  installation section. A package with a peer that ships its own CSS needs BOTH imports,
+  peer first (`sheet` → `@magic-spells/dialog-panel/css` then `@magic-spells/sheet/css`). Why wrap: a port is a fork — every upstream fix has to be
   re-translated by hand, and the translation is where bugs enter (the 5,600-line sheet
   port vs its 2,100-line upstream is the cautionary case). Wrapped overlays may manage
   their own open/close state and report it (`@show` / `@hide({ result })`); the parent
