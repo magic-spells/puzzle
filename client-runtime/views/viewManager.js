@@ -454,10 +454,22 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 	}
 	if (vnode.isText) {
 		el = document.createTextNode(stringify(vnode.attrs.value));
+		vnode.el = el;
 	} else {
 		el = inSvgNamespace(vnode.tag, parent)
 			? document.createElementNS(SVG_NS, vnode.tag)
 			: document.createElement(vnode.tag);
+		// PUBLISH the node before the first side effect, not after the last one. Every
+		// step below can throw — setAttr installs `outside` listeners on DOCUMENT, a
+		// hand-written tree's ref can be any function, a child's mount() is the whole
+		// recursion (a component constructor, a `String(symbol)` in a text node) — and
+		// an unwind hands the half-built tree to releaseAborted(), whose releaseSubtree()
+		// reaches an element's LISTENERS and its captured ref through `vnode.el` alone.
+		// Assigned last, that read found null and the D86 document listener this element
+		// had already parked outlived the render that made it. The node is still detached
+		// here, which no reader minds: `el.remove()` on a parentless node is a no-op and
+		// every devperf/insertion-ref site tests `parentNode` first.
+		vnode.el = el;
 		for (const [name, value] of Object.entries(vnode.attrs)) {
 			setAttr(el, name, value, owner);
 		}
@@ -488,7 +500,8 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 		// option. Re-assert it now that the options are mounted (SPEC §5).
 		reassertSelectValue(el, vnode.attrs);
 	}
-	vnode.el = el;
+	// Insertion stays LAST: mount() builds detached and attaches the finished subtree
+	// in one move, so a throw leaves the container holding nothing this call put there.
 	parent.insertBefore(el, ref ?? null);
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 		devperfMutation();
@@ -914,8 +927,15 @@ function releaseSubtree(vnode) {
  * (#destroyed guard), the ref setters are removal-guarded, and the listener sweep
  * deletes the keys it detaches, so the second visit is a no-op.
  *
- * This runs on an already-failing path, so every subtree is guarded: a throwing
-	 * user beforeDestroy()/ref must not stop the error view from mounting.
+ * This runs on an already-failing path, so the guard is per TREE, not per node: one
+ * tree's release throwing must not cost the OTHER tree its release, and neither may
+ * stop the error view from mounting. Inside a tree the walk is deliberately
+ * unguarded, because nothing it reaches is user code in a compiled app: ref setters
+ * are the framework's own __ref closures (a Map lookup and an assignment), and
+ * destroy() already contains the one user hook it fires, destroyed() (D118). Per-node
+ * try/catch would buy nothing and cost bytes on a walk that also runs on every
+ * ordinary removal. A hand-written render tree can still throw mid-walk; it forfeits
+ * the rest of THAT tree's release, and the error view mounts regardless.
  */
 function releaseAborted(trees) {
 	if (!trees) return;

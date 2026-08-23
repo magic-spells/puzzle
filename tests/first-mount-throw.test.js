@@ -184,6 +184,58 @@ describe('first mount that throws (D145)', () => {
 		expect(vm.treeUnknown).toBe(false);
 	});
 
+	it('detaches `outside` listeners the failed mount had already parked on document', async () => {
+		// `vnode.el` is published the moment the node is created, BEFORE the setAttr
+		// loop that parks D86 `outside` handlers on document. Assigned after the child
+		// mounts instead, it stayed null on any element whose OWN mount was the one
+		// that unwound — and releaseSubtree() reads the listener map off `vnode.el`,
+		// so the sweep found nothing to detach and the handler outlived its element,
+		// its view and the render that made it.
+		//
+		// The ANCESTOR of the throw is the leak: mount() builds depth-first into a
+		// detached parent, so a preceding SIBLING's own mount ran to completion and
+		// always had its `el`. Both are asserted — the pair is what pins the fix to
+		// the element that matters rather than to mount order.
+		const host = container();
+		const vm = new ViewManager(host, {});
+
+		let siblingHits = 0;
+		let ancestorHits = 0;
+		class Exploding extends PuzzleView {
+			boom = (() => {
+				throw new Error('listener boom');
+			})();
+			render() {
+				return h('span');
+			}
+		}
+
+		expect(() =>
+			vm.render(
+				h('div', { '@click:outside': () => ancestorHits++ }, [
+					h('button', { '@click:outside': () => siblingHits++ }, [text('menu')]),
+					comp(Exploding),
+				])
+			)
+		).toThrow('listener boom');
+
+		// Both listeners really are live on document — without this the assertions
+		// below would pass against bindings that never attached.
+		document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		expect(siblingHits).toBe(1);
+		expect(ancestorHits).toBe(1);
+
+		// renderFresh() releases the aborted tree. Neither element is in the app's
+		// world any more, so neither document listener may survive.
+		vm.render(h('p', { class: 'ok' }, [text('fine')]));
+		await tick();
+
+		document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		expect(siblingHits).toBe(1);
+		expect(ancestorHits).toBe(1);
+		expect(host.querySelector('.ok').textContent).toBe('fine');
+	});
+
 	it('sweeps content a failed mount left in an anchored slot', async () => {
 		// The anchor case: a component's manager holds a comment placeholder while its
 		// async data() resolves, and a <Portal> parks its local placeholder in the
