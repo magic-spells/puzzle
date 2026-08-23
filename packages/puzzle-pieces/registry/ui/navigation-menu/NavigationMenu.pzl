@@ -1,0 +1,375 @@
+<puzzle-view>
+  <nav
+    aria-label={ navLabel }
+    class={ rootClass }
+    @keydown:escape={ onRootEscape(event) }>
+    <ul class="flex items-center gap-1">
+      {#for item in items, i}
+        <li
+          class="relative"
+          @pointerenter={ onItemEnter(i, item) }
+          @pointerleave={ onItemLeave(i, item) }>
+          {#if item.kind === 'link'}
+            <a
+              href={ item.href }
+              aria-current={ item.current }
+              class={ item.linkClass }>{ item.label }</a>
+          {:else}
+            <button
+              type="button"
+              id={ item.triggerId }
+              data-nav-trigger={ i }
+              class={ item.triggerClass }
+              aria-expanded={ openIndex === i ? 'true' : 'false' }
+              aria-controls={ item.panelId }
+              @click={ onTriggerClick(i, event) }
+              @keydown:down:prevent={ onTriggerDown(i, event) }>
+              <span>{ item.label }</span>
+              <svg
+                class="size-4 shrink-0 transition-[rotate] motion-reduce:transition-none {#if openIndex === i}rotate-180{/if}"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                aria-hidden="true">
+                <path d="M4 6l4 4 4-4z" />
+              </svg>
+            </button>
+
+            {#if openIndex === i}
+              <div
+                id={ item.panelId }
+                data-nav-panel
+                aria-labelledby={ item.triggerId }
+                class={ item.panelClass }
+                style={ panelStyle }
+                @keydown={ onPanelKeydown(event) }>
+                {#for child in item.children}
+                  <a
+                    href={ child.href }
+                    data-nav-link
+                    aria-current={ child.current }
+                    class={ child.cardClass }>
+                    <span class={ child.labelClass }>{ child.label }</span>
+                    {#if child.description}
+                      <span class="mt-1 block text-sm text-muted line-clamp-2">{ child.description }</span>
+                    {/if}
+                  </a>
+                {/for}
+              </div>
+            {/if}
+          {/if}
+        </li>
+      {/for}
+    </ul>
+  </nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// NavigationMenu — a horizontal site-header navigation with flyout panels,
+// config-first. The whole bar renders from an `items` array; each entry is
+// either a plain link or a flyout trigger whose `children` render as a panel of
+// link cards.
+//
+//   <NavigationMenu items={ nav } activePath={ path } />
+//
+// items entries:
+//   { label, href }                       — a plain top-level link
+//   { label, children: [{ label, href, description? }] }
+//                                         — a flyout trigger; children are link
+//                                           cards (label over an optional 2-line
+//                                           description). >4 children lay out in
+//                                           two columns, else a single column.
+//
+// Accessibility stance — the DISCLOSURE pattern, NOT menubar/menuitem roles.
+// This follows modern APG guidance for site navigation: a menubar implies a
+// desktop-app command menu with full arrow-key roving and a single tab stop,
+// which is wrong for links to pages. So each trigger is a real
+// <button aria-expanded aria-controls>, and the panel is a plain container of
+// real <a> links — every link is a natural Tab stop, screen readers announce
+// "link", and back/forward work as expected. Only the arrow-key niceties are
+// layered on: ArrowDown opens/enters a panel, ArrowUp/Down move link focus,
+// Escape closes and returns focus to the trigger.
+//
+// Hover intent — opening on pointerenter waits 150ms and closing on pointerleave
+// waits 200ms, so a pointer skimming across the bar doesn't flash panels open.
+// Only one panel is open at a time (openIndex); moving the pointer to a sibling
+// trigger while a panel is open switches immediately (no delay). The flyout is a
+// DOM child of the trigger's <li>, so moving the pointer from trigger to panel
+// never fires the <li>'s pointerleave — the panel stays open without any
+// panel-level bookkeeping; the 200ms delay also covers crossing the mt-2 gap.
+//
+// Positioning — the panel is absolute below the bar (top-full mt-2), left-aligned
+// to its trigger, then clamped in a rAF pass (Select._measurePlacement style) so
+// it never overflows the viewport's right edge: measure the rendered panel and,
+// if it runs past the edge, shift it left via an inline `left` offset.
+const TRIGGER_BASE =
+  'inline-flex items-center gap-1 whitespace-nowrap select-none cursor-pointer ' +
+  'rounded-md px-3 py-2 text-sm font-medium text-body transition-colors hover:text-ink ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const LINK_BASE =
+  'inline-flex items-center whitespace-nowrap select-none ' +
+  'rounded-md px-3 py-2 text-sm font-medium transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+// Active/inactive treatment shared by plain links (and, in a lighter form, by
+// active child cards). The outline COLOR is set unconditionally (outline-ring)
+// so transition-colors doesn't flash it in from the default on focus.
+const LINK_ACTIVE = 'text-ink underline decoration-2 underline-offset-8 decoration-brand';
+const LINK_INACTIVE = 'text-body hover:text-ink';
+
+const PANEL_BASE =
+  'absolute left-0 top-full mt-2 z-40 w-max max-w-lg ' +
+  'rounded-lg border border-border bg-surface p-2 shadow-md';
+
+const CARD_BASE =
+  'block rounded-md p-3 transition-colors hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+const CARD_LABEL = 'block text-sm font-medium text-ink';
+// Card labels can't carry underline-offset-8 (it would collide with the
+// description), so the active child gets the same decoration at a tighter offset.
+const CARD_LABEL_ACTIVE = 'underline decoration-2 underline-offset-4 decoration-brand';
+
+// Per-instance id seed so trigger/panel ids are unique across instances.
+let uid = 0;
+
+export default class NavigationMenu extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._openTimer = null; // hover-intent open delay
+    this._closeTimer = null; // hover-intent close delay
+    this._hoverOpened = null; // index opened by the current hover interaction
+    this._docBound = false; // outside-pointerdown listener attached only while open
+    this._pendingFocusFirst = false; // focus first panel link after the next render
+    // Stable ref for the outside-click listener (added in openAt, removed in
+    // closeMenu AND destroyed).
+    this._onDocPointerDown = (event) => {
+      if (
+        this.getData().openIndex != null &&
+        this.element &&
+        !this.element.contains(event.target)
+      ) {
+        this.closeMenu({ refocus: false });
+      }
+    };
+    // open/panel-offset live in the LOCAL state layer (written via setData) so a
+    // data() re-run on prop/store changes never clobbers them.
+    this.setData({ openIndex: null, panelLeft: 0 });
+  }
+
+  data(params, props) {
+    const seed = this._uid;
+    const activePath = props.activePath != null ? String(props.activePath) : null;
+    const raw = Array.isArray(props.items) ? props.items : [];
+
+    const items = raw.map((entry, i) => {
+      const children = entry && Array.isArray(entry.children) ? entry.children : null;
+      const label = entry && entry.label != null ? String(entry.label) : '';
+
+      // Plain link — no children.
+      if (!children || children.length === 0) {
+        const href = entry && entry.href != null ? String(entry.href) : '#';
+        const active = activePath != null && href === activePath;
+        return {
+          kind: 'link',
+          label,
+          href,
+          current: active ? 'page' : false,
+          linkClass: [LINK_BASE, active ? LINK_ACTIVE : LINK_INACTIVE].join(' '),
+        };
+      }
+
+      // Flyout trigger — normalize its child link cards.
+      const cards = children.map((c) => {
+        const href = c && c.href != null ? String(c.href) : '#';
+        const active = activePath != null && href === activePath;
+        return {
+          label: c && c.label != null ? String(c.label) : '',
+          href,
+          description: c && c.description != null ? String(c.description) : '',
+          current: active ? 'page' : false,
+          cardClass: [CARD_BASE, active ? 'bg-surface-sunken' : ''].filter(Boolean).join(' '),
+          labelClass: [CARD_LABEL, active ? CARD_LABEL_ACTIVE : ''].filter(Boolean).join(' '),
+        };
+      });
+      // Two columns past four cards, single column otherwise.
+      const grid = cards.length > 4 ? 'grid grid-cols-2 gap-1' : 'flex flex-col gap-1';
+      return {
+        kind: 'trigger',
+        label,
+        children: cards,
+        triggerId: `nav-trigger-${seed}-${i}`,
+        panelId: `nav-panel-${seed}-${i}`,
+        triggerClass: TRIGGER_BASE,
+        panelClass: [PANEL_BASE, grid].join(' '),
+      };
+    });
+
+    const prev = this.getData();
+    return {
+      navLabel: props.label != null ? String(props.label) : 'Main',
+      rootClass: props.class || '',
+      items,
+      openIndex: prev.openIndex ?? null,
+      panelStyle: prev.panelLeft ? `left:${prev.panelLeft}px;` : '',
+    };
+  }
+
+  // ---- open / close ----------------------------------------------------------
+
+  openAt(index) {
+    this._clearTimers();
+    if (this.getData().openIndex === index) return;
+    this._hoverOpened = null;
+    this.setData({ openIndex: index, panelLeft: 0 });
+    this.refresh();
+    if (!this._docBound) {
+      document.addEventListener('pointerdown', this._onDocPointerDown);
+      this._docBound = true;
+    }
+    // Panel mounts on the setData above; wait a frame so it exists, then clamp it
+    // against the viewport right edge (Select._measurePlacement style).
+    requestAnimationFrame(() => this._measurePanel());
+  }
+
+  closeMenu({ refocus = false } = {}) {
+    this._clearTimers();
+    this._hoverOpened = null;
+    const idx = this.getData().openIndex;
+    if (idx == null) return;
+    this.setData({ openIndex: null, panelLeft: 0 });
+    this.refresh();
+    if (this._docBound) {
+      document.removeEventListener('pointerdown', this._onDocPointerDown);
+      this._docBound = false;
+    }
+    if (refocus) {
+      const trigger = this.element && this.element.querySelector(`[data-nav-trigger="${idx}"]`);
+      if (trigger) trigger.focus();
+    }
+  }
+
+  // ---- hover intent (shared timers, cleared in destroyed) --------------------
+
+  scheduleOpen(index) {
+    if (this._closeTimer) {
+      clearTimeout(this._closeTimer);
+      this._closeTimer = null;
+    }
+    if (this.getData().openIndex === index) return;
+    // A panel is already open on a sibling — switch immediately, no delay.
+    if (this.getData().openIndex != null) {
+      this.openAt(index);
+      this._hoverOpened = index;
+      return;
+    }
+    if (this._openTimer) clearTimeout(this._openTimer);
+    this._openTimer = setTimeout(() => {
+      this._openTimer = null;
+      this.openAt(index);
+      this._hoverOpened = index;
+    }, 150);
+  }
+
+  scheduleClose() {
+    if (this._openTimer) {
+      clearTimeout(this._openTimer);
+      this._openTimer = null;
+    }
+    if (this.getData().openIndex == null) return;
+    if (this._closeTimer) clearTimeout(this._closeTimer);
+    this._closeTimer = setTimeout(() => {
+      this._closeTimer = null;
+      this.closeMenu({ refocus: false });
+    }, 200);
+  }
+
+  _clearTimers() {
+    if (this._openTimer) {
+      clearTimeout(this._openTimer);
+      this._openTimer = null;
+    }
+    if (this._closeTimer) {
+      clearTimeout(this._closeTimer);
+      this._closeTimer = null;
+    }
+  }
+
+  // Shift the open panel left if it runs past the viewport's right edge.
+  _measurePanel() {
+    if (this.getData().openIndex == null || !this.element || typeof window === 'undefined') return;
+    const panel = this.element.querySelector('[data-nav-panel]');
+    if (!panel) return;
+    const margin = 8;
+    const rect = panel.getBoundingClientRect();
+    const overflow = rect.right - (window.innerWidth - margin);
+    if (overflow > 0) {
+      this.setData('panelLeft', -Math.ceil(overflow));
+      this.refresh();
+    }
+  }
+
+  // Move focus to the first panel link after ArrowDown opens the flyout.
+  afterUpdate() {
+    if (!this._pendingFocusFirst) return;
+    this._pendingFocusFirst = false;
+    const link = this.element && this.element.querySelector('[data-nav-panel] [data-nav-link]');
+    if (link) link.focus();
+  }
+
+  destroyed() {
+    this._clearTimers();
+    if (this._docBound) {
+      document.removeEventListener('pointerdown', this._onDocPointerDown);
+      this._docBound = false;
+    }
+  }
+
+  events = {
+    onItemEnter: (i, item) => {
+      if (item.kind === 'trigger') this.scheduleOpen(i);
+    },
+    onItemLeave: (i, item) => {
+      if (item.kind === 'trigger') this.scheduleClose();
+    },
+    onTriggerClick: (i, event) => {
+      if (this.getData().openIndex === i) {
+        if (this._hoverOpened === i) {
+          // This click's own hover opened it — adopt, don't toggle.
+          this._hoverOpened = null;
+          return;
+        }
+        this.closeMenu({ refocus: false });
+      } else {
+        this._hoverOpened = null;
+        this.openAt(i);
+      }
+    },
+    // ArrowDown on a trigger: open (if needed) and drop focus into the panel.
+    onTriggerDown: (i, event) => {
+      this._hoverOpened = null;
+      this._pendingFocusFirst = true;
+      this.openAt(i);
+    },
+    // Inside an open panel: arrows move link focus; Tab is left to the browser.
+    onPanelKeydown: (event) => {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      const panel = event.currentTarget;
+      const links = Array.from(panel.querySelectorAll('[data-nav-link]'));
+      if (!links.length) return;
+      event.preventDefault();
+      const cur = links.indexOf(document.activeElement);
+      const n = links.length;
+      const dir = event.key === 'ArrowDown' ? 1 : -1;
+      const next = cur < 0 ? (dir > 0 ? 0 : n - 1) : (cur + dir + n) % n;
+      links[next].focus();
+    },
+    // Escape from anywhere in the nav (trigger or panel) closes + refocuses.
+    onRootEscape: (event) => {
+      if (this.getData().openIndex == null) return;
+      event.preventDefault();
+      this.closeMenu({ refocus: true });
+    },
+  };
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "bottom-sheet",
+  "description": "Native-dialog bottom sheet dragged, flicked and dismissed with a finger, with optional height snap points that settle on a velocity-aware spring, a pinned footer, inset mode and a dismissal-tracking scrim; wraps the @magic-spells/bottom-sheet web component rather than porting it",
+  "files": ["BottomSheet.pzl"],
+  "registryDependencies": [],
+  "dependencies": ["@magic-spells/bottom-sheet", "@magic-spells/dialog-panel"],
+  "targetDir": "app/components/ui"
+}

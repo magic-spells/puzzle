@@ -1,0 +1,8 @@
+{
+  "name": "pie-chart",
+  "description": "Config-first part-to-whole donut/pie — fixed slot colors, always-on legend, per-slice hover tooltips with percent, optional donut-center total, 8-slice folding, and an sr-only data table",
+  "files": ["PieChart.pzl"],
+  "registryDependencies": ["lib/chart-math.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

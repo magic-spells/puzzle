@@ -1,0 +1,187 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <button
+      type="button"
+      class="flex w-full items-center justify-between gap-2 py-2 text-sm font-medium text-ink cursor-pointer select-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
+      aria-expanded={ open ? 'true' : 'false' }
+      aria-controls={ bodyId }
+      id={ triggerId }
+      @click={ toggle(event) }>
+      <span class="min-w-0 text-left">{ label }</span>
+      <span class="relative size-4 shrink-0 text-muted" aria-hidden="true">
+        <span class="absolute left-1/2 top-1/2 h-0.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"></span>
+        <span class="absolute left-1/2 top-1/2 h-2.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current origin-center transition-[scale] duration-200 motion-reduce:transition-none {#if open}scale-y-0{/if}"></span>
+      </span>
+    </button>
+    <div
+      id={ bodyId }
+      data-collapsible-body
+      class="overflow-hidden"
+      role="region"
+      aria-labelledby={ triggerId }
+      aria-hidden={ open ? false : 'true' }
+      inert={ !open }>
+      <div class="pb-3 text-sm text-body">
+        <Slot/>
+      </div>
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Collapsible — an animated disclosure ported from
+// @magic-spells/collapsible-content. The body's height animates 0 ↔ measured
+// via the Web Animations API (element.animate) in afterUpdate() whenever `open`
+// flips; the duration is DERIVED from the distance travelled and a `speed`
+// (px/sec) pace, clamped between MIN and MAX so tiny panels don't feel instant
+// and tall ones don't crawl — the source's speed→duration model. When closed
+// the body carries `inert` + aria-hidden="true", so its content is out of the
+// tab order and the accessibility tree; prefers-reduced-motion jumps with no
+// animation.
+//
+// Controlled: the parent owns `open` and flips it from @change.
+//
+//   <Collapsible label="Details" open={ open } @change={ setOpen }>
+//     <p>Anything can live in here.</p>
+//   </Collapsible>
+//
+// NO Accordion component ships — exclusive-open is a parent pattern: track one
+// open id and pass a derived boolean to each Collapsible.
+//
+//   {#for item in items}
+//     <Collapsible label={ item.label }
+//                  open={ openId === item.id }
+//                  @change={ toggleItem(item.id) }>{ item.body }</Collapsible>
+//   {/for}
+//   // toggleItem: (id) => this.setData('openId', this.getData().openId === id ? null : id)
+//
+// Props:
+//   label  trigger text
+//   open   controlled boolean (parent flips it)
+//   speed  px/sec pace feeding the duration calc (default 900, matching source)
+//   class  appended to the root element
+//   id     base for the body id / aria-controls (counter fallback)
+// Callback:
+//   @change(open, event)  fired on trigger click with the NEXT open state
+const DEFAULT_SPEED = 900; // px per second (source default)
+const MIN_DURATION = 250; // ms floor
+const MAX_DURATION = 800; // ms ceiling
+
+// Module-level counter for a stable fallback id when `id` is omitted, so the
+// trigger's aria-controls always targets a unique body region.
+let uid = 0;
+
+export default class Collapsible extends PuzzleView {
+  data(params, props) {
+    const base = props.id || (this._id ??= `pieces-collapsible-${++uid}`);
+    const speed = typeof props.speed === 'number' && props.speed > 0 ? props.speed : DEFAULT_SPEED;
+    return {
+      open: !!props.open,
+      label: props.label || '',
+      speed,
+      triggerId: `${base}-trigger`,
+      bodyId: `${base}-body`,
+      rootClass: props.class || '',
+    };
+  }
+
+  // Set the resting height without animating — 'auto' when open (so dynamic
+  // content resizes freely), 0 when closed. Runs once on mount.
+  mounted() {
+    const body = this.bodyEl();
+    const open = this.getData().open;
+    if (body) body.style.height = open ? 'auto' : '0px';
+    this._openState = open;
+  }
+
+  // On every re-render, animate only when `open` actually crossed. The buttons/
+  // body persist across patches, so measuring + animating the live node is safe.
+  afterUpdate() {
+    const open = this.getData().open;
+    if (open === this._openState) return;
+    this._openState = open;
+    this.animateBody(open);
+  }
+
+  destroyed() {
+    this.cancelAnim();
+  }
+
+  bodyEl() {
+    return this.element ? this.element.querySelector('[data-collapsible-body]') : null;
+  }
+
+  cancelAnim() {
+    if (this._anim) {
+      this._anim.cancel();
+      this._anim = null;
+    }
+  }
+
+  // Distance-based duration: |Δheight| / speed seconds, clamped, in ms — the
+  // ported speed→duration model (source worked in seconds; here in ms).
+  durationFor(from, to) {
+    const delta = Math.abs(to - from);
+    const speed = this.getData().speed; // px/sec
+    const ms = (delta / speed) * 1000;
+    return Math.min(MAX_DURATION, Math.max(MIN_DURATION, ms));
+  }
+
+  animateBody(open) {
+    const body = this.bodyEl();
+    if (!body) return;
+
+    // Capture the CURRENT rendered height first (works mid-animation), so an
+    // interrupted open→close starts from where it visually is, not a jump.
+    const current = body.getBoundingClientRect().height;
+    this.cancelAnim();
+
+    const reduce =
+      typeof matchMedia === 'function' &&
+      matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (open) {
+      const target = body.scrollHeight; // full content height (overflow-hidden)
+      if (reduce) {
+        body.style.height = 'auto';
+        return;
+      }
+      body.style.height = `${target}px`;
+      const anim = body.animate(
+        [{ height: `${current}px` }, { height: `${target}px` }],
+        { duration: this.durationFor(current, target), easing: 'ease' }
+      );
+      this._anim = anim;
+      anim.onfinish = () => {
+        this._anim = null;
+        // Leave it at auto so later content changes reflow naturally — but only
+        // if we're still open (a fast re-close may have superseded us).
+        if (this._openState) body.style.height = 'auto';
+      };
+    } else {
+      if (reduce) {
+        body.style.height = '0px';
+        return;
+      }
+      body.style.height = '0px';
+      const anim = body.animate(
+        [{ height: `${current}px` }, { height: '0px' }],
+        { duration: this.durationFor(current, 0), easing: 'ease' }
+      );
+      this._anim = anim;
+      anim.onfinish = () => {
+        this._anim = null;
+      };
+    }
+  }
+
+  events = {
+    toggle: (event) => {
+      const { change } = this.props;
+      if (typeof change === 'function') change(!this.getData().open, event);
+    },
+  };
+}
+</script>

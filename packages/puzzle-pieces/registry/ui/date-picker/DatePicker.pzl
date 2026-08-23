@@ -1,0 +1,532 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ triggerId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+
+    <div class="relative">
+      <button
+        type="button"
+        class={ triggerClass }
+        id={ triggerId }
+        data-datepicker-trigger
+        aria-haspopup="dialog"
+        aria-expanded={ ariaExpanded }
+        aria-controls={ panelId }
+        aria-invalid={ invalid }
+        aria-describedby={ describedby }
+        disabled={ disabled }
+        @click={ onTriggerClick(event) }
+        @keydown={ onTriggerKey(event) }>
+        <span class="flex-1 truncate text-left { placeholderClass }">{ triggerLabel }</span>
+        <svg
+          class="size-4 shrink-0 text-muted"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true">
+          <rect x="3" y="4" width="14" height="13" rx="2" />
+          <path d="M3 8h14M7 2v3.5M13 2v3.5" stroke-linecap="round" />
+        </svg>
+      </button>
+
+      {#if name}
+        <input type="hidden" name={ name } value={ hiddenValue } />
+      {/if}
+
+      {#if open}
+        <div
+          class={ panelClass }
+          id={ panelId }
+          role="dialog"
+          aria-modal="false"
+          aria-label={ dialogLabel }
+          data-datepicker-panel
+          style={ panelStyle }
+          @keydown:escape={ onEscape(event) }>
+          {#if panelHeader}
+            <div class="border-b border-border px-4 py-2.5 text-sm font-medium text-ink">{ panelHeader }</div>
+          {/if}
+          <Calendar
+            frameless={ true }
+            value={ calValue }
+            min={ calMin }
+            max={ calMax }
+            disabledDates={ calDisabledDates }
+            locale={ calLocale }
+            firstDayOfWeek={ calFirstDay }
+            autofocus={ calAutofocus }
+            @change={ onCalendarChange } />
+        </div>
+      {/if}
+    </div>
+
+    {#if error}
+      <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+    {:else if hint}
+      <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { MorphEngine } from '@magic-spells/morph-engine';
+import Calendar from './Calendar.pzl';
+import { parseISODate, toDate } from '../../lib/date-math.js';
+
+// DatePicker — a Field-shaped trigger + popover that composes the Calendar piece,
+// ported from the @magic-spells/date-picker web component. v1 is SINGLE DATE only
+// (range mode and type="month" are deliberately out of scope — the source proves
+// they port later). The behavior design carries over — the WAI-ARIA date-picker
+// dialog pattern, locale-aware trigger label, auto-flip positioning, hidden form
+// input, and the opt-in trigger↔panel morph — but the code shape is Puzzle-native:
+// no custom elements, declarative @event listeners, setData/getData local state,
+// callback props out, and the actual month grid delegated to <Calendar/>.
+//
+//   <DatePicker value={ iso } @change={ setDate } />
+//   <DatePicker label="Ship date" hint="Business days only"
+//               value={ iso } min="2026-01-01" max="2026-12-31"
+//               disabledDates={ weekends } @change={ setDate } />
+//   <DatePicker value={ iso } open={ open } @change={ setDate }
+//               @show={ onShow } @hide={ onHide } />           // controlled open
+//   <DatePicker value={ iso } name="date" morph @change={ setDate } />
+//
+// PROPS
+//   value          string   controlled ISO 'YYYY-MM-DD' (or '' = no selection).
+//                           Parent-owned — DatePicker forwards Calendar's @change up
+//                           and the parent writes the new value back down.
+//   open           boolean  OPTIONAL-CONTROLLED (Select's shape): omit it and the
+//                           picker owns its open state internally; pass it and the
+//                           parent owns it (DatePicker only *asks* to open/close via
+//                           @show/@hide and reflects the prop).
+//   label          string   field label rendered above the trigger. In morph mode it is
+//                           also restated as a header inside the open panel, since the
+//                           panel covers the field (dropdown mode leaves it visible).
+//   hint           string   helper text below the trigger.
+//   error          string   error text below the trigger; also paints the trigger
+//                           border danger and wires aria-invalid + aria-describedby
+//                           (replaces hint when both are set — Field's behavior).
+//   placeholder    string   trigger text when no value (default 'Pick a date').
+//   format         string   Intl dateStyle preset for the trigger label:
+//                           'full' | 'long' | 'medium' (default) | 'short'.
+//   locale         string   BCP-47 tag; passed to Calendar and the trigger formatter
+//                           (default: <html lang>, then navigator.language, then en-US).
+//   firstDayOfWeek 0..6     passed to Calendar (0 = Sunday, default).
+//   min, max       string   inclusive ISO bounds; passed to Calendar.
+//   disabledDates  array|fn  passed to Calendar (ISO array OR predicate (iso, Date) => bool).
+//   disabled       boolean  disables the trigger.
+//   name           string   emits a hidden <input> carrying the ISO value for form posts.
+//   morph          boolean  opt-in trigger↔panel morph via @magic-spells/morph-engine
+//                           (Select's exact opt-in shape). Degrades to the plain
+//                           absolute-positioned panel when off or under reduced motion.
+//   class          string   appended to the root element.
+//
+// CALLBACKS
+//   @change(isoValue, date)  re-emitted from Calendar on day selection; DatePicker
+//                            then closes and returns focus to the trigger. `date` is
+//                            a local-time Date.
+//   @show() / @hide()        fire on the user's open/close INTENT (trigger, Escape,
+//                            outside-click, or a committed selection) — like Dialog's
+//                            @close, so a controlled parent can flip `open`.
+//
+// POSITIONING & FOCUS. Placement is decided synchronously from the trigger's viewport
+// room the moment it opens (the Calendar panel has a fixed height), so the first render
+// is already on the correct side and Calendar's `autofocus` lands on the active day cell
+// without a scroll jump; a follow-up offsetHeight measurement in a rAF corrects the side
+// if the estimate was off. (The source web component keeps a persistent panel laid out
+// via visibility:hidden and reads offsetHeight while invisible; here the panel mounts on
+// open — {#if open} — so it's only ever measured while shown, and we pre-decide the side
+// instead.) Escape closes and returns focus to the trigger — Calendar lets days-view
+// Escape bubble up to this handler, while its months/years views consume Escape to back
+// out hierarchically. Outside-click dismisses via a document pointerdown listener that
+// lives only while open.
+//
+// MORPH. When `morph` is on (and motion isn't reduced) a MorphEngine animates the
+// trigger↔panel transform. The panel opens CENTERED on the trigger — horizontally and
+// vertically (viewport-clamped) — so the transform reads as the field growing in place;
+// focus into the calendar and trigger-focus-return are deferred
+// to the engine's 'shown'/'hidden' events (Select's pattern), and the panel is held
+// mounted through the morph-back. The morph-out only plays in UNCONTROLLED mode — a
+// controlled parent unmounts the panel the instant it flips `open`, so it closes instantly.
+
+let uid = 0;
+
+const VALID_FORMATS = new Set(['full', 'long', 'medium', 'short']);
+
+// Rough resting height of the Calendar panel (fixed 6-week grid + header), used for the
+// synchronous open-time flip decision before the panel has mounted to measure.
+const PANEL_EST_HEIGHT = 340;
+
+const TRIGGER_BASE =
+  'flex h-9 w-full items-center justify-between gap-2 rounded-lg border bg-surface px-3 ' +
+  'text-sm text-ink select-none transition-colors cursor-pointer ' +
+  'hover:border-border-strong ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'disabled:opacity-50 disabled:pointer-events-none disabled:cursor-default';
+const TRIGGER_OK = 'border-border outline-ring focus-visible:outline-ring';
+const TRIGGER_ERROR = 'border-danger outline-danger focus-visible:outline-danger';
+
+// The panel owns the card (Calendar renders `frameless` inside it) so it can carry the
+// label header as one surface (the header renders in morph mode only — the panel covers
+// the field label there, so it restates the context; the plain dropdown sits below the
+// still-visible field label). Two positioning modes:
+//   dropdown (default) — anchored below/above the trigger with the runtime flip;
+//   morph — a container transform should COVER the field it grew from, so the panel
+//   centers on the trigger: horizontally via inset-x-0 + mx-auto + w-fit, vertically
+//   via an inline `top` measured in _positionMorphPanel(). Never transforms — translate
+//   positioning would break the morph engine's rect measurement.
+const PANEL_CARD =
+  'absolute z-50 overflow-hidden rounded-xl border border-border bg-surface shadow-lg';
+const PANEL_DROPDOWN = 'left-0';
+const PANEL_MORPH = 'inset-x-0 mx-auto w-fit';
+
+export default class DatePicker extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._morph = null; // lazily constructed on first morph open
+    this._wasOpen = false; // last effective-open seen by the transition detector
+    this._pendingRestoreFocus = true; // whether the next close returns focus to the trigger
+    // Local UI state (used only in uncontrolled mode + for placement). Never returned
+    // from data() as `open` when controlled — `props.open` wins there.
+    this.setData({ uncontrolledOpen: false, placement: 'bottom', morphTop: 0 });
+  }
+
+  // Outside-click close: attached only while open (see _onOpened / _onClosed). Guarded
+  // by open + containment so the press that OPENED the panel (still on the trigger,
+  // inside this.element) never immediately closes it back.
+  mounted() {
+    this._onDocPointer = (e) => {
+      if (!this._effectiveOpen()) return;
+      if (this.element && this.element.contains(e.target)) return;
+      this._requestClose({ restoreFocus: false });
+    };
+    // Run the open/close side-effects once in case the parent mounts us already-open
+    // (controlled `open={ true }`).
+    this._syncOpenEffects();
+  }
+
+  destroyed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this._morph?.destroy();
+    this._morph = null;
+  }
+
+  // ---- controlled / uncontrolled open resolution ---------------------------
+
+  _controlled() {
+    return this.props.open !== undefined;
+  }
+
+  _effectiveOpen() {
+    return this._controlled() ? !!this.props.open : !!this.getData().uncontrolledOpen;
+  }
+
+  _wantMorph(props) {
+    return !!props.morph && !this._reducedMotion();
+  }
+
+  _reducedMotion() {
+    return (
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    );
+  }
+
+  _locale(props) {
+    return (
+      props.locale ||
+      (typeof document !== 'undefined' && document.documentElement.lang) ||
+      (typeof navigator !== 'undefined' && navigator.language) ||
+      'en-US'
+    );
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  data(params, props) {
+    const prev = this.getData();
+    const open = this._effectiveOpen();
+    const base = props.id || `pieces-date-picker-${this._uid}`;
+
+    const value = typeof props.value === 'string' ? props.value : '';
+    const parts = parseISODate(value);
+    const hasValue = !!parts;
+
+    const locale = this._locale(props);
+    const format = VALID_FORMATS.has(props.format) ? props.format : 'medium';
+    // Rebuilt only when locale/format change (Calendar's memo discipline).
+    const fmt = this.memo('trigfmt', [locale, format], () =>
+      new Intl.DateTimeFormat(locale, { dateStyle: format })
+    );
+    const triggerLabel = hasValue ? fmt.format(toDate(parts)) : props.placeholder || 'Pick a date';
+
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const described = !!(error || hint);
+    // Runtime flip only applies while open; closed always reflects 'bottom'.
+    const placement = (open && prev.placement) || 'bottom';
+
+    return {
+      open,
+      triggerLabel,
+      placeholderClass: hasValue ? 'text-ink' : 'text-muted',
+      label: props.label || '',
+      hint,
+      error,
+      invalid: error ? 'true' : false,
+      describedby: described ? `${base}-desc` : false,
+      descId: `${base}-desc`,
+      triggerId: `${base}-trigger`,
+      panelId: `${base}-panel`,
+      dialogLabel: props.label || 'Choose a date',
+      ariaExpanded: open ? 'true' : 'false',
+      disabled: !!props.disabled,
+      name: props.name || false,
+      hiddenValue: hasValue ? value : '',
+      placement,
+      rootClass: props.class || '',
+      triggerClass: [TRIGGER_BASE, error ? TRIGGER_ERROR : TRIGGER_OK].join(' '),
+      panelClass: this._wantMorph(props)
+        ? [PANEL_CARD, PANEL_MORPH].join(' ')
+        : [PANEL_CARD, PANEL_DROPDOWN, placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'].join(' '),
+      panelStyle: this._wantMorph(props) ? `top:${prev.morphTop ?? 0}px;` : '',
+      // The in-panel label header restates the field label while the morph panel
+      // covers it; the plain dropdown leaves the field label visible, so none.
+      panelHeader: this._wantMorph(props) ? props.label || '' : '',
+      // Calendar pass-through. autofocus lands the caret on the active day when we open
+      // WITHOUT morph; with morph the engine reveals the panel and focus is deferred to
+      // its 'shown' event, so we don't also autofocus.
+      calValue: value,
+      calMin: props.min,
+      calMax: props.max,
+      calDisabledDates: props.disabledDates,
+      calLocale: props.locale,
+      calFirstDay: props.firstDayOfWeek,
+      calAutofocus: open && !this._wantMorph(props),
+    };
+  }
+
+  // ---- open / close intents ------------------------------------------------
+
+  // Decide which side the panel should open on from the trigger's viewport room. Runs
+  // synchronously at open time (panel not yet mounted) so the first render is on the
+  // right side; the offsetHeight pass in _onOpened corrects it if the estimate was off.
+  _decidePlacement() {
+    const trigger = this.element?.querySelector('[data-datepicker-trigger]');
+    if (!trigger || typeof window === 'undefined') return 'bottom';
+    const rect = trigger.getBoundingClientRect();
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    return below < PANEL_EST_HEIGHT && above > below ? 'top' : 'bottom';
+  }
+
+  // Real-height flip decision, run in a rAF once the panel has mounted.
+  _measurePlacement() {
+    const trigger = this.element?.querySelector('[data-datepicker-trigger]');
+    const panel = this.element?.querySelector('[data-datepicker-panel]');
+    if (!trigger || !panel || typeof window === 'undefined') return this.getData().placement;
+    const rect = trigger.getBoundingClientRect();
+    const panelH = panel.offsetHeight;
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    return panelH > below && above > below ? 'top' : 'bottom';
+  }
+
+  _requestOpen() {
+    if (this._effectiveOpen()) return;
+    const placement = this._decidePlacement();
+
+    // Stash the pre-decided side FIRST so it's in place before the parent's @show
+    // handler (controlled mode) synchronously flips `open` and re-renders.
+    if (this._controlled()) {
+      this.setData({ placement });
+    } else {
+      this.setData({ uncontrolledOpen: true, placement });
+    }
+
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+
+    // Uncontrolled: we own `open`, so render the newly-open state ourselves.
+    // Controlled: the parent's prop flip drives the render. Either way
+    // _syncOpenEffects (afterUpdate) runs the open side-effects.
+    if (!this._controlled()) this.refresh();
+  }
+
+  _requestClose({ restoreFocus = true } = {}) {
+    if (!this._effectiveOpen()) return;
+    this._pendingRestoreFocus = restoreFocus;
+
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+
+    const morphLive =
+      this._wantMorph(this.props) &&
+      this._morph &&
+      (this._morph.state === 'shown' || this._morph.state === 'showing');
+
+    if (this._controlled()) {
+      // Parent owns `open`; it will unmount the panel. (Morph-out can't play here — the
+      // panel leaves the DOM as soon as the prop flips.) Focus return happens in _onClosed.
+      return;
+    }
+
+    if (morphLive) {
+      // Keep the panel mounted through the morph-back; the 'hidden' handler tears down
+      // `open` (→ _onClosed) once it has animated away.
+      this._morph.hide();
+    } else {
+      this.setData({ uncontrolledOpen: false });
+      this.refresh();
+    }
+  }
+
+  // ---- open / close side-effects (driven by the effective-open transition) --
+
+  // Fires whenever effective-open actually changes, so it covers both the uncontrolled
+  // setData flip and a controlled parent flipping the prop. Mirrors Dialog's syncOpen().
+  _syncOpenEffects() {
+    const open = this._effectiveOpen();
+    if (open && !this._wasOpen) {
+      this._wasOpen = true;
+      this._onOpened();
+    } else if (!open && this._wasOpen) {
+      this._wasOpen = false;
+      this._onClosed();
+    }
+  }
+
+  afterUpdate() {
+    this._syncOpenEffects();
+  }
+
+  _onOpened() {
+    document.addEventListener('pointerdown', this._onDocPointer);
+    const morphOn = this._wantMorph(this.props);
+
+    // The panel mounted on this render; wait one frame so it exists, then correct the
+    // side against its real height and (for morph) animate from the trigger.
+    requestAnimationFrame(() => {
+      if (!this._effectiveOpen() || !this.element) return;
+
+      if (morphOn) {
+        const trigger = this.element.querySelector('[data-datepicker-trigger]');
+        const panel = this.element.querySelector('[data-datepicker-panel]');
+        if (!this._morph) this._morph = this._createMorph();
+        if (trigger && panel && this._morph.state === 'idle') {
+          // Center the panel on the trigger BEFORE the engine measures it (a
+          // mid-hide reversal never lands here — the engine keeps its original
+          // keyframes by design, so repositioning would desync it).
+          this._positionMorphPanel(trigger, panel);
+          this._morph.show({ from: trigger, to: panel });
+        }
+        // Focus is deferred to the engine's 'shown' handler (panel is unrevealed mid-morph).
+        return;
+      }
+
+      // Non-morph: refine the flip now that we can measure the real panel height. Calendar's
+      // `autofocus` already put focus on the active day cell at the pre-decided side.
+      const corrected = this._measurePlacement();
+      if (corrected !== this.getData().placement) {
+        this.setData({ placement: corrected });
+        this.refresh();
+      }
+    });
+  }
+
+  // Vertically center the morph panel over the trigger so the transform reads
+  // as the field growing in place, clamped into the viewport. Wrapper-relative
+  // coordinates: the panel's offsetParent is the relative div both share.
+  // Runs synchronously inside the pre-morph rAF, before the frame paints.
+  _positionMorphPanel(trigger, panel) {
+    if (typeof window === 'undefined') return;
+    const margin = 8;
+    const wrapRect = panel.parentElement.getBoundingClientRect();
+    const trigRect = trigger.getBoundingClientRect();
+    const panelH = panel.offsetHeight;
+
+    let top = trigRect.top - wrapRect.top + (trigRect.height - panelH) / 2;
+    const screenTop = wrapRect.top + top;
+    const clamped = Math.min(
+      Math.max(screenTop, margin),
+      Math.max(window.innerHeight - margin - panelH, margin)
+    );
+    top += clamped - screenTop;
+
+    this.setData({ morphTop: Math.round(top) });
+    this.refresh();
+  }
+
+  _onClosed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this.setData({ placement: 'bottom', morphTop: 0 });
+    if (this._pendingRestoreFocus) {
+      this.element?.querySelector('[data-datepicker-trigger]')?.focus();
+    }
+    this._pendingRestoreFocus = true;
+  }
+
+  // Lazily build the morph engine that animates the trigger↔panel transform (Select's
+  // pattern): focus moves are deferred to its events because the trigger is hidden and
+  // the panel unrevealed mid-morph.
+  _createMorph() {
+    const engine = new MorphEngine({ revealAt: 0.7, lockScroll: false });
+    engine.on('shown', () => {
+      if (!this._effectiveOpen()) return;
+      this._focusActiveCell();
+    });
+    engine.on('hidden', () => {
+      this.setData({ uncontrolledOpen: false });
+      this.refresh();
+    });
+    return engine;
+  }
+
+  _focusActiveCell() {
+    // Calendar sets tabindex 0 on the active day button; land focus there.
+    this.element
+      ?.querySelector('[data-datepicker-panel] button[data-iso][tabindex="0"]')
+      ?.focus({ preventScroll: true });
+  }
+
+  events = {
+    onTriggerClick: () => {
+      if (this.props.disabled) return;
+      if (this._effectiveOpen()) this._requestClose({ restoreFocus: true });
+      else this._requestOpen();
+    },
+
+    // Open on ArrowDown / Enter / Space while closed. preventDefault on Enter/Space stops
+    // the button's native click from also firing (no double-toggle); when already open the
+    // trigger isn't focused (focus is in the calendar), so this is a no-op then.
+    onTriggerKey: (event) => {
+      if (this.props.disabled || this._effectiveOpen()) return;
+      if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this._requestOpen();
+      }
+    },
+
+    // Escape from the panel. Calendar's days view lets Escape bubble here (its months/years
+    // views consume it to back out). Close and return focus to the trigger.
+    onEscape: (event) => {
+      if (!this._effectiveOpen()) return;
+      event.preventDefault();
+      this._requestClose({ restoreFocus: true });
+    },
+
+    // Calendar committed a day: forward the value up (parent owns `value`), then close and
+    // return focus to the trigger.
+    onCalendarChange: (iso, date) => {
+      const { change } = this.props;
+      if (typeof change === 'function') change(iso, date);
+      this._requestClose({ restoreFocus: true });
+    },
+  };
+}
+</script>

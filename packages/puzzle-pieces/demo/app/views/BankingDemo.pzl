@@ -1,0 +1,706 @@
+<puzzle-view class="w-full">
+  <article class="mx-auto w-full min-w-0 max-w-7xl">
+    <DemoHeader title="Banking dashboard">
+      A Mercury-style fintech app screen built entirely from pieces — a collapsible nav
+      rail, balance stat cards, a cash-flow area chart, a sortable and paginated
+      transactions table with a date-range filter, budget meters, and a live
+      "Send money" transfer flow. Everything is interactive: switch tabs, sort and page
+      the table, filter by date, and send a transfer to fire a toast.
+    </DemoHeader>
+
+    <!-- APP FRAME. No overflow-hidden anywhere on this shell: it would clip the Select,
+         SplitButton, and DateRangePicker popovers. The frame canvas is bg-page; the
+         sidebar and top bar carry bg-surface and round their own outer corners so the
+         square child corners never poke past the frame's radius. -->
+    <div class="overflow-visible rounded-2xl border border-border bg-page shadow-sm">
+      <div class="flex min-h-[46rem] items-stretch">
+
+        <!-- LEFT NAV RAIL (Sidebar piece) — hidden on small screens. -->
+        <div class="hidden shrink-0 md:flex">
+          <Sidebar
+            items={ navItems }
+            activePath="#dashboard"
+            label="Banking"
+            class="rounded-l-2xl">
+            <div slot="header" class="flex items-center gap-2.5 px-3 py-4">
+              <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-ink">
+                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 10l9-6 9 6M5 9v11h14V9M9 20v-6h6v6"/>
+                </svg>
+              </span>
+              <div class="min-w-0">
+                <p class="truncate text-sm font-semibold text-ink">Acme Financial</p>
+                <p class="truncate text-xs text-muted">Business banking</p>
+              </div>
+            </div>
+            <div slot="footer" class="flex items-center gap-2.5 px-2 py-2">
+              <Avatar name="Jordan Lee" size="md"/>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-ink">Jordan Lee</p>
+                <p class="truncate text-xs text-muted">jordan@acme.co</p>
+              </div>
+            </div>
+          </Sidebar>
+        </div>
+
+        <!-- MAIN COLUMN -->
+        <div class="flex min-w-0 flex-1 flex-col">
+
+          <!-- TOP BAR -->
+          <div class="flex flex-wrap items-center gap-3 rounded-tr-2xl border-b border-border bg-surface px-5 py-3">
+            <div class="min-w-0">
+              <p class="text-xs text-muted">Account</p>
+              <div class="mt-0.5 w-56">
+                <Select options={ accountOptions } value={ activeAccount } indicator="caret" @change={ setActiveAccount }/>
+              </div>
+            </div>
+
+            <div class="ml-auto flex items-center gap-3">
+              <div class="hidden items-center sm:flex">
+                <AvatarGroup avatars={ teamAvatars } max={ 4 } size="sm" label="Authorized users"/>
+              </div>
+
+              <Tooltip text="Notifications" side="bottom">
+                <button
+                  type="button"
+                  class="relative rounded-lg p-2 text-muted transition-colors hover:bg-surface-sunken hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+                  <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>
+                  </svg>
+                  <span class="absolute right-1.5 top-1.5 size-2 rounded-full bg-brand" aria-hidden="true"></span>
+                </button>
+              </Tooltip>
+
+              <SplitButton
+                label="Send money"
+                actions={ sendActions }
+                @press={ openTransfer }
+                @select={ onSendAction }/>
+            </div>
+          </div>
+
+          <!-- CONTENT -->
+          <div class="flex-1 space-y-6 p-5">
+
+            <!-- STAT CARDS -->
+            <section aria-label="Balances" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard label="Total balance" value={ totalBalance } delta={ 8.2 } deltaLabel="vs last month" sparkline={ sparkTotal }/>
+              <StatCard label="Operating ···· 4291" value="$128,430.00" delta={ 3.1 } deltaLabel="30-day change" sparkline={ sparkOperating }/>
+              <StatCard label="Reserve ···· 8830" value="$142,900.00" delta={ 1.4 } deltaLabel="30-day change" sparkline={ sparkReserve }/>
+              <StatCard label="Monthly spend" value="$38,912.00" delta={ -4.6 } deltaLabel="vs last month" goodWhen="down" sparkline={ sparkSpend }/>
+            </section>
+
+            <!-- TABS -->
+            <Tabs id="bank-tabs" variant="pills" tabs={ tabItems } value={ tab } @change={ setTab }/>
+
+            <!-- OVERVIEW PANEL -->
+            {#if tab === 'overview'}
+              <section
+                id="bank-tabs-panel-overview"
+                role="tabpanel"
+                aria-labelledby="bank-tabs-tab-overview"
+                tabindex="0"
+                class="grid grid-cols-1 gap-6 outline-none lg:grid-cols-3">
+
+                <div class="space-y-6 lg:col-span-2">
+                  <div class="rounded-xl border border-border bg-surface p-6">
+                    <div class="mb-4 flex items-center justify-between gap-3">
+                      <div>
+                        <h2 class="text-sm font-medium text-ink">Cash flow</h2>
+                        <p class="text-sm text-muted">Inflow vs. outflow, last 6 months</p>
+                      </div>
+                      <Badge variant="brand">+18% net</Badge>
+                    </div>
+                    <AreaChart data={ cashflowRows } xKey="month" series={ cashflowSeries } height={ 260 } formatValue={ fmtMoney } label="Monthly inflow versus outflow"/>
+                  </div>
+
+                  <div class="rounded-xl border border-border bg-surface p-6">
+                    <div class="mb-1 flex items-center justify-between gap-3">
+                      <h2 class="text-sm font-medium text-ink">Recent activity</h2>
+                      <Button variant="ghost" size="sm" @press={ goToTransactions }>View all</Button>
+                    </div>
+                    <ul class="divide-y divide-border">
+                      {#for t in recentRows}
+                        <li class="flex items-center gap-3 py-3" key={ t.id }>
+                          <Avatar name={ t.merchant } size="md"/>
+                          <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium text-ink">{ t.merchant }</p>
+                            <p class="truncate text-xs text-muted">{ t.category } · { t.dateLabel }</p>
+                          </div>
+                          <Badge variant={ t.badgeVariant }>{ t.status }</Badge>
+                          <span class="w-28 shrink-0 text-right text-sm font-medium tabular-nums { t.amountClass }">{ t.amountLabel }</span>
+                        </li>
+                      {/for}
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="space-y-6">
+                  <!-- ACCOUNT DETAILS + COPY -->
+                  <div class="rounded-xl border border-border bg-surface p-6">
+                    <h2 class="mb-3 text-sm font-medium text-ink">Account details</h2>
+                    <DescriptionList items={ accountDetails } divider size="sm"/>
+                    <Separator class="my-4"/>
+                    <div class="space-y-3">
+                      <div>
+                        <p class="text-xs text-muted">Account number</p>
+                        <div class="flex items-center justify-between gap-2">
+                          <p class="font-mono text-sm text-ink">4021 0000 4291</p>
+                          <CopyButton value="402100004291" variant="outline" size="sm"/>
+                        </div>
+                      </div>
+                      <div>
+                        <p class="text-xs text-muted">Routing number</p>
+                        <div class="flex items-center justify-between gap-2">
+                          <p class="font-mono text-sm text-ink">021000021</p>
+                          <CopyButton value="021000021" variant="outline" size="sm"/>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- BUDGETS -->
+                  <div class="rounded-xl border border-border bg-surface p-6">
+                    <h2 class="mb-4 text-sm font-medium text-ink">Budgets this month</h2>
+                    <div class="space-y-4">
+                      {#for m in budgets}
+                        <div key={ m.key }>
+                          <Meter
+                            value={ m.value }
+                            low={ m.low }
+                            high={ m.high }
+                            label={ m.label }
+                            valueText={ m.valueText }/>
+                        </div>
+                      {/for}
+                    </div>
+                  </div>
+
+                  <!-- SAVINGS GOAL -->
+                  <div class="flex flex-col items-center rounded-xl border border-border bg-surface p-6">
+                    <h2 class="self-start text-sm font-medium text-ink">Reserve goal</h2>
+                    <p class="mb-4 self-start text-sm text-muted">$142.9k of $210k target</p>
+                    <ProgressRing value={ 68 } size="lg" label="Reserve goal"/>
+                  </div>
+                </div>
+              </section>
+            {/if}
+
+            <!-- TRANSACTIONS PANEL -->
+            {#if tab === 'transactions'}
+              <section
+                id="bank-tabs-panel-transactions"
+                role="tabpanel"
+                aria-labelledby="bank-tabs-tab-transactions"
+                tabindex="0"
+                class="space-y-4 outline-none">
+                <div class="flex flex-wrap items-end justify-between gap-4">
+                  <div class="w-full max-w-xs">
+                    <DateRangePicker
+                      label="Filter by date"
+                      months={ 2 }
+                      value={ range }
+                      presets={ rangePresets }
+                      placeholder="All dates"
+                      @change={ setRange }/>
+                  </div>
+                  <div class="flex items-center gap-3 pb-1">
+                    <p class="text-sm text-muted">{ txCountLabel }</p>
+                    {#if hasRangeFilter}
+                      <Button variant="ghost" size="sm" @press={ clearRange }>Clear filter</Button>
+                    {/if}
+                  </div>
+                </div>
+
+                <DataTable
+                  columns={ txColumns }
+                  rows={ txRows }
+                  rowKey="id"
+                  sort={ txSort }
+                  page={ txPage }
+                  pageSize={ 6 }
+                  empty="No transactions in this range."
+                  @sortChange={ setSort }
+                  @pageChange={ setPage }/>
+              </section>
+            {/if}
+
+            <!-- CARDS PANEL -->
+            {#if tab === 'cards'}
+              <section
+                id="bank-tabs-panel-cards"
+                role="tabpanel"
+                aria-labelledby="bank-tabs-tab-cards"
+                tabindex="0"
+                class="grid grid-cols-1 gap-6 outline-none sm:grid-cols-2">
+                {#for c in cards}
+                  <div class="rounded-xl border border-border bg-surface p-6" key={ c.key }>
+                    <div class="mb-5 flex items-start justify-between gap-3">
+                      <div>
+                        <p class="text-sm font-medium text-ink">{ c.name }</p>
+                        <p class="mt-0.5 font-mono text-sm text-muted">{ c.number }</p>
+                      </div>
+                      <Badge variant={ c.badgeVariant }>{ c.state }</Badge>
+                    </div>
+
+                    <div class="mb-5 flex items-center justify-between gap-2">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-muted">Monthly limit</span>
+                        <Tooltip text={ c.limitHint } side="top">
+                          <button type="button" class="rounded-full text-muted outline-ring focus-visible:outline-2 focus-visible:outline-offset-2" aria-label="Limit info">
+                            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <circle cx="12" cy="12" r="10"/>
+                              <path d="M12 16v-4M12 8h.01"/>
+                            </svg>
+                          </button>
+                        </Tooltip>
+                      </div>
+                    </div>
+                    <Meter value={ c.usage } low={ 60 } high={ 85 } label={ c.name } valueText={ c.usageText } showValue={ false }/>
+                    <p class="mt-2 text-xs text-muted">{ c.usageText } used</p>
+
+                    <Separator class="my-5"/>
+                    <div class="flex items-center gap-2">
+                      <Button variant="outline" size="sm" @press={ noop }>{ c.action }</Button>
+                      <Button variant="ghost" size="sm" @press={ noop }>Details</Button>
+                    </div>
+                  </div>
+                {/for}
+              </section>
+            {/if}
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- TRANSFER DIALOG (native <dialog>, parent-owned open). Toaster is mounted once by
+       the docs layout, so submitTransfer just calls toast(). -->
+  <Dialog
+    open={ transferOpen }
+    title="Send money"
+    description="Move funds to a saved recipient. This is a demo — nothing is actually sent."
+    @hide={ closeTransfer }>
+    <div class="space-y-4">
+      <div>
+        <p class="mb-1.5 text-sm font-medium text-ink">From account</p>
+        <Select options={ accountOptions } value={ transferFrom } @change={ setTransferFrom }/>
+      </div>
+      <div>
+        <p class="mb-1.5 text-sm font-medium text-ink">Recipient</p>
+        <Select options={ recipientOptions } value={ transferTo } placeholder="Choose a recipient" @change={ setTransferTo }/>
+      </div>
+      <NumberField
+        label="Amount"
+        value={ transferAmount }
+        min={ 0 }
+        step={ 50 }
+        precision={ 2 }
+        placeholder="0.00"
+        error={ amountError }
+        hint={ amountHint }
+        @change={ setTransferAmount }/>
+      <Field
+        label="Memo"
+        placeholder="What's this for? (optional)"
+        value={ transferMemo }
+        @change={ setTransferMemo }/>
+    </div>
+
+    <Button slot="footer" variant="ghost" @press={ closeTransfer }>Cancel</Button>
+    <Button slot="footer" variant="primary" disabled={ !transferValid } @press={ submitTransfer }>{ sendLabel }</Button>
+  </Dialog>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Sidebar from '../components/ui/Sidebar.pzl';
+import StatCard from '../components/ui/StatCard.pzl';
+import AreaChart from '../components/ui/AreaChart.pzl';
+import DataTable from '../components/ui/DataTable.pzl';
+import DateRangePicker from '../components/ui/DateRangePicker.pzl';
+import Meter from '../components/ui/Meter.pzl';
+import Badge from '../components/ui/Badge.pzl';
+import Avatar from '../components/ui/Avatar.pzl';
+import AvatarGroup from '../components/ui/AvatarGroup.pzl';
+import ProgressRing from '../components/ui/ProgressRing.pzl';
+import SplitButton from '../components/ui/SplitButton.pzl';
+import Dialog from '../components/ui/Dialog.pzl';
+import Select from '../components/ui/Select.pzl';
+import NumberField from '../components/ui/NumberField.pzl';
+import Field from '../components/ui/Field.pzl';
+import CopyButton from '../components/ui/CopyButton.pzl';
+import DescriptionList from '../components/ui/DescriptionList.pzl';
+import Tabs from '../components/ui/Tabs.pzl';
+import Button from '../components/ui/Button.pzl';
+import Separator from '../components/ui/Separator.pzl';
+import Tooltip from '../components/ui/Tooltip.pzl';
+import DemoHeader from '../components/docs/DemoHeader.pzl';
+import { toast } from '../components/ui/toast.js';
+
+// BankingDemo — a flagship composition page. It owns ALL interactive state in view
+// data (tab, table sort/page, date-range filter, the transfer dialog + form) and
+// feeds it into controlled pieces; the pieces emit value-first callbacks that write
+// state back. Data is static, deterministic mock data so the screen always renders
+// the same.
+
+// ---- icons (SVG path `d` strings on a 24x24 stroked grid — Sidebar's icon contract)
+const IC_HOME = 'M3 12l9-7 9 7M5 10v10h14V10';
+const IC_PAY = 'M3 7h18v10H3zM3 11h18M7 15h3';
+const IC_TX = 'M4 7h16M4 12h16M4 17h10';
+const IC_CARDS = 'M3 6h18v12H3zM3 10h18M7 15h4';
+const IC_CHART = 'M4 20V10M10 20V4M16 20v-7M21 20H3';
+const IC_USERS = 'M17 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M21 20v-1a4 4 0 0 0-3-3.87';
+const IC_GEAR = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z';
+
+const NAV_ITEMS = [
+  { group: 'Overview' },
+  { label: 'Dashboard', href: '#dashboard', icon: IC_HOME },
+  { label: 'Payments', href: '#payments', icon: IC_PAY, badge: '3' },
+  { label: 'Transactions', href: '#transactions', icon: IC_TX },
+  { label: 'Cards', href: '#cards', icon: IC_CARDS },
+  { group: 'Insights' },
+  { label: 'Analytics', href: '#analytics', icon: IC_CHART },
+  {
+    label: 'Recipients',
+    href: '#recipients',
+    icon: IC_USERS,
+    children: [
+      { label: 'Vendors', href: '#vendors' },
+      { label: 'Payroll', href: '#payroll' },
+    ],
+  },
+  { divider: true },
+  { label: 'Settings', href: '#settings', icon: IC_GEAR },
+];
+
+// ---- transactions (ISO dates sort lexically = chronologically; amounts are signed
+// decimal STRINGS so DataTable's comparator reads them as numbers yet the cells still
+// show cents). Newest first.
+const TRANSACTIONS = [
+  { id: 't16', date: '2026-07-18', merchant: 'Stripe Payout', category: 'Income', status: 'Cleared', amount: 12400 },
+  { id: 't15', date: '2026-07-17', merchant: 'Amazon Web Services', category: 'Software', status: 'Cleared', amount: -1899.5 },
+  { id: 't14', date: '2026-07-16', merchant: 'Gusto Payroll', category: 'Payroll', status: 'Pending', amount: -28450 },
+  { id: 't13', date: '2026-07-15', merchant: 'Figma', category: 'Software', status: 'Cleared', amount: -144 },
+  { id: 't12', date: '2026-07-14', merchant: 'Delta Airlines', category: 'Travel', status: 'Cleared', amount: -842.3 },
+  { id: 't11', date: '2026-07-12', merchant: 'Notion', category: 'Software', status: 'Cleared', amount: -96 },
+  { id: 't10', date: '2026-07-11', merchant: 'WeWork', category: 'Rent', status: 'Cleared', amount: -6200 },
+  { id: 't9', date: '2026-07-09', merchant: 'Northwind Traders', category: 'Income', status: 'Cleared', amount: 8600 },
+  { id: 't8', date: '2026-07-07', merchant: 'Slack', category: 'Software', status: 'Failed', amount: -210 },
+  { id: 't7', date: '2026-07-05', merchant: 'Uber', category: 'Travel', status: 'Cleared', amount: -63.75 },
+  { id: 't6', date: '2026-07-02', merchant: 'Google Ads', category: 'Marketing', status: 'Cleared', amount: -3400 },
+  { id: 't5', date: '2026-06-29', merchant: 'Initech', category: 'Income', status: 'Cleared', amount: 15200 },
+  { id: 't4', date: '2026-06-27', merchant: 'Linear', category: 'Software', status: 'Cleared', amount: -128 },
+  { id: 't3', date: '2026-06-24', merchant: 'Amazon', category: 'Supplies', status: 'Cleared', amount: -418.9 },
+  { id: 't2', date: '2026-06-22', merchant: 'Comcast', category: 'Utilities', status: 'Pending', amount: -320 },
+  { id: 't1', date: '2026-06-20', merchant: 'Umbrella Corp', category: 'Income', status: 'Cleared', amount: 9800 },
+];
+
+const ACCOUNT_OPTIONS = [
+  { value: 'operating', label: 'Operating ···· 4291' },
+  { value: 'reserve', label: 'Reserve ···· 8830' },
+  { value: 'payroll', label: 'Payroll ···· 2201' },
+];
+
+const RECIPIENT_OPTIONS = [
+  { value: 'aws', label: 'Amazon Web Services' },
+  { value: 'gusto', label: 'Gusto (Payroll)' },
+  { value: 'wework', label: 'WeWork' },
+  { value: 'northwind', label: 'Northwind Traders' },
+];
+
+const SEND_ACTIONS = [
+  { label: 'Request money', value: 'request' },
+  { label: 'Wire transfer', value: 'wire' },
+  { divider: true },
+  { label: 'Schedule transfer', value: 'schedule' },
+];
+
+const TAB_ITEMS = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'transactions', label: 'Transactions' },
+  { value: 'cards', label: 'Cards' },
+];
+
+const CASHFLOW_ROWS = [
+  { month: 'Feb', inflow: 38000, outflow: 31000 },
+  { month: 'Mar', inflow: 42000, outflow: 34000 },
+  { month: 'Apr', inflow: 39500, outflow: 36000 },
+  { month: 'May', inflow: 47000, outflow: 33500 },
+  { month: 'Jun', inflow: 51200, outflow: 41000 },
+  { month: 'Jul', inflow: 46800, outflow: 38900 },
+];
+const CASHFLOW_SERIES = [
+  { key: 'inflow', label: 'Inflow' },
+  { key: 'outflow', label: 'Outflow' },
+];
+
+const BUDGETS = [
+  { key: 'payroll', label: 'Payroll', value: 82, low: 70, high: 90, valueText: '$28,450 / $34,000' },
+  { key: 'software', label: 'Software', value: 94, low: 60, high: 85, valueText: '$2,470 / $2,600' },
+  { key: 'marketing', label: 'Marketing', value: 40, low: 55, high: 80, valueText: '$3,400 / $8,500' },
+];
+
+const ACCOUNT_DETAILS = [
+  { term: 'Account holder', description: 'Acme Financial, Inc.' },
+  { term: 'Type', description: 'Business checking' },
+  { term: 'Opened', description: 'Mar 3, 2024' },
+  { term: 'Status', description: 'Active' },
+];
+
+const TEAM_AVATARS = [
+  { name: 'Ada Lovelace' },
+  { name: 'Grace Hopper' },
+  { name: 'Alan Turing' },
+  { name: 'Katherine Johnson' },
+  { name: 'Linus Torvalds' },
+];
+
+const CARDS = [
+  {
+    key: 'c1', name: 'Physical · Visa', number: '···· ···· ···· 4291', state: 'Active', badgeVariant: 'brand',
+    usage: 62, usageText: '$6,200 / $10,000', limitHint: 'Resets on the 1st of each month', action: 'Freeze card',
+  },
+  {
+    key: 'c2', name: 'Virtual · Mastercard', number: '···· ···· ···· 7788', state: 'Frozen', badgeVariant: 'outline',
+    usage: 0, usageText: '$0 / $5,000', limitHint: 'Frozen — no spend allowed', action: 'Unfreeze card',
+  },
+];
+
+const RANGE_PRESETS = [
+  { label: 'Last 7 days', start: '2026-07-13', end: '2026-07-19' },
+  { label: 'Last 30 days', start: '2026-06-19', end: '2026-07-19' },
+  { label: 'This month', start: '2026-07-01', end: '2026-07-31' },
+  { label: 'Last month', start: '2026-06-01', end: '2026-06-30' },
+];
+
+const TX_COLUMNS = [
+  { key: 'date', label: 'Date', sortable: true },
+  { key: 'merchant', label: 'Merchant', sortable: true },
+  { key: 'category', label: 'Category', sortable: true },
+  { key: 'status', label: 'Status', sortable: true },
+  { key: 'amount', label: 'Amount (USD)', align: 'right', sortable: true },
+];
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Full "$1,234.56" (with sign) for human-facing labels.
+function usd(n) {
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(Number(n) || 0);
+  return `${sign}$${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Compact axis money format for the chart ("$47k").
+function fmtMoney(n) {
+  const v = Number(n) || 0;
+  return v >= 1000 || v <= -1000 ? `$${Math.round(v / 1000)}k` : `$${v}`;
+}
+
+// "Jul 18" from an ISO date, avoiding timezone drift by parsing the parts.
+function shortDate(iso) {
+  const [, m, d] = String(iso).split('-').map(Number);
+  return `${MONTHS[(m || 1) - 1]} ${d}`;
+}
+
+const badgeForStatus = (status) =>
+  status === 'Failed' ? 'danger' : status === 'Pending' ? 'brand' : 'default';
+
+export default class BankingDemo extends PuzzleView {
+  created() {
+    this.setData({
+      tab: 'overview',
+      // DataTable controlled sort + page.
+      txSort: { key: 'date', dir: 'desc' },
+      txPage: 1,
+      // DateRangePicker controlled value.
+      range: { start: '', end: '' },
+      // Transfer dialog + form.
+      transferOpen: false,
+      transferFrom: 'operating',
+      transferTo: null,
+      transferAmount: null,
+      transferMemo: '',
+      // Top-bar account switcher.
+      activeAccount: 'operating',
+    });
+  }
+
+  data() {
+    const s = this.getData();
+
+    // --- date-range filter over the transactions (inclusive; ISO strings compare
+    // lexically = chronologically) ---
+    const { start, end } = s.range;
+    const hasRangeFilter = !!(start || end);
+    const filtered = TRANSACTIONS.filter((t) => {
+      if (start && t.date < start) return false;
+      if (end && t.date > end) return false;
+      return true;
+    });
+
+    // DataTable rows: amount as a signed 2dp string so the comparator sorts it
+    // numerically while the cell still shows cents.
+    const txRows = filtered.map((t) => ({
+      id: t.id,
+      date: t.date,
+      merchant: t.merchant,
+      category: t.category,
+      status: t.status,
+      amount: t.amount.toFixed(2),
+    }));
+
+    // Richer recent-activity list (Avatar + Badge + colored amount).
+    const recentRows = TRANSACTIONS.slice(0, 6).map((t) => ({
+      id: t.id,
+      merchant: t.merchant,
+      category: t.category,
+      dateLabel: shortDate(t.date),
+      status: t.status,
+      badgeVariant: badgeForStatus(t.status),
+      amountLabel: (t.amount >= 0 ? '+' : '') + usd(t.amount),
+      amountClass: t.amount >= 0 ? 'text-success' : 'text-ink',
+    }));
+
+    // Transfer validation.
+    const amt = typeof s.transferAmount === 'number' ? s.transferAmount : 0;
+    const available = 128430;
+    const overBalance = amt > available;
+    const transferValid = amt > 0 && !overBalance && !!s.transferTo;
+    const amountError = overBalance ? 'Exceeds available balance' : '';
+    const amountHint = overBalance ? '' : `Available: ${usd(available)}`;
+    const sendLabel = amt > 0 ? `Send ${usd(amt)}` : 'Send';
+
+    return {
+      // nav / chrome
+      navItems: NAV_ITEMS,
+      accountOptions: ACCOUNT_OPTIONS,
+      activeAccount: s.activeAccount,
+      teamAvatars: TEAM_AVATARS,
+      sendActions: SEND_ACTIONS,
+
+      // tabs
+      tabItems: TAB_ITEMS,
+      tab: s.tab,
+
+      // stat cards
+      totalBalance: '$284,120.40',
+      sparkTotal: [231, 240, 236, 252, 261, 258, 270, 274, 279, 284],
+      sparkOperating: [119, 124, 121, 128, 126, 131, 129, 127, 130, 128],
+      sparkReserve: [138, 140, 139, 141, 142, 141, 143, 142, 143, 143],
+      sparkSpend: [44, 42, 45, 41, 43, 40, 41, 39, 40, 39],
+
+      // overview
+      cashflowRows: CASHFLOW_ROWS,
+      cashflowSeries: CASHFLOW_SERIES,
+      fmtMoney,
+      recentRows,
+      accountDetails: ACCOUNT_DETAILS,
+      budgets: BUDGETS,
+
+      // transactions
+      txColumns: TX_COLUMNS,
+      txRows,
+      txSort: s.txSort,
+      txPage: s.txPage,
+      range: s.range,
+      rangePresets: RANGE_PRESETS,
+      hasRangeFilter,
+      txCountLabel: `${filtered.length} transaction${filtered.length === 1 ? '' : 's'}`,
+
+      // cards
+      cards: CARDS,
+
+      // transfer dialog
+      transferOpen: s.transferOpen,
+      transferFrom: s.transferFrom,
+      transferTo: s.transferTo,
+      transferAmount: s.transferAmount,
+      transferMemo: s.transferMemo,
+      recipientOptions: RECIPIENT_OPTIONS,
+      transferValid,
+      amountError,
+      amountHint,
+      sendLabel,
+    };
+  }
+
+  events = {
+    // ---- tabs ----
+    setTab: (value) => {
+      this.setData({ tab: value });
+      this.refresh();
+    },
+    goToTransactions: () => {
+      this.setData({ tab: 'transactions' });
+      this.refresh();
+    },
+
+    // ---- top bar ----
+    setActiveAccount: (value) => {
+      this.setData({ activeAccount: value });
+      this.refresh();
+    },
+    onSendAction: (value) => {
+      const labels = { request: 'Request money', wire: 'Wire transfer', schedule: 'Schedule transfer' };
+      toast({ title: labels[value] || 'Action', message: 'Opening flow…' });
+    },
+
+    // ---- transactions table ----
+    setSort: (next) => {
+      this.setData({ txSort: next, txPage: 1 });
+      this.refresh();
+    },
+    setPage: (n) => {
+      this.setData({ txPage: n });
+      this.refresh();
+    },
+    setRange: (range) => {
+      // Reset to page 1 so the filtered set never lands on an empty page.
+      this.setData({ range, txPage: 1 });
+      this.refresh();
+    },
+    clearRange: () => {
+      this.setData({ range: { start: '', end: '' }, txPage: 1 });
+      this.refresh();
+    },
+
+    // ---- transfer dialog ----
+    openTransfer: () => {
+      this.setData({ transferOpen: true });
+      this.refresh();
+    },
+    closeTransfer: () => {
+      this.setData({ transferOpen: false });
+      this.refresh();
+    },
+    setTransferFrom: (value) => {
+      this.setData({ transferFrom: value });
+      this.refresh();
+    },
+    setTransferTo: (value) => {
+      this.setData({ transferTo: value });
+      this.refresh();
+    },
+    setTransferAmount: (value) => {
+      this.setData({ transferAmount: value });
+      this.refresh();
+    },
+    setTransferMemo: (value) => {
+      this.setData({ transferMemo: value });
+      this.refresh();
+    },
+    submitTransfer: () => {
+      const s = this.getData();
+      const amt = typeof s.transferAmount === 'number' ? s.transferAmount : 0;
+      if (!(amt > 0) || !s.transferTo) return;
+      const recipient = (RECIPIENT_OPTIONS.find((r) => r.value === s.transferTo) || {}).label || 'recipient';
+      toast({ title: 'Transfer sent', message: `${usd(amt)} to ${recipient}`, variant: 'success' });
+      this.setData({ transferOpen: false, transferTo: null, transferAmount: null, transferMemo: '' });
+      this.refresh();
+    },
+
+    noop: () => {},
+  };
+}
+</script>

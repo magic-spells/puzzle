@@ -1,0 +1,126 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Empty</h1>
+        <p class="mt-2 text-body">
+          An empty-state block for no-results moments — an optional icon, a title, a description, and an
+          action slot, stacked in a centered muted column. Every region collapses when unused.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <Empty class="w-full" title="No projects yet" description="Create your first project to start collecting pieces into your workspace.">
+          <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M3 9h18" stroke-linecap="round" />
+          </svg>
+          <Button @press={ create }>New project</Button>
+        </Empty>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="bare" title="Bare" code={ codeBare }>
+          <Empty class="w-full" title="No results" description="Try adjusting your filters or search terms." />
+        </ExampleBox>
+
+        <ExampleBox id="icon" title="Icon slot" code={ codeIcon }>
+          <Empty class="w-full" title="No messages" description="When someone writes to you, it will show up here.">
+            <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M4 5h16v12H7l-3 3z" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </Empty>
+        </ExampleBox>
+
+        <p class="text-sm text-body">
+          Pass a static inline SVG on the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">icon</code>
+          slot. Stroke or fill it with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">currentColor</code>
+          so it inherits the muted tint, and leave off a size — a bare SVG is sized for you. Omit the slot
+          entirely for a text-only state.
+        </p>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Empty from '@/components/ui/Empty.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+const installCmd = 'puzzle add piece empty';
+const usageImport = `import Empty from '@/components/ui/Empty.pzl';`;
+const usageMarkup = `<Empty title="No projects yet" description="Create your first project to get started."></Empty>`;
+
+const codeHero = `<Empty title="No projects yet"
+       description="Create your first project to get started.">
+  <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="1.5" aria-hidden="true">
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M3 9h18" stroke-linecap="round" />
+  </svg>
+  <Button @press={ create }>New project</Button>
+</Empty>`;
+
+const codeBare = `<Empty title="No results"
+       description="Try adjusting your filters or search terms." />`;
+
+const codeIcon = `// A static inline SVG on the icon slot; stroke/fill currentColor so it
+// picks up the muted tint. Leave off a size — a bare svg is sized for you.
+<Empty title="No messages"
+       description="When someone writes to you, it will show up here.">
+  <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="1.5" aria-hidden="true">
+    <path d="M4 5h16v12H7l-3 3z" stroke-linecap="round" stroke-linejoin="round" />
+  </svg>
+</Empty>`;
+
+export default class EmptyDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeBare,
+      codeIcon,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Bare', href: '#bare' },
+        { label: 'Icon slot', href: '#icon' },
+      ],
+    };
+  }
+
+  events = {
+    create: () => toast({ title: 'Project created', message: 'Your first project is ready.', variant: 'success' }),
+  };
+}
+</script>

@@ -1,0 +1,183 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Context Menu</h1>
+        <p class="mt-2 text-body">
+          A right-click menu built on Dropdown Menu's guts — the same grouped items, danger
+          rows, and keyboard navigation — but summoned at the pointer instead of toggled by a
+          button. Config-first: pass an items array and handle @select.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <ContextMenu items={ fileItems } @select={ onSelect }>
+          <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface text-center text-sm text-muted">
+            Right-click anywhere<br/>in this box
+          </div>
+        </ContextMenu>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="groups" title="Groups and danger items" code={ codeGroups }>
+          <ContextMenu items={ editItems } @select={ onSelect }>
+            <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface text-center text-sm text-muted">
+              Right-click for a grouped menu
+            </div>
+          </ContextMenu>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
+          <ContextMenu disabled={ true } items={ fileItems } @select={ onSelect }>
+            <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface text-center text-sm text-muted">
+              Menu disabled — the native browser menu shows instead
+            </div>
+          </ContextMenu>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">
+            Opening focuses the first enabled item; from there the menu owns these keys:
+          </p>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Up / Down arrows</span> — move between enabled items (wrapping, skipping groups and dividers)</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last item</li>
+            <li><span class="font-medium text-ink">Enter / Space</span> — choose the focused item</li>
+            <li><span class="font-medium text-ink">Escape</span> — close the menu</li>
+          </ul>
+          <p class="mb-3 text-sm text-muted">
+            The menu also closes on an outside click, any scroll, or a right-click elsewhere.
+            Touch long-press is not implemented in v1 — most browsers still synthesize a
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">contextmenu</code>
+            event on long-press, which opens the menu.
+          </p>
+          <ExampleBox code={ codeKeyboard }>
+            <ContextMenu items={ fileItems } @select={ onSelect }>
+              <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface text-center text-sm text-muted">
+                Right-click, then use the arrow keys
+              </div>
+            </ContextMenu>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ContextMenu from '@/components/ui/ContextMenu.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+const installCmd = 'puzzle add piece context-menu';
+const usageImport = `import ContextMenu from '@/components/ui/ContextMenu.pzl';`;
+const usageMarkup = `<ContextMenu items={ fileItems } @select={ onSelect }></ContextMenu>`;
+
+const codeHero = `<ContextMenu items={ fileItems } @select={ onSelect }>
+  <div class="…">Right-click anywhere in this box</div>
+</ContextMenu>
+
+// items: interactive rows, { group } headings, { divider } separators
+fileItems: [
+  { label: 'Open', value: 'open' },
+  { label: 'Rename', value: 'rename' },
+  { label: 'Duplicate', value: 'duplicate' },
+];
+
+events = {
+  onSelect: (value, event) => console.log('picked', value),
+};`;
+
+const codeGroups = `<ContextMenu items={ editItems } @select={ onSelect }>
+  <div class="…">Right-click for a grouped menu</div>
+</ContextMenu>
+
+// { group: 'Heading' } is a non-interactive label; { divider: true } draws a
+// hairline; danger: true paints the row in the danger token.
+editItems: [
+  { group: 'Edit' },
+  { label: 'Cut', value: 'cut' },
+  { label: 'Copy', value: 'copy' },
+  { label: 'Paste', value: 'paste' },
+  { divider: true },
+  { label: 'Delete', value: 'delete', danger: true },
+];`;
+
+const codeDisabled = `// disabled short-circuits the contextmenu handler: the piece never opens
+// and the browser's own right-click menu is shown instead.
+<ContextMenu disabled={ true } items={ fileItems } @select={ onSelect }>
+  <div class="…">Menu disabled</div>
+</ContextMenu>`;
+
+const codeKeyboard = `// Opening focuses the first enabled item; arrows move (wrapping, skipping
+// groups/dividers), Enter/Space choose, Escape closes. It also closes on an
+// outside click, any scroll, or a right-click elsewhere.
+<ContextMenu items={ fileItems } @select={ onSelect }>
+  <div class="…">Right-click, then use the arrow keys</div>
+</ContextMenu>`;
+
+export default class ContextMenuDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeGroups,
+      codeDisabled,
+      codeKeyboard,
+      fileItems: [
+        { label: 'Open', value: 'open' },
+        { label: 'Rename', value: 'rename' },
+        { label: 'Duplicate', value: 'duplicate' },
+        { divider: true },
+        { label: 'Delete', value: 'delete', danger: true },
+      ],
+      editItems: [
+        { group: 'Edit' },
+        { label: 'Cut', value: 'cut' },
+        { label: 'Copy', value: 'copy' },
+        { label: 'Paste', value: 'paste', disabled: true },
+        { divider: true },
+        { group: 'Danger zone' },
+        { label: 'Delete', value: 'delete', danger: true },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Groups and danger items', href: '#groups' },
+        { label: 'Disabled', href: '#disabled' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    onSelect: (value) => toast({ message: 'Menu: ' + value }),
+  };
+}
+</script>

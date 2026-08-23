@@ -1,0 +1,8 @@
+{
+  "name": "button-group",
+  "description": "Joined row of action buttons — segmented toolbar cluster from an items array with icons, outline/secondary variants, and three sizes",
+  "files": ["ButtonGroup.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

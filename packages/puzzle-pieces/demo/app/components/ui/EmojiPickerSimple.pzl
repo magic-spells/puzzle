@@ -1,0 +1,603 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <button
+      type="button"
+      class={ triggerClass }
+      id={ triggerId }
+      data-emoji-trigger
+      aria-haspopup="dialog"
+      aria-expanded={ ariaExpanded }
+      aria-controls={ panelId }
+      aria-label={ label }
+      disabled={ disabled }
+      @click={ toggle }
+      @keydown={ onTriggerKey(event) }>
+      <Slot name="trigger">
+        <svg
+          class="size-5"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true">
+          <circle cx="10" cy="10" r="7.25" />
+          <path d="M7 12s1 1.5 3 1.5 3-1.5 3-1.5" stroke-linecap="round" />
+          <circle cx="7.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
+          <circle cx="12.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
+        </svg>
+      </Slot>
+    </button>
+
+    {#if open}
+      <div
+        class={ panelClass }
+        id={ panelId }
+        role="dialog"
+        aria-modal="false"
+        aria-label={ label }
+        data-emoji-panel
+        style={ panelStyle }
+        @keydown:escape={ onEscape(event) }>
+        <div class="px-2 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none">{ groupName }</div>
+        <ul
+          class="grid h-64 grid-cols-8 gap-0.5 overflow-y-auto overscroll-contain px-2 pb-2 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 outline-ring focus-visible:outline-ring"
+          id={ listId }
+          role="listbox"
+          aria-label={ groupName }
+          aria-activedescendant={ activeId }
+          tabindex="0"
+          data-emoji-list
+          @keydown={ onListKey(event) }>
+          {#for cell in cells}
+            <li
+              id={ cell.id }
+              role="option"
+              aria-selected="false"
+              aria-label={ cell.name }
+              title={ cell.name }
+              class={ cell.cellClass }
+              @click={ choose(cell, event) }
+              @mouseenter={ hover(cell) }>{ cell.char }</li>
+          {/for}
+        </ul>
+        <div class="flex gap-0.5 border-t border-border p-1.5" role="tablist" aria-label="Emoji categories">
+          {#for tab in tabs}
+            <button
+              type="button"
+              role="tab"
+              id={ tab.id }
+              aria-selected={ tab.ariaSelected }
+              aria-label={ tab.name }
+              aria-controls={ listId }
+              title={ tab.name }
+              tabindex={ tab.tabindex }
+              class={ tab.tabClass }
+              data-emoji-tab
+              @click={ pickTab(tab) }
+              @keydown={ onTabKey(event) }>{ tab.icon }</button>
+          {/for}
+        </div>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { MorphEngine } from '@magic-spells/morph-engine';
+import { EMOJI_GROUPS } from '../../lib/emoji-data.js';
+
+// EmojiPickerSimple — the lightweight sibling of EmojiPicker: no search box and
+// no keyword data. A category tab bar along the BOTTOM of the panel (one emoji
+// icon per Unicode group) swaps which group's grid is shown; only that one group
+// renders at a time (at most 388 cells), which is the point of this variant.
+// Consumers who don't need search skip copying lib/emoji-keywords.js entirely —
+// this piece depends only on lib/emoji-data.js.
+//
+// Same composed lineage as EmojiPicker (Popover's slot trigger + anchored panel,
+// DatePicker's optional-controlled open + two-pass flip + opt-in morph), except
+// the roving-active model: there is no search input to host aria-activedescendant,
+// so the LISTBOX ITSELF is focusable (tabindex 0) and carries it — arrows move
+// the active cell, Enter/Space picks. The tab bar is a WAI-ARIA tablist with a
+// roving tabindex; Left/Right arrows walk it and switch groups immediately.
+//
+//   <EmojiPickerSimple @change={ addEmoji } />
+//   <EmojiPickerSimple label="Add reaction" align="end" @change={ addEmoji }>
+//     <span slot="trigger" class="…">Custom trigger</span>
+//   </EmojiPickerSimple>
+//   <EmojiPickerSimple open={ open } @change={ addEmoji }
+//                      @show={ onShow } @hide={ onHide } />    // controlled open
+//
+// NO VALUE. Same contract as EmojiPicker: emits @change(char, event), closes,
+// and returns focus to the trigger — no selected state to control.
+//
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141): a
+// currentColor SVG smiley, not an emoji char, so the resting button follows the token
+// palette. Fill slot="trigger" and it REPLACES that fallback — filling the slot IS the
+// opt-in, no flag needed. The button keeps its `label` aria-label either way.
+//
+// PROPS — identical to EmojiPicker minus `placeholder`/`emptyText` (no search):
+//   open, label ('Choose emoji'), side, align, morph, disabled, class, triggerClass.
+//   `label` is the ACCESSIBLE name only (never visible text).
+//
+// The selected category persists across close/reopen for the instance's lifetime
+// (a picker reopened mid-conversation lands where the user left it).
+
+let uid = 0;
+
+const COLS = 8; // must match grid-cols-8 on the listbox
+
+// Rough resting panel height (group header + fixed grid + tab bar), used for
+// the synchronous open-time flip decision before the panel mounts.
+const PANEL_EST_HEIGHT = 340;
+
+// One representative emoji per Unicode group, in EMOJI_GROUPS order.
+const TAB_ICONS = ['😀', '👋', '🐻', '🍔', '✈️', '⚽', '💡', '🔣', '🚩'];
+
+const TRIGGER_BASE =
+  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface ' +
+  'text-muted cursor-pointer transition-colors ' +
+  'hover:text-ink hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+
+const PANEL_CARD =
+  'absolute z-50 w-72 overflow-hidden rounded-xl border border-border bg-surface shadow-lg';
+const PANEL_MORPH = 'inset-x-0 mx-auto w-72';
+
+// Horizontal anchoring, keyed off the relative root's edges (Popover's map).
+const ALIGN = {
+  start: 'left-0',
+  center: 'left-1/2 -translate-x-1/2',
+  end: 'right-0',
+};
+
+function cellClass(active) {
+  return [
+    'flex h-8 items-center justify-center rounded-md text-xl select-none cursor-pointer',
+    'hover:bg-surface-sunken',
+    active ? 'bg-surface-sunken' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function tabClass(selected) {
+  return [
+    'flex h-8 flex-1 items-center justify-center rounded-md text-base select-none cursor-pointer',
+    'transition-colors hover:bg-surface-sunken',
+    'focus-visible:outline-2 focus-visible:-outline-offset-2 outline-ring focus-visible:outline-ring',
+    selected ? 'bg-surface-sunken' : 'opacity-60 hover:opacity-100',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+export default class EmojiPickerSimple extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._morph = null; // lazily constructed on first morph open
+    this._wasOpen = false; // last effective-open seen by the transition detector
+    this._scrollActive = false; // scroll the active cell into view after next render
+    this._pendingRestoreFocus = true; // whether the next close refocuses the trigger
+    this.setData({
+      uncontrolledOpen: false,
+      groupIndex: 0,
+      activeIndex: 0,
+      placement: 'bottom',
+      morphTop: 0,
+    });
+  }
+
+  mounted() {
+    this._onDocPointer = (e) => {
+      if (!this._effectiveOpen()) return;
+      if (this.element && this.element.contains(e.target)) return;
+      this._requestClose({ restoreFocus: false });
+    };
+    this._syncOpenEffects();
+  }
+
+  destroyed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this._morph?.destroy();
+    this._morph = null;
+  }
+
+  // ---- controlled / uncontrolled open resolution ---------------------------
+
+  _controlled() {
+    return this.props.open !== undefined;
+  }
+
+  _effectiveOpen() {
+    return this._controlled() ? !!this.props.open : !!this.getData().uncontrolledOpen;
+  }
+
+  _wantMorph(props) {
+    return !!props.morph && !this._reducedMotion();
+  }
+
+  _reducedMotion() {
+    return (
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    );
+  }
+
+  _base() {
+    return this.props.id || `pieces-emoji-picker-simple-${this._uid}`;
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  data(params, props) {
+    const prev = this.getData();
+    const open = this._effectiveOpen();
+    const base = this._base();
+
+    const groupIndex = Math.min(prev.groupIndex ?? 0, EMOJI_GROUPS.length - 1);
+    const group = EMOJI_GROUPS[groupIndex];
+
+    const cells = group.emoji.map(([char, name], i) => ({
+      kind: 'option',
+      id: `${base}-opt-${i}`,
+      optIndex: i,
+      char,
+      name,
+      active: false,
+    }));
+
+    const activeIndex = Math.min(prev.activeIndex ?? 0, cells.length - 1);
+    const activeOpt = open && cells.length ? cells[activeIndex] : null;
+    if (activeOpt) activeOpt.active = true;
+    cells.forEach((c) => {
+      c.cellClass = cellClass(c.active);
+    });
+
+    const tabs = EMOJI_GROUPS.map((g, i) => ({
+      id: `${base}-tab-${i}`,
+      groupIndex: i,
+      name: g.name,
+      icon: TAB_ICONS[i] || '❓',
+      ariaSelected: i === groupIndex ? 'true' : 'false',
+      tabindex: i === groupIndex ? '0' : '-1',
+      tabClass: tabClass(i === groupIndex),
+    }));
+
+    const side = props.side === 'top' ? 'top' : 'bottom';
+    const placement = (open && prev.placement) || side;
+    const align = props.align === 'center' ? 'center' : props.align === 'end' ? 'end' : 'start';
+    const morphOn = this._wantMorph(props);
+
+    return {
+      open,
+      cells,
+      tabs,
+      groupName: group.name,
+      activeId: activeOpt ? activeOpt.id : false,
+      label: props.label || 'Choose emoji',
+      disabled: !!props.disabled,
+      triggerId: `${base}-trigger`,
+      panelId: `${base}-panel`,
+      listId: `${base}-list`,
+      ariaExpanded: open ? 'true' : 'false',
+      rootClass: ['relative inline-block', props.class || ''].filter(Boolean).join(' '),
+      triggerClass: [TRIGGER_BASE, props.triggerClass || ''].filter(Boolean).join(' '),
+      panelClass: morphOn
+        ? [PANEL_CARD, PANEL_MORPH].join(' ')
+        : [
+            PANEL_CARD,
+            placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1',
+            ALIGN[align],
+          ].join(' '),
+      panelStyle: morphOn ? `top:${prev.morphTop ?? 0}px;` : '',
+    };
+  }
+
+  // ---- open / close intents ------------------------------------------------
+
+  _decidePlacement() {
+    const trigger = this.element?.querySelector('[data-emoji-trigger]');
+    if (!trigger || typeof window === 'undefined') return 'bottom';
+    const rect = trigger.getBoundingClientRect();
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    const want = this.props.side === 'top' ? 'top' : 'bottom';
+    if (want === 'top') return PANEL_EST_HEIGHT > above && below > above ? 'bottom' : 'top';
+    return PANEL_EST_HEIGHT > below && above > below ? 'top' : 'bottom';
+  }
+
+  _measurePlacement() {
+    const trigger = this.element?.querySelector('[data-emoji-trigger]');
+    const panel = this.element?.querySelector('[data-emoji-panel]');
+    if (!trigger || !panel || typeof window === 'undefined') return this.getData().placement;
+    const rect = trigger.getBoundingClientRect();
+    const panelH = panel.offsetHeight;
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    const want = this.props.side === 'top' ? 'top' : 'bottom';
+    if (want === 'top') return panelH > above && below > above ? 'bottom' : 'top';
+    return panelH > below && above > below ? 'top' : 'bottom';
+  }
+
+  _requestOpen() {
+    if (this._effectiveOpen()) return;
+    const placement = this._decidePlacement();
+    // groupIndex deliberately survives across opens; the active cell resets.
+    const seed = { activeIndex: 0, placement };
+
+    if (this._controlled()) {
+      this.setData(seed);
+    } else {
+      this.setData({ ...seed, uncontrolledOpen: true });
+    }
+
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+
+    if (!this._controlled()) this.refresh();
+  }
+
+  _requestClose({ restoreFocus = true } = {}) {
+    if (!this._effectiveOpen()) return;
+    this._pendingRestoreFocus = restoreFocus;
+
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+
+    const morphLive =
+      this._wantMorph(this.props) &&
+      this._morph &&
+      (this._morph.state === 'shown' || this._morph.state === 'showing');
+
+    if (this._controlled()) return;
+
+    if (morphLive) {
+      this._morph.hide();
+    } else {
+      this.setData({ uncontrolledOpen: false });
+      this.refresh();
+    }
+  }
+
+  // ---- open / close side-effects -------------------------------------------
+
+  _syncOpenEffects() {
+    const open = this._effectiveOpen();
+    if (open && !this._wasOpen) {
+      this._wasOpen = true;
+      this._onOpened();
+    } else if (!open && this._wasOpen) {
+      this._wasOpen = false;
+      this._onClosed();
+    }
+  }
+
+  afterUpdate() {
+    this._syncOpenEffects();
+    if (this._scrollActive) {
+      this._scrollActive = false;
+      this._scrollActiveIntoView();
+    }
+  }
+
+  _onOpened() {
+    document.addEventListener('pointerdown', this._onDocPointer);
+    const morphOn = this._wantMorph(this.props);
+
+    requestAnimationFrame(() => {
+      if (!this._effectiveOpen() || !this.element) return;
+
+      if (morphOn) {
+        const trigger = this.element.querySelector('[data-emoji-trigger]');
+        const panel = this.element.querySelector('[data-emoji-panel]');
+        if (!this._morph) this._morph = this._createMorph();
+        if (trigger && panel && this._morph.state === 'idle') {
+          this._positionMorphPanel(trigger, panel);
+          this._morph.show({ from: trigger, to: panel });
+        }
+        return;
+      }
+
+      const corrected = this._measurePlacement();
+      if (corrected !== this.getData().placement) {
+        this.setData({ placement: corrected });
+        this.refresh();
+      }
+      this._focusList();
+    });
+  }
+
+  _positionMorphPanel(trigger, panel) {
+    if (typeof window === 'undefined') return;
+    const margin = 8;
+    const wrapRect = panel.parentElement.getBoundingClientRect();
+    const trigRect = trigger.getBoundingClientRect();
+    const panelH = panel.offsetHeight;
+
+    let top = trigRect.top - wrapRect.top + (trigRect.height - panelH) / 2;
+    const screenTop = wrapRect.top + top;
+    const clamped = Math.min(
+      Math.max(screenTop, margin),
+      Math.max(window.innerHeight - margin - panelH, margin)
+    );
+    top += clamped - screenTop;
+
+    this.setData({ morphTop: Math.round(top) });
+    this.refresh();
+  }
+
+  _onClosed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this.setData({ placement: 'bottom', morphTop: 0, activeIndex: 0 });
+    if (this._pendingRestoreFocus) {
+      this.element?.querySelector('[data-emoji-trigger]')?.focus();
+    }
+    this._pendingRestoreFocus = true;
+  }
+
+  _createMorph() {
+    const engine = new MorphEngine({ revealAt: 0.7, lockScroll: false });
+    engine.on('shown', () => {
+      if (!this._effectiveOpen()) return;
+      this._focusList();
+    });
+    engine.on('hidden', () => {
+      this.setData({ uncontrolledOpen: false });
+      this.refresh();
+    });
+    return engine;
+  }
+
+  _focusList() {
+    this.element?.querySelector('[data-emoji-list]')?.focus({ preventScroll: true });
+  }
+
+  // ---- active-cell / tab movement ------------------------------------------
+
+  _setActive(i, scroll) {
+    const { cells } = this.getData();
+    if (i < 0 || i >= cells.length) return;
+    this._scrollActive = !!scroll;
+    this.setData({ activeIndex: i });
+    this.refresh();
+  }
+
+  _move(delta) {
+    const { cells, activeIndex } = this.getData();
+    const n = cells.length;
+    if (!n) return;
+    const i = Math.max(0, Math.min(n - 1, activeIndex + delta));
+    if (i !== activeIndex) this._setActive(i, true);
+  }
+
+  _scrollActiveIntoView() {
+    const { open, activeId } = this.getData();
+    if (!open || !activeId || !this.element) return;
+    this.element.querySelector(`#${CSS.escape(activeId)}`)?.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Switch the displayed group; the grid scrolls back to the top and the active
+  // cell reseats on its first emoji.
+  _setGroup(gi, { focusTab = false } = {}) {
+    const n = EMOJI_GROUPS.length;
+    const next = Math.max(0, Math.min(n - 1, gi));
+    if (next === this.getData().groupIndex) return;
+    this._scrollActive = false;
+    this.setData({ groupIndex: next, activeIndex: 0 });
+    this.refresh();
+    const list = this.element?.querySelector('[data-emoji-list]');
+    if (list) list.scrollTop = 0;
+    if (focusTab) {
+      this.element?.querySelector(`#${CSS.escape(`${this._base()}-tab-${next}`)}`)?.focus();
+    }
+  }
+
+  _pick(cell, event) {
+    if (!cell) return;
+    const { change } = this.props;
+    if (typeof change === 'function') change(cell.char, event);
+    this._requestClose({ restoreFocus: true });
+  }
+
+  events = {
+    toggle: () => {
+      if (this.props.disabled) return;
+      if (this._effectiveOpen()) this._requestClose({ restoreFocus: true });
+      else this._requestOpen();
+    },
+
+    onTriggerKey: (event) => {
+      if (this.props.disabled) return;
+      if (!this._effectiveOpen() && event.key === 'ArrowDown') {
+        event.preventDefault();
+        this._requestOpen();
+        return;
+      }
+      if (this._effectiveOpen() && event.key === 'Escape') {
+        event.preventDefault();
+        this._requestClose({ restoreFocus: true });
+      }
+    },
+
+    onEscape: (event) => {
+      if (!this._effectiveOpen()) return;
+      event.preventDefault();
+      this._requestClose({ restoreFocus: true });
+    },
+
+    onListKey: (event) => {
+      switch (event.key) {
+        case 'ArrowRight':
+          event.preventDefault();
+          this._move(1);
+          break;
+        case 'ArrowLeft':
+          event.preventDefault();
+          this._move(-1);
+          break;
+        case 'ArrowDown':
+          event.preventDefault();
+          this._move(COLS);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          this._move(-COLS);
+          break;
+        case 'Home':
+          event.preventDefault();
+          this._setActive(0, true);
+          break;
+        case 'End':
+          event.preventDefault();
+          this._setActive(this.getData().cells.length - 1, true);
+          break;
+        case 'Enter':
+        case ' ': {
+          event.preventDefault();
+          const { cells, activeIndex } = this.getData();
+          this._pick(cells[activeIndex], event);
+          break;
+        }
+        default:
+          break;
+      }
+    },
+
+    // WAI-ARIA tabs: Left/Right roving over the tablist, switching groups as it moves.
+    onTabKey: (event) => {
+      const gi = this.getData().groupIndex;
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        this._setGroup(gi + 1, { focusTab: true });
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        this._setGroup(gi - 1, { focusTab: true });
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        this._setGroup(0, { focusTab: true });
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        this._setGroup(EMOJI_GROUPS.length - 1, { focusTab: true });
+      }
+    },
+
+    pickTab: (tab) => {
+      this._setGroup(tab.groupIndex);
+    },
+
+    hover: (cell) => {
+      if (this.getData().activeIndex === cell.optIndex) return;
+      this._setActive(cell.optIndex, false);
+    },
+
+    choose: (cell, event) => {
+      this._pick(cell, event);
+    },
+  };
+}
+</script>

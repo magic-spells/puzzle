@@ -1,0 +1,8 @@
+{
+  "name": "progress",
+  "description": "Determinate or indeterminate progress bar with optional label and percentage, in two sizes",
+  "files": ["Progress.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

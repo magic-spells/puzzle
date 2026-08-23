@@ -1,0 +1,396 @@
+<puzzle-view>
+  <dialog-panel ref="panel">
+    <dialog-backdrop class={ backdropClass }></dialog-backdrop>
+
+    <dialog class={ dialogClass } aria-labelledby={ labelledby } aria-describedby={ describedby }>
+      <div class={ bodyClass }>
+        <Slot name="header">
+          {#if hasHeader}
+            <header class={ headerClass }>
+              {#if title}
+                <h2 id={ titleId } class="text-lg font-semibold text-ink">{ title }</h2>
+              {/if}
+              {#if description}
+                <p id={ descId } class="mt-1.5 text-sm text-muted">{ description }</p>
+              {/if}
+            </header>
+          {/if}
+        </Slot>
+
+        <Children/>
+
+        <div class="mt-6 flex justify-end gap-2 empty:mt-0 empty:hidden">
+          <Slot name="footer"/>
+        </div>
+      </div>
+
+      {#if showClose}
+        <button type="button" data-action-hide-dialog aria-label={ closeLabel } class={ closeClass }>
+          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      {/if}
+    </dialog>
+  </dialog-panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Dialog — a centred modal on the native <dialog> element: the browser traps
+// focus, inerts the page and owns the top layer, and the piece adds the panel
+// chrome, the ARIA wiring and one dismiss policy.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <dialog-panel> /
+// <dialog-backdrop> custom elements from @magic-spells/dialog-panel and lets
+// them run the open/close machine. It replaces a 300-line port. Why:
+//
+//   1. The three overlays in this registry — Sheet, BottomSheet and Dialog —
+//      are all dialog-panel underneath. Porting this one meant a SECOND
+//      implementation of the same state machine, with its own escape / backdrop
+//      / native-close handling, its own focus return and its own animation
+//      hold. One upstream base means one loaded module, one close-and-notify
+//      contract, and an upstream fix reaching every consumer through a version
+//      bump instead of a re-port.
+//   2. What is left is exactly what a piece should own: a token-styled panel.
+//      Radius, border, surface, shadow, width cap, padding and the title /
+//      description / footer layout are all plain Tailwind here.
+//
+//   <Dialog open={ open } title="Delete project?"
+//           description="This cannot be undone." @hide={ finish }>
+//     <p>The project and all of its data are removed.</p>
+//     <div slot="footer" class="flex gap-2">
+//       <button type="button" data-action-hide-dialog data-result="cancel">Cancel</button>
+//       <button type="button" data-action-hide-dialog data-result="delete">Delete</button>
+//     </div>
+//   </Dialog>
+//
+// OPEN IS EDGE-TRIGGERED, AND THE DIALOG CLOSES ITSELF. The parent owns `open`,
+// but only a CHANGE to it acts: true → show(), false → hide(). An unrelated
+// re-render never re-opens a dialog the user just dismissed while the parent's
+// state still says open. The dialog dismisses itself on Escape, a backdrop
+// click, or any [data-action-hide-dialog] descendant, and REPORTS through
+// @hide; the parent's job is to flip `open` back to false there so the next
+// open is a fresh edge. Nothing here calls preventDefault on `cancel` —
+// dialog-panel already owns that.
+//
+//   @show()                        the entrance settled
+//   @hide({ result, triggerElement })
+//                                  the exit finished. `result` is the
+//                                  data-result of the [data-action-hide-dialog]
+//                                  button that closed it, and null for Escape
+//                                  or a backdrop click. That is how a footer
+//                                  answers a question:
+//                                    <button slot="footer" type="button"
+//                                      data-action-hide-dialog
+//                                      data-result="delete">Delete</button>
+//                                  and the parent reads detail.result in @hide.
+//                                  Those attributes have to sit on a real
+//                                  <button>: a component tag takes them as
+//                                  props and never puts them in the DOM.
+//
+// Props
+//   open           bool, edge-triggered as above
+//   title          stock header heading; generates its id and wires
+//                  aria-labelledby. Ignored once the header slot is filled.
+//   description    stock header paragraph; generates its id and wires
+//                  aria-describedby. Ignored once the header slot is filled.
+//   labelledby / describedby
+//                  ids to wire by hand, for a filled header slot
+//   dismissible    default true. false refuses Escape and the backdrop — see
+//                  below. Buttons and the parent still close it.
+//   size           'sm' | 'md' (default) | 'lg' — the panel's width cap
+//   showClose      default false. true adds a close (X) button pinned to the
+//                  panel's top-right corner. It is a [data-action-hide-dialog]
+//                  button with no handler of its own, so it closes through the
+//                  component like any other and reports result null.
+//   closeLabel     accessible name for that button (default 'Close')
+//   class          merged onto <dialog>
+//   backdropClass  merged onto <dialog-backdrop>, after the piece's overlay
+//
+// DISMISSIBLE={ FALSE }. dialog-panel has no opt-out of its own, so the piece
+// cancels the cancelable `beforeHide` event instead. A hide is allowed when it
+// carries a triggerElement (a [data-action-hide-dialog] button), when the
+// wrapper itself asked for it (the parent flipped `open`), or when a
+// keyboard-activated close button is mid-flight — see KNOWN GAPS for why that
+// last case needs a flag rather than the trigger. Everything else — Escape, a
+// backdrop click, a click on the dialog's own margin — is refused, and the
+// dialog stays open with no event fired.
+//
+// MARKUP CONTRACT. The header slot's fallback body is the `title` / `description`
+// block, so a FILLED header slot replaces it entirely and must bring its own
+// heading plus a matching `labelledby` (there is no is-slot-filled probe).
+// Untagged children become the body. The footer slot fills a right-aligned row
+// that is `empty:hidden`, so an unfilled slot leaves no gap. A slot="…"
+// attribute must sit on a DIRECT child of the <Dialog> tag, so wrap two footer
+// buttons in one div. Header, body and footer share one scroll region: the
+// panel caps at 85vh and scrolls inside its own rounded corners, while the
+// close button stays pinned outside that region.
+//
+// LOADING. The package registers its custom elements at module scope with
+// `class extends HTMLElement`, a ReferenceError under Node — so a top-level
+// import would crash the prerender pass of any app on static or hybrid output.
+// The import lives in mounted() instead, which never runs server-side. Markup
+// prerenders correctly either way: an un-upgraded <dialog> is closed, so a
+// closed dialog is invisible before the JS lands, and an `open` that is already
+// true when the view mounts is remembered and applied the moment the module
+// arrives.
+//
+// STYLESHEET. One, and it is not part of the copied file. Add it once to your
+// app's style entry:
+//   @import "@magic-spells/dialog-panel/css" layer(components);
+// The layer is not optional cosmetics: the stylesheet uses plain element
+// selectors, and an unlayered import would outrank every Tailwind utility on
+// the panel — including the size cap and the surface colour set right here.
+// Sheet and BottomSheet need the same one import; three pieces, one copy.
+//
+// THEME. dialog-panel publishes exactly one custom property
+// (--dialog-backdrop-z-index), so unlike Sheet there is no variable bridge to
+// build: the panel is styled with ordinary token utilities, and the overlay is
+// two more of them on <dialog-backdrop> (black at 50%, blurred — the same look
+// the other three overlays land on). Raise the backdrop's stacking level from
+// your own CSS if the page needs it: dialog-panel { --dialog-backdrop-z-index: … }.
+//
+// WHAT DIALOG-PANEL OWNS, AND THIS PIECE MUST NOT SET. The state machine drives
+// the entrance and exit through `opacity`, `transform` and `transition` on the
+// <dialog>, plus `display` / `opacity` / `transition` on <dialog-backdrop>, all
+// keyed off the [state] attribute. Setting any of those from a piece utility
+// fights the animation and can strand the panel mid-transition. Everything else
+// on the base rule — border, padding, width, max-width, max-height, overflow,
+// box-shadow — is a plain default this piece is meant to override.
+//
+// NO MORPH PROP. The ported piece grew a container-transform out of its trigger
+// via @magic-spells/morph-engine. dialog-panel accepts a duck-typed engine on a
+// `morphEngine` property, but no engine in this family implements that seam
+// on its own — the sheet builds it inside its own component. A morphing centred
+// dialog is already a piece: <Sheet position="center" morphTrigger="#card"/>.
+// Reach for that instead of re-growing this one.
+//
+// KNOWN GAPS, all upstream:
+//   * The `hidden` detail carries no reason, so @hide cannot tell Escape from a
+//     backdrop click. Only a [data-action-hide-dialog] close is distinguishable,
+//     through `result`.
+//   * A KEYBOARD activation of a [data-action-hide-dialog] button closes the
+//     dialog but reports result null. A pointerless click carries coordinates
+//     of 0,0, which dialog-panel's outside-click check reads as a backdrop tap
+//     before the delegated handler runs — so the button never gets to pass its
+//     own element along. The piece watches for that click in the capture phase
+//     so dismissible={ false } still lets the button through; recovering the
+//     result belongs upstream.
+//   * dialog-panel's drawer `position` attribute is deliberately not exposed.
+//     Its rules re-position the <dialog> and take over the transform, which
+//     collides with the size cap here — and an edge-anchored panel is what
+//     Sheet is for.
+//
+// ONE COMPILER GAP, AND IT IS NOT UPSTREAM: a named slot's FALLBACK BODY is
+// rendered once and is not patched again, so a `title` or `description` that
+// CHANGES between renders keeps whatever text it had when the view mounted.
+// (Sheet and BottomSheet have the same shape and the same gap.) Everything
+// outside the slot — the size cap, the class prop, aria-labelledby — updates
+// normally. Pass a stable title, or fill the header slot and own the heading
+// yourself, where ordinary call-site content patches as usual.
+let uid = 0;
+
+// The overlay. dialog-panel's own default is a lighter, unblurred scrim; this
+// is the look the rest of the overlay family lands on (Sheet and BottomSheet
+// set the same pair through their components' custom properties).
+const OVERLAY = 'bg-black/50 backdrop-blur-sm';
+
+// The panel. `m-auto` is not decoration: a modal <dialog> is centred by the
+// browser through `margin: auto` against four zeroed insets, and Tailwind's
+// preflight resets margin to 0 on every element — so without this the panel
+// pins itself to the top-left corner. `open:flex` rather than a bare `flex`: a
+// display utility that applies while the dialog is closed defeats the UA's
+// `dialog:not([open]) { display: none }` and renders the panel in the page.
+// The column is what pins the close button while the content scrolls.
+const PANEL =
+  'm-auto rounded-xl border border-border bg-surface text-body shadow-xl overflow-hidden ' +
+  'open:flex open:flex-col';
+
+// The scroll region. min-h-0 is what lets a flex child actually shrink below
+// its content and scroll; overscroll-contain keeps a bottomed-out scroll from
+// chaining to the page behind the modal.
+const BODY = 'min-h-0 flex-1 overflow-y-auto overscroll-contain p-6';
+
+const SIZE = {
+  sm: 'max-w-sm',
+  md: 'max-w-lg',
+  lg: 'max-w-2xl',
+};
+
+// Pinned to the panel, not to the scroll region — it is a sibling of the body,
+// and the UA positions an open modal dialog, so `absolute` resolves against it.
+const CLOSE =
+  'absolute right-3 top-3 flex size-8 cursor-pointer items-center justify-center ' +
+  'rounded-full text-muted transition-colors outline-ring hover:bg-surface-sunken ' +
+  'hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2';
+
+export default class Dialog extends PuzzleView {
+  #id = `dialog-${++uid}`;
+  #panel = null;
+  #live = false;
+  #ready = false;
+  #lastOpen = false;
+  // A hide the wrapper asked for, and a hide a close button asked for without
+  // being able to say so. Both are read by the dismissible guard; both are set
+  // for one synchronous stretch only.
+  #selfHiding = false;
+  #buttonHide = false;
+
+  // dialog-panel's events bubble, so a nested overlay's close would otherwise
+  // reach this panel's listeners too — and be reported as, or refused as, this
+  // dialog's own.
+  #mine(event) {
+    return event.target === this.#panel;
+  }
+
+  #onShown = (event) => {
+    if (!this.#mine(event)) return;
+    this.props.show?.();
+  };
+
+  #onHidden = (event) => {
+    if (!this.#mine(event)) return;
+    const detail = event.detail || {};
+    this.props.hide?.({
+      result: detail.result ?? null,
+      triggerElement: detail.triggerElement ?? null,
+    });
+  };
+
+  // The whole of dismissible={ false }. beforeHide is cancelable and fires for
+  // every close path, so refusing the ones that carry no trigger refuses
+  // Escape and the backdrop while leaving buttons and the parent alone.
+  #onBeforeHide = (event) => {
+    if (!this.#mine(event)) return;
+    if (this.props.dismissible !== false) return;
+    if (this.#selfHiding || this.#buttonHide) return;
+    if (event.detail?.triggerElement) return;
+    event.preventDefault();
+  };
+
+  // Capture phase, on the root: it runs before dialog-panel's own handlers no
+  // matter which listener was registered first (the element may already be
+  // upgraded by the time this view mounts, if another overlay loaded the
+  // module). A keyboard-activated close button arrives at (0,0) and is read as
+  // a backdrop tap upstream, so this is the only place the intent is still
+  // legible — see KNOWN GAPS.
+  #onClickCapture = (event) => {
+    if (!event.target?.closest?.('[data-action-hide-dialog]')) return;
+    this.#buttonHide = true;
+    setTimeout(() => {
+      this.#buttonHide = false;
+    }, 0);
+  };
+
+  data(params, props) {
+    const title = props.title || '';
+    const description = props.description || '';
+    const showClose = props.showClose === true;
+
+    return {
+      title,
+      description,
+      hasHeader: !!(title || description),
+      showClose,
+      titleId: `${this.#id}-title`,
+      descId: `${this.#id}-desc`,
+      // The stock header keeps clear of the close button's corner.
+      headerClass: showClose ? 'mb-4 pr-8' : 'mb-4',
+      labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
+      describedby: props.describedby || (description ? `${this.#id}-desc` : false),
+      closeLabel: props.closeLabel || 'Close',
+      closeClass: CLOSE,
+      bodyClass: BODY,
+      backdropClass: [OVERLAY, props.backdropClass].filter(Boolean).join(' '),
+      dialogClass: [PANEL, SIZE[props.size] || SIZE.md, props.class]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+
+  mounted() {
+    // Browser-only by construction — see LOADING above. The guard is belt and
+    // braces for any host that runs lifecycle hooks outside a document.
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#panel = this.refs.panel;
+    this.#lastOpen = !!this.props.open;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this.#panel?.addEventListener('shown', this.#onShown);
+    this.#panel?.addEventListener('hidden', this.#onHidden);
+    this.#panel?.addEventListener('beforeHide', this.#onBeforeHide);
+    this.#panel?.addEventListener('click', this.#onClickCapture, true);
+
+    import('@magic-spells/dialog-panel')
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+        // A dialog that mounted already open opens now, at the first moment the
+        // elements can honour it.
+        this.#sync();
+      })
+      .catch((error) => {
+        console.error(
+          '[Dialog] failed to load @magic-spells/dialog-panel — the dialog will not open.',
+          error
+        );
+      });
+  }
+
+  afterUpdate() {
+    if (!this.#live) return;
+
+    const open = !!this.props.open;
+    if (open !== this.#lastOpen) {
+      this.#lastOpen = open;
+      this.#sync();
+    }
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.#panel?.removeEventListener('shown', this.#onShown);
+    this.#panel?.removeEventListener('hidden', this.#onHidden);
+    this.#panel?.removeEventListener('beforeHide', this.#onBeforeHide);
+    this.#panel?.removeEventListener('click', this.#onClickCapture, true);
+    // Unbind FIRST: this close is a teardown, not a user dismissal, and must not
+    // call back into a parent that is being torn down with us — and with the
+    // guard gone it cannot be refused either. Everything else — the top-layer
+    // dialog, the page scroll lock — is released by the element's own
+    // disconnectedCallback when Puzzle removes it.
+    if (this.#panel?.isOpen) this.#panel.hide();
+    this.#panel = null;
+  }
+
+  // Edge-triggered, never level-triggered: called only when `open` actually
+  // changed (or when the module finally landed on a dialog that mounted open).
+  // The isOpen guards make a redundant edge — the parent flipping `open` false
+  // inside @hide, for a dialog that already closed itself — a no-op.
+  #sync() {
+    if (!this.#ready || !this.#panel) return;
+    if (this.#lastOpen) {
+      if (!this.#panel.isOpen) this.#panel.show(this.#trigger());
+    } else if (this.#panel.isOpen) {
+      // Flagged so the dismissible guard lets the parent's own close through.
+      this.#selfHiding = true;
+      try {
+        this.#panel.hide();
+      } finally {
+        this.#selfHiding = false;
+      }
+    }
+  }
+
+  // The element show() returns focus to. Whatever the user was on when the
+  // parent opened the dialog is the honest answer, and it keeps focus return
+  // working with no prop to pass.
+  #trigger() {
+    const active = document.activeElement;
+    return active && active !== document.body && active.focus ? active : undefined;
+  }
+}
+</script>

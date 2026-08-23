@@ -1,0 +1,302 @@
+<puzzle-view>
+  <span class="relative inline-flex">
+    <span
+      class="inline-flex"
+      data-hovercard-trigger
+      @pointerenter={ onTriggerEnter }
+      @pointerleave={ onTriggerLeave }
+      @focusin={ onFocusIn }
+      @focusout={ onFocusOut(event) }
+      @keydown:escape={ onEscape(event) }>
+      <Slot name="trigger">{ label }</Slot>
+    </span>
+
+    {#if open}
+      <div
+        class={ panelClass }
+        id={ panelId }
+        data-hovercard-panel
+        @pointerenter={ onPanelEnter }
+        @pointerleave={ onPanelLeave }
+        @keydown:escape={ onEscape(event) }>
+        <Slot/>
+      </div>
+    {/if}
+  </span>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// HoverCard — Popover's hover/focus-triggered cousin, for supplementary previews
+// (link previews, @user cards). It shares Popover's shape — a named "trigger" slot
+// wrapping the caller's target and a default <Slot/> for arbitrary panel content,
+// an absolute panel inside a relative root, and the same open-time auto-flip
+// measurement — but the interaction model comes from Tooltip: it opens on hover or
+// keyboard focus after a delay and closes shortly after the pointer leaves. There
+// is deliberately NO click toggle (that's Popover).
+//
+//   <HoverCard>
+//     <a slot="trigger" href="/u/ada" class="…">@ada</a>
+//     <div class="…">…profile preview…</div>
+//   </HoverCard>
+//   <HoverCard openDelay={ 200 } closeDelay={ 100 }>…</HoverCard>
+//   <HoverCard open={ open } @show={ onShow } @hide={ onHide }>…</HoverCard>
+//
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
+// the plain `label` text. Fill slot="trigger" with your own element (the usual case:
+// a real <a> for a link preview) and it REPLACES that fallback — a filled slot wins
+// over `label`. Pass neither and the trigger is empty, with nothing to hover.
+//
+// TIMING — the hoverable-panel rule. pointerenter (or focusin) on the trigger
+// starts an `openDelay` timer (default 600ms); leaving before it fires cancels the
+// pending open. pointerleave starts a `closeDelay` timer (default 300ms) — but
+// entering the PANEL cancels that timer, so the card stays open while the pointer
+// travels onto it and hovers its content. This hoverable panel is exactly what
+// separates a hover card from a tooltip (whose chip is inert and closes the moment
+// you leave the target). Escape closes immediately. All timers are cleared in
+// destroyed().
+//
+// open — OPTIONAL-CONTROLLED (DatePicker's shape): omit it and the card owns its
+// open state; pass it and the parent owns it (the card only *asks* to open/close
+// via @show/@hide and reflects the prop).
+//
+// ACCESSIBILITY. A hover card is SUPPLEMENTARY by design: it is not reachable by
+// keyboard beyond the trigger's own focus, and its panel carries no role and no
+// focus requirement. Do NOT put content that is only available here — anything
+// critical (an action, a destination, information a task depends on) must also live
+// in the normal document flow. Use Popover for interactive, must-reach content.
+
+let uid = 0;
+
+const PANEL_BASE =
+  'absolute z-50 w-72 rounded-lg border border-border bg-surface p-4 shadow-md ' +
+  'text-sm text-body';
+
+// Horizontal anchoring, keyed off the relative root's edges (Popover's ALIGN).
+const ALIGN = {
+  start: 'left-0',
+  center: 'left-1/2 -translate-x-1/2',
+  end: 'right-0',
+};
+
+export default class HoverCard extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._openTimer = null; // pending open (hover/focus → openDelay → show)
+    this._closeTimer = null; // pending close (leave → closeDelay → hide)
+    this._wasOpen = false; // last effective-open seen by the transition detector
+    // Local UI state (uncontrolled mode + placement). `placement` is the effective
+    // (possibly flipped) side; it reflects `side` while closed.
+    this.setData({ uncontrolledOpen: false, placement: 'bottom' });
+  }
+
+  // Outside-pointerdown close: a safety net alongside the hover/focus close paths,
+  // attached only while open. Guarded by containment so a press inside never closes.
+  mounted() {
+    this._onDocPointer = (e) => {
+      if (!this._effectiveOpen()) return;
+      if (this.element && this.element.contains(e.target)) return;
+      this._requestClose();
+    };
+    // Cover the parent mounting us already-open (controlled open={ true }).
+    this._syncOpenEffects();
+  }
+
+  destroyed() {
+    if (this._openTimer) clearTimeout(this._openTimer);
+    if (this._closeTimer) clearTimeout(this._closeTimer);
+    document.removeEventListener('pointerdown', this._onDocPointer);
+  }
+
+  // ---- controlled / uncontrolled open resolution ---------------------------
+
+  _controlled() {
+    return this.props.open !== undefined;
+  }
+
+  _effectiveOpen() {
+    return this._controlled() ? !!this.props.open : !!this.getData().uncontrolledOpen;
+  }
+
+  _side() {
+    return this.props.side === 'top' ? 'top' : 'bottom';
+  }
+
+  _openDelay() {
+    const d = Number(this.props.openDelay);
+    return Number.isFinite(d) && d >= 0 ? d : 600;
+  }
+
+  _closeDelay() {
+    const d = Number(this.props.closeDelay);
+    return Number.isFinite(d) && d >= 0 ? d : 300;
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  data(params, props) {
+    const prev = this.getData();
+    const open = this._effectiveOpen();
+    const side = this._side();
+    const placement = (open && prev.placement) || side;
+    const align = props.align === 'center' ? 'center' : props.align === 'end' ? 'end' : 'start';
+
+    return {
+      open,
+      side,
+      placement,
+      label: props.label != null ? String(props.label) : '',
+      panelId: props.id || `pieces-hover-card-${this._uid}`,
+      panelClass: [
+        PANEL_BASE,
+        placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
+        ALIGN[align],
+        props.class || '',
+      ].join(' '),
+    };
+  }
+
+  // ---- timers --------------------------------------------------------------
+
+  _clearOpenTimer() {
+    if (this._openTimer) {
+      clearTimeout(this._openTimer);
+      this._openTimer = null;
+    }
+  }
+
+  _clearCloseTimer() {
+    if (this._closeTimer) {
+      clearTimeout(this._closeTimer);
+      this._closeTimer = null;
+    }
+  }
+
+  // Start the open timer (unless already open or already pending). A pending close
+  // is cancelled first — re-entering keeps the card up.
+  _scheduleOpen() {
+    this._clearCloseTimer();
+    if (this._effectiveOpen() || this._openTimer) return;
+    this._openTimer = setTimeout(() => {
+      this._openTimer = null;
+      this._requestOpen();
+    }, this._openDelay());
+  }
+
+  // Start the close timer. Any pending open is cancelled (we're leaving before it
+  // fired). No-op if already closed.
+  _scheduleClose() {
+    this._clearOpenTimer();
+    if (!this._effectiveOpen() || this._closeTimer) return;
+    this._closeTimer = setTimeout(() => {
+      this._closeTimer = null;
+      this._requestClose();
+    }, this._closeDelay());
+  }
+
+  // ---- open / close intents ------------------------------------------------
+
+  _requestOpen() {
+    if (this._effectiveOpen()) return;
+    const side = this._side();
+    // Stash the side FIRST so it's in place before a controlled parent's @show
+    // handler synchronously flips `open` and re-renders.
+    if (this._controlled()) {
+      this.setData({ placement: side });
+    } else {
+      this.setData({ uncontrolledOpen: true, placement: side });
+    }
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+    if (!this._controlled()) this.refresh();
+  }
+
+  _requestClose() {
+    if (!this._effectiveOpen()) return;
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+    if (this._controlled()) return; // parent unmounts the panel via the prop flip
+    this.setData({ uncontrolledOpen: false });
+    this.refresh();
+  }
+
+  // ---- open / close side-effects (driven by the effective-open transition) --
+
+  _syncOpenEffects() {
+    const open = this._effectiveOpen();
+    if (open && !this._wasOpen) {
+      this._wasOpen = true;
+      this._onOpened();
+    } else if (!open && this._wasOpen) {
+      this._wasOpen = false;
+      this._onClosed();
+    }
+  }
+
+  afterUpdate() {
+    this._syncOpenEffects();
+  }
+
+  _onOpened() {
+    document.addEventListener('pointerdown', this._onDocPointer);
+    // The panel mounted this render; wait one frame so it exists, then correct the
+    // side against its real height (Popover's flip-if-no-space measurement).
+    requestAnimationFrame(() => {
+      if (!this._effectiveOpen() || !this.element) return;
+      const next = this._measurePlacement(this._side());
+      if (next !== this.getData().placement) {
+        this.setData({ placement: next });
+        this.refresh();
+      }
+    });
+  }
+
+  _onClosed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this.setData({ placement: this._side() });
+  }
+
+  // Flip to the opposite side only when the panel doesn't fit on the requested side
+  // AND the opposite side has more room — otherwise stay put.
+  _measurePlacement(side) {
+    const trigger = this.element?.querySelector('[data-hovercard-trigger]');
+    const panel = this.element?.querySelector('[data-hovercard-panel]');
+    if (!trigger || !panel || typeof window === 'undefined') return side;
+    const rect = trigger.getBoundingClientRect();
+    const panelH = panel.offsetHeight;
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    if (side === 'bottom') return panelH > below && above > below ? 'top' : 'bottom';
+    return panelH > above && below > above ? 'bottom' : 'top';
+  }
+
+  events = {
+    // Trigger hover: open after openDelay; leaving starts the close countdown.
+    onTriggerEnter: () => this._scheduleOpen(),
+    onTriggerLeave: () => this._scheduleClose(),
+
+    // Keyboard focus opens on the same delay; blur (to outside the card) closes.
+    onFocusIn: () => this._scheduleOpen(),
+    onFocusOut: (event) => {
+      // Focus moving into the panel content must not close the card.
+      if (event.relatedTarget && this.element && this.element.contains(event.relatedTarget)) return;
+      this._scheduleClose();
+    },
+
+    // The hoverable-panel rule: entering the panel cancels the pending close so the
+    // card stays up while the pointer is over it; leaving restarts the countdown.
+    onPanelEnter: () => this._clearCloseTimer(),
+    onPanelLeave: () => this._scheduleClose(),
+
+    onEscape: (event) => {
+      if (!this._effectiveOpen()) return;
+      event.preventDefault();
+      this._clearOpenTimer();
+      this._clearCloseTimer();
+      this._requestClose();
+    },
+  };
+}
+</script>

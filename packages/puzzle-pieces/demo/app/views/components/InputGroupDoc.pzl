@@ -1,0 +1,176 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Input Group</h1>
+        <p class="mt-2 text-body">
+          A Field-compatible input with fused leading and trailing addons. It takes everything
+          Field takes — label, hint or error, and ARIA wiring — then lets you slot a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">prefix</code>
+          and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">suffix</code>
+          into one continuous field.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-sm">
+          <InputGroup label="Website" value={ site } placeholder="acme" @change={ setSite }>
+            <span slot="prefix">https://</span>
+            <span slot="suffix">.com</span>
+          </InputGroup>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="button-suffix" title="Button in the suffix" code={ codeButton }>
+          <div class="w-full max-w-sm">
+            <InputGroup label="Share link" value={ link } @change={ setLink }>
+              <Button slot="suffix" size="sm" variant="ghost" @press={ copy }>Copy</Button>
+            </InputGroup>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="kbd" title="Kbd hint" code={ codeKbd }>
+          <div class="w-full max-w-sm">
+            <InputGroup label="Search" placeholder="Search the docs…" value={ query } @change={ setQuery }>
+              <Kbd slot="suffix">⌘K</Kbd>
+            </InputGroup>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="error" title="Error" code={ codeError }>
+          <div class="w-full max-w-sm">
+            <InputGroup label="Website" value="not a url" error="Enter a valid domain">
+              <span slot="prefix">https://</span>
+              <span slot="suffix">.com</span>
+            </InputGroup>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <p class="mb-3 text-sm text-body">
+          The wiring mirrors Field exactly. The
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>
+          is a real
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<label for>' }</code>
+          tied to the input's id (a stable per-instance id is generated when you don't pass one).
+          An
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">error</code>
+          or
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">hint</code>
+          is wired through
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-describedby</code>,
+          and an error also sets
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-invalid="true"</code>.
+        </p>
+        <p class="text-sm text-muted">
+          Focus lands on the real
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<input>' }</code>,
+          but the ring is painted on the wrapper with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">focus-within</code>
+          so the addons stay inside one focus outline. The outline color is set unconditionally
+          (danger when errored), so
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">transition-colors</code>
+          never flashes it on focus. Empty prefix/suffix containers collapse with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">empty:hidden</code>,
+          leaving no stray hairline.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import InputGroup from '@/components/ui/InputGroup.pzl';
+import Button from '@/components/ui/Button.pzl';
+import Kbd from '@/components/ui/Kbd.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+// Docs page for InputGroup — follows the ButtonDoc/FieldDoc exemplar shape.
+const installCmd = 'puzzle add piece input-group';
+const usageImport = `import InputGroup from '@/components/ui/InputGroup.pzl';`;
+const usageMarkup = `<InputGroup label="Website" value={ site } @change={ setSite }></InputGroup>`;
+
+const codeHero = `<InputGroup label="Website" value={ site } @change={ setSite }>
+  <span slot="prefix">https://</span>
+  <span slot="suffix">.com</span>
+</InputGroup>
+
+// parent
+events = {
+  setSite: (v) => this.setData('site', v),
+};`;
+
+const codeButton = `<InputGroup label="Share link" value={ link } @change={ setLink }>
+  <Button slot="suffix" size="sm" variant="ghost" @press={ copy }>Copy</Button>
+</InputGroup>`;
+
+const codeKbd = `<InputGroup label="Search" placeholder="Search the docs…" value={ query } @change={ setQuery }>
+  <Kbd slot="suffix">⌘K</Kbd>
+</InputGroup>`;
+
+const codeError = `<InputGroup label="Website" value="not a url" error="Enter a valid domain">
+  <span slot="prefix">https://</span>
+  <span slot="suffix">.com</span>
+</InputGroup>`;
+
+export default class InputGroupDoc extends PuzzleView {
+  created() {
+    this.setData({ site: '', link: 'https://acme.example/s/9f2a1', query: '' });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeButton,
+      codeKbd,
+      codeError,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Button in the suffix', href: '#button-suffix' },
+        { label: 'Kbd hint', href: '#kbd' },
+        { label: 'Error', href: '#error' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    setSite: (v) => this.setData('site', v),
+    setLink: (v) => this.setData('link', v),
+    setQuery: (v) => this.setData('query', v),
+    copy: () => toast({ message: 'Link copied to clipboard.', variant: 'success' }),
+  };
+}
+</script>

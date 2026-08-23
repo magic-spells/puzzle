@@ -1,0 +1,8 @@
+{
+  "name": "tree",
+  "description": "Config-first WAI-ARIA tree view — nested nodes with expand/collapse, roving-tabindex keyboard nav, and a selection callback",
+  "files": ["Tree.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

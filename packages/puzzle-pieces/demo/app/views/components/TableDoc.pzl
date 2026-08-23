@@ -1,0 +1,137 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Table</h1>
+        <p class="mt-2 text-body">
+          A config-first styled semantic table. A
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">columns</code>
+          schema and a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">rows</code>
+          array render one real table with per-column alignment, an optional caption, and an empty state.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full">
+          <Table columns={ invoiceColumns } rows={ invoiceRows } caption="Invoices billed this quarter" />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          This is the presentational tier, not a data grid. Sorting, selection, and virtualization are out of scope by design — own that state in the parent and feed sorted or paged rows in.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="alignment" title="Alignment" code={ codeAlignment }>
+          <div class="w-full">
+            <Table columns={ alignColumns } rows={ alignRows } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="empty" title="Empty state" code={ codeEmpty }>
+          <div class="w-full">
+            <Table columns={ invoiceColumns } rows={ noRows } empty="No invoices this quarter." />
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Table from '@/components/ui/Table.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece table';
+const usageImport = `import Table from '@/components/ui/Table.pzl';`;
+const usageMarkup = `<Table columns={ columns } rows={ rows } caption="Invoices billed this quarter" />`;
+
+const codeHero = `const columns = [
+  { key: 'invoice', label: 'Invoice' },
+  { key: 'client', label: 'Client' },
+  { key: 'status', label: 'Status' },
+  { key: 'amount', label: 'Amount', align: 'right' },
+];
+const rows = [
+  { invoice: 'INV-1042', client: 'Acme Inc.', status: 'Paid', amount: '$1,200.00' },
+  { invoice: 'INV-1043', client: 'Globex', status: 'Pending', amount: '$980.00' },
+  { invoice: 'INV-1044', client: 'Initech', status: 'Paid', amount: '$3,450.00' },
+];
+
+<Table columns={ columns } rows={ rows } caption="Invoices billed this quarter" />`;
+
+const codeAlignment = `const columns = [
+  { key: 'item', label: 'Item' },
+  { key: 'qty', label: 'Qty', align: 'center' },
+  { key: 'price', label: 'Price', align: 'right' },
+];
+
+<Table columns={ columns } rows={ rows } />`;
+
+const codeEmpty = `// An empty rows array renders one centered cell spanning every column.
+// The empty prop overrides the default "No results." text.
+<Table columns={ columns } rows={ [] } empty="No invoices this quarter." />`;
+
+export default class TableDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeAlignment,
+      codeEmpty,
+      invoiceColumns: [
+        { key: 'invoice', label: 'Invoice' },
+        { key: 'client', label: 'Client' },
+        { key: 'status', label: 'Status' },
+        { key: 'amount', label: 'Amount', align: 'right' },
+      ],
+      invoiceRows: [
+        { invoice: 'INV-1042', client: 'Acme Inc.', status: 'Paid', amount: '$1,200.00' },
+        { invoice: 'INV-1043', client: 'Globex', status: 'Pending', amount: '$980.00' },
+        { invoice: 'INV-1044', client: 'Initech', status: 'Paid', amount: '$3,450.00' },
+        { invoice: 'INV-1045', client: 'Umbrella Co.', status: 'Overdue', amount: '$540.00' },
+        { invoice: 'INV-1046', client: 'Soylent', status: 'Draft', amount: '$120.00' },
+      ],
+      alignColumns: [
+        { key: 'item', label: 'Item' },
+        { key: 'qty', label: 'Qty', align: 'center' },
+        { key: 'price', label: 'Price', align: 'right' },
+      ],
+      alignRows: [
+        { item: 'Enamel pin', qty: '3', price: '$18.00' },
+        { item: 'Sticker sheet', qty: '12', price: '$6.00' },
+        { item: 'Tote bag', qty: '1', price: '$24.00' },
+      ],
+      noRows: [],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Alignment', href: '#alignment' },
+        { label: 'Empty state', href: '#empty' },
+      ],
+    };
+  }
+}
+</script>

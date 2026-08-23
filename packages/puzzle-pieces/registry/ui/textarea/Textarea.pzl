@@ -1,0 +1,93 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ id } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+    <textarea
+      id={ id }
+      class={ inputClass }
+      rows={ rows }
+      placeholder={ placeholder }
+      name={ name }
+      disabled={ disabled }
+      required={ required }
+      aria-invalid={ invalid }
+      aria-describedby={ describedby }
+      @input={ handleInput(event) }
+      @blur={ handleBlur(event) }
+      @focus={ handleFocus(event) }>{ value }</textarea>
+    {#if error}
+      <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+    {:else if hint}
+      <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Textarea — Field's composite pattern for multi-line text: label, hint/error,
+// and ARIA wiring come built in. Controlled: the parent owns `value` and
+// updates it from `@change`. An `error` string replaces the `hint`, flips
+// aria-invalid, and paints the border/ring danger. A stable id is generated
+// when `id` is absent so the label can target the control. `rows` sets the
+// initial height; the box grows with resize-y.
+//
+//   <Textarea label="Bio" value={ bio } @change={ setBio } />
+//   <Textarea label="Notes" rows={ 6 } hint="Markdown supported" />
+//   <Textarea label="Message" value={ msg } error="Message is required" />
+let uid = 0;
+
+const INPUT_BASE =
+  'block w-full rounded-lg border bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted ' +
+  'resize-y ' +
+  'transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'disabled:opacity-50';
+const INPUT_OK = 'border-border outline-ring focus-visible:outline-ring';
+const INPUT_ERROR = 'border-danger outline-danger focus-visible:outline-danger';
+
+export default class Textarea extends PuzzleView {
+  data(params, props) {
+    // Fallback id is generated once per instance so it survives re-renders; an
+    // explicit `id` prop always wins.
+    const id = props.id || (this._fallbackId ??= `pp-textarea-${++uid}`);
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const described = !!(error || hint);
+    return {
+      id,
+      descId: `${id}-desc`,
+      value: props.value ?? '',
+      placeholder: props.placeholder,
+      name: props.name,
+      rows: props.rows || 4,
+      label: props.label,
+      hint,
+      error,
+      disabled: !!props.disabled,
+      required: !!props.required,
+      invalid: error ? 'true' : false,
+      describedby: described ? `${id}-desc` : false,
+      rootClass: props.class || '',
+      inputClass: [INPUT_BASE, error ? INPUT_ERROR : INPUT_OK].join(' '),
+    };
+  }
+
+  events = {
+    handleInput: (event) => {
+      const { change } = this.props;
+      if (typeof change === 'function') change(event.target.value, event);
+    },
+    handleBlur: (event) => {
+      const { blur } = this.props;
+      if (typeof blur === 'function') blur(event);
+    },
+    handleFocus: (event) => {
+      const { focus } = this.props;
+      if (typeof focus === 'function') focus(event);
+    },
+  };
+}
+</script>

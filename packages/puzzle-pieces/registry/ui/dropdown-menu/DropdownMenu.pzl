@@ -1,0 +1,334 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <button
+      id={ triggerId }
+      data-dm-trigger
+      type="button"
+      class={ triggerClass }
+      disabled={ disabled }
+      aria-haspopup="true"
+      aria-controls={ panelId }
+      aria-expanded={ open ? 'true' : 'false' }
+      @click={ toggle }
+      @keydown:down:prevent={ onTriggerDown(event) }
+      @keydown:up:prevent={ onTriggerUp(event) }
+      @keydown:escape={ onTriggerEscape(event) }>
+      <Slot name="trigger">
+        <span>{ label }</span>
+        <svg
+          class="size-4 shrink-0 transition-[rotate] {#if open}rotate-180{/if}"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true">
+          <path d="M4 6l4 4 4-4z" />
+        </svg>
+      </Slot>
+    </button>
+
+    {#if open}
+      <div
+        id={ panelId }
+        aria-labelledby={ triggerId }
+        class="absolute {#if align === 'end'}right-0{:else}left-0{/if} top-full mt-1 min-w-[10rem] rounded-lg border border-border bg-surface p-1 shadow-lg z-50"
+        @keydown={ onPanelKeydown(event) }>
+        {#for item in items, i}
+          <div class="contents">
+            {#if item.kind === 'divider'}
+              <div class="my-1 border-t border-border" role="separator" aria-hidden="true"></div>
+            {:else if item.kind === 'group'}
+              <div class="px-2.5 pt-2 pb-1 text-xs font-medium text-muted uppercase tracking-wide">{ item.label }</div>
+            {:else if item.kind === 'link'}
+              <a
+                href={ item.href }
+                data-dm-index={ i }
+                tabindex={ activeIndex === i ? '0' : '-1' }
+                aria-disabled={ item.disabled ? 'true' : false }
+                class="block w-full text-left rounded-md px-2.5 py-1.5 text-sm {#if item.danger}text-danger hover:bg-danger-tint{:else}text-body hover:bg-surface-sunken hover:text-ink{/if} {#if item.disabled}opacity-50 pointer-events-none{/if} focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
+                @click={ onItemClick(i, event) }>{ item.label }</a>
+            {:else}
+              <button
+                type="button"
+                data-dm-index={ i }
+                tabindex={ activeIndex === i ? '0' : '-1' }
+                disabled={ item.disabled }
+                class="block w-full text-left rounded-md px-2.5 py-1.5 text-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none {#if item.danger}text-danger hover:bg-danger-tint{:else}text-body hover:bg-surface-sunken hover:text-ink{/if} focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
+                @click={ onItemClick(i, event) }>{ item.label }</button>
+            {/if}
+          </div>
+        {/for}
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DropdownMenu — a click-toggle dropdown menu, ported from the
+// @magic-spells/dropdown-panel web component. The transferable IP is the
+// interaction/ARIA design, not the code: click toggles, outside-pointerdown
+// closes, Escape closes and refocuses the trigger.
+//
+// Accessibility stance, mirrored from the source (Adrian Roselli): NO
+// role="menu"/role="menuitem" — the panel is a plain list of <button>/<a>
+// elements. The trigger carries aria-haspopup + aria-expanded (kept in sync)
+// + aria-controls; the panel is aria-labelledby the trigger. The source used
+// role="button" on a <div> trigger and hand-rolled Enter/Space; here the
+// trigger is a REAL <button>, so native activation comes for free.
+//
+// Focus model — ROVING FOCUS with real .focus() on item elements. The port
+// source did NEITHER roving tabindex NOR aria-activedescendant (it never moved
+// focus between items — only back to the trigger on Escape), so per the port
+// brief we use honest roving focus: one item is tabbable (tabindex 0) at a
+// time and receives real DOM focus; the rest are tabindex -1. Focus is applied
+// in afterUpdate() (the DOM is patched by then) via a pending-index field, so
+// it works both when moving within an open panel and when an arrow key opens
+// the panel in the same tick.
+//
+//   <DropdownMenu label="Options" items={ menuItems } @select={ onSelect } />
+//   <DropdownMenu align="end" items={ items } @select={ pick }>
+//     <span slot="trigger">Custom trigger</span>
+//   </DropdownMenu>
+//
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
+// the `label` text plus the rotating chevron. Fill slot="trigger" and it REPLACES
+// that fallback — a filled slot wins over `label`, so a custom trigger must carry
+// its own accessible name (aria-label or an .sr-only span) instead of leaning on
+// `label`. Passing neither renders an empty button.
+//
+// items entries:
+//   { label, value?, href?, danger?, disabled? }  interactive (href → <a>)
+//   { divider: true }                              hairline separator
+//   { group: 'Heading' }                           non-interactive heading
+//
+// Follow-ups deliberately SKIPPED in v1 (ported from the source but out of
+// scope here): hover-to-open (the source's pointerenter/pointerleave path),
+// the full-width `wide` mega-menu layout, and nested submenus (opens="right").
+const TRIGGER =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
+  'rounded-lg font-medium cursor-pointer transition-colors h-9 px-4 text-sm ' +
+  'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+
+let _uid = 0;
+
+// Normalize the raw items prop into tagged rows the template branches on. The
+// loop index doubles as data-dm-index / activeIndex, so keep dividers/groups in
+// place (they occupy indices too) and let the focus helpers skip them.
+function normalizeItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((it) => {
+    if (it && it.divider) return { kind: 'divider' };
+    if (it && it.group != null) return { kind: 'group', label: String(it.group) };
+    return {
+      kind: it && it.href ? 'link' : 'action',
+      label: it && it.label != null ? String(it.label) : '',
+      value: it ? it.value : undefined,
+      href: (it && it.href) || null,
+      danger: !!(it && it.danger),
+      disabled: !!(it && it.disabled),
+    };
+  });
+}
+
+const isFocusable = (item) =>
+  item && (item.kind === 'action' || item.kind === 'link') && !item.disabled;
+
+export default class DropdownMenu extends PuzzleView {
+  created() {
+    this._uid = ++_uid;
+    this._docBound = false;
+    // Index to focus after the next render (afterUpdate reads + clears it). Kept
+    // off the model — a DOM focus target is not view data.
+    this._pendingFocus = null;
+    // Stable reference for the document outside-pointerdown listener, added only
+    // while open (openMenu) and removed in closeMenu AND destroyed().
+    this._onDocPointerDown = (event) => {
+      if (this.getData().open && this.element && !this.element.contains(event.target)) {
+        this.closeMenu({ refocus: false });
+      }
+    };
+    // open/activeIndex live in the LOCAL state layer (seeded here, written via
+    // setData) so data() re-runs on prop/store changes never clobber them.
+    this.setData({ open: false, activeIndex: -1 });
+  }
+
+  data(params, props) {
+    return {
+      items: normalizeItems(props.items),
+      label: props.label != null ? String(props.label) : '',
+      align: props.align === 'end' ? 'end' : 'start',
+      disabled: !!props.disabled,
+      triggerId: `dm-trigger-${this._uid}`,
+      panelId: `dm-panel-${this._uid}`,
+      rootClass: ['relative inline-block', props.class || ''].join(' '),
+      triggerClass: [TRIGGER, props.triggerClass || ''].join(' '),
+    };
+  }
+
+  // ---- open / close ----------------------------------------------------------
+
+  openMenu(activeIndex) {
+    if (this.getData().open) return;
+    this.setData({ open: true, activeIndex });
+    if (!this._docBound) {
+      document.addEventListener('pointerdown', this._onDocPointerDown);
+      this._docBound = true;
+    }
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+  }
+
+  closeMenu(opts = {}) {
+    if (!this.getData().open) return;
+    if (this._docBound) {
+      document.removeEventListener('pointerdown', this._onDocPointerDown);
+      this._docBound = false;
+    }
+    this.setData({ open: false, activeIndex: -1 });
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+    if (opts.refocus) {
+      const trigger = this.element && this.element.querySelector('[data-dm-trigger]');
+      if (trigger) trigger.focus();
+    }
+  }
+
+  // ---- roving focus helpers --------------------------------------------------
+
+  firstIndex() {
+    const { items } = this.getData();
+    for (let i = 0; i < items.length; i++) if (isFocusable(items[i])) return i;
+    return -1;
+  }
+
+  lastIndex() {
+    const { items } = this.getData();
+    for (let i = items.length - 1; i >= 0; i--) if (isFocusable(items[i])) return i;
+    return -1;
+  }
+
+  // Move active by dir (+1/-1), skipping dividers/groups/disabled, wrapping.
+  moveActive(dir) {
+    const { items, activeIndex } = this.getData();
+    const n = items.length;
+    if (!n) return;
+    let i = activeIndex < 0 ? (dir > 0 ? -1 : 0) : activeIndex;
+    for (let step = 0; step < n; step++) {
+      i = (i + dir + n) % n;
+      if (isFocusable(items[i])) {
+        this.moveTo(i);
+        return;
+      }
+    }
+  }
+
+  moveTo(index) {
+    if (index < 0) return;
+    this._pendingFocus = index;
+    this.setData('activeIndex', index);
+  }
+
+  // Enter the open panel from the trigger: open if needed, land on first/last.
+  enterMenu(fromEnd) {
+    const index = fromEnd ? this.lastIndex() : this.firstIndex();
+    if (index < 0) return;
+    if (this.getData().open) {
+      this.moveTo(index);
+    } else {
+      this._pendingFocus = index;
+      this.openMenu(index);
+    }
+  }
+
+  activate(index, event) {
+    const item = this.getData().items[index];
+    if (!item || item.disabled) return;
+    const { select } = this.props;
+    if (typeof select === 'function') select(item.value, event);
+    // Links: let the (router-intercepted) navigation proceed — no preventDefault,
+    // and no trigger refocus since focus follows the navigation. Buttons: refocus
+    // the trigger, the expected place to land after choosing an action.
+    this.closeMenu({ refocus: item.kind !== 'link' });
+  }
+
+  // Apply pending roving focus after the DOM has been patched.
+  afterUpdate() {
+    if (this._pendingFocus == null) return;
+    const index = this._pendingFocus;
+    this._pendingFocus = null;
+    const el = this.element && this.element.querySelector(`[data-dm-index="${index}"]`);
+    if (el) el.focus();
+  }
+
+  destroyed() {
+    if (this._docBound) {
+      document.removeEventListener('pointerdown', this._onDocPointerDown);
+      this._docBound = false;
+    }
+  }
+
+  events = {
+    // Trigger is a real <button>: native click fires on mouse, Enter, and Space.
+    toggle: (event) => {
+      if (this.getData().disabled) return;
+      if (this.getData().open) this.closeMenu({ refocus: false });
+      else this.openMenu(-1); // click-open: no active item, focus stays on trigger
+    },
+    onTriggerDown: (event) => {
+      if (this.getData().disabled) return;
+      this.enterMenu(false); // ArrowDown → open (if needed) + first item
+    },
+    onTriggerUp: (event) => {
+      if (this.getData().disabled) return;
+      this.enterMenu(true); // ArrowUp → open (if needed) + last item
+    },
+    onTriggerEscape: (event) => {
+      if (this.getData().open) this.closeMenu({ refocus: false });
+    },
+    // One handler on the panel; item focus (roving) tells us the active row.
+    onPanelKeydown: (event) => {
+      const data = this.getData();
+      if (!data.open) return;
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          this.moveActive(1);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          this.moveActive(-1);
+          break;
+        case 'Home':
+          event.preventDefault();
+          this.moveTo(this.firstIndex());
+          break;
+        case 'End':
+          event.preventDefault();
+          this.moveTo(this.lastIndex());
+          break;
+        case 'Escape':
+          event.preventDefault();
+          this.closeMenu({ refocus: true });
+          break;
+        case ' ': {
+          // Buttons activate on Space natively (→ @click); links do not, so
+          // activate them here. Guarding on kind avoids a double-fire on buttons.
+          const item = data.items[data.activeIndex];
+          if (item && item.kind === 'link') {
+            event.preventDefault();
+            this.activate(data.activeIndex, event);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    },
+    onItemClick: (index, event) => {
+      this.activate(index, event);
+    },
+  };
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "calendar",
+  "description": "Inline month-grid calendar with days/months/years drill-down, full keyboard nav, min/max + disabledDates, locale-aware labels via Intl, and an opt-in display-only range/preview shading overlay",
+  "files": ["Calendar.pzl"],
+  "registryDependencies": ["lib/date-math.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

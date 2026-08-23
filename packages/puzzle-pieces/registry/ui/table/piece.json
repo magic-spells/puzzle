@@ -1,0 +1,8 @@
+{
+  "name": "table",
+  "description": "Config-first styled semantic table rendered from a columns schema and an array of row objects, with per-column alignment, an optional caption, and an empty state — the presentational tier, not a data grid (no sorting, selection, or virtualization)",
+  "files": ["Table.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

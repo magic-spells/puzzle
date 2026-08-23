@@ -1,0 +1,131 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <button
+      type="button"
+      class={ buttonClass }
+      aria-label="Decrease"
+      disabled={ decDisabled }
+      @click={ decrement }>
+      <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <line x1="3.5" y1="8" x2="12.5" y2="8" />
+      </svg>
+    </button>
+    <input
+      type="number"
+      class={ inputClass }
+      inputmode="numeric"
+      value={ value }
+      min={ min }
+      max={ max }
+      step={ step }
+      name={ name }
+      aria-label={ label }
+      disabled={ disabled }
+      @change={ inputChange(event) } />
+    <button
+      type="button"
+      class={ buttonClass }
+      aria-label="Increase"
+      disabled={ incDisabled }
+      @click={ increment }>
+      <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <line x1="3.5" y1="8" x2="12.5" y2="8" />
+        <line x1="8" y1="3.5" x2="8" y2="12.5" />
+      </svg>
+    </button>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// QuantityInput — an e-commerce stepper ported from @magic-spells/quantity-input.
+// Controlled: the parent owns `value` and updates it from `@change`. The whole
+// group is one bordered control (decrement | number input | increment); the
+// group — not the input — shows the focus ring via focus-within. Every emitted
+// value is CLAMPED to [min, max]: the buttons stop at the bounds (and disable
+// there), typing is clamped on commit, and an empty/NaN entry snaps the input
+// back to the current clamped value on blur.
+//
+//   <QuantityInput value={ qty } @change={ setQty } />
+//   <QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />
+//
+// Clamp semantics (ported verbatim from quantity-input.js #clamp): with a max,
+// Math.max(min, Math.min(v, max)); without one, Math.max(min, v). A change only
+// fires when the clamped result actually differs from the current value.
+const clamp = (v, min, max) =>
+  max != null ? Math.max(min, Math.min(v, max)) : Math.max(min, v);
+
+const ROOT_BASE =
+  'inline-flex h-9 items-center rounded-lg border border-border bg-surface ' +
+  'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring';
+
+const BUTTON_BASE =
+  'size-9 flex items-center justify-center text-body hover:text-ink ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+
+// Hide the native number spinners so only our buttons drive the value.
+const INPUT_BASE =
+  'w-12 border-0 bg-transparent text-center text-sm text-ink focus-visible:outline-none ' +
+  '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ' +
+  '[-moz-appearance:textfield]';
+
+export default class QuantityInput extends PuzzleView {
+  data(params, props) {
+    const min = typeof props.min === 'number' ? props.min : 1;
+    const max = typeof props.max === 'number' ? props.max : undefined;
+    const step = typeof props.step === 'number' && props.step > 0 ? props.step : 1;
+    const raw = typeof props.value === 'number' ? props.value : min;
+    const value = clamp(raw, min, max);
+    const disabled = !!props.disabled;
+    return {
+      min,
+      max,
+      step,
+      value,
+      disabled,
+      name: props.name,
+      label: props.label || 'Quantity',
+      decDisabled: disabled || value <= min,
+      incDisabled: disabled || (max != null && value >= max),
+      rootClass: [ROOT_BASE, props.class || ''].join(' '),
+      buttonClass: BUTTON_BASE,
+      inputClass: INPUT_BASE,
+    };
+  }
+
+  emit(next, event) {
+    const { change } = this.props;
+    if (typeof change === 'function') change(next, event);
+  }
+
+  events = {
+    decrement: (event) => {
+      const { value, step, min, max, disabled } = this.getData();
+      if (disabled) return;
+      const next = clamp(value - step, min, max);
+      if (next !== value) this.emit(next, event);
+    },
+    increment: (event) => {
+      const { value, step, min, max, disabled } = this.getData();
+      if (disabled) return;
+      const next = clamp(value + step, min, max);
+      if (next !== value) this.emit(next, event);
+    },
+    inputChange: (event) => {
+      const { value, min, max } = this.getData();
+      const parsed = parseInt(event.target.value, 10);
+      // Empty or non-numeric entry: snap the field back to the clamped current.
+      if (Number.isNaN(parsed)) {
+        event.target.value = value;
+        return;
+      }
+      const next = clamp(parsed, min, max);
+      // Reflect the clamped value in the field even when it equals the current
+      // (e.g. the parent won't re-render because value didn't change).
+      event.target.value = next;
+      if (next !== value) this.emit(next, event);
+    },
+  };
+}
+</script>

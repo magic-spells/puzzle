@@ -1,0 +1,86 @@
+<puzzle-view>
+  <span class={ rootClass } style={ fallbackStyle }>
+    {#if showImg}
+      <img class="size-full object-cover" src={ src } alt={ alt } @error={ markFailed } />
+    {:else if hasName}
+      { initials }
+    {:else}
+      <svg class="w-1/2 h-1/2" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z" />
+      </svg>
+    {/if}
+  </span>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Avatar — an image with a graceful fallback. With a valid `src` it renders the
+// image; if that image fails to load (@error) it falls back to the name's
+// initials on a deterministic colored disc. With no image it goes straight to
+// initials; with neither image nor name it shows a neutral person glyph.
+//
+//   <Avatar src={ user.photo } name={ user.name } />
+//   <Avatar name="Ada Lovelace" size="lg" />
+//   <Avatar />                              neutral placeholder
+//
+// The disc color is derived from the name (hue = summed char codes % 360) and
+// applied as an inline hsl() background — the ONE sanctioned dynamic-color
+// exception to the no-hex rule, mirroring pyramid's avatarVM trick.
+
+// initials() ported inline from pyramid-puzzle/app/lib/format.js: first letters
+// of the first and last words, uppercased; a single word gives its first two.
+function initials(label) {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+const ROOT_BASE =
+  'inline-flex items-center justify-center shrink-0 overflow-hidden rounded-full select-none';
+
+const SIZE = {
+  sm: 'size-6 text-[10px]',
+  md: 'size-8 text-xs',
+  lg: 'size-10 text-sm',
+};
+
+export default class Avatar extends PuzzleView {
+  data(params, props) {
+    const src = props.src || '';
+    const name = props.name || '';
+    const hasName = name.trim().length > 0;
+
+    // Track the last src on the instance (via the persisted model) so a failed
+    // load resets the moment a new src prop arrives.
+    const prev = this.getData();
+    const failed = prev && prev.src === src ? !!prev.failed : false;
+    const showImg = !!src && !failed;
+
+    const hue = hasName
+      ? [...name].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 360
+      : 0;
+    const tone = hasName ? 'text-white font-medium' : 'bg-surface-sunken text-muted';
+
+    return {
+      src,
+      alt: name,
+      failed,
+      showImg,
+      hasName,
+      initials: hasName ? initials(name) : '',
+      fallbackStyle: hasName ? `background:hsl(${hue} 45% 45%)` : '',
+      rootClass: [ROOT_BASE, SIZE[props.size] || SIZE.md, tone, props.class || ''].join(' '),
+    };
+  }
+
+  events = {
+    markFailed: () => {
+      // setData persists over the model layer, so the fallback sticks until the
+      // src prop changes (which resets `failed` back in data()).
+      this.setData({ failed: true, showImg: false });
+    },
+  };
+}
+</script>

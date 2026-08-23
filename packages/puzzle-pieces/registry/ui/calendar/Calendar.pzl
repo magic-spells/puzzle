@@ -1,0 +1,883 @@
+<puzzle-view>
+  <div class={ rootClass } role="group" aria-label={ ariaLabel }>
+    <!-- header: prev / drill-down label / next -->
+    <div class="mb-2 flex items-center justify-between gap-1">
+      <button
+        type="button"
+        class={ navClass }
+        aria-label={ prevLabel }
+        disabled={ prevDisabled }
+        @click={ onPrev(event) }>
+        <svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+          <path d="M12 5l-5 5 5 5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+
+      <button
+        type="button"
+        class={ labelBtnClass }
+        id={ labelId }
+        aria-label={ zoomLabel }
+        aria-disabled={ zoomDisabled }
+        @click={ onZoomOut(event) }>
+        <span>{ monthLabel }</span>
+        {#if showChevron}
+          <svg class="size-4 text-muted" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+            <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        {/if}
+      </button>
+
+      <button
+        type="button"
+        class={ navClass }
+        aria-label={ nextLabel }
+        disabled={ nextDisabled }
+        @click={ onNext(event) }>
+        <svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+          <path d="M8 5l5 5-5 5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </div>
+
+    {#if isDays}
+      <div role="grid" aria-labelledby={ labelId } @keydown={ onDaysKey(event) }>
+        <div role="row" class="grid grid-cols-7">
+          {#for wd in weekdays}
+            <div role="columnheader" class={ weekdayClass } aria-label={ wd.long } key={ wd.key }>
+              <abbr class="no-underline" title={ wd.long }>{ wd.narrow }</abbr>
+            </div>
+          {/for}
+        </div>
+        {#for week in weeks}
+          <div role="row" class="grid grid-cols-7" key={ week.key }>
+            {#for d in week.days}
+              <div
+                role="gridcell"
+                class={ d.cellClass }
+                aria-selected={ d.ariaSelected }
+                aria-current={ d.ariaCurrent }
+                key={ d.key }>
+                <button
+                  type="button"
+                  data-iso={ d.iso }
+                  class={ d.buttonClass }
+                  tabindex={ d.tabindex }
+                  aria-label={ d.ariaLabel }
+                  aria-disabled={ d.ariaDisabled }
+                  @click={ onDay(d, event) }>{ d.dayNum }</button>
+              </div>
+            {/for}
+          </div>
+        {/for}
+      </div>
+    {:else if isMonths}
+      <div role="grid" aria-labelledby={ labelId } @keydown={ onMonthsKey(event) }>
+        {#for mrow in monthRows}
+          <div role="row" class="grid grid-cols-3 gap-1" key={ mrow.key }>
+            {#for m in mrow.cells}
+              <div
+                role="gridcell"
+                class="flex items-center justify-center"
+                aria-selected={ m.ariaSelected }
+                aria-current={ m.ariaCurrent }
+                key={ m.key }>
+                <button
+                  type="button"
+                  data-month={ m.month }
+                  class={ m.buttonClass }
+                  tabindex={ m.tabindex }
+                  aria-label={ m.ariaLabel }
+                  aria-disabled={ m.ariaDisabled }
+                  @click={ onMonth(m, event) }>{ m.label }</button>
+              </div>
+            {/for}
+          </div>
+        {/for}
+      </div>
+    {:else}
+      <div role="grid" aria-labelledby={ labelId } @keydown={ onYearsKey(event) }>
+        {#for yrow in yearRows}
+          <div role="row" class="grid grid-cols-3 gap-1" key={ yrow.key }>
+            {#for y in yrow.cells}
+              <div
+                role="gridcell"
+                class="flex items-center justify-center"
+                aria-selected={ y.ariaSelected }
+                aria-current={ y.ariaCurrent }
+                key={ y.key }>
+                <button
+                  type="button"
+                  data-year={ y.year }
+                  class={ y.buttonClass }
+                  tabindex={ y.tabindex }
+                  aria-label={ y.ariaLabel }
+                  aria-disabled={ y.ariaDisabled }
+                  @click={ onYear(y, event) }>{ y.label }</button>
+              </div>
+            {/for}
+          </div>
+        {/for}
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import {
+  parseISODate,
+  formatISODate,
+  startOfYearPage,
+  compareDates,
+  toDate,
+  fromDate,
+  addDays,
+  addMonths,
+  isSameDay,
+  isInRange,
+  clampDate,
+  daysInMonth,
+  startOfWeek,
+  endOfWeek,
+  getCalendarGrid,
+} from '../../lib/date-math.js';
+
+// Calendar — the inline month-grid calendar, ported from the
+// @magic-spells/date-picker web component. SELECTION is single-date only (one click =
+// one emitted ISO via @change); type="month" remains out of scope. Range *display* is
+// now an OPT-IN overlay: pass `range={ {start,end} }` (and optionally `previewDate`) to
+// paint a start/end + in-between band on top of the grid — it adds NO range state or
+// selection semantics, it only shades. Absent those props the grid renders exactly as
+// single-date mode. No popover, no trigger — just the grid; DatePicker /
+// DateRangePicker compose this inside a popover.
+//
+//   <Calendar value={ iso } @change={ setDate } />
+//   <Calendar value={ iso } min="2026-01-01" max="2026-12-31"
+//             disabledDates={ weekends } firstDayOfWeek={ 1 }
+//             @change={ setDate } @monthChange={ onMonth } />
+//   <Calendar range={ { start, end } } previewDate={ hoveredIso }
+//             @change={ onEndpoint } />        // range shading (display-only)
+//
+// PROPS
+//   value          string   controlled ISO 'YYYY-MM-DD' (or '' / null = no selection).
+//                           Parent-owned — the calendar never mutates it; it fires
+//                           @change and the parent writes the new value back.
+//   min, max       string   inclusive ISO bounds. Out-of-bounds days render dim and
+//                           are not selectable (still keyboard-traversable).
+//   disabledDates  array|fn array of ISO strings, OR a predicate (iso, Date) => boolean.
+//                           Matching days are dim + not selectable.
+//   locale         string   BCP-47 tag for month/weekday names (default: <html lang>,
+//                           then navigator.language, then 'en-US'). All names come from
+//                           Intl.DateTimeFormat — nothing is hardcoded.
+//   firstDayOfWeek 0..6     0 = Sunday (default) … 6 = Saturday.
+//   autofocus      boolean  focus the active day cell on mount (DatePicker sets this when
+//                           it opens the popover so keyboard users land on the grid).
+//   label          string   accessible name for the calendar group (default 'Calendar').
+//   frameless      boolean  drop the card chrome (border/bg/rounding) for composition
+//                           inside another surface — DatePicker's panel uses this.
+//   range          {start,end}  OPTIONAL, DISPLAY-ONLY range overlay. ISO strings; either
+//                           side '' / undefined = unset. When both are set the days grid
+//                           paints start/end as selected discs and the in-between days as
+//                           a subtle `bg-brand-tint` band (rounded on the band ends and at
+//                           week wraps). This adds NO selection state — the parent (e.g.
+//                           DateRangePicker) still owns the endpoints and decides which one
+//                           a click sets; Calendar keeps firing single @change(iso, date).
+//   previewDate    string   OPTIONAL, DISPLAY-ONLY. While exactly one of range.start /
+//                           range.end is set, an ISO here extends the tint band from that
+//                           endpoint to the hovered day (a live drag-to-preview band).
+//                           Ignored when both endpoints are set or no endpoint is set.
+//   class          string   appended to the root element.
+//
+// CALLBACKS
+//   @change(isoValue, date)      fires on day selection (single date). `date` is a
+//                                local-time Date. Only the days view ever fires it —
+//                                the months/years drill-down views are PURE NAVIGATION.
+//   @monthChange({ year, month }) fires whenever the DISPLAYED day-grid month changes
+//                                (1-based month). DatePicker reads this to sync its own
+//                                header / measurements.
+//
+// FOR THE FUTURE DatePicker (what it needs from this piece):
+//   - @monthChange exposes the current displayed month (1-based).
+//   - `autofocus` handles "focus lands on selected/today when the popover opens".
+//   - @change fires only on a real day selection, so DatePicker can close + commit there.
+//
+// STATE MODEL (the whole game — see date-math.js): all math is LOCAL-TIME
+// (`new Date(y, m-1, d)`, never Date.parse / new Date('YYYY-MM-DD'), which UTC-parse
+// shift a day across zones); addMonths clamps day overflow (Jan 31 + 1mo = Feb 28/29).
+// `value` stays parent-owned; the displayed month + drill-down view + roving focus are
+// INTERNAL state written with setData()+refresh(). The grid is a fixed 6×7 = 42 cells so
+// the panel height never jumps between months. Crossing a month edge re-renders the grid
+// and re-focuses the moved-to cell via a pendingFocus flag applied in afterUpdate() —
+// the vdom re-render breaks the source's persistent-button focus trick.
+
+let uid = 0;
+
+// A known Sunday, used to generate localized weekday names from real dates.
+const WEEKDAY_REFERENCE = new Date(2023, 0, 1);
+
+const NAV_CLASS =
+  'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-body ' +
+  'cursor-pointer transition-colors hover:bg-surface-sunken hover:text-ink ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-40 disabled:pointer-events-none';
+
+const LABEL_BASE =
+  'inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-ink ' +
+  'cursor-pointer transition-colors hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'aria-disabled:cursor-default aria-disabled:hover:bg-transparent';
+
+const WEEKDAY_CLASS = 'flex h-8 items-center justify-center text-xs font-medium text-muted select-none';
+
+const DAY_BASE =
+  'flex size-9 items-center justify-center rounded-md text-sm select-none transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const CELL_BASE =
+  'flex h-9 w-full items-center justify-center rounded-md text-sm select-none transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+// Compose one day button's class from its state (keyed off pieces.css tokens).
+function dayButtonClass({ disabled, outside, selected, today }) {
+  if (selected) {
+    return `${DAY_BASE} cursor-pointer bg-brand font-medium text-brand-ink hover:bg-brand-dark`;
+  }
+  if (disabled) {
+    return `${DAY_BASE} pointer-events-none cursor-default text-faint`;
+  }
+  const text = outside ? 'text-faint' : 'text-body';
+  const ring = today ? ' ring-1 ring-inset ring-brand' : '';
+  return `${DAY_BASE} cursor-pointer ${text} hover:bg-surface-sunken hover:text-ink${ring}`;
+}
+
+// Base class for a day gridcell wrapper. Kept as a const so the no-range path returns
+// this exact string (byte-identical to the pre-range literal).
+const DAY_CELL_BASE = 'flex items-center justify-center py-0.5';
+
+// Compose a day gridcell wrapper's class. Interior (in-between) days of an opt-in `range`
+// carry the subtle band; endpoints stay transparent (the disc lives on the button). The
+// band rounds only on its terminal cells (roundL/roundR), including at week wraps. With no
+// range this returns DAY_CELL_BASE unchanged.
+function dayCellClass({ interior, roundL, roundR }) {
+  if (!interior) return DAY_CELL_BASE;
+  let cls = `${DAY_CELL_BASE} bg-brand-tint text-ink`;
+  if (roundL) cls += ' rounded-l-md';
+  if (roundR) cls += ' rounded-r-md';
+  return cls;
+}
+
+// Compose a month/year drill-down cell's class from its state.
+function cellButtonClass({ disabled, selected, current }) {
+  if (selected) {
+    return `${CELL_BASE} cursor-pointer bg-brand font-medium text-brand-ink hover:bg-brand-dark`;
+  }
+  if (disabled) {
+    return `${CELL_BASE} pointer-events-none cursor-default text-faint`;
+  }
+  const ring = current ? ' ring-1 ring-inset ring-brand' : '';
+  return `${CELL_BASE} cursor-pointer text-body hover:bg-surface-sunken hover:text-ink${ring}`;
+}
+
+// Nav-arrow availability for a view against min/max, mirroring the source's
+// #updateNavAvailability: a whole previous/next unit out of bounds disables the arrow.
+function navAvailability(view, viewYear, viewMonth, min, max) {
+  let previousLast;
+  let nextFirst;
+  if (view === 'years') {
+    const page = startOfYearPage(viewYear);
+    previousLast = { year: page - 1, month: 12, day: 31 };
+    nextFirst = { year: page + 12, month: 1, day: 1 };
+  } else if (view === 'months') {
+    previousLast = { year: viewYear - 1, month: 12, day: 31 };
+    nextFirst = { year: viewYear + 1, month: 1, day: 1 };
+  } else {
+    const firstOfMonth = { year: viewYear, month: viewMonth, day: 1 };
+    previousLast = addDays(firstOfMonth, -1);
+    nextFirst = addMonths(firstOfMonth, 1);
+  }
+  return {
+    prevDisabled: min ? compareDates(previousLast, min) < 0 : false,
+    nextDisabled: max ? compareDates(nextFirst, max) > 0 : false,
+  };
+}
+
+export default class Calendar extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._pendingFocus = null; // { type:'day'|'month'|'year', iso?/month?/year? }
+    this._lastValue = undefined; // tracks the value prop to detect external changes
+    // Seed the drill-down view; the month/year anchor is derived from `value` on the
+    // first data() run (props aren't available in created()).
+    this.setData({ view: 'days', viewYear: null, viewMonth: null, focusedIso: null, monthCursor: null });
+  }
+
+  mounted() {
+    if (this.props && this.props.autofocus) this._focusActiveCell();
+  }
+
+  // ---- helpers -------------------------------------------------------------
+
+  _locale(props) {
+    return (
+      props.locale ||
+      (typeof document !== 'undefined' && document.documentElement.lang) ||
+      (typeof navigator !== 'undefined' && navigator.language) ||
+      'en-US'
+    );
+  }
+
+  _firstDayOfWeek(props) {
+    const raw = Number(props.firstDayOfWeek);
+    return Number.isInteger(raw) && raw >= 0 && raw <= 6 ? raw : 0;
+  }
+
+  _bounds(props) {
+    return { min: parseISODate(props.min), max: parseISODate(props.max) };
+  }
+
+  // A day is disabled when out of [min,max] or matched by disabledDates.
+  _isDayDisabled(parts, props) {
+    const { min, max } = this._bounds(props);
+    if (!isInRange(parts, min, max)) return true;
+    const dd = props.disabledDates;
+    const iso = formatISODate(parts);
+    if (typeof dd === 'function') {
+      try {
+        return !!dd(iso, toDate(parts));
+      } catch (_) {
+        return false;
+      }
+    }
+    if (Array.isArray(dd)) return dd.includes(iso);
+    return false;
+  }
+
+  _monthOutOfRange(year, month, props) {
+    const { min, max } = this._bounds(props);
+    const first = { year, month, day: 1 };
+    const last = { year, month, day: daysInMonth(year, month) };
+    return (min ? compareDates(last, min) < 0 : false) || (max ? compareDates(first, max) > 0 : false);
+  }
+
+  _yearOutOfRange(year, props) {
+    const { min, max } = this._bounds(props);
+    const first = { year, month: 1, day: 1 };
+    const last = { year, month: 12, day: 31 };
+    return (min ? compareDates(last, min) < 0 : false) || (max ? compareDates(first, max) > 0 : false);
+  }
+
+  // The month (1–12) to focus when entering months view for `year`.
+  _initialMonthCursor(year, props) {
+    const committed = parseISODate(props.value);
+    if (committed && committed.year === year) return committed.month;
+    const today = fromDate(new Date());
+    if (today.year === year) return today.month;
+    return this.getData().viewMonth || today.month;
+  }
+
+  _emitMonthChange(year, month) {
+    const { monthChange } = this.props;
+    if (typeof monthChange === 'function') monthChange({ year, month });
+  }
+
+  _focusActiveCell() {
+    const { view, focusedIso, monthCursor, viewYear } = this.getData();
+    let sel;
+    if (view === 'months') sel = `button[data-month="${monthCursor}"]`;
+    else if (view === 'years') sel = `button[data-year="${viewYear}"]`;
+    else sel = `button[data-iso="${focusedIso}"]`;
+    this.element?.querySelector(sel)?.focus();
+  }
+
+  afterUpdate() {
+    const pf = this._pendingFocus;
+    if (!pf || !this.element) return;
+    this._pendingFocus = null;
+    let sel;
+    if (pf.type === 'day') sel = `button[data-iso="${pf.iso}"]`;
+    else if (pf.type === 'month') sel = `button[data-month="${pf.month}"]`;
+    else sel = `button[data-year="${pf.year}"]`;
+    this.element.querySelector(sel)?.focus();
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  data(params, props) {
+    const local = this.getData();
+    const committed = parseISODate(props.value);
+    const { min, max } = this._bounds(props);
+    const locale = this._locale(props);
+    const firstDayOfWeek = this._firstDayOfWeek(props);
+
+    // Resolve the displayed month + drill-down view + roving focus. These live in the
+    // LOCAL layer (setData) so they survive data() re-runs; they're seeded from `value`
+    // (or today, clamped into range) on first run and re-anchored when `value` changes
+    // externally. Never RETURNED from data() — a returned key would let the model layer
+    // clobber the local one on the next unrelated re-render.
+    const valueChanged = props.value !== this._lastValue;
+    this._lastValue = props.value;
+
+    const seed = {};
+    if (local.view == null) seed.view = 'days';
+    if (local.viewYear == null || valueChanged) {
+      const anchor = committed || clampDate(fromDate(new Date()), min, max);
+      seed.viewYear = anchor.year;
+      seed.viewMonth = anchor.month;
+      seed.focusedIso = formatISODate(anchor);
+      seed.monthCursor = anchor.month;
+    }
+    if (Object.keys(seed).length) this.setData(seed);
+
+    const view = seed.view ?? local.view ?? 'days';
+    const viewYear = seed.viewYear ?? local.viewYear;
+    const viewMonth = seed.viewMonth ?? local.viewMonth;
+    const focusedIso = seed.focusedIso ?? local.focusedIso;
+    const monthCursor = seed.monthCursor ?? local.monthCursor;
+    const focused = parseISODate(focusedIso);
+
+    // Localized formatters — Intl only, nothing hardcoded. Rebuilt when locale changes.
+    const fmt = this.memo('fmt', [locale], () => ({
+      monthYear: new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }),
+      monthShort: new Intl.DateTimeFormat(locale, { month: 'short' }),
+      weekdayNarrow: new Intl.DateTimeFormat(locale, { weekday: 'narrow' }),
+      weekdayLong: new Intl.DateTimeFormat(locale, { weekday: 'long' }),
+      dayLabel: new Intl.DateTimeFormat(locale, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+    }));
+
+    const today = fromDate(new Date());
+    const labelId = `pieces-calendar-${this._uid}-label`;
+
+    // Weekday column headers.
+    const weekdays = [];
+    for (let column = 0; column < 7; column += 1) {
+      const date = new Date(WEEKDAY_REFERENCE);
+      date.setDate(WEEKDAY_REFERENCE.getDate() + firstDayOfWeek + column);
+      weekdays.push({
+        key: `wd-${column}`,
+        narrow: fmt.weekdayNarrow.format(date),
+        long: fmt.weekdayLong.format(date),
+      });
+    }
+
+    // OPT-IN range shading (display-only). When `range` is absent every value below is
+    // null/empty and the days grid renders byte-for-byte as single-date mode: `selected`
+    // is unchanged and dayCellClass returns its untinted base. Endpoints reuse the
+    // existing selected disc; interior days get a `bg-brand-tint` band; an optional
+    // `previewDate` extends the band from a single set endpoint to a hovered day.
+    const range = props.range && typeof props.range === 'object' ? props.range : null;
+    const rangeStart = range ? parseISODate(range.start) : null;
+    const rangeEnd = range ? parseISODate(range.end) : null;
+    const previewDate = range ? parseISODate(props.previewDate) : null;
+    // Active tint interval [bandLo, bandHi]: from the two committed endpoints, or (while a
+    // range is mid-selection) from the one committed endpoint to the hovered preview day.
+    let bandLo = null;
+    let bandHi = null;
+    if (rangeStart && rangeEnd) {
+      [bandLo, bandHi] = compareDates(rangeStart, rangeEnd) <= 0 ? [rangeStart, rangeEnd] : [rangeEnd, rangeStart];
+    } else if (rangeStart && previewDate) {
+      [bandLo, bandHi] = compareDates(rangeStart, previewDate) <= 0 ? [rangeStart, previewDate] : [previewDate, rangeStart];
+    } else if (rangeEnd && previewDate) {
+      [bandLo, bandHi] = compareDates(rangeEnd, previewDate) <= 0 ? [rangeEnd, previewDate] : [previewDate, rangeEnd];
+    }
+    const isRangeEndpoint = (parts) =>
+      (!!rangeStart && isSameDay(parts, rangeStart)) || (!!rangeEnd && isSameDay(parts, rangeEnd));
+    // Interior = inside the band interval (exclusive of a single-day interval) and not a
+    // committed-endpoint disc. The hovered preview day, not yet committed, counts as interior.
+    const isBandInterior = (parts) =>
+      !!bandLo && !!bandHi && compareDates(bandLo, bandHi) !== 0 &&
+      compareDates(parts, bandLo) >= 0 && compareDates(parts, bandHi) <= 0 && !isRangeEndpoint(parts);
+
+    // Days grid (fixed 6×7).
+    const grid = getCalendarGrid({ year: viewYear, month: viewMonth, firstDayOfWeek });
+    const weeks = grid.map((row, w) => ({
+      key: `week-${w}`,
+      days: row.map((cell, col) => {
+        const iso = formatISODate(cell);
+        const disabled = this._isDayDisabled(cell, props);
+        // Endpoints reuse the selected disc; with no range this collapses to the old `selected`.
+        const selected = isSameDay(cell, committed) || isRangeEndpoint(cell);
+        const isToday = isSameDay(cell, today);
+        const interior = isBandInterior(cell);
+        const roundL = interior && (col === 0 || !isBandInterior(addDays(cell, -1)));
+        const roundR = interior && (col === 6 || !isBandInterior(addDays(cell, 1)));
+        return {
+          key: iso,
+          iso,
+          dayNum: String(cell.day),
+          ariaLabel: fmt.dayLabel.format(toDate(cell)),
+          ariaDisabled: disabled ? 'true' : false,
+          ariaSelected: selected ? 'true' : false,
+          ariaCurrent: isToday ? 'date' : false,
+          tabindex: isSameDay(cell, focused) ? 0 : -1,
+          cellClass: dayCellClass({ interior, roundL, roundR }),
+          buttonClass: dayButtonClass({ disabled, outside: !cell.isCurrentMonth, selected, today: isToday }),
+        };
+      }),
+    }));
+
+    // Months drill-down (3×4).
+    const monthCells = [];
+    for (let month = 1; month <= 12; month += 1) {
+      const date = new Date(viewYear, month - 1, 1);
+      const disabled = this._monthOutOfRange(viewYear, month, props);
+      const selected = !!committed && committed.year === viewYear && committed.month === month;
+      const current = today.year === viewYear && today.month === month;
+      monthCells.push({
+        key: `m-${month}`,
+        month,
+        label: fmt.monthShort.format(date),
+        ariaLabel: fmt.monthYear.format(date),
+        ariaDisabled: disabled ? 'true' : false,
+        ariaSelected: selected ? 'true' : false,
+        ariaCurrent: current ? 'date' : false,
+        tabindex: month === monthCursor ? 0 : -1,
+        buttonClass: cellButtonClass({ disabled, selected, current }),
+      });
+    }
+    const monthRows = [0, 1, 2, 3].map((r) => ({ key: `mr-${r}`, cells: monthCells.slice(r * 3, r * 3 + 3) }));
+
+    // Years drill-down (12-year page, 3×4).
+    const page = startOfYearPage(viewYear);
+    const yearCells = [];
+    for (let index = 0; index < 12; index += 1) {
+      const year = page + index;
+      const disabled = this._yearOutOfRange(year, props);
+      const selected = !!committed && committed.year === year;
+      const current = today.year === year;
+      yearCells.push({
+        key: `y-${year}`,
+        year,
+        label: String(year),
+        ariaLabel: String(year),
+        ariaDisabled: disabled ? 'true' : false,
+        ariaSelected: selected ? 'true' : false,
+        ariaCurrent: current ? 'date' : false,
+        tabindex: year === viewYear ? 0 : -1,
+        buttonClass: cellButtonClass({ disabled, selected, current }),
+      });
+    }
+    const yearRows = [0, 1, 2, 3].map((r) => ({ key: `yr-${r}`, cells: yearCells.slice(r * 3, r * 3 + 3) }));
+
+    // Header label + nav wording per view.
+    let monthLabel;
+    let zoomLabel;
+    let prevLabel;
+    let nextLabel;
+    if (view === 'years') {
+      monthLabel = `${page} – ${page + 11}`;
+      zoomLabel = 'Year range';
+      prevLabel = 'Previous years';
+      nextLabel = 'Next years';
+    } else if (view === 'months') {
+      monthLabel = String(viewYear);
+      zoomLabel = 'Choose year';
+      prevLabel = 'Previous year';
+      nextLabel = 'Next year';
+    } else {
+      monthLabel = fmt.monthYear.format(new Date(viewYear, viewMonth - 1, 1));
+      zoomLabel = 'Choose month';
+      prevLabel = 'Previous month';
+      nextLabel = 'Next month';
+    }
+
+    const nav = navAvailability(view, viewYear, viewMonth, min, max);
+
+    return {
+      rootClass: [
+        // `frameless` drops the card chrome for composition inside another
+        // surface (DatePicker's panel owns the border/bg/shadow there).
+        props.frameless
+          ? 'inline-block w-[17rem] max-w-full p-3'
+          : 'inline-block w-[17rem] max-w-full rounded-xl border border-border bg-surface p-3',
+        props.class || '',
+      ].join(' '),
+      ariaLabel: props.label || 'Calendar',
+      labelId,
+      navClass: NAV_CLASS,
+      labelBtnClass: LABEL_BASE,
+      weekdayClass: WEEKDAY_CLASS,
+      monthLabel,
+      zoomLabel,
+      zoomDisabled: view === 'years' ? 'true' : false,
+      showChevron: view !== 'years',
+      prevLabel,
+      nextLabel,
+      prevDisabled: nav.prevDisabled,
+      nextDisabled: nav.nextDisabled,
+      isDays: view === 'days',
+      isMonths: view === 'months',
+      isYears: view === 'years',
+      weekdays,
+      weeks,
+      monthRows,
+      yearRows,
+    };
+  }
+
+  // ---- internal navigation -------------------------------------------------
+
+  _moveFocusTo(target) {
+    const { viewYear, viewMonth } = this.getData();
+    const monthChanged = target.year !== viewYear || target.month !== viewMonth;
+    this.setData({ viewYear: target.year, viewMonth: target.month, focusedIso: formatISODate(target) });
+    this._pendingFocus = { type: 'day', iso: formatISODate(target) };
+    this.refresh();
+    if (monthChanged) this._emitMonthChange(target.year, target.month);
+  }
+
+  _selectDay(parts) {
+    if (!parts || this._isDayDisabled(parts, this.props)) return;
+    const { viewYear, viewMonth } = this.getData();
+    const iso = formatISODate(parts);
+    const monthChanged = parts.month !== viewMonth || parts.year !== viewYear;
+    this.setData({ view: 'days', viewYear: parts.year, viewMonth: parts.month, focusedIso: iso, monthCursor: parts.month });
+    this._pendingFocus = { type: 'day', iso };
+    this.refresh();
+    if (monthChanged) this._emitMonthChange(parts.year, parts.month);
+    const { change } = this.props;
+    if (typeof change === 'function') change(iso, toDate(parts));
+  }
+
+  // Months-view selection = pure navigation (date mode never commits here): drill down
+  // to the days view of the chosen month, clamping the focused day into it.
+  _selectMonth(month) {
+    const { viewYear, viewMonth, focusedIso } = this.getData();
+    if (this._monthOutOfRange(viewYear, month, this.props)) return;
+    const focused = parseISODate(focusedIso);
+    const day = Math.min(focused ? focused.day : 1, daysInMonth(viewYear, month));
+    const iso = formatISODate({ year: viewYear, month, day });
+    const monthChanged = month !== viewMonth;
+    this.setData({ view: 'days', viewMonth: month, focusedIso: iso });
+    this._pendingFocus = { type: 'day', iso };
+    this.refresh();
+    if (monthChanged) this._emitMonthChange(viewYear, month);
+  }
+
+  // Years-view selection = pure navigation: drill down to months view of the chosen year.
+  _selectYear(year) {
+    if (this._yearOutOfRange(year, this.props)) return;
+    const cursor = this._initialMonthCursor(year, this.props);
+    this.setData({ view: 'months', viewYear: year, monthCursor: cursor });
+    this._pendingFocus = { type: 'month', month: cursor };
+    this.refresh();
+  }
+
+  _navigate(delta) {
+    const { view, viewYear, viewMonth, focusedIso, monthCursor } = this.getData();
+    if (view === 'days') {
+      const focused = parseISODate(focusedIso) || { year: viewYear, month: viewMonth, day: 1 };
+      const target = addMonths(focused, delta);
+      this.setData({ viewYear: target.year, viewMonth: target.month, focusedIso: formatISODate(target) });
+      const { min, max } = this._bounds(this.props);
+      const nav = navAvailability('days', target.year, target.month, min, max);
+      const nowDisabled = delta < 0 ? nav.prevDisabled : nav.nextDisabled;
+      // Keep DOM focus on the pressed arrow (it persists in the vdom); only fall back to
+      // the day cell when min/max just disabled the arrow.
+      this._pendingFocus = nowDisabled ? { type: 'day', iso: formatISODate(target) } : null;
+      this.refresh();
+      this._emitMonthChange(target.year, target.month);
+    } else if (view === 'months') {
+      const ny = viewYear + delta;
+      this.setData({ viewYear: ny });
+      const { min, max } = this._bounds(this.props);
+      const nav = navAvailability('months', ny, viewMonth, min, max);
+      const nowDisabled = delta < 0 ? nav.prevDisabled : nav.nextDisabled;
+      this._pendingFocus = nowDisabled ? { type: 'month', month: monthCursor } : null;
+      this.refresh();
+    } else {
+      const ny = viewYear + delta * 12;
+      this.setData({ viewYear: ny });
+      const { min, max } = this._bounds(this.props);
+      const nav = navAvailability('years', ny, viewMonth, min, max);
+      const nowDisabled = delta < 0 ? nav.prevDisabled : nav.nextDisabled;
+      this._pendingFocus = nowDisabled ? { type: 'year', year: ny } : null;
+      this.refresh();
+    }
+  }
+
+  _zoomOut() {
+    const { view, viewYear, viewMonth, monthCursor } = this.getData();
+    if (view === 'days') {
+      this.setData({ view: 'months', monthCursor: viewMonth });
+      this._pendingFocus = { type: 'month', month: viewMonth };
+      this.refresh();
+    } else if (view === 'months') {
+      this.setData({ view: 'years' });
+      this._pendingFocus = { type: 'year', year: viewYear };
+      this.refresh();
+    }
+    // years view: zoom-out disabled (no-op)
+  }
+
+  // ---- events --------------------------------------------------------------
+
+  events = {
+    onPrev: () => this._navigate(-1),
+    onNext: () => this._navigate(1),
+    onZoomOut: () => this._zoomOut(),
+
+    onDay: (d, event) => {
+      if (d.ariaDisabled === 'true') return;
+      this._selectDay(parseISODate(d.iso));
+    },
+
+    onMonth: (m) => {
+      if (m.ariaDisabled === 'true') return;
+      this._selectMonth(m.month);
+    },
+
+    onYear: (y) => {
+      if (y.ariaDisabled === 'true') return;
+      this._selectYear(y.year);
+    },
+
+    // Days-view roving keyboard. Escape is NOT handled here so it can bubble to a
+    // composing DatePicker (which closes the popover).
+    onDaysKey: (event) => {
+      const { viewYear, viewMonth, focusedIso } = this.getData();
+      const focused = parseISODate(focusedIso) || { year: viewYear, month: viewMonth, day: 1 };
+      const fdow = this._firstDayOfWeek(this.props);
+      let target = null;
+      switch (event.key) {
+        case 'ArrowLeft':
+          target = addDays(focused, -1);
+          break;
+        case 'ArrowRight':
+          target = addDays(focused, 1);
+          break;
+        case 'ArrowUp':
+          target = addDays(focused, -7);
+          break;
+        case 'ArrowDown':
+          target = addDays(focused, 7);
+          break;
+        case 'Home':
+          target = startOfWeek(focused, fdow);
+          break;
+        case 'End':
+          target = endOfWeek(focused, fdow);
+          break;
+        case 'PageUp':
+          target = addMonths(focused, event.shiftKey ? -12 : -1);
+          break;
+        case 'PageDown':
+          target = addMonths(focused, event.shiftKey ? 12 : 1);
+          break;
+        case 'Enter':
+        case ' ':
+          event.preventDefault();
+          this._selectDay(focused);
+          return;
+        default:
+          return;
+      }
+      event.preventDefault();
+      this._moveFocusTo(target);
+    },
+
+    // Months-view roving keyboard: ±1 (left/right), ±3 (up/down) crossing years at an
+    // edge, Home/End for the row, Enter/Space selects, Escape backs out to days.
+    onMonthsKey: (event) => {
+      const { viewYear, monthCursor } = this.getData();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        this.setData({ view: 'days' });
+        this._pendingFocus = { type: 'day', iso: this.getData().focusedIso };
+        this.refresh();
+        return;
+      }
+      const index = monthCursor - 1;
+      const absolute = viewYear * 12 + index;
+      let target = null;
+      switch (event.key) {
+        case 'ArrowLeft':
+          target = absolute - 1;
+          break;
+        case 'ArrowRight':
+          target = absolute + 1;
+          break;
+        case 'ArrowUp':
+          target = absolute - 3;
+          break;
+        case 'ArrowDown':
+          target = absolute + 3;
+          break;
+        case 'Home':
+          target = viewYear * 12 + (index - (index % 3));
+          break;
+        case 'End':
+          target = viewYear * 12 + (index - (index % 3) + 2);
+          break;
+        case 'Enter':
+        case ' ':
+          event.preventDefault();
+          this._selectMonth(monthCursor);
+          return;
+        default:
+          return;
+      }
+      event.preventDefault();
+      const ny = Math.floor(target / 12);
+      const nc = (target % 12) + 1;
+      this.setData({ viewYear: ny, monthCursor: nc });
+      this._pendingFocus = { type: 'month', month: nc };
+      this.refresh();
+    },
+
+    // Years-view roving keyboard: ±1 / ±3 crossing pages at an edge, Home/End, Enter/Space
+    // selects, Escape backs out to months.
+    onYearsKey: (event) => {
+      const { viewYear, monthCursor } = this.getData();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        this.setData({ view: 'months' });
+        this._pendingFocus = { type: 'month', month: monthCursor };
+        this.refresh();
+        return;
+      }
+      const page = startOfYearPage(viewYear);
+      const position = viewYear - page;
+      let target = null;
+      switch (event.key) {
+        case 'ArrowLeft':
+          target = viewYear - 1;
+          break;
+        case 'ArrowRight':
+          target = viewYear + 1;
+          break;
+        case 'ArrowUp':
+          target = viewYear - 3;
+          break;
+        case 'ArrowDown':
+          target = viewYear + 3;
+          break;
+        case 'Home':
+          target = page + (position - (position % 3));
+          break;
+        case 'End':
+          target = page + (position - (position % 3) + 2);
+          break;
+        case 'Enter':
+        case ' ':
+          event.preventDefault();
+          this._selectYear(viewYear);
+          return;
+        default:
+          return;
+      }
+      event.preventDefault();
+      this.setData({ viewYear: target });
+      this._pendingFocus = { type: 'year', year: target };
+      this.refresh();
+    },
+  };
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "data-table",
+  "description": "Interactive data table over the presentational Table conventions — optional-controlled column sorting, row selection with select-all, and built-in pagination via the Pagination piece",
+  "files": ["DataTable.pzl"],
+  "registryDependencies": ["pagination"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

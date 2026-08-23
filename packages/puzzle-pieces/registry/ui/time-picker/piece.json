@@ -1,0 +1,8 @@
+{
+  "name": "time-picker",
+  "description": "Field-shaped trigger + popover with hour/minute/second listbox columns and 12/24h display: controlled HH:MM value, optional-controlled open, label/hint/error, locale-aware trigger label",
+  "files": ["TimePicker.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

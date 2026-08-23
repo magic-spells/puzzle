@@ -1,0 +1,8 @@
+{
+  "name": "popover",
+  "description": "Click-toggled floating panel with slot trigger, auto-flip, and outside-click dismiss",
+  "files": ["Popover.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "chat-attachment",
+  "description": "File attachment chip — type-inferred icon, truncated filename, size caption, optional download link and removable mode",
+  "files": ["ChatAttachment.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

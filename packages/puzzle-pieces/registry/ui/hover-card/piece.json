@@ -1,0 +1,8 @@
+{
+  "name": "hover-card",
+  "description": "Hover/focus-triggered floating card for link previews and user cards — open/close delays, hover-persistent panel, auto-flip placement, optional-controlled open",
+  "files": ["HoverCard.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

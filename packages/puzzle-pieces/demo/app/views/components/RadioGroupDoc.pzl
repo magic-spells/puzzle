@@ -1,0 +1,143 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Radio Group</h1>
+        <p class="mt-2 text-body">
+          A config-first radio group rendered from an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">options</code>
+          array. Each row is a native radio input, so arrow-key movement comes for free; layout is vertical or
+          horizontal, and options carry their own hints and disabled state.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="horizontal" title="Horizontal" code={ codeHorizontal }>
+          <RadioGroup label="Size" options={ sizeOptions } value={ size } orientation="horizontal" @change={ setSize } />
+        </ExampleBox>
+
+        <ExampleBox id="hints" title="Option hints and disabled" code={ codeHints }>
+          <RadioGroup label="Plan" options={ planDetailOptions } value={ planDetail } @change={ setPlanDetail } />
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import RadioGroup from '@/components/ui/RadioGroup.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece radio-group';
+const usageImport = `import RadioGroup from '@/components/ui/RadioGroup.pzl';`;
+const usageMarkup = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />`;
+
+const codeHero = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />
+
+// parent
+data() {
+  return {
+    planOptions: [
+      { value: 'free', label: 'Free' },
+      { value: 'pro', label: 'Pro' },
+      { value: 'enterprise', label: 'Enterprise' },
+    ],
+  };
+}
+events = { setPlan: (v) => this.setData('plan', v) };`;
+
+const codeHorizontal = `<RadioGroup
+  label="Size"
+  options={ sizeOptions }
+  value={ size }
+  orientation="horizontal"
+  @change={ setSize } />`;
+
+const codeHints = `const planOptions = [
+  { value: 'free', label: 'Free', hint: 'For hobby projects' },
+  { value: 'pro', label: 'Pro', hint: 'For growing teams' },
+  { value: 'enterprise', label: 'Enterprise', hint: 'Talk to sales', disabled: true },
+];
+
+<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />`;
+
+export default class RadioGroupDoc extends PuzzleView {
+  created() {
+    this.setData({ plan: 'pro', size: 'm', planDetail: 'pro' });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeHorizontal,
+      codeHints,
+      planOptions: [
+        { value: 'free', label: 'Free' },
+        { value: 'pro', label: 'Pro' },
+        { value: 'enterprise', label: 'Enterprise' },
+      ],
+      sizeOptions: [
+        { value: 's', label: 'Small' },
+        { value: 'm', label: 'Medium' },
+        { value: 'l', label: 'Large' },
+      ],
+      planDetailOptions: [
+        { value: 'free', label: 'Free', hint: 'For hobby projects' },
+        { value: 'pro', label: 'Pro', hint: 'For growing teams' },
+        { value: 'enterprise', label: 'Enterprise', hint: 'Talk to sales', disabled: true },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Horizontal', href: '#horizontal' },
+        { label: 'Option hints and disabled', href: '#hints' },
+      ],
+    };
+  }
+
+  events = {
+    setPlan: (v) => {
+      this.setData('plan', v);
+      this.refresh();
+    },
+    setSize: (v) => {
+      this.setData('size', v);
+      this.refresh();
+    },
+    setPlanDetail: (v) => {
+      this.setData('planDetail', v);
+      this.refresh();
+    },
+  };
+}
+</script>

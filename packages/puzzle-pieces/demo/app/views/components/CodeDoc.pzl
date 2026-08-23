@@ -1,0 +1,171 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Code</h1>
+        <p class="mt-2 text-body">
+          A complete code panel in one piece: syntax highlighting on a GitHub light/dark
+          palette, an optional line-number gutter, a corner copy button, and a collapsible
+          View Code preview that animates open. Hand it a snippet string and it takes care
+          of the rest — this docs site renders every example through it.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero } tall={ false }>
+        <div class="w-full max-w-xl">
+          <Code code={ heroSnippet }/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece and its highlighting lib, then install highlight.js:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          The highlighter registers only the javascript, xml, and bash grammars (about 13 KB
+          gzipped total) — add more in app/lib/highlight.js if your snippets need them. The
+          token colors travel inside Code.pzl in a global { '<style>' } block, so there is
+          nothing to merge into pieces.css — retheme the palette by editing the --hl-
+          variables at the bottom of the file.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="command" title="Command block" code={ codeCommand } tall={ false }>
+          <div class="w-full max-w-xl">
+            <Code code={ commandSnippet } numbers={ false }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="collapsible" title="Collapsible" code={ codeCollapsible } tall={ false }>
+          <div class="w-full max-w-xl">
+            <Code code={ longSnippet } collapsible={ true } maxHeight="450px"/>
+          </div>
+        </ExampleBox>
+
+        <section id="languages" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Language detection</h2>
+          <p class="mb-4 text-sm text-body">
+            The grammar is guessed from the snippet's shape — install-style commands go to
+            bash, snippets that open with a tag go to xml, and everything else (including
+            the common const-then-markup mix) goes to javascript, whose JSX support colors
+            embedded tags. Pass
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">lang</code>
+            to override the guess.
+          </p>
+          <ExampleBox code={ codeLang } tall={ false }>
+            <div class="flex w-full max-w-xl flex-col gap-4">
+              <Code code={ bashSnippet } numbers={ false }/>
+              <Code code={ markupSnippet }/>
+            </div>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Code from '@/components/ui/Code.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece code';
+const usageImport = `import Code from '@/components/ui/Code.pzl';`;
+const usageMarkup = `<Code code={ snippet }/>`;
+
+const heroSnippet = `export function debounce(fn, wait = 150) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), wait);
+  };
+}`;
+
+const commandSnippet = `npm install @magic-spells/morph-engine
+npm run build`;
+
+const longSnippet = `import { PuzzleView } from '@magic-spells/puzzle';
+
+// A parent-owned counter: the view holds the value and
+// passes both the number and the handlers down as props.
+export default class Counter extends PuzzleView {
+  created() {
+    this.setData({ count: 0 });
+  }
+
+  data(params, props) {
+    return { count: this.getData().count ?? 0 };
+  }
+
+  events = {
+    increment: () => {
+      this.setData({ count: this.getData().count + 1 });
+      this.refresh();
+    },
+    reset: () => {
+      this.setData({ count: 0 });
+      this.refresh();
+    },
+  };
+}`;
+
+const bashSnippet = `cp registry/ui/button/Button.pzl app/components/ui/`;
+
+const markupSnippet = `<Select options={ opts } value={ pet } @change={ setPet } />`;
+
+const codeHero = `const snippet = \`export function debounce(fn, wait = 150) {
+  …
+}\`;
+
+<Code code={ snippet }/>`;
+
+const codeCommand = `// numbers off for command blocks (CodeBlock is a thin alias for this)
+<Code code={ installCmd } numbers={ false }/>`;
+
+const codeCollapsible = `// starts as a dimmed three-line peek with a View Code pill,
+// animates open, and a chevron collapses it back
+<Code code={ longSnippet } collapsible={ true } maxHeight="450px"/>`;
+
+const codeLang = `<Code code={ bashSnippet } numbers={ false }/>   // guessed: bash
+<Code code={ markupSnippet }/>                    // guessed: xml
+<Code code={ snippet } lang="javascript"/>        // explicit override`;
+
+export default class CodeDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      heroSnippet,
+      commandSnippet,
+      longSnippet,
+      bashSnippet,
+      markupSnippet,
+      codeHero,
+      codeCommand,
+      codeCollapsible,
+      codeLang,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Command block', href: '#command' },
+        { label: 'Collapsible', href: '#collapsible' },
+        { label: 'Language detection', href: '#languages' },
+      ],
+    };
+  }
+}
+</script>

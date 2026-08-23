@@ -1,0 +1,99 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Kbd</h1>
+        <p class="mt-2 text-body">
+          A keyboard-key hint rendered in the native kbd element with an inset keycap shadow. Slot content
+          is the key or chord text; a class prop appends the caller's utilities.
+        </p>
+      </header>
+
+      <ExampleBox tall={ false } code={ codeHero }>
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-body">
+          <span class="inline-flex items-center gap-1.5">
+            <Kbd>⌘</Kbd> <Kbd>K</Kbd> Command palette
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <Kbd>⌘</Kbd> <Kbd>S</Kbd> Save
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <Kbd>Esc</Kbd> Close
+          </span>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="prose" title="In prose" tall={ false } code={ codeProse }>
+          <p class="max-w-md text-center text-sm/relaxed text-body">
+            Press <Kbd>⌘</Kbd> <Kbd>K</Kbd> to open the command palette, or hit
+            <Kbd>Esc</Kbd> at any time to dismiss it.
+          </p>
+        </ExampleBox>
+
+        <p class="text-sm text-body">
+          Each key is its own piece, so chords are written as adjacent tags. Inline, they sit on the text
+          baseline and inherit the surrounding size, so they read naturally mid-sentence.
+        </p>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Kbd from '@/components/ui/Kbd.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece kbd';
+const usageImport = `import Kbd from '@/components/ui/Kbd.pzl';`;
+const usageMarkup = `<Kbd>⌘</Kbd>`;
+
+const codeHero = `<span><Kbd>⌘</Kbd> <Kbd>K</Kbd> Command palette</span>
+<span><Kbd>⌘</Kbd> <Kbd>S</Kbd> Save</span>
+<span><Kbd>Esc</Kbd> Close</span>`;
+
+const codeProse = `<p>
+  Press <Kbd>⌘</Kbd> <Kbd>K</Kbd> to open the command palette, or hit
+  <Kbd>Esc</Kbd> at any time to dismiss it.
+</p>`;
+
+export default class KbdDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeProse,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'In prose', href: '#prose' },
+      ],
+    };
+  }
+}
+</script>

@@ -1,0 +1,109 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Breadcrumb</h1>
+        <p class="mt-2 text-body">
+          A config-first breadcrumb trail rendered from an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">items</code>
+          array, with a chevron separator between crumbs and the final crumb as the current page.
+        </p>
+      </header>
+
+      <ExampleBox tall={ false } code={ codeHero }>
+        <Breadcrumb items={ trail } />
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="current" title="Current page" tall={ false } code={ codeCurrent }>
+          <Breadcrumb items={ shortTrail } />
+        </ExampleBox>
+
+        <p class="text-sm text-body">
+          The last item in the array is the current page: it renders as plain text carrying
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-current="page"</code>,
+          and any href on it is ignored. Every earlier item is a link.
+        </p>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Breadcrumb from '@/components/ui/Breadcrumb.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece breadcrumb';
+const usageImport = `import Breadcrumb from '@/components/ui/Breadcrumb.pzl';`;
+const usageMarkup = `<Breadcrumb items={ trail } />`;
+
+const codeHero = `const trail = [
+  { label: 'Home', href: '/' },
+  { label: 'Projects', href: '/projects' },
+  { label: 'puzzle-pieces', href: '/projects/puzzle-pieces' },
+  { label: 'Settings' },
+];
+
+<Breadcrumb items={ trail } />`;
+
+const codeCurrent = `// The last item renders as text with aria-current="page";
+// its href, if present, is ignored.
+const trail = [
+  { label: 'Docs', href: '/docs' },
+  { label: 'Components', href: '/docs/components' },
+  { label: 'Breadcrumb' },
+];
+
+<Breadcrumb items={ trail } />`;
+
+export default class BreadcrumbDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeCurrent,
+      trail: [
+        { label: 'Home', href: '/' },
+        { label: 'Projects', href: '/content' },
+        { label: 'puzzle-pieces', href: '/content' },
+        { label: 'Settings' },
+      ],
+      shortTrail: [
+        { label: 'Docs', href: '/content' },
+        { label: 'Components', href: '/content' },
+        { label: 'Breadcrumb' },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Current page', href: '#current' },
+      ],
+    };
+  }
+}
+</script>

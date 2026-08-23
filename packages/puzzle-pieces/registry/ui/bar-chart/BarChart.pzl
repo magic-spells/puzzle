@@ -1,0 +1,404 @@
+<puzzle-view>
+  <figure class={ figureClass } aria-label={ label }>
+    {#if showLegend}
+      <div class="mb-3 flex flex-wrap gap-x-4 gap-y-1.5">
+        {#for item in legend}
+          <div class="flex items-center gap-1.5" key={ item.key }>
+            <span class={ item.swatchClass }></span>
+            <span class="text-sm text-body">{ item.label }</span>
+          </div>
+        {/for}
+      </div>
+    {/if}
+
+    <div class="relative" data-plot @pointerleave={ onLeave(event) }>
+      <svg width={ width } height={ height } class="block max-w-full" aria-hidden="true">
+        {#if showGrid}
+          {#for g in gridLines}
+            <line x1={ g.x1 } y1={ g.y } x2={ g.x2 } y2={ g.y } stroke-width="1" class="stroke-border" key={ g.key }/>
+          {/for}
+        {/if}
+
+        {#for m in marks}
+          <path d={ m.d } class={ m.class } @pointermove={ onHover(m, event) } />
+        {/for}
+      </svg>
+
+      <!-- Axis labels live as HTML overlays, NOT SVG <text>: the Puzzle compiler
+           emits ViewNode('text', …) for its internal text-node marker, so an SVG
+           <text> element collides with it and is silently dropped. Coordinates
+           map 1:1 because the SVG has no viewBox scaling. -->
+      {#if showGrid}
+        <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+          {#for g in gridLines}
+            <span class="absolute -translate-y-1/2 text-right text-xs tabular-nums text-muted" style={ g.style } key={ g.key }>{ g.label }</span>
+          {/for}
+        </div>
+      {/if}
+      <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+        {#for x in xLabels}
+          <span class="absolute -translate-x-1/2 text-xs text-muted" style={ x.style } key={ x.key }>{ x.label }</span>
+        {/for}
+      </div>
+
+      {#if tip.visible}
+        <div class={ tipClass } style={ tipStyle }>
+          <div class="text-muted">{ tip.label }</div>
+          <div class="font-medium text-ink tabular-nums">{ tip.value }</div>
+        </div>
+      {/if}
+    </div>
+
+    <table class="sr-only">
+      <caption>{ label }</caption>
+      <thead>
+        <tr>
+          <th scope="col">{ xLabel }</th>
+          {#for h in seriesHeaders}
+            <th scope="col" key={ h.key }>{ h.label }</th>
+          {/for}
+        </tr>
+      </thead>
+      <tbody>
+        {#for r in tableRows}
+          <tr key={ r.key }>
+            <th scope="row">{ r.cat }</th>
+            {#for c in r.cells}
+              <td key={ c.key }>{ c.value }</td>
+            {/for}
+          </tr>
+        {/for}
+      </tbody>
+    </table>
+  </figure>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import {
+  niceDomain,
+  linearScale,
+  bandScale,
+  stackSeries,
+  formatTick,
+} from '../../lib/chart-math.js';
+
+// BarChart — a Tailwind-styled, accessible categorical bar chart. Config-first
+// and controlled: you hand it row objects, an x key, and a series list; it
+// renders the SVG, a legend (auto for 2+ series), per-bar hover tooltips, and an
+// sr-only data table. It never owns data — props in, nothing out.
+//
+//   <BarChart data={ rows } xKey="month" series={ [{ key: 'sales', label: 'Sales' }] } label="Sales by month" />
+//   <BarChart data={ rows } xKey="month" series={ twoSeries } label="Traffic" />            // grouped
+//   <BarChart data={ rows } xKey="month" series={ threeSeries } stacked label="Revenue" />  // stacked
+//
+// PROPS
+//   data         array   row objects — one per category (e.g. { month: 'Jan', sales: 1200 }).
+//   xKey         string  the row key holding each category label.
+//   series       array   [{ key, label }] — one entry per bar series. A single series
+//                        renders one bar per category; multiple series render GROUPED by
+//                        default, or STACKED with `stacked`. Colors are assigned in fixed
+//                        slot order (first series → chart-1 … chart-8, capped).
+//   stacked      boolean stack multiple series into one bar per category (default false).
+//   height       number  SVG pixel height (default 288). Width is measured from the
+//                        container via ResizeObserver, so the chart is responsive.
+//   label        string  accessible name for the <figure> + sr-only table caption.
+//   formatValue  fn      value → string for ticks, tooltips, and the table (default
+//                        formatTick — "1.2k" style).
+//   showGrid     boolean horizontal gridlines + y-axis ticks (default true).
+//   showLegend   boolean force the legend on/off (default: auto — shown for 2+ series).
+//   class        string  appended to the root <figure>.
+//
+// NOTE ON VALUES: bars grow from a zero baseline (niceDomain always includes 0).
+// The chart is built for non-negative magnitudes; negative values are drawn from
+// the baseline but without special styling and are not a supported case.
+//
+// RENDER MODEL: every bar's path / fill class / hover state is precomputed in
+// data() into a flat `marks` list so the template's {#for} body stays a single
+// <path>. Bars are true SVG paths with 4px-rounded TOP corners and a square
+// baseline (a rounded-both-ends rect would be wrong); grouped bars split the band
+// with 2px gaps, stacked segments carry a 2px surface gap between them and only
+// the topmost segment is rounded. Hover dims the other marks to 60%. The SVG uses
+// explicit pixel width/height (no viewBox), so nothing scales or blurs.
+
+let uid = 0;
+
+const GAP = 2; // px between adjacent grouped bars and between stacked segments
+const MAX_BAR = 24; // px — cap bar thickness; let the band's leftover be air
+const MARGIN_TOP = 8;
+const MARGIN_RIGHT = 8;
+const MARGIN_BOTTOM = 28; // room for the x-axis labels
+
+const TIP_CLASS =
+  'pointer-events-none absolute left-0 top-0 z-10 whitespace-nowrap rounded-md border ' +
+  'border-border bg-surface px-3 py-2 text-xs shadow-md';
+
+// Slot fill / swatch classes in fixed order. These are written out as complete
+// literal strings (not `fill-chart-${n}`) so Tailwind's source scan actually
+// generates them — a template-built class name is invisible to the scanner.
+const FILL = [
+  'fill-chart-1', 'fill-chart-2', 'fill-chart-3', 'fill-chart-4',
+  'fill-chart-5', 'fill-chart-6', 'fill-chart-7', 'fill-chart-8',
+];
+const SWATCH = [
+  'bg-chart-1', 'bg-chart-2', 'bg-chart-3', 'bg-chart-4',
+  'bg-chart-5', 'bg-chart-6', 'bg-chart-7', 'bg-chart-8',
+];
+
+// A bar path: flat baseline, `r`-rounded top corners only. `yTop` is the smaller
+// (higher-on-screen) y; `yBottom` the baseline. Returns '' for a zero-height bar.
+function barPath(x, w, yTop, yBottom, r) {
+  const h = yBottom - yTop;
+  if (h <= 0 || w <= 0) return '';
+  const rr = Math.max(0, Math.min(r, w / 2, h));
+  return (
+    `M${x},${yBottom}` +
+    `L${x},${yTop + rr}` +
+    `Q${x},${yTop} ${x + rr},${yTop}` +
+    `L${x + w - rr},${yTop}` +
+    `Q${x + w},${yTop} ${x + w},${yTop + rr}` +
+    `L${x + w},${yBottom}Z`
+  );
+}
+
+export default class BarChart extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this.setData({
+      width: 0,
+      hoveredId: null,
+      tip: { visible: false, x: 0, y: 0, flipX: false, label: '', value: '' },
+    });
+  }
+
+  // Measure the container and re-render on resize so the chart is responsive.
+  mounted() {
+    if (typeof ResizeObserver === 'undefined' || !this.element) return;
+    this._ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0].contentRect.width);
+      if (w && w !== this.getData().width) {
+        this.setData({ width: w });
+        this.refresh();
+      }
+    });
+    this._ro.observe(this.element);
+  }
+
+  destroyed() {
+    this._ro?.disconnect();
+    this._ro = null;
+  }
+
+  data(params, props) {
+    const local = this.getData();
+    const width = local.width || 640; // default before the first measure
+    const height = Number(props.height) || 288;
+    const rows = Array.isArray(props.data) ? props.data : [];
+    const xKey = props.xKey;
+    const series = Array.isArray(props.series) ? props.series : [];
+    const stacked = !!props.stacked;
+    const fmt = typeof props.formatValue === 'function' ? props.formatValue : formatTick;
+    const showGrid = props.showGrid !== false;
+    const showLegend = props.showLegend != null ? !!props.showLegend : series.length >= 2;
+    const hoveredId = local.hoveredId;
+
+    const categories = rows.map((row) => (row ? row[xKey] : ''));
+    const keys = series.map((s) => s.key);
+
+    // ---- value domain (always baselined at 0 by niceDomain) -----------------
+    let dataMax = 0;
+    let dataMin = 0;
+    if (stacked) {
+      for (const row of rows) {
+        let sum = 0;
+        for (const k of keys) {
+          const v = Number(row ? row[k] : 0);
+          if (Number.isFinite(v)) sum += v;
+        }
+        if (sum > dataMax) dataMax = sum;
+        if (sum < dataMin) dataMin = sum;
+      }
+    } else {
+      for (const row of rows) {
+        for (const k of keys) {
+          const v = Number(row ? row[k] : 0);
+          if (!Number.isFinite(v)) continue;
+          if (v > dataMax) dataMax = v;
+          if (v < dataMin) dataMin = v;
+        }
+      }
+    }
+    const nice = niceDomain(dataMin, dataMax);
+    const tickLabels = nice.ticks.map((t) => String(fmt(t)));
+
+    // ---- margins / scales ---------------------------------------------------
+    const maxTickLen = tickLabels.reduce((m, s) => Math.max(m, s.length), 1);
+    const marginLeft = showGrid ? Math.min(80, Math.max(30, maxTickLen * 7 + 12)) : 8;
+    const plotTop = MARGIN_TOP;
+    const plotBottom = height - MARGIN_BOTTOM;
+    const yScale = linearScale(nice.min, nice.max, plotBottom, plotTop);
+    const baselineY = yScale(0);
+    const xBand = bandScale(categories.length, marginLeft, width - MARGIN_RIGHT, 0.2, 0.1);
+    const bandW = xBand.bandwidth;
+
+    // ---- gridlines + y ticks ------------------------------------------------
+    const gridLines = showGrid
+      ? nice.ticks.map((t, i) => {
+          const y = yScale(t);
+          return {
+            key: `grid-${i}`,
+            y,
+            x1: marginLeft,
+            x2: width - MARGIN_RIGHT,
+            label: String(fmt(t)),
+            style: `left:0px;top:${Math.round(y)}px;width:${Math.max(0, marginLeft - 8)}px;`,
+          };
+        })
+      : [];
+
+    // ---- marks --------------------------------------------------------------
+    const marks = [];
+    const dim = (id) => hoveredId != null && hoveredId !== id;
+    const markClass = (si, id) =>
+      `${FILL[si % 8]} transition-opacity ${dim(id) ? 'opacity-60' : 'opacity-100'}`;
+
+    if (stacked) {
+      const stacks = stackSeries(rows, keys);
+      categories.forEach((cat, i) => {
+        // Topmost non-zero series in this category gets the rounded top.
+        let topIndex = -1;
+        series.forEach((s, si) => {
+          const seg = stacks[s.key][i];
+          if (seg && seg[1] > seg[0]) topIndex = si;
+        });
+        const barW = Math.min(bandW, MAX_BAR);
+        const bx = xBand.position(i) + (bandW - barW) / 2;
+        series.forEach((s, si) => {
+          const seg = stacks[s.key][i];
+          if (!seg || seg[1] <= seg[0]) return;
+          const value = Number(rows[i] ? rows[i][s.key] : 0) || 0;
+          const segTop = yScale(seg[1]);
+          const segBottom = yScale(seg[0]) - (seg[0] > 0 ? GAP : 0);
+          const d = barPath(bx, barW, segTop, segBottom, si === topIndex ? 4 : 0);
+          if (!d) return;
+          const id = `${i}-${si}`;
+          marks.push({
+            key: `m-${id}`,
+            id,
+            d,
+            class: markClass(si, id),
+            tipLabel: `${cat} · ${s.label}`,
+            tipValue: String(fmt(value)),
+          });
+        });
+      });
+    } else {
+      const n = Math.max(1, series.length);
+      const rawW = (bandW - GAP * (n - 1)) / n;
+      const barW = Math.min(rawW, MAX_BAR);
+      const groupW = barW * n + GAP * (n - 1);
+      categories.forEach((cat, i) => {
+        const x0 = xBand.position(i) + (bandW - groupW) / 2;
+        series.forEach((s, si) => {
+          const value = Number(rows[i] ? rows[i][s.key] : 0) || 0;
+          const yTop = Math.min(yScale(value), baselineY);
+          const yBottom = Math.max(yScale(value), baselineY);
+          const d = barPath(x0 + si * (barW + GAP), barW, yTop, yBottom, 4);
+          if (!d) return;
+          const id = `${i}-${si}`;
+          marks.push({
+            key: `m-${id}`,
+            id,
+            d,
+            class: markClass(si, id),
+            tipLabel: series.length > 1 ? `${cat} · ${s.label}` : String(cat),
+            tipValue: String(fmt(value)),
+          });
+        });
+      });
+    }
+
+    // ---- x labels (skip every Nth when crowded) -----------------------------
+    const maxLabels = Math.max(1, Math.floor((width - marginLeft - MARGIN_RIGHT) / 48));
+    const step = Math.ceil(categories.length / maxLabels) || 1;
+    const xLabelY = height - MARGIN_BOTTOM + 10;
+    const xLabels = [];
+    categories.forEach((cat, i) => {
+      if (i % step !== 0) return;
+      xLabels.push({
+        key: `x-${i}`,
+        x: xBand.position(i) + bandW / 2,
+        y: xLabelY,
+        label: String(cat),
+        style: `left:${Math.round(xBand.position(i) + bandW / 2)}px;top:${xLabelY}px;`,
+      });
+    });
+
+    // ---- legend + sr-only table ---------------------------------------------
+    const legend = series.map((s, si) => ({
+      key: `lg-${si}`,
+      label: s.label,
+      swatchClass: `inline-block size-3 shrink-0 rounded-sm ${SWATCH[si % 8]}`,
+    }));
+    const seriesHeaders = series.map((s, si) => ({ key: `h-${si}`, label: s.label }));
+    const tableRows = categories.map((cat, i) => ({
+      key: `tr-${i}`,
+      cat: String(cat),
+      cells: series.map((s, si) => ({
+        key: `td-${si}`,
+        value: String(fmt(Number(rows[i] ? rows[i][s.key] : 0) || 0)),
+      })),
+    }));
+
+    // ---- tooltip ------------------------------------------------------------
+    const tip = local.tip || { visible: false, x: 0, y: 0, flipX: false, label: '', value: '' };
+    const tipStyle =
+      `left:${tip.x}px;top:${tip.y}px;` +
+      `transform:translate(${tip.flipX ? 'calc(-100% - 14px)' : '14px'},-50%);`;
+
+    return {
+      figureClass: ['w-full', props.class || ''].join(' ').trim(),
+      label: props.label || 'Bar chart',
+      xLabel: xKey || 'Category',
+      width,
+      height,
+      showGrid,
+      showLegend,
+      gridLines,
+      marks,
+      xLabels,
+      legend,
+      seriesHeaders,
+      tableRows,
+      tip,
+      tipStyle,
+      tipClass: TIP_CLASS,
+    };
+  }
+
+  // Resolve pointer coordinates against the relative plot container.
+  _tipFromEvent(event, label, value) {
+    const plot = this.element?.querySelector('[data-plot]');
+    if (!plot) return null;
+    const rect = plot.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    return { visible: true, x, y, flipX: x > rect.width / 2, label, value };
+  }
+
+  events = {
+    onHover: (mark, event) => {
+      const tip = this._tipFromEvent(event, mark.tipLabel, mark.tipValue);
+      if (!tip) return;
+      this.setData({ hoveredId: mark.id, tip });
+      this.refresh();
+    },
+
+    onLeave: () => {
+      const tip = this.getData().tip;
+      this.setData({ hoveredId: null, tip: { ...tip, visible: false } });
+      this.refresh();
+    },
+  };
+}
+</script>

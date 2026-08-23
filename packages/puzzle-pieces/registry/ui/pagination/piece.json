@@ -1,0 +1,8 @@
+{
+  "name": "pagination",
+  "description": "Controlled page navigator — windowed page numbers with first/last, ellipses, and disabled-at-the-ends prev/next icon buttons",
+  "files": ["Pagination.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

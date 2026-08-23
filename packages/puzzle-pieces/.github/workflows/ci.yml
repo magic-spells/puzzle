@@ -1,0 +1,27 @@
+name: CI
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+
+jobs:
+  test:
+    # Node is pinned to the line the suites were minted under. The exact-float
+    # sheet motion suites that first forced the pin are gone (the overlay pieces
+    # wrap their web components now and that behavior is tested upstream), but
+    # the remaining document-model suites were written against the same line.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+      - name: Registry lib tests
+        run: |
+          npm ci
+          npm test
+      - name: Demo compiles against the pinned framework
+        working-directory: demo
+        run: |
+          npm ci
+          npm run build

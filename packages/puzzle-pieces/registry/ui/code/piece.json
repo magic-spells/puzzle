@@ -1,0 +1,8 @@
+{
+  "name": "code",
+  "description": "Code panel with syntax highlighting (highlight.js, GitHub light/dark palette, Puzzle template grammar), optional line-number gutter, copy button, and a collapsible View Code preview that animates open",
+  "files": ["Code.pzl"],
+  "registryDependencies": ["lib/highlight.js", "lib/puzzle-lang.js"],
+  "dependencies": ["highlight.js"],
+  "targetDir": "app/components/ui"
+}

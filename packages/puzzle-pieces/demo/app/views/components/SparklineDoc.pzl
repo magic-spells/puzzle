@@ -1,0 +1,118 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Sparkline</h1>
+        <p class="mt-2 text-body">
+          A tiny inline trend line — no axes, grid, or tooltip. Pass a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">data</code>
+          number array and it draws one 2px path sized to fit. Color inherits from the text color, so a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">text-chart-*</code>
+          token on the element (or its parent) sets the stroke.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex items-center gap-3">
+          <Sparkline data={ trendUp } width={ 160 } height={ 40 }/>
+          <span class="text-2xl font-semibold text-ink">12.4k</span>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece and its math helper into your app — they compile with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Geometry is computed in the view with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">lib/chart-math.js</code>,
+          so the shared helper is a required dependency.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="basic" title="Basic" code={ codeBasic }>
+          <div class="flex flex-wrap items-center gap-6">
+            <Sparkline data={ trendUp }/>
+            <Sparkline data={ trendVol }/>
+            <Sparkline data={ trendDown }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="area" title="Area fill" code={ codeArea }>
+          <Sparkline data={ trendVol } area width={ 200 } height={ 48 }/>
+        </ExampleBox>
+
+        <ExampleBox id="color" title="Custom color and size" code={ codeColor }>
+          <div class="flex flex-wrap items-center gap-6">
+            <Sparkline data={ trendUp } class="text-chart-3" width={ 200 } height={ 48 }/>
+            <Sparkline data={ trendUp } area class="text-chart-5" width={ 200 } height={ 48 }/>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Sparkline from '@/components/ui/Sparkline.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece sparkline';
+const usageImport = `import Sparkline from '@/components/ui/Sparkline.pzl';`;
+const usageMarkup = `<Sparkline data={ data } width={ 160 } height={ 40 } />`;
+
+const codeHero = `const data = [4, 6, 5, 8, 7, 10, 9, 12];
+
+<Sparkline data={ data } width={ 160 } height={ 40 } />`;
+
+const codeBasic = `// Defaults to 120×32 and text-chart-1. Nulls in the data become gaps.
+<Sparkline data={ [4, 6, 5, 8, 7, 10, 9, 12] } />
+<Sparkline data={ [8, 3, 9, 4, 11, 5, 12, 6] } />
+<Sparkline data={ [12, 10, 11, 8, 9, 6, 7, 4] } />`;
+
+const codeArea = `// area adds a soft fill under the line at 15% of the current color.
+<Sparkline data={ series } area width={ 200 } height={ 48 } />`;
+
+const codeColor = `// The stroke is currentColor — set any text-* color token via class.
+<Sparkline data={ series } class="text-chart-3" width={ 200 } height={ 48 } />
+<Sparkline data={ series } area class="text-chart-5" width={ 200 } height={ 48 } />`;
+
+export default class SparklineDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeBasic,
+      codeArea,
+      codeColor,
+      trendUp: [4, 6, 5, 8, 7, 10, 9, 12],
+      trendVol: [8, 3, 9, 4, 11, 5, 12, 6],
+      trendDown: [12, 10, 11, 8, 9, 6, 7, 4],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Basic', href: '#basic' },
+        { label: 'Area fill', href: '#area' },
+        { label: 'Custom color and size', href: '#color' },
+      ],
+    };
+  }
+}
+</script>

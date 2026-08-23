@@ -1,0 +1,24 @@
+{
+  "name": "@magic-spells/puzzle-pieces",
+  "version": "0.7.0",
+  "description": "Copy-in UI component registry for the Puzzle framework. Fetched by `puzzle add piece` — never installed or imported directly.",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "registry"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/magic-spells/puzzle-pieces.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "marked": "^17.0.1"
+  }
+}

@@ -1,0 +1,157 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Collapsible</h1>
+        <p class="mt-2 text-body">
+          An animated disclosure whose body height eases 0 to measured over a
+          <strong class="font-medium text-ink">speed-based</strong> duration. Closed, it carries
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">inert</code>
+          and aria-hidden, so its content leaves the tab order. The parent owns
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">open</code>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-md rounded-xl border border-border bg-surface p-4">
+          <Collapsible label="Shipping and returns" open={ heroOpen } @change={ setHeroOpen }>
+            <div class="space-y-2">
+              <p>Free standard shipping on orders over 50 dollars. Expedited options are shown at checkout.</p>
+              <ul class="list-disc space-y-1 pl-5 text-muted">
+                <li>Delivered in 3–5 business days</li>
+                <li>Returns accepted within 30 days</li>
+              </ul>
+            </div>
+          </Collapsible>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="exclusivity" title="Composed exclusivity" code={ codeExclusivity }>
+          <div class="w-full max-w-md">
+            <p class="mb-3 text-xs font-medium text-muted">
+              Rich content AND one-open-at-a-time: Collapsibles sharing a parent-owned open id.
+            </p>
+            <div class="divide-y divide-border border-y border-border">
+              {#for item in richFaq}
+                <Collapsible label={ item.label } open={ groupId === item.id } @change={ toggleGroup(item.id) }>
+                  <p>{ item.body }</p>
+                </Collapsible>
+              {/for}
+            </div>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section class="mt-8 max-w-3xl">
+        <p class="text-sm text-body">
+          No Accordion component is needed for exclusivity — track one open id in the parent and
+          pass each Collapsible a derived boolean. This keeps rich slot markup per panel while
+          still closing the others. When your panels are plain text, reach for
+          <strong class="font-medium text-ink">Accordion</strong> instead: it renders the whole
+          set from one config array.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Collapsible from '@/components/ui/Collapsible.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Collapsible — follows the ButtonDoc exemplar shape.
+const installCmd = 'puzzle add piece collapsible';
+const usageImport = `import Collapsible from '@/components/ui/Collapsible.pzl';`;
+const usageMarkup = `<Collapsible label="Shipping and returns" open={ open } @change={ setOpen }></Collapsible>`;
+
+const codeHero = `<Collapsible label="Shipping and returns" open={ open } @change={ setOpen }>
+  <div class="space-y-2">
+    <p>Free standard shipping on orders over 50 dollars.</p>
+    <ul class="list-disc pl-5">
+      <li>Delivered in 3–5 business days</li>
+      <li>Returns accepted within 30 days</li>
+    </ul>
+  </div>
+</Collapsible>
+
+// parent — owns the open boolean, flips it from @change
+events = { setOpen: (open) => this.setData('open', open) };`;
+
+const codeExclusivity = `const richFaq = [
+  { id: 'r1', label: 'When should I reach for Accordion?', body: '…' },
+  { id: 'r2', label: 'And when Collapsible?', body: '…' },
+  { id: 'r3', label: 'Can I have both?', body: '…' },
+];
+
+// One parent-owned open id → rich content AND one-open-at-a-time.
+<div class="divide-y divide-border border-y border-border">
+  {#for item in richFaq}
+    <Collapsible label={ item.label }
+                 open={ openId === item.id }
+                 @change={ toggleGroup(item.id) }>
+      <p>{ item.body }</p>
+    </Collapsible>
+  {/for}
+</div>
+
+// parent — clicking the open one closes it, otherwise switches
+events = {
+  toggleGroup: (id) =>
+    this.setData('openId', this.getData().openId === id ? null : id),
+};`;
+
+export default class CollapsibleDoc extends PuzzleView {
+  created() {
+    this.setData({ heroOpen: false, groupId: 'r1' });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeExclusivity,
+      richFaq: [
+        { id: 'r1', label: 'When should I reach for Accordion?', body: 'When a set of plain-text panels should coordinate — opening one closes the rest.' },
+        { id: 'r2', label: 'And when Collapsible?', body: 'For one-off disclosures, or when the panel body needs real markup — Collapsible takes rich slot content.' },
+        { id: 'r3', label: 'Can I have both?', body: 'This group is Collapsibles composed with a parent-owned open id — rich content AND exclusivity.' },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Composed exclusivity', href: '#exclusivity' },
+      ],
+    };
+  }
+
+  events = {
+    setHeroOpen: (open) => this.setData('heroOpen', open),
+    toggleGroup: (id) => this.setData('groupId', this.getData().groupId === id ? null : id),
+  };
+}
+</script>

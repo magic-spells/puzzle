@@ -1,0 +1,8 @@
+{
+  "name": "field",
+  "description": "Labeled text input with hint/error helper text, danger invalid state, and full ARIA wiring",
+  "files": ["Field.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

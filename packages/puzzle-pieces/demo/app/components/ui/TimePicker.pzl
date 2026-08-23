@@ -1,0 +1,656 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ triggerId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+
+    <div class="relative">
+      <button
+        type="button"
+        class={ triggerClass }
+        id={ triggerId }
+        data-timepicker-trigger
+        aria-haspopup="dialog"
+        aria-expanded={ ariaExpanded }
+        aria-controls={ panelId }
+        aria-invalid={ invalid }
+        aria-describedby={ describedby }
+        disabled={ disabled }
+        @click={ onTriggerClick(event) }
+        @keydown={ onTriggerKey(event) }>
+        <svg
+          class="size-4 shrink-0 text-muted"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true">
+          <circle cx="10" cy="10" r="7" />
+          <path d="M10 6v4l2.5 2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="flex-1 truncate text-left { placeholderClass }">{ triggerLabel }</span>
+      </button>
+
+      {#if name}
+        <input type="hidden" name={ name } value={ hiddenValue } />
+      {/if}
+
+      {#if open}
+        <div
+          class={ panelClass }
+          id={ panelId }
+          role="dialog"
+          aria-modal="false"
+          aria-label={ dialogLabel }
+          data-timepicker-panel
+          style={ panelStyle }
+          @keydown:escape={ onEscape(event) }>
+          <div class="flex items-stretch gap-1">
+            {#for col in columns}
+              <div class="flex min-w-0 flex-col">
+                <div class="px-1 pb-1 text-center text-[11px] font-medium uppercase tracking-wide text-muted" aria-hidden="true">{ col.name }</div>
+                <ul
+                  class={ col.listClass }
+                  role="listbox"
+                  tabindex="0"
+                  aria-label={ col.name }
+                  aria-activedescendant={ col.activeId }
+                  data-tp-col={ col.key }
+                  @keydown={ onColKey(col, event) }>
+                  {#for opt in col.options}
+                    <li
+                      id={ opt.id }
+                      role="option"
+                      aria-selected={ opt.ariaSelected }
+                      data-active={ opt.activeAttr }
+                      class={ opt.rowClass }
+                      @click={ onPick(col, opt, event) }>
+                      <span class="tabular-nums">{ opt.label }</span>
+                    </li>
+                  {/for}
+                </ul>
+              </div>
+            {/for}
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    {#if error}
+      <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+    {:else if hint}
+      <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// TimePicker — a Field-shaped trigger + popover for choosing a time, built on the
+// DatePicker skeleton (trigger + absolute-positioned popover + optional-controlled
+// open + outside-click + auto-flip + label/hint/error) with the Calendar body
+// swapped for two-to-four scrolling listbox COLUMNS (hours, minutes, optional
+// seconds, plus an am/pm column in 12-hour mode). v1 is columns-only: no morph and
+// no segmented-input fallback (both deliberately out of scope — see the pieces spec).
+//
+//   <TimePicker value={ t } @change={ setTime } />                        // 24h HH:MM
+//   <TimePicker hourCycle={ 12 } value={ t } @change={ setTime } />       // am/pm
+//   <TimePicker seconds={ true } value={ t } @change={ setTime } />       // HH:MM:SS
+//   <TimePicker minuteStep={ 5 } value={ t } @change={ setTime } />       // thinned minutes
+//   <TimePicker value={ t } open={ open } @change={ setTime }
+//               @show={ onShow } @hide={ onHide } />                      // controlled open
+//   <TimePicker label="Start" hint="24-hour clock" error="Required"
+//               value={ t } name="start" @change={ setTime } />
+//
+// PROPS
+//   value        string   controlled "HH:MM" or "HH:MM:SS", ALWAYS 24-hour canonical
+//                         regardless of display. '' = no selection. Parent-owned:
+//                         the picker emits @change and the parent writes it back.
+//   open         boolean  OPTIONAL-CONTROLLED (DatePicker's shape): omit it and the
+//                         picker owns its open state; pass it and the parent owns it
+//                         (the picker only asks to open/close via @show/@hide).
+//   hourCycle    12 | 24  trigger label + column DISPLAY format (default 24). The
+//                         stored/emitted value is always 24-hour — display never
+//                         leaks into the value.
+//   seconds      boolean  show the seconds column (default false).
+//   minuteStep   number   thin the minutes column, e.g. 5 / 15 (default 1).
+//   secondStep   number   thin the seconds column (default 1).
+//   label        string   field label above the trigger.
+//   hint         string   helper text below the trigger.
+//   error        string   error text below the trigger; also paints the trigger
+//                         border danger and wires aria-invalid + aria-describedby
+//                         (replaces hint when both are set — Field's behavior).
+//   placeholder  string   trigger text when no value (default 'Pick a time').
+//   locale       string   BCP-47 tag for the Intl trigger label + am/pm column
+//                         labels (default: <html lang>, navigator.language, en-US).
+//   disabled     boolean  disables the trigger.
+//   name         string   emits a hidden <input> carrying the 24h value for posts.
+//   class        string   appended to the root element.
+//
+// CALLBACKS
+//   @change(value, event)  the new "HH:MM[:SS]" 24-hour string. Value-first. Fires on
+//                          every column pick (click / arrow / Enter) — the controlled
+//                          way; the popover does NOT close per pick.
+//   @show() / @hide()      fire on the user's open/close INTENT (trigger, Escape,
+//                          outside-click) so a controlled parent can flip `open`.
+//
+// POSITIONING & FOCUS. Placement is decided synchronously from the trigger's viewport
+// room the moment it opens (the popover has a near-fixed height), so the first render
+// is on the correct side; a follow-up offsetHeight measurement in a rAF corrects it if
+// the estimate was off. Focus lands in the hours column on open; ArrowLeft/Right move
+// between columns, ArrowUp/Down/Home/End move within a column (each move emits), Enter/
+// Space confirm + close, Escape closes and returns focus to the trigger. Outside-click
+// dismisses via a document pointerdown listener that lives only while open. The columns
+// track their highlighted option with aria-activedescendant — DOM focus stays on the
+// <ul>, never on an <li>, so the vdom never fights a browser focus move.
+
+let uid = 0;
+
+// Rough resting height of the popover (column height + header + padding), used for the
+// synchronous open-time flip decision before the panel has mounted to measure.
+const PANEL_EST_HEIGHT = 280;
+
+const TRIGGER_BASE =
+  'flex h-9 w-full items-center gap-2 rounded-lg border bg-surface px-3 ' +
+  'text-sm text-ink select-none transition-colors cursor-pointer ' +
+  'hover:border-border-strong ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'disabled:opacity-50 disabled:pointer-events-none disabled:cursor-default';
+const TRIGGER_OK = 'border-border outline-ring focus-visible:outline-ring';
+const TRIGGER_ERROR = 'border-danger outline-danger focus-visible:outline-danger';
+
+const PANEL_CARD =
+  'absolute left-0 z-50 overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-lg';
+
+const LIST_BASE =
+  'flex h-48 w-14 flex-col gap-0.5 overflow-y-auto rounded-lg px-1 py-1 ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+// ---- pure time helpers (inlined — the piece ships self-contained) -----------
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+// Parse a canonical 24-hour "HH:MM" / "HH:MM:SS" string into {h,m,s}, or null.
+function parseTime(value) {
+  if (typeof value !== 'string') return null;
+  const m = value.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  const s = m[3] != null ? Number(m[3]) : 0;
+  if (h > 23 || min > 59 || s > 59) return null;
+  return { h, m: min, s };
+}
+
+function compose(h, m, s, withSeconds) {
+  return withSeconds ? `${pad2(h)}:${pad2(m)}:${pad2(s)}` : `${pad2(h)}:${pad2(m)}`;
+}
+
+// 24-hour hour -> { dh: displayed 1..12, ap: 'am'|'pm' }.
+function to12(h24) {
+  const ap = h24 < 12 ? 'am' : 'pm';
+  let dh = h24 % 12;
+  if (dh === 0) dh = 12;
+  return { dh, ap };
+}
+
+// displayed 1..12 + meridiem -> 24-hour hour.
+function to24(dh, ap) {
+  let h = dh % 12; // 12 -> 0
+  if (ap === 'pm') h += 12;
+  return h;
+}
+
+function clampStep(v) {
+  const n = Math.floor(Number(v));
+  return n >= 1 && n <= 59 ? n : 1;
+}
+
+// Snap a 0..59 value to the nearest available option on a stepped grid.
+function snap(v, step) {
+  const last = Math.floor(59 / step) * step;
+  return Math.min(Math.max(0, Math.round(v / step) * step), last);
+}
+
+// Locale-correct am/pm labels, derived from Intl (never hardcode 'AM'/'PM').
+function meridiemLabels(locale) {
+  try {
+    const f = new Intl.DateTimeFormat(locale, { hour: 'numeric', hour12: true });
+    const pick = (h) =>
+      f.formatToParts(new Date(2000, 0, 1, h)).find((p) => p.type === 'dayPeriod')?.value;
+    return { am: pick(9) || 'AM', pm: pick(21) || 'PM' };
+  } catch (e) {
+    return { am: 'AM', pm: 'PM' };
+  }
+}
+
+export default class TimePicker extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._wasOpen = false;
+    this._pendingRestoreFocus = true;
+    // active = the highlighted option per column (24h canonical), seeded from
+    // `value` on open. It is the single source of truth for the column highlight
+    // while open; `value` (props) drives the checkmark + trigger label.
+    this.setData({ uncontrolledOpen: false, placement: 'bottom', active: { h: 0, m: 0, s: 0 } });
+  }
+
+  mounted() {
+    this._onDocPointer = (e) => {
+      if (!this._effectiveOpen()) return;
+      if (this.element && this.element.contains(e.target)) return;
+      this._requestClose({ restoreFocus: false });
+    };
+    this._syncOpenEffects();
+  }
+
+  destroyed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+  }
+
+  // ---- controlled / uncontrolled open resolution ---------------------------
+
+  _controlled() {
+    return this.props.open !== undefined;
+  }
+
+  _effectiveOpen() {
+    return this._controlled() ? !!this.props.open : !!this.getData().uncontrolledOpen;
+  }
+
+  _locale(props) {
+    return (
+      props.locale ||
+      (typeof document !== 'undefined' && document.documentElement.lang) ||
+      (typeof navigator !== 'undefined' && navigator.language) ||
+      'en-US'
+    );
+  }
+
+  _hourCycle(props) {
+    return Number(props.hourCycle) === 12 ? 12 : 24;
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  data(params, props) {
+    const prev = this.getData();
+    const open = this._effectiveOpen();
+    const base = props.id || `pieces-time-picker-${this._uid}`;
+
+    const hourCycle = this._hourCycle(props);
+    const showSeconds = !!props.seconds;
+    const minuteStep = clampStep(props.minuteStep);
+    const secondStep = clampStep(props.secondStep);
+
+    const value = typeof props.value === 'string' ? props.value : '';
+    const sel = parseTime(value);
+    const hasValue = !!sel;
+    const active = prev.active || { h: 0, m: 0, s: 0 };
+
+    const locale = this._locale(props);
+    const fmt = this.memo('trigfmt', [locale, hourCycle, showSeconds], () =>
+      new Intl.DateTimeFormat(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+        ...(showSeconds ? { second: '2-digit' } : {}),
+        hour12: hourCycle === 12,
+      })
+    );
+    const mer = this.memo('meridiem', [locale], () => meridiemLabels(locale));
+
+    const triggerLabel = hasValue
+      ? fmt.format(new Date(2000, 0, 1, sel.h, sel.m, sel.s))
+      : props.placeholder || 'Pick a time';
+
+    const activeAp = to12(active.h).ap;
+
+    // Build the columns. Each option carries its precomputed id / aria / class so
+    // the {#for} body stays a single <li>.
+    const columns = [];
+
+    // Hours.
+    const hourVals = [];
+    if (hourCycle === 12) {
+      for (let d = 1; d <= 12; d++) hourVals.push(to24(d, activeAp));
+    } else {
+      for (let h = 0; h < 24; h++) hourVals.push(h);
+    }
+    columns.push(
+      this._buildColumn('h', 'Hours', base, hourVals, (h24) => ({
+        value: h24,
+        label: pad2(hourCycle === 12 ? to12(h24).dh : h24),
+        selected: hasValue && sel.h === h24,
+        active: active.h === h24,
+      }))
+    );
+
+    // Minutes.
+    const minuteVals = [];
+    for (let m = 0; m < 60; m += minuteStep) minuteVals.push(m);
+    columns.push(
+      this._buildColumn('m', 'Minutes', base, minuteVals, (m) => ({
+        value: m,
+        label: pad2(m),
+        selected: hasValue && sel.m === m,
+        active: active.m === m,
+      }))
+    );
+
+    // Seconds (optional).
+    if (showSeconds) {
+      const secondVals = [];
+      for (let s = 0; s < 60; s += secondStep) secondVals.push(s);
+      columns.push(
+        this._buildColumn('s', 'Seconds', base, secondVals, (s) => ({
+          value: s,
+          label: pad2(s),
+          selected: hasValue && sel.s === s,
+          active: active.s === s,
+        }))
+      );
+    }
+
+    // Meridiem (12-hour mode only).
+    if (hourCycle === 12) {
+      columns.push(
+        this._buildColumn('ap', 'AM/PM', base, ['am', 'pm'], (ap) => ({
+          value: ap,
+          label: ap === 'am' ? mer.am : mer.pm,
+          selected: hasValue && to12(sel.h).ap === ap,
+          active: activeAp === ap,
+        }))
+      );
+    }
+
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const described = !!(error || hint);
+    const placement = (open && prev.placement) || 'bottom';
+
+    return {
+      open,
+      columns,
+      triggerLabel,
+      placeholderClass: hasValue ? 'text-ink' : 'text-muted',
+      label: props.label || '',
+      hint,
+      error,
+      invalid: error ? 'true' : false,
+      describedby: described ? `${base}-desc` : false,
+      descId: `${base}-desc`,
+      triggerId: `${base}-trigger`,
+      panelId: `${base}-panel`,
+      dialogLabel: props.label || 'Choose a time',
+      ariaExpanded: open ? 'true' : 'false',
+      disabled: !!props.disabled,
+      name: props.name || false,
+      hiddenValue: hasValue ? value : '',
+      placement,
+      rootClass: props.class || '',
+      triggerClass: [TRIGGER_BASE, error ? TRIGGER_ERROR : TRIGGER_OK].join(' '),
+      panelClass: [PANEL_CARD, placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'].join(' '),
+      panelStyle: '',
+    };
+  }
+
+  // Build one column render model: options + the active option's index/id for
+  // aria-activedescendant + keyboard nav.
+  _buildColumn(key, name, base, values, describe) {
+    const options = [];
+    let activeIndex = -1;
+    let activeId = '';
+    values.forEach((v, i) => {
+      const d = describe(v);
+      const id = `${base}-${key}-${i}`;
+      if (d.active) {
+        activeIndex = i;
+        activeId = id;
+      }
+      options.push({
+        id,
+        value: d.value,
+        label: d.label,
+        ariaSelected: d.selected ? 'true' : 'false',
+        activeAttr: d.active ? 'true' : false,
+        rowClass: [
+          'flex cursor-pointer items-center justify-center rounded-md px-2 py-1.5 text-sm select-none',
+          d.selected ? 'font-medium text-brand' : 'text-body',
+          d.active ? 'bg-surface-sunken' : 'hover:bg-surface-sunken',
+        ].join(' '),
+      });
+    });
+    return { key, name, listClass: LIST_BASE, activeIndex, activeId, options };
+  }
+
+  // ---- placement -----------------------------------------------------------
+
+  _decidePlacement() {
+    const trigger = this.element?.querySelector('[data-timepicker-trigger]');
+    if (!trigger || typeof window === 'undefined') return 'bottom';
+    const rect = trigger.getBoundingClientRect();
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    return below < PANEL_EST_HEIGHT && above > below ? 'top' : 'bottom';
+  }
+
+  _measurePlacement() {
+    const trigger = this.element?.querySelector('[data-timepicker-trigger]');
+    const panel = this.element?.querySelector('[data-timepicker-panel]');
+    if (!trigger || !panel || typeof window === 'undefined') return this.getData().placement;
+    const rect = trigger.getBoundingClientRect();
+    const panelH = panel.offsetHeight;
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    return panelH > below && above > below ? 'top' : 'bottom';
+  }
+
+  // ---- open / close intents ------------------------------------------------
+
+  _seedActive() {
+    const props = this.props;
+    const sel = parseTime(typeof props.value === 'string' ? props.value : '');
+    const minuteStep = clampStep(props.minuteStep);
+    const secondStep = clampStep(props.secondStep);
+    const active = sel
+      ? { h: sel.h, m: snap(sel.m, minuteStep), s: snap(sel.s, secondStep) }
+      : { h: 0, m: 0, s: 0 };
+    this.setData({ active });
+  }
+
+  _requestOpen() {
+    if (this._effectiveOpen()) return;
+    this._seedActive();
+    const placement = this._decidePlacement();
+
+    if (this._controlled()) {
+      this.setData({ placement });
+    } else {
+      this.setData({ uncontrolledOpen: true, placement });
+    }
+
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+
+    if (!this._controlled()) this.refresh();
+  }
+
+  _requestClose({ restoreFocus = true } = {}) {
+    if (!this._effectiveOpen()) return;
+    this._pendingRestoreFocus = restoreFocus;
+
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+
+    if (this._controlled()) return; // parent unmounts the panel; focus return in _onClosed
+
+    this.setData({ uncontrolledOpen: false });
+    this.refresh();
+  }
+
+  // ---- open / close side-effects -------------------------------------------
+
+  _syncOpenEffects() {
+    const open = this._effectiveOpen();
+    if (open && !this._wasOpen) {
+      this._wasOpen = true;
+      this._onOpened();
+    } else if (!open && this._wasOpen) {
+      this._wasOpen = false;
+      this._onClosed();
+    }
+  }
+
+  afterUpdate() {
+    this._syncOpenEffects();
+  }
+
+  _onOpened() {
+    document.addEventListener('pointerdown', this._onDocPointer);
+
+    requestAnimationFrame(() => {
+      if (!this._effectiveOpen() || !this.element) return;
+      const corrected = this._measurePlacement();
+      if (corrected !== this.getData().placement) {
+        this.setData({ placement: corrected });
+        this.refresh();
+      }
+      // Land focus in the hours column and scroll each column's active row in.
+      this.element.querySelector('[data-tp-col="h"]')?.focus({ preventScroll: true });
+      this._scrollActives();
+    });
+  }
+
+  _onClosed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this.setData({ placement: 'bottom' });
+    if (this._pendingRestoreFocus) {
+      this.element?.querySelector('[data-timepicker-trigger]')?.focus();
+    }
+    this._pendingRestoreFocus = true;
+  }
+
+  _scrollActives() {
+    if (!this.element) return;
+    this.element.querySelectorAll('[data-tp-col]').forEach((list) => {
+      list.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'center' });
+    });
+  }
+
+  // ---- selection -----------------------------------------------------------
+
+  // Apply a pick in one column: recompute the composite 24h value, update the
+  // active highlight, and emit @change. Parent owns `value` and writes it back.
+  _applyPick(key, val, event) {
+    const cur = this.getData().active || { h: 0, m: 0, s: 0 };
+    let { h, m, s } = cur;
+    if (key === 'h') h = val;
+    else if (key === 'm') m = val;
+    else if (key === 's') s = val;
+    else if (key === 'ap') h = to24(to12(h).dh, val);
+
+    this.setData({ active: { h, m, s } });
+    this.refresh();
+
+    const { change } = this.props;
+    if (typeof change === 'function') change(compose(h, m, s, !!this.props.seconds), event);
+
+    // Keep the just-picked column's active row scrolled into view next frame.
+    requestAnimationFrame(() => this._scrollActives());
+  }
+
+  events = {
+    onTriggerClick: () => {
+      if (this.props.disabled) return;
+      if (this._effectiveOpen()) this._requestClose({ restoreFocus: true });
+      else this._requestOpen();
+    },
+
+    onTriggerKey: (event) => {
+      if (this.props.disabled || this._effectiveOpen()) return;
+      if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this._requestOpen();
+      }
+    },
+
+    onEscape: (event) => {
+      if (!this._effectiveOpen()) return;
+      event.preventDefault();
+      this._requestClose({ restoreFocus: true });
+    },
+
+    // Click a specific option row.
+    onPick: (col, opt, event) => {
+      this._applyPick(col.key, opt.value, event);
+    },
+
+    // Per-column keyboard. Up/Down/Home/End move within the column (each move
+    // emits); Left/Right move focus between columns; Enter/Space confirm + close;
+    // Escape closes. DOM focus stays on the <ul>; the active option is tracked via
+    // aria-activedescendant.
+    onColKey: (col, event) => {
+      const options = col.options;
+      const len = options.length;
+      if (!len) return;
+      const cur = col.activeIndex < 0 ? 0 : col.activeIndex;
+
+      switch (event.key) {
+        case 'ArrowDown': {
+          event.preventDefault();
+          const next = Math.min(len - 1, cur + 1);
+          this._applyPick(col.key, options[next].value, event);
+          break;
+        }
+        case 'ArrowUp': {
+          event.preventDefault();
+          const prev = Math.max(0, cur - 1);
+          this._applyPick(col.key, options[prev].value, event);
+          break;
+        }
+        case 'Home':
+          event.preventDefault();
+          this._applyPick(col.key, options[0].value, event);
+          break;
+        case 'End':
+          event.preventDefault();
+          this._applyPick(col.key, options[len - 1].value, event);
+          break;
+        case 'ArrowRight':
+        case 'ArrowLeft': {
+          event.preventDefault();
+          const cols = Array.from(this.element?.querySelectorAll('[data-tp-col]') || []);
+          const idx = cols.findIndex((c) => c.getAttribute('data-tp-col') === col.key);
+          const to = event.key === 'ArrowRight' ? idx + 1 : idx - 1;
+          if (to >= 0 && to < cols.length) cols[to].focus({ preventScroll: true });
+          break;
+        }
+        case 'Enter':
+        case ' ': {
+          event.preventDefault();
+          // Confirm the current active value (guarantees an emit even if untouched)
+          // and close, returning focus to the trigger.
+          this._applyPick(col.key, options[cur].value, event);
+          this._requestClose({ restoreFocus: true });
+          break;
+        }
+        case 'Escape':
+          event.preventDefault();
+          this._requestClose({ restoreFocus: true });
+          break;
+        case 'Tab':
+          // Let focus move naturally out of the popover; close.
+          this._requestClose({ restoreFocus: false });
+          break;
+        default:
+          break;
+      }
+    },
+  };
+}
+</script>

@@ -1,0 +1,148 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Avatar Group</h1>
+        <p class="mt-2 text-body">
+          An overlapping stack of avatars rendered from an array, with a "+N"
+          overflow chip once the count exceeds a max. Composes the Avatar
+          piece for each disc, so image/initials/glyph fallback behavior
+          matches Avatar exactly.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero } tall={ false }>
+        <AvatarGroup avatars={ team } max={ 4 } size="lg" label="5 collaborators"/>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours.
+          AvatarGroup composes the Avatar piece, so copy both:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="overflow" title="Overflow chip" code={ codeOverflow } tall={ false }>
+          <AvatarGroup avatars={ team } max={ 3 }/>
+        </ExampleBox>
+
+        <ExampleBox id="no-overflow" title="No overflow" code={ codeNoOverflow } tall={ false }>
+          <AvatarGroup avatars={ pair } max={ 4 }/>
+        </ExampleBox>
+
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes } tall={ false }>
+          <div class="flex flex-col items-start gap-4">
+            <AvatarGroup avatars={ team } max={ 4 } size="sm"/>
+            <AvatarGroup avatars={ team } max={ 4 } size="md"/>
+            <AvatarGroup avatars={ team } max={ 4 } size="lg"/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="large-team" title="Large team" code={ codeLargeTeam } tall={ false }>
+          <AvatarGroup avatars={ largeTeam } max={ 4 } label="16 collaborators"/>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import AvatarGroup from '@/components/ui/AvatarGroup.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for AvatarGroup — follows the Avatar exemplar shape (header →
+// hero ExampleBox → Installation → titled example sections → Toc). Purely
+// presentational piece, so no interactive state — data() just returns the
+// example avatar arrays, code consts, and toc.
+const installCmd = 'puzzle add piece avatar-group';
+const usageImport = `import AvatarGroup from '@/components/ui/AvatarGroup.pzl';`;
+const usageMarkup = `<AvatarGroup avatars={[ { name: 'Ada Lovelace' }, { src: '/grace.jpg', name: 'Grace Hopper' }, { name: 'Alan Turing' }, { name: 'Katherine Johnson' }, { name: 'Linus Torvalds' }, ]} max={ 4 } size="lg" label="5 collaborators" />`;
+
+const codeHero = `<AvatarGroup
+  avatars={[
+    { name: 'Ada Lovelace' },
+    { src: '/grace.jpg', name: 'Grace Hopper' },
+    { name: 'Alan Turing' },
+    { name: 'Katherine Johnson' },
+    { name: 'Linus Torvalds' },
+  ]}
+  max={ 4 }
+  size="lg"
+  label="5 collaborators"
+/>`;
+
+const codeOverflow = `// 5 avatars, max=3 — the remaining 2 fold into a "+2" chip.
+<AvatarGroup avatars={ team } max={ 3 } />`;
+
+const codeNoOverflow = `// avatars.length <= max — every avatar renders, no chip.
+<AvatarGroup avatars={[
+  { name: 'Ada Lovelace' },
+  { name: 'Grace Hopper' },
+]} max={ 4 } />`;
+
+const codeSizes = `<AvatarGroup avatars={ team } max={ 4 } size="sm" />
+<AvatarGroup avatars={ team } max={ 4 } size="md" />
+<AvatarGroup avatars={ team } max={ 4 } size="lg" />`;
+
+const codeLargeTeam = `// 16 avatars, max=4 — the chip reads "+12".
+<AvatarGroup avatars={ largeTeam } max={ 4 } label="16 collaborators" />`;
+
+const NAMES = [
+  'Ada Lovelace', 'Grace Hopper', 'Alan Turing', 'Katherine Johnson',
+  'Linus Torvalds', 'Barbara Liskov', 'Margaret Hamilton', 'Dennis Ritchie',
+  'Radia Perlman', 'Tim Berners-Lee', 'Hedy Lamarr', 'John McCarthy',
+  'Frances Allen', 'Vint Cerf', 'Shafi Goldwasser', 'Donald Knuth',
+];
+
+export default class AvatarGroupDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeOverflow,
+      codeNoOverflow,
+      codeSizes,
+      codeLargeTeam,
+      team: [
+        { name: 'Ada Lovelace' },
+        { src: 'https://i.pravatar.cc/80?img=13', name: 'Grace Hopper' },
+        { name: 'Alan Turing' },
+        { name: 'Katherine Johnson' },
+        { name: 'Linus Torvalds' },
+      ],
+      pair: [
+        { name: 'Ada Lovelace' },
+        { name: 'Grace Hopper' },
+      ],
+      largeTeam: NAMES.map((name) => ({ name })),
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Overflow chip', href: '#overflow' },
+        { label: 'No overflow', href: '#no-overflow' },
+        { label: 'Sizes', href: '#sizes' },
+        { label: 'Large team', href: '#large-team' },
+      ],
+    };
+  }
+}
+</script>

@@ -1,0 +1,72 @@
+<puzzle-view>
+  <label class={ wrapperClass }>
+    <span class="relative inline-flex shrink-0 mt-0.5">
+      <input
+        type="checkbox"
+        class="peer size-4 appearance-none rounded border border-border-strong bg-surface cursor-pointer disabled:cursor-not-allowed transition-colors checked:bg-brand checked:border-brand focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
+        checked={ checked }
+        disabled={ disabled }
+        name={ name }
+        value={ value }
+        @change={ handleChange } />
+      <svg
+        class="pointer-events-none absolute inset-0 size-4 text-brand-ink opacity-0 transition-opacity peer-checked:opacity-100"
+        viewBox="0 0 16 16"
+        fill="none"
+        aria-hidden="true">
+        <path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </span>
+    {#if label}
+      <span class="min-w-0">
+        <span class="block text-sm text-ink">{ label }</span>
+        {#if hint}
+          <span class="block text-sm text-muted">{ hint }</span>
+        {/if}
+      </span>
+    {/if}
+  </label>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Checkbox — a real <input type="checkbox"> restyled with appearance-none, so
+// native semantics and keyboard behavior come for free. The whole row is a
+// <label>, so a click anywhere (box, label text, or hint) toggles it — no id
+// plumbing. The box paints via checked: variants; the tick is an inline SVG
+// revealed with peer-checked. `label` is optional — omit it and only the box
+// renders, leaving the caller to supply their own label markup.
+//
+//   <Checkbox label="Subscribe" checked={ subscribed } @change={ setSub }/>
+//   <Checkbox label="Ship it" hint="Applies to all items" @change={ toggle }/>
+//   <Checkbox name="opt" value="a" checked={ on } @change={ toggle }/>
+const WRAPPER =
+  'inline-flex items-start gap-2 select-none cursor-pointer';
+
+export default class Checkbox extends PuzzleView {
+  data(params, props) {
+    const disabled = !!props.disabled;
+    return {
+      wrapperClass: [
+        WRAPPER,
+        disabled ? 'opacity-50 cursor-not-allowed' : '',
+        props.class || '',
+      ].join(' '),
+      checked: !!props.checked,
+      disabled,
+      label: props.label || '',
+      hint: props.hint || '',
+      name: props.name || false,
+      value: props.value || 'on',
+    };
+  }
+
+  events = {
+    handleChange: (event) => {
+      const { change } = this.props;
+      if (typeof change === 'function') change(event.target.checked, event);
+    },
+  };
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "sheet",
+  "description": "One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, drag and flick gestures, a dismiss policy, entrance and exit effects, and an optional container-transform flight out of the trigger that opened it; wraps the @magic-spells/sheet web component rather than porting it",
+  "files": ["Sheet.pzl"],
+  "registryDependencies": [],
+  "dependencies": ["@magic-spells/sheet", "@magic-spells/dialog-panel"],
+  "targetDir": "app/components/ui"
+}

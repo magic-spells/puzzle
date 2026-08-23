@@ -1,0 +1,368 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <span
+      class="inline-flex"
+      data-popconfirm-trigger
+      @click={ toggle }
+      @keydown:escape={ onEscape(event) }>
+      <Slot name="trigger">
+        <button type="button" class={ triggerClass }>{ triggerLabel }</button>
+      </Slot>
+    </span>
+
+    {#if open}
+      <div
+        class={ panelClass }
+        id={ panelId }
+        role="dialog"
+        aria-labelledby={ messageId }
+        aria-describedby={ describedby }
+        data-popconfirm-panel
+        @keydown:escape={ onEscape(event) }>
+        <p id={ messageId } class="text-sm font-medium text-ink">{ message }</p>
+        {#if description}
+          <p id={ descId } class="mt-1 text-sm text-muted">{ description }</p>
+        {/if}
+        <div class="mt-3 flex justify-end gap-2">
+          <button
+            type="button"
+            class={ cancelClass }
+            data-popconfirm-cancel
+            @click={ handleCancel(event) }>
+            { cancelLabel }
+          </button>
+          <button
+            type="button"
+            class={ confirmClass }
+            data-popconfirm-confirm
+            @click={ handleConfirm(event) }>
+            { confirmLabel }
+          </button>
+        </div>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Popconfirm — a lightweight inline confirmation popover anchored to a trigger, for
+// low-stakes confirmations ("Delete this item?") that don't warrant a full modal.
+// Distinct from AlertDialog, which is a focus-trapping native <dialog> modal: this is
+// a small popover bubble next to the trigger, NOT a dialog.
+//
+// It marries Popover's overlay machinery — a named "trigger" slot holding the caller's
+// own button, an absolute panel inside a relative root, an outside-click document
+// listener attached only while open, and open-time flip-if-no-space measurement — with
+// AlertDialog's confirm/cancel footer (Button.pzl's exact recipes; the `danger` variant
+// tints the confirm button destructive) and HoverCard's optional-controlled `open`.
+//
+//   <Popconfirm message="Delete this item?" @confirm={ remove }>
+//     <button slot="trigger" class="…">Delete</button>
+//   </Popconfirm>
+//
+//   <Popconfirm
+//     message="Delete this file?"
+//     description="This cannot be undone."
+//     confirmLabel="Delete"
+//     variant="danger"
+//     @confirm={ remove }
+//     @cancel={ dismiss }>
+//     <button slot="trigger" class="…">Delete</button>
+//   </Popconfirm>
+//
+// TRIGGER. Pass `label` for the stock button, or supply your OWN focusable control in the
+// "trigger" slot. Custom triggers replace the fallback entirely and must carry their own
+// accessible name. The wrapper delegates click-to-open while popup ARIA is synchronized
+// imperatively onto the real focusable control in either mode.
+//
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
+// a real secondary button whose text comes from `label`. Fill slot="trigger" with your
+// own element and it REPLACES that fallback — a filled slot wins over `label`.
+//
+// open — OPTIONAL-CONTROLLED (HoverCard's shape): omit it and the piece owns its open
+// state; pass it and the parent owns it — the piece only ASKS to open/close via
+// @show / @hide and reflects the prop. @confirm and @cancel are the action callbacks
+// (value-less here — a confirmation carries no value); both fire and then close.
+//
+// DISMISSAL = CANCEL. Escape and outside-click route through the cancel path (fire
+// @cancel), matching a user's mental model — dismissing a confirmation is declining it,
+// the same reasoning AlertDialog uses for Escape.
+//
+// FOCUS. On open, focus moves to the Cancel button (the safe default for a possibly
+// destructive prompt — showModal-free, so we focus it imperatively once the panel
+// mounts). On close via a keyboard/explicit path it returns to the trigger; an
+// outside-click close does not steal focus back (Popover's restoreFocus:false grain).
+// Focus is deliberately NOT trapped — this is a popover, not a modal.
+
+let uid = 0;
+
+const PANEL_BASE =
+  'absolute z-50 w-64 max-w-xs rounded-lg border border-border bg-surface p-4 ' +
+  'shadow-lg text-body';
+
+// Horizontal anchoring, keyed off the relative root's edges (Popover's ALIGN).
+const ALIGN = {
+  start: 'left-0',
+  center: 'left-1/2 -translate-x-1/2',
+  end: 'right-0',
+};
+
+// Footer button recipes copied verbatim from Button.pzl (as AlertDialog does) so the
+// actions render identically to <Button size="sm">. BASE + size sm, then the surface.
+const BTN_BASE =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
+  'rounded-lg font-medium cursor-pointer transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none h-8 px-3 text-sm';
+const BTN_PRIMARY = 'bg-brand text-brand-ink hover:bg-brand-dark';
+const BTN_DANGER = 'bg-danger text-danger-ink hover:bg-danger-dark';
+const BTN_SECONDARY = 'bg-surface-sunken text-ink hover:bg-border';
+const BTN_OUTLINE =
+  'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken';
+
+export default class Popconfirm extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._wasOpen = false; // last effective-open seen by the transition detector
+    this._restoreOnClose = false; // whether the pending close should refocus the trigger
+    this._ariaTarget = null;
+    this._ariaPrev = null;
+    // Local UI state (uncontrolled mode + placement). `placement` is the effective
+    // (possibly flipped) side; it reflects the requested side while closed.
+    this.setData({ uncontrolledOpen: false, placement: 'top' });
+  }
+
+  // Outside-pointerdown close, attached only while open. Guarded by containment so the
+  // press that OPENED the panel (still on the trigger, inside this.element) never
+  // immediately closes it. An outside dismiss = cancel, but does not steal focus back.
+  mounted() {
+    this._onDocPointer = (e) => {
+      if (!this._effectiveOpen()) return;
+      if (this.element && this.element.contains(e.target)) return;
+      this._requestCancel({ restoreFocus: false });
+    };
+    this._syncTriggerAria();
+    // Cover the parent mounting us already-open (controlled open={ true }).
+    this._syncOpenEffects();
+  }
+
+  destroyed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this._restoreTriggerAria();
+  }
+
+  // ---- controlled / uncontrolled open resolution ---------------------------
+
+  _controlled() {
+    return this.props.open !== undefined;
+  }
+
+  _effectiveOpen() {
+    return this._controlled() ? !!this.props.open : !!this.getData().uncontrolledOpen;
+  }
+
+  _side() {
+    return this.props.placement === 'bottom' ? 'bottom' : 'top';
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  data(params, props) {
+    const prev = this.getData();
+    const open = this._effectiveOpen();
+    const side = this._side();
+    const placement = (open && prev.placement) || side;
+    const align = props.align === 'start' ? 'start' : props.align === 'end' ? 'end' : 'center';
+    const id = props.id || `pieces-popconfirm-${this._uid}`;
+    const description = props.description != null ? String(props.description) : '';
+
+    return {
+      open,
+      side,
+      placement,
+      message: props.message != null ? String(props.message) : '',
+      description,
+      triggerLabel: props.label != null ? String(props.label) : '',
+      panelId: id,
+      messageId: `${id}-message`,
+      descId: `${id}-desc`,
+      describedby: description ? `${id}-desc` : false,
+      confirmLabel: props.confirmLabel != null ? String(props.confirmLabel) : 'Confirm',
+      cancelLabel: props.cancelLabel != null ? String(props.cancelLabel) : 'Cancel',
+      rootClass: ['relative inline-block', props.class || ''].join(' '),
+      panelClass: [
+        PANEL_BASE,
+        placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
+        ALIGN[align],
+      ].join(' '),
+      cancelClass: [BTN_BASE, BTN_OUTLINE].join(' '),
+      confirmClass: [BTN_BASE, props.variant === 'danger' ? BTN_DANGER : BTN_PRIMARY].join(' '),
+      triggerClass: [BTN_BASE, BTN_SECONDARY].join(' '),
+    };
+  }
+
+  // ---- open / close intents ------------------------------------------------
+
+  _requestOpen() {
+    if (this._effectiveOpen()) return;
+    const side = this._side();
+    // Stash the side FIRST so it's in place before a controlled parent's @show handler
+    // synchronously flips `open` and re-renders.
+    if (this._controlled()) {
+      this.setData({ placement: side });
+    } else {
+      this.setData({ uncontrolledOpen: true, placement: side });
+    }
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+    if (!this._controlled()) this.refresh();
+  }
+
+  // Close the bubble. `restoreFocus` decides whether focus returns to the trigger when
+  // the panel unmounts (the transition detector reads the flag in _onClosed).
+  _requestHide({ restoreFocus }) {
+    if (!this._effectiveOpen()) return;
+    this._restoreOnClose = !!restoreFocus;
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+    if (this._controlled()) return; // parent unmounts the panel via the prop flip
+    this.setData({ uncontrolledOpen: false });
+    this.refresh();
+  }
+
+  _requestConfirm({ restoreFocus = true } = {}) {
+    if (!this._effectiveOpen()) return;
+    const { confirm } = this.props;
+    if (typeof confirm === 'function') confirm();
+    this._requestHide({ restoreFocus });
+  }
+
+  _requestCancel({ restoreFocus = true } = {}) {
+    if (!this._effectiveOpen()) return;
+    const { cancel } = this.props;
+    if (typeof cancel === 'function') cancel();
+    this._requestHide({ restoreFocus });
+  }
+
+  // ---- open / close side-effects (driven by the effective-open transition) --
+
+  _syncOpenEffects() {
+    const open = this._effectiveOpen();
+    if (open && !this._wasOpen) {
+      this._wasOpen = true;
+      this._onOpened();
+    } else if (!open && this._wasOpen) {
+      this._wasOpen = false;
+      this._onClosed();
+    }
+  }
+
+  afterUpdate() {
+    this._syncOpenEffects();
+    this._syncTriggerAria();
+  }
+
+  _onOpened() {
+    document.addEventListener('pointerdown', this._onDocPointer);
+    // Move focus onto the Cancel button — the safe default for a confirmation. The panel
+    // was rendered this update, so it exists now.
+    this.element?.querySelector('[data-popconfirm-cancel]')?.focus();
+    // Correct the side against the panel's real height once layout settles
+    // (Popover's flip-if-no-space measurement).
+    requestAnimationFrame(() => {
+      if (!this._effectiveOpen() || !this.element) return;
+      const next = this._measurePlacement(this._side());
+      if (next !== this.getData().placement) {
+        this.setData({ placement: next });
+        this.refresh();
+      }
+    });
+  }
+
+  _onClosed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this.setData({ placement: this._side() });
+    if (this._restoreOnClose) {
+      this._restoreOnClose = false;
+      this._triggerFocusEl()?.focus();
+    }
+  }
+
+  // The consumer's focusable trigger element inside the "trigger" slot (fall back to the
+  // slot wrapper itself if they supplied non-focusable content).
+  _triggerFocusEl() {
+    const wrap = this.element?.querySelector('[data-popconfirm-trigger]');
+    if (!wrap) return null;
+    return (
+      wrap.querySelector(
+        'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      ) || wrap
+    );
+  }
+
+  _syncTriggerAria() {
+    const trig = this._triggerFocusEl();
+    if (!trig || trig === this.element) return;
+    if (this._ariaTarget !== trig) {
+      this._restoreTriggerAria();
+      this._ariaTarget = trig;
+      this._ariaPrev = {
+        haspopup: trig.getAttribute('aria-haspopup'),
+        controls: trig.getAttribute('aria-controls'),
+        expanded: trig.getAttribute('aria-expanded'),
+      };
+    }
+    trig.setAttribute('aria-haspopup', 'dialog');
+    trig.setAttribute('aria-controls', this.getData().panelId);
+    trig.setAttribute('aria-expanded', this.getData().open ? 'true' : 'false');
+  }
+
+  _restoreTriggerAria() {
+    if (!this._ariaTarget || !this._ariaPrev) return;
+    for (const [name, value] of Object.entries(this._ariaPrev)) {
+      const attribute = name === 'haspopup' ? 'aria-haspopup' : `aria-${name}`;
+      if (value == null) this._ariaTarget.removeAttribute(attribute);
+      else this._ariaTarget.setAttribute(attribute, value);
+    }
+    this._ariaTarget = null;
+    this._ariaPrev = null;
+  }
+
+  // Flip to the opposite side only when the panel doesn't fit on the requested side AND
+  // the opposite side has more room — otherwise stay put.
+  _measurePlacement(side) {
+    const trigger = this.element?.querySelector('[data-popconfirm-trigger]');
+    const panel = this.element?.querySelector('[data-popconfirm-panel]');
+    if (!trigger || !panel || typeof window === 'undefined') return side;
+    const rect = trigger.getBoundingClientRect();
+    const panelH = panel.offsetHeight;
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    if (side === 'bottom') return panelH > below && above > below ? 'top' : 'bottom';
+    return panelH > above && below > above ? 'bottom' : 'top';
+  }
+
+  events = {
+    // Trigger click toggles the bubble. Opening: the doc pointerdown listener is only
+    // attached in _onOpened (after this render), so the opening click can't self-close.
+    toggle: () => {
+      if (this._effectiveOpen()) this._requestCancel({ restoreFocus: true });
+      else this._requestOpen();
+    },
+
+    handleConfirm: () => this._requestConfirm({ restoreFocus: true }),
+    handleCancel: () => this._requestCancel({ restoreFocus: true }),
+
+    // Escape dismisses (= cancel) from either the trigger or inside the panel, and
+    // returns focus to the trigger.
+    onEscape: (event) => {
+      if (!this._effectiveOpen()) return;
+      event.preventDefault();
+      this._requestCancel({ restoreFocus: true });
+    },
+  };
+}
+</script>

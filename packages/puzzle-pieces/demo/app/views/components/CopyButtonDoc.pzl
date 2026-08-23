@@ -1,0 +1,166 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Copy Button</h1>
+        <p class="mt-2 text-body">
+          A click-to-copy button. Writes a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
+          to the clipboard, then shows a check icon and swapped label for about 1.5 seconds before
+          reverting. Fires a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@copy</code>
+          callback after a successful copy.
+        </p>
+      </header>
+
+      <ExampleBox tall={ false } code={ codeHero }>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <CopyButton value={ apiKey } @copy={ onCopied }/>
+          <CopyButton value={ shareUrl } label="Copy link" @copy={ onCopied }/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="icon-only" title="Icon-only" tall={ false } code={ codeIconOnly }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <CopyButton value={ apiKey } @copy={ onCopied }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="with-label" title="With a label" tall={ false } code={ codeWithLabel }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <CopyButton value={ shareUrl } label="Copy link" @copy={ onCopied }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="variants" title="Variants" tall={ false } code={ codeVariants }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <CopyButton value={ apiKey } label="Ghost" variant="ghost" @copy={ onCopied }/>
+            <CopyButton value={ apiKey } label="Outline" variant="outline" @copy={ onCopied }/>
+            <CopyButton value={ apiKey } label="Secondary" variant="secondary" @copy={ onCopied }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="sizes" title="Sizes" tall={ false } code={ codeSizes }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <CopyButton value={ apiKey } size="sm" @copy={ onCopied }/>
+            <CopyButton value={ apiKey } size="md" @copy={ onCopied }/>
+            <CopyButton value={ apiKey } size="lg" @copy={ onCopied }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="snippet" title="Copying a code snippet" code={ codeSnippet }>
+          <div class="w-full max-w-md">
+            <div class="flex items-center justify-between rounded-lg border border-border bg-surface-sunken px-3 py-2">
+              <code class="truncate font-mono text-[13px] text-ink">{ installSnippet }</code>
+              <CopyButton value={ installSnippet } class="ml-2 shrink-0" @copy={ onCopied }/>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" tall={ false } code={ codeDisabled }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <CopyButton value={ apiKey } label="Copy" disabled/>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import CopyButton from '@/components/ui/CopyButton.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+// Docs page for CopyButton, mirroring ButtonDoc's exemplar shape (header →
+// hero ExampleBox → Installation → titled example sections → Toc). The demo
+// values are inert strings — clicking any example writes them to the real
+// clipboard via navigator.clipboard, so the copied state and the @copy
+// callback are both genuinely exercised in the browser.
+const installCmd = 'puzzle add piece copy-button';
+const usageImport = `import CopyButton from '@/components/ui/CopyButton.pzl';`;
+const usageMarkup = `<CopyButton value={ apiKey } @copy={ onCopied }/>`;
+
+const apiKey = 'sk_live_51H8x2KJvR9pT4mQdZfL7bN0';
+const shareUrl = 'https://puzzle-pieces.dev/components/copy-button';
+const installSnippet = 'npm install @magic-spells/puzzle';
+
+const codeHero = `<CopyButton value={ apiKey } @copy={ onCopied }/>
+<CopyButton value={ shareUrl } label="Copy link" @copy={ onCopied }/>`;
+
+const codeIconOnly = `<CopyButton value={ apiKey } @copy={ onCopied }/>`;
+
+const codeWithLabel = `<CopyButton value={ shareUrl } label="Copy link" @copy={ onCopied }/>`;
+
+const codeVariants = `<CopyButton value={ apiKey } label="Ghost" variant="ghost" @copy={ onCopied }/>
+<CopyButton value={ apiKey } label="Outline" variant="outline" @copy={ onCopied }/>
+<CopyButton value={ apiKey } label="Secondary" variant="secondary" @copy={ onCopied }/>`;
+
+const codeSizes = `<CopyButton value={ apiKey } size="sm" @copy={ onCopied }/>
+<CopyButton value={ apiKey } size="md" @copy={ onCopied }/>
+<CopyButton value={ apiKey } size="lg" @copy={ onCopied }/>`;
+
+const codeSnippet = `<div class="flex items-center justify-between rounded-lg border border-border bg-surface-sunken px-3 py-2">
+  <code>{ installSnippet }</code>
+  <CopyButton value={ installSnippet } @copy={ onCopied }/>
+</div>`;
+
+const codeDisabled = `<CopyButton value={ apiKey } label="Copy" disabled/>`;
+
+export default class CopyButtonDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      apiKey,
+      shareUrl,
+      installSnippet,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeIconOnly,
+      codeWithLabel,
+      codeVariants,
+      codeSizes,
+      codeSnippet,
+      codeDisabled,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Icon-only', href: '#icon-only' },
+        { label: 'With a label', href: '#with-label' },
+        { label: 'Variants', href: '#variants' },
+        { label: 'Sizes', href: '#sizes' },
+        { label: 'Copying a code snippet', href: '#snippet' },
+        { label: 'Disabled', href: '#disabled' },
+      ],
+    };
+  }
+
+  events = {
+    onCopied: (value) => toast({ message: `Copied "${value}" to clipboard.`, variant: 'success' }),
+  };
+}
+</script>

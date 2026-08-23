@@ -1,0 +1,258 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full max-w-5xl min-w-0">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Theming & tokens</h1>
+        <p class="mt-2 text-body">
+          Every Puzzle Piece styles itself through one small set of semantic tokens —
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">bg-surface</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">text-ink</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">bg-brand</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">border-border</code> —
+          never raw colors. Edit the values in one place and your whole UI re-skins. This is
+          the “make it yours” layer.
+        </p>
+      </header>
+
+      <div class="mb-12 rounded-xl border border-border bg-brand-tint p-4">
+        <p class="text-sm/relaxed text-ink">
+          <span class="font-semibold">Every swatch below is live.</span> Each chip is a bare
+          <code class="rounded bg-surface px-1.5 py-0.5 font-mono text-[12px] text-ink">{ bgToken }</code>
+          div rendered in this page’s own theme. Flip the theme toggle in the header and
+          watch them all resolve to their dark values — that is the entire mechanism, on display.
+        </p>
+      </div>
+
+      <section id="how-it-works" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">How it works</h2>
+        <p class="mb-3 text-sm/relaxed text-body">
+          Tokens live in a Tailwind v4
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@theme</code>
+          block. Each one is a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">light-dark()</code>
+          pair, resolved by the element’s
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">color-scheme</code>.
+          A manual switcher only has to set
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">data-theme</code>
+          on <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ htmlTag }</code> —
+          that flips <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">color-scheme</code>,
+          which also keeps native UI (form controls, scrollbars, dialog backdrops) in step. No
+          duplicate dark-mode class list, no per-component overrides.
+        </p>
+        <CodeBlock code={ mechanismSnippet } lang="css"/>
+      </section>
+
+      <section id="schemes" class="mt-14 scroll-mt-20">
+        <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">Schemes</h2>
+        <p class="max-w-2xl text-sm/relaxed text-body">
+          Puzzle Pieces includes four schemes: Default, Warm, Void, and Dim. The variants
+          live in
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">registry/theme/*.css</code>
+          as drop-in replacements for
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">pieces.css</code>.
+          Every scheme contains both light and dark modes, so the existing theme switcher
+          keeps working unchanged.
+        </p>
+      </section>
+
+      <section id="text" class="mt-14 scroll-mt-20">
+        <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">Text & ink</h2>
+        <p class="mb-5 max-w-2xl text-sm/relaxed text-body">
+          Four text weights, darkest to faintest. Apply them with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ textToken }</code>.
+        </p>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {#for t in textTokens}
+            <div key={ t.name } class="rounded-xl border border-border bg-surface p-4">
+              <p class={ t.sample }>Ag</p>
+              <p class="mt-3 font-mono text-[13px] text-ink">{ t.cls }</p>
+              <p class="mt-0.5 text-xs/relaxed text-muted">{ t.role }</p>
+            </div>
+          {/for}
+        </div>
+      </section>
+
+      {#for g in colorGroups}
+        <section id={ g.id } key={ g.id } class="mt-14 scroll-mt-20">
+          <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">{ g.title }</h2>
+          <p class="mb-5 max-w-2xl text-sm/relaxed text-body">{ g.desc }</p>
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {#for t in g.tokens}
+              <div key={ t.name } class="rounded-xl border border-border bg-surface p-3">
+                <div class={ t.chip }></div>
+                <p class="mt-2.5 font-mono text-[13px] text-ink">{ t.cls }</p>
+                <p class="mt-0.5 text-xs/relaxed text-muted">{ t.role }</p>
+              </div>
+            {/for}
+          </div>
+        </section>
+      {/for}
+
+      <section id="charts" class="mt-14 scroll-mt-20">
+        <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">Chart palette</h2>
+        <p class="mb-5 max-w-2xl text-sm/relaxed text-body">
+          Eight categorical series colors, assigned in fixed slot order (1 → 8),
+          never cycled. Validated for colorblind safety and consistent lightness/chroma bands
+          in both light and dark. Chart pieces read these as
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">chart-1</code>
+          through
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">chart-8</code>.
+        </p>
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
+          {#for t in chartTokens}
+            <div key={ t.name } class="rounded-xl border border-border bg-surface p-3">
+              <div class={ t.chip }></div>
+              <p class="mt-2.5 font-mono text-[12px] text-ink">{ t.short }</p>
+            </div>
+          {/for}
+        </div>
+      </section>
+
+      <section id="usage" class="mt-14 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Using tokens in your markup</h2>
+        <p class="mb-3 text-sm/relaxed text-body">
+          Reach for the semantic utility, never a hex or a stock Tailwind color. The same
+          markup is correct in both themes because the token, not the class, carries the
+          light/dark values.
+        </p>
+        <CodeBlock code={ usageSnippet }/>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Theming & tokens — the "make it yours" reference. Every swatch is a live
+// bg-<token>/text-<token> element rendered in the demo's own theme, so the
+// grids double as the light/dark demo. Token names below are the real ones
+// defined in registry/theme/pieces.css (@theme block), merged into
+// app/styles/styles.css the way a consuming app would merge them.
+//
+// Tailwind v4 scans source TEXT for literal class strings, so each bg-*/text-*
+// utility must appear verbatim in this file — that's why every `cls` literal is
+// spelled out here and layout classes are composed around it via .map().
+
+const CHIP = 'h-14 w-full rounded-lg border border-border';
+
+const withChip = (list) => list.map((t) => ({ ...t, chip: `${CHIP} ${t.cls}` }));
+
+// Text — darkest to faintest.
+const textTokens = [
+  { name: 'ink', cls: 'text-ink', role: 'Headings, strong text, control labels' },
+  { name: 'body', cls: 'text-body', role: 'Default body copy' },
+  { name: 'muted', cls: 'text-muted', role: 'Secondary text, placeholders, hints' },
+  { name: 'faint', cls: 'text-faint', role: 'Disabled text, separators' },
+].map((t) => ({ ...t, sample: `text-4xl font-semibold leading-none ${t.cls}` }));
+
+const colorGroups = [
+  {
+    id: 'surfaces',
+    title: 'Surfaces',
+    desc: 'Three stacked background layers, deepest to nearest.',
+    tokens: withChip([
+      { name: 'page', cls: 'bg-page', role: 'App background — the deepest layer' },
+      { name: 'surface', cls: 'bg-surface', role: 'Cards, inputs, panels, popovers' },
+      { name: 'surface-sunken', cls: 'bg-surface-sunken', role: 'Wells, tracks, secondary-button fills' },
+    ]),
+  },
+  {
+    id: 'brand',
+    title: 'Brand',
+    desc: 'The one accent everything keys off — swap it to re-brand the whole UI.',
+    tokens: withChip([
+      { name: 'brand', cls: 'bg-brand', role: 'Primary actions, active states, links' },
+      { name: 'brand-dark', cls: 'bg-brand-dark', role: 'Hover / active' },
+      { name: 'brand-tint', cls: 'bg-brand-tint', role: 'Selected rows, ghost hover, soft chips' },
+      { name: 'brand-ink', cls: 'bg-brand-ink', role: 'Text / icons on solid brand' },
+    ]),
+  },
+  {
+    id: 'feedback',
+    title: 'Feedback',
+    desc: 'Danger, success, and warning — each with a solid tone and a soft tint background.',
+    tokens: withChip([
+      { name: 'danger', cls: 'bg-danger', role: 'Destructive actions, invalid states' },
+      { name: 'danger-dark', cls: 'bg-danger-dark', role: 'Hover / active' },
+      { name: 'danger-tint', cls: 'bg-danger-tint', role: 'Soft error backgrounds' },
+      { name: 'danger-ink', cls: 'bg-danger-ink', role: 'Text / icons on solid danger' },
+      { name: 'success', cls: 'bg-success', role: 'Positive deltas, "up is good"' },
+      { name: 'success-tint', cls: 'bg-success-tint', role: 'Soft positive backgrounds' },
+      { name: 'warning', cls: 'bg-warning', role: 'Caution band — meters, gauges, alerts' },
+      { name: 'warning-tint', cls: 'bg-warning-tint', role: 'Soft caution backgrounds' },
+    ]),
+  },
+  {
+    id: 'lines',
+    title: 'Borders & focus',
+    desc: 'Hairlines and the focus ring. Shown here as fills so you can read the color.',
+    tokens: withChip([
+      { name: 'border', cls: 'bg-border', role: 'Default hairlines (as border-border)' },
+      { name: 'border-strong', cls: 'bg-border-strong', role: 'Hover borders, pressed outlines' },
+      { name: 'ring', cls: 'bg-ring', role: 'Focus rings (usually equal to brand)' },
+    ]),
+  },
+];
+
+const chartTokens = [
+  { name: 'chart-1', cls: 'bg-chart-1' },
+  { name: 'chart-2', cls: 'bg-chart-2' },
+  { name: 'chart-3', cls: 'bg-chart-3' },
+  { name: 'chart-4', cls: 'bg-chart-4' },
+  { name: 'chart-5', cls: 'bg-chart-5' },
+  { name: 'chart-6', cls: 'bg-chart-6' },
+  { name: 'chart-7', cls: 'bg-chart-7' },
+  { name: 'chart-8', cls: 'bg-chart-8' },
+].map((t) => ({ ...t, chip: `h-16 w-full rounded-lg border border-border ${t.cls}`, short: t.name }));
+
+const mechanismSnippet = `:root                    { color-scheme: light dark; } /* OS decides */
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark']  { color-scheme: dark; }
+
+@theme {
+  --color-surface: light-dark(#ffffff, #101013);
+  --color-ink:     light-dark(#1f2933, #f4f4f5);
+  --color-brand:   light-dark(#4c6ef5, #5c7cfa);
+  /* …every token is one light/dark pair… */
+}`;
+
+const usageSnippet = `<div class="rounded-xl border border-border bg-surface p-4">
+  <h3 class="text-ink">Card title</h3>
+  <p class="text-muted">Secondary copy sits on text-muted.</p>
+
+  <button class="bg-brand text-brand-ink hover:bg-brand-dark">
+    Primary action
+  </button>
+</div>`;
+
+export default class Theming extends PuzzleView {
+  data(params, props) {
+    return {
+      bgToken: 'bg-<token>',
+      textToken: 'text-<token>',
+      htmlTag: '<html>',
+      textTokens,
+      colorGroups,
+      chartTokens,
+      mechanismSnippet,
+      usageSnippet,
+      toc: [
+        { label: 'How it works', href: '#how-it-works' },
+        { label: 'Schemes', href: '#schemes' },
+        { label: 'Text & ink', href: '#text' },
+        { label: 'Surfaces', href: '#surfaces' },
+        { label: 'Brand', href: '#brand' },
+        { label: 'Feedback', href: '#feedback' },
+        { label: 'Borders & focus', href: '#lines' },
+        { label: 'Chart palette', href: '#charts' },
+        { label: 'Using tokens', href: '#usage' },
+      ],
+    };
+  }
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "split-button",
+  "description": "Primary action button fused to a dropdown caret that opens a menu of secondary actions — the classic Save ▾ pattern, with Button's variants/sizes and value-first @press/@select callbacks",
+  "files": ["SplitButton.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

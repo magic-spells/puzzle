@@ -1,0 +1,8 @@
+{
+  "name": "rating",
+  "description": "Star rating — read-only display with half-star support and an interactive radiogroup input mode with keyboard nav and hover preview",
+  "files": ["Rating.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

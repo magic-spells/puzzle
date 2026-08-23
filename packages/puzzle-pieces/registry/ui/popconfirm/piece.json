@@ -1,0 +1,8 @@
+{
+  "name": "popconfirm",
+  "description": "Inline confirmation popover anchored to a trigger — message, optional description, confirm/cancel actions, danger variant, auto-flip placement, optional-controlled open",
+  "files": ["Popconfirm.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

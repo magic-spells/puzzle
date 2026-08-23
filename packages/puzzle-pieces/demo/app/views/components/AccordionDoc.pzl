@@ -1,0 +1,150 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Accordion</h1>
+        <p class="mt-2 text-body">
+          A config-first WAI-ARIA accordion. One component renders the whole set from an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">items</code>
+          array; the parent owns
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>.
+          Single mode keeps one panel open; multiple lets any number open.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-md">
+          <Accordion items={ faq } value={ faqOpen } @change={ setFaqOpen }/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="multiple" title="Multiple" code={ codeMultiple }>
+          <div class="w-full max-w-md">
+            <Accordion type="multiple" items={ specs } value={ specsOpen } @change={ setSpecsOpen }/>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="or-collapsible" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accordion or Collapsible?</h2>
+        <p class="mb-3 text-sm text-body">
+          Reach for Accordion when a set of panels should coordinate from one config array and each
+          body is plain text — it owns the group semantics and the open/close animation for you.
+          Reach for Collapsible when a panel body needs real markup: it takes rich slot content, and
+          you compose exclusivity yourself with a parent-owned open id.
+        </p>
+        <p class="mb-3 text-sm text-body">
+          Accordion's items carry plain-text content on purpose — Puzzle's named slots are static,
+          so a single component can't host per-item rich markup. When you need that, drop to
+          Collapsible and coordinate in the parent:
+        </p>
+        <CodeBlock code={ codeCompose }/>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Accordion from '@/components/ui/Accordion.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Accordion — follows the ButtonDoc exemplar shape.
+const installCmd = 'puzzle add piece accordion';
+const usageImport = `import Accordion from '@/components/ui/Accordion.pzl';`;
+const usageMarkup = `<Accordion items={ faq } value={ open } @change={ setOpen }/>`;
+
+const codeHero = `const faq = [
+  { id: 'q1', title: 'What is puzzle-pieces?', content: 'A registry of copy-in components.' },
+  { id: 'q2', title: 'How do I add a piece?', content: 'Copy its .pzl file into your app.' },
+  { id: 'q3', title: 'Can I customize a piece?', content: 'Yes — once copied the file is yours.' },
+];
+
+// single (default) — one open at a time; '' means all closed
+<Accordion items={ faq } value={ open } @change={ setOpen }/>
+
+// parent
+events = { setOpen: (id) => this.setData('open', id) };`;
+
+const codeMultiple = `const specs = [
+  { id: 's1', title: 'Dimensions', content: '…' },
+  { id: 's2', title: 'Accessibility', content: '…' },
+  { id: 's3', title: 'Theming', content: '…' },
+];
+
+// multiple — value is an array of open ids
+<Accordion type="multiple" items={ specs } value={ open } @change={ setOpen }/>
+
+// parent
+events = { setOpen: (ids) => this.setData('open', ids) };`;
+
+const codeCompose = `// Rich per-item markup → compose Collapsible, own exclusivity in the parent
+{#for item in items}
+  <Collapsible label={ item.title }
+               open={ openId === item.id }
+               @change={ () => setOpenId(openId === item.id ? '' : item.id) }>
+    <RichMarkup .../>
+  </Collapsible>
+{/for}`;
+
+export default class AccordionDoc extends PuzzleView {
+  created() {
+    this.setData({ faqOpen: 'q1', specsOpen: ['s1'] });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeMultiple,
+      codeCompose,
+      faq: [
+        { id: 'q1', title: 'What is puzzle-pieces?', content: 'A registry of copy-in Tailwind components for the Puzzle framework — you copy a piece into your app rather than installing a package.' },
+        { id: 'q2', title: 'How do I add a piece?', content: 'Copy its .pzl file into your app components folder. There is nothing to install and no build step to configure.' },
+        { id: 'q3', title: 'Can I customize a piece?', content: 'Yes. Once copied the file is yours — edit the markup, classes, and behavior freely.' },
+      ],
+      specs: [
+        { id: 's1', title: 'Dimensions', content: 'Fits a standard 17rem panel; the grid is a fixed height so month changes never shift the layout.' },
+        { id: 's2', title: 'Accessibility', content: 'Full WAI-ARIA roles, roving tabindex, and keyboard navigation ship in every piece.' },
+        { id: 's3', title: 'Theming', content: 'Every color reads from CSS tokens, so light and dark modes come for free.' },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Multiple', href: '#multiple' },
+        { label: 'Accordion or Collapsible?', href: '#or-collapsible' },
+      ],
+    };
+  }
+
+  events = {
+    setFaqOpen: (id) => this.setData('faqOpen', id),
+    setSpecsOpen: (ids) => this.setData('specsOpen', ids),
+  };
+}
+</script>

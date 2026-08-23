@@ -1,0 +1,275 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ id } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+    <div class={ groupClass }>
+      <!-- String(): non-path expr keeps this a display-only buffer. `display` is derived
+           from props.value in data(); the raw text is committed by Enter/blur, not live-bound (D147). -->
+      <input
+        data-numberfield-input
+        id={ id }
+        type="text"
+        inputmode="decimal"
+        role="spinbutton"
+        class={ inputClass }
+        value={ String(display) }
+        placeholder={ placeholder }
+        name={ name }
+        disabled={ disabled }
+        aria-invalid={ invalid }
+        aria-describedby={ describedby }
+        aria-valuenow={ valueNow }
+        aria-valuemin={ valueMin }
+        aria-valuemax={ valueMax }
+        autocomplete="off"
+        @keydown={ onKey(event) }
+        @blur={ onBlur(event) } />
+      <div class="flex flex-col border-l border-border">
+        <button
+          type="button"
+          tabindex="-1"
+          class={ incClass }
+          aria-label="Increase"
+          disabled={ incDisabled }
+          @click={ stepUp(event) }>
+          <svg class="size-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M3.5 7L6 4.5 8.5 7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          tabindex="-1"
+          class={ decClass }
+          aria-label="Decrease"
+          disabled={ decDisabled }
+          @click={ stepDown(event) }>
+          <svg class="size-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M3.5 5L6 7.5 8.5 5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    {#if error}
+      <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+    {:else if hint}
+      <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// NumberField — the general-purpose numeric FORM field.
+// It wears Field's full chrome (label, hint/error, aria-invalid/describedby, a
+// generated id) around a numeric input with a trailing ▲/▼ stepper stack. The
+// wrapper — not the input — carries the border, rounding, and focus-within ring;
+// the input itself is borderless. Controlled: the parent owns `value` and updates
+// it from `@change`, which emits a NUMBER, or `null` for a cleared field.
+//
+//   <NumberField label="Amount" value={ n } min={ 0 } step={ 5 } @change={ setN } />
+//   <NumberField label="Weight" value={ w } precision={ 1 } step={ 0.1 } @change={ setW } />
+//
+// DELIBERATELY DISTINCT from QuantityInput (the e-commerce stepper). The
+// differences, all intentional:
+//   • bounds are OPTIONAL — with no min/max the value ranges freely;
+//   • EMPTY is allowed — clearing the field emits `null` and does NOT snap back
+//     (QuantityInput always snaps to a clamped number). Validation/required-ness
+//     is the parent's job;
+//   • richer keyboard — PageUp/PageDown = ±largeStep, Home/End = min/max;
+//   • optional `precision` decimal formatting;
+//   • Field's label/hint/error surface (QuantityInput has none).
+// CLAMPING happens on COMMIT ONLY (blur, Enter, a step key, or a button) — never
+// mid-keystroke, so typing "-" or "12." in transit is never fought. The input is
+// `type="text" inputmode="decimal"` (not `type=number`) so precision/formatting is
+// fully under our control and native spinners never appear.
+let uid = 0;
+
+const clampNum = (v, min, max) => {
+  if (min != null && v < min) return min;
+  if (max != null && v > max) return max;
+  return v;
+};
+
+const roundTo = (v, precision) => (precision != null ? Number(v.toFixed(precision)) : v);
+
+const parseNum = (str) => {
+  if (str == null) return null;
+  const t = String(str).trim();
+  if (t === '') return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+};
+
+const format = (v, precision) => {
+  if (v == null) return '';
+  return precision != null ? v.toFixed(precision) : String(v);
+};
+
+const GROUP_BASE =
+  'flex h-9 items-stretch overflow-hidden rounded-lg border bg-surface transition-colors ' +
+  'focus-within:outline-2 focus-within:outline-offset-2';
+const GROUP_OK = 'border-border outline-ring focus-within:outline-ring';
+const GROUP_ERROR = 'border-danger outline-danger focus-within:outline-danger';
+
+const INPUT_BASE =
+  'h-full min-w-0 flex-1 bg-transparent px-3 text-sm tabular-nums text-ink placeholder:text-muted ' +
+  'focus:outline-none disabled:cursor-not-allowed';
+
+const STEP_BASE =
+  'flex w-7 flex-1 items-center justify-center text-body transition-colors ' +
+  'hover:bg-surface-sunken hover:text-ink disabled:pointer-events-none disabled:opacity-40';
+
+export default class NumberField extends PuzzleView {
+  data(params, props) {
+    // Fallback id generated once per instance (survives re-renders); explicit id wins.
+    const id = props.id || (this._fallbackId ??= `pp-numberfield-${++uid}`);
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const described = !!(error || hint);
+    const disabled = !!props.disabled;
+
+    const min = typeof props.min === 'number' && Number.isFinite(props.min) ? props.min : null;
+    const max = typeof props.max === 'number' && Number.isFinite(props.max) ? props.max : null;
+    const step = typeof props.step === 'number' && props.step > 0 ? props.step : 1;
+    const largeStep =
+      typeof props.largeStep === 'number' && props.largeStep > 0 ? props.largeStep : step * 10;
+    const precision =
+      typeof props.precision === 'number' && props.precision >= 0
+        ? Math.floor(props.precision)
+        : null;
+
+    const value =
+      typeof props.value === 'number' && Number.isFinite(props.value) ? props.value : null;
+    const display = format(value, precision);
+
+    return {
+      id,
+      descId: `${id}-desc`,
+      label: props.label,
+      placeholder: props.placeholder,
+      name: props.name,
+      hint,
+      error,
+      disabled,
+      min,
+      max,
+      step,
+      largeStep,
+      precision,
+      value,
+      display,
+      invalid: error ? 'true' : false,
+      describedby: described ? `${id}-desc` : false,
+      valueNow: value != null ? value : false,
+      valueMin: min != null ? min : false,
+      valueMax: max != null ? max : false,
+      decDisabled: disabled || (min != null && value != null && value <= min),
+      incDisabled: disabled || (max != null && value != null && value >= max),
+      rootClass: props.class || '',
+      groupClass: [GROUP_BASE, error ? GROUP_ERROR : GROUP_OK, disabled ? 'opacity-50' : '']
+        .filter(Boolean)
+        .join(' '),
+      inputClass: INPUT_BASE,
+      incClass: `${STEP_BASE} border-b border-border`,
+      decClass: STEP_BASE,
+    };
+  }
+
+  _inputEl() {
+    return this.element?.querySelector('[data-numberfield-input]');
+  }
+
+  emit(next, event) {
+    const { change } = this.props;
+    if (typeof change === 'function') change(next, event);
+  }
+
+  // Commit whatever text is in the field: empty → null (no snap-back), otherwise
+  // parse, clamp to [min,max], round to precision, reflect in the field, and emit
+  // if the result differs from the current controlled value.
+  commit(el, event) {
+    const { value, min, max, precision } = this.getData();
+    const parsed = parseNum(el ? el.value : '');
+    if (parsed === null) {
+      if (el) el.value = '';
+      if (value !== null) this.emit(null, event);
+      return;
+    }
+    const next = roundTo(clampNum(parsed, min, max), precision);
+    if (el) el.value = format(next, precision);
+    if (next !== value) this.emit(next, event);
+  }
+
+  // Relative step (arrows/PageUp-Down/buttons). Base is the live (uncommitted) text
+  // if numeric, else the controlled value; from an empty field the first step lands
+  // on min (or 0), regardless of direction.
+  stepBy(delta, event) {
+    const { value, min, max, precision, disabled } = this.getData();
+    if (disabled) return;
+    const el = this._inputEl();
+    const parsed = parseNum(el ? el.value : '');
+    const base = parsed !== null ? parsed : value;
+    const target = base === null ? (min != null ? min : 0) : base + delta;
+    const next = roundTo(clampNum(target, min, max), precision);
+    if (el) el.value = format(next, precision);
+    if (next !== value) this.emit(next, event);
+  }
+
+  // Absolute set (Home → min, End → max).
+  setTo(target, event) {
+    const { value, min, max, precision, disabled } = this.getData();
+    if (disabled) return;
+    const el = this._inputEl();
+    const next = roundTo(clampNum(target, min, max), precision);
+    if (el) el.value = format(next, precision);
+    if (next !== value) this.emit(next, event);
+  }
+
+  events = {
+    onKey: (event) => {
+      const { step, largeStep, min, max, disabled } = this.getData();
+      if (disabled) return;
+      switch (event.key) {
+        case 'ArrowUp':
+          event.preventDefault();
+          this.stepBy(step, event);
+          break;
+        case 'ArrowDown':
+          event.preventDefault();
+          this.stepBy(-step, event);
+          break;
+        case 'PageUp':
+          event.preventDefault();
+          this.stepBy(largeStep, event);
+          break;
+        case 'PageDown':
+          event.preventDefault();
+          this.stepBy(-largeStep, event);
+          break;
+        case 'Home':
+          if (min != null) {
+            event.preventDefault();
+            this.setTo(min, event);
+          }
+          break;
+        case 'End':
+          if (max != null) {
+            event.preventDefault();
+            this.setTo(max, event);
+          }
+          break;
+        case 'Enter':
+          this.commit(event.target, event);
+          break;
+        default:
+          break;
+      }
+    },
+    onBlur: (event) => this.commit(event.target, event),
+    stepUp: (event) => this.stepBy(this.getData().step, event),
+    stepDown: (event) => this.stepBy(-this.getData().step, event),
+  };
+}
+</script>

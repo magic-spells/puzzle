@@ -1,0 +1,322 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <div data-cm-surface @contextmenu={ onContextMenu(event) }>
+      <Slot/>
+    </div>
+
+    {#if open}
+      <div
+        id={ panelId }
+        data-cm-panel
+        role="menu"
+        class="fixed min-w-[10rem] rounded-lg border border-border bg-surface p-1 shadow-lg z-50"
+        style={ panelStyle }
+        @keydown={ onPanelKeydown(event) }>
+        {#for item in items, i}
+          <div class="contents">
+            {#if item.kind === 'divider'}
+              <div class="my-1 border-t border-border" role="separator" aria-hidden="true"></div>
+            {:else if item.kind === 'group'}
+              <div class="px-2.5 pt-2 pb-1 text-xs font-medium text-muted uppercase tracking-wide">{ item.label }</div>
+            {:else if item.kind === 'link'}
+              <a
+                href={ item.href }
+                role="menuitem"
+                data-cm-index={ i }
+                tabindex={ activeIndex === i ? '0' : '-1' }
+                aria-disabled={ item.disabled ? 'true' : false }
+                class="block w-full text-left rounded-md px-2.5 py-1.5 text-sm {#if item.danger}text-danger hover:bg-danger-tint{:else}text-body hover:bg-surface-sunken hover:text-ink{/if} {#if item.disabled}opacity-50 pointer-events-none{/if} focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
+                @click={ onItemClick(i, event) }>{ item.label }</a>
+            {:else}
+              <button
+                type="button"
+                role="menuitem"
+                data-cm-index={ i }
+                tabindex={ activeIndex === i ? '0' : '-1' }
+                disabled={ item.disabled }
+                class="block w-full text-left rounded-md px-2.5 py-1.5 text-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none {#if item.danger}text-danger hover:bg-danger-tint{:else}text-body hover:bg-surface-sunken hover:text-ink{/if} focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
+                @click={ onItemClick(i, event) }>{ item.label }</button>
+            {/if}
+          </div>
+        {/for}
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ContextMenu — a right-click menu built on DropdownMenu's guts. The items schema,
+// the tagged-row normalization, the menu-item classes (danger rows, disabled rows,
+// group headings, dividers) and the roving-focus keyboard model are ported VERBATIM
+// from DropdownMenu; what changes is the TRIGGER and the POSITIONING. The trigger is
+// the default <Slot/> — the right-clickable surface — wrapped in a div whose
+// @contextmenu opens the menu at the pointer instead of a button toggle. The panel
+// is `fixed` and placed at the pointer coordinates, clamped so it never overflows
+// the viewport (measured in afterUpdate, once the panel is in the DOM).
+//
+//   <ContextMenu items={ items } @select={ onSelect }>
+//     <div class="…">Right-click me</div>
+//   </ContextMenu>
+//
+// items entries (DropdownMenu's schema):
+//   { label, value?, href?, danger?, disabled? }  interactive (href → <a>)
+//   { divider: true }                              hairline separator
+//   { group: 'Heading' }                           non-interactive heading
+//
+// OPEN STATE IS INTERNAL — deliberate deviation from the pieces optional-controlled
+// convention. A context menu is summoned by a right-click at a pointer position and
+// dismissed by the next interaction; there is no meaningful parent-owned "open"
+// state to lift (the coordinates are only known at the moment of the event), so the
+// component owns `open` outright. It closes on Escape, an outside pointerdown, any
+// scroll, or a second contextmenu elsewhere.
+//
+// LONG-PRESS (touch) is NOT implemented in v1 — the menu is summoned by the native
+// `contextmenu` event only. Touch devices synthesize `contextmenu` on long-press in
+// most browsers, but an explicit long-press timer + touch handling is out of scope.
+//
+// A11y stance mirrors DropdownMenu's port: roving tabindex with real .focus() on
+// item elements (one item tabbable at a time), applied in afterUpdate via a pending
+// index. The first enabled item is focused on open.
+const _MENU_MARGIN = 8;
+
+let _uid = 0;
+
+// Normalize the raw items prop into tagged rows the template branches on (verbatim
+// from DropdownMenu). The loop index doubles as data-cm-index / activeIndex, so
+// dividers/groups keep their indices and the focus helpers skip them.
+function normalizeItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((it) => {
+    if (it && it.divider) return { kind: 'divider' };
+    if (it && it.group != null) return { kind: 'group', label: String(it.group) };
+    return {
+      kind: it && it.href ? 'link' : 'action',
+      label: it && it.label != null ? String(it.label) : '',
+      value: it ? it.value : undefined,
+      href: (it && it.href) || null,
+      danger: !!(it && it.danger),
+      disabled: !!(it && it.disabled),
+    };
+  });
+}
+
+const isFocusable = (item) =>
+  item && (item.kind === 'action' || item.kind === 'link') && !item.disabled;
+
+export default class ContextMenu extends PuzzleView {
+  created() {
+    this._uid = ++_uid;
+    this._docBound = false;
+    this._pendingFocus = null; // roving-focus target for the next afterUpdate
+    this._needsClamp = false; // re-measure + clamp the panel on the next afterUpdate
+
+    // Close on any interaction outside the open menu.
+    this._onDocPointerDown = (event) => {
+      if (!this.getData().open) return;
+      const panel = this.element?.querySelector('[data-cm-panel]');
+      if (panel && panel.contains(event.target)) return; // panel clicks: let rows activate
+      this.closeMenu();
+    };
+    // A second right-click OUTSIDE the surface closes us (the native menu / the
+    // surface's own handler takes over); inside the surface, onContextMenu re-opens.
+    this._onDocContextMenu = (event) => {
+      if (!this.getData().open) return;
+      const surface = this.element && this.element.querySelector('[data-cm-surface]');
+      if (surface && surface.contains(event.target)) return;
+      this.closeMenu();
+    };
+    // Any scroll dismisses — the pointer-anchored position would otherwise drift.
+    this._onScroll = () => {
+      if (this.getData().open) this.closeMenu();
+    };
+
+    // open / activeIndex / panel coords live in the LOCAL state layer.
+    this.setData({ open: false, activeIndex: -1, panelX: 0, panelY: 0 });
+  }
+
+  data(params, props) {
+    const { panelX, panelY } = this.getData();
+    return {
+      items: normalizeItems(props.items),
+      disabled: !!props.disabled,
+      panelId: `cm-panel-${this._uid}`,
+      panelStyle: `left:${panelX}px;top:${panelY}px;`,
+      rootClass: ['inline-block', props.class || ''].join(' '),
+    };
+  }
+
+  // ---- open / close ----------------------------------------------------------
+
+  openAt(x, y) {
+    const first = this.firstIndex();
+    this._pendingFocus = first >= 0 ? first : null;
+    this._needsClamp = true;
+    this.setData({ open: true, activeIndex: first, panelX: x, panelY: y });
+    if (!this._docBound) {
+      document.addEventListener('pointerdown', this._onDocPointerDown);
+      document.addEventListener('contextmenu', this._onDocContextMenu);
+      window.addEventListener('scroll', this._onScroll, true);
+      this._docBound = true;
+    }
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+  }
+
+  closeMenu() {
+    if (!this.getData().open) return;
+    if (this._docBound) {
+      document.removeEventListener('pointerdown', this._onDocPointerDown);
+      document.removeEventListener('contextmenu', this._onDocContextMenu);
+      window.removeEventListener('scroll', this._onScroll, true);
+      this._docBound = false;
+    }
+    this._pendingFocus = null;
+    this._needsClamp = false;
+    this.setData({ open: false, activeIndex: -1 });
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+  }
+
+  // ---- roving focus helpers (verbatim from DropdownMenu) ---------------------
+
+  firstIndex() {
+    const { items } = this.getData();
+    for (let i = 0; i < items.length; i++) if (isFocusable(items[i])) return i;
+    return -1;
+  }
+
+  lastIndex() {
+    const { items } = this.getData();
+    for (let i = items.length - 1; i >= 0; i--) if (isFocusable(items[i])) return i;
+    return -1;
+  }
+
+  moveActive(dir) {
+    const { items, activeIndex } = this.getData();
+    const n = items.length;
+    if (!n) return;
+    let i = activeIndex < 0 ? (dir > 0 ? -1 : 0) : activeIndex;
+    for (let step = 0; step < n; step++) {
+      i = (i + dir + n) % n;
+      if (isFocusable(items[i])) {
+        this.moveTo(i);
+        return;
+      }
+    }
+  }
+
+  moveTo(index) {
+    if (index < 0) return;
+    this._pendingFocus = index;
+    this.setData('activeIndex', index);
+  }
+
+  activate(index, event) {
+    const item = this.getData().items[index];
+    if (!item || item.disabled) return;
+    const { select } = this.props;
+    if (typeof select === 'function') select(item.value, event);
+    this.closeMenu();
+  }
+
+  // Apply pending roving focus, then clamp the panel into the viewport — both after
+  // the DOM has been patched. Clamp is guarded by _needsClamp so its setData re-render
+  // doesn't loop.
+  afterUpdate() {
+    if (this._pendingFocus != null) {
+      const index = this._pendingFocus;
+      this._pendingFocus = null;
+      const el = this.element && this.element.querySelector(`[data-cm-index="${index}"]`);
+      if (el) el.focus();
+    }
+
+    if (this._needsClamp) {
+      this._needsClamp = false;
+      this._clampIntoView();
+    }
+  }
+
+  // Pull the pointer-anchored panel back inside the viewport if it would overflow
+  // the right/bottom edges (Select's _measurePlacement shape — measured, not guessed).
+  _clampIntoView() {
+    const panel = this.element && this.element.querySelector('[data-cm-panel]');
+    if (!panel || typeof window === 'undefined') return;
+    const { panelX, panelY } = this.getData();
+    const w = panel.offsetWidth;
+    const h = panel.offsetHeight;
+    const maxX = Math.max(_MENU_MARGIN, window.innerWidth - w - _MENU_MARGIN);
+    const maxY = Math.max(_MENU_MARGIN, window.innerHeight - h - _MENU_MARGIN);
+    const x = Math.min(Math.max(panelX, _MENU_MARGIN), maxX);
+    const y = Math.min(Math.max(panelY, _MENU_MARGIN), maxY);
+    if (x !== panelX || y !== panelY) {
+      this.setData({ panelX: x, panelY: y });
+      this.refresh();
+    }
+  }
+
+  destroyed() {
+    if (this._docBound) {
+      document.removeEventListener('pointerdown', this._onDocPointerDown);
+      document.removeEventListener('contextmenu', this._onDocContextMenu);
+      window.removeEventListener('scroll', this._onScroll, true);
+      this._docBound = false;
+    }
+  }
+
+  events = {
+    // Right-click on the surface: open (or re-position an already-open menu) at the
+    // pointer. Disabled → let the native menu through (no preventDefault).
+    onContextMenu: (event) => {
+      if (this.getData().disabled) return;
+      event.preventDefault();
+      this.openAt(event.clientX, event.clientY);
+    },
+
+    // One handler on the panel; item focus (roving) tells us the active row.
+    onPanelKeydown: (event) => {
+      const data = this.getData();
+      if (!data.open) return;
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          this.moveActive(1);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          this.moveActive(-1);
+          break;
+        case 'Home':
+          event.preventDefault();
+          this.moveTo(this.firstIndex());
+          break;
+        case 'End':
+          event.preventDefault();
+          this.moveTo(this.lastIndex());
+          break;
+        case 'Escape':
+          event.preventDefault();
+          this.closeMenu();
+          break;
+        case ' ': {
+          // Buttons activate on Space natively (→ @click); links do not, so activate
+          // them here. Guarding on kind avoids a double-fire on buttons.
+          const item = data.items[data.activeIndex];
+          if (item && item.kind === 'link') {
+            event.preventDefault();
+            this.activate(data.activeIndex, event);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    },
+
+    onItemClick: (index, event) => {
+      this.activate(index, event);
+    },
+  };
+}
+</script>

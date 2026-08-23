@@ -1,0 +1,108 @@
+<puzzle-view>
+  <div class={ rootClass } aria-label={ ariaLabel }>
+    {#for item in stack}
+      <span key={ item.key } class={ item.wrapperClass } style={ item.style }>
+        {#if item.type === 'avatar'}
+          <Avatar src={ item.src } name={ item.name } size={ size }/>
+        {:else}
+          <span class={ item.chipClass } aria-label={ item.chipLabel }>{ item.chipText }</span>
+        {/if}
+      </span>
+    {/for}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Avatar from './Avatar.pzl';
+
+// AvatarGroup — an overlapping stack of avatars rendered from an array, with a
+// "+N" overflow chip once the count exceeds `max`. Composes the existing
+// Avatar piece for each disc (same size scale, same image/initials/glyph
+// fallback), so the group never re-implements avatar rendering itself.
+//
+//   <AvatarGroup avatars={[{ name:'Ada Lovelace' }, { src:'/a.jpg', name:'Grace Hopper' }]} />
+//   <AvatarGroup avatars={ collaborators } max={ 4 } size="lg" label="5 collaborators" />
+//
+// Props:
+//   avatars  [{ src?, name? }] — forwarded straight to Avatar per item.
+//   max      number, default 4 — show the first `max`; the remainder folds
+//            into a single "+N" chip.
+//   size     'sm' | 'md' | 'lg', default 'md' — forwarded to every Avatar and
+//            matched by the overflow chip's own disc size.
+//   label    optional aria-label on the root (e.g. "5 collaborators").
+//   class    appended to the root.
+//
+// No callbacks — purely presentational.
+//
+// STACKING: every disc (avatar or chip) sits inside a wrapper <span> that
+// carries the overlap (negative left margin, skipped on the first item), a
+// `ring-2 ring-surface` halo so overlapping discs read as separated against
+// the page background, and an inline z-index. z-index DESCENDS left to right
+// (the first/leftmost item is on top) so faces are never clipped by their
+// neighbor; the overflow chip is the last stacked item and so sits lowest.
+// The overlap uses margin, not transform — the Tailwind v4 translate/scale
+// gotcha (CLAUDE.md) does not apply here.
+const AVATAR_OVERLAP = {
+  sm: '-ml-2',
+  md: '-ml-2.5',
+  lg: '-ml-3',
+};
+
+const WRAPPER_BASE = 'relative inline-block shrink-0 rounded-full ring-2 ring-surface';
+
+const CHIP_BASE =
+  'inline-flex items-center justify-center rounded-full shrink-0 select-none font-medium ' +
+  'bg-surface-sunken text-muted';
+
+const CHIP_SIZE = {
+  sm: 'size-6 text-[10px]',
+  md: 'size-8 text-xs',
+  lg: 'size-10 text-sm',
+};
+
+export default class AvatarGroup extends PuzzleView {
+  data(params, props) {
+    const size = CHIP_SIZE[props.size] ? props.size : 'md';
+    const overlap = AVATAR_OVERLAP[size];
+    const source = props.avatars || [];
+    const max = Number(props.max) > 0 ? Math.floor(Number(props.max)) : 4;
+    const visible = source.slice(0, max);
+    const overflowCount = source.length > max ? source.length - max : 0;
+    const total = visible.length + (overflowCount > 0 ? 1 : 0);
+
+    const stack = visible.map((avatar, i) => ({
+      key: 'avatar-' + i,
+      type: 'avatar',
+      src: avatar.src || '',
+      name: avatar.name || '',
+      chipClass: '',
+      chipText: '',
+      chipLabel: '',
+      wrapperClass: [WRAPPER_BASE, i === 0 ? '' : overlap].filter(Boolean).join(' '),
+      style: 'z-index:' + (total - i),
+    }));
+
+    if (overflowCount > 0) {
+      stack.push({
+        key: 'overflow',
+        type: 'chip',
+        src: '',
+        name: '',
+        chipText: '+' + overflowCount,
+        chipLabel: overflowCount + ' more',
+        chipClass: [CHIP_BASE, CHIP_SIZE[size]].join(' '),
+        wrapperClass: [WRAPPER_BASE, visible.length === 0 ? '' : overlap].filter(Boolean).join(' '),
+        style: 'z-index:' + (total - visible.length),
+      });
+    }
+
+    return {
+      size,
+      stack,
+      rootClass: ['flex items-center', props.class || ''].filter(Boolean).join(' '),
+      ariaLabel: props.label || false,
+    };
+  }
+}
+</script>

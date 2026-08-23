@@ -1,0 +1,8 @@
+{
+  "name": "avatar-group",
+  "description": "Overlapping stack of avatars from an array, with a +N overflow chip past a max count",
+  "files": ["AvatarGroup.pzl"],
+  "registryDependencies": ["avatar"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

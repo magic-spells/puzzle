@@ -1,0 +1,8 @@
+{
+  "name": "command",
+  "description": "Command palette — filtered, grouped, keyboard-driven quick actions in a modal",
+  "files": ["Command.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

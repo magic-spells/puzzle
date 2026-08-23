@@ -1,0 +1,441 @@
+<puzzle-view>
+  <div class={ wrapperClass }>
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse text-left">
+        {#if caption}
+          <caption class="caption-bottom px-4 py-3 text-left text-sm text-muted">{ caption }</caption>
+        {/if}
+        <thead>
+          <tr class="border-b border-border bg-surface-sunken">
+            {#if selectable}
+              <th scope="col" class="w-10 px-4 py-3 align-middle">
+                <label class="relative inline-flex items-center align-middle">
+                  <input
+                    type="checkbox"
+                    data-select-all
+                    class={ checkInputHead }
+                    checked={ headerChecked }
+                    aria-label="Select all rows on this page"
+                    @change={ toggleAll(event) } />
+                  <svg class="pointer-events-none absolute inset-0 size-4 text-brand-ink opacity-0 transition-opacity peer-checked:opacity-100" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <svg class="pointer-events-none absolute inset-0 size-4 text-brand-ink opacity-0 transition-opacity peer-indeterminate:opacity-100" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M4 8h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  </svg>
+                </label>
+              </th>
+            {/if}
+            {#for col in columns}
+              <th scope="col" class={ col.thClass } aria-sort={ col.ariaSort } key={ col.key }>
+                {#if col.sortable}
+                  <button type="button" class={ sortBtnClass } @click={ sortBy(col.dataKey, event) }>
+                    <span>{ col.label }</span>
+                    <svg class="size-3.5 shrink-0" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path class={ col.upClass } d="M4 7l3-3 3 3" />
+                      <path class={ col.downClass } d="M4 9l3 3 3-3" />
+                    </svg>
+                  </button>
+                {:else}
+                  { col.label }
+                {/if}
+              </th>
+            {/for}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          {#if hasRows}
+            {#for row in rows}
+              <tr class={ row.rowClass } key={ row.key }>
+                {#if selectable}
+                  <td class="w-10 px-4 py-3 align-middle">
+                    <label class="relative inline-flex items-center align-middle">
+                      <input
+                        type="checkbox"
+                        class={ checkInputRow }
+                        checked={ row.checked }
+                        aria-label={ row.ariaLabel }
+                        @change={ toggleRow(row.selectKey, event) } />
+                      <svg class="pointer-events-none absolute inset-0 size-4 text-brand-ink opacity-0 transition-opacity peer-checked:opacity-100" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </label>
+                  </td>
+                {/if}
+                {#for cell in row.cells}
+                  <td class={ cell.tdClass } key={ cell.key }>{ cell.value }</td>
+                {/for}
+              </tr>
+            {/for}
+          {:else}
+            <tr>
+              <td class="px-4 py-8 text-center text-sm text-muted" colspan={ colspan }>{ emptyText }</td>
+            </tr>
+          {/if}
+        </tbody>
+      </table>
+    </div>
+
+    {#if paginated}
+      <div class="flex items-center justify-between gap-4 border-t border-border px-4 py-3">
+        <p class="text-sm text-muted">{ rangeLabel }</p>
+        {#if showPager}
+          <Pagination page={ page } count={ pageCount } @change={ onPageChange } />
+        {/if}
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Pagination from './Pagination.pzl';
+
+// DataTable — the interactive tier above the presentational `table` piece. It
+// ADAPTS Table's markup/token classes inline (a real <table>, thead/tbody, <th
+// scope="col">, optional <caption>, empty state) and layers on the three things
+// Table deliberately leaves out: column SORTING, row SELECTION with select-all,
+// and built-in PAGINATION (delegated to the Pagination piece). Table is not
+// imported — the interactive header buttons and leading checkbox column make
+// composition impractical, so its markup is reproduced here.
+//
+//   const columns = [
+//     { key: 'invoice', label: 'Invoice', sortable: true },
+//     { key: 'client',  label: 'Client',  sortable: true },
+//     { key: 'amount',  label: 'Amount',  align: 'right', sortable: true },
+//   ];
+//   <DataTable columns={ columns } rows={ rows } rowKey="invoice"
+//              selectable pageSize={ 5 } />
+//
+// PROPS
+//   columns   [{ key, label, align?, sortable? }] — Table's schema plus a per-column
+//             `sortable` flag. align: 'left' (default) | 'right' | 'center'. Cell
+//             value is row[key]; null/undefined → ''.
+//   rows      array of plain row objects.
+//   rowKey    string — the row field holding a stable unique id. REQUIRED for
+//             selection; without it selection keys fall back to the row's index,
+//             which does NOT survive sorting or paging (see the warning below).
+//   caption   string — <caption> below the table, text-sm text-muted.
+//   empty     string — overrides the empty-state text ("No results.").
+//   class     string — appended to the wrapper <div>.
+//
+//   sort      OPTIONAL-CONTROLLED { key, dir: 'asc' | 'desc' } | null (DatePicker's
+//             optional-controlled shape). Omit it and the table owns its sort state
+//             internally; pass it (object or null) and the parent owns it. The table
+//             ALWAYS applies the effective descriptor to the full row set with its
+//             built-in comparator: numeric compare when both cell values read as
+//             finite numbers, else localeCompare. Header clicks cycle asc → desc → null.
+//   selectable  boolean — renders a leading checkbox column.
+//   selected  OPTIONAL-CONTROLLED array of rowKey values. Omit → the table owns the
+//             selection set; pass an array → the parent owns it. Keys are rowKey
+//             values, so a selection survives sorting and paging.
+//   pageSize  number — when > 0, enables pagination (rows are sorted, THEN paged).
+//   page      OPTIONAL-CONTROLLED 1-based current page. Omit → table-owned; pass → parent-owned.
+//
+// CALLBACKS  (value-first; every one fires in BOTH controlled and uncontrolled mode)
+//   @sortChange(next)     next sort descriptor ({ key, dir } | null) after a header click.
+//   @select(keys, event)  the next array of selected rowKey values.
+//   @pageChange(n)        the next 1-based page.
+//
+//   NAMING NOTE / deviation from a plain @sort/@page: Puzzle compiles an `@event`
+//   on a COMPONENT tag to a BARE prop key (e.g. `@sort` → props.sort), which would
+//   collide in one props object with the same-named value prop (`sort={…}`) —
+//   duplicate key, last-wins, breaking controlled mode AND the optional-controlled
+//   `props.x !== undefined` detection. The repo's other optional-controlled pieces
+//   dodge this by naming the value prop and its callback differently (DatePicker:
+//   `open` + @show/@hide). Following that convention, the sort/page callbacks are
+//   @sortChange / @pageChange so `sort`/`page` stay clean value props. `selected`
+//   and @select already differ, so that pair keeps the plain name.
+//
+// ORDER OF OPERATIONS: sort the full row set, then paginate, then render. Selection
+// is keyed by rowKey (never by index or page position), so selected rows stay
+// selected as the user sorts and pages.
+//
+// A11Y. Sortable headers carry aria-sort ("ascending" / "descending"; the attribute
+// is OMITTED when unsorted rather than set to "none"), and the header label is a
+// real <button> so it is keyboard-operable; a small inline SVG chevron pair shows
+// the active direction (paths only — never SVG <text>). Non-sortable headers stay
+// plain text. Row checkboxes are native <input type="checkbox"> (styled with
+// Checkbox's box classes) with an aria-label built from the row's key; the header
+// checkbox toggles select/clear-all for the CURRENT page and shows an indeterminate
+// state when the page is partially selected (the `indeterminate` DOM property is set
+// in afterUpdate — HTML has no indeterminate attribute). Every button and checkbox
+// sets its outline COLOR unconditionally (outline-ring) alongside the
+// focus-visible:outline-2 reveal, so focus never flashes from the default color.
+
+const ALIGN = {
+  left: 'text-left',
+  right: 'text-right',
+  center: 'text-center',
+};
+
+const TH_BASE = 'whitespace-nowrap px-4 py-3 text-sm font-medium text-muted';
+const TD_BASE = 'px-4 py-3 text-sm text-body';
+
+// The sortable-header trigger. Inline-flex so it honors the <th>'s text-align
+// (right/center columns push the button to that edge). Outline color is set
+// unconditionally (outline-ring) so focus doesn't flash — see the header note.
+const SORT_BTN =
+  'group inline-flex items-center gap-1.5 whitespace-nowrap rounded cursor-pointer select-none ' +
+  'text-muted transition-colors hover:text-ink ' +
+  'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
+
+// Checkbox box, lifted verbatim from the Checkbox piece (appearance-none native
+// input + tick overlay). The header variant adds the indeterminate paint.
+const CHECK_INPUT =
+  'peer size-4 shrink-0 appearance-none rounded border border-border-strong bg-surface cursor-pointer ' +
+  'transition-colors checked:bg-brand checked:border-brand ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+const CHECK_INPUT_HEAD = CHECK_INPUT + ' indeterminate:bg-brand indeterminate:border-brand';
+
+// Read a cell value as a finite number, or NaN when it isn't one. Numeric strings
+// (e.g. '42') count; empty/whitespace strings and non-numeric text do not.
+const asNumber = (v) => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  }
+  return NaN;
+};
+
+// Compare two cell values: numeric when both read as finite numbers, else a
+// string localeCompare. Returns a stable-friendly -1/0/1-ish delta.
+const compareCells = (a, b) => {
+  const an = asNumber(a);
+  const bn = asNumber(b);
+  if (!Number.isNaN(an) && !Number.isNaN(bn)) return an - bn;
+  return String(a == null ? '' : a).localeCompare(String(b == null ? '' : b));
+};
+
+export default class DataTable extends PuzzleView {
+  created() {
+    // Internal state, used only in the uncontrolled arm of each optional-controlled
+    // prop. When a prop is passed (props.x !== undefined) the prop wins and these are ignored.
+    this.setData({ uncontrolledSort: null, uncontrolledSelected: [], uncontrolledPage: 1 });
+    this._warnedRowKey = false;
+  }
+
+  // ---- optional-controlled resolution (DatePicker's pattern, x3) -------------
+
+  _sortControlled() {
+    return this.props.sort !== undefined;
+  }
+  _selectedControlled() {
+    return this.props.selected !== undefined;
+  }
+  _pageControlled() {
+    return this.props.page !== undefined;
+  }
+
+  _effectiveSort() {
+    const v = this._sortControlled() ? this.props.sort : this.getData().uncontrolledSort;
+    return v && typeof v === 'object' && v.key != null ? v : null;
+  }
+  _effectiveSelected() {
+    const v = this._selectedControlled() ? this.props.selected : this.getData().uncontrolledSelected;
+    return Array.isArray(v) ? v : [];
+  }
+  _effectivePage() {
+    const v = this._pageControlled() ? this.props.page : this.getData().uncontrolledPage;
+    return Math.max(Math.floor(Number(v) || 1), 1);
+  }
+
+  // ---- commits: write uncontrolled state (if any) + fire the callback -------
+
+  _commitSort(next) {
+    if (!this._sortControlled()) {
+      this.setData('uncontrolledSort', next);
+      this.refresh();
+    }
+    const { sortChange } = this.props;
+    if (typeof sortChange === 'function') sortChange(next);
+  }
+  _commitSelected(keys, event) {
+    if (!this._selectedControlled()) {
+      this.setData('uncontrolledSelected', keys);
+      this.refresh();
+    }
+    const { select } = this.props;
+    if (typeof select === 'function') select(keys, event);
+  }
+  _commitPage(n) {
+    if (!this._pageControlled()) {
+      this.setData('uncontrolledPage', n);
+      this.refresh();
+    }
+    const { pageChange } = this.props;
+    if (typeof pageChange === 'function') pageChange(n);
+  }
+
+  // ---- render model ---------------------------------------------------------
+
+  data(params, props) {
+    const rawColumns = Array.isArray(props.columns) ? props.columns : [];
+    const rawRows = Array.isArray(props.rows) ? props.rows : [];
+    const rowKey = typeof props.rowKey === 'string' && props.rowKey ? props.rowKey : '';
+    const selectable = !!props.selectable;
+
+    if (selectable && !rowKey && !this._warnedRowKey) {
+      this._warnedRowKey = true;
+      if (typeof console !== 'undefined') {
+        console.warn(
+          '[DataTable] `selectable` without `rowKey` — selection keys fall back to row index and will NOT survive sorting or paging. Pass `rowKey` for stable selection.'
+        );
+      }
+    }
+
+    // --- sort the FULL row set ---
+    const sort = this._effectiveSort();
+    const sortKey = sort ? sort.key : null;
+    const sortDir = sort && sort.dir === 'desc' ? 'desc' : 'asc';
+    let sortedRaw = rawRows;
+    if (sortKey != null) {
+      // Decorate-sort-undecorate keeps the sort stable across equal keys.
+      sortedRaw = rawRows
+        .map((r, i) => [r, i])
+        .sort((a, b) => {
+          const av = a[0] == null ? undefined : a[0][sortKey];
+          const bv = b[0] == null ? undefined : b[0][sortKey];
+          const d = compareCells(av, bv);
+          const signed = sortDir === 'desc' ? -d : d;
+          return signed !== 0 ? signed : a[1] - b[1];
+        })
+        .map((pair) => pair[0]);
+    }
+
+    // Header columns with their sort-indicator state.
+    const columns = rawColumns.map((col, i) => {
+      const align = ALIGN[col.align] || ALIGN.left;
+      const key = col.key != null ? String(col.key) : `col-${i}`;
+      const active = sortKey != null && String(col.key) === String(sortKey);
+      const asc = active && sortDir === 'asc';
+      const desc = active && sortDir === 'desc';
+      return {
+        key,
+        dataKey: col.key,
+        label: col.label != null ? String(col.label) : '',
+        sortable: !!col.sortable,
+        thClass: `${TH_BASE} ${align}`,
+        tdClass: `${TD_BASE} ${align}`,
+        ariaSort: active ? (asc ? 'ascending' : 'descending') : false,
+        upClass: asc ? 'text-ink' : 'text-muted/40',
+        downClass: desc ? 'text-ink' : 'text-muted/40',
+      };
+    });
+
+    // --- paginate the sorted set ---
+    const total = sortedRaw.length;
+    const rawPageSize = Number(props.pageSize);
+    const paginated = Number.isFinite(rawPageSize) && rawPageSize > 0;
+    const pageSize = paginated ? Math.floor(rawPageSize) : total;
+    const pageCount = paginated ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+    const page = Math.min(this._effectivePage(), pageCount);
+    const start = paginated ? (page - 1) * pageSize : 0;
+    const end = paginated ? Math.min(start + pageSize, total) : total;
+    const pageRaw = paginated ? sortedRaw.slice(start, end) : sortedRaw;
+
+    // --- selection (keyed by rowKey, so it survives sort/page) ---
+    const selectedSet = new Set(this._effectiveSelected().map((k) => String(k)));
+
+    const rows = pageRaw.map((row, i) => {
+      const globalIndex = start + i;
+      const selectKey = rowKey
+        ? String(row == null || row[rowKey] == null ? '' : row[rowKey])
+        : String(globalIndex);
+      const checked = selectedSet.has(selectKey);
+      return {
+        key: selectKey || `row-${globalIndex}`,
+        selectKey,
+        checked,
+        ariaLabel: `Select ${selectKey}`,
+        rowClass: checked
+          ? 'bg-surface-sunken transition-colors'
+          : 'transition-colors hover:bg-surface-sunken',
+        cells: columns.map((col, c) => {
+          const v = row == null ? undefined : row[col.dataKey];
+          return {
+            key: `${col.key}-${selectKey}-${c}`,
+            value: v == null ? '' : v,
+            tdClass: col.tdClass,
+          };
+        }),
+      };
+    });
+
+    // Header checkbox reflects the CURRENT page only.
+    const pageKeys = rows.map((r) => r.selectKey);
+    const allSelected = pageKeys.length > 0 && pageKeys.every((k) => selectedSet.has(k));
+    const someSelected = pageKeys.some((k) => selectedSet.has(k));
+
+    const rangeStart = total === 0 ? 0 : start + 1;
+    const rangeEnd = paginated ? end : total;
+
+    return {
+      wrapperClass: [
+        'overflow-hidden rounded-xl border border-border bg-surface',
+        props.class || '',
+      ].join(' '),
+      columns,
+      rows,
+      hasRows: rows.length > 0,
+      selectable,
+      colspan: (columns.length || 1) + (selectable ? 1 : 0),
+      caption: props.caption || '',
+      emptyText: props.empty || 'No results.',
+      sortBtnClass: SORT_BTN,
+      checkInputRow: CHECK_INPUT,
+      checkInputHead: CHECK_INPUT_HEAD,
+      headerChecked: allSelected,
+      headerIndeterminate: someSelected && !allSelected,
+      paginated,
+      showPager: paginated && pageCount > 1,
+      page,
+      pageCount,
+      rangeLabel: `${rangeStart}–${rangeEnd} of ${total}`,
+    };
+  }
+
+  // The `indeterminate` state is a DOM property with no HTML attribute, so it can't
+  // ride the template — set it on the header checkbox after every render.
+  afterUpdate() {
+    const box = this.element && this.element.querySelector('[data-select-all]');
+    if (box) box.indeterminate = !!this.getData().headerIndeterminate;
+  }
+
+  events = {
+    // Cycle the clicked column asc → desc → null (off).
+    sortBy: (dataKey) => {
+      const cur = this._effectiveSort();
+      const active = cur && String(cur.key) === String(dataKey);
+      let next;
+      if (!active) next = { key: dataKey, dir: 'asc' };
+      else if (cur.dir !== 'desc') next = { key: dataKey, dir: 'desc' };
+      else next = null;
+      this._commitSort(next);
+    },
+
+    // Select/clear all rows on the current page, preserving selections on other pages.
+    toggleAll: (event) => {
+      const checked = event.target.checked;
+      const pageKeys = this.getData().rows.map((r) => r.selectKey);
+      const set = new Set(this._effectiveSelected().map((k) => String(k)));
+      if (checked) pageKeys.forEach((k) => set.add(k));
+      else pageKeys.forEach((k) => set.delete(k));
+      this._commitSelected(Array.from(set), event);
+    },
+
+    toggleRow: (key, event) => {
+      const checked = event.target.checked;
+      const set = new Set(this._effectiveSelected().map((k) => String(k)));
+      if (checked) set.add(String(key));
+      else set.delete(String(key));
+      this._commitSelected(Array.from(set), event);
+    },
+
+    onPageChange: (n) => {
+      this._commitPage(n);
+    },
+  };
+}
+</script>

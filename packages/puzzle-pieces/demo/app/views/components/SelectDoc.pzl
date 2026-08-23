@@ -1,0 +1,204 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Select</h1>
+        <p class="mt-2 text-body">
+          A listbox-pattern select rendered from an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">options</code>
+          array, with typeahead, full keyboard navigation, group headings, dividers, and an opt-in trigger-to-panel
+          morph. State is controlled through a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          callback.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-64">
+          <Select options={ fruitOptions } value={ fruit } @change={ setFruit } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          The morph-engine install is only needed when you use the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">morph</code>
+          prop. Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="groups" title="Groups and dividers" code={ codeGroups }>
+          <div class="w-64">
+            <Select options={ foodOptions } value={ food } @change={ setFood } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="morph" title="Morph" code={ codeMorph }>
+          <div class="w-64">
+            <Select options={ colorOptions } value={ color } morph={ true } @change={ setColor } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="position" title="Position" code={ codePosition }>
+          <div class="flex w-64 flex-col gap-4">
+            <Select options={ fruitOptions } value={ fruit } position="center" @change={ setFruit } />
+            <Select options={ fruitOptions } value={ fruit } position="up" @change={ setFruit } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="indicator" title="Indicator" code={ codeIndicator }>
+          <div class="flex w-64 flex-col gap-4">
+            <Select options={ fruitOptions } value={ fruit } @change={ setFruit } />
+            <Select options={ fruitOptions } value={ fruit } indicator="chevrons" @change={ setFruit } />
+            <Select options={ fruitOptions } value={ fruit } indicator="caret" @change={ setFruit } />
+          </div>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">Once open, the listbox owns these keys:</p>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Type a letter</span> — typeahead jumps to the next matching option</li>
+            <li><span class="font-medium text-ink">Up / Down arrows</span> — move the active option</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last option</li>
+            <li><span class="font-medium text-ink">Enter / Space</span> — select the active option</li>
+            <li><span class="font-medium text-ink">Escape</span> — close and return focus to the trigger</li>
+          </ul>
+          <ExampleBox code={ codeKeyboard }>
+            <div class="w-64">
+              <Select options={ fruitOptions } value={ fruit } @change={ setFruit } />
+            </div>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Select from '@/components/ui/Select.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece select';
+const usageImport = `import Select from '@/components/ui/Select.pzl';`;
+const usageMarkup = `<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
+
+const codeHero = `const fruitOptions = [
+  { value: 'apple', label: 'Apple' },
+  { value: 'banana', label: 'Banana' },
+  { value: 'cherry', label: 'Cherry' },
+];
+
+<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
+
+const codeGroups = `const foodOptions = [
+  { group: 'Savory' },
+  { value: 'pizza', label: 'Pizza' },
+  { value: 'tacos', label: 'Tacos' },
+  { divider: true },
+  { group: 'Sweet' },
+  { value: 'cake', label: 'Cake' },
+  { value: 'sorbet', label: 'Sorbet', disabled: true },
+];
+
+<Select options={ foodOptions } value={ food } @change={ setFood } />`;
+
+const codeMorph = `// requires: npm install @magic-spells/morph-engine
+// A morph select opens centered: the selected option sits right over the
+// trigger (macOS-style), so clicking the same spot again closes it.
+<Select options={ colorOptions } value={ color } morph={ true } @change={ setColor } />`;
+
+const codePosition = `// position: 'down' | 'up' | 'center'
+// unset — morph selects center; plain selects flip to whichever side has room
+<Select options={ fruitOptions } value={ fruit } position="center" @change={ setFruit } />
+<Select options={ fruitOptions } value={ fruit } position="up" @change={ setFruit } />`;
+
+const codeIndicator = `// indicator: 'triangle' (default) | 'chevrons' | 'caret'
+// 'chevrons' shows the classic up/down selection-list arrows (never rotates).
+<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />
+<Select options={ fruitOptions } value={ fruit } indicator="chevrons" @change={ setFruit } />
+<Select options={ fruitOptions } value={ fruit } indicator="caret" @change={ setFruit } />`;
+
+const codeKeyboard = `<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
+
+export default class SelectDoc extends PuzzleView {
+  created() {
+    this.setData({ fruit: '', food: 'pizza', color: 'blue' });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeGroups,
+      codeMorph,
+      codePosition,
+      codeIndicator,
+      codeKeyboard,
+      fruitOptions: [
+        { value: 'apple', label: 'Apple' },
+        { value: 'banana', label: 'Banana' },
+        { value: 'cherry', label: 'Cherry' },
+      ],
+      foodOptions: [
+        { group: 'Savory' },
+        { value: 'pizza', label: 'Pizza' },
+        { value: 'tacos', label: 'Tacos' },
+        { divider: true },
+        { group: 'Sweet' },
+        { value: 'cake', label: 'Cake' },
+        { value: 'sorbet', label: 'Sorbet', disabled: true },
+      ],
+      colorOptions: [
+        { value: 'red', label: 'Red' },
+        { value: 'blue', label: 'Blue' },
+        { value: 'green', label: 'Green' },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Groups and dividers', href: '#groups' },
+        { label: 'Morph', href: '#morph' },
+        { label: 'Position', href: '#position' },
+        { label: 'Indicator', href: '#indicator' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    setFruit: (v) => {
+      this.setData('fruit', v);
+      this.refresh();
+    },
+    setFood: (v) => {
+      this.setData('food', v);
+      this.refresh();
+    },
+    setColor: (v) => {
+      this.setData('color', v);
+      this.refresh();
+    },
+  };
+}
+</script>

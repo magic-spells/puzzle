@@ -1,0 +1,153 @@
+<puzzle-view class="w-full">
+  <article class="mx-auto w-full min-w-0 max-w-7xl">
+    <DemoHeader title="Chat">
+      The chat pieces working together — Chat Scroller, Chat Message, and Chat Attachment,
+      plus a live composer. Send a message and a teammate replies; scroll up mid-conversation
+      to see the jump-to-latest pill take over.
+    </DemoHeader>
+
+    <!-- The conversation itself stays a comfortable reading column; the page
+         header above spans the full demo width like every other demo. -->
+    <section class="mb-12 max-w-2xl overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+      <div class="flex items-center gap-3 border-b border-border px-4 py-3">
+        <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-tint text-sm font-semibold text-brand">PT</span>
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-semibold text-ink">Puzzle Team</p>
+          <p class="flex items-center gap-1.5 text-xs text-muted">
+            <span class="size-1.5 rounded-full bg-success" aria-hidden="true"></span>
+            3 online
+          </p>
+        </div>
+      </div>
+
+      <ChatScroller height={ 440 } label="Team conversation" class="bg-page px-3">
+        {#for m in rows}
+          <div class="contents" key={ m.key }>
+            {#if m.attachments}
+              <ChatMessage
+                author={ m.author }
+                avatarName={ m.author }
+                time={ m.time }
+                align={ m.align }
+                variant={ m.variant }
+                showMeta={ m.showMeta }>{ m.body }<ChatAttachment
+                slot="attachments" name="q3-dashboard.png" size="1.1 MB"/><ChatAttachment
+                slot="attachments" name="metrics.csv" size="48 KB"/></ChatMessage>
+            {:else}
+              <ChatMessage
+                author={ m.author }
+                avatarName={ m.author }
+                time={ m.time }
+                align={ m.align }
+                variant={ m.variant }
+                showMeta={ m.showMeta }>{ m.body }</ChatMessage>
+            {/if}
+          </div>
+        {/for}
+      </ChatScroller>
+
+      <div class="flex items-center gap-2 border-t border-border p-3">
+        <input
+          type="text"
+          value={ draft }
+          placeholder="Message Puzzle Team…"
+          aria-label="Message"
+          class="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink outline-ring placeholder:text-muted focus-visible:outline-2 focus-visible:-outline-offset-1"
+          @input={ onDraft(event) }
+          @keydown={ onDraftKey(event) }/>
+        <Button @press={ send } disabled={ !canSend }>Send</Button>
+      </div>
+    </section>
+  </article>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ChatScroller from '../components/ui/ChatScroller.pzl';
+import ChatMessage from '../components/ui/ChatMessage.pzl';
+import ChatAttachment from '../components/ui/ChatAttachment.pzl';
+import Button from '../components/ui/Button.pzl';
+import DemoHeader from '../components/docs/DemoHeader.pzl';
+
+// Seeded conversation. align/variant/showMeta are derived in data() so the
+// message data stays clean (showMeta drops when the previous row shares the
+// same author — the compact follow-up treatment).
+const SEED = [
+  { author: 'Grace Hopper', time: '9:12 AM', body: 'Morning! Charts pack is merged — dashboards are live.' },
+  { author: 'Grace Hopper', time: '9:12 AM', body: 'The stat cards look really sharp in dark mode.' },
+  { author: 'Ada Lovelace', time: '9:14 AM', body: 'Nice. I pulled the Q3 numbers into the new data table for the review.', attachments: true },
+  { author: 'You', time: '9:16 AM', body: 'These are great. Donut chart center total was a good call.' },
+  { author: 'Ada Lovelace', time: '9:17 AM', body: 'Agreed — and the sr-only tables mean the numbers read out properly too.' },
+  { author: 'Grace Hopper', time: '9:18 AM', body: 'Shipping the chat pieces next. Very meta of us to be testing them right now.' },
+];
+
+const REPLIES = [
+  { author: 'Grace Hopper', body: 'Good point — noted for the next round.' },
+  { author: 'Ada Lovelace', body: 'Agreed! I will fold that into the review doc.' },
+  { author: 'Grace Hopper', body: 'Ha — the scroller is following along perfectly, by the way.' },
+  { author: 'Ada Lovelace', body: 'Same here. Pinning behavior feels right.' },
+];
+
+export default class ChatDemo extends PuzzleView {
+  created() {
+    this._replyTimer = null;
+    this._replyIndex = 0;
+    this.setData({ messages: SEED.slice(), draft: '' });
+  }
+
+  destroyed() {
+    if (this._replyTimer) clearTimeout(this._replyTimer);
+  }
+
+  data() {
+    const { messages, draft } = this.getData();
+    const rows = messages.map((m, i) => {
+      const prev = messages[i - 1];
+      const mine = m.author === 'You';
+      return {
+        key: `m-${i}`,
+        author: m.author,
+        time: m.time,
+        body: m.body,
+        attachments: !!m.attachments,
+        align: mine ? 'end' : 'start',
+        variant: mine ? 'sent' : 'received',
+        showMeta: !prev || prev.author !== m.author,
+      };
+    });
+    return { rows, draft, canSend: draft.trim().length > 0 };
+  }
+
+  events = {
+    onDraft: (event) => {
+      this.setData({ draft: event.target.value });
+      this.refresh();
+    },
+
+    onDraftKey: (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        this.events.send();
+      }
+    },
+
+    send: () => {
+      const { messages, draft } = this.getData();
+      const text = draft.trim();
+      if (!text) return;
+      this.setData({ messages: [...messages, { author: 'You', time: 'Just now', body: text }], draft: '' });
+      this.refresh();
+
+      if (this._replyTimer) clearTimeout(this._replyTimer);
+      this._replyTimer = setTimeout(() => {
+        this._replyTimer = null;
+        const reply = REPLIES[this._replyIndex % REPLIES.length];
+        this._replyIndex += 1;
+        const { messages: current } = this.getData();
+        this.setData({ messages: [...current, { author: reply.author, time: 'Just now', body: reply.body }] });
+        this.refresh();
+      }, 1100);
+    },
+  };
+}
+</script>

@@ -1,0 +1,774 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ inputId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+
+    <div class="relative">
+      <input
+        data-combobox-input
+        id={ inputId }
+        type="text"
+        role="combobox"
+        class={ inputClass }
+        aria-haspopup="listbox"
+        aria-expanded={ ariaExpanded }
+        aria-controls={ ariaControls }
+        aria-activedescendant={ activeId }
+        aria-autocomplete="list"
+        aria-invalid={ invalid }
+        aria-describedby={ describedby }
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        placeholder={ placeholder }
+        value={ inputValue }
+        disabled={ disabled }
+        @input={ onInput(event) }
+        @keydown={ onKey(event) }
+        @click={ onInputClick(event) } />
+
+      <button
+        type="button"
+        tabindex="-1"
+        class="absolute inset-y-0 right-0 flex items-center pr-3 text-muted disabled:opacity-50 disabled:pointer-events-none"
+        aria-label="Toggle options"
+        disabled={ disabled }
+        @mousedown={ onChevronDown(event) }
+        @click={ toggle(event) }>
+        <svg
+          class="size-4 transition-[rotate] {#if open}rotate-180{/if}"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true">
+          <path d="M6 8l4 4 4-4z" />
+        </svg>
+      </button>
+
+      {#if name}
+        <input type="hidden" name={ name } value={ hiddenValue } />
+      {/if}
+
+      {#if open}
+        <ul
+          class={ panelClass }
+          id={ listId }
+          role="listbox"
+          aria-label={ listAria }
+          data-combobox-panel
+          style={ panelStyle }>
+          {#if empty}
+            <li role="presentation" class="px-3 py-6 text-center text-sm text-muted">{ emptyText }</li>
+          {:else}
+            {#for row in rows}
+              <li
+                id={ row.id }
+                role={ row.role }
+                aria-selected={ row.ariaSelected }
+                aria-disabled={ row.ariaDisabled }
+                aria-hidden={ row.ariaHidden }
+                class={ row.rowClass }
+                @click={ choose(row, event) }
+                @mouseenter={ hover(row) }>
+                {#if row.kind === 'option'}
+                  <span class="flex-1 truncate">{ row.label }</span>
+                  {#if row.selected}
+                    <svg
+                      class="size-4 shrink-0 text-brand"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      aria-hidden="true">
+                      <path d="M5 10l3 3 7-7" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  {/if}
+                {:else if row.kind === 'group'}
+                  { row.label }
+                {/if}
+              </li>
+            {/for}
+          {/if}
+        </ul>
+      {/if}
+    </div>
+
+    {#if error}
+      <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+    {:else if hint}
+      <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Combobox — a filterable autocomplete: a role=combobox text input over a
+// role=listbox popup. It composes three established piece patterns —
+//   • Command.pzl   — the wordPrefix()/tiered ranker, the aria-activedescendant
+//                     roving model, and scroll-into-view;
+//   • Select.pzl    — the options shape ({value,label,disabled?} + {group} +
+//                     {divider}), the auto-flip panel placement, the checkmark
+//                     option rows, and the hidden form <input>;
+//   • DatePicker.pzl — the OPTIONAL-CONTROLLED open lifecycle
+//                     (_controlled/_effectiveOpen/_requestOpen/_requestClose/
+//                     _syncOpenEffects) and the pointerdown outside-click listener
+//                     whose lifetime is bounded to the open state;
+//   • Field.pzl     — the label / hint / error markup + INPUT_OK/INPUT_ERROR
+//                     classes + aria-invalid / aria-describedby wiring.
+//
+//   <Combobox options={ opts } value={ framework } @change={ setFramework } />
+//   <Combobox label="Framework" hint="Pick one" options={ opts }
+//             value={ v } @change={ setV } />
+//   <Combobox options={ opts } value={ v } open={ open }
+//             @change={ setV } @show={ onShow } @hide={ onHide } />   // controlled open
+//
+// Options entries are IDENTICAL to Select's:
+//   { value, label, disabled? }  — a selectable option
+//   { group: 'Heading' }         — a non-interactive section heading
+//   { divider: true }            — a visual separator
+//
+// FOCUS MODEL. DOM focus lives on the <input> the entire time — the listbox is
+// NEVER focused. The active option is tracked purely with aria-activedescendant
+// (Command's model, not Select's focus-into-listbox model), so the vdom never
+// fights a browser focus move. Opening the popup keeps focus on the input; a
+// selection / Escape / outside-click leaves focus on the input too.
+//
+// DISPLAY vs FILTER. Closed, the input shows the SELECTED option's label. Open,
+// it shows the live query. On open we seed the query with the selected label and
+// select-all its text, so the first keystroke replaces it (`pristine` keeps the
+// list unfiltered until that first edit — a freshly opened combobox browses the
+// full list with the current choice active). Typing re-filters AND opens. Escape
+// reverts the input text to the selected label (closing rebinds the input value)
+// and closes. Tab and outside-click (pointerdown) close.
+//
+// FILTERING. Case-insensitive two-tier ranking (word-prefix > substring), copied
+// from Command. A `filter(option, query)` prop overrides the built-in ranker
+// (return truthy to keep). While a query is active, results are re-ranked and
+// re-grouped under their headings (first-appearance order); a heading renders
+// only when one of its options survives, and positional {divider} rows are
+// dropped (they can't survive a rerank). With no query the authored order,
+// headings, and dividers are preserved verbatim (Select's render).
+//
+// STRICT SELECT-ONLY (v1). There is no free-text / custom value: Enter with no
+// matching active option is a no-op and the input reverts on close. A future
+// `allowCustomValue` would slot in at _selectActive (emit the raw query as the
+// value when no option is active) and in the close-time revert — left out of v1
+// on purpose.
+//
+// NO `morph`. Deliberately omitted: the trigger IS the input being typed into, so
+// there is no separate trigger→panel container transform to morph (unlike Select /
+// DatePicker, whose button trigger is distinct from the panel). The popup simply
+// anchors below/above the input.
+
+let uid = 0;
+
+const INPUT_BASE =
+  'h-9 w-full rounded-lg border bg-surface pl-3 pr-9 text-sm text-ink placeholder:text-muted ' +
+  'transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+const INPUT_OK = 'border-border outline-ring focus-visible:outline-ring';
+const INPUT_ERROR = 'border-danger outline-danger focus-visible:outline-danger';
+
+const PANEL_BASE =
+  'absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border ' +
+  'bg-surface py-1 shadow-lg';
+const PANEL_PLACEMENT = { bottom: 'top-full mt-1', top: 'bottom-full mb-1' };
+
+const OPTION_BASE = 'relative flex items-center gap-2 px-3 py-1.5 text-sm select-none';
+const GROUP_CLASS =
+  'px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none';
+const DIVIDER_CLASS = 'my-1 h-px bg-border';
+
+// Compose an option row's class from its disabled / active / selected state,
+// keyed off pieces.css semantic tokens (Select's optionClass).
+function optionClass(disabled, active, selected) {
+  return [
+    OPTION_BASE,
+    disabled ? 'text-faint pointer-events-none' : 'cursor-pointer hover:bg-surface-sunken',
+    active ? 'bg-surface-sunken' : '',
+    selected ? 'font-medium text-brand' : 'text-body',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+// A query "matches" a term as a word-prefix (query starts the term, or any
+// space-delimited word within it) or, more loosely, as a substring anywhere.
+function wordPrefix(text, q) {
+  if (text.startsWith(q)) return true;
+  return text.split(/\s+/).some((w) => w.startsWith(q));
+}
+
+export default class Combobox extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._base = `pp-combobox-${this._uid}`;
+    this._wasOpen = false; // last effective-open seen by the transition detector
+    this._scrollActive = false; // scroll the active option into view after next render
+    this._selectAllOnOpen = false; // select-all the input text once the next open lands
+    this._openSeeded = false; // did this open pass already seed query/active/placement?
+    this._pendingRestoreFocus = true; // whether the next close refocuses the input
+    // Local UI state. `open` is only used in uncontrolled mode (props.open wins
+    // when controlled). `pristine` = freshly opened, query still equals the
+    // selected label → show the full list until the first edit.
+    this.setData({
+      uncontrolledOpen: false,
+      query: '',
+      pristine: true,
+      activeIndex: -1,
+      placement: 'bottom',
+      maxHeight: 0,
+    });
+  }
+
+  // Outside-click close: attached only while open (see _onOpened / _onClosed).
+  // Guarded by open + containment, so the press that OPENED the popup (inside
+  // this.element) never immediately closes it back.
+  mounted() {
+    this._onDocPointer = (e) => {
+      if (!this._effectiveOpen()) return;
+      if (this.element && this.element.contains(e.target)) return;
+      this._requestClose({ restoreFocus: false });
+    };
+    // Run open/close side-effects once in case the parent mounts us already-open
+    // (controlled `open={ true }`).
+    this._syncOpenEffects();
+  }
+
+  destroyed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+  }
+
+  // ---- controlled / uncontrolled open resolution ---------------------------
+
+  _controlled() {
+    return this.props.open !== undefined;
+  }
+
+  _effectiveOpen() {
+    return this._controlled() ? !!this.props.open : !!this.getData().uncontrolledOpen;
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  // Scan the raw options for the option matching `value` (skipping headings /
+  // dividers). Used for the closed input label and the hidden form value — the
+  // selection is resolved against the FULL list, not the filtered one.
+  _selectedOption(props, value) {
+    if (value == null) return null;
+    const raw = Array.isArray(props.options) ? props.options : [];
+    for (const e of raw) {
+      if (e == null || e.divider || e.group != null) continue;
+      if (e.value === value) {
+        return {
+          value: e.value,
+          label: e.label != null ? String(e.label) : String(e.value ?? ''),
+        };
+      }
+    }
+    return null;
+  }
+
+  // Normalize `options` into a flat render list (`rows` — options + group
+  // headings + dividers) plus the option-only list keyboard nav walks
+  // (`options`). Each row carries its own id so the {#for} body can stay a
+  // single <li>; role / aria / class are decorated in data() where the active
+  // state is known. With no query the authored order/headings/dividers are kept
+  // verbatim; with a query the options are filtered + two-tier ranked and
+  // re-grouped under their headings (Command's model), dividers dropped.
+  _build(props, query, value) {
+    const base = this._base;
+    const q = String(query || '').trim().toLowerCase();
+    const rawQuery = String(query || '');
+    const raw = Array.isArray(props.options) ? props.options : [];
+    const filterFn = typeof props.filter === 'function' ? props.filter : null;
+
+    const makeOption = (entry, optIndex) => ({
+      kind: 'option',
+      id: `${base}-opt-${optIndex}`,
+      optIndex,
+      value: entry.value,
+      label: entry.label != null ? String(entry.label) : String(entry.value ?? ''),
+      disabled: !!entry.disabled,
+      selected: entry.value === value,
+      active: false,
+    });
+
+    // No active query — preserve authored order, headings, and dividers (Select).
+    if (!q) {
+      const rows = [];
+      const options = [];
+      let optIndex = 0;
+      raw.forEach((entry, i) => {
+        if (entry == null) return;
+        if (entry.divider) {
+          rows.push({ kind: 'divider', id: `${base}-div-${i}` });
+          return;
+        }
+        if (entry.group != null) {
+          rows.push({ kind: 'group', id: `${base}-grp-${i}`, label: String(entry.group) });
+          return;
+        }
+        const opt = makeOption(entry, optIndex);
+        rows.push(opt);
+        options.push(opt);
+        optIndex++;
+      });
+      return { rows, options };
+    }
+
+    // Active query — filter + two-tier rank + re-group (Command). Each option's
+    // group is derived from the most recent {group} heading; dividers are dropped.
+    let currentGroup = null;
+    const matched = [];
+    raw.forEach((entry, i) => {
+      if (entry == null || entry.divider) return;
+      if (entry.group != null) {
+        currentGroup = String(entry.group);
+        return;
+      }
+      const label = entry.label != null ? String(entry.label) : String(entry.value ?? '');
+      let tier;
+      if (filterFn) {
+        const keep = filterFn(
+          { value: entry.value, label, disabled: !!entry.disabled, group: currentGroup },
+          rawQuery
+        );
+        if (!keep) return;
+        tier = 0;
+      } else {
+        const hay = label.toLowerCase();
+        if (wordPrefix(hay, q)) tier = 0;
+        else if (hay.includes(q)) tier = 1;
+        else return;
+      }
+      matched.push({
+        value: entry.value,
+        label,
+        disabled: !!entry.disabled,
+        group: currentGroup,
+        tier,
+        order: i,
+      });
+    });
+
+    // Stable two-tier sort: word-prefix (0) before substring (1); original order
+    // preserved within a tier (Array.sort is stable).
+    matched.sort((a, b) => a.tier - b.tier || a.order - b.order);
+
+    // Partition: ungrouped first, then groups in first-appearance order.
+    const ungrouped = [];
+    const groupOrder = [];
+    const groupMap = new Map();
+    matched.forEach((m) => {
+      if (m.group == null) {
+        ungrouped.push(m);
+        return;
+      }
+      if (!groupMap.has(m.group)) {
+        groupMap.set(m.group, []);
+        groupOrder.push(m.group);
+      }
+      groupMap.get(m.group).push(m);
+    });
+
+    const rows = [];
+    const options = [];
+    let optIndex = 0;
+    const push = (m) => {
+      const opt = {
+        kind: 'option',
+        id: `${base}-opt-${optIndex}`,
+        optIndex,
+        value: m.value,
+        label: m.label,
+        disabled: m.disabled,
+        selected: m.value === value,
+        active: false,
+      };
+      rows.push(opt);
+      options.push(opt);
+      optIndex++;
+    };
+    ungrouped.forEach(push);
+    groupOrder.forEach((g, gi) => {
+      rows.push({ kind: 'group', id: `${base}-fgrp-${gi}`, label: g });
+      groupMap.get(g).forEach(push);
+    });
+
+    return { rows, options };
+  }
+
+  data(params, props) {
+    const prev = this.getData();
+    const open = this._effectiveOpen();
+    const value = props.value ?? null;
+    const query = prev.query ?? '';
+    const pristine = prev.pristine ?? true;
+    const activeIndex = prev.activeIndex ?? -1;
+
+    // Closed, or freshly opened and unedited → full (unfiltered) list. Only a
+    // live, edited query filters.
+    const buildQuery = open && !pristine ? query : '';
+    const { rows, options } = this._build(props, buildQuery, value);
+
+    const selectedOpt = this._selectedOption(props, value);
+    const selectedLabel = selectedOpt ? selectedOpt.label : '';
+
+    const activeOpt =
+      open && activeIndex >= 0 && options[activeIndex] && !options[activeIndex].disabled
+        ? options[activeIndex]
+        : null;
+    if (activeOpt) activeOpt.active = true;
+
+    // Decorate every row with role / aria / class. The {#for} body renders one
+    // shared <li>, so these are resolved here where `active` is known.
+    rows.forEach((r) => {
+      if (r.kind === 'divider') {
+        r.role = 'separator';
+        r.ariaSelected = false;
+        r.ariaDisabled = false;
+        r.ariaHidden = 'true';
+        r.rowClass = DIVIDER_CLASS;
+      } else if (r.kind === 'group') {
+        r.role = 'presentation';
+        r.ariaSelected = false;
+        r.ariaDisabled = false;
+        r.ariaHidden = false;
+        r.rowClass = GROUP_CLASS;
+      } else {
+        r.role = 'option';
+        r.ariaSelected = r.selected ? 'true' : 'false';
+        r.ariaDisabled = r.disabled ? 'true' : false;
+        r.ariaHidden = false;
+        r.rowClass = optionClass(r.disabled, r.active, r.selected);
+      }
+    });
+
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const described = !!(error || hint);
+    const placement = (open && prev.placement) || 'bottom';
+    const inputId = props.id || `${this._base}-input`;
+
+    return {
+      rows,
+      options,
+      open,
+      empty: options.length === 0,
+      inputValue: open ? query : selectedLabel,
+      placeholder: props.placeholder || 'Select…',
+      emptyText: props.emptyText || 'No results.',
+      label: props.label || '',
+      hint,
+      error,
+      invalid: error ? 'true' : false,
+      describedby: described ? `${this._base}-desc` : false,
+      descId: `${this._base}-desc`,
+      inputId,
+      listId: `${this._base}-list`,
+      listAria: props.label || 'Options',
+      ariaControls: open ? `${this._base}-list` : false,
+      ariaExpanded: open ? 'true' : 'false',
+      activeId: activeOpt ? activeOpt.id : false,
+      disabled: !!props.disabled,
+      name: props.name || false,
+      hiddenValue: selectedOpt ? selectedOpt.value : '',
+      rootClass: props.class || '',
+      inputClass: [INPUT_BASE, error ? INPUT_ERROR : INPUT_OK].join(' '),
+      panelClass: [PANEL_BASE, PANEL_PLACEMENT[placement]].filter(Boolean).join(' '),
+      panelStyle: prev.maxHeight ? `max-height:${prev.maxHeight}px;` : '',
+    };
+  }
+
+  // ---- open / close intents ------------------------------------------------
+
+  // Auto-flip placement from the input's viewport room (Select's _measurePlacement,
+  // anchored to the input since there is no separate trigger). The input is always
+  // mounted, so this can run synchronously before the panel renders.
+  _measurePlacement() {
+    const input = this.element?.querySelector('[data-combobox-input]');
+    if (!input || typeof window === 'undefined') return { placement: 'bottom', maxHeight: 0 };
+    const rect = input.getBoundingClientRect();
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    const placement = below < 240 && above > below ? 'top' : 'bottom';
+    const maxHeight = Math.max(120, Math.floor(placement === 'top' ? above : below));
+    return { placement, maxHeight };
+  }
+
+  // Seed the open state: query = selected label (browse the full list until the
+  // first edit), active option on the selection (else first enabled), and the
+  // auto-flip placement. Shared by the internal open path and the external-open
+  // fallback in _onOpened.
+  _seedOpen(selectAll) {
+    const value = this.props.value ?? null;
+    const selectedOpt = this._selectedOption(this.props, value);
+    const { options } = this._build(this.props, '', value);
+    let ai = options.findIndex((o) => o.value === value && !o.disabled);
+    if (ai < 0) ai = this._firstEnabled(options);
+    const { placement, maxHeight } = this._measurePlacement();
+    this._selectAllOnOpen = selectAll;
+    this._openSeeded = true;
+    return {
+      query: selectedOpt ? selectedOpt.label : '',
+      pristine: true,
+      activeIndex: ai,
+      placement,
+      maxHeight,
+    };
+  }
+
+  _requestOpen({ selectAll = true } = {}) {
+    if (this._effectiveOpen()) return;
+    const base = this._seedOpen(selectAll);
+    if (this._controlled()) {
+      this.setData(base);
+    } else {
+      this.setData({ ...base, uncontrolledOpen: true });
+    }
+
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+
+    // Uncontrolled: we own `open`, so render the newly-open state. Controlled:
+    // the parent's prop flip drives the render. Either way _syncOpenEffects
+    // (afterUpdate) runs the open side-effects.
+    if (!this._controlled()) this.refresh();
+  }
+
+  _requestClose({ restoreFocus = true } = {}) {
+    if (!this._effectiveOpen()) return;
+    this._pendingRestoreFocus = restoreFocus;
+
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+
+    // Controlled: parent owns `open` and will unmount the panel; focus return
+    // happens in _onClosed. Uncontrolled: tear down here.
+    if (this._controlled()) return;
+    this.setData({ uncontrolledOpen: false });
+    this.refresh();
+  }
+
+  // ---- open / close side-effects (driven by the effective-open transition) --
+
+  // Fires whenever effective-open actually changes, covering both the uncontrolled
+  // setData flip and a controlled parent flipping the prop (DatePicker's shape).
+  _syncOpenEffects() {
+    const open = this._effectiveOpen();
+    if (open && !this._wasOpen) {
+      this._wasOpen = true;
+      this._onOpened();
+    } else if (!open && this._wasOpen) {
+      this._wasOpen = false;
+      this._onClosed();
+    }
+  }
+
+  afterUpdate() {
+    this._syncOpenEffects();
+    if (this._scrollActive) {
+      this._scrollActive = false;
+      this._scrollActiveIntoView();
+    }
+  }
+
+  _onOpened() {
+    document.addEventListener('pointerdown', this._onDocPointer);
+    // Fallback seed: a controlled parent may flip `open` true with no combobox
+    // interaction (so _requestOpen/onInput never ran). Seed here, then re-render.
+    if (!this._openSeeded) {
+      this.setData(this._seedOpen(true));
+      this.refresh();
+    }
+    this._openSeeded = false;
+    // Focus stays on the input; select-all its seeded text so the first keystroke
+    // replaces the selection. Runs post-render, so the input value is already the
+    // seeded query.
+    const input = this.element?.querySelector('[data-combobox-input]');
+    if (input) {
+      input.focus({ preventScroll: true });
+      if (this._selectAllOnOpen) input.select();
+    }
+    this._selectAllOnOpen = false;
+    this._scrollActiveIntoView();
+  }
+
+  _onClosed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this.setData({ placement: 'bottom', maxHeight: 0 });
+    if (this._pendingRestoreFocus) {
+      this.element?.querySelector('[data-combobox-input]')?.focus();
+    }
+    this._pendingRestoreFocus = true;
+  }
+
+  // ---- active-option movement ----------------------------------------------
+
+  _firstEnabled(options) {
+    for (let i = 0; i < options.length; i++) if (!options[i].disabled) return i;
+    return -1;
+  }
+
+  _lastEnabled(options) {
+    for (let i = options.length - 1; i >= 0; i--) if (!options[i].disabled) return i;
+    return -1;
+  }
+
+  // Move the active option by `dir`, wrapping the ends and skipping disabled rows.
+  _move(dir) {
+    const { options, activeIndex } = this.getData();
+    const n = options.length;
+    if (!n) return;
+    let i = activeIndex;
+    for (let step = 0; step < n; step++) {
+      i = (i + dir + n) % n;
+      if (!options[i].disabled) {
+        this._setActive(i, true);
+        return;
+      }
+    }
+  }
+
+  _setActive(i, scroll) {
+    if (i < 0) return;
+    this._scrollActive = !!scroll;
+    this.setData({ activeIndex: i });
+    this.refresh();
+  }
+
+  _scrollActiveIntoView() {
+    const { open, activeId } = this.getData();
+    if (!open || !activeId || !this.element) return;
+    this.element.querySelector(`#${CSS.escape(activeId)}`)?.scrollIntoView({ block: 'nearest' });
+  }
+
+  _selectActive(event) {
+    const { options, activeIndex } = this.getData();
+    const opt = options[activeIndex];
+    // Strict select-only: no active/enabled option → no-op (allowCustomValue
+    // would emit the raw query here instead).
+    if (!opt || opt.disabled) return;
+    if (opt.value !== (this.props.value ?? null)) {
+      const { change } = this.props;
+      if (typeof change === 'function') change(opt.value, event);
+    }
+    this._requestClose({ restoreFocus: true });
+  }
+
+  events = {
+    // Chevron: keep DOM focus on the input (don't let the button steal it), then
+    // toggle on the click that follows.
+    onChevronDown: (event) => {
+      event.preventDefault();
+    },
+
+    toggle: (event) => {
+      if (this.props.disabled) return;
+      if (this._effectiveOpen()) this._requestClose({ restoreFocus: true });
+      else this._requestOpen({ selectAll: true });
+    },
+
+    // Clicking the input opens (does not close — clicks inside keep it open).
+    onInputClick: () => {
+      if (this.props.disabled) return;
+      if (!this._effectiveOpen()) this._requestOpen({ selectAll: true });
+    },
+
+    // Every keystroke re-filters, reseats the active row on the first enabled
+    // result, and opens if closed. `pristine` flips false so the list filters.
+    onInput: (event) => {
+      if (this.props.disabled) return;
+      const query = event.target.value;
+      const value = this.props.value ?? null;
+      const { options } = this._build(this.props, query, value);
+      const ai = this._firstEnabled(options);
+      this._scrollActive = false;
+
+      if (!this._effectiveOpen()) {
+        const { placement, maxHeight } = this._measurePlacement();
+        this._selectAllOnOpen = false;
+        this._openSeeded = true;
+        const base = { query, pristine: false, activeIndex: ai, placement, maxHeight };
+        if (this._controlled()) {
+          this.setData(base);
+        } else {
+          this.setData({ ...base, uncontrolledOpen: true });
+        }
+        const { show } = this.props;
+        if (typeof show === 'function') show();
+        if (!this._controlled()) this.refresh();
+      } else {
+        this.setData({ query, pristine: false, activeIndex: ai });
+        this.refresh();
+      }
+    },
+
+    onKey: (event) => {
+      const open = this._effectiveOpen();
+      const { options } = this.getData();
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          if (!open) this._requestOpen({ selectAll: true });
+          else this._move(1);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          if (!open) this._requestOpen({ selectAll: true });
+          else this._move(-1);
+          break;
+        case 'Home':
+          if (!open) return;
+          event.preventDefault();
+          this._setActive(this._firstEnabled(options), true);
+          break;
+        case 'End':
+          if (!open) return;
+          event.preventDefault();
+          this._setActive(this._lastEnabled(options), true);
+          break;
+        case 'Enter':
+          if (!open) return;
+          event.preventDefault();
+          this._selectActive(event);
+          break;
+        case 'Escape':
+          if (!open) return;
+          event.preventDefault();
+          // Revert: closing rebinds the input value to the selected label.
+          this._requestClose({ restoreFocus: true });
+          break;
+        case 'Tab':
+          // Let focus move naturally; just close.
+          if (open) this._requestClose({ restoreFocus: false });
+          break;
+        default:
+          break;
+      }
+    },
+
+    // Pointer hover seats the active row (no scroll — the pointer is already there).
+    hover: (row) => {
+      if (row.kind !== 'option' || row.disabled) return;
+      if (this.getData().activeIndex === row.optIndex) return;
+      this._setActive(row.optIndex, false);
+    },
+
+    choose: (row, event) => {
+      if (row.kind !== 'option' || row.disabled) return;
+      if (row.value !== (this.props.value ?? null)) {
+        const { change } = this.props;
+        if (typeof change === 'function') change(row.value, event);
+      }
+      this._requestClose({ restoreFocus: true });
+    },
+  };
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "markdown-editor",
+  "description": "WYSIWYG markdown editor on Tiptap/ProseMirror — Toolbar-driven headings, bold/italic/strike, inline code, lists, task lists, blockquote, code block, rules, links, and tables, with markdown typing shortcuts, emitting a controlled markdown string via @change; render stored markdown with the markdown piece",
+  "files": ["MarkdownEditor.pzl"],
+  "registryDependencies": ["toolbar", "lib/markdown-doc.js"],
+  "dependencies": ["@tiptap/core", "@tiptap/pm", "@tiptap/starter-kit", "@tiptap/extension-list", "@tiptap/extension-table", "@tiptap/markdown"],
+  "targetDir": "app/components/ui"
+}

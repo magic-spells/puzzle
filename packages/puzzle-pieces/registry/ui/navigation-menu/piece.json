@@ -1,0 +1,8 @@
+{
+  "name": "navigation-menu",
+  "description": "Horizontal site navigation with hover/click flyout panels of link cards — disclosure-pattern semantics, delayed hover intent, viewport-clamped panels, active-route underline",
+  "files": ["NavigationMenu.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

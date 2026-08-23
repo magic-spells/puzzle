@@ -1,0 +1,8 @@
+{
+  "name": "empty",
+  "description": "Empty-state block for no-results moments — optional icon slot, title, description, and action slot in a centered muted column",
+  "files": ["Empty.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

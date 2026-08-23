@@ -1,0 +1,175 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Carousel</h1>
+        <p class="mt-2 text-body">
+          A horizontal, accessible slideshow built on native scroll + CSS scroll-snap. Slides are
+          the component's <strong class="font-medium text-ink">default-slot children</strong> — one
+          direct child per slide — so you drop arbitrary markup in and the piece measures the count.
+          Prev / next arrows, a clickable dot row, arrow-key nav, and optional autoplay come built in.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <Carousel class="w-full max-w-xl">
+          <div class="flex h-56 w-full flex-col items-center justify-center gap-1 bg-brand-tint">
+            <span class="text-xs font-medium uppercase tracking-wide text-muted">Slide 1</span>
+            <span class="text-xl font-semibold text-ink">Mountains</span>
+          </div>
+          <div class="flex h-56 w-full flex-col items-center justify-center gap-1 bg-surface-sunken">
+            <span class="text-xs font-medium uppercase tracking-wide text-muted">Slide 2</span>
+            <span class="text-xl font-semibold text-ink">Forests</span>
+          </div>
+          <div class="flex h-56 w-full flex-col items-center justify-center gap-1 bg-success-tint">
+            <span class="text-xs font-medium uppercase tracking-wide text-muted">Slide 3</span>
+            <span class="text-xl font-semibold text-ink">Rivers</span>
+          </div>
+        </Carousel>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="autoplay" title="Autoplay" code={ codeAutoplay }>
+          <Carousel autoplay={ 3500 } loop={ true } class="w-full max-w-xl">
+            <div class="flex h-56 w-full items-center justify-center bg-brand-tint text-xl font-semibold text-ink">One</div>
+            <div class="flex h-56 w-full items-center justify-center bg-surface-sunken text-xl font-semibold text-ink">Two</div>
+            <div class="flex h-56 w-full items-center justify-center bg-success-tint text-xl font-semibold text-ink">Three</div>
+            <div class="flex h-56 w-full items-center justify-center bg-danger-tint text-xl font-semibold text-ink">Four</div>
+          </Carousel>
+        </ExampleBox>
+
+        <ExampleBox id="loop" title="Loop + controlled index" code={ codeLoop }>
+          <div class="w-full max-w-xl space-y-3">
+            <Carousel loop={ true } value={ loopIdx } @change={ setLoopIdx } class="w-full">
+              <div class="flex h-56 w-full items-center justify-center bg-surface-sunken text-xl font-semibold text-ink">Alpha</div>
+              <div class="flex h-56 w-full items-center justify-center bg-brand-tint text-xl font-semibold text-ink">Bravo</div>
+              <div class="flex h-56 w-full items-center justify-center bg-success-tint text-xl font-semibold text-ink">Charlie</div>
+            </Carousel>
+            <p class="text-center text-sm text-muted">Active slide: { loopIdx + 1 } of 3</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="dots" title="Dots only (no arrows)" code={ codeDots }>
+          <Carousel controls={ false } class="w-full max-w-xl">
+            <div class="flex h-56 w-full items-center justify-center bg-brand-tint text-xl font-semibold text-ink">Red</div>
+            <div class="flex h-56 w-full items-center justify-center bg-surface-sunken text-xl font-semibold text-ink">Green</div>
+            <div class="flex h-56 w-full items-center justify-center bg-success-tint text-xl font-semibold text-ink">Blue</div>
+          </Carousel>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">
+            Tab to the carousel region (or any of its buttons), then:
+          </p>
+          <ul class="space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Left / Right arrow</span> — previous / next slide</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first / last slide</li>
+            <li><span class="font-medium text-ink">Dots</span> — each dot is a real button; Tab to it and press Enter / Space to jump</li>
+            <li><span class="font-medium text-ink">Autoplay</span> — pauses while the pointer is over the carousel or focus lives inside it, and is disabled entirely under <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">prefers-reduced-motion</code></li>
+            <li><span class="font-medium text-ink">Announcements</span> — a polite live region reports “Slide N of M” as the active slide changes</li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Carousel from '@/components/ui/Carousel.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Carousel — follows the TabsDoc / ScrollAreaDoc exemplar shape.
+const installCmd = 'puzzle add piece carousel';
+const usageImport = `import Carousel from '@/components/ui/Carousel.pzl';`;
+const usageMarkup = `<Carousel class="w-full max-w-xl"></Carousel>`;
+
+const codeHero = `// Slides are the default-slot children — one direct child per slide.
+// Uncontrolled: the carousel owns its own index.
+<Carousel class="w-full max-w-xl">
+  <div class="flex h-56 w-full items-center justify-center bg-brand-tint text-ink">Mountains</div>
+  <div class="flex h-56 w-full items-center justify-center bg-surface-sunken text-ink">Forests</div>
+  <div class="flex h-56 w-full items-center justify-center bg-success-tint text-ink">Rivers</div>
+</Carousel>`;
+
+const codeAutoplay = `// autoplay is an ms interval; loop wraps past the ends.
+// Autoplay pauses on hover / focus-within and honors prefers-reduced-motion.
+<Carousel autoplay={ 3500 } loop={ true } class="w-full max-w-xl">
+  <div>…</div>
+  <div>…</div>
+  <div>…</div>
+  <div>…</div>
+</Carousel>`;
+
+const codeLoop = `// Controlled index: the parent owns \`value\`, props in / @change out.
+<Carousel loop={ true } value={ i } @change={ setI } class="w-full max-w-xl">
+  <div>Alpha</div>
+  <div>Bravo</div>
+  <div>Charlie</div>
+</Carousel>
+
+// parent
+created() { this.setData('i', 0); }
+events = { setI: (index) => this.setData('i', index) };`;
+
+const codeDots = `// controls={ false } hides the arrows and leaves the dot row.
+// (dots={ false } would do the opposite.)
+<Carousel controls={ false } class="w-full max-w-xl">
+  <div>Red</div>
+  <div>Green</div>
+  <div>Blue</div>
+</Carousel>`;
+
+export default class CarouselDoc extends PuzzleView {
+  created() {
+    this.setData({ loopIdx: 0 });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeAutoplay,
+      codeLoop,
+      codeDots,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Autoplay', href: '#autoplay' },
+        { label: 'Loop + controlled', href: '#loop' },
+        { label: 'Dots only', href: '#dots' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    setLoopIdx: (index) => this.setData('loopIdx', index),
+  };
+}
+</script>

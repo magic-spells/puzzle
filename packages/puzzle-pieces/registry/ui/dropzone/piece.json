@@ -1,0 +1,8 @@
+{
+  "name": "dropzone",
+  "description": "File upload dropzone — drag-drop + click-to-browse over a hidden file input, dragover styling, removable file list, and accept/size validation",
+  "files": ["Dropzone.pzl"],
+  "registryDependencies": ["chat-attachment"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

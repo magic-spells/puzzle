@@ -1,0 +1,8 @@
+{
+  "name": "accordion",
+  "description": "Config-first WAI-ARIA accordion group over Collapsible's speed-based open/close animation, single or multiple open",
+  "files": ["Accordion.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}
