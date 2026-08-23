@@ -78,3 +78,49 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser
+
+  pieces:
+    name: Pieces (registry + demo)
+    # Node 25 + macOS carried over from the old puzzle-pieces repo CI — the
+    # document-model suites were minted under that line (see the pieces
+    # CLAUDE.md); keep the pin unless those suites are re-minted.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Go builds the demo with the in-repo CLI: working-tree compiler AND
+      # working-tree runtime (the compiler's in-repo walk aliases
+      # '@magic-spells/puzzle' to this checkout) — strictly stronger than the
+      # old repo's published-CLI build.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 25
+      - name: Registry lib tests
+        working-directory: packages/puzzle-pieces
+        run: |
+          npm ci
+          npm test
+      - name: Demo compiles against the working tree
+        working-directory: packages/puzzle-pieces/demo
+        run: |
+          npm ci
+          npm run build
+
+  devtools:
+    name: DevTools (panel suite)
+    # No paths filter, deliberately: the panel is a Puzzle app linked to the
+    # working-tree runtime (file: dep), so a framework breaking change fails
+    # this job the day it lands instead of at the next extension release.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Panel suite against the working-tree runtime
+        working-directory: packages/puzzle-devtools
+        run: |
+          npm ci
+          npx vitest run

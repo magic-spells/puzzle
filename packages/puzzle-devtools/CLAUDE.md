@@ -10,6 +10,12 @@ apps. The framework ships a dev-only **runtime bridge** (`client-runtime/devtool
 decision D100); this repo ships everything else. The two halves are joined ONLY by the
 wire protocol — never by shared code.
 
+This package lives in the `magic-spells/puzzle` monorepo at `packages/puzzle-devtools`:
+the framework root is `../..`, the `@magic-spells/puzzle` dependency is a `file:../..`
+link (tests always run against the working-tree runtime), and the version fields track
+the framework's release train — the monorepo's `release:prep` asserts them. It stays
+`private: true` forever; "publishing" is always the extension zip, never npm.
+
 **The panel UI is itself a Puzzle app** (`panel/`), compiled by the real compiler. That
 is deliberate dogfooding: protocol messages upsert into the panel's own Puzzle store and
 the panels are ordinary reactive views. When something is awkward to build here, that is
@@ -18,15 +24,14 @@ a finding about the framework, not a reason to reach outside it.
 ## Commands
 
 ```bash
-npm install            # @magic-spells/puzzle from npm; provides node_modules/.bin/puzzle
+npm install            # links @magic-spells/puzzle from ../.. (file: dep)
 npm run build          # panel + dist-extension/
 npx vitest run         # the full suite — must be green before any commit
 npm run serve:fixture  # the synthetic bridge at :5177
 ```
 
-To develop against an unpublished framework checkout:
-`cd <puzzle>/compiler && go build -o ../puzzle ./cmd/puzzle`, then
-`PUZZLE_BIN=<puzzle>/puzzle npm run build`.
+`npm run build` compiles the panel with the monorepo compiler binary `../../puzzle` —
+build it once at the repo root with `npm run build:compiler`. `PUZZLE_BIN` overrides.
 
 ## Invariants that are easy to break
 

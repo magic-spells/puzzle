@@ -1,15 +1,20 @@
 # CLAUDE.md — puzzle-pieces
 
-Canonical agent guide for this repo. Read this every session before touching anything.
+Canonical agent guide for this package. Read this every session before touching anything.
 This file is the durable contract and stands alone; deeper rationale lives in the
 `constellation/` cards.
 
 ## What this repo is
 
-A **copy-in** UI component registry for the [Puzzle framework](../puzzle)
+A **copy-in** UI component registry for the [Puzzle framework](../..)
 (a compiler for `.pzl` single-file components). Pieces are Tailwind-styled, accessible,
 morph-aware Puzzle components distributed as **source you copy into a consumer app**, not
 packages you install.
+
+This package lives in the `magic-spells/puzzle` monorepo at `packages/puzzle-pieces`:
+release branches, feature PRs, and CI are the monorepo's, the framework root is `../..`
+(not a sibling checkout), and the monorepo's `release:prep` asserts this package's
+version stamps at release time.
 
 **Why pieces can't ship as npm imports:** plain-JS npm packages work fine in a Puzzle app,
 but `.pzl` files inside `node_modules` are unsupported — the compiler's formatter scan prunes
@@ -78,33 +83,34 @@ Rules that follow from this:
 ## Versioning
 
 **puzzle-pieces tracks the Puzzle framework version.** When the framework releases 0.5.0,
-this repo is 0.5.0 — there is no independent version line for the registry. Bumping means
+this package is 0.5.0 — there is no independent version line for the registry. Bumping means
 updating every place the number is written by hand:
 
 - `demo/package.json` `version`
 - the header badge in `demo/app/layouts/Default.pzl` (`{ pieceCount } pieces · v0.5.0`)
-- `demo/package.json`'s `@magic-spells/puzzle` dependency range, which should point at the
-  matching framework release
-- the root `package.json` `version` — the published `@magic-spells/puzzle-pieces`
+- this package's `package.json` `version` — the published `@magic-spells/puzzle-pieces`
   npm package the `add` CLI resolves against
 
 The PATCH digit is the registry's own: a piece bugfix publishes as e.g. 0.6.1
-(`npm publish` from the repo root) with no framework release and no demo bump.
+(`npm publish` from `packages/puzzle-pieces/`) with no framework release and no demo bump.
 Only major.minor moves in lockstep with the framework.
+
+The demo's `@magic-spells/puzzle` dependency is `file:../../..` — the monorepo working
+tree — so there is no framework range to bump at release.
 
 `registry/registry.json`'s `"version": 1` is the manifest SCHEMA version read by the `add`
 CLI — it is unrelated and must not be bumped along with the release.
 
 ## Verification workflow
 
-- **Compile-verify:** `cd demo && npm run build`. `@magic-spells/puzzle` is installed from
-  npm (the `puzzle` bin resolves per-platform binary packages); a globally installed
-  `puzzle` run directly in `demo/` works too. Every non-trivial change must compile clean
-  before it's done.
+- **Compile-verify:** `cd demo && npm run build` (runs the in-repo CLI via `go run`; the
+  compiler's in-repo walk resolves `@magic-spells/puzzle` to the monorepo working tree,
+  and the demo's `file:../../..` link covers editor/TS resolution). Every non-trivial
+  change must compile clean before it's done.
 - **Dev server:** `cd demo && npm run dev` on **port 3070** (3000 and several other ports
   are taken by sibling projects). Browser-smoke interactive pieces in a FOREGROUNDED tab —
   Puzzle's rAF-based view scheduler stalls re-renders in a hidden/backgrounded tab.
-- **Node tests:** `npm test` at the repo root runs the DOM-free suites in `test/` against
+- **Node tests:** `npm test` at the package root runs the DOM-free suites in `test/` against
   `registry/lib/`: the markdown and rich-text document models, an InputOTP suite, static
   wiring guards for the `sheet` and `bottom-sheet` wrapper pieces, and parity suites that
   assert the demo copies are byte-identical to their `registry/` sources. These are
@@ -242,7 +248,7 @@ CLI — it is unrelated and must not be bumped along with the release.
 
 ## The `add` CLI (shipped in the Puzzle Go CLI)
 
-`puzzle add piece <name…>` lives in the puzzle repo (`../puzzle/compiler/internal/pieces/`
+`puzzle add piece <name…>` lives in the framework (`../../compiler/internal/pieces/`
 + `add.go`) — there is NO npm package for the CLI itself; the default registry is the
 `@magic-spells/puzzle-pieces` npm package. Contract this registry must stay compatible
 with:

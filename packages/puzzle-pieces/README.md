@@ -5,7 +5,10 @@ Tailwind-styled, accessible, morph-aware — and **copied into your app, not ins
 from npm**. This package exists only as the transport for `puzzle add piece` — the CLI
 downloads it and copies sources into your app; you never install or import it.
 
-**[▶ Browse the component library](https://magic-spells.github.io/puzzle-pieces/)** —
+Part of the [`magic-spells/puzzle`](https://github.com/magic-spells/puzzle) monorepo —
+this package lives at `packages/puzzle-pieces` and releases in lockstep with the framework.
+
+**[▶ Browse the component library](https://magicspells.io/puzzle-pieces)** —
 live docs and examples for every piece.
 
 ## Why copy-in?
@@ -41,7 +44,7 @@ overlays (Dialog, Sheet, Popover, DropdownMenu, Command), data display (DataTabl
 Timeline, Tree, StatCard), charts (LineChart, BarChart, AreaChart, PieChart,
 Sparkline), rich editing (RichTextEditor, MarkdownEditor), and app-scale composites
 (Kanban, Sidebar, ChatScroller, Stepper).
-Browse them all in the [live component library](https://magic-spells.github.io/puzzle-pieces/),
+Browse them all in the [live component library](https://magicspells.io/puzzle-pieces),
 in [`registry/ui/`](./registry/ui/), or by running the docs app locally:
 
 ```sh

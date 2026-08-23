@@ -2,7 +2,7 @@
 name: Puzzle Pieces
 connected_repos:
   - name: puzzle
-    path: ../puzzle
+    path: ../..
     description: >-
       The Puzzle framework — the .pzl compiler + runtime pieces are built for. Has its own
       constellation plan.
@@ -29,7 +29,7 @@ connections:
 
 # Puzzle Pieces
 
-A **copy-in** UI component registry for the [Puzzle framework](../puzzle):
+A **copy-in** UI component registry for the [Puzzle framework](../..):
 90 Tailwind-styled, accessible, morph-aware `.pzl` pieces distributed as **source you
 copy into a consumer app**, not packages you install. This card is the map; the
 always-load rules, conventions, and hard-won gotchas live in `CLAUDE.md` (read it every

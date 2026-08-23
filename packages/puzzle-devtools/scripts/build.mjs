@@ -6,10 +6,11 @@
  *   node scripts/build.mjs --dev      development panel (unminified, sourcemap)
  *   node scripts/build.mjs --zip      also emit puzzle-devtools-<version>.zip
  *
- * The panel is compiled by the `puzzle` CLI that `npm install` provides —
- * node_modules/.bin/puzzle, the shim that resolves this platform's compiler
- * binary. Nothing outside the repo is required. PUZZLE_BIN overrides it, which
- * is how you build the panel against an unpublished framework checkout.
+ * The panel is compiled by the monorepo's compiler binary — ../../puzzle, built
+ * at the repo root with `npm run build:compiler`. The framework dependency is a
+ * file: link to ../.., so the npm shim would resolve a platform binary package
+ * that a working-tree link never installs; it is deliberately not a fallback.
+ * PUZZLE_BIN overrides the compiler binary.
  *
  * Layout produced:
  *
@@ -38,8 +39,8 @@ const PANEL_DIST = join(PANEL_DIR, 'dist');
 const EXTENSION_DIR = join(ROOT, 'extension');
 const OUT_DIR = join(ROOT, 'dist-extension');
 
-const DEFAULT_PUZZLE_BIN = join(ROOT, 'node_modules', '.bin', 'puzzle');
-const PUZZLE_BIN = process.env.PUZZLE_BIN || DEFAULT_PUZZLE_BIN;
+const MONOREPO_PUZZLE_BIN = join(ROOT, '..', '..', 'puzzle');
+const PUZZLE_BIN = process.env.PUZZLE_BIN || MONOREPO_PUZZLE_BIN;
 
 const args = process.argv.slice(2);
 const wantZip = args.includes('--zip');
@@ -61,8 +62,8 @@ function buildPanel() {
 	if (!existsSync(PUZZLE_BIN)) {
 		fail(
 			`puzzle compiler not found at ${PUZZLE_BIN}\n` +
-				`Run \`npm install\` first, or set PUZZLE_BIN to a puzzle binary (a framework ` +
-				`checkout builds one with: cd compiler && go build -o ../puzzle ./cmd/puzzle).`
+				`Build it at the monorepo root with \`npm run build:compiler\` (emits ./puzzle), ` +
+				`or set PUZZLE_BIN to a puzzle binary.`
 		);
 	}
 

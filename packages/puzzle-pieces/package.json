@@ -9,7 +9,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/magic-spells/puzzle-pieces.git"
+    "url": "git+https://github.com/magic-spells/puzzle.git",
+    "directory": "packages/puzzle-pieces"
   },
   "publishConfig": {
     "access": "public",

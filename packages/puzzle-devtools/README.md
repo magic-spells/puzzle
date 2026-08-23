@@ -9,7 +9,9 @@ bridge registers into. There are no production bytes on either side: a productio
 compiles the bridge away entirely, and a page with no bridge simply reports
 "No Puzzle app detected".
 
-**Requires Puzzle 0.6.0+** running a **development** build (`puzzle dev`). The bridge
+**Requires Puzzle 0.7.0+** running a **development** build (`puzzle dev`) — devtools
+releases in lockstep with the framework from the `magic-spells/puzzle` monorepo
+(`packages/puzzle-devtools`). The bridge
 is compiled out of production bundles, so a production page correctly reports no app.
 
 ## The panels
@@ -130,20 +132,13 @@ the Performance panel and leaves the rest working.
 ## Development setup
 
 ```bash
-npm install
+npm install                          # links @magic-spells/puzzle from ../.. (file: dep)
+(cd ../.. && npm run build:compiler) # the monorepo compiler binary — emits ../../puzzle
 ```
 
-That is the whole setup. `@magic-spells/puzzle` comes from npm, and its `puzzle` shim
-lands at `node_modules/.bin/puzzle` — which is what compiles the panel. Nothing outside
-this repo is required.
-
-To build the panel against an **unpublished framework checkout** instead (developing the
-bridge and the panel together), point `PUZZLE_BIN` at a compiler you built:
-
-```bash
-cd /path/to/puzzle/compiler && go build -o ../puzzle ./cmd/puzzle
-PUZZLE_BIN=/path/to/puzzle/puzzle npm run build
-```
+The panel is compiled by that binary, and the `file:` link means the test suite and the
+panel always run against the working-tree runtime — which is the point of living in the
+monorepo. `PUZZLE_BIN` overrides the compiler if you need a different build.
 
 ## Build
 
