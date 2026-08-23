@@ -11,7 +11,7 @@ decision D100); this repo ships everything else. The two halves are joined ONLY 
 wire protocol — never by shared code.
 
 This package lives in the `magic-spells/puzzle` monorepo at `packages/puzzle-devtools`:
-the framework root is `../..`, the `@magic-spells/puzzle` dependency is a `file:../..`
+the framework root is `../puzzle`, the `@magic-spells/puzzle` dependency is a `file:../puzzle`
 link (tests always run against the working-tree runtime), and the version fields track
 the framework's release train — the monorepo's `release:prep` asserts them. It stays
 `private: true` forever; "publishing" is always the extension zip, never npm.
@@ -24,14 +24,14 @@ a finding about the framework, not a reason to reach outside it.
 ## Commands
 
 ```bash
-npm install            # links @magic-spells/puzzle from ../.. (file: dep)
+npm install            # links @magic-spells/puzzle from ../puzzle (file: dep)
 npm run build          # panel + dist-extension/
 npx vitest run         # the full suite — must be green before any commit
 npm run serve:fixture  # the synthetic bridge at :5177
 ```
 
-`npm run build` compiles the panel with the monorepo compiler binary `../../puzzle` —
-build it once at the repo root with `npm run build:compiler`. `PUZZLE_BIN` overrides.
+`npm run build` compiles the panel with the monorepo compiler binary `../puzzle/puzzle` —
+build it once with `npm run build:compiler` (repo root delegates into `packages/puzzle`). `PUZZLE_BIN` overrides.
 
 ## Invariants that are easy to break
 

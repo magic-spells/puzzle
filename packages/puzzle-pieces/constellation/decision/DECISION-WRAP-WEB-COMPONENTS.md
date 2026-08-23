@@ -58,7 +58,7 @@ notes:
       bug was. Findings logged in notes/2026-08-22-sheet-wrapper-plan.md: dialog-panel dialogClick
       misreads keyboard (detail===0) clicks as backdrop taps (upstream), bottom-sheet 2.0.2 double
       overlay (upstream, fixed on main), and a Puzzle gap reported by the phase-3 agent — named-slot
-      FALLBACK bodies render once and are never patched (needs a minimal repro in ../..). Site
+      FALLBACK bodies render once and are never patched (needs a minimal repro in ../puzzle). Site
       sync (../magic-spells-puzzle-site) in progress.
 ---
 

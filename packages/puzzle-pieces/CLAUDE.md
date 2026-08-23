@@ -6,13 +6,13 @@ This file is the durable contract and stands alone; deeper rationale lives in th
 
 ## What this repo is
 
-A **copy-in** UI component registry for the [Puzzle framework](../..)
+A **copy-in** UI component registry for the [Puzzle framework](../puzzle)
 (a compiler for `.pzl` single-file components). Pieces are Tailwind-styled, accessible,
 morph-aware Puzzle components distributed as **source you copy into a consumer app**, not
 packages you install.
 
 This package lives in the `magic-spells/puzzle` monorepo at `packages/puzzle-pieces`:
-release branches, feature PRs, and CI are the monorepo's, the framework root is `../..`
+release branches, feature PRs, and CI are the monorepo's, the framework root is `../puzzle`
 (not a sibling checkout), and the monorepo's `release:prep` asserts this package's
 version stamps at release time.
 
@@ -95,7 +95,7 @@ The PATCH digit is the registry's own: a piece bugfix publishes as e.g. 0.6.1
 (`npm publish` from `packages/puzzle-pieces/`) with no framework release and no demo bump.
 Only major.minor moves in lockstep with the framework.
 
-The demo's `@magic-spells/puzzle` dependency is `file:../../..` — the monorepo working
+The demo's `@magic-spells/puzzle` dependency is `file:../../puzzle` — the monorepo working
 tree — so there is no framework range to bump at release.
 
 `registry/registry.json`'s `"version": 1` is the manifest SCHEMA version read by the `add`
@@ -105,7 +105,7 @@ CLI — it is unrelated and must not be bumped along with the release.
 
 - **Compile-verify:** `cd demo && npm run build` (runs the in-repo CLI via `go run`; the
   compiler's in-repo walk resolves `@magic-spells/puzzle` to the monorepo working tree,
-  and the demo's `file:../../..` link covers editor/TS resolution). Every non-trivial
+  and the demo's `file:../../puzzle` link covers editor/TS resolution). Every non-trivial
   change must compile clean before it's done.
 - **Dev server:** `cd demo && npm run dev` on **port 3070** (3000 and several other ports
   are taken by sibling projects). Browser-smoke interactive pieces in a FOREGROUNDED tab —
@@ -248,7 +248,7 @@ CLI — it is unrelated and must not be bumped along with the release.
 
 ## The `add` CLI (shipped in the Puzzle Go CLI)
 
-`puzzle add piece <name…>` lives in the framework (`../../compiler/internal/pieces/`
+`puzzle add piece <name…>` lives in the framework (`../puzzle/compiler/internal/pieces/`
 + `add.go`) — there is NO npm package for the CLI itself; the default registry is the
 `@magic-spells/puzzle-pieces` npm package. Contract this registry must stay compatible
 with:

@@ -198,24 +198,24 @@ for (const rel of SCAFFOLD_TEMPLATES) {
 // header badge, asserted because hand-bumped literals have burned us before
 // (FRAMEWORK_VERSION sat stale through a release; so did the README banner).
 {
-	const piecesPkg = readJSON('packages/puzzle-pieces/package.json');
+	const piecesPkg = readJSON('../puzzle-pieces/package.json');
 	if (piecesPkg.version !== version) {
 		fail(
-			`packages/puzzle-pieces/package.json version is "${piecesPkg.version}", expected "${version}"\n` +
+			`../puzzle-pieces/package.json version is "${piecesPkg.version}", expected "${version}"\n` +
 				"  `puzzle add piece` resolves pieces to the CLI's major.minor — publish them together."
 		);
 	}
-	console.log(`  OK  packages/puzzle-pieces/package.json version = ${piecesPkg.version}`);
+	console.log(`  OK  ../puzzle-pieces/package.json version = ${piecesPkg.version}`);
 
-	const demoPkg = readJSON('packages/puzzle-pieces/demo/package.json');
+	const demoPkg = readJSON('../puzzle-pieces/demo/package.json');
 	if (demoPkg.version !== version) {
 		fail(
-			`packages/puzzle-pieces/demo/package.json version is "${demoPkg.version}", expected "${version}"`
+			`../puzzle-pieces/demo/package.json version is "${demoPkg.version}", expected "${version}"`
 		);
 	}
-	console.log(`  OK  packages/puzzle-pieces/demo/package.json version = ${demoPkg.version}`);
+	console.log(`  OK  ../puzzle-pieces/demo/package.json version = ${demoPkg.version}`);
 
-	const badgeRel = 'packages/puzzle-pieces/demo/app/layouts/Default.pzl';
+	const badgeRel = '../puzzle-pieces/demo/app/layouts/Default.pzl';
 	const badge = readFileSync(join(repoRoot, badgeRel), 'utf8');
 	const badgeMatch = badge.match(/pieces · v(\d+\.\d+\.\d+)/);
 	if (!badgeMatch) fail(`could not find the "pieces · v<version>" header badge in ${badgeRel}`);
@@ -225,9 +225,9 @@ for (const rel of SCAFFOLD_TEMPLATES) {
 	console.log(`  OK  ${badgeRel} header badge = v${badgeMatch[1]}`);
 
 	for (const rel of [
-		'packages/puzzle-devtools/package.json',
-		'packages/puzzle-devtools/panel/package.json',
-		'packages/puzzle-devtools/extension/manifest.json',
+		'../puzzle-devtools/package.json',
+		'../puzzle-devtools/panel/package.json',
+		'../puzzle-devtools/extension/manifest.json',
 	]) {
 		const manifest = readJSON(rel);
 		if (manifest.version !== version) {
@@ -379,7 +379,7 @@ console.log('already exist on the registry before the root package resolves):\n'
 for (const { pkg } of MATRIX) {
 	console.log(`  npm publish ./npm/${pkg} --access public`);
 }
-console.log('  npm publish ./packages/puzzle-pieces --access public   # pieces — at or before root');
+console.log('  npm publish ../puzzle-pieces --access public   # pieces — at or before root');
 console.log(`  npm publish ./${rootTarball} --access public   # root — MUST go last\n`);
 console.log('Publish the root as THAT TARBALL, not as `npm publish` in this directory:');
 console.log('a directory publish sends a manifest with NO platform pins (D120), which');
@@ -387,7 +387,7 @@ console.log('is how 0.3.0 shipped with no working CLI.\n');
 console.log('Pieces publishes as a directory (no pin injection there) and must be live');
 console.log("at or before the root: `puzzle add piece` resolves pieces to the CLI's");
 console.log('own major.minor. The devtools zip is separate and unhurried:');
-console.log('  npm run build:compiler && cd packages/puzzle-devtools && npm run build:zip\n');
+console.log('  npm run build:compiler && cd ../puzzle-devtools && npm run build:zip\n');
 console.log('Then confirm the registry actually got the pins:');
 console.log('  npm run verify:published\n');
 console.log('Reminder: run the full suites first if you have not already:');
