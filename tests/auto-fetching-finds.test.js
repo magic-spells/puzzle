@@ -384,6 +384,44 @@ describe('D161 — collection completeness', () => {
 		expect(value.map((post) => post.id)).toEqual(['p1']);
 	});
 
+	it('a complete collection answers a tracked findOne miss locally, with no request', async () => {
+		fetchMock.mockImplementation(async () => json([{ id: 'p1', title: 'a' }]));
+		const store = makeStore();
+		await store.loadMany('post');
+		expect(serializeReadState(store).complete).toEqual(['post']);
+		fetchMock.mockClear();
+
+		// The stale-link case: an id the complete load did not return. The collection
+		// already proved it absent, so this must never become a detail GET.
+		const { value, requests } = trackedPass(store, () => store.findOne('post', 'missing-id'));
+		expect(value).toBeNull();
+		expect(requests.size).toBe(0);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('an options-bearing loadMany leaves a tracked findOne still faulting', async () => {
+		fetchMock.mockImplementation(async () => json([{ id: 'p1', title: 'a' }]));
+		const store = makeStore();
+		await store.loadMany('post', { page: 1 });
+		expect(serializeReadState(store).complete).toEqual([]);
+
+		fetchMock.mockImplementation(async () => json({ id: 'p2', title: 'faulted' }));
+		const { value } = await settle(store, () => store.findOne('post', 'p2'));
+		expect(value.title).toBe('faulted');
+	});
+
+	it('loadOne stays the force-refresh escape hatch after the type is complete', async () => {
+		fetchMock.mockImplementation(async () => json([]));
+		const store = makeStore();
+		await store.loadMany('post');
+		fetchMock.mockClear();
+
+		fetchMock.mockImplementation(async () => json({ id: 'p1', title: 'forced' }));
+		await expect(store.loadOne('post', 'p1')).resolves.toMatchObject({ title: 'forced' });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(fetchMock.mock.calls[0][0]).toBe(`${API}/api/posts/p1`);
+	});
+
 	it('several filtered queries share one collection request and filter locally', async () => {
 		fetchMock.mockImplementation(async () =>
 			json([

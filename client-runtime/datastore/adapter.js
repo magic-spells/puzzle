@@ -164,8 +164,14 @@ async function responseData(response) {
 	return readBody(response);
 }
 
+// Registry symbol shared with the `/fixtures` mock, which cannot use the real
+// Response constructor (not uniform across Node/jsdom) and so fails instanceof.
+// A brand, not a duck-type on ok/status: a plain payload could carry those keys.
+const RESPONSE_BRAND = Symbol.for('puzzle.response');
+
 function isResponse(value) {
-	return typeof Response !== 'undefined' && value instanceof Response;
+	if (typeof Response !== 'undefined' && value instanceof Response) return true;
+	return value != null && typeof value === 'object' && value[RESPONSE_BRAND] === true;
 }
 
 async function generatedTransport(url, verb, fetch, arg) {
@@ -571,15 +577,20 @@ class AdapterStoreMethods {
 	 * decides — with all the state that decision needs living out here — whether a
 	 * request is owed, and records the one to wait for under its diagnostic key.
 	 *
-	 * Silent (no request, no entry) when: the id is nullish or unkeyable, the
-	 * identity is known absent, or the model resolves no loadOne verb. A pending
-	 * identical request is joined rather than reissued.
+	 * Silent (no request, no entry) when: the id is nullish or unkeyable, the type
+	 * is collection-complete, the identity is known absent, or the model resolves
+	 * no loadOne verb. A pending identical request is joined rather than reissued.
 	 */
 	_faultOne(type, id, requests) {
 		if (id == null) return;
 		const key = identityKey(type, id);
 		if (key === null) return;
 		const state = readStateFor(this);
+		// A complete collection already answered every id it omits, so a miss here is
+		// a local fact, not a cache gap — pure local, same as a negative-cache hit
+		// (D161). Without this, a stale link's id would fetch a detail GET whose 500
+		// turns a known absence into a failed view.
+		if (state.complete.has(type)) return;
 		if (isAbsent(state, key)) return;
 		const inflight = state.one.get(key);
 		if (inflight) {

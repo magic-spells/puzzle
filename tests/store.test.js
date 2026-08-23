@@ -726,6 +726,19 @@ describe('Store — optional persistence', () => {
 		expect(() => todo.toggle()).not.toThrow(); // instance methods survive
 	});
 
+	it('rejects a model declaring the reserved __synced field at construction', () => {
+		class Reserved extends PuzzleModel {
+			static schema = {
+				id: Puzzle.string().primary(),
+				__synced: Puzzle.string(),
+			};
+		}
+		// The wire shape writes provenance under this exact key and hydration strips
+		// it, so a declared field of that name would silently vanish on reload.
+		expect(() => new Store({ reserved: Reserved })).toThrow(/__synced/);
+		expect(() => makeStore()).not.toThrow();
+	});
+
 	it('ignores corrupt storage content', () => {
 		const storage = fakeStorage();
 		storage.setItem('puzzle-store', '{not json');
