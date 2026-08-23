@@ -364,14 +364,17 @@ export class Store {
 	 *   and `_tracking` is left dangling. At most one async tracked eval is in
 	 *   flight at a time; overlapping async calls defer until the chain settles.
 	 *
-	 * The caller hints a known-async fn via `expectsAsync` (PuzzleView.refresh
-	 * passes `data.constructor.name === 'AsyncFunction'`), so such evals defer
-	 * up front — a single invocation — instead of running, discovering they are
-	 * async, and retrying. The rare sync-SHAPED fn that nonetheless returns a
-	 * raw Promise while a chain is in flight is caught in the thenable branch
-	 * below: its first invocation is dropped and it is retried behind the chain.
-	 * The double invocation is acceptable because data() is contractually
-	 * re-runnable — it re-runs on every store change.
+	 * The caller hints a known-async fn via `expectsAsync` (PuzzleView passes
+	 * `data.constructor.name === 'AsyncFunction'` OR its sticky
+	 * `_dataAsyncShape`), so such evals defer up front — a single invocation —
+	 * instead of running, discovering they are async, and retrying. The rare
+	 * sync-SHAPED fn that nonetheless returns a raw Promise while a chain is in
+	 * flight is caught in the thenable branch below: its first invocation is
+	 * dropped and it is retried behind the chain. The double invocation is
+	 * acceptable because data() is contractually re-runnable — it re-runs on
+	 * every store change. Latching the shape is what keeps that branch to a
+	 * view's FIRST promise-shaped evaluation: from the second on, the caller
+	 * hints true and the eval defers before it runs.
 	 *
 	 * @param {boolean} [expectsAsync=false] caller's hint that fn is async.
 	 * @param {?{reconcile?: function(boolean): void}} [pending=null] HELD-eval channel

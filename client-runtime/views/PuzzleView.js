@@ -51,6 +51,11 @@ import {
 // definition, so the differ never churns the listener, and typing does nothing.
 const INERT_BIND = () => {};
 
+// Dev steering for a .then-style data(), once per view CLASS (D161) — the fix is
+// one edit in one file, so one warning per class is the whole message. Allocated
+// lazily inside the __PUZZLE_DEV__ gate in #noteAsyncShape so production keeps
+// nothing but an unused `let` for the minifier to drop.
+let asyncShapeWarned = null;
 
 export class PuzzleView {
 	// Two-layer component state (Change C, SPEC §4). #local holds values written
@@ -133,6 +138,20 @@ export class PuzzleView {
 	// (D157). Internal; nothing outside the framework may touch them.
 	_settlingToken = 0;
 	_settleDirty = false;
+	// Sticky "this view's data() came back thenable at least once" (D161). The
+	// `expectsAsync` hint withTracking serializes on is otherwise
+	// `data.constructor.name === 'AsyncFunction'`, which a .then-style data() — a
+	// plain function returning a promise — defeats: such an eval runs INLINE, is
+	// found to be async, and is retried behind the in-flight chain, but the
+	// abandoned first invocation's continuations still run, and the store reads
+	// inside them record their faults into whichever evaluation holds `_requests`
+	// when they resume — i.e. some OTHER view's settle batch. ORing this flag into
+	// every expectsAsync makes every later eval of this view defer up front exactly
+	// like a declared-async data(), so the window is at most this view's first-ever
+	// evaluation. Underscore-public for the same reason as the two fields above:
+	// the settle loop that must OR it into its own per-pass hint is installed onto
+	// this prototype by the adapter capability (D157).
+	_dataAsyncShape = false;
 
 	// D146: the { params, props, route } a PREPARED (not yet committed) data() run
 	// evaluates against. Non-null only while such an evaluation is in flight; the
@@ -931,6 +950,28 @@ export class PuzzleView {
 	}
 
 	/**
+	 * Latch `_dataAsyncShape` the first time a data() invocation comes back thenable
+	 * (D161). Called from every eval wrapper, so the flag engages whichever entry
+	 * point happened to run first. In dev it also steers a .then-style data() at the
+	 * declaration that would have made it serialize from the start; a declared-async
+	 * data() latches the flag silently, since it already defers up front.
+	 */
+	#noteAsyncShape() {
+		if (this._dataAsyncShape) return;
+		this._dataAsyncShape = true;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (this.data.constructor.name === 'AsyncFunction') return;
+			const View = this.constructor;
+			asyncShapeWarned ??= new WeakSet();
+			if (asyncShapeWarned.has(View)) return;
+			asyncShapeWarned.add(View);
+			console.warn(
+				`[puzzle] ${View.name}.data() is a plain function returning a Promise — declare it \`async\` so overlapping evaluations serialize`
+			);
+		}
+	}
+
+	/**
 	 * Re-run data() and re-render — the router calls this on param changes,
 	 * parents on prop changes, the store via onStoreChange. Queries inside
 	 * data() re-subscribe through the store's tracking scope; a newer refresh
@@ -964,13 +1005,15 @@ export class PuzzleView {
 		}
 		const token = ++this.#runToken;
 		const run = () => {
-			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-				return devperfRunData(this, this.#params, this.#props);
-			}
-			return this.data(this.#params, this.#props);
+			const out =
+				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
+					? devperfRunData(this, this.#params, this.#props)
+					: this.data(this.#params, this.#props);
+			if (out && typeof out.then === 'function') this.#noteAsyncShape();
+			return out;
 		};
 		const store = this.ctx.store;
-		const expectsAsync = this.data.constructor.name === 'AsyncFunction';
+		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
 		let result;
 		if (!store) {
 			result = run();
@@ -1062,9 +1105,24 @@ export class PuzzleView {
 
 		// Establish/restore #evalScope around EVERY invocation (withTracking may retry
 		// fn behind an in-flight async chain) and across the async tail.
+		//
+		// Two details make that retry safe. First, the unwind target is captured ONCE
+		// here, not per invocation: the retry is a fresh top-level evaluation of the
+		// same prepare, not a nested one, so every invocation unwinds to whatever was
+		// live when the prepare started (an invocation that captured its own `prev`
+		// would capture the ABANDONED invocation's still-installed scope and leave it
+		// behind for good). Second, each invocation installs its OWN copy of `scope` —
+		// commit() below still reads the outer object — so the async tail can tell
+		// whether the scope it installed is still the live one. It may not be: the
+		// abandoned invocation's `.then` runs LATE, after the retry installed its own
+		// scope, and restoring there would clobber the live scope mid-run and leave the
+		// retry evaluating (or committing) against the wrong params/route. So the tail
+		// restores only while it still owns #evalScope. The synchronous paths cannot
+		// interleave and restore unconditionally, as before.
+		const outer = this.#evalScope;
 		const run = () => {
-			const prev = this.#evalScope;
-			this.#evalScope = scope;
+			const mine = { ...scope };
+			this.#evalScope = mine;
 			let out;
 			try {
 				out =
@@ -1072,27 +1130,28 @@ export class PuzzleView {
 						? devperfRunData(this, scope.params, scope.props)
 						: this.data(scope.params, scope.props);
 			} catch (err) {
-				this.#evalScope = prev;
+				this.#evalScope = outer;
 				throw err;
 			}
 			if (out && typeof out.then === 'function') {
+				this.#noteAsyncShape();
 				return out.then(
 					(model) => {
-						this.#evalScope = prev;
+						if (this.#evalScope === mine) this.#evalScope = outer;
 						return model;
 					},
 					(err) => {
-						this.#evalScope = prev;
+						if (this.#evalScope === mine) this.#evalScope = outer;
 						throw err;
 					}
 				);
 			}
-			this.#evalScope = prev;
+			this.#evalScope = outer;
 			return out;
 		};
 
 		const store = this.ctx.store;
-		const expectsAsync = this.data.constructor.name === 'AsyncFunction';
+		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
 		// D161: a prepared run settles through the same loop. Intermediate passes are
 		// discarded as they are anywhere else; the FINAL pass's reconcile is parked on
 		// `pending`, so commit()/discard() below are unchanged. Store notifications
