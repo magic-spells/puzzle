@@ -115,4 +115,44 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 		expect(formattedCompiles).toBe(originalCompiles);
 		expect(originalCompiles).toBeGreaterThan(0);
 	}, 300_000);
+
+	// The examples corpus has no {#raw} usage, so the plugin's own fixtures carry
+	// the D150 acceptance case: raw spans must survive formatting well enough that
+	// the compiler still emits the SAME literal text nodes.
+	it('compiles the formatted output for every fixture the compiler accepts', async () => {
+		const scratch = mkdtempSync(join(tmpdir(), 'pzlc-fix-'));
+		let checked = 0;
+		const regressions = [];
+
+		for (const file of listPzl(FIXTURES_DIR)) {
+			const outOrig = join(scratch, 'orig.js');
+			if (!compile(pzlc, 'view', file, outOrig, '').ok) continue; // out of scope
+			checked++;
+			const fmtIn = join(scratch, 'formatted.pzl');
+			writeFileSync(fmtIn, await format(readFileSync(file, 'utf8')), 'utf8');
+			const outFmt = join(scratch, 'formatted.js');
+			const res = compile(pzlc, 'view', fmtIn, outFmt, '');
+			if (!res.ok) {
+				regressions.push(`${file}: ${res.stderr.trim().split('\n')[0]}`);
+				continue;
+			}
+			if (file.endsWith('raw-block.pzl')) {
+				// The raw bodies reach codegen byte-identically: same literal text
+				// nodes before and after formatting, braces and all.
+				for (const literal of [
+					'{ "loop": true, "slides": [1, 2], "url": "/api/x" }',
+					'{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}',
+					'outer {#raw} inner',
+				]) {
+					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);
+					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
+				}
+			}
+		}
+
+		if (regressions.length) {
+			throw new Error(`formatted fixtures failed to compile:\n${regressions.join('\n')}`);
+		}
+		expect(checked).toBeGreaterThan(0);
+	}, 120_000);
 });

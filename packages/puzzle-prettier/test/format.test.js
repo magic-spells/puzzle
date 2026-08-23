@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { format, sectionMap } from './helpers.js';
+import { format, sectionMap, splitSections } from './helpers.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(here, 'fixtures');
@@ -193,21 +193,33 @@ describe('{#raw} blocks (D150)', () => {
 		expect(b['puzzle-view'].inner).toBe('{#raw}x{/raw}<br/>');
 	});
 
-	it('finds the section close after {/raw} with a stray brace in <style>', async () => {
-		const src = '<puzzle-view>{#raw}x{/raw}</puzzle-view>\n<style>\na{color:red}\n</style>\n';
+	it('finds the section close after {/raw} with an unbalanced brace later in the file', () => {
+		// Same runaway, different landing spot: the second bogus regex ate
+		// </puzzle-view> and the group closed on the first loose '}' it reached.
+		const src = '<puzzle-view>{#raw}x{/raw}</puzzle-view>\n<style>\n}\n</style>\n';
 		const b = sectionMap(src);
 		expect(b['puzzle-view'].inner).toBe('{#raw}x{/raw}');
 	});
 });
 
 describe('lexer table parity with the compiler', () => {
-	it('treats ++ / -- as update operators, not a cleared regex context', async () => {
-		// LexSkip consumes both bytes of ++/--; in `a+++/re/` the third '+' clears
-		// the state so the '/' opens a regex. Getting this wrong mis-pairs the
-		// slashes and derails the rest of the brace group.
-		const src = '<puzzle-view><b>{ a+++/}/.source }</b></puzzle-view>\n';
+	it('treats ++ / -- as update operators so a following / is division', async () => {
+		// LexSkip consumes BOTH bytes of ++/--, preserving the incoming state, so
+		// the '/' in `a++ / 2` is division. Read byte-by-byte instead, the second
+		// '+' clears the state, '/' opens a bogus regex that closes on the '/' of
+		// /}/ in the script, and the group then swallows </puzzle-view>.
+		const src =
+			'<puzzle-view><b>{ a++ / 2 }</b></puzzle-view>\n<script>\nconst re = /}/;\n</script>\n';
 		const out = await format(src);
-		expect(out).toBe(src);
+		const b = sectionMap(out);
+		expect(b['puzzle-view'].inner).toBe('<b>{ a++ / 2 }</b>');
+	});
+
+	it('still reads a lone + or - as an operator that opens a regex context', async () => {
+		// The update-operator case must require the SAME byte twice: `a+/x/` keeps
+		// the regex reading.
+		const src = '<puzzle-view><b>{ (a + /}/.source).length }</b></puzzle-view>\n';
+		expect(await format(src)).toBe(src);
 	});
 
 	it('steers a plural <scripts>/<styles> section to the singular name', async () => {
@@ -220,8 +232,13 @@ describe('lexer table parity with the compiler', () => {
 	});
 
 	it('skips a leading UTF-8 BOM instead of reporting it as stray content', async () => {
-		const out = await format('﻿<puzzle-view><div>x</div></puzzle-view>\n');
-		expect(out).toBe('﻿<puzzle-view><div>x</div></puzzle-view>\n');
+		// Prettier strips the BOM before the parser sees it, so this exercises the
+		// splitter directly — the same entry point sectionMap and puzzle-eslint use.
+		const src = '﻿<puzzle-view><div>x</div></puzzle-view>\n';
+		expect(() => splitSections(src)).not.toThrow();
+		expect(splitSections(src).map((x) => x.name)).toEqual(['puzzle-view']);
+		// and it still round-trips through Prettier unchanged
+		expect(await format(src)).toBe(src);
 	});
 });
 

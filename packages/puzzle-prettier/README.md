@@ -15,7 +15,7 @@ Both bodies honor your Prettier options (`singleQuote`, `useTabs`, `tabWidth`, `
 
 Template reformatting is **deliberately deferred to a future version.** In this v1 release the following are preserved **byte-for-byte**:
 
-- `<puzzle-view>` and `<puzzle-skeleton>` template bodies
+- `<puzzle-view>` and `<puzzle-skeleton>` template bodies — including `{#raw}` … `{/raw}` blocks, which are never reindented or rewrapped
 - every section's opening/closing tags and attributes
 - top-level HTML comments and all inter-section whitespace
 
@@ -47,7 +47,7 @@ Prettier automatically routes `.pzl` files through this plugin.
 
 ## How the splitter works
 
-Reprinting the right bytes requires splitting a `.pzl` file into its sections exactly the way the compiler does. The splitter in `src/split.js` (and its lexical helpers in `src/lex.js`) is a faithful JavaScript port of the compiler's canonical splitter, [`compiler/internal/parser/sections.go`](https://github.com/magic-spells/puzzle), including its language-aware close-tag scans. This means a literal `</script>` inside a JS string, template literal, comment, or regex — or a literal `</style>` inside a CSS comment or string — never truncates a body, and template brace groups / HTML comments inside `<puzzle-view>` are skipped correctly.
+Reprinting the right bytes requires splitting a `.pzl` file into its sections exactly the way the compiler does. The splitter in `src/split.js` (and its lexical helpers in `src/lex.js`) is a faithful JavaScript port of the compiler's canonical splitter, [`compiler/internal/parser/sections.go`](https://github.com/magic-spells/puzzle), including its language-aware close-tag scans. This means a literal `</script>` inside a JS string, template literal, comment, or regex — or a literal `</style>` inside a CSS comment or string — never truncates a body, and template brace groups / HTML comments inside `<puzzle-view>` are skipped correctly. The block-closer table is kept in step with the compiler's (`{/if}`, `{/unless}`, `{/case}`, `{/for}`, `{/svg}`, `{/comment}`, `{/raw}`), because that table is what tells the brace scanner a `/` right after a `{` is structural rather than the start of a regex literal.
 
 Files that fail to split — missing `<puzzle-view>`, a duplicated section, stray top-level content, or an unterminated tag — throw a positioned error (surfaced by Prettier with line/column) rather than silently mangling output.
 
