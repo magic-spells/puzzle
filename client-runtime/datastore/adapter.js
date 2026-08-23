@@ -1136,7 +1136,17 @@ class AdapterViewMethods {
 		const pass = () => {
 			const requests = new Map();
 			const channel = {};
-			const result = store.withTracking(this, run, expectsAsync, channel, requests);
+			// Re-read the sticky shape flag per pass, not once for the loop: a
+			// .then-style data() only reveals itself by returning a promise, and the
+			// pass that revealed it must not leave the NEXT round still hinting sync
+			// (D161 — see PuzzleView._dataAsyncShape).
+			const result = store.withTracking(
+				this,
+				run,
+				expectsAsync || this._dataAsyncShape,
+				channel,
+				requests
+			);
 			return result && typeof result.then === 'function'
 				? result.then((model) => afterPass(model, requests, channel))
 				: afterPass(result, requests, channel);
