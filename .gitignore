@@ -27,3 +27,6 @@ npm-debug.log*
 .vscode/
 .idea/
 *.swp
+
+# npm auth token lives here for publishing — never commit it
+.npmrc

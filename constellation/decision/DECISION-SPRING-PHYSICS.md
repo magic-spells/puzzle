@@ -3,7 +3,7 @@ name: Spring physics is a registry dependency for snapping sheets
 status: built
 connections:
   - DOC-REGISTRY
-  - DECISION-NATIVE-REBUILD
+  - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-COPY-IN-DISTRIBUTION
   - PLAN-PROJECT
 notes:
@@ -14,10 +14,20 @@ notes:
       Sheet's motion core lives in registry/lib/sheet-engine.js — a verbatim port of the source web
       component's spring-keyframe engine — plus sheet-policy.js and sheet-drag.js, all pinned by the
       repo-root `npm test` suite (133 tests, including exact-number motion assertions and
-      registry↔demo parity coverage). Unlike
-      bottom-sheet's height-driven WAAPI/spring hybrid, sheet's engine drives full keyframe
-      choreography per profile/effect. bottom-sheet deliberately remains the lighter-weight piece;
-      sheet supersedes only the old drag-to-dismiss Sheet.pzl.
+      registry↔demo parity coverage). Unlike bottom-sheet's height-driven WAAPI/spring hybrid,
+      sheet's engine drives full keyframe choreography per profile/effect. bottom-sheet deliberately
+      remains the lighter-weight piece; sheet supersedes only the old drag-to-dismiss Sheet.pzl.
+  - kind: state
+    text: >-
+      2026-08-22 — the earlier state note about the rebuilt `sheet` piece (frame-engine as second
+      engine dep, registry/lib/sheet-engine.js + policy + drag, 133 pinned tests) is now HISTORY:
+      sheet became a wrapper over @magic-spells/sheet (commit 1093ded, feat/sheet-wrapper) and those
+      libs, tests and the registry's direct physics/frame-engine devDeps are gone. physics-engine
+      remains a registry dependency only through bottom-sheet (still the height-driven port
+      described by this card) — and phase 2 of notes/2026-08-22-sheet-wrapper-plan.md converts
+      bottom-sheet to a wrapper over @magic-spells/bottom-sheet too, at which point this decision's
+      subject (spring physics as a direct dependency of a PORTED sheet) stops applying and the card
+      can be deleted or rewritten as 'engines arrive transitively through wrapped packages'.
 ---
 
 # Spring physics is a registry dependency for snapping sheets
@@ -37,6 +47,7 @@ cannot express that layout contract.
 
 ## Decision
 
+
 `@magic-spells/physics-engine` is the registry's third npm dependency and its
 first engine dependency used for behavior other than morphing. The
 `bottom-sheet` manifest declares it directly; the engine is constructed lazily
@@ -45,8 +56,12 @@ the tuned WAAPI fallback via `spring="none"`.
 
 Snapping is height-driven. Dragging and settling write the panel's height, then
 return the resting value to `dvh`; transform is reserved for motion below the
-shortest snap and final dismissal. This is a native `.pzl` rebuild under
-[[DECISION-NATIVE-REBUILD]], not a wrapper over the source web component.
+shortest snap and final dismissal. This is a native `.pzl` rebuild, not a
+wrapper over the source web component — built under the original
+rebuild-everything rule, before [[DECISION-WRAP-WEB-COMPONENTS]] flipped the
+default to wrapping (2026-08-22). `bottom-sheet` stays a port until there is a
+reason to rework it; `sheet` is the first piece scheduled for conversion to a
+wrapper.
 
 ## Alternatives
 

@@ -4,7 +4,32 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Sheet</h1>
         <p class="mt-2 text-body">
-          One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, an optional container-transform flight out of the trigger that opened it, entrance and exit effects, a dismiss policy, and parent-controlled open state
+          One component that is a snap-point bottom sheet on phones and morphs — live, in place,
+          while open — into a side drawer or centered dialog past the breakpoint, with
+          spring-physics snaps, drag and flick gestures, a dismiss policy, entrance and exit
+          effects, and an optional container-transform flight out of the trigger that opened it.
+        </p>
+        <p class="mt-3 text-body">
+          This piece is a <strong class="font-medium text-ink">wrapper</strong>, not a port: it
+          renders the real
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<dialog-panel>' }</code>
+          and
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<sheet-panel>' }</code>
+          custom elements from
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/sheet</code>
+          and binds attributes to them. The value here is motion — spring integration, the
+          scroll-chain handoff that decides whether a finger belongs to the sheet or to a nested
+          scroller, the profile morph across the breakpoint — and none of that is worth forking.
+          The design-system bridge is four CSS custom properties.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          The sheet closes <strong class="font-medium text-ink">itself</strong> on Escape, a
+          backdrop tap, an allowed swipe, or any
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">data-action-hide-dialog</code>
+          button, and reports through
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@hide</code>.
+          Your job is to flip <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+          back to false there — see <a class="text-brand underline underline-offset-2" href="#usage">Usage</a>.
         </p>
       </header>
 
@@ -14,20 +39,20 @@
           open={ heroOpen }
           labelledby="sheet-hero-title"
           position="center"
-          @close={ closeHero }>
+          @hide={ closeHero }>
           <div slot="header" class="pb-4">
             <div class="relative flex h-8 items-center">
               <h2 id="sheet-hero-title" class="pr-9 text-base font-semibold text-ink">Your cart</h2>
               <button
                 type="button"
+                data-action-hide-dialog
                 aria-label="Close"
-                class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                @click={ closeHero }>×</button>
+                class={ closeButtonClass }>×</button>
             </div>
           </div>
           <div class="space-y-4 py-4 text-sm text-body">
             <p>A plain centered dialog — same position at every width, no snap points, no morph. This is the zero-drama baseline; the examples below add the responsive profiles.</p>
-            <p>The X in the corner is yours, not the piece's: filling the header slot replaces the stock header, so this one re-supplies the heading and adds a close button wired to the same @close handler.</p>
+            <p>The X in the corner is yours, not the piece's: filling the header slot replaces the stock header, so this one re-supplies the heading and adds a close button. It carries data-action-hide-dialog and no click handler at all — the sheet closes itself and tells the page afterwards.</p>
             {#for n in paragraphs}
               <p key={ n }>Cart line { n } — filler content so the sheet scrolls.</p>
             {/for}
@@ -42,10 +67,31 @@
           Copy the piece into your app — it compiles with your build and the code is yours:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Like Scroll Stack, this piece has a runtime dependency: the web component it wraps.
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/dialog-panel</code>
+          is a peer that npm 7+ and pnpm install for you; Yarn 1 only warns, so install it
+          explicitly there.
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge <strong class="font-medium text-ink">both</strong> stylesheets into your app's
+          style entry
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
+          dialog-panel owns the dialog and overlay transport; sheet.css layers the panel geometry,
+          the handle and the scrim on top of it. Without them the sheet is an unstyled full-bleed
+          native dialog:
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
-          The CLI prints the npm installs for @magic-spells/physics-engine,
-          @magic-spells/frame-engine and @magic-spells/morph-engine, and copies
-          lib/sheet-engine.js, lib/sheet-policy.js, and lib/sheet-drag.js into app/lib/.
+          Order matters — dialog-panel first, because sheet.css deliberately overrides several of
+          its rules. So does
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">layer(components)</code>:
+          both stylesheets use plain element selectors, and an unlayered import would outrank every
+          Tailwind utility you put on the panel.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
       </section>
 
@@ -59,6 +105,12 @@
           content. Pass desktopPosition="bottom" to keep it welded to the bottom edge on
           desktop too.
         </p>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+          is <strong class="font-medium text-ink">edge-triggered</strong>: only a change to it acts.
+          That is what makes a self-closing sheet safe — an unrelated re-render never re-opens a
+          sheet the user just swiped away while your state still says it is open.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
@@ -70,14 +122,26 @@
           <Sheet
             open={ snapsOpen }
             title="Filters"
-            snapPoints="85vh 55vh 25vh"
+            snapPoints="25vh 55vh 85vh"
+            initialSnap={ 1 }
             snap={ snapIndex }
             @snapChange={ setSnapIndex }
-            @close={ closeSnaps }>
+            @hide={ closeSnaps }>
             <div class="space-y-3 py-4 text-sm text-body">
-              <p>This one deliberately keeps the zero-config chrome: pass title and the stock header renders a touch grabber above a centered heading, generates the heading id, and wires aria-labelledby for you. No slot, no close button, no ids to invent.</p>
+              <div class="flex gap-2">
+                {#for step in snapSteps}
+                  <button
+                    key={ step.index }
+                    type="button"
+                    class={ step.class }
+                    @click={ setSnapIndex(step.index) }>{ step.label }</button>
+                {/for}
+              </div>
+              <p>Those three buttons write the snap prop, and the piece calls snapTo() for you — that is the whole controlled path. They live inside the sheet because showModal() makes everything outside it inert.</p>
+              <p>This one deliberately keeps the zero-config chrome: pass title and the stock header renders a heading, generates its id, and wires aria-labelledby for you. No slot, no close button, no ids to invent. The grabber pill above it comes from the component.</p>
               <p>A slow release settles on the nearest snap; a flick steps exactly one snap in its direction, measured from wherever the panel actually is.</p>
-              <p>snap is optional-controlled: pass it with @snapChange to own the committed index, or omit it and the sheet tracks its snap locally. The counter next to the trigger reflects each commit.</p>
+              <p>snap is optional-controlled: pass it with @snapChange to own the committed index, or omit it and the sheet tracks its snap on its own. The counter next to the trigger reflects each commit. initialSnap picks the opening rung — snap does not seed it.</p>
+              <p>Snap points are a mobile-bottom feature only. Widen the window past 768px and this becomes a centered dialog sized to its own content, with nothing to snap to.</p>
             </div>
           </Sheet>
         </ExampleBox>
@@ -133,22 +197,18 @@
           <Sheet
             open={ morphCenterOpen }
             labelledby="sheet-morph-center-title"
-            snapPoints="85vh 55vh 30vh"
+            snapPoints="30vh 55vh 85vh"
             desktopPosition="center"
-            @close={ closeMorphCenter }>
+            @hide={ closeMorphCenter }>
             <div slot="header" class="pb-3">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-morph-center-title" class="px-9 text-center text-base font-semibold text-ink">Shipping address</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeMorphCenter }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
               <p>Below 768px: a bottom sheet welded to the edge with three snap points, dragged and flicked with a thumb. At or above it: a centered dialog that hugs its own content height and is dismiss-only.</p>
-              <p>Snaps belong to bottom sheets only, so crossing the breakpoint does not merely reposition the panel — it changes what the gesture even means. Drag it to a mid snap, widen the window, and watch it morph into a centered box.</p>
+              <p>Snaps belong to bottom sheets only, so crossing the breakpoint does not merely reposition the panel — it changes what the gesture even means. Drag it to a mid snap, widen the window, and watch it morph into a centered box. The dialog never closes and no @hide fires.</p>
               <p>The mobile side is spelled out too: snapPoints and the default position="bottom" are the phone profile, desktopPosition="center" is the wide one.</p>
             </div>
           </Sheet>
@@ -160,15 +220,11 @@
             mode="card"
             desktopPosition="left"
             desktopMode="edge"
-            @close={ closeMorphDrawer }>
+            @hide={ closeMorphDrawer }>
             <div slot="header" class="pb-3">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-morph-drawer-title" class="px-9 text-center text-base font-semibold text-ink">Browse</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeMorphDrawer }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
@@ -186,15 +242,11 @@
             desktopEffect="slide"
             desktopExitEffect="fade-scale"
             desktopMode="card"
-            @close={ closeMorphPop }>
+            @hide={ closeMorphPop }>
             <div slot="header" class="pb-3">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-morph-pop-title" class="px-9 text-center text-base font-semibold text-ink">Order placed</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeMorphPop }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
@@ -210,32 +262,24 @@
             <Button variant="outline" @press={ openCenter }>Center</Button>
             <Button variant="outline" @press={ openRight }>Right</Button>
           </div>
-          <Sheet open={ leftOpen } labelledby="sheet-left-title" position="left" @close={ closeLeft }>
+          <Sheet open={ leftOpen } labelledby="sheet-left-title" position="left" @hide={ closeLeft }>
             <div slot="header" class="pb-4">
               <div class="relative flex h-8 items-center">
                 <h2 id="sheet-left-title" class="pr-9 text-base font-semibold text-ink">Navigation</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeLeft }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
               <p>position sets the mobile profile and desktopPosition falls back to it, so a lone position="left" is a left drawer at every width — phone and desktop alike. Nothing here morphs; that is the point of this example.</p>
-              <p>A left drawer slides in from its edge and is fixed width — snap points do not apply to the sides.</p>
+              <p>A left drawer slides in from its edge and is fixed width — snap points do not apply to the sides. Retune that width with the --sheet-active-size custom property.</p>
               <p>Swipe it back toward its edge, tap the backdrop, press Escape, or use the X.</p>
             </div>
           </Sheet>
-          <Sheet open={ rightOpen } labelledby="sheet-right-title" position="right" @close={ closeRight }>
+          <Sheet open={ rightOpen } labelledby="sheet-right-title" position="right" @hide={ closeRight }>
             <div slot="header" class="pb-4">
               <div class="relative flex h-8 items-center">
                 <h2 id="sheet-right-title" class="pr-9 text-base font-semibold text-ink">Cart</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeRight }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
@@ -243,20 +287,16 @@
               <p>Want the phone to differ? Give it its own position and let desktopPosition take the wide profile — see the morphing examples above.</p>
             </div>
           </Sheet>
-          <Sheet open={ centerOpen } labelledby="sheet-center-title" position="center" @close={ closeCenter }>
+          <Sheet open={ centerOpen } labelledby="sheet-center-title" position="center" @hide={ closeCenter }>
             <div slot="header" class="pb-2">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-center-title" class="px-9 text-center text-base font-semibold text-ink">Heads up</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeCenter }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-2 py-2 text-sm text-body">
-              <p>A centered dialog hugs its content height, on a phone and on a desktop.</p>
-              <p>Two short lines stay two short lines. No grabber here — a centered dialog has no edge to drag toward, so the stock header omits it too.</p>
+              <p>A centered dialog hugs its content height, on a phone and on a desktop, and takes its width from --sheet-center-width.</p>
+              <p>Two short lines stay two short lines. It ignores snapPoints and mode at every width, and it is still swipe-dismissible downward.</p>
             </div>
           </Sheet>
         </ExampleBox>
@@ -266,15 +306,11 @@
             <Button variant="outline" @press={ openCard }>Card on mobile, card on desktop</Button>
             <Button variant="outline" @press={ openEdge }>Edge on mobile, edge on desktop</Button>
           </div>
-          <Sheet open={ cardOpen } labelledby="sheet-card-title" mode="card" desktopPosition="bottom" @close={ closeCard }>
+          <Sheet open={ cardOpen } labelledby="sheet-card-title" mode="card" desktopPosition="bottom" @hide={ closeCard }>
             <div slot="header" class="pb-3">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-card-title" class="px-9 text-center text-base font-semibold text-ink">Card mode</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeCard }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
@@ -282,21 +318,17 @@
               <p>mode="card" is the mobile profile and desktopMode already defaults to card, so this one is a floating card at every width. Both sheets here also pin desktopPosition="bottom": mode describes a panel with an edge to hug, and a bottom sheet otherwise centers on desktop where there is no edge to hug.</p>
             </div>
           </Sheet>
-          <Sheet open={ edgeOpen } labelledby="sheet-edge-title" desktopMode="edge" desktopPosition="bottom" @close={ closeEdge }>
+          <Sheet open={ edgeOpen } labelledby="sheet-edge-title" desktopMode="edge" desktopPosition="bottom" @hide={ closeEdge }>
             <div slot="header" class="pb-3">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-edge-title" class="px-9 text-center text-base font-semibold text-ink">Edge mode</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeEdge }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
               <p>Edge mode sits flush against the screen edge. It is the mobile default, so saying nothing gets it on a phone; desktopMode defaults to card, so this sheet forces desktopMode="edge" to stay flush past the breakpoint too.</p>
               <p>Leave desktopMode off and you get the third pairing for free: flush on mobile, floating card on desktop.</p>
-              <p>Both of these are also the place to see a desktop BOTTOM panel, since they pin desktopPosition="bottom". Past the breakpoint it sizes to its content rather than to a snap point — snapPoints never crosses the breakpoint — so it sits at the bottom edge only as tall as it needs to be, up to the viewport.</p>
+              <p>Both of these are also the place to see a desktop BOTTOM panel, since they pin desktopPosition="bottom". Past the breakpoint it sizes to its content rather than to a snap point — snapPoints never crosses the breakpoint — so it sits at the bottom edge only as tall as it needs to be.</p>
             </div>
           </Sheet>
         </ExampleBox>
@@ -306,20 +338,16 @@
             <Button variant="outline" @press={ openPop }>Fade-scale dialog</Button>
             <Button variant="outline" @press={ openAsym }>Bottom slide in, desktop fade out</Button>
           </div>
-          <Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="fade-scale" @close={ closePop }>
+          <Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="fade-scale" @hide={ closePop }>
             <div slot="header" class="pb-2">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-pop-title" class="px-9 text-center text-base font-semibold text-ink">Saved</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closePop }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-2 py-2 text-sm text-body">
               <p>fade-scale grows in from 95% behind a short blur, with no travel at all.</p>
-              <p>The blur is spent well before the panel settles, so the tail of the run is pure geometry.</p>
+              <p>The blur is spent well before the panel settles, so the tail of the run is pure geometry. A desktop center profile picks this effect by default.</p>
             </div>
           </Sheet>
           <Sheet
@@ -328,15 +356,11 @@
             position="bottom"
             desktopPosition="right"
             desktopExitEffect="fade-scale"
-            @close={ closeAsym }>
+            @hide={ closeAsym }>
             <div slot="header" class="pb-3">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-asym-title" class="px-9 text-center text-base font-semibold text-ink">Details</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeAsym }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
@@ -364,40 +388,41 @@
             position="bottom"
             desktopPosition="center"
             morphTrigger="#sheet-morph-source"
-            @close={ closeTriggerMorph }>
+            @hide={ closeTriggerMorph }>
             <div slot="header" class="pb-3">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-trigger-morph-title" class="px-9 text-center text-base font-semibold text-ink">Aurora Pack</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeTriggerMorph }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
               <p>morphTrigger names the element the sheet grows out of. A stand-in flies from that card to the panel while the real dialog stays out of the top layer, and the dialog is promoted mid-flight — so there is no frame where a full-size panel repaints into view.</p>
               <p>Closing it deliberately runs the flight in reverse, back into the card. Swiping it away does not: the trigger is handed back with a small pop at the end instead, because a dismissal is not a return trip.</p>
               <p>It degrades rather than breaks. Scroll the card out of view and close the sheet, and it leaves by the ordinary spring — a morph into somewhere off screen is worse than no morph. Reduced motion drops it for the same reason.</p>
+              <p>Without morphTrigger there is no morph, but focus return still works: whatever was focused when you flipped open is passed to the component as the return target.</p>
             </div>
           </Sheet>
         </ExampleBox>
 
         <ExampleBox id="dismiss" title="A sheet that may not be waved away" code={ codeDismiss }>
-          <Button variant="outline" @press={ openConfirm }>Delete project</Button>
+          <div class="flex flex-col items-center gap-2">
+            <Button variant="outline" @press={ openConfirm }>Delete project</Button>
+            <span class="text-sm text-muted">last result: { lastResult }</span>
+          </div>
           <Sheet
             open={ confirmOpen }
             title="Delete project?"
             position="center"
             dismiss="none"
-            @close={ closeConfirm }>
+            @hide={ closeConfirm }>
             <div class="space-y-2 py-2 text-sm text-body">
               <p>This cannot be undone.</p>
-              <p>Swipe, backdrop tap, and Escape are all refused — a refused swipe settles back and reports prevented: true on @snapRelease. The two buttons below are the only way out, which is why this one also keeps the stock header and offers no X in the corner: every exit is an explicit, labelled choice.</p>
+              <p>Swipe, backdrop tap, and Escape are all refused. The two buttons below are the only way out, which is why this one also keeps the stock header and offers no X in the corner: every exit is an explicit, labelled choice.</p>
+              <p>Each button carries data-action-hide-dialog and a data-result, so @hide receives which one closed it. The readout next to the trigger is that value. Escape and a backdrop tap would have reported null — that is how a dismissal is told apart from an answer.</p>
             </div>
             <div slot="footer" class="flex gap-3">
-              <Button variant="outline" class="flex-1" @press={ closeConfirm }>Cancel</Button>
-              <Button variant="destructive" class="flex-1" @press={ closeConfirm }>Delete project</Button>
+              <button type="button" data-action-hide-dialog data-result="cancel" class={ cancelButtonClass }>Cancel</button>
+              <button type="button" data-action-hide-dialog data-result="delete" class={ deleteButtonClass }>Delete project</button>
             </div>
           </Sheet>
         </ExampleBox>
@@ -408,45 +433,44 @@
             open={ springOpen }
             labelledby="sheet-spring-title"
             spring="0.08 0.4"
-            @close={ closeSpring }>
+            @hide={ closeSpring }>
             <div slot="header" class="pb-3">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-spring-title" class="px-9 text-center text-base font-semibold text-ink">Floaty</h2>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeSpring }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
               <p>spring="attraction friction" retunes how the sheet arrives — both dials exclusive of 0 and 1. This one is looser and floatier than the default entrance.</p>
-              <p>The override governs the entrance only; exits and snap settles keep their tuned presets.</p>
+              <p>The override governs the entrance only; exits and snap settles keep their tuned presets, so leaving stays brisk whatever you set.</p>
             </div>
           </Sheet>
         </ExampleBox>
 
         <ExampleBox id="header-slot" title="Custom header and a close button" code={ codeHeader }>
-          <Button variant="outline" @press={ openHeader }>Open with custom header</Button>
+          <div class="flex flex-col items-center gap-3">
+            <Button variant="outline" @press={ openHeader }>Open with custom header</Button>
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-muted">
+              <input type="checkbox" class="size-4 accent-brand" checked={ headerGrabber } @change={ toggleHeaderGrabber }/>
+              showGrabber
+            </label>
+          </div>
           <Sheet
             open={ headerOpen }
             labelledby="sheet-promo-title"
             desktopPosition="right"
-            @close={ closeHeader }>
+            showGrabber={ headerGrabber }
+            @hide={ closeHeader }>
             <div slot="header" class="pb-3">
               <div class="relative flex h-8 items-center gap-2 pr-9">
                 <h2 id="sheet-promo-title" class="text-base font-semibold text-ink">Summer promo</h2>
                 <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink">New</span>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-                  @click={ closeHeader }>×</button>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
               <p>Filling the header slot replaces the stock title entirely, so a custom header brings its own heading and points labelledby at it. There is no is-slot-filled probe — the piece cannot render the fallback alongside your markup.</p>
-              <p>The grabber is not part of that trade. Every pill is hosted on the panel and absolutely positioned, so it floats inside the header's padding rather than sitting in the flow: it survives any header content, and hiding it on a fine pointer or on desktop moves nothing. This header is just a heading, a badge, and a close button positioned against a relative row.</p>
+              <p>The grabber is not part of that trade. It is a pseudo-element on the header, so it floats inside the padding rather than sitting in the flow: it survives any header content. Toggle showGrabber next to the trigger to see it and the room it reserves disappear together — the drag surfaces are unchanged either way. It is hidden automatically on a fine pointer and on the desktop profile, so a mouse never sees one.</p>
               <p>The header is still an unconditional drag surface. A tap on the X never becomes a drag: pointer capture is deferred until the finger has moved 5px.</p>
             </div>
           </Sheet>
@@ -484,6 +508,29 @@
               </div>
             {/for}
           </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">CSS custom properties</h3>
+          <p class="mb-3 text-sm text-body">
+            Everything the ported piece exposed as numeric props — exit runway, morph duration and
+            easing, the trigger-return pop, the blob's stacking level — is a custom property on the
+            component, tunable from your own CSS with no prop at all. The piece bridges four of them
+            onto the design tokens
+            (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">--sheet-panel-background</code>,
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">--sheet-handle-color</code>,
+            and the two overlay tokens) and leaves the rest at the component's defaults:
+          </p>
+          <div class="text-sm">
+            {#for row in cssRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-56 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+          <p class="mt-3 text-sm text-muted">
+            The full list lives in the component's README — these are the ones a piece consumer
+            reaches for most.
+          </p>
         </section>
       </div>
     </article>
@@ -501,30 +548,71 @@ import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
 const installCmd = 'puzzle add piece sheet';
+const installDep = `npm install @magic-spells/sheet
+# Yarn 1 only — npm 7+ and pnpm install the peer for you
+# yarn add @magic-spells/sheet @magic-spells/dialog-panel`;
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dialog-panel/css" layer(components);
+@import "@magic-spells/sheet/css" layer(components);`;
+
 const usageImport = `import Sheet from '@/components/ui/Sheet.pzl';`;
-const usageMarkup = `<Sheet open={ sheetOpen } title="Your cart" @close={ () => this.setData('sheetOpen', false) }>
+const usageMarkup = `<Sheet open={ cartOpen } title="Your cart" @hide={ () => this.setData('cartOpen', false) }>
   <CartLines/>
   <Button slot="footer" @press={ checkout }>Checkout</Button>
-</Sheet>`;
+</Sheet>
 
-// The close-button class string is spelled out in codeHero and codeHeader and
-// elided as class="…" in the rest, following the docs convention for long
-// utility strings. Every sample's MARKUP matches its live example exactly.
+// open is EDGE-TRIGGERED: only a change to it acts. The sheet dismisses
+// itself on Escape, a backdrop tap, an allowed swipe, or any
+// [data-action-hide-dialog] descendant, then reports through @hide —
+// where you flip open back to false so the next open is a fresh edge.`;
+
+// The close-button class string is spelled out once in codeHero and elided as
+// class="…" in the rest, following the docs convention for long utility
+// strings. Every sample's MARKUP matches its live example exactly.
+const closeButtonClass =
+  'absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full ' +
+  'text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken ' +
+  'hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2';
+
+const cancelButtonClass =
+  'flex-1 cursor-pointer rounded-lg border border-border bg-surface px-4 py-2 text-sm ' +
+  'font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2';
+
+// Labels match the snapPoints list on the live example, low rung first. Built
+// once at module scope: the row never changes, and the live index is already
+// reported by the readout next to the trigger.
+const SNAP_STEP =
+  'cursor-pointer rounded-lg border border-border bg-surface px-3 py-1.5 text-xs ' +
+  'font-medium text-body transition-colors outline-ring hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2';
+const SNAP_STEPS = ['25vh', '55vh', '85vh'].map((label, index) => ({
+  index,
+  label,
+  class: SNAP_STEP,
+}));
+
+const deleteButtonClass =
+  'flex-1 cursor-pointer rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-ink ' +
+  'transition-colors outline-ring hover:bg-danger-dark focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2';
+
 const codeHero = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
 <Sheet
   open={ sheetOpen }
   labelledby="sheet-hero-title"
   position="center"
-  @close={ () => this.setData('sheetOpen', false) }>
+  @hide={ () => this.setData('sheetOpen', false) }>
 
   <div slot="header" class="pb-4">
     <div class="relative flex h-8 items-center">
       <h2 id="sheet-hero-title" class="pr-9 text-base font-semibold text-ink">Your cart</h2>
       <button
         type="button"
+        data-action-hide-dialog
         aria-label="Close"
-        class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-        @click={ closeSheet }>×</button>
+        class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2">×</button>
     </div>
   </div>
 
@@ -534,7 +622,9 @@ const codeHero = `<Button variant="outline" @press={ openSheet }>Open sheet</But
 
 // A plain centered dialog at every width — no snap points, no morph.
 // The header slot replaces the stock header, so this one re-supplies the
-// heading and adds the X. labelledby points at its heading id.`;
+// heading and adds the X. labelledby points at its heading id.
+// The X has NO click handler: data-action-hide-dialog closes the sheet
+// and @hide is where the page catches up.`;
 
 const codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping sheet</Button>
 <span class="text-sm text-muted">snap index: { snapIndex }</span>
@@ -542,31 +632,42 @@ const codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping 
 <Sheet
   open={ sheetOpen }
   title="Filters"
-  snapPoints="85vh 55vh 25vh"
+  snapPoints="25vh 55vh 85vh"
+  initialSnap={ 1 }
   snap={ snapIndex }
   @snapChange={ (index) => this.setData('snapIndex', index) }
-  @close={ () => this.setData('sheetOpen', false) }>
+  @hide={ () => this.setData('sheetOpen', false) }>
+
+  <div class="flex gap-2">
+    <button type="button" class="…" @click={ setSnapIndex(0) }>25vh</button>
+    <button type="button" class="…" @click={ setSnapIndex(1) }>55vh</button>
+    <button type="button" class="…" @click={ setSnapIndex(2) }>85vh</button>
+  </div>
   <FilterList/>
 </Sheet>
 
-// No header slot: title alone gets the centered heading,
-// the generated heading id, and aria-labelledby wired for you.
+// Those buttons only write snapIndex; the piece sees the prop change and
+// calls snapTo() for you. They sit INSIDE the sheet because showModal()
+// makes everything outside the dialog inert.
+// No header slot: title alone gets the heading, the generated heading id,
+// and aria-labelledby wired for you — plus the component's grabber pill.
 // snap is optional-controlled: omit it and the sheet tracks its own snap.
-// snapChange fires only when a release commits a snap, never mid-drag.
-// snapPoints is mobile-only — past the breakpoint this sheet is a centered
-// dialog sized to its content and none of these lengths apply.`;
+// snapChange fires only when a release commits a snap, never mid-drag,
+// and snap does not seed the opening rung — initialSnap does.
+// snapPoints is mobile-bottom only: past the breakpoint this sheet is a
+// centered dialog sized to its content and none of these lengths apply.`;
 
 const codeResponsive = `// 1 — bottom sheet with snaps on mobile, centered dialog on desktop
 <Sheet
   open={ addressOpen }
   labelledby="sheet-address-title"
-  snapPoints="85vh 55vh 30vh"
+  snapPoints="30vh 55vh 85vh"
   desktopPosition="center"
-  @close={ closeAddress }>
+  @hide={ closeAddress }>
   <div slot="header" class="pb-3">
     <div class="relative flex h-8 items-center justify-center">
       <h2 id="sheet-address-title" class="px-9 text-center text-base font-semibold text-ink">Shipping address</h2>
-      <button type="button" aria-label="Close" class="…" @click={ closeAddress }>×</button>
+      <button type="button" data-action-hide-dialog aria-label="Close" class="…">×</button>
     </div>
   </div>
   <AddressForm/>
@@ -580,7 +681,7 @@ const codeResponsive = `// 1 — bottom sheet with snaps on mobile, centered dia
   mode="card"
   desktopPosition="left"
   desktopMode="edge"
-  @close={ closeBrowse }>
+  @hide={ closeBrowse }>
   <div slot="header" class="pb-3">…heading + X…</div>
   <NavLinks/>
 </Sheet>
@@ -594,38 +695,38 @@ const codeResponsive = `// 1 — bottom sheet with snaps on mobile, centered dia
   desktopEffect="slide"
   desktopExitEffect="fade-scale"
   desktopMode="card"
-  @close={ closeOrder }>
+  @hide={ closeOrder }>
   <div slot="header" class="pb-3">…heading + X…</div>
   <OrderSummary/>
 </Sheet>
 
 // position / mode / effect / exitEffect describe the MOBILE profile.
 // desktopPosition / desktopMode / desktopEffect / desktopExitEffect take over
-// at breakpoint (default 768). desktopPosition falls back to position — EXCEPT
+// at breakpoint (default 768). Each falls back to its mobile twin — EXCEPT
 // a bottom sheet, which fans out to center by default so it sizes to its
-// content instead of standing 85vh tall on a wide screen;
-// desktopMode defaults to card, and a centered desktopEffect defaults to
-// fade-scale. Only name the halves that actually differ.
+// content instead of standing 85vh tall on a wide screen, and desktopMode,
+// which is always card unless you say otherwise. A centered desktopEffect
+// defaults to fade-scale. Only name the halves that actually differ.
 // Crossing the breakpoint while open morphs the panel in place: the dialog
-// never closes, no @close fires, and the box animates from one resting
+// never closes, no @hide fires, and the box animates from one resting
 // geometry to the other.`;
 
-const codePositions = `<Sheet open={ leftOpen } labelledby="sheet-left-title" position="left" @close={ closeLeft }>
+const codePositions = `<Sheet open={ leftOpen } labelledby="sheet-left-title" position="left" @hide={ closeLeft }>
   <div slot="header" class="pb-4">
     <div class="relative flex h-8 items-center">
       <h2 id="sheet-left-title" class="pr-9 text-base font-semibold text-ink">Navigation</h2>
-      <button type="button" aria-label="Close" class="…" @click={ closeLeft }>×</button>
+      <button type="button" data-action-hide-dialog aria-label="Close" class="…">×</button>
     </div>
   </div>
   <NavLinks/>
 </Sheet>
 
-<Sheet open={ centerOpen } labelledby="sheet-center-title" position="center" @close={ closeCenter }>
+<Sheet open={ centerOpen } labelledby="sheet-center-title" position="center" @hide={ closeCenter }>
   <div slot="header" class="pb-2">…heading + X…</div>
   <p>A centered dialog hugs its content height.</p>
 </Sheet>
 
-<Sheet open={ rightOpen } labelledby="sheet-right-title" position="right" @close={ closeRight }>
+<Sheet open={ rightOpen } labelledby="sheet-right-title" position="right" @hide={ closeRight }>
   <div slot="header" class="pb-4">…heading + X…</div>
   <CartLines/>
 </Sheet>
@@ -633,18 +734,16 @@ const codePositions = `<Sheet open={ leftOpen } labelledby="sheet-left-title" po
 // A non-bottom desktopPosition falls back to position, so each of these is the
 // SAME profile on a phone and on a desktop — no morph. Only bottom fans out to
 // center by default. Set desktopPosition when you want the two to differ.
-// Sides take a single fixed width; center takes its intrinsic height.
-// All three ignore snapPoints — snaps belong to bottom sheets only.
-// A side sheet keeps its edge pill on touch and a centered dialog has none;
-// either way the pill floats on the panel, so these headers are just a
-// heading and a close button.`;
+// Sides take a single fixed width (--sheet-active-size); a centered dialog
+// takes --sheet-center-width and its own content height.
+// All three ignore snapPoints — snaps belong to bottom sheets only.`;
 
-const codeModes = `<Sheet open={ cardOpen } labelledby="sheet-card-title" mode="card" desktopPosition="bottom" @close={ closeCard }>
+const codeModes = `<Sheet open={ cardOpen } labelledby="sheet-card-title" mode="card" desktopPosition="bottom" @hide={ closeCard }>
   <div slot="header" class="pb-3">…heading + X…</div>
   <p>Floats inside a margin with rounded corners on every side.</p>
 </Sheet>
 
-<Sheet open={ edgeOpen } labelledby="sheet-edge-title" desktopMode="edge" desktopPosition="bottom" @close={ closeEdge }>
+<Sheet open={ edgeOpen } labelledby="sheet-edge-title" desktopMode="edge" desktopPosition="bottom" @hide={ closeEdge }>
   <div slot="header" class="pb-3">…heading + X…</div>
   <p>Flush against the screen edge at every width.</p>
 </Sheet>
@@ -662,17 +761,19 @@ const codeMorphTrigger = `<button id="sheet-morph-source" @click={ openTriggerMo
   position="bottom"
   desktopPosition="center"
   morphTrigger="#sheet-morph-source"
-  @close={ closeTriggerMorph }>
+  @hide={ closeTriggerMorph }>
   <div slot="header" class="pb-3">…heading + X…</div>
   <p>Grows out of the card, and back into it on a deliberate close.</p>
 </Sheet>
 
-// morphTrigger takes a selector or an element. A deliberate close reverses the
-// flight; a swipe dismissal hands the trigger back with a pop instead. Set
-// morphDuration to 0 — or turn on reduced motion — to switch it off entirely.
-// Requires @magic-spells/morph-engine.`;
+// morphTrigger takes a selector or an element, and is also the focus-return
+// target. A deliberate close reverses the flight; a swipe dismissal hands the
+// trigger back with a pop instead. Set --sheet-morph-duration to 0 — or turn
+// on reduced motion, which does it for you — to switch it off entirely.
+// Without morphTrigger there is no morph, but focus still returns: whatever
+// was focused when open flipped is passed to the component.`;
 
-const codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="fade-scale" @close={ closePop }>
+const codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="fade-scale" @hide={ closePop }>
   <div slot="header" class="pb-2">…heading + X…</div>
   <p>fade-scale grows in from 95% behind a short blur, with no travel at all.</p>
 </Sheet>
@@ -683,7 +784,7 @@ const codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" positi
   position="bottom"
   desktopPosition="right"
   desktopExitEffect="fade-scale"
-  @close={ closeDetails }>
+  @hide={ closeDetails }>
   <div slot="header" class="pb-3">…heading + X…</div>
   <p>Bottom sheet on mobile; a right card on desktop that fades away.</p>
 </Sheet>
@@ -692,29 +793,38 @@ const codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" positi
 // exitEffect / desktopExitEffect fall back to the entrance effects,
 // so saying nothing keeps leaving as the mirror of arriving.`;
 
-const codeDismiss = `<Sheet
+const codeDismiss = `<Button variant="outline" @press={ openConfirm }>Delete project</Button>
+<span class="text-sm text-muted">last result: { lastResult }</span>
+
+<Sheet
   open={ confirmOpen }
   title="Delete project?"
   position="center"
   dismiss="none"
-  @close={ closeConfirm }>
+  @hide={ finishConfirm }>
   <p>This cannot be undone.</p>
 
   <div slot="footer" class="flex gap-3">
-    <Button variant="outline" class="flex-1" @press={ closeConfirm }>Cancel</Button>
-    <Button variant="destructive" class="flex-1" @press={ confirmDelete }>Delete project</Button>
+    <button type="button" data-action-hide-dialog data-result="cancel" class="…">Cancel</button>
+    <button type="button" data-action-hide-dialog data-result="delete" class="…">Delete project</button>
   </div>
 </Sheet>
 
+// events = {
+//   finishConfirm: ({ result }) => {
+//     this.setData({ confirmOpen: false, lastResult: result ?? 'dismissed' });
+//     if (result === 'delete') this.deleteProject();
+//   },
+// };
+
 // dismiss is a token list: "swipe backdrop escape" (default all) or "none".
-// A refused swipe settles back to its snap and @snapRelease reports
-// prevented: true, so you can shake the panel or flag the field.
-// The two footer buttons are the only exits, so this one keeps the stock
-// header and adds no X — every way out is explicit and labelled.
+// data-action-hide-dialog closes the sheet through the component; the button's
+// data-result rides along in the @hide detail, so one handler can tell which
+// answer was given. Escape, a backdrop tap and a swipe all report null.
 // The footer slot takes a single direct child, so two buttons share a
 // wrapper div that carries slot="footer".`;
 
-const codeSpring = `<Sheet open={ sheetOpen } labelledby="sheet-spring-title" spring="0.08 0.4" @close={ close }>
+const codeSpring = `<Sheet open={ sheetOpen } labelledby="sheet-spring-title" spring="0.08 0.4" @hide={ close }>
   <div slot="header" class="pb-3">…heading + X…</div>
   <p>Looser attraction, lighter friction — a floatier arrival.</p>
 </Sheet>
@@ -722,28 +832,29 @@ const codeSpring = `<Sheet open={ sheetOpen } labelledby="sheet-spring-title" sp
 // spring="attraction friction", both dials exclusive of 0 and 1.
 // Overrides the entrance only; exits and snaps keep their presets.`;
 
-const codeHeader = `<Sheet open={ sheetOpen } labelledby="sheet-promo-title" desktopPosition="right" @close={ close }>
+const codeHeader = `<Sheet
+  open={ sheetOpen }
+  labelledby="sheet-promo-title"
+  desktopPosition="right"
+  showGrabber={ showGrabber }
+  @hide={ close }>
   <div slot="header" class="pb-3">
     <div class="relative flex h-8 items-center gap-2 pr-9">
       <h2 id="sheet-promo-title" class="text-base font-semibold text-ink">Summer promo</h2>
       <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink">New</span>
-      <button
-        type="button"
-        aria-label="Close"
-        class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-        @click={ close }>×</button>
+      <button type="button" data-action-hide-dialog aria-label="Close" class="…">×</button>
     </div>
   </div>
   <PromoDetails/>
 </Sheet>
 
 // A filled header slot replaces the stock title, so it must bring its own
-// heading and point labelledby at that heading's id. The grabber is hosted
-// on the panel and floats, so it survives any header content.
+// heading and point labelledby at that heading's id. The grabber is a
+// pseudo-element on the header, so it survives any header content.
 // slot="header" must sit on a direct child of the Sheet tag.
-// The close button is absolute inside a relative row, so it pins to the
-// top-right corner without joining the flex flow. It calls the same close
-// handler as @close — the sheet never closes itself.`;
+// showGrabber={ false } zeroes the pill and the room reserved for it —
+// pure CSS, and the drag surfaces are unchanged. It is hidden automatically
+// on a fine pointer and on the desktop profile.`;
 
 export default class SheetDoc extends PuzzleView {
   created() {
@@ -764,67 +875,80 @@ export default class SheetDoc extends PuzzleView {
       confirmOpen: false,
       springOpen: false,
       headerOpen: false,
-      snapIndex: 0,
+      headerGrabber: true,
+      snapIndex: 1,
+      lastResult: '—',
     });
   }
 
   data(params, props) {
+    const state = this.getData();
     return {
-      ...this.getData(),
+      ...state,
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
+      closeButtonClass,
+      cancelButtonClass,
+      deleteButtonClass,
       codeHero,
       codeSnaps,
       codeResponsive,
       codePositions,
       codeModes,
       codeEffects,
+      codeMorphTrigger,
       codeDismiss,
       codeSpring,
       codeHeader,
       paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
+      snapSteps: SNAP_STEPS,
       propRows: [
-        { name: 'open', desc: 'Required, controlled. The parent owns it; flip it in @close.' },
-        { name: 'title', desc: 'Heading text rendered by the default header. Ignored once the header slot is filled.' },
+        { name: 'open', desc: 'Controlled, and EDGE-TRIGGERED: only a change acts. true opens, false closes. An unrelated re-render never re-opens a sheet the user already dismissed.' },
+        { name: 'title', desc: 'Heading text rendered by the stock header, which also generates its id and wires aria-labelledby. Ignored once the header slot is filled.' },
         { name: 'labelledby', desc: 'Id of the labelling heading when the header slot is filled.' },
         { name: 'position', desc: 'Mobile profile: bottom, left, right, or center. Default bottom.' },
-        { name: 'mode', desc: 'Mobile profile mode: edge or card. Default edge.' },
+        { name: 'mode', desc: 'Mobile geometry: edge or card. Default edge. Ignored by a center position at every width.' },
         { name: 'breakpoint', desc: 'Pixel width where the desktop profile takes over. Default 768.' },
         { name: 'desktopPosition', desc: 'Desktop position. Falls back to position — except a bottom sheet, which defaults to center so a wide panel sizes to its content instead of standing 85vh tall. Pass "bottom" to keep it bottom.' },
-        { name: 'desktopMode', desc: 'Desktop mode. Default card.' },
+        { name: 'desktopMode', desc: 'Desktop mode. Always card unless set — it does NOT inherit mode.' },
         { name: 'effect', desc: 'Entrance: slide, fade-scale, or slide-fade. Default slide.' },
         { name: 'exitEffect', desc: 'Exit effect; falls back to effect.' },
-        { name: 'desktopEffect', desc: 'Desktop entrance; falls back to effect, except a centered desktop defaults to fade-scale.' },
+        { name: 'desktopEffect', desc: 'Desktop entrance; falls back to effect, except a centered desktop profile, which defaults to fade-scale.' },
         { name: 'desktopExitEffect', desc: 'Desktop exit; falls back to exitEffect, then desktopEffect.' },
-        { name: 'snapPoints', desc: 'CSS lengths, e.g. "85vh 55vh calc(100dvh - 4rem)". Browser measurement supports viewport-unit variants, calc(), clamp(), and var(). Default "85vh". A MOBILE-profile prop only — nothing past the breakpoint reads it. Sides measure their width; center at any width and bottom on desktop measure their content height, so a desktop bottom panel can stand taller than the largest mobile snap.' },
-        { name: 'snap', desc: 'Snap index. Optional-controlled with @snapChange.' },
-        { name: 'initialSnap', desc: 'Index to open at on every uncontrolled open.' },
-        { name: 'dismiss', desc: 'Token list of swipe, backdrop, escape; or "all" (default) or "none".' },
-        { name: 'maxDisplayWidth', desc: 'Opening-only pixel ceiling. Above it a closed sheet will not open; an already-open sheet stays open, even if the viewport crosses the ceiling.' },
+        { name: 'snapPoints', desc: 'Space-separated CSS heights, or an array of them. A MOBILE BOTTOM prop only — every other profile sizes itself by measurement. Default "85vh".' },
+        { name: 'initialSnap', desc: 'Zero-based snap index the sheet opens at. Default: the largest.' },
+        { name: 'snap', desc: 'Optional-controlled snap index. Only a change calls snapTo(), and a change that writes back a rung the sheet itself announced through @snapChange is absorbed — a late render can never drag the sheet back to a rung the user already left. Pair with @snapChange. It does not seed the opening index — use initialSnap.' },
+        { name: 'dismiss', desc: 'Which of swipe, backdrop, escape may dismiss. Absent or "all" opens all three; "none" refuses all three. A refused sheet still tracks your finger and springs back.' },
+        { name: 'maxDisplayWidth', desc: 'Largest viewport width where opening is allowed. Above it show() refuses silently, so open={true} there leaves the page out of sync until you flip it back.' },
         { name: 'spring', desc: '"attraction friction" entrance override, both dials in (0, 1).' },
-        { name: 'showGrabber', desc: 'Show the grabber. Default true. Every pill lives on the panel, absolutely positioned and pointer-events-none, so it survives a filled header slot and costs no layout — hiding it (fine pointer, desktop, or this prop) moves nothing. A centered dialog never has one.' },
-        { name: 'exitCushion', desc: 'Extra pixels of exit runway to clear the shadow. Default 28.' },
-        { name: 'morphDuration', desc: 'Profile morph duration in ms. Default 600. Double duty: zero also switches the trigger morph off, which is why prefers-reduced-motion (it zeroes this) is the whole reduced-motion policy.' },
-        { name: 'morphEasing', desc: 'Profile morph easing.' },
-        { name: 'morphTrigger', desc: 'CSS selector or Element the sheet grows out of and shrinks back into. A MorphEngine blob flies between that box and the panel while the real dialog stays demoted, and the dialog is promoted mid-flight. A swipe dismissal, a detached trigger, or a trigger scrolled out of the viewport falls back to the ordinary spring exit.' },
-        { name: 'blobZIndex', desc: 'Stacking level for the morph blob, a body child. Default 1002 — above the dialog and scrim at 1000 and the panel at 1001.' },
-        { name: 'triggerReturnDuration', desc: 'Milliseconds for the pop a trigger plays when it is handed back without a reverse morph. Default 280; zero (or reduced motion) plays nothing at all.' },
-        { name: 'triggerReturnEasing', desc: 'Easing for that pop. Default cubic-bezier(0.34, 1.4, 0.64, 1).' },
-        { name: 'class', desc: 'Merged onto the panel; a caller width utility replaces the default width.' },
-        { name: 'backdropClass', desc: 'Merged onto the backdrop.' },
+        { name: 'morphTrigger', desc: 'CSS selector or Element the panel grows out of and shrinks back into, and the focus-return target. Without it the sheet still returns focus — document.activeElement at open time is used — it simply does not morph.' },
+        { name: 'showGrabber', desc: 'Default true. false zeroes the handle pill and the room reserved for it. CSS only; the drag surfaces are unaffected. The component already hides it on a fine pointer and on the desktop profile.' },
+        { name: 'class', desc: 'Merged onto the sheet-panel element.' },
+        { name: 'backdropClass', desc: 'Merged onto the dialog-backdrop element.' },
+        { name: 'style', desc: 'Merged onto sheet-panel after the piece\'s own classes. It must not CHANGE between renders — the component writes --sheet-active-size into that same attribute every frame.' },
       ],
       callbackRows: [
-        { name: '@close(reason)', desc: 'reason is swipe, backdrop, escape, or close. close reports a native close such as form method="dialog" or dialog.close(). The parent flips open here, and your own close button calls the same handler.' },
-        { name: '@snapChange(index)', desc: 'A release committed a snap; fires only on commit, never mid-drag.' },
-        { name: '@snapRelease(detail)', desc: 'Every claimed release: { velocity, flick, direction, size, target, prevented }. prevented is true when the dismiss policy refused a swipe.' },
-        { name: '@shown()', desc: 'The entrance settled.' },
-        { name: '@hidden()', desc: 'The exit finished and the dialog closed.' },
+        { name: '@hide(detail)', desc: 'The exit finished. detail is { result, triggerElement }: result is the data-result of the [data-action-hide-dialog] button that closed it, and null for Escape, a backdrop tap or a swipe. Flip open back to false here.' },
+        { name: '@show()', desc: 'The entrance settled and the native dialog is in the top layer.' },
+        { name: '@snapChange(index)', desc: 'A release committed a different snap; fires on commit, never mid-drag.' },
       ],
       slotRows: [
-        { name: 'header', desc: 'Replaces the title heading entirely; a filled header brings its own heading and points labelledby at it. The grabber is not replaced — it floats on the panel. The wrapper supplies the top padding. Always a drag surface.' },
-        { name: 'footer', desc: 'Pinned below the content; hidden when empty. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute.' },
-        { name: 'default', desc: 'Untagged children become the scrollable content region.' },
+        { name: 'header', desc: 'Fills sheet-header, replacing the title heading entirely; a filled header brings its own heading and points labelledby at it. The grabber is a pseudo-element and survives it. Always a drag surface.' },
+        { name: 'footer', desc: 'Fills sheet-footer, pinned below the content and hidden while empty. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute.' },
+        { name: 'default', desc: 'Untagged children become sheet-content, the scrollable region.' },
+      ],
+      cssRows: [
+        { name: '--sheet-active-size', desc: 'Fixed width of a left or right sheet (default min(26rem, 90vw)), and the active snap height of a mobile bottom sheet.' },
+        { name: '--sheet-center-width', desc: 'Width of a center dialog; its height always follows its content.' },
+        { name: '--sheet-panel-border-radius', desc: 'Exposed corner radius in edge mode (25px). --sheet-card-border-radius (20px) and --sheet-card-margin (12px) do the same for card mode.' },
+        { name: '--sheet-content-padding', desc: 'Content inset (20px). --sheet-footer-padding follows it, plus the safe area.' },
+        { name: '--sheet-morph-duration', desc: 'Profile-morph duration (600ms) AND the trigger-morph gate: 0 disables the morph entirely, which is what prefers-reduced-motion sets.' },
+        { name: '--sheet-exit-cushion', desc: 'How far past its edge a dismissal carries the panel (28px). Raise it to about your shadow blur if the panel leaves a halo.' },
+        { name: '--sheet-trigger-return-duration', desc: 'The pop a trigger plays when a close did not morph back into it (280ms).' },
+        { name: '--sheet-panel-z-index', desc: 'Stacking of the dialog (1001), one above dialog-panel\'s scrim; --sheet-blob-z-index (1002) is the morph blob. Raise the trio together.' },
       ],
       toc: [
         { label: 'Installation', href: '#installation' },
@@ -834,6 +958,7 @@ export default class SheetDoc extends PuzzleView {
         { label: 'Positions', href: '#positions' },
         { label: 'Card mode vs edge', href: '#modes' },
         { label: 'Effects', href: '#effects' },
+        { label: 'Trigger morph', href: '#morph-trigger' },
         { label: 'Dismiss policy', href: '#dismiss' },
         { label: 'Spring override', href: '#spring' },
         { label: 'Custom header', href: '#header-slot' },
@@ -871,11 +996,16 @@ export default class SheetDoc extends PuzzleView {
     openAsym: () => this.setData('asymOpen', true),
     closeAsym: () => this.setData('asymOpen', false),
     openConfirm: () => this.setData('confirmOpen', true),
-    closeConfirm: () => this.setData('confirmOpen', false),
+    // The one handler that reads the @hide detail: data-result tells a deliberate
+    // answer apart from a dismissal, which reports null.
+    closeConfirm: (detail) =>
+      this.setData({ confirmOpen: false, lastResult: detail?.result ?? 'dismissed' }),
     openSpring: () => this.setData('springOpen', true),
     closeSpring: () => this.setData('springOpen', false),
     openHeader: () => this.setData('headerOpen', true),
     closeHeader: () => this.setData('headerOpen', false),
+    toggleHeaderGrabber: (event) =>
+      this.setData('headerGrabber', !!event.target.checked),
   };
 }
 </script>

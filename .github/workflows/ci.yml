@@ -6,11 +6,10 @@ on:
 
 jobs:
   test:
-    # The sheet motion suites pin EXACT floats (ported byte-identical from
-    # @magic-spells/sheet — assertions are never loosened to fit an
-    # environment). The last-ULP values are Node-version-sensitive: node 22
-    # fails test 24 by one ULP on the SAME arm64 hardware where node 25
-    # passes, so CI pins the node line the values were minted under.
+    # Node is pinned to the line the suites were minted under. The exact-float
+    # sheet motion suites that first forced the pin are gone (the overlay pieces
+    # wrap their web components now and that behavior is tested upstream), but
+    # the remaining document-model suites were written against the same line.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
