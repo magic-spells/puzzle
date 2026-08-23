@@ -1,0 +1,11 @@
+{
+	"name": "puzzle-devtools-panel",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "The Puzzle DevTools panel UI — itself a Puzzle app (dogfooding).",
+	"scripts": {
+		"dev": "puzzle dev",
+		"build": "puzzle build"
+	}
+}

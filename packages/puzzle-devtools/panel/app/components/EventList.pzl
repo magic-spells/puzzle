@@ -1,0 +1,36 @@
+<puzzle-view>
+  <div>
+    {#if events.length === 0}
+      <p class="px-3 py-2 m-0 text-[11px] text-faint">No protocol messages yet.</p>
+    {:else}
+      <ul class="m-0 p-0 list-none">
+        {#for entry in events}
+          <li class="flex items-baseline gap-2 px-3 py-1 border-b border-line last:border-b-0">
+            <span class="font-mono text-[10px] text-faint tabular-nums shrink-0">{ entry.time }</span>
+            <span class="font-mono text-[11px] text-accent shrink-0">{ entry.type }</span>
+            <span class="text-[11px] text-muted truncate">{ entry.summary }</span>
+          </li>
+        {/for}
+      </ul>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+/**
+ * Newest-first list of recent protocol messages. Props: `limit` (default 12).
+ * Reads the capped `event` ring directly rather than taking rows as a prop, so
+ * it re-renders on its own when the bridge pushes a message.
+ */
+export default class EventList extends PuzzleView {
+  data(params, props) {
+    const limit = props.limit ?? 12;
+    const events = this.ctx.store.findMany('event');
+    return {
+      events: events.slice(-limit).reverse(),
+    };
+  }
+}
+</script>

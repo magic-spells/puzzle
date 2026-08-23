@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Puzzle DevTools panel (standalone)</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<!--
+			Standalone shell for `cd panel && puzzle dev` — UI iteration without
+			Chrome. There is no panel-glue here, so the app falls back to its offline
+			bridge stub and renders the "no Puzzle app detected" state.
+			The EXTENSION uses extension/panel.html instead; this file is never
+			copied into dist-extension/.
+		-->
+		<div id="app"></div>
+		<script type="module" src="/app.js"></script>
+	</body>
+</html>
