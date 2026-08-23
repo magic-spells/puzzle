@@ -70,16 +70,19 @@ export class ViewManager {
 		// lands — needed because a child's mount() awaits async data() while the
 		// synchronous parent patch must already have a stable insertion ref.
 		this.anchor = null;
-		// A patch() threw partway: the DOM matches NEITHER currentTree nor the tree
-		// that was being applied, so nothing may be diffed against it again. The
+		// A render threw partway — a patch(), or the very first mount(). The DOM
+		// matches NEITHER currentTree nor the tree that was being applied, so nothing
+		// may be diffed against it again. The
 		// next render routes through renderFresh() while this is set (D145).
 		this.treeUnknown = false;
 		// The two live siblings bracketing this manager's DOM range, captured
-		// immediately before the patch that threw. Both sit OUTSIDE the range, so an
-		// aborted patch cannot have moved or removed them — they are the only
-		// trustworthy handles on the corrupt range.
+		// immediately before the render that threw. Both sit OUTSIDE the range, so an
+		// aborted render cannot have moved or removed them — they are the only
+		// trustworthy handles on the corrupt range. (A failed FIRST mount brackets the
+		// anchor's slot: that is the only stretch of container it could have dirtied.)
 		this.unknownRange = null;
-		// Both vnode trees involved in that aborted patch. Their DOM positions are
+		// The vnode trees involved in that aborted render — both of a patch's, or the
+		// single incoming one of a failed first mount. Their DOM positions are
 		// lies, but their INSTANCE bookkeeping is not: nested component instances,
 		// element refs and document-level `outside` listeners are reachable only
 		// through them, and clearing the range by DOM removal releases none of it.
@@ -108,7 +111,37 @@ export class ViewManager {
 		if (this.treeUnknown) return this.renderFresh(rawTree);
 		const newTree = expandSlots(rawTree, this.slotChildren);
 		if (!this.currentTree) {
-			mount(newTree, this.container, this.anchor, this.ctx, this.owner);
+			// A FIRST mount throws too (a component's class-field initializer, a
+			// `String(symbol)` in a text node), and it needs the same D145 machinery —
+			// more so: `currentTree` is still null, so destroy() → clear() would walk
+			// NOTHING while every component this mount already instantiated keeps its
+			// store subscriptions, its document-level `outside` listeners and its
+			// <Portal> range (portalCount is incremented BEFORE the portaled children
+			// mount, so a throw under a Portal never lets the outlet go).
+			//
+			// The RANGE is the one asymmetry with the patch branch. mount() builds each
+			// element's subtree detached and inserts the root into the container LAST,
+			// so on a throw the container holds nothing this call put there — except
+			// this manager's own anchor, and the local placeholder a <Portal> parks
+			// before teleporting. Bracket the anchor's slot so renderFresh() sweeps
+			// anything that did land; the anchor is the range's `after`, the EXCLUSIVE
+			// stop, so the sweep can never eat the position marker it needs as an
+			// insertion ref. With no anchor there is no trustworthy handle on an empty
+			// range — null, exactly the patch branch's un-bracketed case, and
+			// renderFresh() mounts without a sweep.
+			const anchored = this.anchor != null && this.anchor.parentNode === this.container;
+			const before = anchored ? this.anchor.previousSibling : null;
+			try {
+				mount(newTree, this.container, this.anchor, this.ctx, this.owner);
+			} catch (err) {
+				this.treeUnknown = true;
+				this.unknownRange = anchored ? { before, after: this.anchor } : null;
+				// ONE tree: a first mount has no outgoing tree. The incoming one is the
+				// only record of what got instantiated before the throw, and
+				// releaseAborted() is the only thing that can still reach it.
+				this.unknownTrees = [newTree];
+				throw err;
+			}
 			if (this.anchor) {
 				this.anchor.remove();
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
@@ -421,10 +454,22 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 	}
 	if (vnode.isText) {
 		el = document.createTextNode(stringify(vnode.attrs.value));
+		vnode.el = el;
 	} else {
 		el = inSvgNamespace(vnode.tag, parent)
 			? document.createElementNS(SVG_NS, vnode.tag)
 			: document.createElement(vnode.tag);
+		// PUBLISH the node before the first side effect, not after the last one. Every
+		// step below can throw — setAttr installs `outside` listeners on DOCUMENT, a
+		// hand-written tree's ref can be any function, a child's mount() is the whole
+		// recursion (a component constructor, a `String(symbol)` in a text node) — and
+		// an unwind hands the half-built tree to releaseAborted(), whose releaseSubtree()
+		// reaches an element's LISTENERS and its captured ref through `vnode.el` alone.
+		// Assigned last, that read found null and the D86 document listener this element
+		// had already parked outlived the render that made it. The node is still detached
+		// here, which no reader minds: `el.remove()` on a parentless node is a no-op and
+		// every devperf/insertion-ref site tests `parentNode` first.
+		vnode.el = el;
 		for (const [name, value] of Object.entries(vnode.attrs)) {
 			setAttr(el, name, value, owner);
 		}
@@ -455,7 +500,8 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 		// option. Re-assert it now that the options are mounted (SPEC §5).
 		reassertSelectValue(el, vnode.attrs);
 	}
-	vnode.el = el;
+	// Insertion stays LAST: mount() builds detached and attaches the finished subtree
+	// in one move, so a throw leaves the container holding nothing this call put there.
 	parent.insertBefore(el, ref ?? null);
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 		devperfMutation();
@@ -884,8 +930,11 @@ function releaseSubtree(vnode) {
 }
 
 /**
- * Release the non-DOM resources held by the two vnode trees of a patch that threw
- * partway (ViewManager.treeUnknown). The DOM is cleared separately, by range
+ * Release the non-DOM resources held by the vnode trees of a render that threw
+ * partway (ViewManager.treeUnknown) — both trees of an aborted patch, or the single
+ * incoming tree of an aborted FIRST mount, which nothing else can reach at all
+ * (currentTree is still null, so clear()'s unmount walk covers nothing).
+ * The DOM is cleared separately, by range
  * removal, because these trees no longer describe where anything IS — but they are
  * still the only record of WHAT exists: nested component instances (and their store
  * subscriptions), element refs (D72), `outside` listeners parked on document (D86),
@@ -898,8 +947,15 @@ function releaseSubtree(vnode) {
  * (#destroyed guard), the ref setters are removal-guarded, and the listener sweep
  * deletes the keys it detaches, so the second visit is a no-op.
  *
- * This runs on an already-failing path, so every subtree is guarded: a throwing
-	 * user beforeDestroy()/ref must not stop the error view from mounting.
+ * This runs on an already-failing path, so the guard is per TREE, not per node: one
+ * tree's release throwing must not cost the OTHER tree its release, and neither may
+ * stop the error view from mounting. Inside a tree the walk is deliberately
+ * unguarded, because nothing it reaches is user code in a compiled app: ref setters
+ * are the framework's own __ref closures (a Map lookup and an assignment), and
+ * destroy() already contains the one user hook it fires, destroyed() (D118). Per-node
+ * try/catch would buy nothing and cost bytes on a walk that also runs on every
+ * ordinary removal. A hand-written render tree can still throw mid-walk; it forfeits
+ * the rest of THAT tree's release, and the error view mounts regardless.
  */
 function releaseAborted(trees) {
 	if (!trees) return;

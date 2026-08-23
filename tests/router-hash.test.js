@@ -155,7 +155,12 @@ describe('Router hash mode — construction & mode parity (D34)', () => {
 		routers.push(router);
 		history.replaceState({}, '', '/#/about');
 		await router.start(el, ctx());
-		expect(router.current.path).toBe('/'); // the fragment is NOT a route here
+		// The fragment is NOT a route here: it is an ordinary anchor, carried on
+		// `path`/`hash` (D83) but matched only on the pathname.
+		expect(router.current.route.name).toBe('home');
+		expect(router.current.pathname).toBe('/');
+		expect(router.current.hash).toBe('#/about');
+		expect(router.current.path).toBe('/#/about');
 		const a = document.createElement('a');
 		a.setAttribute('href', '#/about');
 		document.body.appendChild(a);
@@ -163,7 +168,8 @@ describe('Router hash mode — construction & mode parity (D34)', () => {
 		a.dispatchEvent(event);
 		await Promise.resolve();
 		expect(event.defaultPrevented).toBe(false); // left to the browser
-		expect(router.current.path).toBe('/');
+		expect(router.current.route.name).toBe('home');
+		expect(router.current.pathname).toBe('/');
 		a.remove();
 	});
 

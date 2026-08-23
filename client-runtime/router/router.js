@@ -614,7 +614,8 @@ export class Router {
 	/**
 	 * The current route path for this mode, path-shaped (pathname+search style)
 	 * and BASE-STRIPPED (v1.19, D51) — the app-facing surface never sees the base.
-	 * Path routing reads `location.pathname + location.search` inline; any other mode
+	 * Path routing reads `location.pathname + location.search + location.hash`
+	 * inline; any other mode
 	 * delegates to its own `readPath(base)` (hash parses `location.hash`, D34 —
 	 * see router/modes.js), which may return `null` for "not a route fragment", so
 	 * the caller leaves the view alone. A urlless mode never gets here (it seeds
@@ -628,11 +629,24 @@ export class Router {
 	 */
 	#currentPath() {
 		if (this.#mode) return this.#mode.readPath(this.#base);
+		// The FRAGMENT rides along too. `current.hash` is contractually the raw
+		// leading-'#' fragment (D83), and hash routing already keeps an in-fragment
+		// '#anchor'; dropping it here left path routing reporting `hash: ''` on
+		// navigation #0 and on every popstate while the address bar plainly showed
+		// `/docs#faq`, and made a re-click on an anchored link a REAL navigation —
+		// push()'s sameNavKey compares the hash byte-for-byte against a committed
+		// path that never carried one, so a byte-identical URL got a duplicate
+		// history entry. Route MATCHING is unaffected: #navigate runs stripPath
+		// first, which drops query and hash alike (link-derived paths have always
+		// carried a fragment through it). Scroll is unaffected too: #resolveScroll
+		// leaves navigation #0 alone entirely, and a pop's saved position beats the
+		// D41 anchor by design.
 		const pathname = location.pathname;
+		const fragment = location.hash;
 		if (this.#base) {
-			if (pathname === this.#base) return '/' + location.search;
+			if (pathname === this.#base) return '/' + location.search + fragment;
 			if (pathname.startsWith(this.#base + '/')) {
-				return pathname.slice(this.#base.length) + location.search;
+				return pathname.slice(this.#base.length) + location.search + fragment;
 			}
 			// Loaded outside the configured base (D51): pass the pathname through
 			// un-stripped (→ catch-all) and warn once so a misconfigured deploy is
@@ -641,9 +655,9 @@ export class Router {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				warnOutsideBaseOnce(pathname, this.#base);
 			}
-			return pathname + location.search;
+			return pathname + location.search + fragment;
 		}
-		return pathname + location.search;
+		return pathname + location.search + fragment;
 	}
 
 	/**

@@ -357,6 +357,36 @@ describe('FormatterRegistry', () => {
 			expect(typeof f.timeago(new Date())).toBe('string');
 			expect(typeof f.timeago(new Date(Date.now() - 5000))).toBe('string');
 		});
+
+		// `new Date(v)` coerces with ToNumber, and ToNumber(null|false|'') is 0 —
+		// so an unset `todo.completedAt` used to render the Unix epoch
+		// ("12/31/1969", "56 years ago") while undefined correctly rendered nothing.
+		it('an ABSENT value renders empty, never the Unix epoch', () => {
+			for (const empty of [null, undefined, '', false, true]) {
+				expect(f.date(empty)).toBe('');
+				expect(f.date(empty, 'long', 'en-US')).toBe('');
+				expect(f.date(empty, 'iso')).toBe('');
+				expect(f.time(empty)).toBe('');
+				expect(f.datetime(empty)).toBe('');
+				expect(f.timeago(empty)).toBe('');
+			}
+		});
+
+		it('in_timezone hands an absent value the Invalid Date undefined already got', () => {
+			for (const empty of [null, undefined, '', false, true]) {
+				const shifted = f.in_timezone(empty, 'America/New_York');
+				expect(shifted).toBeInstanceOf(Date);
+				expect(Number.isNaN(shifted.getTime())).toBe(true);
+			}
+		});
+
+		it('numeric 0 stays a legitimate epoch timestamp', () => {
+			// The one falsy input that IS a date. `0` and `'0'` both name the epoch.
+			expect(f.date(0, 'iso')).toBe('1970-01-01T00:00:00.000Z');
+			expect(f.date(0, 'long', 'en-US')).not.toBe('');
+			expect(f.timeago(0)).not.toBe('');
+			expect(Number.isNaN(f.in_timezone(0, 'UTC').getTime())).toBe(false);
+		});
 	});
 
 	// Every assertion here must hold in ANY machine time zone — that IS the fix.
