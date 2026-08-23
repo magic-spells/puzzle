@@ -1376,6 +1376,22 @@ export class PuzzleView {
 	viewWillHide() {}
 	viewDidHide() {}
 
+	/**
+	 * INTERNAL — does this instance actually OVERRIDE a hide hook? Component removal
+	 * (viewManager's unmount) has to fire the hide sequence for a view that declares
+	 * the hooks without an `animations.out`, and take the plain synchronous destroy()
+	 * for one that declares neither. viewManager cannot ask that question itself: the
+	 * import runs views → manager, so the base prototype is out of scope there.
+	 * Compared against the base methods rather than tested for existence, since every
+	 * instance inherits the no-op stubs above.
+	 */
+	get __hasHideHooks() {
+		return (
+			this.viewWillHide !== PuzzleView.prototype.viewWillHide ||
+			this.viewDidHide !== PuzzleView.prototype.viewDidHide
+		);
+	}
+
 	// ---- animation (constellation/doc/DOC-SPEC.md §12) ----------------------
 
 	// A subclass MAY also declare an optional `transitionMode` field here,

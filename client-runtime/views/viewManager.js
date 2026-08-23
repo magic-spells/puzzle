@@ -789,10 +789,16 @@ function unmount(vnode) {
 		// GENUINE reorder concurrent with a leave, survivors order correctly but
 		// the leaver's resting spot among them is unspecified; a newly mounted
 		// sibling inserts relative to survivors and may land before or after a
-		// leaver. Pure removals keep the leaver exactly in place. Without
-		// `animations.out` this is the original synchronous, instant destroy() —
-		// zero behaviour change (the whole existing suite is the regression net).
-		if (child?.animations?.out) {
+		// leaver. Pure removals keep the leaver exactly in place. Declaring NEITHER
+		// an out-animation nor a hide hook keeps the original synchronous, instant
+		// destroy() — zero behaviour change (the whole existing suite is the
+		// regression net). Declaring a hide hook WITHOUT an animation still routes
+		// through destroyAnimated(), because viewWillHide()/viewDidHide() are
+		// lifecycle, not animation callbacks (D28): they fire in order with
+		// zero-duration semantics, exactly as the router's teardown already fires
+		// them. Nothing else changes for that view — playOut() with no `out` spec
+		// awaits no animation, so the hooks and destroy() land in the same order.
+		if (child?.animations?.out || child?.__hasHideHooks) {
 			const leavingEl = child.element;
 			if (leavingEl && leavingEl.nodeType === 1 /* ELEMENT_NODE */) {
 				leavingEls.add(leavingEl);
