@@ -153,6 +153,12 @@
             and Escape dismisses it and refocuses the button.
           </li>
           <li>
+            The collapse control is the rail's right edge itself: a full-height button with
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-pressed</code>
+            and a state-aware label. It is keyboard-reachable, and focusing it reveals the same
+            highlight and arrow that hovering does — no pointer required.
+          </li>
+          <li>
             Every link and button shows a visible focus ring (unconditional outline color, revealed
             on <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">:focus-visible</code>),
             and the width and submenu animations honor
@@ -237,7 +243,8 @@ const codeHero = `const items = [
 </Sidebar>`;
 
 const codeCollapsed = `// collapsed is OPTIONAL-CONTROLLED: pass it and the parent owns it.
-// @collapse(next) fires from the rail's built-in bottom toggle too.
+// @collapse(next) fires from the rail's built-in edge toggle too —
+// hover or focus the right border to reveal it.
 <Sidebar items={ items } activePath={ path }
          collapsed={ collapsed } @collapse={ setCollapsed } />
 
