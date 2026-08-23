@@ -720,7 +720,21 @@ function sameNode(a, b) {
 	// (tag, key) identity by SameValueZero — the same comparison the keyed map in
 	// patchKeyedChildren uses, so a `NaN` key matches itself (a bare `===` reads
 	// NaN !== NaN and would needlessly replace the row on every render).
-	return a.tag === b.tag && (a.key === b.key || (a.key !== a.key && b.key !== b.key));
+	//
+	// Child OWNERSHIP is part of that identity: an `island` element's children are
+	// third-party-owned and frozen by carrying the mounted child vnodes forward, so
+	// two conditional branches sharing a tag and key but disagreeing about `island`
+	// describe different subtrees, not one subtree to patch across. Patching the flip
+	// would diff stale seed vnodes against DOM the island's owner has since rewritten
+	// — currentTree would end up holding detached nodes and every later render would
+	// corrupt further. Making the flip a REPLACEMENT unmounts and remounts cleanly in
+	// both directions. Components and text vnodes never carry `island` (it is rejected
+	// on components), so neither side of this test moves for them.
+	return (
+		a.tag === b.tag &&
+		(a.key === b.key || (a.key !== a.key && b.key !== b.key)) &&
+		('island' in a.attrs) === ('island' in b.attrs)
+	);
 }
 
 function shallowEqual(a, b) {

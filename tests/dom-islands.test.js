@@ -118,6 +118,48 @@ describe('ViewManager — DOM islands (island attr)', () => {
 		expect(replaced.textContent).toBe('fresh seed');
 	});
 
+	it('dropping `island` replaces the node and hands the position back to the patcher', () => {
+		const { container, vm } = setup();
+		vm.render(h('div', { key: 'k', island: true }, [text('seed')]));
+		const island = container.firstChild;
+
+		// The island's real owner rewrites the subtree the framework never looks at.
+		island.innerHTML = '';
+		island.appendChild(document.createElement('canvas'));
+
+		// The editor/viewer flip: the SAME tag and key, now WITHOUT island. Ownership
+		// is part of node identity, so this is a replacement — patching it would diff
+		// the frozen seed vnodes against DOM they no longer describe.
+		vm.render(h('div', { key: 'k' }, [text('managed'), h('b', {}, [text('kid')])]));
+		const managed = container.firstChild;
+		expect(managed).not.toBe(island);
+		expect(managed.querySelector('canvas')).toBeNull();
+		expect(managed.innerHTML).toBe('managed<b>kid</b>');
+
+		// …and the fresh subtree is genuinely managed again: it patches.
+		vm.render(h('div', { key: 'k' }, [text('managed2'), h('b', {}, [text('kid2')])]));
+		expect(container.firstChild).toBe(managed);
+		expect(managed.innerHTML).toBe('managed2<b>kid2</b>');
+	});
+
+	it('adding `island` replaces the node and freezes the fresh seed', () => {
+		const { container, vm } = setup();
+		vm.render(h('div', { key: 'k' }, [text('managed')]));
+		const managed = container.firstChild;
+
+		vm.render(h('div', { key: 'k', island: true }, [text('seed')]));
+		const island = container.firstChild;
+		expect(island).not.toBe(managed);
+		expect(island.textContent).toBe('seed');
+
+		// Frozen from here: an out-of-band edit survives the next render.
+		island.appendChild(document.createElement('canvas'));
+		vm.render(h('div', { key: 'k', island: true }, [text('ignored')]));
+		expect(container.firstChild).toBe(island);
+		expect(island.textContent).toBe('seed');
+		expect(island.querySelector('canvas')).not.toBeNull();
+	});
+
 	it('a key change replaces the node and re-seeds (the sanctioned island reset)', () => {
 		const { container, vm } = setup();
 		vm.render(h('div', { key: 'k1', island: true }, [text('seed')]));
