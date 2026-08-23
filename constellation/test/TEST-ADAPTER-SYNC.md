@@ -1,7 +1,7 @@
 ---
 name: Adapter server sync
 kind: integration
-status: built
+status: verified
 framework: vitest
 connections:
   - FLOW-ADAPTER-SYNC
@@ -19,6 +19,8 @@ connections:
   - FEATURE-DELETE-IDEMPOTENCY
   - DOC-TESTING
   - FILE-ADAPTER
+verified_at: '2026-08-23T19:55:49.676Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 # Adapter server sync

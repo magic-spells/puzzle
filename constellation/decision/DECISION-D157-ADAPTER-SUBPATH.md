@@ -13,8 +13,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-verified_at: '2026-08-15T06:30:34.091Z'
-verified_sha: 9ee1bddc34d8a2a3f1ce8e310af323169b6a3799
+verified_at: '2026-08-23T19:55:21.762Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 The server adapter — the D21 read path, the D50 write path, `store.request()`,

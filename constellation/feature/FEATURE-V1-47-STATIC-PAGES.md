@@ -1,7 +1,7 @@
 ---
 name: v1.47 — True static-pages output mode (D81)
 status: verified
-verified_at: '2026-08-16T04:38:26.339Z'
+verified_at: '2026-08-23T19:55:34.622Z'
 connections:
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D67-SSG-STATIC-BUILD
@@ -14,7 +14,7 @@ connections:
   - FILE-STATIC-MOUNT
   - FILE-SSG-ASSEMBLE
   - FILE-BUILD-PRERENDER-PAGES
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 release: RELEASE-V0-2-0
 change: breaking
 ---

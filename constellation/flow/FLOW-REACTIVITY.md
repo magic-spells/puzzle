@@ -13,7 +13,8 @@ connections:
   - FILE-PUZZLE-VIEW
   - FILE-VIEW-MANAGER
   - DECISION-D62-HANDLER-CACHING
-verified_at: '2026-08-16T04:49:21.640Z'
+  - DECISION-D161-AUTO-FETCHING-FINDS
+verified_at: '2026-08-23T19:55:48.268Z'
 notes:
   - kind: gotcha
     text: >-
@@ -26,7 +27,7 @@ notes:
       identity; the store carries live data. If a framework-level answer is ever wanted
       (always-refresh children, or record versioning), it needs a D-number — SPEC §4's
       shallow-differ rule is the documented contract.
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 # Reactivity flow
@@ -34,8 +35,11 @@ verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 Puzzle has two intentionally asymmetric update paths:
 
 1. A store notification, prop change, or route-param change reruns
-   `data(params, props)`. The successful result replaces the component's model
-   layer, then the component renders and patches.
+   `data(params, props)`. The successful, settled result replaces the
+   component's model layer, then the component renders and patches. A
+   notification landing while a D161 settle window is open folds into the
+   settling run as one more pass (`_settleDirty`) rather than starting a
+   competing refresh.
 2. `setData()` mutates the persistent local layer and renders immediately. It
    does not rerun `data()`; call `refresh()` when derived model data must be
    recomputed.
@@ -49,14 +53,20 @@ controlled-property echo compares against the live DOM, so the keystroke that
 caused the write patches nothing back into the input.
 
 Queries made inside `data()` register the evaluating component with
-[[COMPONENT-STORE]]. Record and collection keys are batched into one flush,
-each subscriber is isolated from failures, and subscriptions are replaced on
-reevaluation and removed on destroy.
+[[COMPONENT-STORE]]. With the adapter capability installed, a tracked miss
+also queues a fetch and the evaluation re-runs until it settles — only the
+final warm pass's subscriptions commit; every provisional pass's registrations
+are unwound first ([[DECISION-D161-AUTO-FETCHING-FINDS]]). Record and
+collection keys are batched into one flush, each subscriber is isolated from
+failures, and subscriptions are replaced on reevaluation and removed on
+destroy.
 
 Async `data()` is last-wins: an older promise cannot commit after a newer
-evaluation. While a component is suspended, optional skeleton content follows
-the first-load and minimum-duration rules described by
-[[COMPONENT-PUZZLE-VIEW]].
+evaluation. A previously-synchronous `data()` returns a promise as soon as a
+tracked find misses — only a sync, hit-only first pass stays synchronous, which
+is what decides whether a skeleton shows. While a component is suspended,
+optional skeleton content follows the first-load and minimum-duration rules
+described by [[COMPONENT-PUZZLE-VIEW]].
 
 The DOM path is render → diff → keyed patch in [[COMPONENT-VIEW-MANAGER]].
 Conditional placeholders stabilize child arity so toggling a branch does not

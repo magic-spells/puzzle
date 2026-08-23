@@ -334,5 +334,7 @@ No SSR server, hydration, lazy route loading (code splitting itself is the
 opt-in `build.splitting`, D160),
 named-route navigation, scoped slots, array refs, built-in virtual list,
 per-module hot swap, Sass pipeline, event bus, global keyboard API, app-level
-computed/settings/methods, app-config devtools hook (the D100 bridge is
-extension-injected, not config), or automatic query fault-in.
+computed/settings/methods, or app-config devtools hook (the D100 bridge is
+extension-injected, not config). Query fault-in left this list with D161:
+tracked `findOne`/`findMany` now fault in automatically through the adapter
+capability (in the codebase for 0.7.0).

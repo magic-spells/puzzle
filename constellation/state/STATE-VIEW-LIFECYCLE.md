@@ -1,6 +1,6 @@
 ---
 name: PuzzleView lifecycle machine
-status: built
+status: verified
 states:
   - name: constructed
     initial: true
@@ -127,6 +127,8 @@ connections:
   - DECISION-D118-LIFECYCLE-HOOK-CONTAINMENT
   - DECISION-D28-ANIMATIONS
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
+verified_at: '2026-08-23T19:55:49.079Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 # PuzzleView lifecycle machine

@@ -1,7 +1,7 @@
 ---
 name: "Public store.upsert() for custom-action responses"
 status: verified
-verified_at: '2026-08-16T04:34:54.114Z'
+verified_at: '2026-08-23T19:55:33.918Z'
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
   - DECISION-D50-ADAPTER-WRITE-SYNC
@@ -15,7 +15,7 @@ notes:
       Found by the habit-lab test app (2026-07-22): its checkIn() custom action
       receives fresh server state ({habit, checkin}) but must throw it away and
       re-fetch via two loadOne GETs, because Store._upsert is private.
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 release: RELEASE-V0-1-2
 change: feature
 ---

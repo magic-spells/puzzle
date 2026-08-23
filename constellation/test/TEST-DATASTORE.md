@@ -1,7 +1,7 @@
 ---
 name: Store, models, validation, and relationships
 kind: unit
-status: built
+status: verified
 framework: vitest
 connections:
   - COMPONENT-STORE
@@ -24,8 +24,9 @@ connections:
   - FEATURE-STORE-PUBLIC-UPSERT
   - FEATURE-VALIDATE-PK-PARITY
   - DOC-TESTING
+verified_at: '2026-08-23T19:55:50.852Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
-
 
 # Store, models, validation, and relationships
 

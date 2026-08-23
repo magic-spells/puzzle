@@ -11,8 +11,8 @@ connections:
   - DOC-VIEW-LIFECYCLE
   - FILE-PUZZLE-VIEW
   - FILE-VIEW-MANAGER
-verified_at: '2026-08-16T04:33:05.780Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-23T19:55:19.533Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 # D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown (v1.64)

@@ -1,7 +1,7 @@
 ---
 name: Template parser and section splitting
 kind: unit
-status: built
+status: verified
 framework: go test
 connections:
   - COMPONENT-TEMPLATE-PARSER
@@ -22,8 +22,9 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-COMPILER-DESIGN
   - DOC-TESTING
+verified_at: '2026-08-23T19:55:50.729Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
-
 
 # Template parser and section splitting
 

@@ -12,14 +12,14 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-DATA
   - FILE-ADAPTER
-verified_at: '2026-08-16T04:34:58.988Z'
+verified_at: '2026-08-23T19:55:29.264Z'
 notes:
   - kind: verified
     text: >-
       Verified at the merged main sha: save/delete/request semantics reviewed against SPEC §22 at
       ship (validate-first, POST/PUT provenance, pk adoption, confirmed deletes);
       tests/adapter-write.test.js (27) + full suite green (480 vitest).
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 release: RELEASE-V0-1-0
 change: feature
 ---
@@ -35,8 +35,6 @@ A locally-changed record syncs to the server without app-level fetch plumbing,
 driven by the same bare `static adapter = { endpoint }` the read path uses.
 
 ## Scope
-
-
 
 **In (shipped):**
 - **Explicit verbs, local-first:** `createRecord`/`update`/`destroy` keep exact
@@ -58,12 +56,15 @@ driven by the same bare `static adapter = { endpoint }` the read path uses.
   custom-endpoint escape hatch; documented idiom wraps it in model instance
   methods.
 - **`PuzzleAdapterError`** (`.status`/`.statusText`/`.body`) from the opt-in
-  `/adapter` subpath; the D21 read path keeps its plain-Error messages.
+  `/adapter` subpath; reads normalize through it too — the D161 auto-fetch
+  path recognises absence by `status === 404`, which a plain Error could not
+  carry.
 
 **Out (rejected/re-deferred in D50):** automatic write-through, optimistic
-delete with restore, a declarative `adapter.methods` map, query fault-in
-(re-deferred — `findMany`'s sync pure-local return is load-bearing), offline
-queueing, conflict resolution.
+delete with restore, a declarative `adapter.methods` map, offline queueing,
+conflict resolution. Query fault-in was re-deferred here and has since shipped
+via [[DECISION-D161-AUTO-FETCHING-FINDS]], built on the tracked read path so
+`findMany`'s load-bearing sync pure-local return stayed intact.
 
 ## Outcome
 

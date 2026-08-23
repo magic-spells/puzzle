@@ -10,8 +10,8 @@ connections:
   - DECISION-D84-HEAD-MANAGEMENT
   - DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY
   - DECISION-D81-STATIC-PAGES-MODE
-verified_at: '2026-08-16T04:37:41.316Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-23T19:55:20.972Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 # D151 — Managed head injection owns the shell head, and only the shell head

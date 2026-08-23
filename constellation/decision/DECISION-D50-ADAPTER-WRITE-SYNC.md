@@ -13,13 +13,13 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-DATA
   - FILE-ADAPTER
-verified_at: '2026-08-16T04:49:16.498Z'
+verified_at: '2026-08-23T19:55:22.356Z'
 notes:
   - kind: verified
     text: >-
       Decision implemented as written and verified at the merged main sha (480 vitest green); no
       deviations from the recorded contract.
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 # D50 — Adapter write path: explicit `save()`/`delete()` verbs, local-first, validate-before-sync (v1.18)

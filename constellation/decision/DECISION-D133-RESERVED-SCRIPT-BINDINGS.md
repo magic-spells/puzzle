@@ -9,8 +9,8 @@ connections:
   - COMPONENT-CODEGEN
   - FILE-CODEGEN
   - DOC-COMPILER-DESIGN
-verified_at: '2026-08-16T04:34:36.755Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-23T19:55:18.118Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 notes:
   - kind: verified
     text: >-
@@ -36,8 +36,6 @@ skewed by the generated preamble.
 
 ## Mechanism
 
-
-
 `scriptcollide.go`'s existing string/comment/regex-aware tokenizer (the same
 LexSkip walk behind the import-shadow warning and classname extraction) gains a
 top-level declaration scan: identifiers bound by `const`/`let`/`var`/
@@ -56,7 +54,11 @@ reservation the `.pzl` cannot see.
 The scan is deliberately conservative — destructuring patterns, later
 declarators of a list, and `function`/`class` in expression position are
 skipped (a named class expression binds its name inside the expression only),
-and TS `declare` statements are ignored as type-only. The asymmetry is the
+and TS `declare` statements are ignored as type-only. TS type-only imports are
+likewise excluded: `import type …` and inline `{ type X }` / `{ type X as Y }`
+specifiers register no value binding — esbuild erases them before the injected
+import lands — while the value-space spellings `import type from 'x'`,
+`{ type }`, and `{ X as type }` still count. The asymmetry is the
 point: a **miss falls through to esbuild's own duplicate-binding error**, while
 a false hit would reject legal code. The compiler cannot *parse* the script
 (that contract holds — the script's bytes are the user's), but the token scan

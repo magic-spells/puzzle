@@ -1,6 +1,6 @@
 ---
 name: Prerender flow
-status: built
+status: verified
 triggers:
   - kind: manual
 connections:
@@ -28,12 +28,14 @@ connections:
   - DECISION-D142-HYBRID-ROUTE-SNAPSHOT
   - DECISION-D145-ERROR-BOUNDARIES
   - DECISION-D151-SHELL-HEAD-OWNERSHIP
+  - DECISION-D161-AUTO-FETCHING-FINDS
   - FLOW-BUILD
   - DOC-SPEC-BUILD
   - FEATURE-V1-33-SSG
   - FEATURE-V1-47-STATIC-PAGES
+verified_at: '2026-08-23T19:55:47.676Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
-
 
 # Prerender flow
 
@@ -105,9 +107,12 @@ identical. [[DECISION-D01-SPA-ONLY]] holds for the runtime in both modes.
      rebuilt as a marked container around the markup. A `prerender: false` route
      gets the untouched shell — a genuine SPA island, no head injection.
    - *Static* strips the shell's `app.js` script tag, marks the target with the
-     static marker, and appends two things before `</body>`: an inline JSON data
-     island and a `<script type="module">` pointing at that page's generated
-     entry. Slugs are assigned by walking the page list in order.
+     static marker, and appends before `</body>`, as one splice at the shell's
+     recorded offset: an inline JSON data island, a read-state envelope island
+     when the prerender settled anything through the adapter (adapter-less or
+     settled-nothing pages omit it — [[DECISION-D161-AUTO-FETCHING-FINDS]]),
+     and a `<script type="module">` pointing at that page's generated entry.
+     Slugs are assigned by walking the page list in order.
 9. **Go post-checks the written output.** A route page may not overwrite a
    `public/` asset — case-folded, since the common collision is a hand-authored
    `public/404.html` against a catch-all route, and the only sanctioned overlap
@@ -159,8 +164,11 @@ registry, the formatters module and an adapter binding. Then, in order:
 3. Build the context: a store over the models, the *throwing* router stub, and a
    formatter registry. `beforeMount` is deliberately not called — it ran at build
    time and its result rode in on the data island.
-4. Rehydrate the data island into the store in replace mode. Absent or empty is a
-   silent cold start; corrupt is logged and the mount continues.
+4. Rehydrate the data island into the store in replace mode, then hand the
+   read-state envelope to `hydrateReadState` — records first is load-bearing,
+   so an absence whose record actually rode the data island is dropped. Absent
+   or empty is a silent cold start; either island corrupt is logged and the
+   mount continues, the envelope without touching the records.
 5. Assemble the chain through the same shared module the prerenderer used, with
    the same snapshot threaded into every preload. `data()` runs again here — but
    against the rehydrated store, which is what makes the client render match the
@@ -189,15 +197,21 @@ the link formatter — prerenders in the state the live router will render after
 takeover ([[DECISION-D142-HYBRID-ROUTE-SNAPSHOT]]). Then it is thrown away; the
 live router re-derives everything from the URL. Without it, every `current` read
 rendered its nothing-is-current branch into the shipped HTML, which is exactly
-what crawlers and no-JS visitors — hybrid's whole audience — would see.
+what crawlers and no-JS visitors — hybrid's whole audience — would see. Hybrid
+also transfers no adapter read state: the live app re-faults through the normal
+D161 path after takeover.
 
-**Static embeds two things, in two places.** The store's serialized state goes
+**Static embeds three things, in two places.** The store's serialized state goes
 into an inline JSON island anchored at a fixed shell offset (a `</body>` inside a
 raw script block used to steal a scanned anchor), memoized across pages because
-one build-time seed shared by every route is the common case. The route snapshot
-travels as plain JSON baked into the generated per-page module, not the HTML.
-Both are necessary because a static page has no router to re-derive its identity
-from and no `beforeMount` at runtime.
+one build-time seed shared by every route is the common case. The adapter read
+state the prerender settled — loaded keys and negative-cache absences — rides a
+second envelope island beside it, so the client kernel adopts the build's reads
+instead of re-faulting on first render ([[DECISION-D161-AUTO-FETCHING-FINDS]]);
+a page that settled nothing carries no envelope. The route snapshot travels as
+plain JSON baked into the generated per-page module, not the HTML. All are
+necessary because a static page has no router to re-derive its identity from
+and no `beforeMount` at runtime.
 
 ## Head ownership
 
@@ -227,7 +241,8 @@ and prerenders normally. No catch-all at all warns that no `404.html` will exist
 Hard build failures: a target selector that is not a `#id`, or a target that is
 missing from the shell or not empty; hybrid combined with any `routerMode` (a
 hash or memory router boots at `/` and would render the home route over every
-deep-linked page); any route's `data()` rejecting, named by route; a route path
+deep-linked page); any route's `data()` rejecting, named by route — a tracked
+fault the settle loop cannot satisfy fails the same way; a route path
 escaping the output directory; a RAWTEXT breakout; a `public/` asset colliding
 with generated output or a reserved scratch name; and — static only — a rendered
 route whose view or layout is a hand-written class carrying no compiled module

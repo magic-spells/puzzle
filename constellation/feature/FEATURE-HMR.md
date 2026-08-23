@@ -1,7 +1,7 @@
 ---
 name: HMR with state preservation
 status: verified
-verified_at: '2026-08-16T04:35:11.352Z'
+verified_at: '2026-08-23T19:55:29.977Z'
 connections:
   - DECISION-D57-HMR-STATE-RELOAD
   - DECISION-D27-FAST-DEV-REBUILDS
@@ -36,7 +36,7 @@ notes:
       recomputed, never pinned). Fixes the masked bug where store-derived views rendered empty until
       the next mutation after a dev reload. DCE guard green; hmr-dev-reload.test.js grew
       first-paint/override/derived-recompute coverage.
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 release: RELEASE-V0-1-0
 change: feature
 ---
@@ -51,11 +51,15 @@ hot replacement.
 
 Before the injected SSE client reloads the page,
 `window.__PUZZLE_APP__.__devSnapshot()` stores one short-lived, one-shot blob in
-`sessionStorage` key `__puzzleHMR` (~10s expiry). Fresh boot restores in two
-phases:
+`sessionStorage` key `__puzzleHMR` (~10s expiry). The blob carries store
+records, each view's JSON-safe local `setData` layer, and — when the adapter
+capability is installed — the D161 adapter read state, captured fail-soft
+through the capabilities relay. Fresh boot restores in two phases:
 
 1. after `beforeMount` but before navigation zero, the store hydrates in
-   identity-preserving replace mode;
+   identity-preserving replace mode, then the read state is handed to
+   `hydrateReadState` — records first, so an absence whose record crossed the
+   reload is dropped; in-flight request promises never cross;
 2. after the routed tree mounts, each view's JSON-safe local `setData` layer
    restores by stable class/mount identity.
 

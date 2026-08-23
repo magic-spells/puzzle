@@ -1,6 +1,6 @@
 ---
 name: Store record lifecycle
-status: built
+status: verified
 states:
   - name: detached
     initial: true
@@ -84,6 +84,8 @@ connections:
   - FEATURE-DELETE-IDEMPOTENCY
   - FEATURE-VALIDATE-PK-PARITY
   - FILE-ADAPTER
+verified_at: '2026-08-23T19:55:48.972Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 # Store record lifecycle

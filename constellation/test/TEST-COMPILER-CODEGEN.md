@@ -1,7 +1,7 @@
 ---
 name: Codegen emission and golden files
 kind: unit
-status: built
+status: verified
 framework: go test
 connections:
   - COMPONENT-CODEGEN
@@ -26,8 +26,9 @@ connections:
   - DOC-COMPILATION-FLOW
   - DOC-TESTING
   - TEST-TODOS-INTEGRATION
+verified_at: '2026-08-23T19:55:50.392Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
-
 
 # Codegen emission and golden files
 

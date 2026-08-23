@@ -7,8 +7,8 @@ connections:
   - FILE-PARSER
   - FILE-PARSER-SECTIONS
   - FILE-PARSER-SCANNER
-verified_at: '2026-08-16T04:34:18.080Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-23T19:55:12.089Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 notes:
   - kind: gotcha
     text: >-
@@ -41,8 +41,10 @@ Raw blocks ([[DECISION-D150-RAW-TEMPLATE-BLOCK]]) reuse the comment block's
 forward scan but preserve the body as one outer-lexer token. The parser owns the
 needed parent context: under script/style it emits that span as one literal Text
 node; elsewhere a nested brace-disabled HTML lexer builds ordinary element/text
-nodes. Attribute tokens from that nested pass are static; an `@`-prefixed name
-carries a literal-name bit so it cannot become an event. Raw blocks do not nest
+nodes, their text flagged raw so codegen preserves its bytes verbatim.
+Attribute tokens from that nested pass are static and every name carries a
+literal-name bit, so none can become an event or directive; `{#svg}` asset
+roots stamp the same bit on their root attrs. Raw blocks do not nest
 and are rejected at attribute-value positions. Because their expanded AST is
 otherwise indistinguishable from ordinary markup, the synthetic template or
 skeleton root also records that at least one raw block was parsed; D89's usage

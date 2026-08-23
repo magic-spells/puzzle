@@ -1,7 +1,7 @@
 ---
 name: Hybrid and static prerender output
 kind: integration
-status: built
+status: verified
 framework: vitest
 connections:
   - COMPONENT-SSG
@@ -21,11 +21,14 @@ connections:
   - DECISION-D142-HYBRID-ROUTE-SNAPSHOT
   - DECISION-D151-SHELL-HEAD-OWNERSHIP
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
+  - DECISION-D161-AUTO-FETCHING-FINDS
   - FEATURE-V1-33-SSG
   - FEATURE-V1-47-STATIC-PAGES
   - DOC-TESTING
   - COMPONENT-ROUTER
   - COMPONENT-VIEW-MANAGER
+verified_at: '2026-08-23T19:55:54.482Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 # Hybrid and static prerender output
@@ -47,6 +50,14 @@ Static (`output: 'static'`): the per-page `mountStatic` kernel, the router facad
 parity it presents to view code that expects a router, base-prefixed page module
 hrefs, hash and memory modes flattened or refused, storage ignored with a
 warning, and the route-subset render used by incremental rebuilds.
+
+The D161 read-state seam is covered from both sides. Emission: the envelope
+island beside the record island, its omission for adapter-less and
+settled-nothing pages, script-breakout escaping, a rejected tracked fault
+failing the build naming the route, and hybrid transferring nothing. Adoption:
+the kernel adopting the envelope, faulting normally without one, ignoring an
+empty or foreign-version envelope, dropping an absence whose record rode the
+data island, and surviving a corrupt envelope without losing records.
 
 Head management: per-field leaf-to-root resolution, managed head surgery into
 both the hybrid shell and the static shell, and head tags landing before any JS

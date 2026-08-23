@@ -7,8 +7,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
-verified_at: '2026-08-16T04:34:16.663Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-23T19:54:19.892Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 notes:
   - kind: gotcha
     text: >-
@@ -84,11 +84,15 @@ built per file from what the file actually needs: `ViewNode` always, `SLOT_TAG`
 when a marker is present in the template or skeleton, `PORTAL_TAG` when a
 portal is, and `displayValue as __s` when an interpolation coerces for display.
 
-Raw-block bodies arrive as ordinary static Text/Element AST nodes, so their
-text takes only the JS-string path and never expression resolution. A literal
-`@name` attribute from raw markup is emitted under the private `@@name` vnode
-key on host elements; [[COMPONENT-VIEW-MANAGER]] and [[COMPONENT-SSG]] decode
-that key back to the authored DOM attribute without entering listener logic.
+Raw-block bodies arrive as static Text/Element AST nodes whose text carries the
+parser's `Raw` bit, so their text takes only the JS-string path and never
+expression resolution — and a `Raw` text segment bypasses the template
+whitespace policy, emitting its bytes exactly as authored (a JSON blob or
+`<pre>` body inside `{#raw}` survives byte-for-byte). A literal `@name`
+attribute — from raw markup or from an `{#svg}` asset root — is emitted under
+the private `@@name` vnode key on host elements; [[COMPONENT-VIEW-MANAGER]] and
+[[COMPONENT-SSG]] decode that key back to the authored DOM attribute without
+entering listener logic.
 
 Data-independent event sites cache one closure per instance in `this.__h`,
 stabilizing DOM listeners and callback props. Sites that capture model or loop
@@ -123,7 +127,12 @@ and remount it. A generated-key range loop stays stable and counts as zero
 slots. Balanced branches emit unchanged.
 
 Inline SVG reads one app asset, validates a literal root, emits an island SVG
-vnode, and registers the file with esbuild watch inputs. The read + scan is
+vnode, and registers the file with esbuild watch inputs. Root attrs from the
+asset file are authored literals, never framework directives: every root attr
+is stamped literal-name, reserved names (`ref`, `island`, `key`, `flip`) are
+dropped before emission, an `@name` decodes through the `@@name` escape as a
+plain DOM attribute, and a literal `key` on the asset root does not suppress
+the synthetic `{#for}` key. The read + scan is
 memoized per absolute path in an optional build-scoped `SVGCache`
 (`Options.SVGCache`), which the esbuild plugin also shares with its shared-asset
 virtual module loader — so an icon used at N sites across M files and three

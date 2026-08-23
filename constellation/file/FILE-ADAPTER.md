@@ -1,6 +1,6 @@
 ---
 name: server adapter runtime
-status: built
+status: verified
 path: client-runtime/datastore/adapter.js
 language: javascript
 summary: >-
@@ -10,7 +10,8 @@ connections:
   - COMPONENT-ADAPTER
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
+verified_at: '2026-08-23T19:55:36.851Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
-
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `client-runtime/datastore/adapter.js`.

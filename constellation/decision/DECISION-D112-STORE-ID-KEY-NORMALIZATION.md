@@ -11,8 +11,8 @@ connections:
   - COMPONENT-STORE
   - FILE-STORE
   - FILE-ADAPTER
-verified_at: '2026-08-16T04:30:59.015Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-23T19:55:12.749Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 notes:
   - kind: verified
     text: >-
@@ -54,7 +54,8 @@ mirror bug: a string FK against a numeric pk silently yielded `[]`.
 - One helper, `recordKey(id)`: `typeof id === 'number'` → `String(id)`,
   everything else passes through untouched. Applied at every record-Map
   `get`/`set`/`has`/`delete` keyed by an id: `_instantiate` (dup check + skip
-  branch + insert), `findOne`, `_upsert`, `removeRecord`, `_hydrateAll`, the
+  branch + insert), `_findOneLocal` (the local read that `findOne` and the
+  D161 fault path both ride), `_upsert`, `removeRecord`, `_hydrateAll`, the
   save/delete in-flight identity re-checks, and pk adoption.
 - **Identity comparisons use the same rule.** `_saveRecordNow`'s `pkDiffers`
   compares under `recordKey`, so a server echoing numeric `1` for a record
@@ -62,7 +63,8 @@ mirror bug: a string FK against a numeric pk silently yielded `[]`.
   key is identical either way) — not pk adoption, and not the spurious
   "primary keys are immutable" warning.
 - `hasMany` normalizes both sides of its FK filter; `belongsTo` rides
-  `findOne` and needs nothing.
+  `_findOneLocal` — the relationship getters never fault (D49/D161) — and
+  needs nothing.
 - **Only numbers normalize.** `null`/`undefined`/objects keep SameValueZero
   identity — preserving `belongsTo`'s null-FK short-circuit, and `String(null)`
   can never collide with a legitimate `'null'` string id. No numeric parsing

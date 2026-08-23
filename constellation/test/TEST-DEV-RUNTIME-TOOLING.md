@@ -1,7 +1,7 @@
 ---
 name: 'Dev-only runtime tooling: HMR, profiler, DevTools bridge'
 kind: integration
-status: built
+status: verified
 framework: vitest
 connections:
   - COMPONENT-DEVSTATE
@@ -18,8 +18,9 @@ connections:
   - FEATURE-HMR
   - FEATURE-DEV-PERFORMANCE-PROFILING
   - DOC-TESTING
+verified_at: '2026-08-23T19:55:53.884Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
-
 
 # Dev-only runtime tooling: HMR, profiler, DevTools bridge
 

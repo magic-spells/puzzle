@@ -1,6 +1,6 @@
 ---
 name: Fixtures and mock adapter (@magic-spells/puzzle/fixtures)
-status: built
+status: verified
 connections:
   - FILE-FIXTURES
   - FILE-FIXTURES-GENERATOR
@@ -30,8 +30,9 @@ connections:
   - DECISION-D52-SKELETON-ANTIFLASH
   - DECISION-D153-PUZZLE-SCRATCH-DIR
   - FEATURE-VALIDATE-PK-PARITY
+verified_at: '2026-08-23T19:55:09.920Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
-
 
 # Fixtures and the mock adapter
 

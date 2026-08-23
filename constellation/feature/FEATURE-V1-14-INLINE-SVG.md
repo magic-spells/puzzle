@@ -75,7 +75,7 @@ The shared-icon workflow (Shopify's `{% render 'icon-cart' %}`): one `currentCol
 - Parser: `InlineSVG` AST node; `{#svg 'path'}` as the first **void** block tag (dedicated stray-`{/svg}` error); `ScanSVGFile` (prolog/DOCTYPE strip, single depth-counted `<svg>` root, root-open-tag attr extraction, verbatim inner markup — contents never template-parsed).
 - Codegen: `resolveInlineSVG` pass over template + skeleton ASTs; `Element.RawInner` → `new ViewNode('svg', {…}, "<inner>")` string children; `Options.AssetsDir`; `Compile` → `*Result{JS, InlinedFiles}` (populated even on error).
 - Plugin/dev: `WatchFiles` from `InlinedFiles` — `.svg`-only edits rebuild under `puzzle dev`; missing-file builds recover when the file appears. `app/assets/` never copied to `dist/`.
-- Runtime: string-typed vnode children seeded once via `innerHTML`, island-owned (D44) thereafter; root attrs/listeners patch normally; re-seed only on a changed string.
+- Runtime: string-typed vnode children seeded once via `innerHTML`, island-owned (D44) thereafter; root attrs patch normally — they are the asset file's own attrs, stamped authored literals, so a reserved name or `@`-attr in the file never wires a framework directive or listener; re-seed only on a changed string.
 - CLI: `pzlc --assets`; `puzzle init` default template ships `app/assets/icons/heart.svg` used in `Home.pzl`.
 
 **Out (rejected — see the decision card):** per-use attributes/params on the tag; `{@svg}`; generic `{#asset}`; parsing file contents into vnodes; a general raw-HTML vnode.

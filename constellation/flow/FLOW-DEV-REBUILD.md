@@ -1,6 +1,6 @@
 ---
 name: Dev rebuild loop
-status: built
+status: verified
 triggers:
   - kind: manual
 connections:
@@ -29,8 +29,9 @@ connections:
   - FLOW-PRERENDER
   - DOC-SPEC-BUILD
   - DOC-DEVELOPMENT
+verified_at: '2026-08-23T19:55:47.574Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
-
 
 # Dev rebuild loop
 
@@ -211,8 +212,10 @@ says.
 
 The reload is a full page load, not a module swap
 ([[DECISION-D57-HMR-STATE-RELOAD]]). Before reloading, the client asks the app
-for a snapshot of store records and JSON-safe local view state; the store is
-restored before navigation and local state after mount. The snapshot attempt is
+for a snapshot of store records, JSON-safe local view state, and — with the
+adapter capability installed — the D161 adapter read state; the store is
+restored before navigation (records first, then the read state), and local
+state after mount. The snapshot attempt is
 best-effort — the reload happens even if it throws — and in static output the
 hook simply does not exist, so it is a caught no-op and the page reloads plain.
 Production bundles tree-shake the whole path.

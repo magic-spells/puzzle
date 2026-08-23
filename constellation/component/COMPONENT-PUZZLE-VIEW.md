@@ -18,8 +18,8 @@ notes:
       Keep raw source values and data()-derived display values under different
       keys. A successful data() replaces the model layer, so reusing one key for
       raw local state and a reshaped model value loses the raw value by design.
-verified_at: '2026-08-16T04:32:49.836Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-23T19:55:10.642Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 # PuzzleView
@@ -42,8 +42,10 @@ committed state and hands back commit/discard
 With the adapter capability installed, every tracked `data()` evaluation runs
 inside the D161 settle loop — `_settleData`, installed onto the prototype by
 [[COMPONENT-ADAPTER]]; core holds only the `!this._settleData` branch at its
-three call sites, so no-adapter apps ship a single-pass evaluator and none of
-the loop. Each pass carries its own pending-request Map and held reconcile; a
+two call sites — refresh and prepareRefresh; preload, mount, and prerender all
+reach the loop through refresh — so no-adapter apps ship a single-pass
+evaluator and none of the loop. Each pass carries its own pending-request Map
+and held reconcile; a
 pass that queued fetches is not committed — the batch is awaited, the
 provisional pass's subscriptions are unwound, and `data()` re-runs, so only
 the final warm pass's subscriptions and model commit

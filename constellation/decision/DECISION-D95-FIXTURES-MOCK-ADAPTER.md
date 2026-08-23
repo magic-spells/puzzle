@@ -1,6 +1,6 @@
 ---
 name: D95 — Schema-driven fixtures + the mock adapter (v1.57)
-status: built
+status: verified
 connections:
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
@@ -13,6 +13,8 @@ connections:
   - DECISION-D98-FIXTURES-MODULE-FLAG
   - DOC-SPEC
   - DOC-DATASTORE
+verified_at: '2026-08-23T19:55:27.785Z'
+verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
 ---
 
 `store.seed(type, n)` generates believable records from the schema alone, and
@@ -40,7 +42,7 @@ unmodified while `beforeRequest` still runs. Author code that explicitly uses
 global fetch bypasses the mock, as it bypasses the hook. The collection lives in
 fixture module WeakMap state keyed by Store and is deep-cloned from `mock.data`.
 
-`latency` (a number or `[min, max]`) is the knob that makes skeletons developable. `failRate` and `fail: true` produce non-ok responses that flow through the real error paths — `PuzzleAdapterError` for writes, the D21 throw for reads — rather than rejecting the fetch itself. `handler({ method, url, path, body, collection })` is the escape hatch for `store.request()`'s arbitrary paths, falling through to default CRUD on a falsy return.
+`latency` (a number or `[min, max]`) is the knob that makes skeletons developable. `failRate` and `fail: true` produce non-ok responses that flow through the real error path — `PuzzleAdapterError` for every verb, reads included, carrying the response `status` the D161 auto-fetch path reads to recognise absence (`404`) — rather than rejecting the fetch itself. `handler({ method, url, path, body, collection })` is the escape hatch for `store.request()`'s arbitrary paths, falling through to default CRUD on a falsy return.
 
 **Two PRNG streams, not one**, both derived from a single `fixtureSeed` (`seed` and `seed ^ 0x9e3779b9`). Sharing one stream means adding a `seed()` call to a test silently changes *which requests fail* — a genuinely nasty flake source. `resetFixtureSeed()` resets both plus the record counter.
 
