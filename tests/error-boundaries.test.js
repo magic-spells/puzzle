@@ -502,6 +502,87 @@ describe('errorView retry', () => {
 		expect(reports.map((r) => r.info.phase)).toEqual(['mount', 'mount']);
 	});
 
+	it('redraws the error view when the retried OWNER refresh fails', async () => {
+		let attempts = 0;
+		let ownerDown = false;
+		let host;
+		const errorViews = [];
+		const reports = [];
+		const ErrorView = errorViewClass(errorViews);
+
+		class Child extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				attempts++;
+			}
+			data() {
+				if (attempts === 1) throw new Error('first failure');
+				return {};
+			}
+			render() {
+				return h('strong', { class: 'ready' }, [text('ready')]);
+			}
+		}
+		class Host extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				host = this;
+			}
+			data() {
+				if (ownerDown) throw new Error('owner down');
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'host' }, [comp(Child)]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Host }],
+			errorView: ErrorView,
+			onError(error, info) {
+				reports.push({ error, info });
+			},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+		expect(errorViews).toHaveLength(1);
+
+		// A component position hands itself back EMPTY and lets the owner's re-render
+		// refill it — so an owner whose own data() rejects (retrying while the server
+		// is still down) would leave nothing but the placeholder here. Redraw instead,
+		// carrying the owner's NEW error rather than the child's mount-phase one.
+		ownerDown = true;
+		await errorViews[0].props.retry();
+		await flush();
+		expect(errorViews).toHaveLength(2);
+		expect(errorViews[0].isDestroyed).toBe(true);
+		expect(errorViews[1].props.error.message).toBe('owner down');
+		expect(app.find('.message').textContent).toBe('owner down');
+		// The owner itself never re-rendered, so the surrounding markup stands.
+		expect(app.find('.host')).not.toBeNull();
+		expect(app.find('.ready')).toBeNull();
+		// Reported once, against the OWNER whose data() threw.
+		expect(reports).toHaveLength(2);
+		expect(reports[1].info.phase).toBe('refresh');
+		expect(reports[1].info.view).toBe(host);
+
+		// The spent closure stays spent — the new face carries its own.
+		await errorViews[0].props.retry();
+		await flush();
+		expect(errorViews).toHaveLength(2);
+
+		// Heal the owner: the redrawn face is pressable and the child remounts fresh.
+		ownerDown = false;
+		await errorViews[1].props.retry();
+		await flush();
+		expect(app.find('.ready').textContent).toBe('ready');
+		expect(app.find('.app-error')).toBeNull();
+		expect(attempts).toBe(2);
+		expect(reports).toHaveLength(2);
+	});
+
 	it('redraws the error view when a retried navigation fails in the load phase', async () => {
 		let attempts = 0;
 		let failLoad = true;
