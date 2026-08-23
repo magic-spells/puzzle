@@ -1,0 +1,8 @@
+{
+  "name": "textarea",
+  "description": "Labeled multi-line text input with hint/error and ARIA wiring, mirroring Field",
+  "files": ["Textarea.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

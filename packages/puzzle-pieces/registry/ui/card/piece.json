@@ -1,0 +1,8 @@
+{
+  "name": "card",
+  "description": "Presentational container with optional title/description header, default body slot, and a footer slot for actions",
+  "files": ["Card.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

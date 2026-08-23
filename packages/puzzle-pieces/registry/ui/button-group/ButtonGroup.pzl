@@ -1,0 +1,149 @@
+<puzzle-view>
+  <div class={ rootClass } role="group" aria-label={ ariaLabel }>
+    {#for item in items}
+      <button
+        type="button"
+        key={ item.value }
+        class={ item.class }
+        title={ item.title }
+        disabled={ item.disabled }
+        @click={ press(item.value, event) }>
+        {#if item.icon}
+          <svg class={ iconClass } viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d={ item.icon }/>
+          </svg>
+        {/if}
+        <span class={ item.labelClass }>{ item.label }</span>
+      </button>
+    {/for}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ButtonGroup — a joined row of ACTION buttons (a segmented toolbar cluster:
+// text-format bar, alignment actions, paging controls). This is NOT ToggleGroup:
+// there is no pressed/selected state and no value memory — every button just
+// FIRES an action through @press(value, event). Config-first: the whole strip
+// renders from one `items` array.
+//
+// ICON STORY: unlike ToggleGroup (which can't render per-item icons), a `d`
+// attribute IS bindable inside a literal <svg>, so `items[].icon` is a 24×24
+// stroke-current SVG path `d` string rendered before the label. `label` is
+// ALWAYS required — it is the accessible name. For an icon-only button, set
+// `iconOnly: true` on the item: the label renders sr-only and is mirrored onto
+// the button's `title` (hover tooltip) so the control still has a visible and an
+// accessible name.
+//
+//   // text-format toolbar (icon-only)
+//   <ButtonGroup label="Text formatting" @press={ format } items={[
+//     { value:'bold',      label:'Bold',      icon:BOLD,      iconOnly:true },
+//     { value:'italic',    label:'Italic',    icon:ITALIC,    iconOnly:true },
+//     { value:'underline', label:'Underline', icon:UNDERLINE, iconOnly:true },
+//   ]}/>
+//
+//   // labeled actions
+//   <ButtonGroup variant="secondary" @press={ run } items={[
+//     { value:'copy', label:'Copy' },
+//     { value:'cut',  label:'Cut'  },
+//     { value:'paste', label:'Paste', disabled:true },
+//   ]}/>
+//
+// Props:
+//   items    [{ value, label, icon?, iconOnly?, disabled? }] — label required.
+//            icon: SVG path `d` string (24×24, stroke-current). iconOnly: hide
+//            the label text (sr-only) and expose it via title.
+//   variant  'outline' (default) | 'secondary' — Button's own variant recipes.
+//   size     'sm' | 'md' | 'lg' — Button's own scale.
+//   label    aria-label on the role="group" wrapper (default 'Actions').
+//   disabled disables every button in the group.
+//   class    appended to the wrapper.
+// Callback:
+//   @press(value, event)  value-first, typeof-guarded. Disabled buttons no-op.
+//
+// JOINED-ROW TREATMENT (copied from ToggleGroup's intent, different mechanism):
+// buttons overlap by -ml-px so adjacent borders collapse into one hairline; only
+// the first/last ends round (rounded-l-md / rounded-r-md), middles stay square.
+// Each button is `relative` and raises to `z-10` on focus so its 2px outline
+// draws ABOVE the neighbors instead of being covered by their borders. Per the
+// focus-flash rule the outline COLOR is set unconditionally (outline-ring) and
+// only the width/offset are revealed under focus-visible. A {#for} body must be a
+// single element, so every per-item class string is precomputed here in data().
+const ROOT = 'inline-flex items-center';
+
+const ITEM_BASE =
+  'relative inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
+  'font-medium cursor-pointer transition-colors ' +
+  'focus-visible:z-10 ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+
+// Variant recipes lifted verbatim from Button.pzl.
+const VARIANT = {
+  outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
+  secondary: 'bg-surface-sunken text-ink hover:bg-border',
+};
+
+// Size scale lifted verbatim from Button.pzl.
+const SIZE = {
+  sm: 'h-8 px-3 text-sm',
+  md: 'h-9 px-4 text-sm',
+  lg: 'h-10 px-5 text-base',
+};
+
+const ICON_SIZE = { sm: 'size-4', md: 'size-4', lg: 'size-5' };
+
+export default class ButtonGroup extends PuzzleView {
+  data(params, props) {
+    const variant = VARIANT[props.variant] ? props.variant : 'outline';
+    const size = SIZE[props.size] ? props.size : 'md';
+    const groupDisabled = !!props.disabled;
+    const source = props.items || [];
+    const last = source.length - 1;
+
+    const items = source.map((it, i) => {
+      const iconOnly = !!it.iconOnly;
+      // Rounding: only the ends round; -ml-px collapses shared borders.
+      const rounding =
+        i === 0
+          ? source.length === 1
+            ? 'rounded-md'
+            : 'rounded-l-md'
+          : i === last
+            ? 'rounded-r-md'
+            : 'rounded-none';
+      const overlap = i === 0 ? '' : '-ml-px';
+      return {
+        value: it.value,
+        label: it.label,
+        icon: it.icon || false,
+        disabled: groupDisabled || !!it.disabled,
+        // Icon-only buttons keep the label as the accessible name (sr-only) and
+        // mirror it onto title for a hover tooltip.
+        title: iconOnly ? it.label : false,
+        labelClass: iconOnly ? 'sr-only' : '',
+        class: [ITEM_BASE, VARIANT[variant], SIZE[size], rounding, overlap]
+          .filter(Boolean)
+          .join(' '),
+      };
+    });
+
+    return {
+      items,
+      iconClass: `${ICON_SIZE[size]} shrink-0`,
+      rootClass: [ROOT, props.class || ''].filter(Boolean).join(' '),
+      ariaLabel: props.label || 'Actions',
+    };
+  }
+
+  events = {
+    press: (value, event) => {
+      const item = this.getData().items.find((i) => i.value === value);
+      if (!item || item.disabled) return;
+      const { press } = this.props;
+      if (typeof press === 'function') press(value, event);
+    },
+  };
+}
+</script>

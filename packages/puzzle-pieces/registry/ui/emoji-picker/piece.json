@@ -1,0 +1,8 @@
+{
+  "name": "emoji-picker",
+  "description": "Emoji picker popover — searchable, keyboard-navigable grid of the full Unicode emoji set grouped by category, with slot trigger, optional-controlled open, auto-flip, and optional trigger↔panel morph",
+  "files": ["EmojiPicker.pzl"],
+  "registryDependencies": ["lib/emoji-data.js", "lib/emoji-keywords.js"],
+  "dependencies": ["@magic-spells/morph-engine"],
+  "targetDir": "app/components/ui"
+}

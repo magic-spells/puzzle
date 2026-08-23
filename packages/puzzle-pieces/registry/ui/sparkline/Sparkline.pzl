@@ -1,0 +1,89 @@
+<puzzle-view>
+  <svg
+    class={ rootClass }
+    role="img"
+    width={ width }
+    height={ height }
+    viewBox={ viewBox }
+    aria-label={ label }>
+    {#if hasArea}
+      <path
+        d={ areaPathD }
+        class="fill-current"
+        fill-opacity="0.15"
+        stroke="none" />
+    {/if}
+    {#if linePathD}
+      <path
+        d={ linePathD }
+        class="stroke-current fill-none"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round" />
+    {/if}
+  </svg>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { extent, linearScale, linePath, areaPath } from '../../lib/chart-math.js';
+
+// Sparkline — a tiny inline trend line with no axes, grid, or tooltip. Pass a
+// `data` number array and it draws one 2px path sized to `width`×`height`
+// (defaults 120×32). Color inherits from the text color: the path uses
+// stroke-current / fill-current, so set `text-chart-1` (the default) or any
+// other token via `class`. `area` adds a soft fill under the line at 15%.
+//
+//   <Sparkline data={ [3, 7, 4, 9, 6, 11, 8] } />
+//   <Sparkline data={ series } area />
+//   <Sparkline data={ series } width={ 200 } height={ 48 } class="text-chart-3" />
+//
+// A 2px vertical inset keeps the stroke off the edges. Null / NaN entries are
+// gaps (the line breaks). A single data point is drawn as a flat line so it's
+// still visible; empty data renders an accessible-but-empty <svg>. Path geometry
+// is computed here with chart-math and handed to the template as finished `d`
+// strings — the same relative-import convention Calendar uses for date-math.
+const PAD = 2; // vertical inset so the 2px stroke never clips at the edges
+
+export default class Sparkline extends PuzzleView {
+  data(params, props) {
+    const width = Number(props.width) > 0 ? Number(props.width) : 120;
+    const height = Number(props.height) > 0 ? Number(props.height) : 32;
+
+    const raw = Array.isArray(props.data) ? props.data : [];
+    const clean = raw.map((v) => (typeof v === 'number' && !Number.isNaN(v) ? v : null));
+    const n = clean.length;
+
+    const [min, max] = extent(clean);
+    const xAt = linearScale(0, Math.max(1, n - 1), 0, width);
+    const yAt = linearScale(min, max, height - PAD, PAD);
+
+    let points = clean.map((v, i) => (v == null ? null : [xAt(i), yAt(v)]));
+    // A lone point has no segment to stroke — stretch it into a flat line.
+    const valid = points.filter((p) => p != null);
+    if (valid.length === 1) {
+      const y = valid[0][1];
+      points = [[0, y], [width, y]];
+    }
+
+    const linePathD = linePath(points);
+    const areaPathD = props.area ? areaPath(points, height - PAD) : '';
+
+    // Default to text-chart-1, but step aside when the caller passes their own
+    // text color token so their `class` wins regardless of generated CSS order.
+    const cls = props.class || '';
+    const hasColor = /(?:^|\s)text-(?:chart-|brand|danger|success|muted|ink|body|faint)/.test(cls);
+
+    return {
+      width,
+      height,
+      viewBox: `0 0 ${width} ${height}`,
+      label: props.label || 'Trend',
+      linePathD,
+      areaPathD,
+      hasArea: !!props.area && !!areaPathD,
+      rootClass: [hasColor ? '' : 'text-chart-1', cls].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>

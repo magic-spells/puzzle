@@ -1,0 +1,256 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Date Range Picker</h1>
+        <p class="mt-2 text-body">
+          A Field-shaped trigger and popover for start/end selection that composes the Calendar piece:
+          a controlled
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '{ start, end }' }</code>
+          ISO value, in-between range shading with a live hover preview, optional-controlled open,
+          one or two months, and an optional presets rail. It is parent-owned — it emits
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          on each committed endpoint and the parent writes the range back down.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-xs">
+          <DateRangePicker
+            label="Stay dates"
+            hint="Pick a check-in and check-out day."
+            value={ heroRange }
+            @change={ setHeroRange } />
+        </div>
+      </ExampleBox>
+
+      <p class="mt-4 text-sm text-muted">
+        The first click sets the start and clears the end; the second sets the end (auto-ordered).
+        While you choose the end, hovering previews the in-between band. A third click starts over.
+      </p>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the range picker, the Calendar it composes, and the date helper they share:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          date-math.js is a shared lib file — both pieces import it as ../../lib/date-math.js. Keep it in app/lib/.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="two-months" title="Two months" code={ codeTwo }>
+          <div class="w-full max-w-md">
+            <DateRangePicker
+              label="Trip dates"
+              months={ 2 }
+              value={ twoRange }
+              @change={ setTwoRange } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="presets" title="Presets" code={ codePresets }>
+          <div class="w-full max-w-xs">
+            <DateRangePicker
+              label="Report window"
+              value={ presetRange }
+              presets={ presets }
+              @change={ setPresetRange } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="bounds" title="Bounds" code={ codeBounds }>
+          <div class="w-full max-w-xs">
+            <DateRangePicker
+              label="Within July"
+              min="2026-07-01"
+              max="2026-07-31"
+              value={ boundedRange }
+              @change={ setBoundedRange } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="controlled-open" title="Controlled open" code={ codeControlled }>
+          <div class="w-full max-w-xs space-y-3">
+            <Button variant="secondary" @press={ toggleOpen }>{ openLabel }</Button>
+            <DateRangePicker
+              label="Booking"
+              value={ controlledRange }
+              open={ controlledOpen }
+              @change={ setControlledRange }
+              @show={ onShow }
+              @hide={ onHide } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="error" title="Error state" code={ codeError }>
+          <div class="w-full max-w-xs">
+            <DateRangePicker
+              label="Contract term"
+              error="Please choose a start and end date."
+              value={ errorRange }
+              @change={ setErrorRange } />
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DateRangePicker from '@/components/ui/DateRangePicker.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for DateRangePicker — follows the DatePickerDoc exemplar (header → hero
+// ExampleBox → Installation → titled example sections → Toc). Parent-owned: the view holds
+// each { start, end } range and the picker emits @change on every committed endpoint.
+
+// Three files: the range picker, the Calendar it composes, and the shared date helper.
+const installCmd = 'puzzle add piece date-range-picker';
+const usageImport = `import DateRangePicker from '@/components/ui/DateRangePicker.pzl';`;
+const usageMarkup = `<DateRangePicker label="Stay dates" hint="Pick a check-in and check-out day." value={ range } @change={ setRange } />`;
+
+const codeHero = `<DateRangePicker
+  label="Stay dates"
+  hint="Pick a check-in and check-out day."
+  value={ range }
+  @change={ setRange } />
+
+// parent — value is { start, end } ISO strings
+created() {
+  this.setData({ range: { start: '', end: '' } });
+}
+events = {
+  setRange: (range) => this.setData('range', range),
+};`;
+
+const codeTwo = `<!-- two side-by-side month grids sharing the range band -->
+<DateRangePicker
+  label="Trip dates"
+  months={ 2 }
+  value={ range }
+  @change={ setRange } />`;
+
+const codePresets = `const presets = [
+  { label: 'This week',   start: '2026-07-13', end: '2026-07-19' },
+  { label: 'Last 7 days', start: '2026-07-12', end: '2026-07-18' },
+  { label: 'This month',  start: '2026-07-01', end: '2026-07-31' },
+  { label: 'This weekend', start: '2026-07-18', end: '2026-07-19' },
+];
+
+<DateRangePicker
+  label="Report window"
+  value={ range }
+  presets={ presets }
+  @change={ setRange } />`;
+
+const codeBounds = `<DateRangePicker
+  label="Within July"
+  min="2026-07-01"
+  max="2026-07-31"
+  value={ range }
+  @change={ setRange } />`;
+
+const codeControlled = `<!-- pass open + @show/@hide to own the open state -->
+<DateRangePicker
+  label="Booking"
+  value={ range }
+  open={ open }
+  @change={ setRange }
+  @show={ onShow }
+  @hide={ onHide } />
+
+events = {
+  onShow: () => this.setData('open', true),
+  onHide: () => this.setData('open', false),
+};`;
+
+const codeError = `<DateRangePicker
+  label="Contract term"
+  error="Please choose a start and end date."
+  value={ range }
+  @change={ setRange } />`;
+
+const presets = [
+  { label: 'This week', start: '2026-07-13', end: '2026-07-19' },
+  { label: 'Last 7 days', start: '2026-07-12', end: '2026-07-18' },
+  { label: 'This month', start: '2026-07-01', end: '2026-07-31' },
+  { label: 'This weekend', start: '2026-07-18', end: '2026-07-19' },
+];
+
+export default class DateRangePickerDoc extends PuzzleView {
+  created() {
+    this.setData({
+      heroRange: { start: '', end: '' },
+      twoRange: { start: '2026-07-14', end: '2026-07-22' },
+      presetRange: { start: '', end: '' },
+      boundedRange: { start: '2026-07-08', end: '2026-07-16' },
+      controlledRange: { start: '', end: '' },
+      controlledOpen: false,
+      errorRange: { start: '', end: '' },
+    });
+  }
+
+  data(params, props) {
+    const d = this.getData();
+    return {
+      ...d,
+      presets,
+      openLabel: d.controlledOpen ? 'Close picker' : 'Open picker',
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeTwo,
+      codePresets,
+      codeBounds,
+      codeControlled,
+      codeError,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Two months', href: '#two-months' },
+        { label: 'Presets', href: '#presets' },
+        { label: 'Bounds', href: '#bounds' },
+        { label: 'Controlled open', href: '#controlled-open' },
+        { label: 'Error state', href: '#error' },
+      ],
+    };
+  }
+
+  events = {
+    setHeroRange: (range) => this.setData('heroRange', range),
+    setTwoRange: (range) => this.setData('twoRange', range),
+    setPresetRange: (range) => this.setData('presetRange', range),
+    setBoundedRange: (range) => this.setData('boundedRange', range),
+    setErrorRange: (range) => this.setData('errorRange', range),
+    setControlledRange: (range) => this.setData('controlledRange', range),
+    toggleOpen: () => {
+      this.setData('controlledOpen', !this.getData().controlledOpen);
+      this.refresh();
+    },
+    onShow: () => {
+      this.setData('controlledOpen', true);
+      this.refresh();
+    },
+    onHide: () => {
+      this.setData('controlledOpen', false);
+      this.refresh();
+    },
+  };
+}
+</script>

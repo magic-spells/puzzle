@@ -1,0 +1,619 @@
+<puzzle-view class="h-full flex min-h-0">
+  {#if disconnected}
+    <div class="flex-1 min-w-0">
+      <Empty title={ emptyTitle } description={ emptyHint } class="py-8! px-4!" />
+    </div>
+  {:else}
+    <SplitPanel
+      class="flex-1 min-h-0"
+      direction="horizontal"
+      defaultSizes={ [25, 75] }
+      min={ ['140px', '280px'] }
+      storageKey="puzzle-devtools:store-split">
+
+    <div slot="first" class="h-full flex flex-col min-h-0 overflow-hidden border-r border-line bg-surface">
+      <header class="shrink-0 flex items-center gap-2 min-h-8 px-2 py-1.5 border-b border-line">
+        <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Types</span>
+        <button
+          type="button"
+          title="Re-request snapshot:records"
+          class="ml-auto flex size-4 items-center justify-center rounded text-muted hover:bg-raised hover:text-accent { loading ? 'animate-spin text-accent' : '' }"
+          @click={ reload }>{#svg 'icons/refresh.svg'}</button>
+      </header>
+
+      {#if error}
+        <p class="m-0 px-2 py-1 font-mono text-[10px] text-danger break-all">{ error }</p>
+      {/if}
+
+      <div class="flex-1 min-h-0 overflow-auto">
+        {#if types.length === 0}
+          <p class="m-0 px-2 py-2 text-[11px] text-faint">No record types.</p>
+        {:else}
+          <ul class="m-0 p-0 list-none">
+            {#for type in types}
+              <li key={ type.id }>
+                <div
+                  data-type="{ type.id }"
+                  class="flex items-center gap-1.5 min-h-[22px] px-2 py-0.5 cursor-default { type.rowClass }"
+                  @click={ selectType(type.id) }>
+                  <span class="font-mono text-[12px] truncate { type.nameClass }">{ type.id }</span>
+                  {#if type.dirty}
+                    <span class="font-mono text-[10px] text-warn" title="a flush named this type">•</span>
+                  {/if}
+                  <span class="ml-auto font-mono text-[11px] tabular-nums text-faint">{ type.count }</span>
+                </div>
+              </li>
+            {/for}
+          </ul>
+        {/if}
+      </div>
+    </div>
+
+    <div slot="second" class="h-full flex flex-col min-h-0 overflow-hidden">
+      {#if !activeType}
+        <Empty description="Select a record type to browse its rows." class="py-8! px-4!" />
+      {:else}
+        <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
+          <span class="font-mono text-[12px] font-semibold text-ink">{ activeType }</span>
+          <span class="font-mono text-[10px] tabular-nums text-faint">{ rowCount } rows</span>
+          {#if hiddenColumns}
+            <span class="font-mono text-[10px] text-faint">+{ hiddenColumns } more columns in detail</span>
+          {/if}
+        </header>
+
+        <div class="flex-1 min-h-0 overflow-auto">
+          {#if rows.length === 0}
+            <Empty description="No records of this type." class="py-6! px-4!" />
+          {:else}
+            <table class="w-full border-collapse text-left">
+              <thead class="sticky top-0 bg-surface">
+                <tr>
+                  {#for column in columns}
+                    <th
+                      key={ column }
+                      class="px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint whitespace-nowrap">
+                      { column }
+                    </th>
+                  {/for}
+                  <th class="px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">sync</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#for row in rows}
+                  <tr
+                    key={ row.key }
+                    data-row="{ row.key }"
+                    class="cursor-default { row.rowClass }"
+                    @click={ selectRow(row.key) }>
+                    {#for cell in row.cells}
+                      <td
+                        key={ cell.label }
+                        title="{ cell.full }"
+                        class="max-w-[16rem] truncate px-2 py-1 border-b border-line font-mono text-[11px] { cell.cls }">
+                        { cell.value }
+                      </td>
+                    {/for}
+                    <td class="px-2 py-1 border-b border-line">
+                      <Badge
+                        variant={ row.syncedVariant }
+                        class="px-1! py-0! font-mono text-[9px]! uppercase tracking-wide">{ row.syncedLabel }</Badge>
+                    </td>
+                  </tr>
+                {/for}
+              </tbody>
+            </table>
+          {/if}
+        </div>
+
+        {#if hasDetail}
+          <section class="shrink-0 max-h-[55%] flex flex-col min-h-0 border-t border-line bg-surface">
+            <header class="shrink-0 flex items-baseline gap-2 min-h-8 px-3 py-1.5 leading-relaxed border-b border-line">
+              <span class="shrink-0 font-mono text-[11px] font-semibold text-ink">{ activeType } · { detailId }</span>
+              <span class="min-w-0 truncate text-[10px] text-muted">edits go through the app's real record.update()</span>
+              <CopyButton
+                value={ recordJson }
+                size="sm"
+                class="ml-auto size-5! rounded-sm! shrink-0" />
+              <button
+                type="button"
+                data-apply="1"
+                class="rounded border border-line bg-raised px-1.5 font-mono text-[10px] text-ink hover:border-accent hover:text-accent disabled:opacity-50"
+                disabled={ applying }
+                @click={ apply }>
+                { applying ? 'Applying…' : 'Apply' }
+              </button>
+              <button
+                type="button"
+                class="rounded px-1 font-mono text-[10px] text-faint hover:text-ink"
+                title="Close"
+                @click={ closeDetail }>×</button>
+            </header>
+
+            {#if editError}
+              <p class="m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-danger break-words">{ editError }</p>
+            {/if}
+            {#if editOk}
+              <p class="m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-ok">{ editOk }</p>
+            {/if}
+
+            <dl class="m-0 flex-1 min-h-0 overflow-auto">
+              {#for field in fields}
+                <div key={ field.label } data-field="{ field.label }" class="group flex items-center gap-2 min-h-[24px] px-3 py-1 border-b border-line">
+                  <dt
+                    class="w-24 max-w-[35%] shrink-0 truncate font-mono text-[11px] leading-[1.35] text-muted"
+                    title="{ field.label }">{ field.label }</dt>
+                  <dd class="m-0 flex-1 min-w-0">
+                    {#if field.kind === 'boolean'}
+                      <input
+                        type="checkbox"
+                        class="align-middle accent-accent"
+                        checked={ field.checked }
+                        @change={ editBool(field.label, event) } />
+                    {:else if field.editable}
+                      <input
+                        type="text"
+                        spellcheck="false"
+                        class="w-full rounded border border-line bg-canvas px-1 py-0 font-mono text-[11px] text-ink focus:border-accent focus:outline-none"
+                        value={ field.input }
+                        @input={ editField(field.label, event) } />
+                    {:else}
+                      <span class="block truncate font-mono text-[11px] text-faint" title="{ field.full }">{ field.value }</span>
+                    {/if}
+                  </dd>
+                  <span class="w-14 shrink-0 text-right font-mono text-[9px] uppercase tracking-wide text-faint">{ field.kindLabel }</span>
+                  <CopyButton
+                    value={ field.copy }
+                    class="size-5! rounded-sm! shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
+                </div>
+              {/for}
+
+              <section data-history class="border-t border-line">
+                <h3 class="m-0 flex items-baseline gap-2 px-3 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-faint">
+                  History
+                  <span class="tabular-nums">{ history.length }</span>
+                  <span class="ml-auto font-normal normal-case tracking-normal text-[9px] text-faint">changes seen while this card was open</span>
+                </h3>
+                {#if history.length === 0}
+                  <p class="m-0 px-3 pb-1.5 text-[10px] italic text-faint">No changes yet.</p>
+                {:else}
+                  <ul class="m-0 p-0 pb-1 list-none">
+                    {#for entry in history}
+                      <li
+                        key={ entry.key }
+                        data-history-entry
+                        class="flex items-baseline gap-2 px-3 py-0.5 font-mono text-[10px]">
+                        <span class="shrink-0 tabular-nums text-faint">{ entry.time }</span>
+                        <span class="shrink-0 text-muted">{ entry.field }</span>
+                        <span class="min-w-0 truncate text-faint line-through">{ entry.from }</span>
+                        <span class="shrink-0 text-faint">→</span>
+                        <span class="min-w-0 truncate text-ink">{ entry.to }</span>
+                      </li>
+                    {/for}
+                  </ul>
+                {/if}
+              </section>
+            </dl>
+          </section>
+        {/if}
+      {/if}
+    </div>
+    </SplitPanel>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Badge from '../components/ui/Badge.pzl';
+import CopyButton from '../components/ui/CopyButton.pzl';
+import Empty from '../components/ui/Empty.pzl';
+import SplitPanel from '../components/ui/SplitPanel.pzl';
+import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
+import { api, applyRecordSnapshot } from '../bridge.js';
+import { disconnectedEmpty } from '../emptystate.js';
+import {
+  appendHistory,
+  clipboardText,
+  coerceInput,
+  deriveColumns,
+  diffRecord,
+  inputValue,
+  preview,
+  valueKind,
+} from '../values.js';
+
+/**
+ * The Store panel: record types on the left, a compact table of the active
+ * type's rows, and a detail card that edits primitive fields through
+ * `edit:record` — which the runtime applies with the app's real
+ * `record.update()`, so §20 schema validation answers back as `{ error }`.
+ *
+ * Rows are plain JSON snapshots, not live records (the inspected app's store
+ * lives in another realm). `flush` therefore does not update them; it bumps the
+ * connection's `flushSeq`, which schedules a debounced re-snapshot of whichever
+ * type is on screen.
+ */
+
+/** Flushes arrive one per store batch; re-snapshotting on each would thrash. */
+const FLUSH_DEBOUNCE_MS = 200;
+const OK_MS = 2000;
+
+const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
+const ROW_IDLE = 'hover:bg-raised';
+
+export default class StoreView extends PuzzleView {
+  created() {
+    this.setData({
+      activeType: null,
+      selectedRowId: null,
+      /** label -> raw input value, for the fields the user has touched. */
+      edits: {},
+      editError: '',
+      editOk: '',
+      applying: false,
+      loading: false,
+      error: '',
+      /** Newest-first changelog for the record whose detail card is open. */
+      history: [],
+    });
+
+    // `<connection state>#<flushSeq>` as of the last data() run — composite so a
+    // late `hello`, which does not touch flushSeq, still triggers a first load.
+    this._seenGeneration = null;
+    this._flushTimer = null;
+    this._okTimer = null;
+    // The last snapshot of the watched record: { type, id, row }. Kept OFF the
+    // local state layer on purpose — it is diff bookkeeping, never rendered, and
+    // putting it in setData would re-render the card on every flush.
+    this._watched = null;
+  }
+
+  mounted() {
+    // Tab activation: one unfiltered snapshot establishes the type list.
+    if (this.connected()) this.loadTypes();
+  }
+
+  destroyed() {
+    clearTimeout(this._flushTimer);
+    clearTimeout(this._okTimer);
+  }
+
+  data() {
+    const store = this.ctx.store;
+    const connection = store.findOne('connection', CONNECTION_ID);
+    const buckets = store.findMany('recordType');
+    const local = this.getData();
+
+    const state = connection?.state ?? CONNECTION_STATE.WAITING;
+    const connected = state === CONNECTION_STATE.CONNECTED;
+
+    // Reading these subscribes us to them: a flush means the rows on screen are
+    // a stale copy of the app's store, and a `hello` means there is finally an
+    // app to ask. A page with no Puzzle app never gets a request.
+    const generation = `${state}#${connection?.flushSeq ?? 0}`;
+    if (generation !== this._seenGeneration) {
+      const first = this._seenGeneration === null;
+      this._seenGeneration = generation;
+      if (!connected) clearTimeout(this._flushTimer);
+      else if (!first) this.scheduleRefresh();
+    }
+
+    const activeType = local.activeType;
+    const bucket = activeType ? store.findOne('recordType', activeType) : null;
+    const records = bucket?.records ?? [];
+    const shape = deriveColumns(records);
+
+    const selectedRowId = local.selectedRowId;
+    const selectedRow = findRow(records, shape.pk, selectedRowId);
+    const empty = disconnectedEmpty(state);
+
+    return {
+      disconnected: !connected,
+      emptyTitle: empty.title,
+      emptyHint: empty.description,
+
+      types: buckets.map((type) => ({
+        id: type.id,
+        count: type.count,
+        dirty: type.dirty,
+        rowClass: type.id === activeType ? ROW_SELECTED : ROW_IDLE,
+        nameClass: type.id === activeType ? 'text-accent font-semibold' : 'text-ink',
+      })),
+
+      activeType: activeType ?? '',
+      rowCount: records.length,
+      columns: shape.columns,
+      hiddenColumns: shape.hidden > 0 ? shape.hidden : 0,
+      rows: records.map((row) => this.toRow(row, shape, selectedRowId)),
+
+      hasDetail: !!selectedRow,
+      detailId: selectedRow ? String(selectedRow[shape.pk]) : '',
+      fields: this.toFields(selectedRow, shape.pk, local.edits),
+      // Pretty-printed so a pasted record is readable, not one long line.
+      recordJson: selectedRow ? JSON.stringify(selectedRow, null, 2) : '',
+      history: (local.history ?? []).map((entry, index) => ({
+        key: `${entry.at}-${entry.field}-${index}`,
+        time: stamp(entry.at),
+        field: entry.field,
+        from: preview(entry.from, 40),
+        to: preview(entry.to, 40),
+      })),
+
+      editError: local.editError,
+      editOk: local.editOk,
+      applying: local.applying,
+      loading: local.loading,
+      error: local.error,
+    };
+  }
+
+  /* ---- projections ------------------------------------------------------- */
+
+  toRow(row, shape, selectedRowId) {
+    const key = String(row?.[shape.pk] ?? '');
+    const isSelected = key === String(selectedRowId ?? '\u0000');
+    return {
+      key,
+      rowClass: isSelected ? ROW_SELECTED : ROW_IDLE,
+      syncedLabel: row?._synced ? 'synced' : 'local',
+      // Badge's vocabulary: `brand` is the tinted chip, `outline` the quiet one.
+      syncedVariant: row?._synced ? 'brand' : 'outline',
+      cells: shape.columns.map((column) => ({
+        label: column,
+        // Cells are single-line and truncated; `full` is what hover reveals.
+        value: preview(row?.[column], 80),
+        full: preview(row?.[column], Infinity),
+        cls: column === shape.pk ? 'text-ink' : 'text-muted',
+      })),
+    };
+  }
+
+  /**
+   * Every field of the selected row, in serialization order. The primary key and
+   * `_synced` are shown but never editable: the pk is immutable in the app's
+   * store (§20) and `_synced` is provenance the bridge synthesizes, not a field.
+   */
+  toFields(row, pk, edits) {
+    if (!row) return [];
+    return Object.keys(row).map((label) => {
+      const value = row[label];
+      const kind = valueKind(value);
+      const locked = label === pk || label === '_synced';
+      const editable = !locked && kind !== 'other';
+      const edited = Object.prototype.hasOwnProperty.call(edits, label);
+      return {
+        label,
+        kind: editable ? kind : 'locked',
+        kindLabel: locked ? 'read-only' : kind,
+        editable,
+        value: preview(value),
+        full: preview(value, Infinity),
+        copy: clipboardText(value),
+        input: edited ? String(edits[label]) : inputValue(value),
+        checked: edited ? edits[label] === true || edits[label] === 'true' : value === true,
+      };
+    });
+  }
+
+  /* ---- requests ---------------------------------------------------------- */
+
+  /** True once `hello` landed with a protocol version this build renders. */
+  connected() {
+    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
+    return connection?.state === CONNECTION_STATE.CONNECTED;
+  }
+
+  scheduleRefresh() {
+    clearTimeout(this._flushTimer);
+    this._flushTimer = setTimeout(() => {
+      this._flushTimer = null;
+      const type = this.getData().activeType;
+      // Only the type on screen: re-snapshotting every bucket on every flush is
+      // the one thing that would make this panel slower than the app it watches.
+      if (type) this.loadTypes(type);
+      else this.loadTypes();
+    }, FLUSH_DEBOUNCE_MS);
+  }
+
+  async loadTypes(type) {
+    if (this.isDestroyed || !this.connected()) return;
+    this.setData({ loading: true, error: '' });
+    this.refresh();
+    try {
+      const result = await api.snapshotRecords(type);
+      if (this.isDestroyed) return;
+      const names = applyRecordSnapshot(result, type ?? null);
+      // First snapshot with nothing selected: land on something.
+      if (!this.getData().activeType && names.length) {
+        this.setData('activeType', names[0]);
+      }
+      // Every re-snapshot is a chance to see what changed under the open card.
+      this.syncWatched();
+    } catch (err) {
+      if (this.isDestroyed) return;
+      this.setData('error', err?.message ?? String(err));
+    } finally {
+      if (!this.isDestroyed) {
+        this.setData('loading', false);
+        this.refresh();
+      }
+    }
+  }
+
+  /**
+   * Diff the watched record against the snapshot we held before this one and
+   * append what changed.
+   *
+   * Only fires when the SAME record of the SAME type is still open — switching
+   * record or type resets the baseline instead of reporting the switch as a
+   * change. A record that vanished (deleted upstream) simply stops the watch;
+   * inventing "field → undefined" rows for a deletion would be noise.
+   */
+  syncWatched() {
+    const local = this.getData();
+    const type = local.activeType;
+    const id = local.selectedRowId;
+    if (!type || id == null) {
+      this._watched = null;
+      return;
+    }
+
+    const bucket = this.ctx.store.findOne('recordType', type);
+    const records = bucket?.records ?? [];
+    const shape = deriveColumns(records);
+    const row = findRow(records, shape.pk, id);
+    const next = row ? { ...row } : null;
+
+    const previous = this._watched;
+    const sameTarget =
+      previous && previous.type === type && String(previous.id) === String(id);
+
+    if (sameTarget && previous.row && next) {
+      const changes = diffRecord(previous.row, next);
+      if (changes.length) {
+        this.setData('history', appendHistory(local.history ?? [], changes, Date.now()));
+      }
+    }
+
+    this._watched = next ? { type, id, row: next } : null;
+  }
+
+  /** Drop the changelog and its baseline — the card is now showing something else. */
+  resetWatch() {
+    this._watched = null;
+    this.setData('history', []);
+  }
+
+  flashOk(message) {
+    clearTimeout(this._okTimer);
+    this.setData('editOk', message);
+    this._okTimer = setTimeout(() => {
+      this._okTimer = null;
+      if (this.isDestroyed) return;
+      this.setData('editOk', '');
+      this.refresh();
+    }, OK_MS);
+  }
+
+  events = {
+    selectType: (id) => {
+      if (this.getData().activeType === id) return;
+      this.setData({
+        activeType: id,
+        selectedRowId: null,
+        edits: {},
+        editError: '',
+        editOk: '',
+      });
+      this.resetWatch();
+      this.refresh();
+    },
+
+    selectRow: (key) => {
+      const same = String(this.getData().selectedRowId ?? '\u0000') === String(key);
+      this.setData({
+        selectedRowId: same ? null : key,
+        edits: {},
+        editError: '',
+        editOk: '',
+      });
+      // A different record means a different changelog; re-baseline immediately
+      // so the first flush after this diffs against what is on screen NOW.
+      this.resetWatch();
+      this.syncWatched();
+      this.refresh();
+    },
+
+    closeDetail: () => {
+      this.setData({ selectedRowId: null, edits: {}, editError: '', editOk: '' });
+      this.resetWatch();
+      this.refresh();
+    },
+
+    // No refresh() on keystroke: the input already holds what was typed, and
+    // re-rendering a focused controlled input is how you lose a caret position.
+    editField: (label, event) => {
+      const edits = { ...this.getData().edits };
+      edits[label] = event.target.value;
+      this.setData('edits', edits);
+    },
+
+    editBool: (label, event) => {
+      const edits = { ...this.getData().edits };
+      edits[label] = event.target.checked;
+      this.setData('edits', edits);
+    },
+
+    apply: async () => {
+      const local = this.getData();
+      const store = this.ctx.store;
+      const type = local.activeType;
+      const bucket = type ? store.findOne('recordType', type) : null;
+      const records = bucket?.records ?? [];
+      const shape = deriveColumns(records);
+      const row = findRow(records, shape.pk, local.selectedRowId);
+      if (!row) return;
+
+      const patch = {};
+      for (const [label, raw] of Object.entries(local.edits)) {
+        if (label === shape.pk || label === '_synced') continue;
+        const kind = valueKind(row[label]);
+        const parsed = coerceInput(raw, kind);
+        if (!parsed.ok) {
+          this.setData({ editError: `${label}: ${parsed.error}`, editOk: '' });
+          this.refresh();
+          return;
+        }
+        if (parsed.value !== row[label]) patch[label] = parsed.value;
+      }
+
+      if (Object.keys(patch).length === 0) {
+        this.setData({ editError: 'nothing changed', editOk: '' });
+        this.refresh();
+        return;
+      }
+
+      this.setData({ applying: true, editError: '', editOk: '' });
+      this.refresh();
+      try {
+        await api.editRecord(type, row[shape.pk], patch);
+        if (this.isDestroyed) return;
+        // The write succeeded in the app's store; re-read so the table shows what
+        // the app actually holds (defaults, coercions, adapter round-trips)
+        // rather than what we sent.
+        this.setData({ edits: {} });
+        this.flashOk('applied');
+        await this.loadTypes(type);
+      } catch (err) {
+        // A §20 validation failure arrives here: panel-glue turns an `{ error }`
+        // result into a rejection. The typed values stay in `edits` so the field
+        // can be corrected instead of retyped.
+        if (this.isDestroyed) return;
+        this.setData('editError', err?.message ?? String(err));
+      } finally {
+        if (!this.isDestroyed) {
+          this.setData('applying', false);
+          this.refresh();
+        }
+      }
+    },
+
+    reload: () => {
+      this.loadTypes();
+    },
+  };
+}
+
+/** hh:mm:ss for a changelog row — the date is never useful inside one session. */
+function stamp(at) {
+  if (!at) return '';
+  const d = new Date(at);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/** Rows round-trip through JSON, so a numeric pk can arrive as either type. */
+function findRow(records, pk, id) {
+  if (id == null) return null;
+  return records.find((row) => String(row?.[pk]) === String(id)) ?? null;
+}
+</script>

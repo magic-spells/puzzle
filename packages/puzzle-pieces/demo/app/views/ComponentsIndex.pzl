@@ -1,0 +1,41 @@
+<puzzle-view class="w-full">
+  <!-- Toc-width right inset. The component doc pages lay out as a flex row of
+       article + a w-48 Toc with gap-12 between; reserving that same 15rem here
+       lands this page's column in the identical place on every route. -->
+  <div class="xl:pr-60">
+    <article class="mx-auto w-full max-w-5xl min-w-0">
+      <header class="mb-8 max-w-3xl">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Components</h1>
+        <p class="mt-2 text-body">
+          All 90 pieces in the registry. Every one is a native Puzzle component you copy
+          into your app — click through for live examples and usage.
+        </p>
+      </header>
+
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {#for item in components}
+          <a
+            href="#{ item.path }"
+            key={ item.name }
+            class="block rounded-xl border border-border bg-surface p-5 transition-colors hover:border-border-strong outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <h2 class="text-sm font-semibold text-ink">{ item.title }</h2>
+            <p class="mt-1.5 text-sm/relaxed text-muted">{ item.description }</p>
+          </a>
+        {/for}
+      </div>
+    </article>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { COMPONENTS } from '../docs/nav.js';
+
+// The /components index — a linked card per piece, driven by the same generated
+// nav.js config as the sidebar (descriptions come from each piece.json).
+export default class ComponentsIndex extends PuzzleView {
+  data(params, props) {
+    return { components: COMPONENTS };
+  }
+}
+</script>

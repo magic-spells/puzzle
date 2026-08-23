@@ -1,0 +1,547 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ triggerId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+
+    <div class="relative">
+      <button
+        type="button"
+        class={ triggerClass }
+        id={ triggerId }
+        data-drp-trigger
+        aria-haspopup="dialog"
+        aria-expanded={ ariaExpanded }
+        aria-controls={ panelId }
+        aria-invalid={ invalid }
+        aria-describedby={ describedby }
+        disabled={ disabled }
+        @click={ onTriggerClick(event) }
+        @keydown={ onTriggerKey(event) }>
+        <span class="flex-1 truncate text-left { placeholderClass }">{ triggerLabel }</span>
+        <svg
+          class="size-4 shrink-0 text-muted"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true">
+          <rect x="3" y="4" width="14" height="13" rx="2" />
+          <path d="M3 8h14M7 2v3.5M13 2v3.5" stroke-linecap="round" />
+        </svg>
+      </button>
+
+      {#if name}
+        <input type="hidden" name={ startName } value={ startValue } />
+      {/if}
+      {#if name}
+        <input type="hidden" name={ endName } value={ endValue } />
+      {/if}
+
+      {#if open}
+        <div
+          class={ panelClass }
+          id={ panelId }
+          role="dialog"
+          aria-modal="false"
+          aria-label={ dialogLabel }
+          data-drp-panel
+          style={ panelStyle }
+          @keydown:escape={ onEscape(event) }
+          @mouseover={ onDayHover(event) }
+          @mouseleave={ onDayLeave(event) }>
+          <div class="flex">
+            {#if hasPresets}
+              <div class="flex w-36 shrink-0 flex-col gap-0.5 border-r border-border p-2">
+                {#for p in presetList}
+                  <button
+                    type="button"
+                    class={ presetClass }
+                    @click={ onPreset(p, event) }
+                    key={ p.key }>{ p.label }</button>
+                {/for}
+              </div>
+            {/if}
+
+            {#if twoMonths}
+              <div class="flex gap-2 p-1">
+                <Calendar
+                  frameless={ true }
+                  value={ calStartValue }
+                  range={ calRange }
+                  previewDate={ calPreview }
+                  min={ calMin }
+                  max={ calMax }
+                  disabledDates={ calDisabledDates }
+                  locale={ calLocale }
+                  firstDayOfWeek={ calFirstDay }
+                  autofocus={ calAutofocus }
+                  label="Range start month"
+                  @change={ onCalendarChange } />
+                <Calendar
+                  frameless={ true }
+                  value={ calEndValue }
+                  range={ calRange }
+                  previewDate={ calPreview }
+                  min={ calMin }
+                  max={ calMax }
+                  disabledDates={ calDisabledDates }
+                  locale={ calLocale }
+                  firstDayOfWeek={ calFirstDay }
+                  label="Range end month"
+                  @change={ onCalendarChange } />
+              </div>
+            {:else}
+              <div class="p-1">
+                <Calendar
+                  frameless={ true }
+                  value={ calAnchorValue }
+                  range={ calRange }
+                  previewDate={ calPreview }
+                  min={ calMin }
+                  max={ calMax }
+                  disabledDates={ calDisabledDates }
+                  locale={ calLocale }
+                  firstDayOfWeek={ calFirstDay }
+                  autofocus={ calAutofocus }
+                  label="Date range"
+                  @change={ onCalendarChange } />
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    {#if error}
+      <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+    {:else if hint}
+      <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Calendar from './Calendar.pzl';
+import { parseISODate, toDate, compareDates } from '../../lib/date-math.js';
+
+// DateRangePicker — a Field-shaped trigger + popover for start/end range selection,
+// composing the Calendar piece. It reuses DatePicker's whole trigger/popover/open
+// lifecycle (optional-controlled open, outside-click, auto-flip, hidden inputs, Field
+// label/hint/error) and adds two-endpoint selection plus the OPT-IN Calendar range
+// shading (start/end discs + in-between band + a live hover-preview band).
+//
+//   <DateRangePicker value={ range } @change={ setRange } />
+//   <DateRangePicker label="Trip" months={ 2 } value={ range } @change={ setRange } />
+//   <DateRangePicker value={ range } presets={ presets } @change={ setRange } />
+//   <DateRangePicker value={ range } open={ open } @change={ setRange }
+//                    @show={ onShow } @hide={ onHide } />       // controlled open
+//
+// PROPS
+//   value          { start, end }  controlled ISO range; either side '' = unset. Parent-
+//                                  owned — DateRangePicker emits @change and the parent
+//                                  writes the new { start, end } back down.
+//   open           boolean  OPTIONAL-CONTROLLED (DatePicker's shape): omit it and the
+//                           picker owns its open state; pass it and the parent owns it
+//                           (the picker only *asks* to open/close via @show/@hide).
+//   months         1 | 2    number of month grids side by side (default 1). See MONTHS.
+//   presets        array    optional [{ label, start, end }] quick-ranges in a left rail.
+//   label          string   field label above the trigger.
+//   hint           string   helper text below the trigger.
+//   error          string   error text below the trigger; paints the trigger border
+//                           danger and wires aria-invalid + aria-describedby (replaces
+//                           hint when both set).
+//   placeholder    string   trigger text when no range (default 'Pick a date range').
+//   format         string   Intl dateStyle preset for the trigger label endpoints:
+//                           'full' | 'long' | 'medium' (default) | 'short'.
+//   locale         string   BCP-47 tag; passed to Calendar and the trigger formatter
+//                           (default: <html lang>, then navigator.language, then en-US).
+//   firstDayOfWeek 0..6     passed to Calendar (0 = Sunday, default).
+//   min, max       string   inclusive ISO bounds; passed to Calendar.
+//   disabledDates  array|fn  passed to Calendar (ISO array OR predicate (iso, Date) => bool).
+//   disabled       boolean  disables the trigger.
+//   name           string   emits two hidden inputs: `${name}-start` and `${name}-end`,
+//                           each carrying its ISO endpoint (empty when unset).
+//   class          string   appended to the root element.
+//
+// CALLBACKS
+//   @change(range, event)   value-first { start, end }. Fires on EACH committed endpoint:
+//                           the first click emits { start, end:'' } (new range begun); the
+//                           second emits the completed { start, end } (swapped so start ≤
+//                           end). A third click begins a fresh range. Presets emit their
+//                           full { start, end } ordered the same way.
+//   @show() / @hide()       fire on the user's open/close intent (trigger, Escape,
+//                           outside-click, or a completed range) so a controlled parent
+//                           can flip `open`.
+//
+// SELECTION MODEL. Selection phase is DERIVED from the parent-owned value, not a private
+// flag, so it survives reopen: `value.start && !value.end` means "awaiting the end". A day
+// @change from either Calendar routes through onCalendarChange — if awaiting the end it
+// completes (ordering the two endpoints), otherwise it starts a new range. The only local
+// state beyond DatePicker's open/placement is `preview` (the hovered ISO), used to drive
+// Calendar's `previewDate` band while awaiting the end; it's set from a delegated
+// @mouseover on the panel (reading the hovered button's data-iso) and cleared on leave /
+// completion / close. The picker closes and restores trigger focus on a completed range or
+// a preset; it stays open after the first endpoint.
+//
+// MONTHS. `months={ 2 }` renders two frameless Calendars sharing the same `range` /
+// `previewDate` band. Calendar owns its displayed month INTERNALLY (seeded from its
+// `value`), and exposes no external month-anchor prop, so the two grids are anchored on
+// the two endpoints (start → left, end → right) and otherwise navigate INDEPENDENTLY;
+// while the range is empty both open on the current month. Coordinated shared prev/next
+// across two grids would require a Calendar API addition and is intentionally out of scope
+// — `months={ 1 }` is the default and the fully-coordinated experience. (Documented gap.)
+//
+// POSITIONING & FOCUS mirror DatePicker exactly: the side is pre-decided from the
+// trigger's viewport room at open time (fixed-height panel) and corrected against the real
+// height in a rAF; Calendar's `autofocus` lands focus on the active day; Escape closes and
+// returns focus to the trigger (Calendar's days-view Escape bubbles up; its months/years
+// views consume it to back out); outside-click dismisses via a document pointerdown
+// listener bounded to the open state. No morph (kept out of scope for v1).
+
+let uid = 0;
+
+const VALID_FORMATS = new Set(['full', 'long', 'medium', 'short']);
+
+// Rough resting height of a Calendar panel (fixed 6-week grid + header), for the
+// synchronous open-time flip decision before the panel has mounted to measure.
+const PANEL_EST_HEIGHT = 340;
+
+const TRIGGER_BASE =
+  'flex h-9 w-full items-center justify-between gap-2 rounded-lg border bg-surface px-3 ' +
+  'text-sm text-ink select-none transition-colors cursor-pointer ' +
+  'hover:border-border-strong ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'disabled:opacity-50 disabled:pointer-events-none disabled:cursor-default';
+const TRIGGER_OK = 'border-border outline-ring focus-visible:outline-ring';
+const TRIGGER_ERROR = 'border-danger outline-danger focus-visible:outline-danger';
+
+// The panel owns the card (Calendars render `frameless` inside it). Dropdown-anchored
+// below/above the trigger with the runtime flip — never transformed.
+const PANEL_CARD =
+  'absolute left-0 z-50 rounded-xl border border-border bg-surface shadow-lg';
+
+const PRESET_CLASS =
+  'rounded-md px-2.5 py-1.5 text-left text-sm text-body cursor-pointer transition-colors ' +
+  'hover:bg-surface-sunken hover:text-ink ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+export default class DateRangePicker extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._wasOpen = false; // last effective-open seen by the transition detector
+    this._pendingRestoreFocus = true; // whether the next close returns focus to the trigger
+    // Local UI state (open placement + hover preview). Never returned from data() as `open`
+    // when controlled — `props.open` wins there.
+    this.setData({ uncontrolledOpen: false, placement: 'bottom', preview: '' });
+  }
+
+  mounted() {
+    this._onDocPointer = (e) => {
+      if (!this._effectiveOpen()) return;
+      if (this.element && this.element.contains(e.target)) return;
+      this._requestClose({ restoreFocus: false });
+    };
+    this._syncOpenEffects();
+  }
+
+  destroyed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+  }
+
+  // ---- controlled / uncontrolled open resolution ---------------------------
+
+  _controlled() {
+    return this.props.open !== undefined;
+  }
+
+  _effectiveOpen() {
+    return this._controlled() ? !!this.props.open : !!this.getData().uncontrolledOpen;
+  }
+
+  _locale(props) {
+    return (
+      props.locale ||
+      (typeof document !== 'undefined' && document.documentElement.lang) ||
+      (typeof navigator !== 'undefined' && navigator.language) ||
+      'en-US'
+    );
+  }
+
+  // Normalize the parent-owned range value into two ISO strings.
+  _value(props) {
+    const v = (props && props.value) || this.props.value || {};
+    const start = v && typeof v.start === 'string' ? v.start : '';
+    const end = v && typeof v.end === 'string' ? v.end : '';
+    return { start, end };
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  data(params, props) {
+    const prev = this.getData();
+    const open = this._effectiveOpen();
+    const base = props.id || `pieces-date-range-picker-${this._uid}`;
+
+    const { start, end } = this._value(props);
+    const ps = parseISODate(start);
+    const pe = parseISODate(end);
+    const hasValue = !!(ps || pe);
+    const selecting = !!(start && !end); // awaiting the end endpoint
+
+    const locale = this._locale(props);
+    const format = VALID_FORMATS.has(props.format) ? props.format : 'medium';
+    const fmt = this.memo('trigfmt', [locale, format], () =>
+      new Intl.DateTimeFormat(locale, { dateStyle: format })
+    );
+    let triggerLabel;
+    if (ps && pe) triggerLabel = `${fmt.format(toDate(ps))} – ${fmt.format(toDate(pe))}`;
+    else if (ps) triggerLabel = `${fmt.format(toDate(ps))} – …`;
+    else if (pe) triggerLabel = `… – ${fmt.format(toDate(pe))}`;
+    else triggerLabel = props.placeholder || 'Pick a date range';
+
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const described = !!(error || hint);
+    const placement = (open && prev.placement) || 'bottom';
+
+    const twoMonths = Number(props.months) === 2;
+    const presetList = (Array.isArray(props.presets) ? props.presets : []).map((p, i) => ({
+      key: `preset-${i}`,
+      label: p.label,
+      start: p.start || '',
+      end: p.end || '',
+    }));
+
+    // Preview only extends the band while awaiting the end endpoint.
+    const preview = selecting ? prev.preview || '' : '';
+
+    return {
+      open,
+      triggerLabel,
+      placeholderClass: hasValue ? 'text-ink' : 'text-muted',
+      label: props.label || '',
+      hint,
+      error,
+      invalid: error ? 'true' : false,
+      describedby: described ? `${base}-desc` : false,
+      descId: `${base}-desc`,
+      triggerId: `${base}-trigger`,
+      panelId: `${base}-panel`,
+      dialogLabel: props.label || 'Choose a date range',
+      ariaExpanded: open ? 'true' : 'false',
+      disabled: !!props.disabled,
+      name: props.name || false,
+      startName: props.name ? `${props.name}-start` : false,
+      endName: props.name ? `${props.name}-end` : false,
+      startValue: start,
+      endValue: end,
+      placement,
+      rootClass: props.class || '',
+      triggerClass: [TRIGGER_BASE, error ? TRIGGER_ERROR : TRIGGER_OK].join(' '),
+      panelClass: [PANEL_CARD, placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'].join(' '),
+      panelStyle: '',
+      presetClass: PRESET_CLASS,
+      hasPresets: presetList.length > 0,
+      presetList,
+      twoMonths,
+      // Calendar pass-through. The `range` prop paints the endpoints + band (display-only);
+      // `value` anchors each grid's displayed month + focus on its endpoint.
+      calRange: { start, end },
+      calPreview: preview,
+      calAnchorValue: start || end || '',
+      calStartValue: start || '',
+      calEndValue: end || '',
+      calMin: props.min,
+      calMax: props.max,
+      calDisabledDates: props.disabledDates,
+      calLocale: props.locale,
+      calFirstDay: props.firstDayOfWeek,
+      calAutofocus: open,
+    };
+  }
+
+  // ---- placement -----------------------------------------------------------
+
+  _decidePlacement() {
+    const trigger = this.element?.querySelector('[data-drp-trigger]');
+    if (!trigger || typeof window === 'undefined') return 'bottom';
+    const rect = trigger.getBoundingClientRect();
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    return below < PANEL_EST_HEIGHT && above > below ? 'top' : 'bottom';
+  }
+
+  _measurePlacement() {
+    const trigger = this.element?.querySelector('[data-drp-trigger]');
+    const panel = this.element?.querySelector('[data-drp-panel]');
+    if (!trigger || !panel || typeof window === 'undefined') return this.getData().placement;
+    const rect = trigger.getBoundingClientRect();
+    const panelH = panel.offsetHeight;
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    return panelH > below && above > below ? 'top' : 'bottom';
+  }
+
+  // ---- open / close intents ------------------------------------------------
+
+  _requestOpen() {
+    if (this._effectiveOpen()) return;
+    const placement = this._decidePlacement();
+    if (this._controlled()) {
+      this.setData({ placement });
+    } else {
+      this.setData({ uncontrolledOpen: true, placement });
+    }
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+    if (!this._controlled()) this.refresh();
+  }
+
+  _requestClose({ restoreFocus = true } = {}) {
+    if (!this._effectiveOpen()) return;
+    this._pendingRestoreFocus = restoreFocus;
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+    if (this._controlled()) return; // parent unmounts the panel; focus return in _onClosed
+    this.setData({ uncontrolledOpen: false });
+    this.refresh();
+  }
+
+  // ---- open / close side-effects -------------------------------------------
+
+  _syncOpenEffects() {
+    const open = this._effectiveOpen();
+    if (open && !this._wasOpen) {
+      this._wasOpen = true;
+      this._onOpened();
+    } else if (!open && this._wasOpen) {
+      this._wasOpen = false;
+      this._onClosed();
+    }
+  }
+
+  afterUpdate() {
+    this._syncOpenEffects();
+  }
+
+  _onOpened() {
+    document.addEventListener('pointerdown', this._onDocPointer);
+    requestAnimationFrame(() => {
+      if (!this._effectiveOpen() || !this.element) return;
+      const corrected = this._measurePlacement();
+      if (corrected !== this.getData().placement) {
+        this.setData({ placement: corrected });
+        this.refresh();
+      }
+    });
+  }
+
+  _onClosed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this.setData({ placement: 'bottom', preview: '' });
+    if (this._pendingRestoreFocus) {
+      this.element?.querySelector('[data-drp-trigger]')?.focus();
+    }
+    this._pendingRestoreFocus = true;
+  }
+
+  // ---- selection -----------------------------------------------------------
+
+  _emit(range, event) {
+    const { change } = this.props;
+    if (typeof change === 'function') change(range, event);
+  }
+
+  _commitDay(iso, event) {
+    const { start, end } = this._value(this.props);
+    if (start && !end) {
+      // Complete the range, ordering so start ≤ end.
+      const anchor = parseISODate(start);
+      const picked = parseISODate(iso);
+      const ordered =
+        anchor && picked && compareDates(picked, anchor) < 0
+          ? { start: iso, end: start }
+          : { start, end: iso };
+      this.setData('preview', '');
+      this._emit(ordered, event);
+      this._requestClose({ restoreFocus: true });
+    } else {
+      // Begin a fresh range: set start, clear end, keep the popover open.
+      this.setData('preview', '');
+      this._emit({ start: iso, end: '' }, event);
+    }
+  }
+
+  events = {
+    onTriggerClick: () => {
+      if (this.props.disabled) return;
+      if (this._effectiveOpen()) this._requestClose({ restoreFocus: true });
+      else this._requestOpen();
+    },
+
+    onTriggerKey: (event) => {
+      if (this.props.disabled || this._effectiveOpen()) return;
+      if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this._requestOpen();
+      }
+    },
+
+    onEscape: (event) => {
+      if (!this._effectiveOpen()) return;
+      event.preventDefault();
+      this._requestClose({ restoreFocus: true });
+    },
+
+    // A Calendar committed a day: run the two-endpoint state machine.
+    onCalendarChange: (iso, date, event) => {
+      this._commitDay(iso, event);
+    },
+
+    // Apply a preset range directly, then close.
+    onPreset: (p, event) => {
+      this.setData('preview', '');
+      let { start, end } = p;
+      const startDate = parseISODate(start);
+      const endDate = parseISODate(end);
+      if (startDate && endDate && compareDates(endDate, startDate) < 0) {
+        [start, end] = [end, start]; // honor the @change ordering contract
+      }
+      this._emit({ start, end }, event);
+      this._requestClose({ restoreFocus: true });
+    },
+
+    // Delegated hover-preview: while awaiting the end endpoint, extend the band to the
+    // hovered day. Reads the hovered day button's data-iso; guarded to only refresh on a
+    // real change to avoid churn.
+    onDayHover: (event) => {
+      const { start, end } = this._value(this.props);
+      if (!(start && !end)) {
+        if (this.getData().preview) {
+          this.setData('preview', '');
+          this.refresh();
+        }
+        return;
+      }
+      const target = event.target;
+      const btn = target && target.closest ? target.closest('[data-iso]') : null;
+      const iso = btn ? btn.getAttribute('data-iso') : '';
+      if (iso !== this.getData().preview) {
+        this.setData('preview', iso);
+        this.refresh();
+      }
+    },
+
+    onDayLeave: () => {
+      if (this.getData().preview) {
+        this.setData('preview', '');
+        this.refresh();
+      }
+    },
+  };
+}
+</script>

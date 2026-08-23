@@ -1,0 +1,337 @@
+<puzzle-view>
+  <ul role="tree" aria-label={ treeLabel } class={ rootClass }>
+    {#for row in rows}
+      <li
+        role="treeitem"
+        key={ row.id }
+        id={ row.itemId }
+        aria-level={ row.level1 }
+        aria-posinset={ row.posinset }
+        aria-setsize={ row.setsize }
+        aria-selected={ row.selectedAttr }
+        aria-expanded={ row.expandedAttr }
+        aria-disabled={ row.disabledAttr }
+        tabindex={ row.tabindex }
+        class={ row.rowClass }
+        style={ row.indentStyle }
+        @keydown={ handleKeydown(row.id, event) }
+        @click={ handleClick(row.id, event) }>
+        {#if row.hasChildren}
+          <svg
+            class="size-4 shrink-0 text-muted transition-[rotate] duration-150 motion-reduce:transition-none {#if row.expanded}rotate-90{/if}"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true">
+            <path d="M7 5l6 5-6 5z"/>
+          </svg>
+        {:else}
+          <span class="size-4 shrink-0" aria-hidden="true"></span>
+        {/if}
+        {#if row.icon}
+          <svg class="size-4 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d={ row.icon }/>
+          </svg>
+        {/if}
+        <span class="min-w-0 flex-1 truncate">{ row.label }</span>
+      </li>
+    {/for}
+  </ul>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Tree — a config-first WAI-ARIA tree view (file-explorer style) rendered from a
+// nested `nodes` array. ONE component, no compound subcomponents: the nested tree
+// is FLATTENED in data() into an ordered list of the currently-visible rows and
+// rendered as a single {#for} over one <li role="treeitem"> each — the compiler
+// needs one element per for-body, and roving-tabindex + keyboard nav both want a
+// single ordered visible list anyway.
+//
+//   <Tree nodes={ nodes } value={ selected } expanded={ expanded }
+//         @select={ onSelect } @toggle={ onToggle } label="Files" />
+//
+// NODES — recursive plain objects (config-first, NOT compound components):
+//   { id, label, icon?, disabled?, children? }
+//     id        stable unique string used for value/expanded/select/toggle.
+//     label     row text.
+//     icon      OPTIONAL SVG path `d` string on a 24×24 grid (stroke, fill none) —
+//               the config-first icon slot, same contract as Sidebar/ButtonGroup.
+//     disabled  the row is aria-disabled and cannot be selected/toggled by pointer
+//               (still reachable by keyboard so it is announced).
+//     children  an array of the same shape → the node is a parent (a group).
+//
+// PROPS
+//   nodes     array   the tree config above.
+//   value     string  the SELECTED node id (controlled selection; '' = none).
+//   expanded  string[] OPTIONAL-CONTROLLED set of expanded parent ids (Sidebar's
+//                      collapsed shape): omit it and the Tree owns expansion
+//                      internally (toggled by click/keys); pass it and the PARENT
+//                      owns it — the Tree only reflects the prop and *asks* to
+//                      change via @toggle. Starts all-collapsed when uncontrolled.
+//   label     string  aria-label on the role="tree" root (default 'Tree').
+//   class     string  appended to the root <ul> (callers win — added last).
+//
+// CALLBACKS (named ≠ any prop; Puzzle forwards ONE value to an @event handler):
+//   @select(id)                  value-first; the selected node id, on click /
+//                                Enter / Space of an enabled node. (Look the node
+//                                up in your own `nodes` data if you need it.)
+//   @toggle({ id, expanded })    a parent's expand/collapse INTENT; `expanded` is
+//                                the full next array of expanded ids. A controlled
+//                                parent writes it back to `expanded`. (Uncontrolled,
+//                                the Tree also flips its internal set + refresh().)
+//
+// KEYBOARD (roving tabindex — the whole tree is a single Tab stop; exactly one
+// visible treeitem is tabbable, and per APG it is the LAST-FOCUSED row, not the
+// selected one: arrowing down five rows and tabbing away must return you to row
+// five, not to the selection. Falls back to the selected row, then to the first
+// enabled root, when nothing has been focused yet or that row is gone). Focus
+// moves imperatively over the flattened visible order:
+//   Down / Up      next / previous visible row
+//   Right          collapsed parent → expand; expanded parent → focus first child;
+//                  leaf → nothing
+//   Left           expanded parent → collapse; else → focus parent row
+//   Home / End     first / last visible row
+//   Enter / Space  select the row (a parent also toggles, mirroring a pointer click)
+// All handled keys preventDefault. Expansion is INSTANT (no per-node animation — a
+// tree can hold many nodes; animating each fights the roving model). Reduced motion
+// is respected on the triangle rotation.
+
+let uid = 0;
+
+const TREE_BASE = 'w-full select-none space-y-0.5';
+
+// Shared row chrome. The outline COLOR is set unconditionally (outline-ring) next to
+// the focus-visible reveal, so the ring never flashes from the default on focus.
+const ROW_BASE =
+  'flex items-center gap-1.5 rounded-md py-1 pr-2 text-sm cursor-pointer transition-colors ' +
+  'outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
+const ROW_IDLE = 'text-body hover:bg-surface-sunken hover:text-ink';
+const ROW_SELECTED = 'bg-brand-tint text-ink font-medium';
+const ROW_DISABLED = 'opacity-50 cursor-not-allowed pointer-events-none';
+
+// Flatten the nested nodes into an ordered array of VISIBLE rows (a child is visible
+// only when every ancestor is expanded). Plain-JS recursion building an array — this
+// is NOT template/component recursion (which config-first Puzzle can't do). posinset/
+// setsize are 1-based within each sibling group for correct flat-tree semantics.
+function flatten(nodes, expandedSet, value, level, out) {
+  const list = Array.isArray(nodes) ? nodes : [];
+  list.forEach((node, i) => {
+    const id = node && node.id != null ? String(node.id) : '';
+    const children = Array.isArray(node && node.children) ? node.children : [];
+    const hasChildren = children.length > 0;
+    const expanded = hasChildren && expandedSet.has(id);
+    const disabled = !!(node && node.disabled);
+    out.push({
+      id,
+      node,
+      label: node && node.label != null ? String(node.label) : '',
+      icon: (node && node.icon) || '',
+      disabled,
+      level,
+      hasChildren,
+      expanded,
+      selected: value !== '' && id === value,
+      posinset: i + 1,
+      setsize: list.length,
+    });
+    if (expanded) flatten(children, expandedSet, value, level + 1, out);
+  });
+  return out;
+}
+
+export default class Tree extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    // Uncontrolled expansion state keyed by node id (instance field, flipped with
+    // refresh() — mirrors Sidebar's _openMap). Ignored when `expanded` is controlled.
+    this._expandedMap = {};
+  }
+
+  // ---- expanded: optional-controlled resolution ----------------------------
+
+  _expandedControlled() {
+    return this.props.expanded !== undefined;
+  }
+
+  _expandedSet() {
+    if (this._expandedControlled()) {
+      const arr = Array.isArray(this.props.expanded) ? this.props.expanded : [];
+      return new Set(arr.map(String));
+    }
+    return new Set(
+      Object.keys(this._expandedMap).filter((id) => this._expandedMap[id])
+    );
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  data(params, props) {
+    const prev = this.getData();
+    const value = props.value != null ? String(props.value) : '';
+    const expandedSet = this._expandedSet();
+    const rows = flatten(props.nodes, expandedSet, value, 0, []);
+    const base = `pieces-tree-${this._uid}`;
+
+    // ROVING TABINDEX FOLLOWS FOCUS, NOT SELECTION (APG). Whoever the reader last
+    // moved focus to — by arrow key or by click — owns the tree's single Tab stop,
+    // so tabbing out and shift-tabbing back returns to where they were rather than
+    // teleporting to the selection. focusedId is local state (setData in
+    // _setFocused), carried across data() re-runs through `prev` so a parent
+    // re-render cannot lose the reader's place. Two fallbacks in order: the row is
+    // gone or now disabled (a collapsed branch, a filtered list) → the selected
+    // row if visible → the first enabled root, which keeps the tree reachable at
+    // all times.
+    const focusedId = prev && prev.focusedId != null ? prev.focusedId : null;
+    let rovingId = null;
+    if (focusedId && rows.some((r) => r.id === focusedId && !r.disabled)) {
+      rovingId = focusedId;
+    } else if (value && rows.some((r) => r.id === value)) {
+      rovingId = value;
+    } else {
+      const firstEnabled = rows.find((r) => !r.disabled);
+      rovingId = firstEnabled ? firstEnabled.id : null;
+    }
+
+    rows.forEach((r, k) => {
+      // Parent = nearest preceding row one level shallower (well-formed visible tree).
+      let parentIndex = -1;
+      for (let j = k - 1; j >= 0; j--) {
+        if (rows[j].level < r.level) {
+          parentIndex = j;
+          break;
+        }
+      }
+      r.parentIndex = parentIndex;
+      r.itemId = `${base}-item-${k}`;
+      r.level1 = r.level + 1;
+      r.tabindex = r.id === rovingId ? '0' : '-1';
+      r.selectedAttr = r.selected ? 'true' : 'false';
+      r.expandedAttr = r.hasChildren ? (r.expanded ? 'true' : 'false') : false;
+      r.disabledAttr = r.disabled ? 'true' : false;
+      r.indentStyle = `padding-left:${r.level * 16 + 8}px`;
+      r.rowClass = [
+        ROW_BASE,
+        r.selected ? ROW_SELECTED : ROW_IDLE,
+        r.disabled ? ROW_DISABLED : '',
+      ].join(' ');
+    });
+
+    return {
+      rows,
+      focusedId,
+      treeLabel: props.label || 'Tree',
+      rootClass: [TREE_BASE, props.class || ''].join(' '),
+    };
+  }
+
+  // ---- intent helpers ------------------------------------------------------
+
+  requestSelect(row, event) {
+    if (!row || row.disabled) return;
+    const { select } = this.props;
+    if (typeof select === 'function') select(row.id);
+  }
+
+  requestToggle(row, event) {
+    if (!row || !row.hasChildren || row.disabled) return;
+    const set = this._expandedSet();
+    const willExpand = !set.has(row.id);
+    if (willExpand) set.add(row.id);
+    else set.delete(row.id);
+    const nextArr = [...set];
+
+    const { toggle } = this.props;
+    if (typeof toggle === 'function') toggle({ id: row.id, expanded: nextArr });
+
+    if (!this._expandedControlled()) {
+      this._expandedMap[row.id] = willExpand;
+      this.refresh();
+    }
+  }
+
+  // Move DOM focus to the visible row at `index`. The <li>s are live already, so
+  // focusing works before any parent-driven re-render lands.
+  focusRow(index) {
+    if (index == null || index < 0) return;
+    const items = this.element
+      ? this.element.querySelectorAll('[role="treeitem"]')
+      : null;
+    if (!items || !items[index]) return;
+    items[index].focus();
+    const row = this.getData().rows[index];
+    this._setFocused(row ? row.id : null);
+  }
+
+  // Hand the roving tabindex to `id`. refresh() is what makes it stick: setData
+  // alone re-renders without re-running data(), and every row's tabindex is derived
+  // there — the attribute would stay on the old row until some unrelated re-render.
+  // Rows are keyed by id, so the patch reuses the same <li> and DOM focus survives.
+  _setFocused(id) {
+    if (!id || this.getData().focusedId === id) return;
+    this.setData({ focusedId: id });
+    this.refresh();
+  }
+
+  events = {
+    handleClick: (id, event) => {
+      const { rows } = this.getData();
+      const row = rows.find((r) => r.id === id);
+      if (!row || row.disabled) return;
+      // A click focuses the <li> (it is tabindex-bearing), so the tab stop has to
+      // move with it — otherwise clicking row 7 and tabbing back lands on row 1.
+      this._setFocused(row.id);
+      this.requestSelect(row, event);
+      if (row.hasChildren) this.requestToggle(row, event);
+    },
+
+    handleKeydown: (id, event) => {
+      const { rows } = this.getData();
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx === -1) return;
+      const row = rows[idx];
+
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          this.focusRow(idx + 1);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          this.focusRow(idx - 1);
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          if (row.hasChildren && !row.expanded) this.requestToggle(row, event);
+          else if (row.hasChildren && row.expanded) this.focusRow(idx + 1);
+          break;
+        case 'ArrowLeft':
+          event.preventDefault();
+          if (row.hasChildren && row.expanded) this.requestToggle(row, event);
+          else this.focusRow(row.parentIndex);
+          break;
+        case 'Home':
+          event.preventDefault();
+          this.focusRow(0);
+          break;
+        case 'End':
+          event.preventDefault();
+          this.focusRow(rows.length - 1);
+          break;
+        case 'Enter':
+        case ' ':
+          event.preventDefault();
+          if (row.disabled) break;
+          // This row already holds DOM focus (it is the keydown target); make the
+          // tab stop agree even if the reader tabbed straight in and never arrowed.
+          this._setFocused(row.id);
+          this.requestSelect(row, event);
+          if (row.hasChildren) this.requestToggle(row, event);
+          break;
+        default:
+          return;
+      }
+    },
+  };
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "collapsible",
+  "description": "Animated disclosure with speed-based duration and inert/aria-hidden discipline",
+  "files": ["Collapsible.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

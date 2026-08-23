@@ -1,0 +1,308 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ inputId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+
+    <div class={ controlClass } data-tagsinput-control @click={ focusInput(event) }>
+      {#for chip in chips}
+        <span class={ chipClass } role="listitem">
+          <span class="truncate">{ chip.label }</span>
+          <button
+            type="button"
+            tabindex="-1"
+            class={ chipRemoveClass }
+            aria-label={ chip.removeLabel }
+            disabled={ disabled }
+            @mousedown={ onRemoveDown(event) }
+            @click={ removeTag(chip, event) }>
+            <svg
+              class="size-3"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              aria-hidden="true">
+              <path d="M6 6l8 8M14 6l-8 8" stroke-linecap="round" />
+            </svg>
+          </button>
+        </span>
+      {/for}
+
+      <input
+        data-tagsinput-input
+        id={ inputId }
+        type="text"
+        class={ inputClass }
+        placeholder={ placeholder }
+        value={ draft }
+        disabled={ disabled }
+        aria-invalid={ invalid }
+        aria-describedby={ describedby }
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        @input={ onInput(event) }
+        @keydown={ onKey(event) }
+        @paste={ onPaste(event) } />
+
+      {#if name}
+        {#for chip in chips}
+          <input type="hidden" name={ name } value={ chip.value } />
+        {/for}
+      {/if}
+    </div>
+
+    {#if error}
+      <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+    {:else if hint}
+      <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// TagsInput — a FREE-TEXT tag entry field. The user types a tag and commits it
+// with a delimiter key (Enter or comma by default); each committed tag renders as
+// a removable chip. Backspace on an EMPTY input removes the last tag. There is NO
+// predefined option list, no popup, and no listbox — this is the key distinction
+// from MultiSelect (which picks from a fixed `options` list). Don't over-build it.
+//
+//   <TagsInput value={ tags } @change={ setTags } />
+//   <TagsInput label="Skills" hint="Press Enter to add" value={ tags } @change={ setTags } />
+//   <TagsInput value={ tags } max={ 5 } @change={ setTags } />
+//   <TagsInput value={ tags } error="Add at least one tag" @change={ setTags } />
+//
+// `value` is an ARRAY of strings (controlled: props in, callbacks out). The ONLY
+// local state is the in-progress input text (`draft`); the chips always render
+// from the parent-owned `value`. `@change(nextTags, event)` fires value-first with
+// the NEXT array — one MORE entry on add, one FEWER on remove.
+//
+// CHROME = InputGroup's grouped-field pattern: one bordered wrapper owns the
+// border, rounding, background, and FOCUS RING (focus-within, with the outline
+// COLOR set unconditionally to dodge the transition-colors focus flash); the inner
+// <input> is borderless and transparent. Chips + input flow with flex-wrap so tags
+// stack onto new lines as they accumulate. An `error` string swaps border/outline
+// to danger, flips aria-invalid, and wires aria-describedby (Field's behavior).
+//
+// KEYBOARD. A delimiter key (default Enter or ",") commits the trimmed draft as a
+// new tag and clears the input; Backspace on an empty input removes the last tag.
+// Pasting text that contains character delimiters splits into multiple tags.
+//
+// DEDUPE / MAX. By default duplicate tags are rejected (case-sensitive, trimmed);
+// pass `allowDuplicates` to permit them. `max` caps the tag count — once reached,
+// further commits are no-ops. Empty / whitespace-only text never commits.
+
+let uid = 0;
+
+const CONTROL_BASE =
+  'flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-lg border bg-surface ' +
+  'px-2 py-1 text-sm transition-colors ' +
+  'focus-within:outline-2 focus-within:outline-offset-2';
+const CONTROL_OK = 'border-border outline-ring focus-within:outline-ring';
+const CONTROL_ERROR = 'border-danger outline-danger focus-within:outline-danger';
+
+const INPUT_BASE =
+  'h-7 min-w-[6rem] flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
+  'focus:outline-none disabled:cursor-not-allowed';
+
+const CHIP_CLASS =
+  'inline-flex max-w-full items-center gap-1 rounded-full bg-brand-tint py-0.5 pl-2 pr-1 ' +
+  'text-xs font-medium text-brand';
+const CHIP_REMOVE_CLASS =
+  'inline-flex size-4 shrink-0 items-center justify-center rounded-full text-brand ' +
+  'transition-colors hover:bg-brand hover:text-brand-ink ' +
+  'disabled:pointer-events-none';
+
+export default class TagsInput extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._base = `pp-tagsinput-${this._uid}`;
+    this.setData({ draft: '' });
+  }
+
+  // ---- value helpers -------------------------------------------------------
+
+  // The controlled value as a string array (defensive: non-array → []).
+  _values(props) {
+    return Array.isArray(props.value) ? props.value.map((v) => String(v ?? '')) : [];
+  }
+
+  _delimiters(props) {
+    return Array.isArray(props.delimiters) && props.delimiters.length
+      ? props.delimiters
+      : ['Enter', ','];
+  }
+
+  _allowDuplicates() {
+    return !!this.props.allowDuplicates;
+  }
+
+  _max() {
+    const m = Number(this.props.max);
+    return Number.isFinite(m) && m > 0 ? m : Infinity;
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  data(params, props) {
+    const draft = this.getData().draft ?? '';
+    const values = this._values(props);
+    const chips = values.map((v, i) => ({
+      id: `${this._base}-chip-${i}`,
+      value: v,
+      label: v,
+      removeLabel: `Remove ${v}`,
+    }));
+
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const described = !!(error || hint);
+    const disabled = !!props.disabled;
+    const inputId = props.id || `${this._base}-input`;
+
+    return {
+      chips,
+      draft,
+      label: props.label || '',
+      hint,
+      error,
+      invalid: error ? 'true' : false,
+      describedby: described ? `${this._base}-desc` : false,
+      descId: `${this._base}-desc`,
+      inputId,
+      name: props.name || false,
+      placeholder: props.placeholder || 'Add a tag…',
+      disabled,
+      chipClass: CHIP_CLASS,
+      chipRemoveClass: CHIP_REMOVE_CLASS,
+      rootClass: props.class || '',
+      controlClass: [
+        CONTROL_BASE,
+        error ? CONTROL_ERROR : CONTROL_OK,
+        disabled ? 'opacity-50 pointer-events-none' : 'cursor-text',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      inputClass: INPUT_BASE,
+    };
+  }
+
+  // ---- add / remove --------------------------------------------------------
+
+  _focusInput() {
+    this.element?.querySelector('[data-tagsinput-input]')?.focus({ preventScroll: true });
+  }
+
+  // Commit one trimmed candidate onto `current`, honoring dedupe + max. Returns
+  // the (possibly unchanged) next array. Pure — no side effects.
+  _commitOne(current, raw) {
+    const tag = String(raw ?? '').trim();
+    if (!tag) return current;
+    if (current.length >= this._max()) return current;
+    if (!this._allowDuplicates() && current.includes(tag)) return current;
+    return current.concat([tag]);
+  }
+
+  // Commit the draft as a single tag; rejected non-empty text stays editable.
+  _commitDraft(event) {
+    if (this.props.disabled) return;
+    const current = this._values(this.props);
+    const draft = this.getData().draft;
+    const next = this._commitOne(current, draft);
+    if (next !== current) {
+      this.setData({ draft: '' });
+      const { change } = this.props;
+      if (typeof change === 'function') change(next, event);
+    } else if (!String(draft ?? '').trim()) {
+      this.setData({ draft: '' });
+    }
+    this.refresh();
+    this._focusInput();
+  }
+
+  _remove(value, event) {
+    if (this.props.disabled) return;
+    const current = this._values(this.props);
+    const idx = current.lastIndexOf(value);
+    if (idx === -1) return;
+    const next = current.slice(0, idx).concat(current.slice(idx + 1));
+    const { change } = this.props;
+    if (typeof change === 'function') change(next, event);
+    this.refresh();
+    this._focusInput();
+  }
+
+  events = {
+    // Clicking anywhere in the control (its padding, between chips) focuses the
+    // input — the whole box reads as one field.
+    focusInput: (event) => {
+      if (this.props.disabled) return;
+      if (event.target && event.target.closest('button')) return;
+      this._focusInput();
+    },
+
+    onRemoveDown: (event) => {
+      // Keep focus on the input when a chip's × is pressed.
+      event.preventDefault();
+    },
+
+    onInput: (event) => {
+      this.setData({ draft: event.target.value });
+      // No refresh: the native input already shows the text; refreshing here would
+      // re-render mid-keystroke. The draft is read back on commit / keydown.
+    },
+
+    onKey: (event) => {
+      const delimiters = this._delimiters(this.props);
+      if (delimiters.includes(event.key)) {
+        event.preventDefault();
+        this._commitDraft(event);
+        return;
+      }
+      if (event.key === 'Backspace') {
+        // Empty input → remove the last tag.
+        if (event.target.value !== '') return;
+        const current = this._values(this.props);
+        if (!current.length) return;
+        event.preventDefault();
+        this._remove(current[current.length - 1], event);
+      }
+    },
+
+    // Pasting text with character delimiters splits into multiple tags.
+    onPaste: (event) => {
+      if (this.props.disabled) return;
+      const delims = this._delimiters(this.props).filter((d) => d.length === 1);
+      const text = (event.clipboardData || window.clipboardData)?.getData('text') || '';
+      if (!delims.length || !delims.some((d) => text.includes(d))) return;
+      event.preventDefault();
+      const splitRe = new RegExp('[' + delims.map((d) => '\\' + d).join('') + ']');
+      const existing = this.getData().draft || '';
+      const parts = (existing + text).split(splitRe);
+      let current = this._values(this.props);
+      const before = current;
+      const rejected = [];
+      for (const part of parts) {
+        const next = this._commitOne(current, part);
+        if (next === current && String(part).trim()) rejected.push(String(part).trim());
+        current = next;
+      }
+      this.setData({ draft: rejected.join(' ') });
+      if (current !== before) {
+        const { change } = this.props;
+        if (typeof change === 'function') change(current, event);
+      }
+      this.refresh();
+      this._focusInput();
+    },
+
+    removeTag: (chip, event) => {
+      this._remove(chip.value, event);
+    },
+  };
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "chat-message",
+  "description": "Chat message row — avatar with initials fallback, author/time meta, sent/received bubble variants, start/end alignment, compact follow-up mode, and an attachments slot",
+  "files": ["ChatMessage.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

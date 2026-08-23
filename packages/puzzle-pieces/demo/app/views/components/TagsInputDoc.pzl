@@ -1,0 +1,242 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Tags Input</h1>
+        <p class="mt-2 text-body">
+          A free-text tag entry field. Type a tag and press
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Enter</code>
+          (or comma) to commit it as a removable chip; Backspace on an empty input removes the last
+          tag. Unlike
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Multi-Select</code>,
+          there is no predefined option list — any text becomes a tag. State is controlled through a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          callback that fires with the next array of strings.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-80">
+          <TagsInput value={ tags } placeholder="Add a tag…" @change={ setTags } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          No npm dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <section id="basic" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Basic usage</h2>
+          <p class="mb-3 text-sm text-body">
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
+            is an array of strings; each entry becomes a chip. Add a
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>
+            and
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">hint</code>
+            for the full field chrome.
+          </p>
+          <ExampleBox code={ codeBasic }>
+            <div class="w-80">
+              <TagsInput
+                label="Skills"
+                hint="Press Enter or comma to add a tag"
+                value={ basicTags }
+                placeholder="Add a skill…"
+                @change={ setBasicTags } />
+            </div>
+          </ExampleBox>
+        </section>
+
+        <ExampleBox id="max" title="Max tags" code={ codeMax }>
+          <div class="w-80">
+            <TagsInput
+              label="Up to 3 tags"
+              value={ maxTags }
+              max={ 3 }
+              placeholder="Add a tag…"
+              @change={ setMaxTags } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="duplicates" title="No duplicates" code={ codeDupes }>
+          <div class="w-80">
+            <TagsInput
+              hint="Duplicate tags are rejected by default"
+              value={ dupeTags }
+              placeholder="Add a tag…"
+              @change={ setDupeTags } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="comma" title="Comma to add" code={ codeComma }>
+          <div class="w-80">
+            <TagsInput
+              hint="Enter or comma both commit the current text"
+              value={ commaTags }
+              placeholder="tag, tag, tag…"
+              @change={ setCommaTags } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="error" title="Error state" code={ codeError }>
+          <div class="w-80">
+            <TagsInput
+              label="Keywords"
+              value={ errTags }
+              error="Add at least one keyword"
+              placeholder="Add a keyword…"
+              @change={ setErrTags } />
+          </div>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">Focus stays on the input; these keys drive the field:</p>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Enter / comma</span> — commit the trimmed text as a new tag and clear the input</li>
+            <li><span class="font-medium text-ink">Backspace</span> — on an empty input, remove the last tag</li>
+            <li><span class="font-medium text-ink">Paste</span> — text with delimiters splits into several tags at once</li>
+            <li><span class="font-medium text-ink">Chip ×</span> — click a chip's remove button to drop that tag</li>
+          </ul>
+          <ExampleBox code={ codeKeyboard }>
+            <div class="w-80">
+              <TagsInput value={ tags } placeholder="Add a tag…" @change={ setTags } />
+            </div>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import TagsInput from '@/components/ui/TagsInput.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece tags-input';
+const usageImport = `import TagsInput from '@/components/ui/TagsInput.pzl';`;
+const usageMarkup = `<TagsInput value={ tags } @change={ setTags } />`;
+
+const codeHero = `// value is a string ARRAY; @change fires with the NEXT array on add or remove.
+setTags(next) {
+  this.setData('tags', next);
+  this.refresh();
+}
+
+<TagsInput value={ tags } @change={ setTags } />`;
+
+const codeBasic = `// Type a tag and press Enter (or comma) to commit it. Backspace on an
+// empty input removes the last tag; each chip's × removes that tag.
+<TagsInput
+  label="Skills"
+  hint="Press Enter or comma to add a tag"
+  value={ tags }
+  @change={ setTags } />`;
+
+const codeMax = `// max caps the tag count — once reached, further commits are no-ops.
+<TagsInput label="Up to 3 tags" value={ tags } max={ 3 } @change={ setTags } />`;
+
+const codeDupes = `// Duplicate tags are rejected by default (trimmed, case-sensitive).
+// Pass allowDuplicates to permit them.
+<TagsInput value={ tags } @change={ setTags } />
+<TagsInput value={ tags } allowDuplicates @change={ setTags } />`;
+
+const codeComma = `// delimiters defaults to ['Enter', ',']. Override to change the commit keys.
+<TagsInput value={ tags } @change={ setTags } />
+<TagsInput value={ tags } delimiters={ ['Enter'] } @change={ setTags } />`;
+
+const codeError = `// An error string paints the border/ring danger, sets aria-invalid,
+// and wires aria-describedby to the message (Field's behavior).
+<TagsInput
+  label="Keywords"
+  value={ tags }
+  error="Add at least one keyword"
+  @change={ setTags } />`;
+
+const codeKeyboard = `<TagsInput value={ tags } @change={ setTags } />`;
+
+export default class TagsInputDoc extends PuzzleView {
+  created() {
+    this.setData({
+      tags: ['design', 'puzzle'],
+      basicTags: ['typescript', 'go'],
+      maxTags: ['red', 'green'],
+      dupeTags: ['unique'],
+      commaTags: [],
+      errTags: [],
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeBasic,
+      codeMax,
+      codeDupes,
+      codeComma,
+      codeError,
+      codeKeyboard,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Basic usage', href: '#basic' },
+        { label: 'Max tags', href: '#max' },
+        { label: 'No duplicates', href: '#duplicates' },
+        { label: 'Comma to add', href: '#comma' },
+        { label: 'Error state', href: '#error' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    setTags: (v) => {
+      this.setData('tags', v);
+      this.refresh();
+    },
+    setBasicTags: (v) => {
+      this.setData('basicTags', v);
+      this.refresh();
+    },
+    setMaxTags: (v) => {
+      this.setData('maxTags', v);
+      this.refresh();
+    },
+    setDupeTags: (v) => {
+      this.setData('dupeTags', v);
+      this.refresh();
+    },
+    setCommaTags: (v) => {
+      this.setData('commaTags', v);
+      this.refresh();
+    },
+    setErrTags: (v) => {
+      this.setData('errTags', v);
+      this.refresh();
+    },
+  };
+}
+</script>

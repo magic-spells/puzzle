@@ -1,0 +1,8 @@
+{
+  "name": "date-picker",
+  "description": "Field-shaped trigger + popover composing Calendar: controlled ISO value, optional-controlled open, label/hint/error, locale-aware trigger label, auto-flip, and optional trigger↔panel morph",
+  "files": ["DatePicker.pzl"],
+  "registryDependencies": ["calendar", "lib/date-math.js"],
+  "dependencies": ["@magic-spells/morph-engine"],
+  "targetDir": "app/components/ui"
+}

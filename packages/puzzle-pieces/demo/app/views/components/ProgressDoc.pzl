@@ -1,0 +1,124 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Progress</h1>
+        <p class="mt-2 text-body">
+          A determinate or indeterminate progress bar. Pass a numeric
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>;
+          omit it for the indeterminate state.
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">showValue</code>
+          prints a percentage beside the label.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-md space-y-5">
+          <Progress value={ pct } max={ 100 } label="Uploading" showValue />
+          <div class="flex justify-center gap-3">
+            <Button variant="outline" @press={ bump }>+10%</Button>
+            <Button variant="ghost" @press={ reset }>Reset</Button>
+          </div>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="indeterminate" title="Indeterminate" code={ codeIndeterminate }>
+          <div class="w-full max-w-md">
+            <Progress label="Syncing" />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes }>
+          <div class="w-full max-w-md space-y-5">
+            <Progress value={ 40 } size="sm" />
+            <Progress value={ 40 } size="md" />
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Progress from '@/components/ui/Progress.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Progress — follows the Button exemplar shape (header → hero
+// ExampleBox → Installation → titled example sections → Toc).
+const installCmd = 'puzzle add piece progress';
+const usageImport = `import Progress from '@/components/ui/Progress.pzl';`;
+const usageMarkup = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />`;
+
+const codeHero = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />
+
+// parent
+events = {
+  bump: () => this.setData({ pct: Math.min(100, this.getData().pct + 10) }),
+  reset: () => this.setData({ pct: 0 }),
+};`;
+
+const codeIndeterminate = `// Omit value to render the indeterminate (pulsing) state.
+<Progress label="Syncing" />`;
+
+const codeSizes = `<Progress value={ 40 } size="sm" />
+<Progress value={ 40 } size="md" />`;
+
+export default class ProgressDoc extends PuzzleView {
+  created() {
+    this.setData({ pct: 30 });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeIndeterminate,
+      codeSizes,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Indeterminate', href: '#indeterminate' },
+        { label: 'Sizes', href: '#sizes' },
+      ],
+    };
+  }
+
+  events = {
+    bump: () => {
+      this.setData({ pct: Math.min(100, this.getData().pct + 10) });
+      this.refresh();
+    },
+    reset: () => {
+      this.setData({ pct: 0 });
+      this.refresh();
+    },
+  };
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "number-field",
+  "description": "Accessible numeric form field with min/max/step, increment/decrement buttons, arrow/PageUp-Down keyboard, precision formatting, and label/hint/error",
+  "files": ["NumberField.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

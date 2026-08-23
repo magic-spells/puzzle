@@ -1,0 +1,8 @@
+{
+  "name": "panel-stack",
+  "description": "Controlled nested-panel navigation stack with delegated push/pop actions, fluid slide or stack transitions, Escape composition, and focus restoration",
+  "files": ["PanelStack.pzl"],
+  "registryDependencies": ["lib/panel-stack.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

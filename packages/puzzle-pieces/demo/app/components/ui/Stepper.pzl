@@ -1,0 +1,221 @@
+<puzzle-view>
+  <ol class={ rootClass } role="list" aria-label={ navLabel }>
+    {#for step in steps}
+      <li class={ step.itemClass } aria-current={ step.currentAttr }>
+        <div class={ step.gutterClass }>
+          {#if step.interactive}
+            <button
+              type="button"
+              class={ step.discClass }
+              aria-label={ step.label }
+              @click={ press(step.index, event) }>
+              {#if step.complete}
+                <svg class="size-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <path d="M5 10l3.5 3.5L15 6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              {:else}
+                { step.number }
+              {/if}
+            </button>
+          {:else}
+            <span
+              class={ step.discClass }
+              aria-disabled={ step.disabledAttr }
+              aria-hidden="true">
+              {#if step.complete}
+                <svg class="size-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <path d="M5 10l3.5 3.5L15 6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              {:else}
+                { step.number }
+              {/if}
+            </span>
+          {/if}
+          {#if !step.isLast}
+            <span class={ step.connectorClass } aria-hidden="true"></span>
+          {/if}
+        </div>
+        <div class={ step.labelWrapClass }>
+          {#if step.statusLabel}
+            <span class="sr-only">{ step.statusLabel }</span>
+          {/if}
+          <div class={ step.labelClass }>{ step.label }</div>
+          {#if step.description}
+            <div class={ step.descClass }>{ step.description }</div>
+          {/if}
+        </div>
+      </li>
+    {/for}
+  </ol>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Stepper — a numbered step-progress indicator (wizard / checkout style),
+// config-first from a `steps` array. Each step is COMPLETE (index < current),
+// CURRENT (index === current), or UPCOMING (index > current); the current step
+// carries aria-current="step" and completed steps swap their number for a check
+// glyph. Horizontal (default) lays discs out on a row with a connector rail
+// between them and labels below; vertical stacks them down a left gutter with the
+// connector running beside each disc and labels to the right.
+//
+// This is progress PRESENTATION, not a tablist — there is deliberately NO roving
+// tabindex. When `clickable`, every REACHABLE step (completed or current) becomes
+// a real, natively-tabbable <button>; upcoming steps stay non-interactive spans.
+// Activating a reachable step fires @stepChange(index, event).
+//
+//   <Stepper steps={ steps } value={ current } />
+//   <Stepper steps={ steps } value={ current } orientation="vertical" />
+//   <Stepper steps={ steps } value={ current } clickable @stepChange={ goToStep } />
+//
+// PROPS
+//   steps        [{ label, description? }]  the ordered steps.
+//   value        number   the current step index. OPTIONAL-CONTROLLED (Sidebar's
+//                         shape): omit it and the Stepper owns `current` internally
+//                         (seeded to 0), advanced by clicks in `clickable` mode;
+//                         pass it and the PARENT owns it — the Stepper only reflects
+//                         the prop and asks to change via @stepChange.
+//   orientation  'horizontal' (default) | 'vertical'
+//   clickable    bool     when true, completed/current steps are buttons; upcoming
+//                         steps remain non-interactive.
+//   label        string   accessible name on the root <ol> (default 'Progress').
+//   class        string   appended to the root <ol> (callers win).
+//
+// CALLBACK
+//   @stepChange(index, event)  fires only in `clickable` mode when a reachable step
+//                              is activated. Named to differ from the `value` prop
+//                              (the @event-vs-prop-name collision trap): a controlled
+//                              parent flips `value` in response.
+//
+// Per-step class strings + the complete/interactive flags are all precomputed in
+// data() so the {#for} body stays a single <li> root (Puzzle requires one element
+// root per loop body). Connectors are flexbox rails (flex-1 lines), never translate
+// positioning, and no transition moves an element here — so the translate/scale
+// gotcha does not apply.
+const DISC_BASE =
+  'flex size-9 shrink-0 items-center justify-center rounded-full border ' +
+  'text-sm font-medium transition-colors';
+
+// Per-state disc treatment. Current is a hollow brand ring; complete is a solid
+// brand fill with the check glyph; upcoming is a muted outline.
+const DISC_STATE = {
+  complete: 'bg-brand text-brand-ink border-brand',
+  current: 'bg-surface text-brand border-2 border-brand',
+  upcoming: 'bg-surface text-muted border-border',
+};
+
+// Interactive discs (reachable steps in clickable mode) add pointer affordance and
+// the focus ring. The outline COLOR is set unconditionally (outline-ring) alongside
+// the focus-visible reveal so it never flashes from the default on focus.
+const DISC_INTERACTIVE =
+  'cursor-pointer hover:opacity-90 ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const LABEL_BASE = 'text-sm leading-tight';
+
+export default class Stepper extends PuzzleView {
+  created() {
+    // Uncontrolled fallback for `value` (Sidebar's optional-controlled shape).
+    this.setData({ uncontrolledCurrent: 0 });
+  }
+
+  // ---- value: optional-controlled resolution --------------------------------
+
+  _controlled() {
+    return this.props.value !== undefined;
+  }
+
+  _current() {
+    if (this._controlled()) {
+      const v = Number(this.props.value);
+      return Number.isFinite(v) ? v : 0;
+    }
+    const d = this.getData();
+    return typeof d.uncontrolledCurrent === 'number' ? d.uncontrolledCurrent : 0;
+  }
+
+  // ---- render model ---------------------------------------------------------
+
+  data(params, props) {
+    const horizontal = props.orientation !== 'vertical';
+    const clickable = !!props.clickable;
+    const src = Array.isArray(props.steps) ? props.steps : [];
+    const current = this._current();
+    const last = src.length - 1;
+
+    const steps = src.map((s, i) => {
+      const complete = i < current;
+      const isCurrent = i === current;
+      const upcoming = i > current;
+      const state = complete ? 'complete' : isCurrent ? 'current' : 'upcoming';
+      // Reachable = completed or current. Only reachable steps are interactive.
+      const interactive = clickable && i <= current;
+      const isLast = i === last;
+
+      return {
+        index: i,
+        number: String(i + 1),
+        label: s && s.label != null ? String(s.label) : '',
+        description: s && s.description != null ? String(s.description) : '',
+        complete,
+        interactive,
+        isLast,
+        // aria-current on the <li>; false omits the attribute (Sidebar's idiom).
+        currentAttr: isCurrent ? 'step' : false,
+        // Only meaningful for an unreachable step surfaced in clickable mode.
+        disabledAttr: clickable && upcoming ? 'true' : false,
+        // sr-only prefix so screen readers hear completion (the check is visual).
+        statusLabel: complete ? 'Completed: ' : '',
+        itemClass: horizontal
+          ? isLast
+            ? 'shrink-0'
+            : 'flex-1 min-w-0'
+          : 'flex gap-4',
+        gutterClass: horizontal
+          ? 'flex items-center'
+          : 'flex flex-col items-center',
+        connectorClass: [
+          horizontal
+            ? 'h-0.5 flex-1 mx-2 rounded-full'
+            : 'w-0.5 flex-1 my-1 min-h-6 rounded-full',
+          // A connector is "filled" when the step it trails is complete.
+          complete ? 'bg-brand' : 'bg-border',
+        ].join(' '),
+        discClass: [
+          DISC_BASE,
+          DISC_STATE[state],
+          interactive ? DISC_INTERACTIVE : '',
+        ].join(' '),
+        labelWrapClass: horizontal
+          ? 'mt-2 pr-4'
+          : 'pt-1 ' + (isLast ? 'pb-1' : 'pb-8'),
+        labelClass: [
+          LABEL_BASE,
+          upcoming ? 'text-muted' : 'text-ink',
+          isCurrent ? 'font-semibold' : 'font-medium',
+        ].join(' '),
+        descClass: 'mt-0.5 text-xs text-muted leading-snug',
+      };
+    });
+
+    return {
+      steps,
+      navLabel: props.label || 'Progress',
+      rootClass: [
+        horizontal ? 'flex w-full items-start' : 'flex flex-col',
+        props.class || '',
+      ].join(' '),
+    };
+  }
+
+  events = {
+    press: (index, event) => {
+      const { stepChange } = this.props;
+      if (typeof stepChange === 'function') stepChange(index, event);
+      // Uncontrolled: own the move. Controlled: the parent's prop change drives it.
+      if (!this._controlled()) this.setData({ uncontrolledCurrent: index });
+    },
+  };
+}
+</script>

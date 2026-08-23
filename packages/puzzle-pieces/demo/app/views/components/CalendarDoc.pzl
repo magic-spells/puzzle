@@ -1,0 +1,201 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Calendar</h1>
+        <p class="mt-2 text-body">
+          An inline month-grid calendar with days / months / years drill-down, full keyboard
+          navigation, min/max bounds plus
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">disabledDates</code>,
+          and locale-aware labels via Intl. It is parent-owned: it never mutates
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>,
+          it fires
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          and the parent writes the new ISO date back.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex flex-col items-center gap-4">
+          <Calendar value={ date } @change={ setDate } />
+          <p class="text-sm text-muted">Selected: <code class="font-mono text-ink">{ date || 'none' }</code></p>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece and its date helper into your app — they compile with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          date-math.js is a shared lib file — Calendar imports it as ../../lib/date-math.js. Keep it in app/lib/.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="bounds" title="Bounds and disabled dates" code={ codeBounds }>
+          <div class="flex flex-col items-center gap-4">
+            <Calendar
+              value={ boundedDate }
+              min="2026-07-01"
+              max="2026-08-31"
+              disabledDates={ weekends }
+              @change={ setBoundedDate } />
+            <p class="text-sm text-muted">Weekdays only, July–August 2026.</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="first-day" title="First day of week" code={ codeFirstDay }>
+          <Calendar value={ mondayDate } firstDayOfWeek={ 1 } @change={ setMondayDate } />
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-4 text-sm text-body">
+            The day grid is a roving-tabindex grid — one Tab stop lands on the active day, then the keys
+            move the focus:
+          </p>
+          <ul class="space-y-2.5 text-sm text-body">
+            <li>
+              <kbd class={ keyClass }>←</kbd> <kbd class={ keyClass }>→</kbd> move by one day;
+              <kbd class={ keyClass }>↑</kbd> <kbd class={ keyClass }>↓</kbd> move by one week (±7 days).
+            </li>
+            <li>
+              <kbd class={ keyClass }>Home</kbd> and <kbd class={ keyClass }>End</kbd> jump to the start
+              and end of the focused week.
+            </li>
+            <li>
+              <kbd class={ keyClass }>Page Up</kbd> and <kbd class={ keyClass }>Page Down</kbd> move by one
+              month; hold <kbd class={ keyClass }>Shift</kbd> to move by one year.
+            </li>
+            <li>
+              <kbd class={ keyClass }>Enter</kbd> or <kbd class={ keyClass }>Space</kbd> selects the focused day.
+            </li>
+            <li>
+              Activate the header label to drill down into the months and years views; the arrows rove those
+              grids too, and <kbd class={ keyClass }>Escape</kbd> backs out one level.
+            </li>
+          </ul>
+        </section>
+
+        <ExampleBox id="from-trigger" title="From a trigger, with morph" code={ codeMorph }>
+          <div class="w-full max-w-sm">
+            <DatePicker
+              label="Event date"
+              value={ morphDate }
+              morph={ true }
+              @change={ setMorphDate } />
+            <p class="mt-3 text-sm text-muted">
+              Calendar is inline-only by design. To open it from a button, compose it through
+              DatePicker — with the morph prop, the trigger itself morphs into the calendar panel.
+            </p>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Calendar from '@/components/ui/Calendar.pzl';
+import DatePicker from '@/components/ui/DatePicker.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Calendar — follows the ButtonDoc exemplar (header → hero ExampleBox
+// → Installation → titled example sections → Toc). Every control is parent-owned:
+// the view holds the ISO value and Calendar fires @change back into it (lifted from
+// the Calendar section of the old Forms view).
+
+// Two files: the piece plus the shared date helper it imports.
+const installCmd = 'puzzle add piece calendar';
+const usageImport = `import Calendar from '@/components/ui/Calendar.pzl';`;
+const usageMarkup = `<Calendar value={ date } @change={ setDate } />`;
+
+// disabledDates accepts an ISO array OR a predicate (iso, date) => boolean. A stable
+// module reference keeps the child prop identity steady across re-renders.
+const weekends = (iso, date) => {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+};
+
+const KEY_CLASS =
+  'inline-flex min-w-[1.75rem] items-center justify-center rounded border border-border ' +
+  'bg-surface-sunken px-1.5 py-0.5 font-mono text-xs text-ink';
+
+const codeHero = `<Calendar value={ date } @change={ setDate } />
+
+// parent — Calendar never mutates value; it asks and you write it back
+events = {
+  setDate: (iso) => this.setData('date', iso),
+};`;
+
+const codeBounds = `// disabledDates: an ISO array, or a predicate (iso, date) => boolean
+const weekends = (iso, date) => date.getDay() === 0 || date.getDay() === 6;
+
+<Calendar
+  value={ date }
+  min="2026-07-01"
+  max="2026-08-31"
+  disabledDates={ weekends }
+  @change={ setDate } />`;
+
+const codeFirstDay = `<!-- firstDayOfWeek: 0 = Sunday (default) … 6 = Saturday -->
+<Calendar value={ date } firstDayOfWeek={ 1 } @change={ setDate } />`;
+
+const codeMorph = `// Calendar is inline-only; DatePicker composes it behind a trigger.
+// morph animates the trigger into the panel (npm install @magic-spells/morph-engine).
+<DatePicker label="Event date" value={ date } morph={ true } @change={ setDate } />`;
+
+export default class CalendarDoc extends PuzzleView {
+  created() {
+    this.setData({
+      date: '2026-07-16',
+      boundedDate: '2026-07-16',
+      mondayDate: '2026-07-16',
+      morphDate: '2026-08-01',
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      weekends,
+      keyClass: KEY_CLASS,
+      codeHero,
+      codeBounds,
+      codeFirstDay,
+      codeMorph,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Bounds and disabled dates', href: '#bounds' },
+        { label: 'First day of week', href: '#first-day' },
+        { label: 'Keyboard', href: '#keyboard' },
+        { label: 'From a trigger, with morph', href: '#from-trigger' },
+      ],
+    };
+  }
+
+  events = {
+    setDate: (iso) => this.setData('date', iso),
+    setBoundedDate: (iso) => this.setData('boundedDate', iso),
+    setMondayDate: (iso) => this.setData('mondayDate', iso),
+    setMorphDate: (iso) => this.setData('morphDate', iso),
+  };
+}
+</script>

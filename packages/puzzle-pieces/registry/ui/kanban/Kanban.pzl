@@ -1,0 +1,656 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <div class="sr-only" role="status" aria-live="polite" data-kb-live>{ announce }</div>
+
+    <div class={ boardClass } role="group" aria-label={ boardLabel }>
+      {#for column in viewColumns}
+        <section class={ columnClass } data-kb-col={ column.id } aria-label={ column.title } key={ column.id }>
+          <header class="flex items-center justify-between gap-2 px-3 py-2.5">
+            <h3 class="text-sm font-semibold text-ink">{ column.title }</h3>
+            <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-surface px-1.5 text-xs font-medium text-muted">{ column.count }</span>
+          </header>
+
+          <ul class={ column.listClass } role="list" data-kb-list>
+            {#for item in column.items}
+              <li class="list-none" key={ item.key } flip={ flipOpts }>
+                {#if item.placeholder}
+                  <div class="rounded-lg border-2 border-dashed border-brand bg-brand-tint/50" style={ item.placeholderStyle } aria-hidden="true"></div>
+                {:else}
+                  <KanbanCard
+                    card={ item.card }
+                    grabbed={ item.grabbed }
+                    disabled={ disabled }
+                    @pointerdown={ onCardPointerDown(column.id, item.id, event) }
+                    @keydown={ onCardKey(column.id, item.id, event) }/>
+                {/if}
+              </li>
+            {/for}
+          </ul>
+        </section>
+      {/for}
+    </div>
+
+    {#if dragging}
+      <div class="pointer-events-none fixed left-0 top-0 z-50 will-change-transform" data-kb-ghost style={ ghostStyle } aria-hidden="true">
+        <KanbanCard card={ ghost } variant="ghost"/>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import KanbanCard from './KanbanCard.pzl';
+
+// Kanban — a config-first, controlled Kanban board: horizontal columns, each a
+// vertical list of cards, with pointer drag-and-drop and full keyboard move
+// support. The PARENT owns the board data; the board is purely presentational
+// plus transient drag UI state (which card is grabbed, the hovered column, the
+// insertion index). It NEVER mutates the data itself — it emits a move intent and
+// waits for the parent to pass new `columns` back down.
+//
+//   <Kanban columns={ columns } @move={ onMove } />
+//
+//   events = {
+//     // Remove the card from wherever it is, then insert it into toColumnId's
+//     // cards at toIndex. toIndex is an index into the DESTINATION column's card
+//     // array AFTER the card has been removed from its source (splice-into-the-
+//     // remaining-list semantics), so it is always in [0, destRemainingLength].
+//     onMove: ({ cardId, toColumnId, toIndex }) => {
+//       const cols = structuredClone(this.getData().columns);
+//       let card = null;
+//       for (const c of cols) {
+//         const i = c.cards.findIndex((k) => k.id === cardId);
+//         if (i !== -1) { card = c.cards.splice(i, 1)[0]; break; }
+//       }
+//       const dest = cols.find((c) => c.id === toColumnId);
+//       dest.cards.splice(toIndex, 0, card);
+//       this.setData({ columns: cols });
+//     },
+//   };
+//
+// DATA SHAPE (the single-array shape — cards live inside their column):
+//   columns: [
+//     {
+//       id: 'todo',            // stable column id (required)
+//       title: 'To do',        // column heading (required)
+//       cards: [
+//         {
+//           id: 'c1',          // stable card id (required, unique board-wide)
+//           title: 'Card title', // required
+//           badge: 'Bug',      // optional chip text
+//           badgeVariant: 'danger', // optional: default | brand | danger | outline
+//           meta: 'Due Fri',   // optional secondary line
+//           assignee: 'Ada Lovelace', // optional name → initials disc
+//         },
+//       ],
+//
+// CARD RENDERING lives in the sibling KanbanCard.pzl, not here. The board hands
+// it the raw card object and keeps only the drag state; edit that file to change
+// what a card looks like or to read extra fields off your own card objects. The
+// board renders it in both places a card appears — the column row and the
+// floating drag ghost — so the two can't drift.
+//     },
+//   ]
+//
+// Props
+//   columns   the board data (array described above). Controlled — props in.
+//   disabled  blocks all drag + keyboard moves (cards stay focusable/readable).
+//   label     accessible name for the board region (default 'Board').
+//   class     merged onto the root.
+// Callback (value-first single payload, name ≠ any prop). Puzzle forwards ONE
+// value to an @event handler, so the move details ride in one object:
+//   @move({ cardId, toColumnId, toIndex, event })  a completed drag or keyboard
+//     move. toIndex is splice-into-the-remaining-list: the position in the
+//     destination column AFTER the card is removed from its source.
+//
+// KEYBOARD LEVEL SHIPPED: full keyboard drag-and-drop. Tab focuses a card;
+// Space/Enter "picks it up" (aria-grabbed=true, announced); Arrow Up/Down reorder
+// within the column, Arrow Left/Right move to the adjacent column at a comparable
+// index; Space/Enter drops; Escape cancels the pickup. Every move is announced
+// through a polite aria-live region. Each arrow emits @move and the board keeps
+// the card grabbed + refocused after the parent re-renders.
+//
+// POINTER MODEL (mirrors Slider/Sheet/ScrollArea):
+//   - pointerdown on a card ARMS a gesture; it only promotes to a drag once the
+//     pointer moves past DRAG_THRESHOLD, so plain clicks/focus taps are untouched.
+//   - Once dragging, the source card is REMOVED from the rendered lists and a
+//     floating ghost (position:fixed) follows the pointer — its translate is
+//     written imperatively via `element.style.transform` (the real transform
+//     property, unlike Tailwind's `translate-*` which sets the `translate`
+//     property and would not compose). The rotate-2 tilt on the ghost sets the
+//     independent `rotate` property, so it composes with the imperative translate.
+//   - The hovered column + insertion index are computed from the pointer against
+//     the LIVE card rects (rAF-throttled) and drawn as a dashed placeholder in the
+//     hovered column. Because the source card is not rendered while dragging, the
+//     rects never include it, so the index math stays clean.
+//   - setPointerCapture is taken on the ROOT (never the card — the card is removed
+//     mid-drag, which would fire a spurious pointercancel), mouse/pen only; touch
+//     rides implicit capture. window pointermove/up/cancel/keydown listeners carry
+//     the gesture; a window touchmove preventDefaults once a drag is live.
+//   - Escape or pointercancel aborts with no @move; a real drop emits @move unless
+//     it resolves to the card's original slot (a no-op).
+
+const DRAG_THRESHOLD = 5;
+
+// Passed to every row's `flip` attribute. A shade quicker than the 250ms default:
+// cards shifting out of the way should read as a reaction to the pointer, not an
+// animation the user waits on. Template expressions do not admit inline object
+// literals, so this rides through data() as `flipOpts`.
+const FLIP = { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' };
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(v, hi));
+}
+
+export default class Kanban extends PuzzleView {
+  created() {
+    this._arm = null; // { pointerId, colId, cardId, startX, startY, started, offX, offY }
+    this._rafT = null; // rAF handle for target recompute
+    this._lastPtr = null;
+    this._ghostPos = null; // {x,y} last pointer, applied to the ghost imperatively
+    this._refocusGrabbed = null; // card id to refocus after a keyboard move re-render
+    this._listening = false;
+
+    this._onWinMove = (e) => this._pointerMove(e);
+    this._onWinUp = (e) => this._pointerUp(e);
+    this._onWinCancel = () => this._cancelPointerDrag();
+    this._onWinKey = (e) => {
+      if (e.key === 'Escape' && this._arm) {
+        e.preventDefault();
+        this._cancelPointerDrag();
+      }
+    };
+    this._onTouchMove = (e) => {
+      if (this._arm && this._arm.started && e.cancelable) e.preventDefault();
+    };
+
+    this.setData({
+      dragging: false,
+      dragCardId: null,
+      dragFromCol: null,
+      dragCard: null,
+      hoveredColId: null,
+      targetIndex: -1,
+      ghostW: 0,
+      ghostH: 0,
+      grabbedId: null,
+      announce: '',
+    });
+  }
+
+  destroyed() {
+    this._removeWindowListeners();
+    if (this._rafT) cancelAnimationFrame(this._rafT);
+  }
+
+  data(params, props) {
+    const d = this.getData();
+    const cols = Array.isArray(props.columns) ? props.columns : [];
+    const disabled = !!props.disabled;
+    const dragging = !!d.dragging;
+    const dragCardId = dragging ? d.dragCardId : null;
+    const hoveredColId = dragging ? d.hoveredColId : null;
+    const targetIndex = dragging ? d.targetIndex : -1;
+    const grabbedId = d.grabbedId || null;
+
+    // Drag bookkeeping only — everything visual about a card lives in
+    // KanbanCard, which receives the raw card object untouched. `grabbed` is the
+    // exception that has to be decided here: whether ANY card is grabbed is
+    // board-wide knowledge, and it selects between omitting aria-grabbed
+    // entirely and stating true/false on every card.
+    const cardView = (card) => ({
+      id: card.id,
+      key: card.id,
+      placeholder: false,
+      card,
+      grabbed: grabbedId ? (grabbedId === card.id ? 'true' : 'false') : false,
+    });
+
+    const viewColumns = cols.map((col) => {
+      const rawCards = Array.isArray(col.cards) ? col.cards : [];
+      const kept = rawCards.filter((c) => !(dragging && c.id === dragCardId));
+      const items = kept.map(cardView);
+      if (dragging && col.id === hoveredColId) {
+        const idx = clamp(targetIndex, 0, items.length);
+        // The gap has to be exactly as tall as the card that left it. A fixed
+        // height makes every row below jump by the difference on each pointermove,
+        // and `flip` animates that error instead of hiding it.
+        items.splice(idx, 0, {
+          placeholder: true,
+          key: '__kb_placeholder__',
+          placeholderStyle: `height:${d.ghostH || 64}px`,
+        });
+      }
+      return {
+        id: col.id,
+        title: col.title || '',
+        count: kept.length,
+        items,
+        listClass: 'flex min-h-12 flex-1 flex-col gap-2 px-2 pb-3',
+      };
+    });
+
+    const ghostCard = dragging && d.dragCard ? d.dragCard : null;
+
+    return {
+      rootClass: [
+        'w-full',
+        disabled ? 'opacity-70' : '',
+        props.class || '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      boardClass: 'flex gap-4 overflow-x-auto pb-2',
+      columnClass: 'flex w-72 shrink-0 flex-col rounded-xl border border-border bg-surface-sunken',
+      boardLabel: props.label || 'Board',
+      viewColumns,
+      flipOpts: FLIP,
+      disabled,
+      dragging,
+      // The raw card, straight through — KanbanCard's ghost variant styles it.
+      ghost: ghostCard || {},
+      ghostStyle: dragging ? `width:${d.ghostW || 288}px` : false,
+      announce: d.announce || '',
+    };
+  }
+
+  afterUpdate() {
+    if (this.getData().dragging) this._applyGhost();
+    if (this._refocusGrabbed) {
+      const id = this._refocusGrabbed;
+      this._refocusGrabbed = null;
+      const el = this.element && this.element.querySelector(`[data-kb-card="${id}"]`);
+      if (el) el.focus({ preventScroll: true });
+    }
+  }
+
+  // --- window listener plumbing ---------------------------------------------
+
+  _addWindowListeners() {
+    if (this._listening || typeof window === 'undefined') return;
+    this._listening = true;
+    window.addEventListener('pointermove', this._onWinMove);
+    window.addEventListener('pointerup', this._onWinUp);
+    window.addEventListener('pointercancel', this._onWinCancel);
+    window.addEventListener('keydown', this._onWinKey);
+    window.addEventListener('touchmove', this._onTouchMove, { passive: false });
+  }
+
+  _removeWindowListeners() {
+    if (!this._listening || typeof window === 'undefined') return;
+    this._listening = false;
+    window.removeEventListener('pointermove', this._onWinMove);
+    window.removeEventListener('pointerup', this._onWinUp);
+    window.removeEventListener('pointercancel', this._onWinCancel);
+    window.removeEventListener('keydown', this._onWinKey);
+    window.removeEventListener('touchmove', this._onTouchMove, { passive: false });
+  }
+
+  // --- geometry --------------------------------------------------------------
+
+  // Column chosen by X (clamped to the nearest by center X when between/outside);
+  // insertion index = the first live card whose vertical midpoint is below the
+  // pointer, else the end. The dragged card is not rendered, so its rect is absent.
+  _computeTarget(clientX, clientY) {
+    if (!this.element) return null;
+    const colEls = Array.from(this.element.querySelectorAll('[data-kb-col]'));
+    if (!colEls.length) return null;
+
+    let colEl = null;
+    for (const c of colEls) {
+      const r = c.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right) {
+        colEl = c;
+        break;
+      }
+    }
+    if (!colEl) {
+      let bestDist = Infinity;
+      for (const c of colEls) {
+        const r = c.getBoundingClientRect();
+        const dist = Math.abs(clientX - (r.left + r.right) / 2);
+        if (dist < bestDist) {
+          bestDist = dist;
+          colEl = c;
+        }
+      }
+    }
+
+    const colId = colEl.getAttribute('data-kb-col');
+    const list = colEl.querySelector('[data-kb-list]');
+    if (!list) return { colId, index: 0 };
+
+    // Measure in LAYOUT space, not visual space. `flip` animates each row with a
+    // transform and getBoundingClientRect() includes it, so hit-testing live rects
+    // reads cards mid-slide — which picks a different slot, relocates the
+    // placeholder, and starts another animation. That feedback loop is what makes
+    // rows jitter instead of settling. offsetTop/offsetHeight ignore transforms,
+    // and the list element is never itself transformed, so this is resting
+    // geometry regardless of what is in flight. Counting the rows above the
+    // pointer (rather than breaking at the first row below it) also degrades
+    // gracefully if a row is momentarily out of visual order.
+    const listTop = list.getBoundingClientRect().top - list.offsetTop;
+    let index = 0;
+    for (const row of list.children) {
+      if (!row.querySelector('[data-kb-card]')) continue; // skip the placeholder
+      if (clientY > listTop + row.offsetTop + row.offsetHeight / 2) index += 1;
+    }
+    return { colId, index };
+  }
+
+  _origIndex(colId, cardId) {
+    const cols = Array.isArray(this.props.columns) ? this.props.columns : [];
+    const col = cols.find((c) => c.id === colId);
+    if (!col || !Array.isArray(col.cards)) return -1;
+    return col.cards.findIndex((c) => c.id === cardId);
+  }
+
+  _findCard(colId, cardId) {
+    const cols = Array.isArray(this.props.columns) ? this.props.columns : [];
+    const col = cols.find((c) => c.id === colId);
+    if (!col || !Array.isArray(col.cards)) return null;
+    return col.cards.find((c) => c.id === cardId) || null;
+  }
+
+  _emitMove(cardId, toColId, toIndex, event) {
+    const fn = this.props.move;
+    // Puzzle forwards a single value to @event handlers, so pack the move
+    // details into one payload object rather than positional args.
+    if (typeof fn === 'function') {
+      fn({ cardId, toColumnId: toColId, toIndex, event });
+    }
+  }
+
+  // --- ghost (imperative — never setData per move) ---------------------------
+
+  _applyGhost() {
+    if (!this.element || !this._ghostPos) return;
+    const g = this.element.querySelector('[data-kb-ghost]');
+    if (!g) return;
+    const x = this._ghostPos.x - (this._arm ? this._arm.offX : 0);
+    const y = this._ghostPos.y - (this._arm ? this._arm.offY : 0);
+    g.style.transform = `translate(${x}px, ${y}px)`;
+  }
+
+  _scheduleTarget(x, y) {
+    this._lastPtr = { x, y };
+    if (this._rafT) return;
+    this._rafT = requestAnimationFrame(() => {
+      this._rafT = null;
+      if (!this.getData().dragging || !this._lastPtr) return;
+      const t = this._computeTarget(this._lastPtr.x, this._lastPtr.y);
+      if (!t) return;
+      const d = this.getData();
+      if (d.hoveredColId !== t.colId || d.targetIndex !== t.index) {
+        this.setData({ hoveredColId: t.colId, targetIndex: t.index });
+        this.refresh();
+      }
+    });
+  }
+
+  // --- pointer flow ----------------------------------------------------------
+
+  _pointerMove(event) {
+    const a = this._arm;
+    if (!a || a.pointerId !== event.pointerId) return;
+
+    if (!a.started) {
+      const dx = Math.abs(event.clientX - a.startX);
+      const dy = Math.abs(event.clientY - a.startY);
+      if (dx <= DRAG_THRESHOLD && dy <= DRAG_THRESHOLD) return;
+      this._startPointerDrag(a, event);
+    }
+
+    this._ghostPos = { x: event.clientX, y: event.clientY };
+    this._applyGhost();
+    this._scheduleTarget(event.clientX, event.clientY);
+  }
+
+  _startPointerDrag(a, event) {
+    a.started = true;
+    const card = this._findCard(a.colId, a.cardId);
+    const orig = this._origIndex(a.colId, a.cardId);
+    // clear any keyboard grab — one gesture at a time
+    this._ghostPos = { x: event.clientX, y: event.clientY };
+    this.setData({
+      dragging: true,
+      dragCardId: a.cardId,
+      dragFromCol: a.colId,
+      dragCard: card,
+      hoveredColId: a.colId,
+      targetIndex: orig < 0 ? 0 : orig,
+      ghostW: a.width,
+      ghostH: a.height,
+      grabbedId: null,
+      announce: '',
+    });
+    this.refresh();
+    // Capture on the ROOT (persists across the source-card removal), mouse/pen only.
+    if (event.pointerType !== 'touch' && this.element) {
+      try {
+        this.element.setPointerCapture(event.pointerId);
+      } catch (_) {
+        /* best effort */
+      }
+    }
+  }
+
+  _pointerUp(event) {
+    const a = this._arm;
+    if (!a || a.pointerId !== event.pointerId) return;
+    const started = a.started;
+    this._releaseCapture(event.pointerId);
+    this._arm = null;
+    this._removeWindowListeners();
+    if (this._rafT) {
+      cancelAnimationFrame(this._rafT);
+      this._rafT = null;
+    }
+    if (!started) return; // plain click/tap — never dragged
+
+    const d = this.getData();
+    const cardId = d.dragCardId;
+    const fromCol = d.dragFromCol;
+    const toColId = d.hoveredColId;
+    const toIndex = d.targetIndex;
+    const card = d.dragCard;
+    const orig = this._origIndex(fromCol, cardId);
+    const noop = toColId === fromCol && toIndex === orig;
+
+    const dest = (Array.isArray(this.props.columns) ? this.props.columns : []).find(
+      (c) => c.id === toColId
+    );
+    this.setData({
+      dragging: false,
+      dragCardId: null,
+      dragFromCol: null,
+      dragCard: null,
+      hoveredColId: null,
+      targetIndex: -1,
+      announce:
+        !noop && toColId && card && dest
+          ? `Moved ${card.title} to ${dest.title}.`
+          : '',
+    });
+    this.refresh();
+
+    if (!noop && toColId) this._emitMove(cardId, toColId, toIndex, event);
+  }
+
+  _cancelPointerDrag() {
+    const a = this._arm;
+    if (a) this._releaseCapture(a.pointerId);
+    this._arm = null;
+    this._removeWindowListeners();
+    if (this._rafT) {
+      cancelAnimationFrame(this._rafT);
+      this._rafT = null;
+    }
+    if (this.getData().dragging) {
+      this.setData({
+        dragging: false,
+        dragCardId: null,
+        dragFromCol: null,
+        dragCard: null,
+        hoveredColId: null,
+        targetIndex: -1,
+        announce: 'Move cancelled.',
+      });
+      this.refresh();
+    }
+  }
+
+  _releaseCapture(pointerId) {
+    try {
+      if (
+        this.element &&
+        this.element.hasPointerCapture &&
+        this.element.hasPointerCapture(pointerId)
+      ) {
+        this.element.releasePointerCapture(pointerId);
+      }
+    } catch (_) {
+      /* best effort */
+    }
+  }
+
+  // --- keyboard flow ---------------------------------------------------------
+
+  _grab(colId, cardId) {
+    const card = this._findCard(colId, cardId);
+    this.setData({
+      grabbedId: cardId,
+      announce: card
+        ? `Picked up ${card.title}. Use the arrow keys to move, space to drop, escape to cancel.`
+        : '',
+    });
+    this.refresh();
+  }
+
+  _drop() {
+    const card = this._findCard(this._grabColOf(), this.getData().grabbedId);
+    this.setData({
+      grabbedId: null,
+      announce: card ? `Dropped ${card.title}.` : '',
+    });
+    this.refresh();
+  }
+
+  _cancelGrab() {
+    this.setData({ grabbedId: null, announce: 'Move cancelled.' });
+    this.refresh();
+  }
+
+  // Locate the column currently holding the grabbed card (its position moves as
+  // the parent re-renders, so re-derive it from props each time).
+  _grabColOf() {
+    const id = this.getData().grabbedId;
+    const cols = Array.isArray(this.props.columns) ? this.props.columns : [];
+    const col = cols.find((c) => (c.cards || []).some((k) => k.id === id));
+    return col ? col.id : null;
+  }
+
+  _keyboardMove(colId, cardId, dir, event) {
+    const cols = Array.isArray(this.props.columns) ? this.props.columns : [];
+    const ci = cols.findIndex((c) => c.id === colId);
+    if (ci < 0) return;
+    const cards = Array.isArray(cols[ci].cards) ? cols[ci].cards : [];
+    const i = cards.findIndex((c) => c.id === cardId);
+    if (i < 0) return;
+
+    let destColId = colId;
+    let index;
+    if (dir === 'up') {
+      if (i <= 0) return;
+      index = i - 1;
+    } else if (dir === 'down') {
+      if (i >= cards.length - 1) return;
+      index = i + 1;
+    } else if (dir === 'left') {
+      if (ci <= 0) return;
+      const dc = cols[ci - 1];
+      destColId = dc.id;
+      index = Math.min(i, (dc.cards || []).length);
+    } else if (dir === 'right') {
+      if (ci >= cols.length - 1) return;
+      const dc = cols[ci + 1];
+      destColId = dc.id;
+      index = Math.min(i, (dc.cards || []).length);
+    } else {
+      return;
+    }
+
+    const card = cards[i];
+    const destCol = cols.find((c) => c.id === destColId);
+    const destLen = (destCol.cards || []).length + (destColId === colId ? 0 : 1);
+    this._refocusGrabbed = cardId;
+    this.setData({
+      announce: `Moved ${card.title} to ${destCol.title}, position ${index + 1} of ${destLen}.`,
+    });
+    this.refresh();
+    this._emitMove(cardId, destColId, index, event);
+  }
+
+  events = {
+    onCardPointerDown: (colId, cardId, event) => {
+      if (this.props.disabled) return;
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      // never hijack a live drag; self-heal a stale arm
+      if (this._arm) {
+        if (this._arm.started) return;
+        this._cancelPointerDrag();
+      }
+      // starting a pointer gesture clears any keyboard grab
+      if (this.getData().grabbedId) {
+        this.setData({ grabbedId: null });
+      }
+      const rect = event.currentTarget.getBoundingClientRect();
+      this._arm = {
+        pointerId: event.pointerId,
+        colId,
+        cardId,
+        startX: event.clientX,
+        startY: event.clientY,
+        started: false,
+        offX: event.clientX - rect.left,
+        offY: event.clientY - rect.top,
+        width: rect.width,
+        height: rect.height,
+      };
+      this._addWindowListeners();
+    },
+
+    onCardKey: (colId, cardId, event) => {
+      if (this.props.disabled) return;
+      const key = event.key;
+      const grabbed = this.getData().grabbedId === cardId;
+
+      if (key === ' ' || key === 'Spacebar' || key === 'Enter') {
+        event.preventDefault();
+        if (grabbed) this._drop();
+        else this._grab(colId, cardId);
+        return;
+      }
+      if (key === 'Escape') {
+        if (grabbed) {
+          event.preventDefault();
+          this._cancelGrab();
+        }
+        return;
+      }
+      if (!grabbed) return; // arrows only act on a grabbed card
+
+      const dir = {
+        ArrowUp: 'up',
+        ArrowDown: 'down',
+        ArrowLeft: 'left',
+        ArrowRight: 'right',
+      }[key];
+      if (!dir) return;
+      event.preventDefault();
+      this._keyboardMove(colId, cardId, dir, event);
+    },
+  };
+}
+</script>

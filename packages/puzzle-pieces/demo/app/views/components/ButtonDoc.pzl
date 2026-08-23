@@ -1,0 +1,145 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Button</h1>
+        <p class="mt-2 text-body">
+          A button with five variants, three sizes, and a loading state. Fires a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@press</code>
+          callback; disabled and loading both block it.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <Button variant="primary" @press={ cheer }>Get started</Button>
+          <Button variant="outline" @press={ cheer }>Learn more</Button>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="variants" title="Variants" code={ codeVariants }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Button variant="primary" @press={ cheer }>Primary</Button>
+            <Button variant="secondary" @press={ cheer }>Secondary</Button>
+            <Button variant="outline" @press={ cheer }>Outline</Button>
+            <Button variant="ghost" @press={ cheer }>Ghost</Button>
+            <Button variant="destructive" @press={ cheer }>Destructive</Button>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Button size="sm" @press={ cheer }>Small</Button>
+            <Button size="md" @press={ cheer }>Medium</Button>
+            <Button size="lg" @press={ cheer }>Large</Button>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="states" title="Disabled and loading" code={ codeStates }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Button disabled>Disabled</Button>
+            <Button variant="primary" loading={ loading }>Save changes</Button>
+            <Button variant="outline" @press={ toggleLoading }>Toggle loading</Button>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+// Docs page for Button — THE exemplar page: every other component page follows
+// this exact shape (header → hero ExampleBox → Installation → titled example
+// sections → Toc mirroring the section ids).
+const installCmd = 'puzzle add piece button';
+const usageImport = `import Button from '@/components/ui/Button.pzl';`;
+const usageMarkup = `<Button variant="primary" @press={ getStarted }>Get started</Button>`;
+
+const codeHero = `<Button variant="primary" @press={ getStarted }>Get started</Button>
+<Button variant="outline" @press={ learnMore }>Learn more</Button>`;
+
+const codeVariants = `<Button variant="primary" @press={ save }>Primary</Button>
+<Button variant="secondary" @press={ save }>Secondary</Button>
+<Button variant="outline" @press={ save }>Outline</Button>
+<Button variant="ghost" @press={ save }>Ghost</Button>
+<Button variant="destructive" @press={ remove }>Destructive</Button>`;
+
+const codeSizes = `<Button size="sm" @press={ save }>Small</Button>
+<Button size="md" @press={ save }>Medium</Button>
+<Button size="lg" @press={ save }>Large</Button>`;
+
+const codeStates = `<Button disabled>Disabled</Button>
+<Button variant="primary" loading={ saving }>Save changes</Button>
+
+// parent
+events = {
+  save: async () => {
+    this.setData({ saving: true });
+    this.refresh();
+    await api.save();
+    this.setData({ saving: false });
+    this.refresh();
+  },
+};`;
+
+export default class ButtonDoc extends PuzzleView {
+  created() {
+    this.setData({ loading: false });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeVariants,
+      codeSizes,
+      codeStates,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Variants', href: '#variants' },
+        { label: 'Sizes', href: '#sizes' },
+        { label: 'Disabled and loading', href: '#states' },
+      ],
+    };
+  }
+
+  events = {
+    cheer: () => toast({ message: 'Buttons wire up @press callbacks.', variant: 'success' }),
+    toggleLoading: () => {
+      this.setData({ loading: !this.getData().loading });
+      this.refresh();
+    },
+  };
+}
+</script>

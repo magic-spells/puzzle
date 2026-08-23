@@ -1,0 +1,260 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Menubar</h1>
+        <p class="mt-2 text-body">
+          A desktop-application-style horizontal menu bar (File / Edit / View / Help). Each
+          top label opens a dropdown of actions on click; hovering another label switches
+          menus, and full keyboard navigation moves between and inside menus. Config-first:
+          pass a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">menus</code>
+          array and handle @select.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full">
+          <Menubar menus={ appMenus } @select={ onSelect }/>
+          <p class="mt-6 text-sm text-muted">
+            Last action:
+            <span class="font-medium text-ink">{ lastAction }</span>
+          </p>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          No npm dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="shortcuts" title="Shortcuts and separators" code={ codeShortcuts }>
+          <Menubar menus={ editMenus } @select={ onSelect }/>
+        </ExampleBox>
+
+        <ExampleBox id="states" title="Disabled and danger items" code={ codeStates }>
+          <Menubar menus={ stateMenus } @select={ onSelect }/>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">
+            The bar uses a roving tabindex — Tab lands on one top label, then arrow keys drive everything:
+          </p>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Left / Right arrows</span> — move between top menus (and switch the open menu)</li>
+            <li><span class="font-medium text-ink">Down / Enter / Space</span> — open the focused menu and move to its first item</li>
+            <li><span class="font-medium text-ink">Up arrow</span> — open the focused menu and move to its last item</li>
+            <li><span class="font-medium text-ink">Up / Down arrows</span> — move between items (skipping disabled), wrapping</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first / last item</li>
+            <li><span class="font-medium text-ink">Enter / Space</span> — activate the focused item and close</li>
+            <li><span class="font-medium text-ink">Escape</span> — close the menu and return focus to its top label</li>
+          </ul>
+          <ExampleBox code={ codeKeyboard }>
+            <Menubar menus={ appMenus } @select={ onSelect }/>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Menubar from '@/components/ui/Menubar.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+const installCmd = 'puzzle add piece menubar';
+const usageImport = `import Menubar from '@/components/ui/Menubar.pzl';`;
+const usageMarkup = `<Menubar menus={ appMenus } @select={ onSelect } />`;
+
+const codeHero = `<Menubar menus={ appMenus } @select={ onSelect } />
+
+// menus: an array of { label, items }. Items are leaf actions, { divider }
+// separators, and optional { group } headings. @select is value-first.
+data() {
+  return {
+    appMenus: [
+      { label: 'File', items: [
+        { label: 'New File', value: 'file:new', shortcut: '⌘N' },
+        { label: 'Open…', value: 'file:open', shortcut: '⌘O' },
+        { label: 'Save', value: 'file:save', shortcut: '⌘S' },
+        { divider: true },
+        { label: 'Print…', value: 'file:print', shortcut: '⌘P', disabled: true },
+      ] },
+      { label: 'Edit', items: [
+        { label: 'Undo', value: 'edit:undo', shortcut: '⌘Z' },
+        { label: 'Redo', value: 'edit:redo', shortcut: '⇧⌘Z' },
+      ] },
+      { label: 'Help', items: [
+        { label: 'Documentation', value: 'help:docs' },
+        { divider: true },
+        { label: 'Reset All Settings', value: 'help:reset', danger: true },
+      ] },
+    ],
+  };
+}
+
+events = {
+  onSelect: (value) => console.log('picked', value),
+};`;
+
+const codeShortcuts = `// shortcut renders as an aligned <kbd> hint on the right of the row;
+// divider: true draws a hairline separator between groups of actions.
+editMenus: [
+  { label: 'Edit', items: [
+    { label: 'Undo', value: 'undo', shortcut: '⌘Z' },
+    { label: 'Redo', value: 'redo', shortcut: '⇧⌘Z' },
+    { divider: true },
+    { label: 'Cut', value: 'cut', shortcut: '⌘X' },
+    { label: 'Copy', value: 'copy', shortcut: '⌘C' },
+    { label: 'Paste', value: 'paste', shortcut: '⌘V' },
+  ] },
+  { label: 'View', items: [
+    { label: 'Zoom In', value: 'zoomin', shortcut: '⌘+' },
+    { label: 'Zoom Out', value: 'zoomout', shortcut: '⌘-' },
+    { label: 'Reset Zoom', value: 'zoomreset', shortcut: '⌘0' },
+  ] },
+];`;
+
+const codeStates = `// disabled: true greys a row out and skips it in keyboard nav;
+// danger: true paints it in the danger token with a danger-tint hover.
+stateMenus: [
+  { label: 'Account', items: [
+    { label: 'Profile', value: 'profile' },
+    { label: 'Billing', value: 'billing', disabled: true },
+    { divider: true },
+    { label: 'Sign out', value: 'signout' },
+    { label: 'Delete account', value: 'delete', danger: true },
+  ] },
+];`;
+
+const codeKeyboard = `<Menubar menus={ appMenus } @select={ onSelect } />`;
+
+export default class MenubarDoc extends PuzzleView {
+  created() {
+    this.setData({ lastAction: '—' });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeShortcuts,
+      codeStates,
+      codeKeyboard,
+      appMenus: [
+        {
+          label: 'File',
+          items: [
+            { label: 'New File', value: 'file:new', shortcut: '⌘N' },
+            { label: 'Open…', value: 'file:open', shortcut: '⌘O' },
+            { label: 'Save', value: 'file:save', shortcut: '⌘S' },
+            { label: 'Save As…', value: 'file:saveas', shortcut: '⇧⌘S' },
+            { divider: true },
+            { label: 'Print…', value: 'file:print', shortcut: '⌘P', disabled: true },
+          ],
+        },
+        {
+          label: 'Edit',
+          items: [
+            { label: 'Undo', value: 'edit:undo', shortcut: '⌘Z' },
+            { label: 'Redo', value: 'edit:redo', shortcut: '⇧⌘Z' },
+            { divider: true },
+            { label: 'Cut', value: 'edit:cut', shortcut: '⌘X' },
+            { label: 'Copy', value: 'edit:copy', shortcut: '⌘C' },
+            { label: 'Paste', value: 'edit:paste', shortcut: '⌘V' },
+          ],
+        },
+        {
+          label: 'View',
+          items: [
+            { label: 'Zoom In', value: 'view:zoomin', shortcut: '⌘+' },
+            { label: 'Zoom Out', value: 'view:zoomout', shortcut: '⌘-' },
+            { label: 'Reset Zoom', value: 'view:zoomreset', shortcut: '⌘0' },
+            { divider: true },
+            { label: 'Toggle Sidebar', value: 'view:sidebar', shortcut: '⌘B' },
+          ],
+        },
+        {
+          label: 'Help',
+          items: [
+            { label: 'Documentation', value: 'help:docs' },
+            { label: 'Keyboard Shortcuts', value: 'help:keys', shortcut: '⌘/' },
+            { divider: true },
+            { label: 'Reset All Settings', value: 'help:reset', danger: true },
+          ],
+        },
+      ],
+      editMenus: [
+        {
+          label: 'Edit',
+          items: [
+            { label: 'Undo', value: 'undo', shortcut: '⌘Z' },
+            { label: 'Redo', value: 'redo', shortcut: '⇧⌘Z' },
+            { divider: true },
+            { label: 'Cut', value: 'cut', shortcut: '⌘X' },
+            { label: 'Copy', value: 'copy', shortcut: '⌘C' },
+            { label: 'Paste', value: 'paste', shortcut: '⌘V' },
+          ],
+        },
+        {
+          label: 'View',
+          items: [
+            { label: 'Zoom In', value: 'zoomin', shortcut: '⌘+' },
+            { label: 'Zoom Out', value: 'zoomout', shortcut: '⌘-' },
+            { label: 'Reset Zoom', value: 'zoomreset', shortcut: '⌘0' },
+          ],
+        },
+      ],
+      stateMenus: [
+        {
+          label: 'Account',
+          items: [
+            { label: 'Profile', value: 'profile' },
+            { label: 'Billing', value: 'billing', disabled: true },
+            { divider: true },
+            { label: 'Sign out', value: 'signout' },
+            { label: 'Delete account', value: 'delete', danger: true },
+          ],
+        },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Shortcuts and separators', href: '#shortcuts' },
+        { label: 'Disabled and danger items', href: '#states' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    onSelect: (value) => {
+      this.setData('lastAction', value);
+      toast({ message: 'Menu: ' + value });
+    },
+  };
+}
+</script>

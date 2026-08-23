@@ -1,0 +1,8 @@
+{
+  "name": "tabs",
+  "description": "Accessible tablist — underline or pill variant; panels stay parent-owned",
+  "files": ["Tabs.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

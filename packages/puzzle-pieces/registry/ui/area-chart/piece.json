@@ -1,0 +1,8 @@
+{
+  "name": "area-chart",
+  "description": "Responsive, config-first area chart with overlapping or stacked bands, full-strength edge lines, a nearest-x hover crosshair, tooltip, legend, and an sr-only data table",
+  "files": ["AreaChart.pzl"],
+  "registryDependencies": ["lib/chart-math.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

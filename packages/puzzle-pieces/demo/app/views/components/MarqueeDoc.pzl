@@ -1,0 +1,173 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Marquee</h1>
+        <p class="mt-2 text-body">
+          A continuously scrolling ticker of content — logos, announcements, testimonials. The
+          items are the component's <strong class="font-medium text-ink">default-slot children</strong>;
+          the piece clones them to loop seamlessly. It pauses on hover, supports drag-to-scroll, and
+          honors <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">prefers-reduced-motion</code>
+          (no auto-scroll). It runs a plain <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">requestAnimationFrame</code>
+          loop — no CSS keyframes, nothing added to your theme.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <Marquee class="w-full rounded-xl border border-border bg-surface py-4">
+          <span class="px-4 text-lg font-semibold text-ink">Acme</span>
+          <span class="px-4 text-lg font-semibold text-ink">Globex</span>
+          <span class="px-4 text-lg font-semibold text-ink">Initech</span>
+          <span class="px-4 text-lg font-semibold text-ink">Umbrella</span>
+          <span class="px-4 text-lg font-semibold text-ink">Soylent</span>
+          <span class="px-4 text-lg font-semibold text-ink">Hooli</span>
+        </Marquee>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction). No extra
+          keyframes or theme changes are needed — the scroll runs entirely in JS.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="direction" title="Direction" code={ codeDirection }>
+          <Marquee direction="right" class="w-full rounded-xl border border-border bg-surface py-4">
+            <span class="px-4 text-lg font-semibold text-ink">One</span>
+            <span class="px-4 text-lg font-semibold text-ink">Two</span>
+            <span class="px-4 text-lg font-semibold text-ink">Three</span>
+            <span class="px-4 text-lg font-semibold text-ink">Four</span>
+            <span class="px-4 text-lg font-semibold text-ink">Five</span>
+            <span class="px-4 text-lg font-semibold text-ink">Six</span>
+          </Marquee>
+        </ExampleBox>
+
+        <ExampleBox id="announcement" title="Announcement bar" code={ codeAnnouncement }>
+          <Marquee class="w-full rounded-xl bg-brand py-2.5 text-brand-ink">
+            <span class="px-6 text-sm font-medium">Free shipping on orders over $50</span>
+            <span class="px-6 text-sm font-medium">New winter collection now live</span>
+            <span class="px-6 text-sm font-medium">Members get 20% off this week</span>
+            <span class="px-6 text-sm font-medium">Refer a friend, get $10 credit</span>
+          </Marquee>
+        </ExampleBox>
+
+        <ExampleBox id="pause" title="Pause on hover (off)" code={ codePause }>
+          <Marquee pauseOnHover={ false } class="w-full rounded-xl border border-border bg-surface py-4">
+            <span class="px-4 text-sm font-medium text-body">Keeps scrolling even under the pointer</span>
+            <span class="px-4 text-sm font-medium text-body">Set pauseOnHover to false</span>
+            <span class="px-4 text-sm font-medium text-body">Default is true</span>
+          </Marquee>
+        </ExampleBox>
+
+        <ExampleBox id="speed" title="Speed" code={ codeSpeed }>
+          <div class="w-full space-y-3">
+            <Marquee speed={ 20 } class="w-full rounded-xl border border-border bg-surface py-3">
+              <span class="px-4 text-sm font-medium text-muted">Slow — 20 px/sec</span>
+              <span class="px-4 text-sm font-medium text-muted">Slow — 20 px/sec</span>
+              <span class="px-4 text-sm font-medium text-muted">Slow — 20 px/sec</span>
+            </Marquee>
+            <Marquee speed={ 90 } class="w-full rounded-xl border border-border bg-surface py-3">
+              <span class="px-4 text-sm font-medium text-ink">Fast — 90 px/sec</span>
+              <span class="px-4 text-sm font-medium text-ink">Fast — 90 px/sec</span>
+              <span class="px-4 text-sm font-medium text-ink">Fast — 90 px/sec</span>
+            </Marquee>
+          </div>
+        </ExampleBox>
+
+        <section id="behavior" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Behavior</h2>
+          <ul class="space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Seamless loop</span> — the slotted content is measured and cloned enough times to overfill the viewport; the track wraps by exactly one copy's width so there is never a gap</li>
+            <li><span class="font-medium text-ink">Pause on hover</span> — the scroll stops while the pointer is over the marquee (mouse only); disable with <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ 'pauseOnHover={ false }' }</code></li>
+            <li><span class="font-medium text-ink">Drag to scroll</span> — press and drag along the scroll axis to move the ticker by hand; touch drags the marquee while still letting the page scroll on the cross axis</li>
+            <li><span class="font-medium text-ink">Reduced motion</span> — under <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">prefers-reduced-motion</code> the auto-scroll never starts; the content renders static and the duplicate copies are <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-hidden</code> so assistive tech reads the sequence once</li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Marquee from '@/components/ui/Marquee.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Marquee — follows the CarouselDoc / ScrollAreaDoc exemplar shape.
+const installCmd = 'puzzle add piece marquee';
+const usageImport = `import Marquee from '@/components/ui/Marquee.pzl';`;
+const usageMarkup = `<Marquee class="w-full rounded-xl border border-border bg-surface py-4"></Marquee>`;
+
+const codeHero = `// Items are the default-slot children — the piece clones them to loop.
+<Marquee class="w-full rounded-xl border border-border bg-surface py-4">
+  <span class="px-4 text-lg font-semibold text-ink">Acme</span>
+  <span class="px-4 text-lg font-semibold text-ink">Globex</span>
+  <span class="px-4 text-lg font-semibold text-ink">Initech</span>
+  <span class="px-4 text-lg font-semibold text-ink">Umbrella</span>
+</Marquee>`;
+
+const codeDirection = `// direction: 'left' (default) | 'right' | 'up' | 'down'.
+// up/down switch the track to a vertical column.
+<Marquee direction="right" class="w-full ...">
+  <span>One</span>
+  <span>Two</span>
+  <span>Three</span>
+</Marquee>`;
+
+const codeAnnouncement = `// A single-line announcement ticker.
+<Marquee class="w-full rounded-xl bg-brand py-2.5 text-brand-ink">
+  <span class="px-6 text-sm font-medium">Free shipping on orders over $50</span>
+  <span class="px-6 text-sm font-medium">New winter collection now live</span>
+  <span class="px-6 text-sm font-medium">Members get 20% off this week</span>
+</Marquee>`;
+
+const codePause = `// pauseOnHover defaults to true; set false to keep scrolling.
+<Marquee pauseOnHover={ false } class="w-full ...">
+  <span>Keeps scrolling even under the pointer</span>
+  <span>Set pauseOnHover to false</span>
+</Marquee>`;
+
+const codeSpeed = `// speed is pixels per second (default 40; larger = faster).
+<Marquee speed={ 20 } class="w-full ...">…slow…</Marquee>
+<Marquee speed={ 90 } class="w-full ...">…fast…</Marquee>`;
+
+export default class MarqueeDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeDirection,
+      codeAnnouncement,
+      codePause,
+      codeSpeed,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Direction', href: '#direction' },
+        { label: 'Announcement bar', href: '#announcement' },
+        { label: 'Pause on hover', href: '#pause' },
+        { label: 'Speed', href: '#speed' },
+        { label: 'Behavior', href: '#behavior' },
+      ],
+    };
+  }
+}
+</script>

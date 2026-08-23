@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+/*
+ * The scroll-stack piece WRAPS the @magic-spells/scroll-stack web component
+ * rather than porting it, so the component's own stylesheet has to be loaded —
+ * it is where every effect, the sticky pinning, snapping and the per-view
+ * flex-basis actually live. Tailwind v4 resolves this bare specifier out of
+ * node_modules, so the rules land in dist/styles.css with everything else.
+ *
+ * Consuming apps do the same one-line merge (documented on the Scroll Stack
+ * docs page). `layer(components)` matters: the component's rules are plain
+ * element selectors (`scroll-stack`, `scroll-stack-item`) and an unlayered
+ * import would beat every Tailwind utility, so `gap-4` or `rounded-xl` on the
+ * element would silently do nothing. In the components layer the normal
+ * mental model holds — utilities win, the component's defaults fill in the
+ * rest.
+ */
+@import "@magic-spells/scroll-stack/css" layer(components);
+
+/*
+ * The sheet piece wraps @magic-spells/sheet the same way, and that one needs
+ * TWO stylesheets: its dialog-panel peer owns the <dialog>/<dialog-backdrop>
+ * transport, and sheet.css layers the panel geometry, the handle and the
+ * overlay on top of it. dialog-panel FIRST — sheet.css deliberately overrides
+ * several of its rules and an inverted order would undo them. Same
+ * `layer(components)` reasoning as above.
+ */
+@import "@magic-spells/dialog-panel/css" layer(components);
+@import "@magic-spells/sheet/css" layer(components);
+
+/*
+ * bottom-sheet is the third wrapper over the same family and shares the
+ * dialog-panel transport imported just above — one copy, imported once. Its own
+ * stylesheet carries the panel geometry, the grabber, the snap-point heights
+ * and the scrim, so it goes after dialog-panel for the same reason sheet.css
+ * does.
+ */
+@import "@magic-spells/bottom-sheet/css" layer(components);
+
+/*
+ * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
+ * and JS so the utility classes they use are generated. Paths are relative to
+ * this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * dist/ is COMMITTED (GitHub Pages serves it), so it is not gitignored — which
+ * means v4's automatic content detection also scans the PREVIOUS build's own
+ * output. A class deleted from source then keeps its rule for exactly one more
+ * build, and a malformed class literal can look like it works because the older
+ * bundle still carried the correct one. Exclude it so the generated CSS reflects
+ * source alone. Requires Tailwind >= 4.1 (this project is on 4.3).
+ */
+@source not "../../dist/**";
+
+/* Gutter system (Luna-theme pattern, same as magic-spells-puzzle-site): one
+   responsive variable drives side padding via Tailwind utilities (px-gutter). */
+:root {
+  --gutter-base: 1.25rem;
+  --gutter-md: 2rem;
+  --gutter-lg: 2.5rem;
+  --spacing-gutter: var(--gutter-base);
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --spacing-gutter: var(--gutter-md);
+  }
+}
+
+@media (min-width: 80rem) {
+  :root {
+    --spacing-gutter: var(--gutter-lg);
+  }
+}
+
+/* Register the gutter as a Tailwind spacing token → px-gutter, mx-gutter, gap-gutter… */
+@theme {
+  --spacing-gutter: var(--spacing-gutter);
+}
+
+/*
+ * puzzle-pieces design tokens — merged from registry/theme/pieces.css, exactly
+ * the way a consuming app would. Every piece styles itself through the semantic
+ * utilities these generate (bg-surface, text-ink, border-border, bg-brand, …).
+ *
+ * Dark mode: every token is a `light-dark(light, dark)` pair resolved by
+ * `color-scheme`. No data-theme attribute → follow the OS; the header switcher
+ * sets data-theme="light"/"dark" on <html> (persisted in localStorage, applied
+ * pre-paint by an inline script in public/index.html).
+ */
+
+:root {
+  color-scheme: light dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@theme {
+  /* Text — darkest to faintest. */
+  --color-ink: light-dark(#1f2933, #f4f4f5);
+  --color-body: light-dark(#52606d, #b4b4bb);
+  --color-muted: light-dark(#7b8794, #7f7f88);
+  --color-faint: light-dark(#cbd2d9, #46464e);
+
+  /* Surfaces. */
+  --color-page: light-dark(#f5f7fa, #09090b);
+  --color-surface: light-dark(#ffffff, #101013);
+  --color-surface-sunken: light-dark(#eef1f6, #18181c);
+
+  /* Brand. */
+  --color-brand: light-dark(#4c6ef5, #5c7cfa);
+  --color-brand-dark: light-dark(#3b5bdb, #748ffc);
+  --color-brand-tint: light-dark(#eef2ff, #1d2440);
+  --color-brand-ink: #ffffff;
+
+  /* Danger. */
+  --color-danger: light-dark(#e03131, #fa5252);
+  --color-danger-dark: light-dark(#c92a2a, #ff6b6b);
+  --color-danger-tint: light-dark(#fff5f5, #271417);
+  --color-danger-ink: #ffffff;
+
+  /* Success — positive deltas, "up is good" indicators (counterpart to danger). */
+  --color-success: light-dark(#006300, #0ca30c);
+  --color-success-tint: light-dark(#ebf7eb, #122616); /* soft positive backgrounds */
+
+  /* Warning — caution band between success and danger (meters, gauges, alerts). */
+  --color-warning: light-dark(#b45309, #f59e0b);
+  --color-warning-tint: light-dark(#fff8eb, #2a1c07); /* soft caution backgrounds */
+
+  /* Charts — categorical series palette, assigned in fixed slot order (1→8), never cycled.
+     Validated for colorblind safety + lightness/chroma bands in both modes
+     (dataviz six-checks validator, 2026-07-17). Light slots 3/4/5 sit below 3:1
+     contrast on white by design — chart pieces mitigate with legends, tooltips,
+     and their built-in accessible table views. */
+  --color-chart-1: light-dark(#2a78d6, #3987e5);
+  --color-chart-2: #008300;
+  --color-chart-3: light-dark(#e87ba4, #d55181);
+  --color-chart-4: light-dark(#eda100, #c98500);
+  --color-chart-5: light-dark(#1baf7a, #199e70);
+  --color-chart-6: light-dark(#eb6834, #d95926);
+  --color-chart-7: light-dark(#4a3aa7, #9085e9);
+  --color-chart-8: light-dark(#e34948, #e66767);
+
+  /* Lines & focus. */
+  --color-border: light-dark(#e4e9f0, #1f1f23);
+  --color-border-strong: light-dark(#c3cfe6, #2e2e35);
+  --color-ring: light-dark(#4c6ef5, #5c7cfa);
+}
+
+@import './schemes.css';
+
+@layer base {
+  body {
+    -webkit-font-smoothing: antialiased;
+    color: var(--color-body);
+    background: var(--color-page);
+  }
+}

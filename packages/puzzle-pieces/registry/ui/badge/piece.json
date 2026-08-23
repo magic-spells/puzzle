@@ -1,0 +1,8 @@
+{
+  "name": "badge",
+  "description": "Status chip with default/brand/danger/outline variants",
+  "files": ["Badge.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

@@ -1,0 +1,304 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Timeline</h1>
+        <p class="mt-2 text-body">
+          A vertical event feed rendered from an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">items</code>
+          array — a dot/connector rail with a per-item title, an optional preformatted
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">time</code>,
+          a description, and an optional status color. Purely presentational: the parent owns
+          the data and passes times already formatted.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-md">
+          <Timeline items={ feed }/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Each item is
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">{ itemShape }</code>.
+          The last item drops its connector automatically. The piece never formats dates — pass
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">time</code>
+          as a ready-to-display string.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="status" title="Status colors" code={ codeStatus }>
+          <div class="w-full max-w-md">
+            <Timeline items={ statusFeed }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="icons" title="With icons" code={ codeIcons }>
+          <div class="w-full max-w-md">
+            <Timeline items={ iconFeed }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="numbered" title="Numbered steps" code={ codeNumbered }>
+          <div class="w-full max-w-md">
+            <Timeline items={ stepFeed } numbered/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="mixed" title="Numbers with a completed step" code={ codeMixed }>
+          <div class="w-full max-w-md">
+            <Timeline items={ mixedFeed } numbered/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="compact" title="Compact" code={ codeCompact }>
+          <div class="w-full max-w-md">
+            <Timeline items={ compactFeed }/>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Timeline from '@/components/ui/Timeline.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece timeline';
+const usageImport = `import Timeline from '@/components/ui/Timeline.pzl';`;
+const usageMarkup = `<Timeline items={ feed }/>`;
+const itemShape = '{ title, time?, description?, status?, icon?, number? }';
+
+const feed = [
+  {
+    title: 'Order placed',
+    time: '9:41 AM',
+    description: 'Payment confirmed and receipt sent to your email.',
+    status: 'success',
+  },
+  {
+    title: 'Preparing shipment',
+    time: '10:12 AM',
+    description: 'Items picked from the warehouse and packed.',
+    status: 'brand',
+  },
+  {
+    title: 'In transit',
+    time: 'Yesterday',
+    description: 'Package handed to the carrier — arriving in 2 days.',
+    status: 'brand',
+  },
+  {
+    title: 'Delivery attempt failed',
+    time: '2h ago',
+    description: 'No one was available. We will retry tomorrow.',
+    status: 'danger',
+  },
+];
+
+const statusFeed = [
+  { title: 'Default event', time: 'Just now', status: 'default' },
+  { title: 'Brand highlight', time: '5m ago', status: 'brand' },
+  { title: 'Completed step', time: '1h ago', status: 'success' },
+  { title: 'Something went wrong', time: '3h ago', status: 'danger' },
+  { title: 'Muted / low priority', time: 'Yesterday', status: 'muted' },
+];
+
+// icon = a 24×24 stroke-current SVG path `d` string.
+const iconFeed = [
+  {
+    title: 'Signed up',
+    time: 'Mon',
+    description: 'Account created and verified.',
+    status: 'brand',
+    icon: 'M12 5v14M5 12h14',
+  },
+  {
+    title: 'Invited teammates',
+    time: 'Tue',
+    description: 'Three collaborators joined the workspace.',
+    status: 'default',
+    icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
+  },
+  {
+    title: 'First project shipped',
+    time: 'Fri',
+    description: 'Deployed to production.',
+    status: 'success',
+    icon: 'M20 6 9 17l-5-5',
+  },
+];
+
+// `numbered` fills each marker with its 1-based index — no per-item number needed.
+const stepFeed = [
+  {
+    title: 'Create your account',
+    description: 'Pick a workspace name and verify your email address.',
+    status: 'brand',
+  },
+  {
+    title: 'Invite your team',
+    description: 'Send invites by email or share a join link.',
+    status: 'brand',
+  },
+  {
+    title: 'Connect a repository',
+    description: 'Authorize GitHub and choose the repos to track.',
+    status: 'brand',
+  },
+  {
+    title: 'Ship your first build',
+    description: 'Push to main and watch the pipeline run.',
+    status: 'brand',
+  },
+];
+
+// Marker precedence is icon > number > dot, so an explicit `icon` opts one step
+// out of numbering — here the finished step shows a checkmark instead of "1".
+const mixedFeed = [
+  {
+    title: 'Account created',
+    time: 'Done',
+    description: 'Workspace verified and ready.',
+    status: 'success',
+    icon: 'M20 6 9 17l-5-5',
+  },
+  {
+    title: 'Invite your team',
+    description: 'Send invites by email or share a join link.',
+    status: 'brand',
+  },
+  {
+    title: 'Connect a repository',
+    description: 'Authorize GitHub and choose the repos to track.',
+  },
+];
+
+const compactFeed = [
+  { title: 'Build queued', time: '12:00' },
+  { title: 'Build running', time: '12:01', status: 'brand' },
+  { title: 'Tests passed', time: '12:04', status: 'success' },
+  { title: 'Deployed', time: '12:05', status: 'success' },
+];
+
+const codeHero = `<Timeline items={ feed }/>
+
+// feed = [
+//   { title: 'Order placed', time: '9:41 AM',
+//     description: 'Payment confirmed…', status: 'success' },
+//   { title: 'Preparing shipment', time: '10:12 AM',
+//     description: 'Items picked and packed.', status: 'brand' },
+//   { title: 'In transit', time: 'Yesterday',
+//     description: 'Handed to the carrier.', status: 'brand' },
+//   { title: 'Delivery attempt failed', time: '2h ago',
+//     description: 'No one was available.', status: 'danger' },
+// ];`;
+
+const codeStatus = `<!-- status tints the dot: 'default' | 'brand' | 'success' |
+     'danger' | 'muted' (omit for 'default'). -->
+<Timeline items={ [
+  { title: 'Default event', time: 'Just now', status: 'default' },
+  { title: 'Brand highlight', time: '5m ago', status: 'brand' },
+  { title: 'Completed step', time: '1h ago', status: 'success' },
+  { title: 'Something went wrong', time: '3h ago', status: 'danger' },
+  { title: 'Muted / low priority', time: 'Yesterday', status: 'muted' },
+] }/>`;
+
+const codeIcons = `<!-- icon = a 24×24 stroke-current SVG path 'd' string; the dot
+     becomes a ringed icon marker tinted by status. -->
+<Timeline items={ [
+  { title: 'Signed up', time: 'Mon', status: 'brand',
+    icon: 'M12 5v14M5 12h14' },
+  { title: 'Invited teammates', time: 'Tue', status: 'default',
+    icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z' },
+  { title: 'First project shipped', time: 'Fri', status: 'success',
+    icon: 'M20 6 9 17l-5-5' },
+] }/>`;
+
+const codeNumbered = `<!-- 'numbered' auto-fills each marker with its 1-based index.
+     Pass a per-item 'number' to override any single one. -->
+<Timeline numbered items={ [
+  { title: 'Create your account', status: 'brand',
+    description: 'Pick a workspace name and verify your email.' },
+  { title: 'Invite your team', status: 'brand',
+    description: 'Send invites by email or share a join link.' },
+  { title: 'Connect a repository', status: 'brand',
+    description: 'Authorize GitHub and choose the repos to track.' },
+  { title: 'Ship your first build', status: 'brand',
+    description: 'Push to main and watch the pipeline run.' },
+] }/>`;
+
+const codeMixed = `<!-- Marker precedence is icon > number > dot, so an explicit
+     'icon' opts one step out of numbering — the finished step shows a
+     checkmark while the remaining steps keep their 2 / 3 digits. -->
+<Timeline numbered items={ [
+  { title: 'Account created', time: 'Done', status: 'success',
+    description: 'Workspace verified and ready.',
+    icon: 'M20 6 9 17l-5-5' },
+  { title: 'Invite your team', status: 'brand',
+    description: 'Send invites by email or share a join link.' },
+  { title: 'Connect a repository',
+    description: 'Authorize GitHub and choose the repos to track.' },
+] }/>`;
+
+const codeCompact = `<!-- Omit description for a dense title + time feed. -->
+<Timeline items={ [
+  { title: 'Build queued', time: '12:00' },
+  { title: 'Build running', time: '12:01', status: 'brand' },
+  { title: 'Tests passed', time: '12:04', status: 'success' },
+  { title: 'Deployed', time: '12:05', status: 'success' },
+] }/>`;
+
+export default class TimelineDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      itemShape,
+      feed,
+      statusFeed,
+      iconFeed,
+      stepFeed,
+      mixedFeed,
+      compactFeed,
+      codeHero,
+      codeStatus,
+      codeIcons,
+      codeNumbered,
+      codeMixed,
+      codeCompact,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Status colors', href: '#status' },
+        { label: 'With icons', href: '#icons' },
+        { label: 'Numbered steps', href: '#numbered' },
+        { label: 'Numbers with a completed step', href: '#mixed' },
+        { label: 'Compact', href: '#compact' },
+      ],
+    };
+  }
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "kbd",
+  "description": "Keyboard-key hint rendered in a native <kbd> with a keycap shadow",
+  "files": ["Kbd.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

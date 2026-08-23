@@ -1,0 +1,159 @@
+<puzzle-view>
+  <button
+    type="button"
+    class={ classes }
+    disabled={ disabled }
+    aria-label={ ariaLabel }
+    @click={ handleClick }>
+    {#if copied}
+      <svg class={ iconClass } viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+        <path d="M3 8.5l3.5 3.5L13 5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    {:else}
+      <svg class={ iconClass } viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+        <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
+      </svg>
+    {/if}
+    {#if label}
+      <span>{ displayLabel }</span>
+    {/if}
+    <span class="sr-only" aria-live="polite">{ liveText }</span>
+  </button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// CopyButton — a click-to-copy control: writes `value` to the clipboard, then
+// shows a transient "copied" state (check icon, swapped label, and an
+// aria-live announcement) for ~1.5s before reverting. Icon-only when no
+// `label` is given — only then is an `aria-label` emitted, because an
+// aria-label OVERRIDES visible text: labeling a "Copy link" button
+// "Copy Copy link" is what the accessible name would become. With a `label`
+// the visible text is the accessible name and swaps to "Copied" too.
+// Variant/size mirror Button's own vocabulary — default is a subtle ghost look
+// meant to sit inline next to a code snippet, a field value, or a share link.
+//
+//   <CopyButton value={ apiKey }/>                          icon-only, ghost
+//   <CopyButton value={ url } label="Copy link"/>            labeled
+//   <CopyButton value={ snippet } variant="outline" size="sm"
+//               @copy={ onCopied }/>                         with callback
+//
+// Props:
+//   value     the text to copy (required)
+//   label     optional visible text — omit for an icon-only button
+//   variant   'ghost' (default) | 'outline' | 'secondary'
+//   size      'sm' | 'md' | 'lg' (default 'md') — Button's own height scale
+//   disabled  disables the button and blocks copying
+//   class     appended to the root
+// Callback:
+//   @copy(value)  value-first, fires only after a successful clipboard write
+//
+// Clipboard failures (denied permission, insecure context, no Clipboard API)
+// are swallowed — the button just never enters the copied state. The revert
+// timer is cleared on teardown so it never fires setData on a dead view, and
+// an in-flight clipboard write that resolves after teardown fires nothing
+// (the runtime guards setData/refresh, but not the parent's @copy callback).
+const BASE =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
+  'font-medium cursor-pointer transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+
+const VARIANT = {
+  ghost: 'text-body hover:bg-surface-sunken hover:text-ink',
+  outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
+  secondary: 'bg-surface-sunken text-ink hover:bg-border',
+};
+
+// Labeled sizes match Button's height/padding scale exactly.
+const SIZE = {
+  sm: 'h-8 px-3 text-sm',
+  md: 'h-9 px-4 text-sm',
+  lg: 'h-10 px-5 text-base',
+};
+
+// Icon-only sizes stay square at Button's own heights, rounded-md like the
+// corner icon buttons in Code.pzl.
+const ICON_SIZE = {
+  sm: 'size-8 rounded-md',
+  md: 'size-9 rounded-md',
+  lg: 'size-10 rounded-md',
+};
+
+const ICON_GLYPH_SIZE = { sm: 'size-4', md: 'size-4', lg: 'size-5' };
+
+const COPIED_MS = 1500;
+
+export default class CopyButton extends PuzzleView {
+  created() {
+    this._timer = null;
+    this._destroyed = false;
+    this.setData({ copied: false });
+  }
+
+  destroyed() {
+    this._destroyed = true;
+    if (this._timer) clearTimeout(this._timer);
+  }
+
+  data(params, props) {
+    const variant = VARIANT[props.variant] ? props.variant : 'ghost';
+    const size = SIZE[props.size] ? props.size : 'md';
+    const label = props.label || '';
+    const iconOnly = !label;
+    const copied = !!this.getData().copied;
+
+    return {
+      classes: [
+        BASE,
+        VARIANT[variant],
+        iconOnly ? ICON_SIZE[size] : [SIZE[size], 'rounded-lg'].join(' '),
+        props.class || '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      disabled: !!props.disabled,
+      // Only icon-only buttons need an aria-label; on a labeled button it would
+      // OVERRIDE the visible text ("Copy link" → "Copy Copy link"). A null
+      // attribute value is removed by the patcher, so nothing is emitted.
+      ariaLabel: iconOnly ? (copied ? 'Copied' : 'Copy') : null,
+      label,
+      displayLabel: copied ? 'Copied' : label,
+      liveText: copied ? 'Copied' : '',
+      copied,
+      iconClass: [ICON_GLYPH_SIZE[size], 'shrink-0'].join(' '),
+    };
+  }
+
+  events = {
+    handleClick: () => {
+      if (this.getData().disabled) return;
+      if (!navigator.clipboard?.writeText) return;
+      const value = this.props.value || '';
+      navigator.clipboard.writeText(value).then(
+        () => {
+          // The write can resolve after teardown: setData/refresh are guarded by
+          // the runtime, but the parent's @copy callback is not — bail entirely.
+          if (this._destroyed) return;
+          this.setData({ copied: true });
+          this.refresh();
+          const { copy } = this.props;
+          if (typeof copy === 'function') copy(value);
+          if (this._timer) clearTimeout(this._timer);
+          this._timer = setTimeout(() => {
+            this._timer = null;
+            this.setData({ copied: false });
+            this.refresh();
+          }, COPIED_MS);
+        },
+        () => {
+          // Clipboard write rejected (permissions, insecure context, …) — no
+          // crash, no copied state, no @copy callback.
+        }
+      );
+    },
+  };
+}
+</script>

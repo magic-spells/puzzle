@@ -1,0 +1,41 @@
+<puzzle-view>
+  <header class="mb-8">
+    <a
+      href="#/demos"
+      class="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm text-muted transition-colors hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6" />
+      </svg>
+      Demos
+    </a>
+    <h1 class="mt-2 text-3xl font-semibold tracking-tight text-ink">{ title }</h1>
+    <p class="mt-2 max-w-3xl text-body">
+      <Slot/>
+    </p>
+  </header>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DemoHeader — the shared page header every /examples/* demo opens with
+// (docs-only, not a registry piece). A "< Demos" back link to the /demos index,
+// the demo title, and the intro prose as slot content. Keeping it in one place
+// is what makes the six demos read as one family: they all sit in the docs
+// DefaultLayout (sidebar + search + theme controls), and they all get the same
+// way back out.
+//
+//   <DemoHeader title="Analytics">
+//     Every chart piece working together — stat cards, line, area, bar…
+//   </DemoHeader>
+//
+// Props:
+//   title  the demo name, rendered as the page <h1>
+// Slot: the intro paragraph. Prose lives in the view (not a prop) so the copy
+// keeps its inline markup and needs no JS-string escaping.
+export default class DemoHeader extends PuzzleView {
+  data(params, props) {
+    return { title: props.title || '' };
+  }
+}
+</script>

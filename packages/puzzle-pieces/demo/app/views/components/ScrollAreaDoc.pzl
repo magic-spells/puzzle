@@ -1,0 +1,163 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Scroll Area</h1>
+        <p class="mt-2 text-body">
+          A wrapper that hides the native scrollbar and paints its own overlay one — a rounded, fading,
+          draggable thumb. Content scrolls natively (wheel, trackpad, touch, and keyboard), so this is a
+          purely cosmetic layer; set
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">orientation</code>
+          to pick which axes get a thumb and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">maxHeight</code>
+          to cap the viewport.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface">
+          <ul class="divide-y divide-border">
+            {#for item in ingredients}
+              <li class="px-4 py-3 text-sm text-body">{ item }</li>
+            {/for}
+          </ul>
+        </ScrollArea>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="horizontal" title="Horizontal" code={ codeHorizontal }>
+          <ScrollArea orientation="horizontal" label="Covers" class="w-80 max-w-full rounded-lg border border-border bg-surface p-2">
+            <div class="flex w-max gap-3">
+              {#for card in covers}
+                <div class="flex h-24 w-32 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-sm font-medium text-body">{ card }</div>
+              {/for}
+            </div>
+          </ScrollArea>
+        </ExampleBox>
+
+        <ExampleBox id="both" title="Both axes" code={ codeBoth }>
+          <ScrollArea orientation="both" maxHeight={ 240 } label="Log output" class="w-80 max-w-full rounded-lg border border-border bg-surface">
+            <div class="w-[640px] space-y-1.5 p-3">
+              {#for line in logLines}
+                <p class="whitespace-nowrap font-mono text-[13px] text-body">{ line }</p>
+              {/for}
+            </div>
+          </ScrollArea>
+        </ExampleBox>
+
+        <section id="accessibility" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+          <p class="mb-3 text-sm text-body">
+            Scrolling stays native, so keyboard and screen-reader support come for free — the custom thumb is
+            purely decorative on top:
+          </p>
+          <ul class="space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Native scroll</span> — wheel, trackpad, and touch are untouched; the thumb only mirrors the position</li>
+            <li><span class="font-medium text-ink">Keyboard</span> — the viewport takes <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">tabindex="0"</code> only while it overflows, so arrow keys, Page Up / Page Down, Space, and Home / End scroll it once focused</li>
+            <li><span class="font-medium text-ink">Landmark</span> — pass <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">label</code> and the viewport becomes a <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">role="region"</code> a screen-reader user can enter by name</li>
+            <li><span class="font-medium text-ink">Decorative thumb</span> — the bar is <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-hidden</code>; it is draggable with a pointer but never focusable</li>
+            <li><span class="font-medium text-ink">Reduced motion</span> — the fade-in / fade-out honors <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">prefers-reduced-motion</code></li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ScrollArea from '@/components/ui/ScrollArea.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece scroll-area';
+const usageImport = `import ScrollArea from '@/components/ui/ScrollArea.pzl';`;
+const usageMarkup = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface"></ScrollArea>`;
+
+const codeHero = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface">
+  <ul class="divide-y divide-border">
+    {#for item in ingredients}
+      <li class="px-4 py-3 text-sm text-body">{ item }</li>
+    {/for}
+  </ul>
+</ScrollArea>`;
+
+const codeHorizontal = `// orientation="horizontal" enables x-overflow and a bottom thumb.
+// Give the inner track an intrinsic width (w-max) so it can overflow.
+<ScrollArea orientation="horizontal" class="w-80 rounded-lg border border-border bg-surface p-2">
+  <div class="flex w-max gap-3">
+    {#for card in covers}
+      <div class="h-24 w-32 shrink-0 rounded-md bg-surface-sunken">{ card }</div>
+    {/for}
+  </div>
+</ScrollArea>`;
+
+const codeBoth = `// orientation="both" scrolls on both axes with a thumb on each edge.
+<ScrollArea orientation="both" maxHeight={ 240 } label="Log output" class="w-80 rounded-lg border border-border bg-surface">
+  <div class="w-[640px] space-y-1.5 p-3">
+    {#for line in logLines}
+      <p class="whitespace-nowrap font-mono text-[13px] text-body">{ line }</p>
+    {/for}
+  </div>
+</ScrollArea>`;
+
+export default class ScrollAreaDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeHorizontal,
+      codeBoth,
+      ingredients: [
+        'Extra-virgin olive oil', 'Garlic, minced', 'Yellow onion', 'Roma tomatoes',
+        'Fresh basil', 'Sea salt', 'Cracked black pepper', 'Parmesan, grated',
+        'Dried oregano', 'Red pepper flakes', 'Balsamic vinegar', 'Pine nuts',
+        'Spaghetti', 'Baby spinach', 'Lemon zest', 'Unsalted butter',
+      ],
+      covers: ['01', '02', '03', '04', '05', '06', '07', '08'],
+      logLines: [
+        '12:04:01  GET  /api/orders           200  14ms',
+        '12:04:02  GET  /api/orders/1042      200  9ms',
+        '12:04:04  POST /api/orders           201  38ms',
+        '12:04:05  GET  /api/inventory        200  22ms',
+        '12:04:07  PATCH /api/orders/1042     200  17ms',
+        '12:04:09  GET  /api/customers?page=2 200  31ms',
+        '12:04:11  DELETE /api/carts/abandon  204  6ms',
+        '12:04:12  GET  /api/reports/daily    500  altered upstream timeout',
+        '12:04:14  GET  /api/orders           200  11ms',
+        '12:04:16  POST /api/webhooks/stripe  200  44ms',
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Horizontal', href: '#horizontal' },
+        { label: 'Both axes', href: '#both' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+}
+</script>

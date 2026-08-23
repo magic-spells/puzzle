@@ -1,0 +1,329 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <div data-code-scroll class={ scrollClass } style={ scrollStyle } aria-hidden={ scrollHidden }>
+      {#if numbers}
+        <pre aria-hidden="true" class="sticky left-0 z-10 shrink-0 select-none bg-surface py-4 pl-4 pr-3 text-right font-mono text-[13px]/relaxed text-faint whitespace-pre">{ lineNumbers }</pre>
+      {/if}
+      <pre island data-code-pre class={ codeClass }>{ code }</pre>
+    </div>
+
+    {#if collapsedNow}
+      <div class="absolute inset-0 bg-gradient-to-b from-transparent to-surface"></div>
+      <div class="absolute inset-0 flex items-center justify-center">
+        <button
+          type="button"
+          class="cursor-pointer rounded-full border border-border bg-page px-4 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors hover:border-border-strong hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          @click={ expand }>
+          View Code
+        </button>
+      </div>
+    {:else}
+      <div class="absolute top-2.5 right-2.5 flex items-center gap-1">
+        {#if copy}
+          <button type="button" class={ iconBtnClass } aria-label={ copyLabel } @click={ copyCode }>
+            {#if copied}
+              <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path d="M3 8.5l3.5 3.5L13 5" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            {:else}
+              <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+                <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
+              </svg>
+            {/if}
+          </button>
+        {/if}
+        {#if collapsible}
+          <button type="button" class={ iconBtnClass } aria-label="Collapse code" @click={ collapse }>
+            <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M4 10l4-4 4 4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        {/if}
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { highlight } from '../../lib/highlight.js';
+
+// Code — a complete code panel in one piece: syntax highlighting (highlight.js
+// via lib/highlight.js, GitHub light/dark palette from the .hljs-* <style>
+// block at the bottom of this file), an optional line-number gutter, a corner
+// copy button, and an optional collapsed "View Code" preview that animates
+// open. Hand it a snippet string and it takes care of the rest.
+//
+// Requires: npm install highlight.js (declared in piece.json) plus the
+// lib/highlight.js registry file. The syntax-token CSS travels with this file
+// — the only piece that carries a <style> block, because highlight.js
+// generates its class names at runtime so they can't be Tailwind utilities.
+//
+//   <Code code={ snippet }/>                            framed, numbers, copy
+//   <Code code={ installCmd } numbers={ false }/>       command block
+//   <Code code={ snippet } bare={ true }
+//         collapsible={ true } maxHeight="450px"/>      embedded (ExampleBox)
+//
+// Props:
+//   code         the snippet string (required)
+//   lang         'javascript' | 'xml' | 'bash' — omit to auto-guess by shape
+//   numbers      line-number gutter, default true; sticky-left so it stays put
+//                while long lines scroll horizontally
+//   copy         corner copy button, default true
+//   collapsible  default false — true starts as a dimmed three-line peek under
+//                a fade with a centered "View Code" pill; expanding animates
+//                the height open (WAAPI on the scroll container, which lives
+//                OUTSIDE the {#if} branches so the element survives the state
+//                render). A chevron button collapses it back.
+//   bare         default false — true drops the border/rounding/background for
+//                embedding inside an existing frame
+//   maxHeight    e.g. '450px' — caps the expanded scroll area
+//   class        appended to the root
+//
+// Highlighting is applied imperatively AFTER render (mounted/afterUpdate): the
+// vdom renders the snippet as escaped text, then we swap in hljs-classed HTML.
+// The <pre> is an `island`, so the patcher never touches its children again —
+// without that, replacing the text node with innerHTML detaches the node the
+// patcher writes into, and a later `code` change lands in a node that is no
+// longer in the document (the old snippet stays on screen). The island makes
+// this piece the sole owner of that subtree; _applyHighlight keys its work on
+// lang + code so unrelated re-renders (copy feedback, expand/collapse) are
+// no-ops and a real prop change always re-highlights.
+const COLLAPSED_MAX = '7rem';
+const COPIED_MS = 1500;
+
+export default class Code extends PuzzleView {
+  created() {
+    this._copyTimer = null;
+    this._hlKey = null;
+    this.setData({ copied: false, expanded: false });
+  }
+
+  destroyed() {
+    if (this._copyTimer) clearTimeout(this._copyTimer);
+  }
+
+  _applyHighlight() {
+    const pre = this.element?.querySelector('[data-code-pre]');
+    if (!pre) return;
+    const code = this.props.code || '';
+    const key = `${this.props.lang || ''} ${code}`;
+    if (this._hlKey === key) return;
+    this._hlKey = key;
+    if (!code) {
+      pre.textContent = '';
+      return;
+    }
+    const html = highlight(code, this.props.lang);
+    if (html != null) pre.innerHTML = html;
+    else pre.textContent = code; // highlighter failed: plain text fallback
+  }
+
+  mounted() {
+    this._applyHighlight();
+  }
+
+  afterUpdate() {
+    this._applyHighlight();
+  }
+
+  _reducedMotion() {
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  // Animate the scroll container between its measured before/after heights.
+  // The re-render in `flip` swaps the overlay branch and the max-height style;
+  // the WAAPI animation then plays over the final layout, so no fill cleanup.
+  // max-height is the animated property (not height — the state's own
+  // max-height style would clamp height keyframes and snap the collapse), and
+  // overflow is pinned to hidden for the flight so no scrollbar flashes by.
+  _animateHeight(flip) {
+    const el = this.element?.querySelector('[data-code-scroll]');
+    if (!el || this._reducedMotion()) {
+      flip();
+      return;
+    }
+    const from = el.getBoundingClientRect().height;
+    flip();
+    const to = el.getBoundingClientRect().height;
+    if (from === to) return;
+    el.style.overflow = 'hidden';
+    const anim = el.animate([{ maxHeight: `${from}px` }, { maxHeight: `${to}px` }], {
+      duration: 220,
+      easing: 'ease-out',
+    });
+    anim.onfinish = anim.oncancel = () => {
+      el.style.overflow = '';
+    };
+  }
+
+  data(params, props) {
+    const code = props.code || '';
+    const numbers = props.numbers !== false;
+    const copy = props.copy !== false;
+    const collapsible = !!props.collapsible;
+    const collapsedNow = collapsible && !this.getData().expanded;
+    const lines = code.split('\n').length;
+    return {
+      code,
+      // `lang` is not read by the template — it is returned so a lang-only prop
+      // change still commits a render and therefore reaches afterUpdate, where
+      // _applyHighlight re-highlights the island.
+      lang: props.lang || '',
+      numbers,
+      copy,
+      collapsible,
+      collapsedNow,
+      copied: !!this.getData().copied,
+      copyLabel: this.getData().copied ? 'Copied' : 'Copy to clipboard',
+      lineNumbers: this.memo('nums', [lines], () =>
+        Array.from({ length: lines }, (_, i) => i + 1).join('\n')
+      ),
+      scrollHidden: collapsedNow ? 'true' : false,
+      scrollClass: [
+        'flex overflow-auto',
+        collapsedNow ? 'pointer-events-none select-none opacity-60' : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      scrollStyle: collapsedNow
+        ? `max-height:${COLLAPSED_MAX};`
+        : props.maxHeight
+          ? `max-height:${props.maxHeight};`
+          : '',
+      codeClass: [
+        'flex-1 py-4 font-mono text-[13px]/relaxed text-body whitespace-pre',
+        numbers ? 'pl-1' : 'pl-4',
+        copy || collapsible ? 'pr-16' : 'pr-4',
+      ].join(' '),
+      rootClass: [
+        'relative',
+        props.bare ? '' : 'overflow-hidden rounded-lg border border-border bg-surface',
+        props.class || '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      iconBtnClass:
+        'inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-muted ' +
+        'transition-colors hover:bg-surface-sunken hover:text-ink ' +
+        'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+    };
+  }
+
+  events = {
+    expand: () => {
+      this._animateHeight(() => {
+        this.setData({ expanded: true });
+        this.refresh();
+      });
+    },
+    collapse: () => {
+      this._animateHeight(() => {
+        this.setData({ expanded: false });
+        this.refresh();
+      });
+    },
+    // Mirrors CopyButton: the checkmark is gated on the clipboard promise, so a
+    // rejected write (permissions, insecure context) shows no feedback and
+    // never leaves an unhandled rejection behind.
+    copyCode: () => {
+      const code = this.props.code || '';
+      if (!navigator.clipboard?.writeText) return;
+      navigator.clipboard.writeText(code).then(
+        () => {
+          this.setData({ copied: true });
+          this.refresh();
+          if (this._copyTimer) clearTimeout(this._copyTimer);
+          this._copyTimer = setTimeout(() => {
+            this._copyTimer = null;
+            this.setData({ copied: false });
+            this.refresh();
+          }, COPIED_MS);
+        },
+        () => {}
+      );
+    },
+  };
+}
+</script>
+
+<style>
+/*
+ * Syntax tokens for the highlight.js classes that lib/highlight.js emits.
+ * GitHub Light / GitHub Dark, swapped through `light-dark()` like the
+ * pieces.css theme tokens.
+ *
+ * This block is deliberately NOT `scoped`: _applyHighlight() writes the
+ * highlighted markup with `pre.innerHTML`, so the .hljs-* spans are created
+ * outside the vdom and would never carry a per-component scope marker.
+ * Global emission is what makes them match.
+ */
+:root {
+  --hl-comment: light-dark(#6e7781, #8b949e);
+  --hl-keyword: light-dark(#cf222e, #ff7b72);
+  --hl-entity: light-dark(#8250df, #d2a8ff);   /* function/class titles */
+  --hl-constant: light-dark(#0550ae, #79c0ff); /* attrs, numbers, variables, meta */
+  --hl-string: light-dark(#0a3069, #a5d6ff);
+  --hl-tag: light-dark(#116329, #7ee787);      /* markup tag names */
+  --hl-builtin: light-dark(#953800, #ffa657);
+  --hl-expr: light-dark(#6639ba, #d2a8ff);     /* Puzzle { expression } braces */
+  --hl-directive: light-dark(#cf222e, #ff7b72); /* Puzzle @event= / :prop attrs */
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-doctag,
+.hljs-template-tag,
+.hljs-selector-tag {
+  color: var(--hl-keyword);
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_ {
+  color: var(--hl-entity);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-meta,
+.hljs-selector-attr,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--hl-constant);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-meta .hljs-string {
+  color: var(--hl-string);
+}
+.hljs-name,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--hl-tag);
+}
+.hljs-built_in,
+.hljs-type {
+  color: var(--hl-builtin);
+}
+
+/*
+ * Puzzle template tokens (lib/puzzle-lang.js). `{ expr }` interpolation and
+ * `{#if}`/`{/for}` block tags share one expression color — the directive name
+ * inside a block tag falls through to .hljs-keyword above — while `@event=`
+ * and `:prop` bindings read as behavior, not data.
+ */
+.hljs-template-variable {
+  color: var(--hl-expr);
+}
+.hljs-attr.directive_ {
+  color: var(--hl-directive);
+}
+</style>

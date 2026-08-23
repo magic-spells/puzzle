@@ -1,0 +1,34 @@
+{
+  "name": "puzzle-pieces-demo",
+  "version": "0.7.0",
+  "description": "Dev harness + showcase app for the puzzle-pieces component library",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "go run ../../../compiler/cmd/puzzle dev --port 3070",
+    "build": "go run ../../../compiler/cmd/puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/bottom-sheet": "^2.0.2",
+    "@magic-spells/dialog-panel": "^2.0.1",
+    "@magic-spells/frame-engine": "^1.0.1",
+    "@magic-spells/morph-engine": "^0.1.2",
+    "@magic-spells/physics-engine": "^1.0.1",
+    "@magic-spells/puzzle": "file:../../..",
+    "@magic-spells/scroll-stack": "^0.1.0",
+    "@magic-spells/sheet": "^0.1.1",
+    "@tiptap/core": "3.30.0",
+    "@tiptap/extension-list": "3.30.0",
+    "@tiptap/extension-table": "3.30.0",
+    "@tiptap/extension-text-align": "3.30.0",
+    "@tiptap/markdown": "3.30.0",
+    "@tiptap/pm": "3.30.0",
+    "@tiptap/starter-kit": "3.30.0",
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "tailwindcss": "^4.1.14"
+  }
+}

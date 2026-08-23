@@ -1,0 +1,203 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Navigation Menu</h1>
+        <p class="mt-2 text-body">
+          A horizontal site-header navigation rendered from an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">items</code>
+          array. Plain links sit alongside flyout triggers whose children open as a panel of link cards, with
+          delayed hover intent, keyboard support, and viewport-clamped panels. It uses the accessible
+          disclosure pattern — real
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-expanded</code>
+          buttons over plain
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<a>' }</code>
+          links, not menubar roles.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
+          <span class="text-sm font-semibold text-ink">Acme</span>
+          <NavigationMenu items={ heroItems }/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          No npm dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="active" title="Active route" code={ codeActive }>
+          <div class="flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
+            <span class="text-sm font-semibold text-ink">Acme</span>
+            <NavigationMenu items={ heroItems } activePath="/pricing"/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="single-column" title="Single column" code={ codeSingle }>
+          <div class="flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
+            <span class="text-sm font-semibold text-ink">Acme</span>
+            <NavigationMenu items={ resourceItems }/>
+          </div>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">Triggers and their flyouts support the disclosure-pattern keys:</p>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Enter / Space</span> — toggle the focused trigger's panel</li>
+            <li><span class="font-medium text-ink">Down arrow</span> — open the panel and move into its first link</li>
+            <li><span class="font-medium text-ink">Up / Down arrows</span> — move link focus inside an open panel</li>
+            <li><span class="font-medium text-ink">Tab</span> — move through the links in natural order</li>
+            <li><span class="font-medium text-ink">Escape</span> — close the panel and return focus to the trigger</li>
+          </ul>
+          <ExampleBox code={ codeKeyboard }>
+            <div class="flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
+              <span class="text-sm font-semibold text-ink">Acme</span>
+              <NavigationMenu items={ heroItems }/>
+            </div>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import NavigationMenu from '@/components/ui/NavigationMenu.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece navigation-menu';
+const usageImport = `import NavigationMenu from '@/components/ui/NavigationMenu.pzl';`;
+const usageMarkup = `<NavigationMenu items={ nav } />`;
+
+const codeHero = `const nav = [
+  {
+    label: 'Products',
+    children: [
+      { label: 'Analytics', href: '/products/analytics',
+        description: 'Real-time dashboards and funnels for every event you track.' },
+      { label: 'Automation', href: '/products/automation',
+        description: 'Trigger workflows from any signal without writing glue code.' },
+      { label: 'Data Warehouse', href: '/products/warehouse',
+        description: 'Query your raw events with standard SQL, no pipeline to babysit.' },
+      { label: 'Integrations', href: '/products/integrations',
+        description: 'Two hundred connectors that sync both ways out of the box.' },
+    ],
+  },
+  { label: 'Pricing', href: '/pricing' },
+  { label: 'Docs', href: '/docs' },
+];
+
+// >4 children lay out grid-cols-2; the panel is w-max max-w-lg.
+<NavigationMenu items={ nav } />`;
+
+const codeActive = `// The plain link or child whose href === activePath gets the active
+// underline treatment and aria-current="page".
+<NavigationMenu items={ nav } activePath="/pricing" />`;
+
+const codeSingle = `// Four or fewer children lay out in a single column.
+const nav = [
+  {
+    label: 'Resources',
+    children: [
+      { label: 'Documentation', href: '/docs',
+        description: 'Guides, API reference, and tutorials.' },
+      { label: 'Support', href: '/support',
+        description: 'Reach the team and browse the help center.' },
+    ],
+  },
+  { label: 'Blog', href: '/blog' },
+];
+
+<NavigationMenu items={ nav } />`;
+
+const codeKeyboard = `<NavigationMenu items={ nav } />`;
+
+export default class NavigationMenuDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeActive,
+      codeSingle,
+      codeKeyboard,
+      heroItems: [
+        {
+          label: 'Products',
+          children: [
+            {
+              label: 'Analytics',
+              href: '/products/analytics',
+              description: 'Real-time dashboards and funnels for every event you track.',
+            },
+            {
+              label: 'Automation',
+              href: '/products/automation',
+              description: 'Trigger workflows from any signal without writing glue code.',
+            },
+            {
+              label: 'Data Warehouse',
+              href: '/products/warehouse',
+              description: 'Query your raw events with standard SQL, no pipeline to babysit.',
+            },
+            {
+              label: 'Integrations',
+              href: '/products/integrations',
+              description: 'Two hundred connectors that sync both ways out of the box.',
+            },
+          ],
+        },
+        { label: 'Pricing', href: '/pricing' },
+        { label: 'Docs', href: '/docs' },
+      ],
+      resourceItems: [
+        {
+          label: 'Resources',
+          children: [
+            {
+              label: 'Documentation',
+              href: '/docs',
+              description: 'Guides, API reference, and tutorials.',
+            },
+            {
+              label: 'Support',
+              href: '/support',
+              description: 'Reach the team and browse the help center.',
+            },
+          ],
+        },
+        { label: 'Blog', href: '/blog' },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Active route', href: '#active' },
+        { label: 'Single column', href: '#single-column' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+}
+</script>

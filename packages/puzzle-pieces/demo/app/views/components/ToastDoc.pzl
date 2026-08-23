@@ -1,0 +1,132 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Toast</h1>
+        <p class="mt-2 text-body">
+          An imperative
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">toast()</code>
+          API with a host that mounts once in your layout — variants, pausable
+          auto-dismiss, and corner positioning.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <Button variant="outline" @press={ fireDefault }>Default</Button>
+          <Button variant="outline" @press={ fireSuccess }>Success</Button>
+          <Button variant="outline" @press={ fireDanger }>Danger</Button>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Toast is two files — the store and public API in toast.js, and the
+          Toaster host that renders them. Copy both into your app:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="sticky" title="Sticky and dismissal" code={ codeSticky }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Button variant="outline" @press={ fireSticky }>Sticky toast</Button>
+            <Button variant="ghost" @press={ clearAll }>Clear all</Button>
+          </div>
+        </ExampleBox>
+
+        <section id="setup" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Setup</h2>
+          <p class="mb-3 text-sm text-body">
+            Mount a single Toaster host once, near the root of your app layout, and
+            pick a corner with the position prop. Then call
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">toast()</code>
+            from anywhere — the host subscribes to the store and renders every
+            notification.
+          </p>
+          <CodeBlock code={ setupCode }/>
+          <p class="mt-3 text-sm text-muted">
+            This demo's layout already mounts a Toaster, which is why the buttons
+            above just work.
+          </p>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast, clearToasts } from '@/components/ui/toast.js';
+
+// Docs page for Toast — follows the Button exemplar shape (header → hero
+// ExampleBox → Installation → examples → Toc). Toast ships as two files, so
+// installation copies both toast.js and Toaster.pzl.
+const installCmd = 'puzzle add piece toast';
+const usageImport = `import { toast } from '@/components/ui/toast.js';`;
+const usageMarkup = `toast('Your draft was saved.');`;
+
+const codeHero = `import { toast } from '@/components/ui/toast.js';
+
+toast('Your draft was saved.');
+toast({ title: 'Published', message: 'The post is now live.', variant: 'success' });
+toast({ title: 'Upload failed', message: 'Check your connection.', variant: 'danger' });`;
+
+const codeSticky = `import { toast, clearToasts } from '@/components/ui/toast.js';
+
+// duration: 0 never auto-dismisses — it stays until closed
+toast({ title: 'Sticky', message: 'This one stays until dismissed.', duration: 0 });
+
+// dismiss every visible toast at once
+clearToasts();`;
+
+const setupCode = `// app/layouts/AppLayout.pzl — mount the host once, near the root
+<Toaster position="bottom-right" />
+
+// then, from any view or module
+import { toast } from '@/components/ui/toast.js';
+toast('Saved!');`;
+
+export default class ToastDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeSticky,
+      setupCode,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Sticky and dismissal', href: '#sticky' },
+        { label: 'Setup', href: '#setup' },
+      ],
+    };
+  }
+
+  events = {
+    fireDefault: () => toast('Your draft was saved.'),
+    fireSuccess: () => toast({ title: 'Published', message: 'The post is now live.', variant: 'success' }),
+    fireDanger: () => toast({ title: 'Upload failed', message: 'Check your connection and retry.', variant: 'danger' }),
+    fireSticky: () => toast({ title: 'Sticky', message: 'This one stays until dismissed.', duration: 0 }),
+    clearAll: () => clearToasts(),
+  };
+}
+</script>

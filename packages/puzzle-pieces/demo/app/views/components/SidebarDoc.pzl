@@ -1,0 +1,315 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Sidebar</h1>
+        <p class="mt-2 text-body">
+          A config-first app-shell navigation rail. One
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">items</code>
+          array renders grouped links with icons and badges, animated collapsible submenus, and
+          active-route highlighting — plus an optional-controlled
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">collapsed</code>
+          icon-only mode with header and footer slots.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex h-[440px] w-full overflow-hidden rounded-xl border border-border">
+          <Sidebar items={ navItems } activePath="/reports/overview" label="Main">
+            <div slot="header" class="flex items-center gap-2 border-b border-border px-4 py-3.5">
+              <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand text-sm font-bold text-brand-ink">P</span>
+              <span class="truncate text-sm font-semibold text-ink">Pieceworks</span>
+            </div>
+            <div slot="footer" class="flex items-center gap-2 rounded-md px-2 py-1.5">
+              <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-ink">AR</span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-medium text-ink">Ada Reese</span>
+                <span class="block truncate text-xs text-muted">ada@example.com</span>
+              </span>
+            </div>
+          </Sidebar>
+          <div class="flex-1 bg-page p-8">
+            <div class="mb-4 h-6 w-40 rounded bg-surface-sunken"></div>
+            <div class="space-y-2.5">
+              <div class="h-3 w-full rounded bg-surface-sunken"></div>
+              <div class="h-3 w-11/12 rounded bg-surface-sunken"></div>
+              <div class="h-3 w-3/4 rounded bg-surface-sunken"></div>
+            </div>
+          </div>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          This is the rail only. Compose off-canvas mobile behavior at the app level — render the
+          Sidebar inside a Sheet on small screens and inline it from
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">md:</code>
+          up. The rail expects a bounded-height parent.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="collapsed" title="Collapsed rail" code={ codeCollapsed }>
+          <div class="w-full">
+            <div class="mb-4 flex justify-center">
+              <button
+                type="button"
+                class="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                @click={ toggleCollapsed }>
+                { collapsed ? 'Expand' : 'Collapse' } sidebar
+              </button>
+            </div>
+            <div class="flex h-[380px] overflow-hidden rounded-xl border border-border">
+              <Sidebar items={ navItems } activePath="/reports/overview" collapsed={ collapsed } @collapse={ setCollapsed }/>
+              <div class="flex-1 bg-page p-8">
+                <div class="mb-4 h-6 w-40 rounded bg-surface-sunken"></div>
+                <div class="space-y-2.5">
+                  <div class="h-3 w-full rounded bg-surface-sunken"></div>
+                  <div class="h-3 w-3/4 rounded bg-surface-sunken"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="submenus" title="Collapsible submenus" code={ codeSubmenus }>
+          <div class="flex h-[420px] w-72 overflow-hidden rounded-xl border border-border">
+            <Sidebar items={ navItems } activePath="/reports/traffic" label="Main"/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="slots" title="Header and footer slots" code={ codeSlots }>
+          <div class="flex h-[380px] w-72 overflow-hidden rounded-xl border border-border">
+            <Sidebar items={ shortItems } activePath="/inbox">
+              <div slot="header" class="flex items-center gap-2 border-b border-border px-4 py-3.5">
+                <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand text-sm font-bold text-brand-ink">P</span>
+                <span class="truncate text-sm font-semibold text-ink">Pieceworks</span>
+              </div>
+              <div slot="footer" class="flex items-center gap-2 rounded-md px-2 py-1.5">
+                <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-ink">AR</span>
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-medium text-ink">Ada Reese</span>
+                  <span class="block truncate text-xs text-muted">ada@example.com</span>
+                </span>
+              </div>
+            </Sidebar>
+            <div class="flex-1 bg-page p-6">
+              <div class="h-5 w-32 rounded bg-surface-sunken"></div>
+            </div>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20 max-w-3xl">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <ul class="list-disc space-y-2 pl-5 text-sm text-body">
+          <li>
+            The rail is a real
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<nav>' }</code>
+            with an accessible <strong class="font-medium text-ink">label</strong> prop (default
+            <em>Main</em>), and links live in a semantic
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<ul>' }</code>.
+          </li>
+          <li>
+            The link matching <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">activePath</code>
+            — top-level or submenu child — is marked
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-current="page"</code>
+            alongside the visual tint, so it is announced as the current page.
+          </li>
+          <li>
+            Each submenu is a disclosure: the button carries
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-expanded</code>
+            and <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-controls</code>;
+            the closed region is <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">inert</code>
+            + aria-hidden, so its links leave the tab order and the accessibility tree.
+          </li>
+          <li>
+            In the collapsed rail, labels stay mounted and fade to
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">opacity-0</code>
+            rather than becoming screen-reader-only; each icon link or button keeps a
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">title</code>
+            for its sighted tooltip while the mounted label remains its accessible name.
+          </li>
+          <li>
+            Group headings stay in the accessibility tree when collapsed: their animated grid
+            track loses height, but the heading itself remains present.
+          </li>
+          <li>
+            A collapsed parent trigger carries
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-haspopup</code>
+            and swaps <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-controls</code>
+            from the inline region to the flyout panel. The panel is labelled by the trigger,
+            and Escape dismisses it and refocuses the button.
+          </li>
+          <li>
+            The collapse control is the rail's right edge itself: a full-height button with
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-pressed</code>
+            and a state-aware label. It is keyboard-reachable, and focusing it reveals the same
+            highlight and arrow that hovering does — no pointer required.
+          </li>
+          <li>
+            Every link and button shows a visible focus ring (unconditional outline color, revealed
+            on <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">:focus-visible</code>),
+            and the width and submenu animations honor
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">prefers-reduced-motion</code>.
+          </li>
+        </ul>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Sidebar from '@/components/ui/Sidebar.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Sidebar — follows the TableDoc exemplar shape.
+const installCmd = 'puzzle add piece sidebar';
+const usageImport = `import Sidebar from '@/components/ui/Sidebar.pzl';`;
+const usageMarkup = `<Sidebar items={ items } activePath="/reports/overview" label="Main"></Sidebar>`;
+
+// Icon paths are 24×24 stroked `d` strings (fill none) — the config-first icon slot.
+const icons = {
+  home: 'M3 12l9-7 9 7M5 10v10h14V10',
+  chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  inbox: 'M4 13h4l2 3h4l2-3h4M4 13V6a2 2 0 012-2h12a2 2 0 012 2v7M4 13v5a2 2 0 002 2h12a2 2 0 002-2v-5',
+  users: 'M17 20v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M10 10a3 3 0 100-6 3 3 0 000 6M22 20v-2a4 4 0 00-3-3.87M16 4.13A4 4 0 0116 12',
+  settings: 'M12 15a3 3 0 100-6 3 3 0 000 6M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-2.82 1.17V21a2 2 0 11-4 0v-.09A1.65 1.65 0 006.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 003.4 14.6a1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09A1.65 1.65 0 003.4 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009.4 3.4V3a2 2 0 114 0v.09a1.65 1.65 0 001.82 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0020.6 9.4V10a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z',
+};
+
+const navItems = [
+  { group: 'Overview' },
+  { label: 'Home', href: '/home', icon: icons.home },
+  {
+    label: 'Reports',
+    icon: icons.chart,
+    badge: '3',
+    children: [
+      { label: 'Overview', href: '/reports/overview' },
+      { label: 'Traffic', href: '/reports/traffic', badge: 'New' },
+      { label: 'Conversions', href: '/reports/conversions' },
+    ],
+  },
+  { label: 'Inbox', href: '/inbox', icon: icons.inbox, badge: '12' },
+  { divider: true },
+  { group: 'Workspace' },
+  { label: 'Team', href: '/team', icon: icons.users },
+  { label: 'Settings', href: '/settings', icon: icons.settings },
+];
+
+const shortItems = [
+  { group: 'Overview' },
+  { label: 'Home', href: '/home', icon: icons.home },
+  { label: 'Inbox', href: '/inbox', icon: icons.inbox, badge: '12' },
+  { label: 'Team', href: '/team', icon: icons.users },
+];
+
+const codeHero = `const items = [
+  { group: 'Overview' },
+  { label: 'Home', href: '/home', icon: 'M3 12l9-7 9 7M5 10v10h14V10' },
+  {
+    label: 'Reports', icon: reportsIcon, badge: '3',
+    children: [
+      { label: 'Overview', href: '/reports/overview' },
+      { label: 'Traffic', href: '/reports/traffic', badge: 'New' },
+    ],
+  },
+  { label: 'Inbox', href: '/inbox', icon: inboxIcon, badge: '12' },
+  { divider: true },
+  { group: 'Workspace' },
+  { label: 'Settings', href: '/settings', icon: settingsIcon },
+];
+
+// icon is an SVG path d string on a 24×24 grid (stroke, fill none).
+<Sidebar items={ items } activePath="/reports/overview" label="Main">
+  <div slot="header">…brand…</div>
+  <div slot="footer">…user card…</div>
+</Sidebar>`;
+
+const codeCollapsed = `// collapsed is OPTIONAL-CONTROLLED: pass it and the parent owns it.
+// @collapse(next) fires from the rail's built-in edge toggle too —
+// hover or focus the right border to reveal it.
+<Sidebar items={ items } activePath={ path }
+         collapsed={ collapsed } @collapse={ setCollapsed } />
+
+events = { setCollapsed: (next) => this.setData('collapsed', next) };
+
+// Collapsed = an icon-only w-[3.75rem] rail. Icons never move: rows keep px-3
+// in both states and the rail is exactly 2× the icon's center offset. Labels
+// and badges fade and clip; group headers fade out and collapse to zero height.
+// A parent with children pops its submenu out to the right; Escape, an outside
+// click, or a scroll dismisses it.`;
+
+const codeSubmenus = `// An item with a children array renders a disclosure button + an
+// animated collapse region (inert + aria-hidden when closed). The
+// submenu holding the active child auto-opens on first render.
+const items = [
+  {
+    label: 'Reports', icon: reportsIcon, badge: '3',
+    children: [
+      { label: 'Overview', href: '/reports/overview' },
+      { label: 'Traffic', href: '/reports/traffic', badge: 'New' },
+      { label: 'Conversions', href: '/reports/conversions' },
+    ],
+  },
+];
+
+<Sidebar items={ items } activePath="/reports/traffic" />`;
+
+const codeSlots = `// header pins to the top, footer to the bottom (mt-auto).
+// Both collapse cleanly when nothing is slotted.
+<Sidebar items={ items } activePath="/inbox">
+  <div slot="header">…logo + workspace name…</div>
+  <div slot="footer">…avatar + account…</div>
+</Sidebar>`;
+
+export default class SidebarDoc extends PuzzleView {
+  created() {
+    this.setData({ collapsed: false });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeCollapsed,
+      codeSubmenus,
+      codeSlots,
+      navItems,
+      shortItems,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Collapsed rail', href: '#collapsed' },
+        { label: 'Collapsible submenus', href: '#submenus' },
+        { label: 'Header and footer slots', href: '#slots' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    setCollapsed: (next) => this.setData('collapsed', next),
+    toggleCollapsed: () => this.setData('collapsed', !this.getData().collapsed),
+  };
+}
+</script>

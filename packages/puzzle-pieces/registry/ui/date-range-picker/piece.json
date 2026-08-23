@@ -1,0 +1,8 @@
+{
+  "name": "date-range-picker",
+  "description": "Start/end range selection in a field-shaped trigger + popover composing Calendar: controlled {start,end} ISO value, in-between range + hover-preview shading, optional-controlled open, one or two months, and optional presets",
+  "files": ["DateRangePicker.pzl"],
+  "registryDependencies": ["calendar", "lib/date-math.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

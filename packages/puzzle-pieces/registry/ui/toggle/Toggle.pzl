@@ -1,0 +1,91 @@
+<puzzle-view>
+  <button
+    type="button"
+    class={ classes }
+    aria-pressed={ pressedAttr }
+    disabled={ disabled }
+    @click={ handleClick }>
+    <Slot/>
+  </button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Toggle — a two-state <button aria-pressed>: a TOOL state (bold/italic in a
+// text editor, grid/list view), not a call to action. Controlled: the parent
+// owns `pressed` and flips it from @change. The default <Slot/> holds the
+// content — an icon, text, or both. Pressed reads as a filled well
+// (bg-faint text-ink); unpressed is ghost-like (transparent, hover raises a
+// subtle surface). The class recipes here match ToggleGroup's buttons so a lone
+// Toggle and a grouped one look like the same control.
+//
+//   <Toggle pressed={ bold } @change={ setBold }>B</Toggle>
+//   <Toggle variant="outline" pressed={ muted } @change={ setMuted }>Mute</Toggle>
+//   <Toggle size="lg" pressed={ starred } @change={ setStarred }>★ Star</Toggle>
+//
+// Props:
+//   pressed   boolean — the pressed state (controlled by the parent)
+//   variant   'default' (ghost, no border) | 'outline' (bordered)
+//   size      'sm' | 'md' (default) | 'lg' — mirrors Button's size scale
+//   disabled  boolean — dims the button and blocks the callback
+//   class     appended last to the root <button>
+// Callback:
+//   @change(pressed, event)  fired on click with the NEXT pressed value (value-
+//                            first); typeof-guarded so it's optional
+//
+// aria-pressed is emitted in STRING form ('true' | 'false') — a boolean-valued
+// attr would compile to a bare/absent attribute and lose the state semantics.
+const BASE =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
+  'rounded-lg font-medium cursor-pointer transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+
+// Size scale mirrors Button (sm/md/lg → same heights and text sizes).
+const SIZE = {
+  sm: 'h-8 px-3 text-sm',
+  md: 'h-9 px-4 text-sm',
+  lg: 'h-10 px-5 text-base',
+};
+
+// Pressed / unpressed recipes per variant. Pressed = a filled well (bg-faint
+// text-ink); unpressed is transparent and only raises a surface on hover.
+const VARIANT = {
+  default: {
+    off: 'bg-transparent text-body hover:bg-surface-sunken hover:text-ink',
+    on: 'bg-faint text-ink hover:bg-faint',
+  },
+  outline: {
+    off: 'border border-border bg-transparent text-body hover:bg-surface-sunken hover:text-ink',
+    on: 'border border-border bg-faint text-ink hover:bg-faint',
+  },
+};
+
+export default class Toggle extends PuzzleView {
+  data(params, props) {
+    const pressed = !!props.pressed;
+    const variant = VARIANT[props.variant] || VARIANT.default;
+    return {
+      pressed,
+      pressedAttr: pressed ? 'true' : 'false',
+      disabled: !!props.disabled,
+      classes: [
+        BASE,
+        SIZE[props.size] || SIZE.md,
+        pressed ? variant.on : variant.off,
+        props.class || '',
+      ].join(' '),
+    };
+  }
+
+  events = {
+    handleClick: (event) => {
+      const { pressed, disabled } = this.getData();
+      if (disabled) return;
+      const { change } = this.props;
+      if (typeof change === 'function') change(!pressed, event);
+    },
+  };
+}
+</script>

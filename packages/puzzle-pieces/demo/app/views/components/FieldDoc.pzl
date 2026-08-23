@@ -1,0 +1,115 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Field</h1>
+        <p class="mt-2 text-body">
+          The workhorse labeled text input — label, hint or error helper text, and ARIA wiring come
+          built in. Controlled: the parent owns the value and updates it from
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-sm">
+          <Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="hint" title="Hint" code={ codeHint }>
+          <div class="w-full max-w-sm">
+            <Field label="Company" hint="As it appears on your invoice" placeholder="Acme Inc." />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="error" title="Error" code={ codeError }>
+          <div class="w-full max-w-sm">
+            <Field label="Email" value="taken@example.com" error="That address is already in use" />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
+          <div class="w-full max-w-sm">
+            <Field label="Read-only" value="Locked field" disabled />
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Field from '@/components/ui/Field.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Field — follows the ButtonDoc exemplar shape.
+const installCmd = 'puzzle add piece field';
+const usageImport = `import Field from '@/components/ui/Field.pzl';`;
+const usageMarkup = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />`;
+
+const codeHero = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />
+
+// parent
+events = {
+  setName: (v) => this.setData('name', v),
+};`;
+
+const codeHint = `<Field label="Company" hint="As it appears on your invoice" placeholder="Acme Inc." />`;
+
+const codeError = `<Field label="Email" value="taken@example.com" error="That address is already in use" />`;
+
+const codeDisabled = `<Field label="Read-only" value="Locked field" disabled />`;
+
+export default class FieldDoc extends PuzzleView {
+  created() {
+    this.setData({ name: '' });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeHint,
+      codeError,
+      codeDisabled,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Hint', href: '#hint' },
+        { label: 'Error', href: '#error' },
+        { label: 'Disabled', href: '#disabled' },
+      ],
+    };
+  }
+
+  events = {
+    setName: (v) => this.setData('name', v),
+  };
+}
+</script>

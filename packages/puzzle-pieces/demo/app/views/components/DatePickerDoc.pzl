@@ -1,0 +1,196 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Date Picker</h1>
+        <p class="mt-2 text-body">
+          A Field-shaped trigger and popover that composes the Calendar piece: a controlled ISO
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>,
+          a locale-aware trigger label, label / hint / error, and an optional trigger↔panel morph.
+          It is parent-owned — it forwards Calendar's
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          up, closes, and returns focus to the trigger.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-xs">
+          <DatePicker
+            label="Ship date"
+            hint="We deliver Monday through Friday."
+            value={ shipDate }
+            @change={ setShipDate } />
+        </div>
+      </ExampleBox>
+
+      <p class="mt-4 text-sm text-muted">
+        DatePicker composes the Calendar piece inside a popover and auto-flips it above the trigger when
+        the trigger sits near the bottom of the viewport.
+      </p>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the picker, the Calendar it composes, and the date helper they share:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          date-math.js is a shared lib file — both pieces import it as ../../lib/date-math.js. Keep it in app/lib/.
+        </p>
+        <CodeBlock code={ morphInstall } class="mt-4"/>
+        <p class="mt-3 text-sm text-muted">
+          Only needed for the morph prop — DatePicker imports @magic-spells/morph-engine lazily and degrades
+          to a plain popover without it (or under reduced motion).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="error" title="Error state" code={ codeError }>
+          <div class="w-full max-w-xs">
+            <DatePicker
+              label="Deadline"
+              error="Please choose a date."
+              value={ errorDate }
+              @change={ setErrorDate } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="morph" title="Morph" code={ codeMorph }>
+          <div class="w-full max-w-xs">
+            <DatePicker
+              label="Event date"
+              value={ morphDate }
+              morph={ true }
+              @change={ setMorphDate } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="bounds" title="Bounds" code={ codeBounds }>
+          <div class="w-full max-w-xs">
+            <DatePicker
+              label="Within July"
+              min="2026-07-01"
+              max="2026-07-31"
+              value={ boundedDate }
+              @change={ setBoundedDate } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="formats" title="Formats" code={ codeFormats }>
+          <div class="grid w-full max-w-lg gap-4 sm:grid-cols-2">
+            <DatePicker label="short" format="short" value={ fmtDate } @change={ setFmtDate } />
+            <DatePicker label="medium" format="medium" value={ fmtDate } @change={ setFmtDate } />
+            <DatePicker label="long" format="long" value={ fmtDate } @change={ setFmtDate } />
+            <DatePicker label="full" format="full" value={ fmtDate } @change={ setFmtDate } />
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DatePicker from '@/components/ui/DatePicker.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for DatePicker — follows the ButtonDoc exemplar (header → hero ExampleBox
+// → Installation → titled example sections → Toc). Parent-owned: the view holds each
+// ISO value and DatePicker forwards Calendar's @change back into it (lifted from the
+// DatePicker section of the old Forms view).
+
+// Three files: the picker, the Calendar it composes, and the shared date helper.
+const installCmd = 'puzzle add piece date-picker';
+const usageImport = `import DatePicker from '@/components/ui/DatePicker.pzl';`;
+const usageMarkup = `<DatePicker label="Ship date" hint="We deliver Monday through Friday." value={ shipDate } @change={ setShipDate } />`;
+
+const morphInstall = 'npm install @magic-spells/morph-engine';
+
+const codeHero = `<DatePicker
+  label="Ship date"
+  hint="We deliver Monday through Friday."
+  value={ shipDate }
+  @change={ setShipDate } />
+
+// parent
+events = {
+  setShipDate: (iso) => this.setData('shipDate', iso),
+};`;
+
+const codeError = `<DatePicker
+  label="Deadline"
+  error="Please choose a date."
+  value={ date }
+  @change={ setDate } />`;
+
+const codeMorph = `// npm install @magic-spells/morph-engine
+<DatePicker
+  label="Event date"
+  value={ date }
+  morph={ true }
+  @change={ setDate } />`;
+
+const codeBounds = `<DatePicker
+  label="Within July"
+  min="2026-07-01"
+  max="2026-07-31"
+  value={ date }
+  @change={ setDate } />`;
+
+const codeFormats = `<!-- format: short | medium (default) | long | full -->
+<DatePicker label="Meeting" format="short" value={ date } @change={ setDate } />
+<DatePicker label="Meeting" format="long" value={ date } @change={ setDate } />`;
+
+export default class DatePickerDoc extends PuzzleView {
+  created() {
+    this.setData({
+      shipDate: '',
+      errorDate: '',
+      morphDate: '2026-08-01',
+      boundedDate: '2026-07-16',
+      fmtDate: '2026-07-16',
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      morphInstall,
+      codeHero,
+      codeError,
+      codeMorph,
+      codeBounds,
+      codeFormats,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Error state', href: '#error' },
+        { label: 'Morph', href: '#morph' },
+        { label: 'Bounds', href: '#bounds' },
+        { label: 'Formats', href: '#formats' },
+      ],
+    };
+  }
+
+  events = {
+    setShipDate: (iso) => this.setData('shipDate', iso),
+    setErrorDate: (iso) => this.setData('errorDate', iso),
+    setMorphDate: (iso) => this.setData('morphDate', iso),
+    setBoundedDate: (iso) => this.setData('boundedDate', iso),
+    setFmtDate: (iso) => this.setData('fmtDate', iso),
+  };
+}
+</script>

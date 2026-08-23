@@ -1,0 +1,8 @@
+{
+  "name": "aspect-ratio",
+  "description": "Fixed width:height ratio box that constrains slotted media or content to a chosen aspect",
+  "files": ["AspectRatio.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

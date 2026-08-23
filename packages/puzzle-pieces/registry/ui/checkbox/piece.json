@@ -1,0 +1,8 @@
+{
+  "name": "checkbox",
+  "description": "Checkbox built on a native input, with optional label and hint, click-anywhere label wrapper, and a change callback",
+  "files": ["Checkbox.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

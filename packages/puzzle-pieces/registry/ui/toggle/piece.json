@@ -1,0 +1,8 @@
+{
+  "name": "toggle",
+  "description": "Two-state pressed button (aria-pressed) for tool states, with default/outline variants and three sizes",
+  "files": ["Toggle.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

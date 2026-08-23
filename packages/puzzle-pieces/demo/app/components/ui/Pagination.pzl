@@ -1,0 +1,211 @@
+<puzzle-view>
+  <nav aria-label="Pagination" class={ rootClass }>
+    <ul class="flex items-center gap-1">
+      {#for item in items}
+        <li key={ item.key }>
+          {#if item.kind === 'prev'}
+            <button
+              type="button"
+              class={ item.class }
+              aria-label="Previous page"
+              disabled={ item.disabled }
+              @click={ go(item.page, event) }>
+              <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M10 3.5 5.5 8l4.5 4.5" />
+              </svg>
+            </button>
+          {/if}
+          {#if item.kind === 'next'}
+            <button
+              type="button"
+              class={ item.class }
+              aria-label="Next page"
+              disabled={ item.disabled }
+              @click={ go(item.page, event) }>
+              <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 3.5 10.5 8 6 12.5" />
+              </svg>
+            </button>
+          {/if}
+          {#if item.kind === 'page'}
+            <button
+              type="button"
+              class={ item.class }
+              aria-current={ item.ariaCurrent }
+              @click={ go(item.page, event) }>
+              { item.page }
+            </button>
+          {/if}
+          {#if item.kind === 'ellipsis'}
+            <span class={ ellipsisClass } aria-hidden="true">
+              <svg class="size-4" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <circle cx="3" cy="8" r="1.25" />
+                <circle cx="8" cy="8" r="1.25" />
+                <circle cx="13" cy="8" r="1.25" />
+              </svg>
+            </span>
+          {/if}
+        </li>
+      {/for}
+    </ul>
+  </nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Pagination — controlled page navigator. The parent owns `page` (1-based) and
+// updates it from `@change(page)`; the component renders a windowed list of page
+// numbers with prev/next icon buttons and ellipses. Always shows the first and
+// last page; collapses long ranges around the current page with ellipses.
+//
+//   <Pagination page={ page } count={ 20 } @change={ setPage }/>
+//   <Pagination page={ page } count={ 5 } @change={ setPage } class="justify-center"/>
+//
+// The parent applies the new page:  setPage(p) { this.setData({ page: p }); }
+//
+// Props:
+//   page    1-based current page (controlled by the parent)
+//   count   total number of pages
+//   class   appended to the root <nav>
+// Callback:
+//   @change(page, event)  fired on a page/prev/next click; NEVER called with the
+//                         current page or an out-of-range page (the click is
+//                         guarded and prev/next disable at the ends).
+//
+// Windowing is a pure function (`paginate`, below): boundaryCount = 1,
+// siblingCount = 1. It emits a FLAT list of entries — { kind: 'prev' } , a run of
+// { kind: 'page' | 'ellipsis' }, then { kind: 'next' } — so the {#for} body stays
+// one <li> root; data() precomputes each entry's kind/class/label/key. Adapted
+// from MUI's usePagination range math.
+
+// Inclusive integer range [start, end]; empty when start > end.
+const range = (start, end) => {
+  const out = [];
+  for (let i = start; i <= end; i++) out.push(i);
+  return out;
+};
+
+// paginate(page, count, { boundaryCount = 1, siblingCount = 1 })
+//   -> Array<{ kind: 'prev' | 'next' | 'page' | 'ellipsis', page?, current? }>
+// Rules: always show first/last page; a run of siblings around the current page;
+// an 'ellipsis' entry only when the gap is >= 2 pages — a gap of exactly 1 is
+// filled with the real page number instead. With the default 1/1 counts, counts
+// of 7 or fewer never gap, so every page shows and no ellipsis appears.
+const paginate = (page, count, opts) => {
+  const boundaryCount = (opts && opts.boundaryCount) || 1;
+  const siblingCount = (opts && opts.siblingCount) || 1;
+
+  const total = Math.max(0, Math.floor(count) || 0);
+  if (total <= 0) return [];
+  const current = Math.min(Math.max(Math.floor(page) || 1, 1), total);
+
+  const startPages = range(1, Math.min(boundaryCount, total));
+  const endPages = range(Math.max(total - boundaryCount + 1, boundaryCount + 1), total);
+
+  const siblingsStart = Math.max(
+    Math.min(current - siblingCount, total - boundaryCount - siblingCount * 2 - 1),
+    boundaryCount + 2
+  );
+  const siblingsEnd = Math.min(
+    Math.max(current + siblingCount, boundaryCount + siblingCount * 2 + 2),
+    endPages.length > 0 ? endPages[0] - 2 : total - 1
+  );
+
+  const pages = [
+    ...startPages,
+    // Fill the gap after the start boundary: ellipsis if >= 2, else the one page.
+    ...(siblingsStart > boundaryCount + 2
+      ? ['ellipsis']
+      : boundaryCount + 1 < total - boundaryCount
+        ? [boundaryCount + 1]
+        : []),
+    ...range(siblingsStart, siblingsEnd),
+    // Fill the gap before the end boundary.
+    ...(siblingsEnd < total - boundaryCount - 1
+      ? ['ellipsis']
+      : total - boundaryCount > boundaryCount
+        ? [total - boundaryCount]
+        : []),
+    ...endPages,
+  ];
+
+  return [
+    { kind: 'prev', page: current - 1 },
+    ...pages.map((p) =>
+      p === 'ellipsis'
+        ? { kind: 'ellipsis' }
+        : { kind: 'page', page: p, current: p === current }
+    ),
+    { kind: 'next', page: current + 1 },
+  ];
+};
+
+// Shared cell geometry for every clickable + the ellipsis so the strip aligns.
+const CELL_BASE =
+  'inline-flex items-center justify-center size-9 rounded-lg text-sm font-medium select-none ' +
+  'transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+// Current page — solid brand treatment, matching Button's primary variant.
+const PAGE_ACTIVE = 'bg-brand text-brand-ink cursor-default';
+// Other pages — ghost hover, matching Button's ghost variant.
+const PAGE_INACTIVE = 'text-body cursor-pointer hover:bg-surface-sunken hover:text-ink';
+// Prev/next icon buttons — ghost hover; disabled at the ends (real attr + styles).
+const NAV_BTN =
+  'text-body cursor-pointer hover:bg-surface-sunken hover:text-ink ' +
+  'disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed';
+
+const ELLIPSIS = 'inline-flex items-center justify-center size-9 text-muted';
+
+export default class Pagination extends PuzzleView {
+  data(params, props) {
+    const count = Math.max(0, Math.floor(props.count) || 0);
+    const page = Math.min(Math.max(Math.floor(props.page) || 1, 1), Math.max(count, 1));
+
+    let ek = 0;
+    const items = paginate(page, count, { boundaryCount: 1, siblingCount: 1 }).map((it) => {
+      if (it.kind === 'ellipsis') {
+        return { kind: 'ellipsis', key: `e${ek++}` };
+      }
+      if (it.kind === 'prev' || it.kind === 'next') {
+        // Prev target < 1 or next target > count means we're at an end.
+        return {
+          kind: it.kind,
+          page: it.page,
+          disabled: it.page < 1 || it.page > count,
+          key: it.kind,
+          class: [CELL_BASE, NAV_BTN].join(' '),
+        };
+      }
+      // page
+      return {
+        kind: 'page',
+        page: it.page,
+        current: it.current,
+        ariaCurrent: it.current ? 'page' : false,
+        key: `p${it.page}`,
+        class: [CELL_BASE, it.current ? PAGE_ACTIVE : PAGE_INACTIVE].join(' '),
+      };
+    });
+
+    return {
+      items,
+      count,
+      page,
+      ellipsisClass: ELLIPSIS,
+      rootClass: props.class || '',
+    };
+  }
+
+  events = {
+    // Guarded so @change never fires with the current page or an out-of-range
+    // page. Prev/next are disabled at the ends, but re-check here as a backstop.
+    go: (target, event) => {
+      const { count, page } = this.getData();
+      if (target < 1 || target > count || target === page) return;
+      const { change } = this.props;
+      if (typeof change === 'function') change(target, event);
+    },
+  };
+}
+</script>

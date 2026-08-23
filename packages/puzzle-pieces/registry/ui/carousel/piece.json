@@ -1,0 +1,8 @@
+{
+  "name": "carousel",
+  "description": "Accessible scroll-snap carousel — arrows, dots, keyboard, autoplay; slides are slot children",
+  "files": ["Carousel.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

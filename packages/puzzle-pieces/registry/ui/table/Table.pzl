@@ -1,0 +1,125 @@
+<puzzle-view>
+  <div class={ wrapperClass }>
+    <table class="w-full border-collapse text-left">
+      {#if caption}
+        <caption class="caption-bottom px-4 py-3 text-left text-sm text-muted">{ caption }</caption>
+      {/if}
+      <thead>
+        <tr class="border-b border-border bg-surface-sunken">
+          {#for col in columns}
+            <th scope="col" class={ col.thClass } key={ col.key }>{ col.label }</th>
+          {/for}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {#if hasRows}
+          {#for row in rows}
+            <tr class="transition-colors hover:bg-surface-sunken" key={ row.key }>
+              {#for cell in row.cells}
+                <td class={ cell.tdClass } key={ cell.key }>{ cell.value }</td>
+              {/for}
+            </tr>
+          {/for}
+        {:else}
+          <tr>
+            <td class="px-4 py-8 text-center text-sm text-muted" colspan={ colspan }>{ emptyText }</td>
+          </tr>
+        {/if}
+      </tbody>
+    </table>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Table — the styled semantic-table tier, NOT a data-table. Config-first: a
+// `columns` schema and a `rows` array of plain objects render one semantic
+// <table> (thead/tbody, real <th scope="col">, optional <caption>) wrapped in a
+// rounded, bordered, horizontally-scrollable panel. Everything dynamic — cell
+// values, per-column alignment classes, the colspan for the empty state — is
+// precomputed in data(), so each {#for} body stays a single element root.
+//
+//   const columns = [
+//     { key: 'name',   label: 'Name' },
+//     { key: 'role',   label: 'Role' },
+//     { key: 'amount', label: 'Amount', align: 'right' },
+//   ];
+//   const rows = [
+//     { name: 'Ada Lovelace', role: 'Engineer', amount: '$1,200' },
+//     { name: 'Alan Turing',  role: 'Designer',  amount: '$980' },
+//   ];
+//   <Table columns={ columns } rows={ rows } caption="Team billing this month" />
+//
+// PROPS
+//   columns  [{ key, label, align? }]  — align: 'left' (default) | 'right' | 'center'.
+//                                        Cell value is row[key]; null/undefined → ''.
+//   rows     array of plain objects    — one <tr> each; empty array renders a single
+//                                        centered "No results." cell spanning all columns.
+//   caption  string (optional)         — <caption> below the table (caption-side bottom),
+//                                        text-sm text-muted.
+//   empty    string (optional)         — overrides the empty-state text ("No results.").
+//   class    string (optional)         — appended last to the wrapper <div>.
+//
+// OUT OF SCOPE (deliberately — this is the presentational tier, not a data grid):
+// no column sorting, no row selection/checkboxes, no pagination, no virtualization,
+// no row striping, no sticky header, no resizable columns. Compose those in the
+// parent view (own the sort/selection state there, feed sorted/paged `rows` in) or
+// reach for a dedicated data-table. Rows and columns are rendered as given.
+const ALIGN = {
+  left: 'text-left',
+  right: 'text-right',
+  center: 'text-center',
+};
+
+const TH_BASE = 'whitespace-nowrap px-4 py-3 text-sm font-medium text-muted';
+const TD_BASE = 'px-4 py-3 text-sm text-body';
+
+export default class Table extends PuzzleView {
+  data(params, props) {
+    const rawColumns = Array.isArray(props.columns) ? props.columns : [];
+
+    // Normalize columns once: resolve the alignment class up front and key each
+    // header cell by its column key (stable across renders).
+    const columns = rawColumns.map((col, i) => {
+      const align = ALIGN[col.align] || ALIGN.left;
+      return {
+        key: col.key != null ? String(col.key) : `col-${i}`,
+        dataKey: col.key,
+        label: col.label != null ? String(col.label) : '',
+        thClass: `${TH_BASE} ${align}`,
+        tdClass: `${TD_BASE} ${align}`,
+      };
+    });
+
+    const rawRows = Array.isArray(props.rows) ? props.rows : [];
+
+    // Precompute every cell (value + per-column class) so the nested {#for}
+    // bodies (<tr>, <td>) each keep a single element root.
+    const rows = rawRows.map((row, r) => ({
+      key: `row-${r}`,
+      cells: columns.map((col, c) => {
+        const v = row == null ? undefined : row[col.dataKey];
+        return {
+          key: `${col.key}-${c}`,
+          value: v == null ? '' : v,
+          tdClass: col.tdClass,
+        };
+      }),
+    }));
+
+    return {
+      wrapperClass: [
+        'overflow-hidden overflow-x-auto rounded-xl border border-border bg-surface',
+        props.class || '',
+      ].join(' '),
+      columns,
+      rows,
+      hasRows: rows.length > 0,
+      colspan: columns.length || 1,
+      caption: props.caption || '',
+      emptyText: props.empty || 'No results.',
+    };
+  }
+}
+</script>

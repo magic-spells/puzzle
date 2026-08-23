@@ -1,0 +1,66 @@
+<puzzle-view>
+  <div class={ classes }>
+    {#if hasHeader}
+      <div class="flex flex-col gap-1.5 p-6 pb-0">
+        {#if title}
+          <h3 class="font-semibold text-ink">{ title }</h3>
+        {/if}
+        {#if description}
+          <p class="text-sm text-muted">{ description }</p>
+        {/if}
+      </div>
+    {/if}
+    <div class={ bodyClass }>
+      <Slot/>
+    </div>
+    <div class="flex items-center gap-2 p-6 pt-0 empty:hidden">
+      <Slot name="footer"/>
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Card — a presentational container matching the demo's section-card styling
+// (rounded-xl border border-border bg-surface) so hand-rolled cards drop in 1:1.
+// `title` and `description` render an optional header; both are optional and the
+// header block is conditionally rendered so it never leaves a gap when absent
+// (the same discipline Dialog's footer uses via empty:hidden). The default
+// <Slot/> is the body; the named footer slot holds actions and collapses with
+// empty:hidden when nothing is slotted. A `class` prop is appended to the root.
+//
+// Padding stays on p-6 density throughout: the header pads p-6 pb-0, the body
+// drops its top pad when a header sits above it (pt-0), and the footer pads
+// p-6 pt-0 — so every region seam is a single 1.5rem gutter, never doubled.
+//
+//   <Card title="Team" description="Manage members and permissions.">
+//     <p>Nine people have access to this workspace.</p>
+//   </Card>
+//
+//   <Card title="Delete project?">
+//     <p>This permanently removes the project and its data.</p>
+//     <Button slot="footer" variant="ghost" @press={ cancel }>Cancel</Button>
+//     <Button slot="footer" variant="destructive" @press={ confirm }>Delete</Button>
+//   </Card>
+//
+//   <Card>Just a plain padded surface — no header, no footer.</Card>
+const BASE = 'rounded-xl border border-border bg-surface text-body';
+
+export default class Card extends PuzzleView {
+  data(params, props) {
+    const title = props.title || '';
+    const description = props.description || '';
+    const hasHeader = !!(title || description);
+    return {
+      title,
+      description,
+      hasHeader,
+      // Body keeps full p-6, but drops its top pad when a header already
+      // supplied the top gutter — keeps the header→body seam a single 1.5rem.
+      bodyClass: hasHeader ? 'p-6 pt-0' : 'p-6',
+      classes: [BASE, props.class || ''].join(' '),
+    };
+  }
+}
+</script>

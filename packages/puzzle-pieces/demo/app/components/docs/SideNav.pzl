@@ -1,0 +1,65 @@
+<puzzle-view>
+  <nav class={ rootClass } aria-label="Components">
+    <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-[0.16em] text-ink">Getting started</p>
+    <ul class="space-y-0.5">
+      {#for item in started}
+        <li key={ item.path }>
+          <a href="#{ item.path }" class={ item.class }>{ item.title }</a>
+        </li>
+      {/for}
+    </ul>
+
+    {#for section in sections}
+      <div key={ section.label } class="mt-6">
+        <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-[0.16em] text-ink">{ section.label }</p>
+        <ul class="space-y-0.5">
+          {#for item in section.items}
+            <li key={ item.path }>
+              <a href="#{ item.path }" class={ item.class }>{ item.title }</a>
+            </li>
+          {/for}
+        </ul>
+      </div>
+    {/for}
+  </nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { GETTING_STARTED, SECTIONS } from '../../docs/nav.js';
+
+// SideNav — the left component navigation (docs-only). Reads the generated
+// nav.js config: a "Getting started" block, then one labeled section per
+// component category (Forms / Overlays / Feedback / Content). Section labels
+// are text-ink so the groups read at a glance; the entry matching the current
+// path (passed by the layout) gets the active pill. Links are plain <a href>
+// so the SPA router handles them.
+//
+//   <SideNav path={ path }/>
+const LINK =
+  'block rounded-md px-3 py-1.5 text-sm transition-colors ' +
+  'outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
+const IDLE = `${LINK} text-muted hover:bg-surface-sunken hover:text-ink`;
+const ACTIVE = `${LINK} bg-surface-sunken font-medium text-ink`;
+
+export default class SideNav extends PuzzleView {
+  data(params, props) {
+    const path = props.path || '/';
+    // The demo pages live under /examples/* but have no nav entry of their own,
+    // so keep the /demos index lit while you are inside one — otherwise nothing
+    // in the sidebar reflects where you are.
+    const isActive = (item) =>
+      item.path === path || (item.path === '/demos' && path.startsWith('/examples/'));
+    const mark = (items) =>
+      items.map((item) => ({
+        ...item,
+        class: isActive(item) ? ACTIVE : IDLE,
+      }));
+    return {
+      started: mark(GETTING_STARTED),
+      sections: SECTIONS.map((s) => ({ label: s.label, items: mark(s.items) })),
+      rootClass: props.class || '',
+    };
+  }
+}
+</script>

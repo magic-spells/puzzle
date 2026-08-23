@@ -1,0 +1,8 @@
+{
+  "name": "separator",
+  "description": "Hairline divider in horizontal or vertical orientation",
+  "files": ["Separator.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

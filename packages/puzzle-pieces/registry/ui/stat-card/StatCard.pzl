@@ -1,0 +1,113 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <p class="text-sm text-muted">{ label }</p>
+    <p class="mt-1 text-3xl font-semibold text-ink">{ value }</p>
+
+    {#if hasFooter}
+      <div class="mt-3 flex items-center justify-between gap-3">
+        <div class="flex min-w-0 items-center gap-2">
+          {#if hasDelta}
+            <span class={ deltaClass }>
+              {#if hasArrow}
+                <svg class="size-3 shrink-0" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                  <path d={ arrowPath }/>
+                </svg>
+              {/if}
+              <span aria-hidden="true">{ deltaText }</span>
+              <span class="sr-only">{ srText }</span>
+            </span>
+          {/if}
+          {#if showDeltaLabel}
+            <span class="truncate text-xs text-muted">{ deltaLabel }</span>
+          {/if}
+        </div>
+
+        {#if hasSparkline}
+          <Sparkline
+            class={ sparkColor }
+            data={ sparkData }
+            width={ 84 }
+            height={ 28 }
+            label={ sparkLabel }/>
+        {/if}
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { formatTick } from '../../lib/chart-math.js';
+import Sparkline from './Sparkline.pzl';
+
+// StatCard — a KPI tile: a metric label, a big preformatted value, and an
+// optional signed delta with an up/down arrow and screen-reader text. The piece
+// does NOT format numbers — pass `value` as a finished string ("$12,400",
+// "1.2k", "98%"). `delta` is a percent change whose SIGN gives direction;
+// `goodWhen` ('up' by default) decides whether that direction paints success or
+// danger. An optional `sparkline` array renders a Sparkline colored to match the
+// delta sentiment (or muted when there's no delta).
+//
+//   <StatCard label="Revenue" value="$48,120" delta={ 12.4 } deltaLabel="vs last month" />
+//   <StatCard label="Churn" value="2.1%" delta={ 0.4 } goodWhen="down" />
+//   <StatCard label="Signups" value="1,240" delta={ 8 } sparkline={ trend } />
+//   <StatCard label="Sessions" value="18.3k" />   // no delta
+//
+// Chrome matches Card.pzl (rounded-xl border border-border bg-surface). The
+// value uses proportional figures on purpose — no tabular-nums. The arrow SVG
+// and the visible "12.4%" are aria-hidden; a single sr-only phrase ("up 12.4
+// percent") carries the delta to assistive tech so it isn't read twice.
+const BASE = 'rounded-xl border border-border bg-surface p-5';
+
+// Small filled triangles in a 12×12 box — apex up or apex down.
+const ARROW_UP = 'M6 3 L10 9 L2 9 Z';
+const ARROW_DOWN = 'M6 9 L10 3 L2 3 Z';
+
+const COLOR = { success: 'text-success', danger: 'text-danger', muted: 'text-muted' };
+
+export default class StatCard extends PuzzleView {
+  data(params, props) {
+    const hasDelta = typeof props.delta === 'number' && !Number.isNaN(props.delta);
+    const delta = hasDelta ? props.delta : 0;
+    const direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+    const goodWhen = props.goodWhen === 'down' ? 'down' : 'up';
+
+    // Sentiment: matching the "good" direction is success, the opposite danger,
+    // an exactly-flat delta is neutral.
+    const sentiment =
+      direction === 'flat' ? 'muted' : direction === goodWhen ? 'success' : 'danger';
+    const colorClass = COLOR[sentiment];
+
+    const absText = formatTick(Math.abs(delta));
+    const directionWord = direction === 'up' ? 'up' : direction === 'down' ? 'down' : 'unchanged';
+
+    const sparkData = Array.isArray(props.sparkline) ? props.sparkline : [];
+    const hasSparkline = sparkData.length > 0;
+    const deltaLabel = props.deltaLabel || '';
+
+    return {
+      label: props.label || '',
+      value: props.value != null ? String(props.value) : '',
+
+      hasDelta,
+      hasArrow: direction !== 'flat',
+      arrowPath: direction === 'up' ? ARROW_UP : direction === 'down' ? ARROW_DOWN : '',
+      deltaText: `${absText}%`,
+      srText: direction === 'flat' ? 'No change' : `${directionWord} ${absText} percent`,
+      deltaClass: `inline-flex items-center gap-1 text-sm font-medium ${colorClass}`,
+
+      showDeltaLabel: hasDelta && !!deltaLabel,
+      deltaLabel,
+
+      hasSparkline,
+      sparkData,
+      // Match the delta sentiment; muted when there's nothing to compare.
+      sparkColor: hasDelta ? colorClass : 'text-muted',
+      sparkLabel: `${props.label || 'Metric'} trend`,
+
+      hasFooter: hasDelta || hasSparkline,
+      rootClass: [BASE, props.class || ''].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>

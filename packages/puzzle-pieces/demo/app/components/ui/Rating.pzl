@@ -1,0 +1,258 @@
+<puzzle-view>
+  <div
+    class={ rootClass }
+    role={ rootRole }
+    aria-label={ rootLabel }
+    aria-disabled={ ariaDisabled }
+    @keydown={ onKeyDown(event) }
+    @pointerleave={ onLeave }>
+    {#if isInput}
+      {#for star in stars}
+        <button
+          type="button"
+          key={ star.key }
+          data-star={ star.value }
+          class={ buttonClass }
+          role="radio"
+          aria-checked={ star.checkedAttr }
+          aria-label={ star.ariaLabel }
+          tabindex={ star.tabindex }
+          disabled={ disabled }
+          @click={ onPick(star.value, event) }
+          @pointerenter={ onHover(star.value) }>
+          <svg class={ star.svgClass } viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M11.48 3.5a.56.56 0 011.04 0l2.12 5.11a.56.56 0 00.48.35l5.52.44c.5.04.7.66.32.99l-4.2 3.6a.56.56 0 00-.19.56l1.29 5.38a.56.56 0 01-.84.61l-4.73-2.88a.56.56 0 00-.58 0l-4.73 2.88a.56.56 0 01-.84-.61l1.29-5.38a.56.56 0 00-.19-.56l-4.2-3.6a.56.56 0 01.32-.99l5.52-.44a.56.56 0 00.48-.35L11.48 3.5z"></path>
+          </svg>
+        </button>
+      {/for}
+      {#if name}
+        <input type="hidden" name={ name } value={ valueStr } />
+      {/if}
+    {:else}
+      {#for star in stars}
+        <span class="relative inline-flex shrink-0" aria-hidden="true">
+          <svg class={ emptySvgClass } viewBox="0 0 24 24">
+            <path d="M11.48 3.5a.56.56 0 011.04 0l2.12 5.11a.56.56 0 00.48.35l5.52.44c.5.04.7.66.32.99l-4.2 3.6a.56.56 0 00-.19.56l1.29 5.38a.56.56 0 01-.84.61l-4.73-2.88a.56.56 0 00-.58 0l-4.73 2.88a.56.56 0 01-.84-.61l1.29-5.38a.56.56 0 00-.19-.56l-4.2-3.6a.56.56 0 01.32-.99l5.52-.44a.56.56 0 00.48-.35L11.48 3.5z"></path>
+          </svg>
+          {#if star.hasFill}
+            <span class="absolute inset-0 left-0 overflow-hidden" style={ star.overlayStyle }>
+              <svg class={ fillSvgClass } viewBox="0 0 24 24">
+                <path d="M11.48 3.5a.56.56 0 011.04 0l2.12 5.11a.56.56 0 00.48.35l5.52.44c.5.04.7.66.32.99l-4.2 3.6a.56.56 0 00-.19.56l1.29 5.38a.56.56 0 01-.84.61l-4.73-2.88a.56.56 0 00-.58 0l-4.73 2.88a.56.56 0 01-.84-.61l1.29-5.38a.56.56 0 00-.19-.56l-4.2-3.6a.56.56 0 01.32-.99l5.52-.44a.56.56 0 00.48-.35L11.48 3.5z"></path>
+              </svg>
+            </span>
+          {/if}
+        </span>
+      {/for}
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Rating — a star rating in two modes. In DISPLAY mode (readOnly) it renders a
+// static row that supports half stars (e.g. 3.5) via a clipped overlay, exposed
+// to assistive tech as a single role="img" ("3.5 out of 5 stars") with the stars
+// themselves hidden. In INPUT mode it is an accessible radiogroup: each star is a
+// role="radio" button, arrow keys move the value, and hovering previews the
+// prospective rating. A CONTROLLED component — the parent owns `value` and reads
+// changes back through @change; halves are display-only, input commits whole
+// stars.
+//
+//   // display, with a half star
+//   <Rating value={ 3.5 } readOnly />
+//
+//   // interactive, bound to parent state
+//   <Rating value={ score } @change={ (v) => setData('score', v) } />
+//
+//   // retint (Sparkline's currentColor trick — a text-* color on the root wins)
+//   <Rating value={ 4 } readOnly class="text-amber-500" />
+//
+//   // form field
+//   <Rating value={ score } name="rating" @change={ setScore } />
+//
+// Props
+//   value     number — current rating. Display mode rounds to the nearest half;
+//             input mode to whole stars.
+//   max       number (default 5) — how many stars
+//   readOnly  boolean — display mode (halves allowed, no interaction)
+//   size      'sm' | 'md' | 'lg' → size-4 / size-5 / size-6 (default md)
+//   label     accessible name (default 'Rating') — the radiogroup label in input
+//             mode; display mode uses a computed "N out of M stars" image label
+//   disabled  boolean — input mode only; blocks pointer + keyboard
+//   name      string — emits a hidden input carrying the whole-star value for form posts
+//   class     merged onto the root; a text color token here retints the filled stars
+//
+// Callback (value-first)
+//   @change(value, event)  fires on click and on each keyboard step, with the new
+//                          whole-star value.
+//
+// COLOR MODEL (Sparkline's trick). Filled stars use `fill-current` and inherit
+// the root's text color — default `text-brand`, but if `class` supplies its own
+// text-* color that wins and the default steps aside. Empty stars force
+// `text-faint` regardless. A {#for} body must have one element root, so each
+// star's class/state is precomputed here and the template only reads it.
+const SIZE = { sm: 'size-4', md: 'size-5', lg: 'size-6' };
+
+const BUTTON =
+  'inline-flex items-center justify-center rounded-sm p-0.5 cursor-pointer ' +
+  'transition-colors disabled:cursor-not-allowed disabled:opacity-50 ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+// A text-* color the caller can pass to retint — deliberately excludes text-SIZE
+// utilities (text-sm/lg/…) so only real color tokens flip the default off.
+const COLOR_RE =
+  /(?:^|\s)text-(?:brand|danger|success|warning|ink|body|muted|faint|chart-|amber|yellow|orange|red|rose|pink|green|emerald|lime|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|slate|gray|zinc|neutral|stone|\[)/;
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(v, hi));
+}
+
+export default class Rating extends PuzzleView {
+  created() {
+    this.setData({ hover: 0 });
+  }
+
+  data(params, props) {
+    const max = Number(props.max) > 0 ? Math.floor(Number(props.max)) : 5;
+    const readOnly = !!props.readOnly;
+    const disabled = !!props.disabled;
+    const sizeClass = SIZE[props.size] || SIZE.md;
+    const label = props.label || 'Rating';
+
+    const rawValue = Number(props.value);
+    const value = Number.isFinite(rawValue) ? clamp(rawValue, 0, max) : 0;
+
+    // Filled color: default text-brand unless the caller's class already sets one.
+    const cls = props.class || '';
+    const rootColor = COLOR_RE.test(cls) ? '' : 'text-brand';
+    const rootClass = ['inline-flex items-center gap-0.5 select-none', rootColor, cls]
+      .filter(Boolean)
+      .join(' ');
+
+    if (readOnly) {
+      const rounded = Math.round(value * 2) / 2; // nearest half
+      const stars = [];
+      for (let i = 1; i <= max; i++) {
+        let pct = 0;
+        if (rounded >= i) pct = 100;
+        else if (rounded >= i - 0.5) pct = 50;
+        stars.push({ key: i, hasFill: pct > 0, overlayStyle: `width:${pct}%` });
+      }
+      return {
+        isInput: false,
+        stars,
+        rootClass,
+        rootRole: 'img',
+        rootLabel: `${formatNum(rounded)} out of ${max} stars`,
+        ariaDisabled: false,
+        emptySvgClass: `${sizeClass} shrink-0 fill-current text-faint`,
+        fillSvgClass: `${sizeClass} shrink-0 fill-current`,
+      };
+    }
+
+    // Input mode — whole stars, hover preview, roving tabindex.
+    const hover = this.getData().hover || 0;
+    const checked = value >= 1 ? Math.round(value) : 0;
+    const previewing = hover > 0;
+    const effective = previewing ? hover : checked;
+    // Only one star is tabbable: the checked one, else the first.
+    const roving = checked >= 1 ? checked : 1;
+
+    const stars = [];
+    for (let i = 1; i <= max; i++) {
+      const on = i <= effective;
+      stars.push({
+        key: i,
+        value: i,
+        checkedAttr: i === checked ? 'true' : 'false',
+        tabindex: i === roving ? '0' : '-1',
+        ariaLabel: `${i} ${i === 1 ? 'star' : 'stars'}`,
+        svgClass: [
+          sizeClass,
+          'shrink-0 fill-current',
+          on ? '' : 'text-faint',
+          on && previewing ? 'opacity-60' : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      });
+    }
+
+    return {
+      isInput: true,
+      stars,
+      rootClass,
+      rootRole: 'radiogroup',
+      rootLabel: label,
+      buttonClass: BUTTON,
+      disabled,
+      ariaDisabled: disabled ? 'true' : false,
+      name: props.name || false,
+      valueStr: String(checked),
+      max,
+    };
+  }
+
+  events = {
+    onPick: (value, event) => {
+      if (this.props.disabled) return;
+      const { change } = this.props;
+      if (typeof change === 'function') change(value, event);
+    },
+
+    onHover: (value) => {
+      if (this.props.disabled) return;
+      this.setData('hover', value);
+      this.refresh();
+    },
+
+    onLeave: () => {
+      if (this.getData().hover === 0) return;
+      this.setData('hover', 0);
+      this.refresh();
+    },
+
+    onKeyDown: (event) => {
+      if (this.props.disabled) return;
+      const max = Number(this.props.max) > 0 ? Math.floor(Number(this.props.max)) : 5;
+      const raw = Number(this.props.value);
+      const value = Number.isFinite(raw) ? clamp(raw, 0, max) : 0;
+      const base = value >= 1 ? Math.round(value) : 0;
+
+      let next = null;
+      switch (event.key) {
+        case 'ArrowRight':
+        case 'ArrowUp':
+          next = Math.min(max, base + 1);
+          break;
+        case 'ArrowLeft':
+        case 'ArrowDown':
+          next = Math.max(1, base - 1);
+          break;
+        case 'Home':
+          next = 1;
+          break;
+        case 'End':
+          next = max;
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      const { change } = this.props;
+      if (typeof change === 'function') change(next, event);
+      // Move roving focus onto the newly selected star once the DOM settles.
+      const target = next;
+      requestAnimationFrame(() => {
+        const el = this.element && this.element.querySelector(`[data-star="${target}"]`);
+        if (el) el.focus();
+      });
+    },
+  };
+}
+
+function formatNum(n) {
+  return String(Math.round(n * 2) / 2);
+}
+</script>

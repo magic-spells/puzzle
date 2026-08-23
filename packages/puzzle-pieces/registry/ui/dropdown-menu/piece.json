@@ -1,0 +1,8 @@
+{
+  "name": "dropdown-menu",
+  "description": "Click-toggle dropdown menu with grouped items, dividers, danger items, keyboard nav, and outside-click dismiss",
+  "files": ["DropdownMenu.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

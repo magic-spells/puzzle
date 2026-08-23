@@ -109,7 +109,13 @@ decision cards explain why the contract has its current shape.
   in static mode, pruned across dev rebuilds — and add a per-dependency
   composition report to the build size banner. Phase 2 (lazy route views) is a
   separate design.
-  The next free decision number is D161.
+- **Current 0.7 data work (v1.76):** [[DECISION-D161-AUTO-FETCHING-FINDS]] —
+  tracked finds fault in missing data; the settle loop commits complete passes.
+- **Monorepo (0.7.0):** [[DECISION-D162-MONOREPO-PACKAGES]] — lockstep
+  satellites live under `packages/` (puzzle-pieces, puzzle-devtools), imported
+  with full history; grammars stay in their own repos; absorbed repos are
+  archived, never deleted.
+  The next free decision number is D163.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode

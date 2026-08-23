@@ -1,0 +1,309 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ inputId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+
+    <div
+      class={ zoneClass }
+      @click={ openPicker(event) }
+      @dragenter={ onDragOver(event) }
+      @dragover={ onDragOver(event) }
+      @dragleave={ onDragLeave(event) }
+      @drop={ onDrop(event) }>
+      <input
+        id={ inputId }
+        type="file"
+        class="sr-only"
+        accept={ accept }
+        multiple={ multiple }
+        disabled={ disabled }
+        aria-label={ inputLabel }
+        aria-invalid={ invalid }
+        aria-describedby={ describedby }
+        data-dropzone-input
+        @change={ onInputChange(event) } />
+      <div class="pointer-events-none flex flex-col items-center gap-2">
+        <svg class={ iconClass } viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 15V3" />
+          <path d="M8 7l4-4 4 4" />
+          <path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" />
+        </svg>
+        <span class="text-sm text-body">
+          <span class="font-medium text-ink">Click to upload</span> or drag and drop
+        </span>
+      </div>
+    </div>
+
+    {#if hasFiles}
+      <ul class="mt-3 flex flex-col gap-2">
+        {#for f in fileRows}
+          <li>
+            <ChatAttachment
+              name={ f.name }
+              size={ f.size }
+              type={ f.type }
+              removable={ true }
+              disabled={ disabled }
+              class="flex w-full max-w-full"
+              @remove={ onRemove } />
+          </li>
+        {/for}
+      </ul>
+    {/if}
+
+    <div class="empty:hidden" aria-live="polite">
+      {#if error}
+        <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+      {:else if hasRejections}
+        <ul id={ descId } class="mt-1.5 flex flex-col gap-1">
+          {#for m in rejectionMessages}
+            <li class="text-sm text-danger">{ m }</li>
+          {/for}
+        </ul>
+      {:else if hint}
+        <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+      {/if}
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ChatAttachment from './ChatAttachment.pzl';
+
+// Dropzone — a file-upload area: drag-and-drop OR click-to-browse over a
+// visually-hidden <input type="file">, a dragover highlight, and a removable
+// list of chosen files with size + × buttons. It is a form control, so it wears
+// Field's label / hint / error affordances and ARIA wiring.
+//
+// CONTROLLED, value-first. The PARENT owns the `files` array (File objects or
+// { name, size, type } descriptors); props in, callbacks out. Dropzone never
+// stores the file list itself — the only local setData state is `dragging`
+// (the highlight) and `rejections` (transient validation messages). On a pick or
+// drop it validates against `accept` + `maxSize`, then emits @change with the NEW
+// array (merged for `multiple`, replaced otherwise) and @reject with any failures.
+//
+//   <Dropzone label="Attachments" files={ files } multiple
+//             accept="image/*" maxSize={ 5 * 1024 * 1024 }
+//             @change={ (next) => this.setData('files', next) } />
+//
+// Props:
+//   files      controlled array of File objects or { name, size, type } (parent-owned)
+//   accept     forwarded to the input `accept` attr AND used in validation
+//   multiple   allow more than one file (else a pick/drop REPLACES the list)
+//   maxSize    bytes; larger files are rejected
+//   disabled   dims the zone and blocks picking / dropping
+//   label      field label above the zone; also names the hidden input
+//   hint       helper text below the zone
+//   error      external error string — paints danger + aria-invalid (wins over
+//              internal validation messages)
+//   class      appended to the root last, so callers win
+// Callbacks:
+//   @change(files, event)      the new accepted array (value-first)
+//   @reject(rejections, event) [{ file, reason, message }] for failed files
+//
+// A11y: the real <input type="file"> stays sr-only but reachable, so keyboard /
+// AT users tab to it (labeled, describedby, aria-invalid) and open the native
+// picker with Space/Enter; mouse users click anywhere on the zone. The focus ring
+// is painted on the zone with `focus-within`, its color set unconditionally
+// (outline-ring, or outline-danger when errored) so `transition-colors` never
+// flashes it. Validation messages live in an aria-live="polite" region.
+//
+// SIZE FORMATTING: this piece formats each file's byte count for the list chips
+// (File.size is raw bytes) — a display-only transform, never applied to the
+// emitted value. The array passed through @change is untouched.
+
+let uid = 0;
+
+// Format a raw byte count into a compact human string for the file-list chips.
+// Returns '' for missing/NaN so descriptor mocks without a size just omit it.
+function formatBytes(bytes) {
+  const n = Number(bytes);
+  if (bytes == null || Number.isNaN(n)) return '';
+  if (n === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+  const scaled = n / Math.pow(1024, i);
+  const val = scaled >= 10 || i === 0 ? Math.round(scaled) : Math.round(scaled * 10) / 10;
+  return `${val} ${units[i]}`;
+}
+
+// Does `file` satisfy the `accept` token list? Empty accept = anything. Tokens
+// are extensions (.png), wildcard MIME (image/*), or exact MIME (application/pdf).
+function acceptsFile(file, accept) {
+  if (!accept) return true;
+  const name = (file.name || '').toLowerCase();
+  const type = (file.type || '').toLowerCase();
+  const tokens = accept.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+  if (!tokens.length) return true;
+  return tokens.some((tok) => {
+    if (tok.startsWith('.')) return name.endsWith(tok);
+    if (tok.endsWith('/*')) return type.startsWith(tok.slice(0, -1));
+    return type === tok;
+  });
+}
+
+export default class Dropzone extends PuzzleView {
+  data(params, props) {
+    const inputId = props.id || (this._fallbackId ??= `pp-dropzone-${++uid}`);
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const disabled = !!props.disabled;
+    const state = this.getData() || {};
+    const rejections = state.rejections || [];
+    const rejectionMessages = rejections.map((r) => r.message);
+    const hasRejections = rejectionMessages.length > 0;
+    const described = !!(error || hint || hasRejections);
+
+    const files = Array.isArray(props.files) ? props.files : [];
+    const fileRows = files.map((f) => ({
+      name: f.name || '',
+      size: formatBytes(f.size),
+      type: f.type && !String(f.type).includes('/') ? f.type : '',
+    }));
+
+    const ZONE_BASE =
+      'relative flex w-full flex-col items-center justify-center gap-2 rounded-xl ' +
+      'border-2 border-dashed px-6 py-8 text-center transition-colors ' +
+      'focus-within:outline-2 focus-within:outline-offset-2';
+
+    const zoneClass = [
+      ZONE_BASE,
+      error ? 'outline-danger focus-within:outline-danger' : 'outline-ring focus-within:outline-ring',
+      disabled
+        ? 'cursor-not-allowed opacity-60 border-border'
+        : state.dragging
+          ? 'cursor-pointer border-brand bg-brand-tint'
+          : error
+            ? 'cursor-pointer border-danger hover:bg-surface-sunken'
+            : 'cursor-pointer border-border hover:border-border-strong hover:bg-surface-sunken',
+      props.class || '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    return {
+      inputId,
+      descId: `${inputId}-desc`,
+      label: props.label || '',
+      inputLabel: props.label || 'Upload files',
+      hint,
+      error,
+      disabled,
+      multiple: !!props.multiple,
+      accept: props.accept || '',
+      invalid: error ? 'true' : false,
+      describedby: described ? `${inputId}-desc` : false,
+      hasFiles: fileRows.length > 0,
+      fileRows,
+      rejectionMessages,
+      hasRejections,
+      iconClass: state.dragging ? 'size-8 text-brand' : 'size-8 text-muted',
+      rootClass: '',
+      zoneClass,
+    };
+  }
+
+  // Validate an incoming FileList, emit @change with the merged/replaced array
+  // and @reject with any failures, and stash rejection messages for the live
+  // region. Does NOT refresh — callers do, once.
+  processFiles(fileList, event) {
+    const list = Array.from(fileList || []);
+    if (!list.length) return;
+
+    const props = this.props;
+    const accept = props.accept || '';
+    const maxSize = props.maxSize != null ? Number(props.maxSize) : null;
+
+    const accepted = [];
+    const rejected = [];
+    for (const f of list) {
+      if (!acceptsFile(f, accept)) {
+        rejected.push({ file: f, reason: 'file-invalid-type', message: `${f.name} is not an accepted file type.` });
+        continue;
+      }
+      if (maxSize != null && !Number.isNaN(maxSize) && typeof f.size === 'number' && f.size > maxSize) {
+        rejected.push({ file: f, reason: 'file-too-large', message: `${f.name} is larger than the maximum size.` });
+        continue;
+      }
+      accepted.push(f);
+    }
+
+    const existing = Array.isArray(props.files) ? props.files : [];
+    let next;
+    if (props.multiple) {
+      const seen = new Set(existing.map((f) => `${f.name}::${f.size ?? ''}`));
+      const add = accepted.filter((f) => !seen.has(`${f.name}::${f.size ?? ''}`));
+      next = existing.concat(add);
+    } else {
+      next = accepted.slice(0, 1);
+    }
+
+    this.setData({ rejections: rejected });
+
+    const { change, reject } = props;
+    if (accepted.length && typeof change === 'function') change(next, event);
+    if (rejected.length && typeof reject === 'function') reject(rejected, event);
+  }
+
+  events = {
+    openPicker: (event) => {
+      if (this.props.disabled) return;
+      const input = this.element?.querySelector('[data-dropzone-input]');
+      if (!input) return;
+      // A direct click on the (1px) input already opens the native picker — don't
+      // fire a second one.
+      if (event && event.target === input) return;
+      input.click();
+    },
+
+    onInputChange: (event) => {
+      const input = event.target;
+      this.processFiles(input.files, event);
+      // Reset so re-selecting the same file fires `change` again.
+      input.value = '';
+      this.refresh();
+    },
+
+    onDragOver: (event) => {
+      // Always cancel: an uncancelled dragover makes the browser navigate to the
+      // dropped file. Only after claiming the drag do we no-op.
+      event.preventDefault();
+      event.stopPropagation();
+      if (this.props.disabled) return;
+      if (!this.getData().dragging) {
+        this.setData({ dragging: true });
+        this.refresh();
+      }
+    },
+
+    onDragLeave: (event) => {
+      const zone = event.currentTarget;
+      // Ignore leaves into descendant elements (flicker guard).
+      if (zone && event.relatedTarget && zone.contains && zone.contains(event.relatedTarget)) return;
+      if (this.getData().dragging) {
+        this.setData({ dragging: false });
+        this.refresh();
+      }
+    },
+
+    onDrop: (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (this.props.disabled) return;
+      this.setData({ dragging: false });
+      this.processFiles(event.dataTransfer && event.dataTransfer.files, event);
+      this.refresh();
+    },
+
+    onRemove: (name, event) => {
+      if (this.props.disabled) return;
+      const existing = Array.isArray(this.props.files) ? this.props.files : [];
+      const next = existing.filter((f) => (f.name || '') !== name);
+      const { change } = this.props;
+      if (typeof change === 'function') change(next, event);
+    },
+  };
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "input-group",
+  "description": "Field-compatible input with fused prefix/suffix addon slots — group-level focus ring and error styling, full label/hint/error ARIA",
+  "files": ["InputGroup.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

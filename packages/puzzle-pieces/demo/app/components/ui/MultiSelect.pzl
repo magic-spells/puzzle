@@ -1,0 +1,848 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ inputId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+
+    <div class="relative">
+      <div class={ controlClass } data-multiselect-control>
+        {#for chip in chips}
+          <span class={ chipClass }>
+            <span class="truncate">{ chip.label }</span>
+            <button
+              type="button"
+              tabindex="-1"
+              class={ chipRemoveClass }
+              aria-label={ chip.removeLabel }
+              disabled={ disabled }
+              @mousedown={ onRemoveDown(event) }
+              @click={ removeChip(chip, event) }>
+              <svg
+                class="size-3"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                aria-hidden="true">
+                <path d="M6 6l8 8M14 6l-8 8" stroke-linecap="round" />
+              </svg>
+            </button>
+          </span>
+        {/for}
+
+        <input
+          data-multiselect-input
+          id={ inputId }
+          type="text"
+          role="combobox"
+          class={ inputClass }
+          aria-haspopup="listbox"
+          aria-expanded={ ariaExpanded }
+          aria-controls={ ariaControls }
+          aria-activedescendant={ activeId }
+          aria-autocomplete="list"
+          aria-invalid={ invalid }
+          aria-describedby={ describedby }
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          placeholder={ inputPlaceholder }
+          value={ query }
+          disabled={ disabled }
+          @input={ onInput(event) }
+          @keydown={ onKey(event) }
+          @click={ onInputClick(event) } />
+
+        <button
+          type="button"
+          tabindex="-1"
+          class="absolute inset-y-0 right-0 flex items-center pr-3 text-muted disabled:opacity-50 disabled:pointer-events-none"
+          aria-label="Toggle options"
+          disabled={ disabled }
+          @mousedown={ onChevronDown(event) }
+          @click={ toggle(event) }>
+          <svg
+            class="size-4 transition-[rotate] {#if open}rotate-180{/if}"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true">
+            <path d="M6 8l4 4 4-4z" />
+          </svg>
+        </button>
+      </div>
+
+      {#if open}
+        <ul
+          class={ panelClass }
+          id={ listId }
+          role="listbox"
+          aria-multiselectable="true"
+          aria-label={ listAria }
+          data-multiselect-panel
+          style={ panelStyle }>
+          {#if empty}
+            <li role="presentation" class="px-3 py-6 text-center text-sm text-muted">{ emptyText }</li>
+          {:else}
+            {#for row in rows}
+              <li
+                id={ row.id }
+                role={ row.role }
+                aria-selected={ row.ariaSelected }
+                aria-disabled={ row.ariaDisabled }
+                aria-hidden={ row.ariaHidden }
+                class={ row.rowClass }
+                @click={ choose(row, event) }
+                @mouseenter={ hover(row) }>
+                {#if row.kind === 'option'}
+                  <span class="flex-1 truncate">{ row.label }</span>
+                {:else if row.kind === 'group'}
+                  { row.label }
+                {/if}
+              </li>
+            {/for}
+          {/if}
+        </ul>
+      {/if}
+    </div>
+
+    {#if error}
+      <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+    {:else if hint}
+      <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// MultiSelect — a filterable tag / multi-value combobox: the multi-value sibling
+// of Combobox. Selected options render as removable chips at the START of one
+// bordered control; a role=combobox text input filters the REMAINING (unselected)
+// options in a role=listbox popup. Picking an option ADDS it to the value array
+// and clears the query, leaving the popup OPEN so several tags can be added in a
+// row (Combobox closes on select — the one behavioral divergence). It reuses
+// Combobox's machinery wholesale:
+//   • the wordPrefix()/two-tier ranker + re-group-under-headings filtering;
+//   • the aria-activedescendant roving model (DOM focus never leaves the input);
+//   • the OPTIONAL-CONTROLLED open lifecycle (_controlled / _effectiveOpen /
+//     _requestOpen / _requestClose / _syncOpenEffects) and the bounded
+//     pointerdown outside-click listener;
+//   • Field's label / hint / error markup + aria-invalid / aria-describedby;
+//   • InputGroup's focus-within group ring — the chips + input share one control
+//     box whose outline lights up while the inner input is focused.
+//
+//   <MultiSelect options={ opts } value={ picks } @change={ setPicks } />
+//   <MultiSelect label="Stack" hint="Pick a few" options={ opts }
+//                value={ picks } @change={ setPicks } />
+//   <MultiSelect options={ opts } value={ picks } open={ open }
+//                @change={ setPicks } @show={ onShow } @hide={ onHide } /> // controlled open
+//
+// `value` is an ARRAY of selected values (controlled: props in, callbacks out).
+// `@change(nextValues)` fires value-first with the NEXT array — one MORE entry on
+// add, one FEWER on remove. Options entries are identical to Select / Combobox:
+//   { value, label, disabled? }  — a selectable option
+//   { group: 'Heading' }         — a non-interactive section heading
+//   { divider: true }            — a visual separator
+//
+// SELECTED = HIDDEN. Already-picked options are removed from the listbox (the
+// simplest, least-ambiguous UX — the chips already show them). A heading whose
+// options are all picked (or filtered out) drops with them; a divider stranded by
+// the hiding is dropped too. Re-add a value by removing its chip.
+//
+// FOCUS MODEL (Combobox's). DOM focus lives on the <input> the whole time; the
+// listbox is never focused. The active option is tracked purely with
+// aria-activedescendant, so the vdom never fights a browser focus move. Chip ×
+// buttons and the chevron preventDefault their mousedown to keep focus on input.
+//
+// KEYBOARD. Type filters + opens; Down/Up move the active option (wrap, skip
+// disabled); Home/End jump; Enter ADDS the active option (query clears, popup
+// stays open); Escape closes; Backspace on an EMPTY input removes the last chip;
+// Tab closes and moves on. Clicking a chip's × removes that chip.
+//
+// NO free-text / custom value (Combobox's strict-select stance): Enter with no
+// active option is a no-op. NO `morph`: the trigger IS the input being typed into,
+// so there is no separate trigger→panel container to morph.
+
+let uid = 0;
+
+const CONTROL_BASE =
+  'relative flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-lg border bg-surface ' +
+  'py-1 pl-2 pr-9 text-sm transition-colors ' +
+  'focus-within:outline-2 focus-within:outline-offset-2';
+const CONTROL_OK = 'border-border outline-ring focus-within:outline-ring';
+const CONTROL_ERROR = 'border-danger outline-danger focus-within:outline-danger';
+
+const INPUT_BASE =
+  'h-7 min-w-[4rem] flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
+  'focus:outline-none disabled:cursor-not-allowed';
+
+const CHIP_CLASS =
+  'inline-flex max-w-full items-center gap-1 rounded-full bg-brand-tint py-0.5 pl-2 pr-1 ' +
+  'text-xs font-medium text-brand';
+const CHIP_REMOVE_CLASS =
+  'inline-flex size-4 shrink-0 items-center justify-center rounded-full text-brand ' +
+  'transition-colors hover:bg-brand hover:text-brand-ink ' +
+  'disabled:pointer-events-none';
+
+const PANEL_BASE =
+  'absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border ' +
+  'bg-surface py-1 shadow-lg';
+const PANEL_PLACEMENT = { bottom: 'top-full mt-1', top: 'bottom-full mb-1' };
+
+const OPTION_BASE = 'relative flex items-center gap-2 px-3 py-1.5 text-sm select-none';
+const GROUP_CLASS =
+  'px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none';
+const DIVIDER_CLASS = 'my-1 h-px bg-border';
+
+// Compose an option row's class from its disabled / active state, keyed off
+// pieces.css semantic tokens (Combobox's optionClass, minus the selected branch —
+// selected options are hidden from the list here).
+function optionClass(disabled, active) {
+  return [
+    OPTION_BASE,
+    disabled ? 'text-faint pointer-events-none' : 'cursor-pointer hover:bg-surface-sunken',
+    active ? 'bg-surface-sunken text-body' : 'text-body',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+// A query "matches" a term as a word-prefix (query starts the term, or any
+// space-delimited word within it) or, more loosely, as a substring anywhere.
+function wordPrefix(text, q) {
+  if (text.startsWith(q)) return true;
+  return text.split(/\s+/).some((w) => w.startsWith(q));
+}
+
+// Drop structural rows left stranded once selected options are hidden: a group
+// heading with no option before the next heading, and any divider gone leading,
+// trailing, or adjacent to another divider. Dividers between still-visible content
+// (including beside a surviving heading) are kept, as authored.
+function pruneStructure(rows) {
+  const withGroups = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.kind === 'group') {
+      let hasOption = false;
+      for (let j = i + 1; j < rows.length; j++) {
+        if (rows[j].kind === 'group') break;
+        if (rows[j].kind === 'option') {
+          hasOption = true;
+          break;
+        }
+      }
+      if (!hasOption) continue;
+    }
+    withGroups.push(r);
+  }
+  const out = [];
+  for (let i = 0; i < withGroups.length; i++) {
+    const r = withGroups[i];
+    if (r.kind === 'divider') {
+      const prev = out[out.length - 1];
+      const next = withGroups[i + 1];
+      if (!prev || prev.kind === 'divider') continue;
+      if (!next || next.kind === 'divider') continue;
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+export default class MultiSelect extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this._base = `pp-multiselect-${this._uid}`;
+    this._wasOpen = false; // last effective-open seen by the transition detector
+    this._scrollActive = false; // scroll the active option into view after next render
+    this._openSeeded = false; // did this open pass already seed query/active/placement?
+    this._pendingRestoreFocus = true; // whether the next close refocuses the input
+    this.setData({
+      uncontrolledOpen: false,
+      query: '',
+      activeIndex: -1,
+      placement: 'bottom',
+      maxHeight: 0,
+    });
+  }
+
+  // Outside-click close: attached only while open (see _onOpened / _onClosed).
+  mounted() {
+    this._onDocPointer = (e) => {
+      if (!this._effectiveOpen()) return;
+      if (this.element && this.element.contains(e.target)) return;
+      this._requestClose({ restoreFocus: false });
+    };
+    this._syncOpenEffects();
+  }
+
+  destroyed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+  }
+
+  // ---- controlled / uncontrolled open resolution ---------------------------
+
+  _controlled() {
+    return this.props.open !== undefined;
+  }
+
+  _effectiveOpen() {
+    return this._controlled() ? !!this.props.open : !!this.getData().uncontrolledOpen;
+  }
+
+  // ---- selection helpers ---------------------------------------------------
+
+  // The controlled value as an array (defensive: non-array props.value → []).
+  _values(props) {
+    return Array.isArray(props.value) ? props.value : [];
+  }
+
+  // Resolve each selected value to its option label (falling back to the raw
+  // value), preserving the value array's order — this is the chip order.
+  _chips(props) {
+    const values = this._values(props);
+    const raw = Array.isArray(props.options) ? props.options : [];
+    const labelByValue = new Map();
+    for (const e of raw) {
+      if (e == null || e.divider || e.group != null) continue;
+      labelByValue.set(e.value, e.label != null ? String(e.label) : String(e.value ?? ''));
+    }
+    return values.map((v, i) => {
+      const label = labelByValue.has(v) ? labelByValue.get(v) : String(v ?? '');
+      return { id: `${this._base}-chip-${i}`, value: v, label, removeLabel: `Remove ${label}` };
+    });
+  }
+
+  // ---- render model --------------------------------------------------------
+
+  // Normalize `options` into a flat render list (`rows` — options + headings +
+  // dividers) plus the option-only list keyboard nav walks (`options`). Options
+  // whose value is in `selectedSet` are HIDDEN. With no query the authored order /
+  // headings / dividers are kept (then pruned of anything the hiding stranded);
+  // with a query the survivors are filtered + two-tier ranked and re-grouped under
+  // their headings (Combobox's model), dividers dropped.
+  _build(props, query, selectedSet) {
+    const base = this._base;
+    const q = String(query || '').trim().toLowerCase();
+    const rawQuery = String(query || '');
+    const raw = Array.isArray(props.options) ? props.options : [];
+    const filterFn = typeof props.filter === 'function' ? props.filter : null;
+    const isSelected = (v) => selectedSet && selectedSet.has(v);
+
+    const makeOption = (entry, optIndex) => ({
+      kind: 'option',
+      id: `${base}-opt-${optIndex}`,
+      optIndex,
+      value: entry.value,
+      label: entry.label != null ? String(entry.label) : String(entry.value ?? ''),
+      disabled: !!entry.disabled,
+      active: false,
+    });
+
+    // No active query — authored order, headings, and dividers, minus selected
+    // options and the structure their removal stranded.
+    if (!q) {
+      const structural = [];
+      raw.forEach((entry, i) => {
+        if (entry == null) return;
+        if (entry.divider) {
+          structural.push({ kind: 'divider', id: `${base}-div-${i}` });
+          return;
+        }
+        if (entry.group != null) {
+          structural.push({ kind: 'group', id: `${base}-grp-${i}`, label: String(entry.group) });
+          return;
+        }
+        if (isSelected(entry.value)) return;
+        structural.push(makeOption(entry, 0));
+      });
+      // Renumber option ids/indexes after pruning so activeIndex stays contiguous.
+      const rows = pruneStructure(structural);
+      const options = [];
+      let optIndex = 0;
+      rows.forEach((r) => {
+        if (r.kind !== 'option') return;
+        r.optIndex = optIndex;
+        r.id = `${base}-opt-${optIndex}`;
+        options.push(r);
+        optIndex++;
+      });
+      return { rows, options };
+    }
+
+    // Active query — filter + two-tier rank + re-group (Combobox). Selected
+    // options are skipped; each survivor's group is the most recent {group}.
+    let currentGroup = null;
+    const matched = [];
+    raw.forEach((entry, i) => {
+      if (entry == null || entry.divider) return;
+      if (entry.group != null) {
+        currentGroup = String(entry.group);
+        return;
+      }
+      if (isSelected(entry.value)) return;
+      const label = entry.label != null ? String(entry.label) : String(entry.value ?? '');
+      let tier;
+      if (filterFn) {
+        const keep = filterFn(
+          { value: entry.value, label, disabled: !!entry.disabled, group: currentGroup },
+          rawQuery
+        );
+        if (!keep) return;
+        tier = 0;
+      } else {
+        const hay = label.toLowerCase();
+        if (wordPrefix(hay, q)) tier = 0;
+        else if (hay.includes(q)) tier = 1;
+        else return;
+      }
+      matched.push({
+        value: entry.value,
+        label,
+        disabled: !!entry.disabled,
+        group: currentGroup,
+        tier,
+        order: i,
+      });
+    });
+
+    matched.sort((a, b) => a.tier - b.tier || a.order - b.order);
+
+    const ungrouped = [];
+    const groupOrder = [];
+    const groupMap = new Map();
+    matched.forEach((m) => {
+      if (m.group == null) {
+        ungrouped.push(m);
+        return;
+      }
+      if (!groupMap.has(m.group)) {
+        groupMap.set(m.group, []);
+        groupOrder.push(m.group);
+      }
+      groupMap.get(m.group).push(m);
+    });
+
+    const rows = [];
+    const options = [];
+    let optIndex = 0;
+    const push = (m) => {
+      const opt = {
+        kind: 'option',
+        id: `${base}-opt-${optIndex}`,
+        optIndex,
+        value: m.value,
+        label: m.label,
+        disabled: m.disabled,
+        active: false,
+      };
+      rows.push(opt);
+      options.push(opt);
+      optIndex++;
+    };
+    ungrouped.forEach(push);
+    groupOrder.forEach((g, gi) => {
+      rows.push({ kind: 'group', id: `${base}-fgrp-${gi}`, label: g });
+      groupMap.get(g).forEach(push);
+    });
+
+    return { rows, options };
+  }
+
+  data(params, props) {
+    const prev = this.getData();
+    const open = this._effectiveOpen();
+    const query = prev.query ?? '';
+    const activeIndex = prev.activeIndex ?? -1;
+    const selectedSet = new Set(this._values(props));
+
+    // Closed → no filter (query is cleared on close anyway); open filters live.
+    const buildQuery = open ? query : '';
+    const { rows, options } = this._build(props, buildQuery, selectedSet);
+
+    const chips = this._chips(props);
+
+    const activeOpt =
+      open && activeIndex >= 0 && options[activeIndex] && !options[activeIndex].disabled
+        ? options[activeIndex]
+        : null;
+    if (activeOpt) activeOpt.active = true;
+
+    rows.forEach((r) => {
+      if (r.kind === 'divider') {
+        r.role = 'separator';
+        r.ariaSelected = false;
+        r.ariaDisabled = false;
+        r.ariaHidden = 'true';
+        r.rowClass = DIVIDER_CLASS;
+      } else if (r.kind === 'group') {
+        r.role = 'presentation';
+        r.ariaSelected = false;
+        r.ariaDisabled = false;
+        r.ariaHidden = false;
+        r.rowClass = GROUP_CLASS;
+      } else {
+        r.role = 'option';
+        r.ariaSelected = 'false';
+        r.ariaDisabled = r.disabled ? 'true' : false;
+        r.ariaHidden = false;
+        r.rowClass = optionClass(r.disabled, r.active);
+      }
+    });
+
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const described = !!(error || hint);
+    const placement = (open && prev.placement) || 'bottom';
+    const inputId = props.id || `${this._base}-input`;
+    const disabled = !!props.disabled;
+    // The placeholder only shows when there are no chips (mirrors a native
+    // tag-input: once a chip is present the input is a bare filter caret).
+    const inputPlaceholder = chips.length ? '' : props.placeholder || 'Select…';
+
+    return {
+      rows,
+      options,
+      chips,
+      open,
+      empty: options.length === 0,
+      query,
+      inputPlaceholder,
+      emptyText: props.emptyText || 'No results.',
+      label: props.label || '',
+      hint,
+      error,
+      invalid: error ? 'true' : false,
+      describedby: described ? `${this._base}-desc` : false,
+      descId: `${this._base}-desc`,
+      inputId,
+      listId: `${this._base}-list`,
+      listAria: props.label || 'Options',
+      ariaControls: open ? `${this._base}-list` : false,
+      ariaExpanded: open ? 'true' : 'false',
+      activeId: activeOpt ? activeOpt.id : false,
+      disabled,
+      chipClass: CHIP_CLASS,
+      chipRemoveClass: CHIP_REMOVE_CLASS,
+      rootClass: props.class || '',
+      controlClass: [
+        CONTROL_BASE,
+        error ? CONTROL_ERROR : CONTROL_OK,
+        disabled ? 'opacity-50 pointer-events-none' : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      inputClass: INPUT_BASE,
+      panelClass: [PANEL_BASE, PANEL_PLACEMENT[placement]].filter(Boolean).join(' '),
+      panelStyle: prev.maxHeight ? `max-height:${prev.maxHeight}px;` : '',
+    };
+  }
+
+  // ---- open / close intents ------------------------------------------------
+
+  // Auto-flip placement from the control's viewport room (Combobox's model,
+  // anchored to the whole control box since chips can wrap it onto several lines).
+  _measurePlacement() {
+    const control = this.element?.querySelector('[data-multiselect-control]');
+    if (!control || typeof window === 'undefined') return { placement: 'bottom', maxHeight: 0 };
+    const rect = control.getBoundingClientRect();
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    const placement = below < 240 && above > below ? 'top' : 'bottom';
+    const maxHeight = Math.max(120, Math.floor(placement === 'top' ? above : below));
+    return { placement, maxHeight };
+  }
+
+  // Seed the open state: empty query (the input is always a bare filter here — the
+  // chips carry the selection), active on the first enabled candidate, auto-flip
+  // placement. Shared by the internal open path and the external-open fallback.
+  _seedOpen() {
+    const selectedSet = new Set(this._values(this.props));
+    const { options } = this._build(this.props, '', selectedSet);
+    const ai = this._firstEnabled(options);
+    const { placement, maxHeight } = this._measurePlacement();
+    this._openSeeded = true;
+    return { query: '', activeIndex: ai, placement, maxHeight };
+  }
+
+  _requestOpen() {
+    if (this._effectiveOpen()) return;
+    const base = this._seedOpen();
+    if (this._controlled()) {
+      this.setData(base);
+    } else {
+      this.setData({ ...base, uncontrolledOpen: true });
+    }
+
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+
+    if (!this._controlled()) this.refresh();
+  }
+
+  _requestClose({ restoreFocus = true } = {}) {
+    if (!this._effectiveOpen()) return;
+    this._pendingRestoreFocus = restoreFocus;
+
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+
+    if (this._controlled()) {
+      // Parent owns `open`; clear the local query so the reopened control is blank.
+      this.setData({ query: '' });
+      return;
+    }
+    this.setData({ uncontrolledOpen: false, query: '' });
+    this.refresh();
+  }
+
+  // ---- open / close side-effects (driven by the effective-open transition) --
+
+  _syncOpenEffects() {
+    const open = this._effectiveOpen();
+    if (open && !this._wasOpen) {
+      this._wasOpen = true;
+      this._onOpened();
+    } else if (!open && this._wasOpen) {
+      this._wasOpen = false;
+      this._onClosed();
+    }
+  }
+
+  afterUpdate() {
+    this._syncOpenEffects();
+    if (this._scrollActive) {
+      this._scrollActive = false;
+      this._scrollActiveIntoView();
+    }
+  }
+
+  _onOpened() {
+    document.addEventListener('pointerdown', this._onDocPointer);
+    // Fallback seed: a controlled parent may flip `open` true with no interaction.
+    if (!this._openSeeded) {
+      this.setData(this._seedOpen());
+      this.refresh();
+    }
+    this._openSeeded = false;
+    const input = this.element?.querySelector('[data-multiselect-input]');
+    if (input) input.focus({ preventScroll: true });
+    this._scrollActiveIntoView();
+  }
+
+  _onClosed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+    this.setData({ placement: 'bottom', maxHeight: 0 });
+    if (this._pendingRestoreFocus) {
+      this.element?.querySelector('[data-multiselect-input]')?.focus();
+    }
+    this._pendingRestoreFocus = true;
+  }
+
+  // ---- active-option movement ----------------------------------------------
+
+  _firstEnabled(options) {
+    for (let i = 0; i < options.length; i++) if (!options[i].disabled) return i;
+    return -1;
+  }
+
+  _lastEnabled(options) {
+    for (let i = options.length - 1; i >= 0; i--) if (!options[i].disabled) return i;
+    return -1;
+  }
+
+  _move(dir) {
+    const { options, activeIndex } = this.getData();
+    const n = options.length;
+    if (!n) return;
+    let i = activeIndex;
+    for (let step = 0; step < n; step++) {
+      i = (i + dir + n) % n;
+      if (!options[i].disabled) {
+        this._setActive(i, true);
+        return;
+      }
+    }
+  }
+
+  _setActive(i, scroll) {
+    if (i < 0) return;
+    this._scrollActive = !!scroll;
+    this.setData({ activeIndex: i });
+    this.refresh();
+  }
+
+  _scrollActiveIntoView() {
+    const { open, activeId } = this.getData();
+    if (!open || !activeId || !this.element) return;
+    this.element.querySelector(`#${CSS.escape(activeId)}`)?.scrollIntoView({ block: 'nearest' });
+  }
+
+  // ---- add / remove --------------------------------------------------------
+
+  // Emit `change` with the value ADDED, clear the query, and reseat the active
+  // option against the NEW (shorter) candidate list. The popup stays OPEN.
+  _add(value, event) {
+    if (this.props.disabled) return;
+    const current = this._values(this.props);
+    if (current.includes(value)) return;
+    const next = current.concat([value]);
+
+    const { change } = this.props;
+    if (typeof change === 'function') change(next, event);
+
+    const { options } = this._build(this.props, '', new Set(next));
+    this._scrollActive = false;
+    this.setData({ query: '', activeIndex: this._firstEnabled(options) });
+    this.refresh();
+    this.element?.querySelector('[data-multiselect-input]')?.focus({ preventScroll: true });
+  }
+
+  // Emit `change` with `value` REMOVED. Open state is untouched; focus returns to
+  // the input. Reseats active against the NEW (longer) candidate list.
+  _remove(value, event) {
+    if (this.props.disabled) return;
+    const current = this._values(this.props);
+    if (!current.includes(value)) return;
+    const next = current.filter((v) => v !== value);
+
+    const { change } = this.props;
+    if (typeof change === 'function') change(next, event);
+
+    if (this._effectiveOpen()) {
+      const { options } = this._build(this.props, this.getData().query, new Set(next));
+      const { activeIndex } = this.getData();
+      const ai = activeIndex >= 0 && activeIndex < options.length ? activeIndex : this._firstEnabled(options);
+      this._scrollActive = false;
+      this.setData({ activeIndex: ai });
+      this.refresh();
+    }
+    this.element?.querySelector('[data-multiselect-input]')?.focus({ preventScroll: true });
+  }
+
+  _selectActive(event) {
+    const { options, activeIndex } = this.getData();
+    const opt = options[activeIndex];
+    if (!opt || opt.disabled) return;
+    this._add(opt.value, event);
+  }
+
+  events = {
+    onChevronDown: (event) => {
+      event.preventDefault();
+    },
+
+    onRemoveDown: (event) => {
+      event.preventDefault();
+    },
+
+    toggle: () => {
+      if (this.props.disabled) return;
+      if (this._effectiveOpen()) this._requestClose({ restoreFocus: true });
+      else this._requestOpen();
+    },
+
+    onInputClick: () => {
+      if (this.props.disabled) return;
+      if (!this._effectiveOpen()) this._requestOpen();
+    },
+
+    // Every keystroke re-filters, reseats the active row on the first result, and
+    // opens if closed.
+    onInput: (event) => {
+      if (this.props.disabled) return;
+      const query = event.target.value;
+      const selectedSet = new Set(this._values(this.props));
+      const { options } = this._build(this.props, query, selectedSet);
+      const ai = this._firstEnabled(options);
+      this._scrollActive = false;
+
+      if (!this._effectiveOpen()) {
+        const { placement, maxHeight } = this._measurePlacement();
+        this._openSeeded = true;
+        const base = { query, activeIndex: ai, placement, maxHeight };
+        if (this._controlled()) {
+          this.setData(base);
+        } else {
+          this.setData({ ...base, uncontrolledOpen: true });
+        }
+        const { show } = this.props;
+        if (typeof show === 'function') show();
+        if (!this._controlled()) this.refresh();
+      } else {
+        this.setData({ query, activeIndex: ai });
+        this.refresh();
+      }
+    },
+
+    onKey: (event) => {
+      const open = this._effectiveOpen();
+      const { options, query } = this.getData();
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          if (!open) this._requestOpen();
+          else this._move(1);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          if (!open) this._requestOpen();
+          else this._move(-1);
+          break;
+        case 'Home':
+          if (!open) return;
+          event.preventDefault();
+          this._setActive(this._firstEnabled(options), true);
+          break;
+        case 'End':
+          if (!open) return;
+          event.preventDefault();
+          this._setActive(this._lastEnabled(options), true);
+          break;
+        case 'Enter':
+          if (!open) return;
+          event.preventDefault();
+          this._selectActive(event);
+          break;
+        case 'Backspace': {
+          // Empty input → remove the last chip (whether open or closed).
+          if (event.target.value !== '') return;
+          const current = this._values(this.props);
+          if (!current.length) return;
+          event.preventDefault();
+          this._remove(current[current.length - 1], event);
+          break;
+        }
+        case 'Escape':
+          if (!open) return;
+          event.preventDefault();
+          this._requestClose({ restoreFocus: true });
+          break;
+        case 'Tab':
+          if (open) this._requestClose({ restoreFocus: false });
+          break;
+        default:
+          break;
+      }
+    },
+
+    hover: (row) => {
+      if (row.kind !== 'option' || row.disabled) return;
+      if (this.getData().activeIndex === row.optIndex) return;
+      this._setActive(row.optIndex, false);
+    },
+
+    choose: (row, event) => {
+      if (row.kind !== 'option' || row.disabled) return;
+      this._add(row.value, event);
+    },
+
+    removeChip: (chip, event) => {
+      this._remove(chip.value, event);
+    },
+  };
+}
+</script>

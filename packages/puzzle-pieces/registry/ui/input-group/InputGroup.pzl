@@ -1,0 +1,139 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <label for={ id } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
+    {/if}
+    <div class={ groupClass }>
+      <div class="flex items-center px-3 text-sm text-muted select-none border-r border-border empty:hidden">
+        <Slot name="prefix"/>
+      </div>
+      <input
+        id={ id }
+        type={ type }
+        class={ inputClass }
+        value={ value }
+        placeholder={ placeholder }
+        name={ name }
+        disabled={ disabled }
+        required={ required }
+        aria-invalid={ invalid }
+        aria-describedby={ describedby }
+        @input={ handleInput(event) }
+        @blur={ handleBlur(event) }
+        @focus={ handleFocus(event) } />
+      <div class="flex items-center px-3 text-sm text-muted select-none border-l border-border empty:hidden">
+        <Slot name="suffix"/>
+      </div>
+    </div>
+    {#if error}
+      <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
+    {:else if hint}
+      <p id={ descId } class="mt-1.5 text-sm text-muted">{ hint }</p>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// InputGroup — a Field-compatible text input with fused leading/trailing addons.
+// It takes everything Field takes (label, hint/error, ARIA wiring, controlled
+// value via @change) and mirrors Field's markup EXACTLY — the only difference is
+// where the chrome lives. Here the BORDER, ROUNDING, BACKGROUND, and FOCUS RING
+// move up onto a group wrapper; the real <input> inside is borderless and
+// transparent, so `prefix`/`suffix` addons sit flush inside one continuous field.
+//
+// FOCUS moves with `focus-within`: focus the inner input and the WRAPPER lights
+// up. Per the focus-flash rule the outline COLOR is set unconditionally
+// (outline-ring, or outline-danger when errored) and only the 2px width/offset is
+// revealed under focus-within — so `transition-colors` never flashes the outline.
+// An `error` string swaps the border and outline to danger and flips
+// aria-invalid, identical to Field.
+//
+// ADDONS are named slots. Following Card's optional-footer discipline, each slot
+// lives in its own muted container (px-3, text-muted, select-none) with a
+// border hairline toward the input; `empty:hidden` COLLAPSES the container when
+// nothing is slotted, so an unused prefix/suffix leaves no gap or stray hairline.
+// Slot anything: a text span, a <Kbd>, an icon, or a Button piece.
+//
+//   // https:// … .com URL field
+//   <InputGroup label="Website" value={ url } @change={ setUrl }>
+//     <span slot="prefix">https://</span>
+//     <span slot="suffix">.com</span>
+//   </InputGroup>
+//
+//   // a Button in the suffix
+//   <InputGroup label="Share link" value={ link }>
+//     <Button slot="suffix" size="sm" variant="ghost" @press={ copy }>Copy</Button>
+//   </InputGroup>
+//
+//   // a Kbd hint in the suffix
+//   <InputGroup label="Search" value={ q } @change={ setQ }>
+//     <Kbd slot="suffix">⌘K</Kbd>
+//   </InputGroup>
+//
+// Props (all of Field's, plus the two slots):
+//   label, hint, error, placeholder, value, type, disabled, name, id, required,
+//   class, and @change(value, event) (value-first). Named slots: prefix, suffix.
+let uid = 0;
+
+const GROUP_BASE =
+  'flex items-stretch rounded-lg border bg-surface overflow-hidden transition-colors ' +
+  'focus-within:outline-2 focus-within:outline-offset-2';
+const GROUP_OK = 'border-border outline-ring focus-within:outline-ring';
+const GROUP_ERROR = 'border-danger outline-danger focus-within:outline-danger';
+
+const INPUT_BASE =
+  'h-9 min-w-0 flex-1 bg-transparent px-3 text-sm text-ink placeholder:text-muted ' +
+  'focus:outline-none disabled:cursor-not-allowed';
+
+export default class InputGroup extends PuzzleView {
+  data(params, props) {
+    // Fallback id generated once per instance (survives re-renders); explicit id wins.
+    const id = props.id || (this._fallbackId ??= `pp-inputgroup-${++uid}`);
+    const error = props.error || '';
+    const hint = props.hint || '';
+    const described = !!(error || hint);
+    const disabled = !!props.disabled;
+    return {
+      id,
+      descId: `${id}-desc`,
+      type: props.type || 'text',
+      value: props.value ?? '',
+      placeholder: props.placeholder,
+      name: props.name,
+      label: props.label,
+      hint,
+      error,
+      disabled,
+      required: !!props.required,
+      invalid: error ? 'true' : false,
+      describedby: described ? `${id}-desc` : false,
+      rootClass: props.class || '',
+      groupClass: [
+        GROUP_BASE,
+        error ? GROUP_ERROR : GROUP_OK,
+        disabled ? 'opacity-50' : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      inputClass: INPUT_BASE,
+    };
+  }
+
+  events = {
+    handleInput: (event) => {
+      const { change } = this.props;
+      if (typeof change === 'function') change(event.target.value, event);
+    },
+    handleBlur: (event) => {
+      const { blur } = this.props;
+      if (typeof blur === 'function') blur(event);
+    },
+    handleFocus: (event) => {
+      const { focus } = this.props;
+      if (typeof focus === 'function') focus(event);
+    },
+  };
+}
+</script>

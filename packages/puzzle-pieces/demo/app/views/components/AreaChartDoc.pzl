@@ -1,0 +1,192 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Area Chart</h1>
+        <p class="mt-2 text-body">
+          The
+          <a href="#/components/line-chart" class="font-medium text-brand hover:underline">line chart</a>'s
+          filled sibling — same config-first, responsive shape, plus a low-opacity fill wash under a
+          full-strength 2px edge line. Pass
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">stacked</code>
+          for cumulative bands, or leave it off for overlapping translucent areas.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full">
+          <AreaChart data={ visitsData } xKey="month" series={ visitsSeries } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece and its math helper into your app — they compile with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          chart-math.js is a shared lib file — AreaChart imports it as ../../lib/chart-math.js. It ships
+          alongside the piece; keep it in app/lib/.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <div>
+          <ExampleBox id="stacked" title="Stacked" code={ codeStacked }>
+            <div class="w-full">
+              <AreaChart data={ channelData } xKey="month" series={ channelSeries } stacked={ true } />
+            </div>
+          </ExampleBox>
+          <p class="mt-3 text-sm text-muted">
+            Stacked bands are cumulative, so the top edge reads as the total. The tooltip still shows each
+            channel's own value, not the running sum.
+          </p>
+        </div>
+
+        <div>
+          <ExampleBox id="overlapping" title="Overlapping" code={ codeOverlapping }>
+            <div class="w-full">
+              <AreaChart data={ compareData } xKey="month" series={ compareSeries } />
+            </div>
+          </ExampleBox>
+          <p class="mt-3 text-sm text-muted">
+            Without stacked, series share the y=0 baseline and their translucent washes overlap — good for
+            comparing two or three magnitudes directly.
+          </p>
+        </div>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import AreaChart from '@/components/ui/AreaChart.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for AreaChart — follows the TableDoc / CalendarDoc exemplar (header →
+// hero ExampleBox → Installation → titled example sections → Toc). Data lives as
+// static module consts fed straight into the pure-presentation piece.
+
+const installCmd = 'puzzle add piece area-chart';
+const usageImport = `import AreaChart from '@/components/ui/AreaChart.pzl';`;
+const usageMarkup = `<AreaChart data={ data } xKey="month" series={ [{ key: 'visits', label: 'Visits' }] } />`;
+
+const codeHero = `const data = [
+  { month: 'Jan', visits: 12400 },
+  { month: 'Feb', visits: 13900 },
+  { month: 'Mar', visits: 15200 },
+  // …
+];
+
+<AreaChart data={ data } xKey="month" series={ [{ key: 'visits', label: 'Visits' }] } />`;
+
+const codeStacked = `// stacked draws cumulative bands (bottom-to-top); the tooltip shows per-series values.
+const series = [
+  { key: 'direct',   label: 'Direct' },
+  { key: 'referral', label: 'Referral' },
+  { key: 'social',   label: 'Social' },
+];
+
+<AreaChart data={ data } xKey="month" series={ series } stacked={ true } />`;
+
+const codeOverlapping = `// Without stacked, areas share the baseline and overlap translucently.
+const series = [
+  { key: 'productA', label: 'Aurora' },
+  { key: 'productB', label: 'Borealis' },
+];
+
+<AreaChart data={ data } xKey="month" series={ series } />`;
+
+const visitsData = [
+  { month: 'Jan', visits: 12400 },
+  { month: 'Feb', visits: 13900 },
+  { month: 'Mar', visits: 15200 },
+  { month: 'Apr', visits: 14600 },
+  { month: 'May', visits: 16800 },
+  { month: 'Jun', visits: 18100 },
+  { month: 'Jul', visits: 19500 },
+  { month: 'Aug', visits: 18800 },
+  { month: 'Sep', visits: 21200 },
+  { month: 'Oct', visits: 23400 },
+  { month: 'Nov', visits: 24900 },
+  { month: 'Dec', visits: 27600 },
+];
+const visitsSeries = [{ key: 'visits', label: 'Visits' }];
+
+const channelData = [
+  { month: 'Jan', direct: 5200, referral: 3100, social: 2400 },
+  { month: 'Feb', direct: 5600, referral: 3400, social: 2900 },
+  { month: 'Mar', direct: 6100, referral: 3600, social: 3300 },
+  { month: 'Apr', direct: 5900, referral: 3900, social: 3600 },
+  { month: 'May', direct: 6600, referral: 4200, social: 4100 },
+  { month: 'Jun', direct: 7100, referral: 4600, social: 4700 },
+  { month: 'Jul', direct: 7600, referral: 4900, social: 5200 },
+  { month: 'Aug', direct: 7400, referral: 5200, social: 5600 },
+  { month: 'Sep', direct: 8200, referral: 5600, social: 6300 },
+  { month: 'Oct', direct: 8900, referral: 6100, social: 7000 },
+  { month: 'Nov', direct: 9400, referral: 6600, social: 7600 },
+  { month: 'Dec', direct: 10200, referral: 7100, social: 8400 },
+];
+const channelSeries = [
+  { key: 'direct', label: 'Direct' },
+  { key: 'referral', label: 'Referral' },
+  { key: 'social', label: 'Social' },
+];
+
+const compareData = [
+  { month: 'Jan', productA: 8200, productB: 5400 },
+  { month: 'Feb', productA: 8600, productB: 6100 },
+  { month: 'Mar', productA: 9100, productB: 6800 },
+  { month: 'Apr', productA: 8800, productB: 7300 },
+  { month: 'May', productA: 9600, productB: 8100 },
+  { month: 'Jun', productA: 10200, productB: 8900 },
+  { month: 'Jul', productA: 10800, productB: 9600 },
+  { month: 'Aug', productA: 10500, productB: 10100 },
+  { month: 'Sep', productA: 11400, productB: 11200 },
+  { month: 'Oct', productA: 12100, productB: 12400 },
+  { month: 'Nov', productA: 12800, productB: 13600 },
+  { month: 'Dec', productA: 13500, productB: 15100 },
+];
+const compareSeries = [
+  { key: 'productA', label: 'Aurora' },
+  { key: 'productB', label: 'Borealis' },
+];
+
+export default class AreaChartDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeStacked,
+      codeOverlapping,
+      visitsData,
+      visitsSeries,
+      channelData,
+      channelSeries,
+      compareData,
+      compareSeries,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Stacked', href: '#stacked' },
+        { label: 'Overlapping', href: '#overlapping' },
+      ],
+    };
+  }
+}
+</script>

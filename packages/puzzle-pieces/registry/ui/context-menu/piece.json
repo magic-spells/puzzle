@@ -1,0 +1,8 @@
+{
+  "name": "context-menu",
+  "description": "Right-click context menu — dropdown-menu's grouped items, danger rows, and keyboard nav opened at the pointer position with viewport clamping",
+  "files": ["ContextMenu.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

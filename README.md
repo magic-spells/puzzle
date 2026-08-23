@@ -393,11 +393,23 @@ import Icon from './Icon.pzl';              // relative
 import Icon from '@/components/Icon.pzl';   // app/components/Icon.pzl
 ```
 
+## Monorepo
+
+The framework lives at the repo root. `packages/` holds what releases in
+lockstep with it:
+
+- [`packages/puzzle-pieces`](packages/puzzle-pieces) — the official component
+  library (published to npm as `@magic-spells/puzzle-pieces`)
+- [`packages/puzzle-devtools`](packages/puzzle-devtools) — the Chrome DevTools
+  extension (ships as an extension zip, not npm)
+
+Editor grammars live in their own repos — see Syntax Highlighting below.
+
 ## Puzzle Pieces
 
-[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) is the official
-component library for Puzzle — ready-made `.pzl` components (and their styles)
-you can drop into any app:
+[Puzzle Pieces](packages/puzzle-pieces) is the official component library for
+Puzzle — ready-made `.pzl` components (and their styles) you can drop into any
+app. It lives in this monorepo and releases in lockstep with the framework:
 
 ```bash
 puzzle add piece <name>
@@ -410,7 +422,7 @@ pins an exact release; `--registry` accepts `npm:pkg[@version]`, a local
 directory, or an http(s) URL.
 
 Preview every piece in the live catalog at
-[magic-spells.github.io/puzzle-pieces](https://magic-spells.github.io/puzzle-pieces/).
+[magicspells.io/puzzle-pieces](https://magicspells.io/puzzle-pieces).
 
 ## Syntax Highlighting
 
@@ -418,6 +430,7 @@ Editor extensions provide full `.pzl` highlighting — native HTML, JavaScript/T
 
 - **[puzzle-vscode](https://github.com/magic-spells/puzzle-vscode)** - Visual Studio Code extension with snippets and completions
 - **[puzzle-sublime](https://github.com/magic-spells/puzzle-sublime)** - Sublime Text 4 syntax package
+- **[puzzle-zed](https://github.com/magic-spells/puzzle-zed)** - Zed extension (tree-sitter grammar)
 
 Install instructions are in each repository's README.
 

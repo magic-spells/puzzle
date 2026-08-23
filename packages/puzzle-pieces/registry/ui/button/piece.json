@@ -1,0 +1,8 @@
+{
+  "name": "button",
+  "description": "Button with primary/secondary/outline/ghost/destructive variants, three sizes, and a loading state",
+  "files": ["Button.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

@@ -1,0 +1,215 @@
+<puzzle-view>
+  <div
+    class={ rootClass }
+    data-panel-stack-effect={ effect }
+    @click={ handleClick(event) }
+    @keydown={ handleKeydown(event) }>
+    <Slot/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// PanelStack — controlled nested-panel navigation, ported from
+// @magic-spells/panel-stack. This piece renders only the frame + behavior;
+// every panel stays parent-authored and mounted in the default slot so the
+// class changes from lib/panel-stack.js can animate both push and pop.
+//
+// CONTROLLED BY THE PARENT. `stack` is a root-first array of panel handles.
+// push(), pop(), reset(), delegated action buttons, and Escape only propose a
+// next array through @change. The parent accepts by updating its stack prop or
+// cancels by declining to update it.
+//
+//   <PanelStack stack={ stack } @change={ setStack }>
+//     <div data-stack-panel="root" role="group"
+//          class={ panelClass(stack, 'root') }
+//          inert={ panelInert(stack, 'root') }>
+//       <button data-action-stack-push target="shop">Shop</button>
+//     </div>
+//     <div data-stack-panel="shop" role="group"
+//          class={ panelClass(stack, 'shop') }
+//          inert={ panelInert(stack, 'shop') }>
+//       <button data-action-stack-pop>Back</button>
+//     </div>
+//   </PanelStack>
+//
+// Props:
+//   stack   array of handles, root-first (controlled by the parent)
+//   effect  'slide' (default) | 'stack'; pass the same value to panelClass()
+//   class   appended to the root frame
+// Callback:
+//   @change(nextStack, { type, fromHandle, toHandle })
+//   type is 'push' | 'pop' | 'reset'; nextStack is always the first argument.
+//
+// FOCUS. Delegated pushes remember their trigger by target handle. After the
+// parent-driven render applies the new inert states, push/reset focuses the
+// new panel's [data-stack-focus] or first focusable descendant; pop restores
+// the remembered trigger when it still exists. Every focus call uses
+// { preventScroll: true } because ordinary focus scrolls clipped, translated
+// panels into view and can shift the frame's nearest scroll ancestor sideways.
+//
+// ESCAPE COMPOSITION. At depth > 1, Escape pops one level. At the root it
+// bubbles untouched so a wrapping Dialog or Sheet can close normally.
+//
+// MORPH. Panels use transforms for positioning, so neither this stack root nor
+// its panels may be morph roots.
+const ROOT =
+  'relative block w-full h-full overflow-hidden rounded-[inherit] touch-manipulation';
+
+const FOCUSABLE =
+  'button:not([disabled]), a[href], ' +
+  '[tabindex]:not([tabindex="-1"]):not([disabled]), input:not([disabled]), ' +
+  'select:not([disabled]), textarea:not([disabled])';
+
+function sameStack(a, b) {
+  return a.length === b.length && a.every((handle, index) => handle === b[index]);
+}
+
+function isPrefix(prefix, stack) {
+  return prefix.every((handle, index) => handle === stack[index]);
+}
+
+export default class PanelStack extends PuzzleView {
+  data(params, props) {
+    return {
+      stack: Array.isArray(props.stack) ? props.stack : [],
+      effect: props.effect === 'stack' ? 'stack' : 'slide',
+      rootClass: [ROOT, props.class || ''].join(' '),
+    };
+  }
+
+  mounted() {
+    this._stackState = [...this.getData().stack];
+    this._triggers = new Map();
+  }
+
+  afterUpdate() {
+    const previous = this._stackState || [];
+    const stack = [...this.getData().stack];
+    this._stackState = stack;
+
+    if (sameStack(previous, stack)) {
+      this._pendingChange = null;
+      return;
+    }
+
+    const pending = this._pendingChange;
+    const accepted = pending && sameStack(pending.nextStack, stack) ? pending.detail : null;
+    this._pendingChange = null;
+
+    let type = accepted?.type;
+    if (!type && stack.length === previous.length + 1 && isPrefix(previous, stack)) {
+      type = 'push';
+    } else if (!type && previous.length === stack.length + 1 && isPrefix(stack, previous)) {
+      type = 'pop';
+    } else if (!type) {
+      type = 'reset';
+    }
+
+    if (type === 'pop') {
+      const fromHandle = accepted?.fromHandle ?? previous[previous.length - 1];
+      const trigger = this._triggers.get(fromHandle);
+      if (trigger?.isConnected) {
+        trigger.focus({ preventScroll: true });
+        return;
+      }
+    }
+
+    this.focusPanel(stack[stack.length - 1]);
+  }
+
+  destroyed() {
+    this._triggers?.clear();
+  }
+
+  panelFor(handle) {
+    if (!this.element) return null;
+    const panels = this.element.querySelectorAll('[data-stack-panel]');
+    for (const panel of panels) {
+      if (panel.getAttribute('data-stack-panel') === String(handle)) return panel;
+    }
+    return null;
+  }
+
+  focusPanel(handle) {
+    const panel = this.panelFor(handle);
+    if (!panel) return;
+    const target = panel.querySelector('[data-stack-focus]') || panel.querySelector(FOCUSABLE);
+    if (target) target.focus({ preventScroll: true });
+  }
+
+  emitChange(nextStack, detail) {
+    const { change } = this.props;
+    if (typeof change !== 'function') return false;
+    this._pendingChange = { nextStack: [...nextStack], detail };
+    change(nextStack, detail);
+    return true;
+  }
+
+  push(handle, trigger = null) {
+    const stack = this.getData().stack;
+    if (!handle || stack.includes(handle) || !this.panelFor(handle)) return false;
+
+    const detail = {
+      type: 'push',
+      fromHandle: stack[stack.length - 1] ?? null,
+      toHandle: handle,
+    };
+    const changed = this.emitChange([...stack, handle], detail);
+    if (changed && trigger) this._triggers.set(handle, trigger);
+    return changed;
+  }
+
+  pop() {
+    const stack = this.getData().stack;
+    if (stack.length <= 1) return false;
+
+    return this.emitChange(stack.slice(0, -1), {
+      type: 'pop',
+      fromHandle: stack[stack.length - 1],
+      toHandle: stack[stack.length - 2],
+    });
+  }
+
+  reset() {
+    const stack = this.getData().stack;
+    if (stack.length <= 1) return false;
+
+    return this.emitChange([stack[0]], {
+      type: 'reset',
+      fromHandle: stack[stack.length - 1],
+      toHandle: stack[0],
+    });
+  }
+
+  events = {
+    handleClick: (event) => {
+      const origin = event.target;
+      const pushTrigger = origin?.closest?.('[data-action-stack-push]');
+      if (pushTrigger && this.element?.contains(pushTrigger)) {
+        const handle = pushTrigger.getAttribute('target');
+        if (handle) {
+          event.preventDefault();
+          this.push(handle, pushTrigger);
+        }
+        return;
+      }
+
+      const popTrigger = origin?.closest?.('[data-action-stack-pop]');
+      if (popTrigger && this.element?.contains(popTrigger)) {
+        event.preventDefault();
+        this.pop();
+      }
+    },
+
+    handleKeydown: (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (this.getData().stack.length <= 1) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.pop();
+    },
+  };
+}
+</script>

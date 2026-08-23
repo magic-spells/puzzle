@@ -1,0 +1,222 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Dropzone</h1>
+        <p class="mt-2 text-body">
+          A file-upload area — drag and drop or click to browse over a hidden
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<input type="file">' }</code>,
+          with a dragover highlight, a removable list of chosen files, and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">accept</code>
+          plus
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">maxSize</code>
+          validation. Controlled and value-first: the parent owns the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">files</code>
+          array; picks and drops come back through
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-md">
+          <Dropzone label="Attachment" files={ files } accept=".pdf,.doc,.docx" @change={ setFiles }/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Pulls in the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">chat-attachment</code>
+          piece (each chosen file renders as a ChatAttachment chip) and the pieces.css tokens.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="multiple" title="Multiple files" code={ codeMultiple }>
+          <div class="w-full max-w-md">
+            <Dropzone label="Images" files={ images } multiple accept="image/*" hint="PNG, JPG or GIF" @change={ setImages }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="validation" title="Accept and max size" code={ codeValidation }>
+          <div class="w-full max-w-md">
+            <Dropzone
+              label="Avatar"
+              files={ avatar }
+              accept=".png,.jpg,.jpeg"
+              maxSize={ oneMB }
+              hint="PNG or JPG, up to 1 MB"
+              @change={ setAvatar }
+              @reject={ onReject }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="error" title="Error state" code={ codeError }>
+          <div class="w-full max-w-md">
+            <Dropzone label="Resume" files={ empty } error="A resume is required"/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
+          <div class="w-full max-w-md">
+            <Dropzone label="Attachment" disabled files={ empty }/>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <p class="mb-3 text-sm text-body">
+          The real
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<input type="file">' }</code>
+          stays visually hidden but reachable, so keyboard and assistive-tech users tab to it
+          (it carries the label,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-describedby</code>,
+          and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-invalid</code>)
+          and open the native picker with Space or Enter; pointer users click anywhere on the zone.
+        </p>
+        <p class="text-sm text-muted">
+          The focus ring is painted on the zone with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">focus-within</code>,
+          its color set unconditionally (danger when errored) so
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">transition-colors</code>
+          never flashes it. Validation messages live in an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-live="polite"</code>
+          region. An external
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">error</code>
+          takes priority over internal
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">accept</code>/<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">maxSize</code>
+          messages.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Dropzone from '@/components/ui/Dropzone.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+// Docs page for Dropzone — follows the InputGroupDoc / FieldDoc exemplar shape.
+// Real uploads can't run in a static docs page, so the interactive examples seed
+// the `files` arrays with { name, size, type } descriptor MOCKS (size in bytes —
+// Dropzone formats them for the chips). Dragging or browsing a real file still
+// works live and flows through @change / @reject like production.
+const installCmd = 'puzzle add piece dropzone';
+const usageImport = `import Dropzone from '@/components/ui/Dropzone.pzl';`;
+const usageMarkup = `<Dropzone label="Attachment" files={ files } accept=".pdf,.doc,.docx" @change={ setFiles } />`;
+
+const codeHero = `<Dropzone label="Attachment" files={ files } accept=".pdf,.doc,.docx" @change={ setFiles } />
+
+// parent
+created() {
+  this.setData({ files: [] });
+}
+events = {
+  setFiles: (next) => this.setData('files', next),
+};`;
+
+const codeMultiple = `<Dropzone
+  label="Images"
+  files={ images }
+  multiple
+  accept="image/*"
+  hint="PNG, JPG or GIF"
+  @change={ setImages } />
+
+// A pick or drop MERGES into the existing array (deduped by name+size).
+// Removing a chip emits @change with that file filtered out.`;
+
+const codeValidation = `<Dropzone
+  label="Avatar"
+  files={ avatar }
+  accept=".png,.jpg,.jpeg"
+  maxSize={ 1024 * 1024 }
+  hint="PNG or JPG, up to 1 MB"
+  @change={ setAvatar }
+  @reject={ onReject } />
+
+// @reject gives [{ file, reason, message }] for files that fail accept/size —
+// surface your own toast, or rely on the inline aria-live message.
+events = {
+  onReject: (rejections) =>
+    toast({ message: rejections[0].message, variant: 'danger' }),
+};`;
+
+const codeError = `<Dropzone label="Resume" files={ files } error="A resume is required" />`;
+
+const codeDisabled = `<Dropzone label="Attachment" disabled files={ files } />`;
+
+export default class DropzoneDoc extends PuzzleView {
+  created() {
+    this.setData({
+      files: [{ name: 'brand-guidelines.pdf', size: 2_411_724, type: '' }],
+      images: [
+        { name: 'hero-banner.png', size: 845_231 },
+        { name: 'promo-loop.mp4', size: 18_402_112 },
+      ],
+      avatar: [{ name: 'profile.png', size: 132_480 }],
+      empty: [],
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      oneMB: 1024 * 1024,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeMultiple,
+      codeValidation,
+      codeError,
+      codeDisabled,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Multiple files', href: '#multiple' },
+        { label: 'Accept and max size', href: '#validation' },
+        { label: 'Error state', href: '#error' },
+        { label: 'Disabled', href: '#disabled' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    setFiles: (next) => {
+      this.setData('files', next);
+      this.refresh();
+    },
+    setImages: (next) => {
+      this.setData('images', next);
+      this.refresh();
+    },
+    setAvatar: (next) => {
+      this.setData('avatar', next);
+      this.refresh();
+    },
+    onReject: (rejections) =>
+      toast({ message: rejections[0].message, variant: 'danger' }),
+  };
+}
+</script>

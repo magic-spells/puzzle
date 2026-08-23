@@ -1,0 +1,200 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Popconfirm</h1>
+        <p class="mt-2 text-body">
+          A lightweight inline confirmation popover anchored to its trigger, for low-stakes
+          confirmations that don't warrant a full modal. It opens next to the trigger on click;
+          an outside click or Escape cancels it, and it flips sides when the requested edge runs
+          out of room. Reach for Alert Dialog when the choice is consequential enough to demand a
+          focus-trapping modal.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }>
+          <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+            Delete item
+          </button>
+        </Popconfirm>
+        <p class="mt-4 text-sm text-muted">Deleted { deleteCount } time{ deleteCount === 1 ? '' : 's' } this session.</p>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="danger" title="Danger variant" code={ codeDanger }>
+          <div class="flex flex-wrap items-center justify-center gap-4">
+            <Popconfirm
+              message="Delete this file?"
+              description="This permanently removes the file and cannot be undone."
+              confirmLabel="Delete"
+              variant="danger"
+              @confirm={ onDelete }>
+              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg bg-danger px-4 text-sm font-medium text-danger-ink hover:bg-danger-dark outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+                Delete file
+              </button>
+            </Popconfirm>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="placement" title="Placement" code={ codePlacement }>
+          <div class="flex flex-wrap items-center justify-center gap-4">
+            <Popconfirm message="Confirm this action?" placement="top" align="start">
+              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Top start</button>
+            </Popconfirm>
+            <Popconfirm message="Confirm this action?" placement="top" align="center">
+              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Top center</button>
+            </Popconfirm>
+            <Popconfirm message="Confirm this action?" placement="bottom" align="end">
+              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Bottom end</button>
+            </Popconfirm>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="controlled" title="Controlled open" code={ codeControlled }>
+          <div class="flex flex-col items-center gap-4 text-sm text-body">
+            <Popconfirm
+              message="Publish these changes?"
+              confirmLabel="Publish"
+              open={ confirmOpen }
+              @show={ onShow }
+              @hide={ onHide }
+              @confirm={ onPublish }>
+              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+                Publish
+              </button>
+            </Popconfirm>
+            <p>
+              The parent owns <span class="font-medium text-ink">open</span> — it is currently
+              <span class="font-medium text-ink">{ confirmOpen ? 'open' : 'closed' }</span>.
+              { published ? ' Changes published.' : '' }
+            </p>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Popconfirm from '@/components/ui/Popconfirm.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece popconfirm';
+const usageImport = `import Popconfirm from '@/components/ui/Popconfirm.pzl';`;
+const usageMarkup = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }></Popconfirm>`;
+
+const codeHero = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }>
+  <button slot="trigger" class="…">Delete item</button>
+</Popconfirm>
+
+// The consumer supplies their OWN button in the "trigger" slot; clicking it
+// opens the confirm bubble. @confirm fires and closes; @cancel (or Escape /
+// an outside click) dismisses without confirming.
+events = {
+  onDelete: () => this.doDelete(),
+};`;
+
+const codeDanger = `// variant="danger" tints the confirm button destructive. Pair it with a
+// description line for the "cannot be undone" reassurance.
+<Popconfirm
+  message="Delete this file?"
+  description="This permanently removes the file and cannot be undone."
+  confirmLabel="Delete"
+  variant="danger"
+  @confirm={ onDelete }>
+  <button slot="trigger" class="…">Delete file</button>
+</Popconfirm>`;
+
+const codePlacement = `<Popconfirm message="Confirm this action?" placement="top" align="start">…</Popconfirm>
+<Popconfirm message="Confirm this action?" placement="bottom" align="end">…</Popconfirm>
+
+// placement — "top" (default) or "bottom"; flips automatically when the
+//              requested edge lacks room for the measured bubble.
+// align     — "center" (default), "start", or "end" along the trigger's edge.`;
+
+const codeControlled = `// open is optional-controlled: pass it and the parent owns the state. The
+// bubble fires @show / @hide so a controlled parent can stay in sync, and
+// @confirm / @cancel for the action itself.
+<Popconfirm
+  message="Publish these changes?"
+  confirmLabel="Publish"
+  open={ confirmOpen }
+  @show={ onShow }
+  @hide={ onHide }
+  @confirm={ onPublish }>
+  <button slot="trigger" class="…">Publish</button>
+</Popconfirm>
+
+events = {
+  onShow: () => this.setData('confirmOpen', true),
+  onHide: () => this.setData('confirmOpen', false),
+};`;
+
+export default class PopconfirmDoc extends PuzzleView {
+  created() {
+    this.setData({ deleteCount: 0, confirmOpen: false, published: false });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeDanger,
+      codePlacement,
+      codeControlled,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Danger variant', href: '#danger' },
+        { label: 'Placement', href: '#placement' },
+        { label: 'Controlled open', href: '#controlled' },
+      ],
+    };
+  }
+
+  events = {
+    onDelete: () => {
+      this.setData('deleteCount', this.getData().deleteCount + 1);
+      this.refresh();
+    },
+    onShow: () => {
+      this.setData('confirmOpen', true);
+      this.refresh();
+    },
+    onHide: () => {
+      this.setData('confirmOpen', false);
+      this.refresh();
+    },
+    onPublish: () => {
+      this.setData('published', true);
+      this.refresh();
+    },
+  };
+}
+</script>

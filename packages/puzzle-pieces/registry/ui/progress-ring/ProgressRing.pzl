@@ -1,0 +1,132 @@
+<puzzle-view>
+  <div
+    class={ rootClass }
+    style={ rootStyle }
+    role="progressbar"
+    aria-valuemin="0"
+    aria-valuemax={ max }
+    aria-valuenow={ now }
+    aria-label={ label }>
+    <svg
+      class="block"
+      width={ size }
+      height={ size }
+      viewBox={ viewBox }
+      aria-hidden="true">
+      <circle
+        class="stroke-surface-sunken"
+        cx={ center }
+        cy={ center }
+        r={ radius }
+        fill="none"
+        stroke-width={ stroke } />
+      <circle
+        class="stroke-current transition-[stroke-dashoffset] duration-300 motion-reduce:transition-none"
+        cx={ center }
+        cy={ center }
+        r={ radius }
+        fill="none"
+        stroke-width={ stroke }
+        stroke-linecap="round"
+        stroke-dasharray={ circumference }
+        stroke-dashoffset={ dashoffset }
+        transform={ rotation } />
+    </svg>
+    {#if showValue}
+      <div class="absolute inset-0 flex flex-col items-center justify-center" aria-hidden="true">
+        <span class="font-semibold leading-none text-ink" style={ valueStyle }>{ valueLabel }</span>
+        {#if showCaption}
+          <span class="mt-1 text-xs leading-none text-muted">{ label }</span>
+        {/if}
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ProgressRing — a determinate circular progress indicator: an SVG ring with a
+// muted track and a value arc drawn via the stroke-dasharray/dashoffset trick,
+// rotated so it starts at 12 o'clock and sweeps clockwise. Pass a numeric
+// `value` in [0, max]; a centered percentage is shown by default. Value changes
+// animate smoothly (transition-[stroke-dashoffset], honoring prefers-reduced-
+// motion). For the INDETERMINATE ring (unknown/ongoing work) use Spinner.
+//
+//   <ProgressRing value={ 73 } />
+//   <ProgressRing value={ done } max={ 100 } size="lg" label="Upload" />
+//   <ProgressRing value={ 40 } size={ 64 } thickness={ 6 } />
+//   <ProgressRing value={ 90 } class="text-chart-5" />   retint the arc
+//   <ProgressRing value={ 60 } showValue={ false } />     arc only
+//
+// The arc is `stroke-current` and the root defaults to `text-brand`, so a caller
+// can retint with any text-color token via `class` (the currentColor trick
+// Sparkline/Spinner use). `size` is a px diameter or a preset (sm/md/lg =
+// 48/96/128). The centered percentage font scales from `size` with proportional
+// (non-tabular) figures. `label` is always the accessible name; it also renders
+// as a small caption under the percentage when a label is passed AND the ring is
+// large enough (size >= 88) — on smaller rings it stays aria-only to avoid
+// crowding.
+const SIZE = { sm: 48, md: 96, lg: 128 };
+const CAPTION_MIN = 88; // below this the label is aria-only, not a visible caption
+
+export default class ProgressRing extends PuzzleView {
+  data(params, props) {
+    const max = typeof props.max === 'number' && props.max > 0 ? props.max : 100;
+
+    const hasValue = typeof props.value === 'number' && !Number.isNaN(props.value);
+    const value = hasValue ? Math.min(Math.max(props.value, 0), max) : 0;
+    const fraction = max > 0 ? value / max : 0;
+
+    // Resolve size: explicit px number wins, else a preset name, else md.
+    const size =
+      typeof props.size === 'number' && props.size > 0
+        ? props.size
+        : SIZE[props.size] || SIZE.md;
+
+    // Stroke width, clamped so the radius stays positive at tiny sizes.
+    const rawStroke = Number(props.thickness) > 0 ? Number(props.thickness) : 8;
+    const stroke = Math.max(1, Math.min(rawStroke, Math.floor(size / 2) - 1));
+
+    const center = size / 2;
+    const radius = (size - stroke) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const dashoffset = circumference * (1 - fraction);
+
+    const showValue = props.showValue !== false;
+    const hasLabel = typeof props.label === 'string' && props.label.trim() !== '';
+    const label = hasLabel ? props.label : 'Progress';
+
+    // Default the arc to text-brand, but step aside if the caller passes their
+    // own text-color token so their `class` wins regardless of CSS order.
+    const cls = props.class || '';
+    const hasColor = /(?:^|\s)text-(?:chart-|brand|danger|success|muted|ink|body|faint)/.test(cls);
+
+    return {
+      max,
+      now: value,
+      label,
+      valueLabel: `${Math.round(fraction * 100)}%`,
+      size,
+      stroke,
+      center,
+      radius,
+      circumference,
+      dashoffset,
+      viewBox: `0 0 ${size} ${size}`,
+      rotation: `rotate(-90 ${center} ${center})`,
+      showValue,
+      showCaption: showValue && hasLabel && size >= CAPTION_MIN,
+      valueStyle: `font-size:${Math.round(size * 0.26)}px`,
+      rootStyle: `width:${size}px;height:${size}px`,
+      rootClass: [
+        'relative inline-flex items-center justify-center',
+        hasColor ? '' : 'text-brand',
+        cls,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+}
+</script>

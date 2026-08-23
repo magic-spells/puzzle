@@ -11,7 +11,10 @@
 //      client-runtime/devtools.js FRAMEWORK_VERSION and each
 //      npm/puzzle-*/package.json (all must agree), plus the `@magic-spells/puzzle`
 //      dependency ranges no version field carries: the two go:embed-ed scaffold
-//      templates and examples/*/package.json.
+//      templates and examples/*/package.json. The packages/ train stamps ride
+//      the same check: pieces (package.json, demo, demo header badge) and
+//      devtools (package.json, panel, extension manifest) must equal the root
+//      version — pieces because `add piece` resolves the CLI's major.minor.
 //   2. Pack allowlist — delegate to scripts/verify-pack.mjs (the tarball must ship
 //      only the runtime + declarations + bin shim).
 //   2.5. README size banner — scripts/measure-size.mjs --check builds the two
@@ -187,6 +190,53 @@ for (const rel of SCAFFOLD_TEMPLATES) {
 	console.log(`  OK  ${exampleManifests.length} examples/*/package.json → @magic-spells/puzzle@^${version}`);
 }
 
+// The monorepo packages ride the same release train. Pieces MUST match exactly:
+// `puzzle add piece` resolves @magic-spells/puzzle-pieces to the CLI's own
+// major.minor, so a lagging pieces version breaks zero-config `add piece` the
+// day the CLI ships. DevTools has no protocol-level lock, but its versions are
+// train-stamped by decision (D162) — three manifests plus the demo's hand-written
+// header badge, asserted because hand-bumped literals have burned us before
+// (FRAMEWORK_VERSION sat stale through a release; so did the README banner).
+{
+	const piecesPkg = readJSON('packages/puzzle-pieces/package.json');
+	if (piecesPkg.version !== version) {
+		fail(
+			`packages/puzzle-pieces/package.json version is "${piecesPkg.version}", expected "${version}"\n` +
+				"  `puzzle add piece` resolves pieces to the CLI's major.minor — publish them together."
+		);
+	}
+	console.log(`  OK  packages/puzzle-pieces/package.json version = ${piecesPkg.version}`);
+
+	const demoPkg = readJSON('packages/puzzle-pieces/demo/package.json');
+	if (demoPkg.version !== version) {
+		fail(
+			`packages/puzzle-pieces/demo/package.json version is "${demoPkg.version}", expected "${version}"`
+		);
+	}
+	console.log(`  OK  packages/puzzle-pieces/demo/package.json version = ${demoPkg.version}`);
+
+	const badgeRel = 'packages/puzzle-pieces/demo/app/layouts/Default.pzl';
+	const badge = readFileSync(join(repoRoot, badgeRel), 'utf8');
+	const badgeMatch = badge.match(/pieces · v(\d+\.\d+\.\d+)/);
+	if (!badgeMatch) fail(`could not find the "pieces · v<version>" header badge in ${badgeRel}`);
+	if (badgeMatch[1] !== version) {
+		fail(`${badgeRel} header badge says v${badgeMatch[1]}, expected v${version}`);
+	}
+	console.log(`  OK  ${badgeRel} header badge = v${badgeMatch[1]}`);
+
+	for (const rel of [
+		'packages/puzzle-devtools/package.json',
+		'packages/puzzle-devtools/panel/package.json',
+		'packages/puzzle-devtools/extension/manifest.json',
+	]) {
+		const manifest = readJSON(rel);
+		if (manifest.version !== version) {
+			fail(`${rel} version is "${manifest.version}", expected "${version}"`);
+		}
+		console.log(`  OK  ${rel} version = ${manifest.version}`);
+	}
+}
+
 // --- 2. Pack allowlist check -----------------------------------------------
 console.log('\nrelease-prep: verifying pack contents (scripts/verify-pack.mjs)...');
 try {
@@ -329,10 +379,15 @@ console.log('already exist on the registry before the root package resolves):\n'
 for (const { pkg } of MATRIX) {
 	console.log(`  npm publish ./npm/${pkg} --access public`);
 }
+console.log('  npm publish ./packages/puzzle-pieces --access public   # pieces — at or before root');
 console.log(`  npm publish ./${rootTarball} --access public   # root — MUST go last\n`);
 console.log('Publish the root as THAT TARBALL, not as `npm publish` in this directory:');
 console.log('a directory publish sends a manifest with NO platform pins (D120), which');
 console.log('is how 0.3.0 shipped with no working CLI.\n');
+console.log('Pieces publishes as a directory (no pin injection there) and must be live');
+console.log("at or before the root: `puzzle add piece` resolves pieces to the CLI's");
+console.log('own major.minor. The devtools zip is separate and unhurried:');
+console.log('  npm run build:compiler && cd packages/puzzle-devtools && npm run build:zip\n');
 console.log('Then confirm the registry actually got the pins:');
 console.log('  npm run verify:published\n');
 console.log('Reminder: run the full suites first if you have not already:');

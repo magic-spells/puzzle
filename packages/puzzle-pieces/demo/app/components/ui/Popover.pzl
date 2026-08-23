@@ -1,0 +1,199 @@
+<puzzle-view>
+  <div class="relative inline-block">
+    <button
+      type="button"
+      class={ triggerClass }
+      aria-haspopup="dialog"
+      aria-expanded={ open ? 'true' : 'false' }
+      aria-controls={ panelId }
+      data-popover-trigger
+      @click={ toggle }
+      @keydown:escape={ onEscape(event) }>
+      <Slot name="trigger">{ label }</Slot>
+    </button>
+
+    {#if open}
+      <div
+        class={ panelClass }
+        id={ panelId }
+        role="dialog"
+        data-popover-panel
+        @keydown:escape={ onEscape(event) }>
+        <Slot/>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Popover — a click-toggled floating panel with arbitrary content. Follows the
+// overlay grain established by Select.pzl: an absolute panel inside a relative
+// root, an outside-click document listener attached in show()/removed in hide()
+// and destroyed(), inline flip-if-no-space measurement in a rAF after render,
+// and setData/refresh() local state (refresh re-runs data(), which reads the
+// runtime placement back out of getData()).
+//
+//   <Popover label="Options">…rich panel content…</Popover>
+//   <Popover align="end" side="top">
+//     <span slot="trigger" class="…">Custom trigger</span>
+//     …content…
+//   </Popover>
+//
+// The component owns a real <button type="button"> so ARIA lives on a genuine
+// control (aria-expanded / aria-haspopup="dialog" / aria-controls); the caller's
+// arbitrary TRIGGER content goes inside it via the named "trigger" slot. Panel
+// content is the default <Slot/>.
+//
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
+// the plain `label` text. Fill slot="trigger" for arbitrary trigger content and it
+// REPLACES that fallback — a filled slot wins over `label`, so a custom trigger
+// must carry its own accessible name (aria-label or an .sr-only span) instead of
+// leaning on `label`. Pass neither and the button renders empty and unclickable.
+// The slot fills the CONTENTS OF the component-owned button, so supply
+// non-interactive content only — a <button>/<a> in the slot nests an interactive
+// element inside a button, which is invalid HTML the parser then re-shapes.
+//
+// Focus is deliberately NOT trapped — this is a popover, not a modal — and open
+// does not steal focus. The panel is rendered right after the trigger, so tabbing
+// into it is natural DOM order. Escape closes and refocuses the trigger, and works
+// whether focus sits on the trigger or has moved into the panel (the keydown
+// bubbles up to whichever listener — trigger or panel — is nearest).
+
+// Per-instance id seed so the aria-controls target is unique across instances.
+let uid = 0;
+
+const TRIGGER_BASE =
+  'inline-flex items-center gap-1 text-sm text-body cursor-pointer transition-colors ' +
+  'hover:text-ink ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const PANEL_BASE =
+  'absolute z-50 w-max max-w-xs rounded-lg border border-border bg-surface p-4 ' +
+  'shadow-lg text-sm text-body';
+
+// Horizontal anchoring, keyed off the relative root's edges.
+const ALIGN = {
+  start: 'left-0',
+  center: 'left-1/2 -translate-x-1/2',
+  end: 'right-0',
+};
+
+export default class Popover extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    // Seed local UI state so the first data() run can read it back. `placement`
+    // is the effective (possibly flipped) side; null while closed = "use `side`".
+    this.setData({ open: false, placement: null });
+  }
+
+  // Outside-click close: attached only while open (see show/hide). Guarded by
+  // `open` and containment, so the pointerdown that OPENED the panel (still on
+  // the trigger, inside this.element) never immediately closes it.
+  mounted() {
+    this._onDocPointer = (e) => {
+      if (!this.getData().open) return;
+      if (this.element && this.element.contains(e.target)) return;
+      this.hide({ restoreFocus: false });
+    };
+  }
+
+  destroyed() {
+    document.removeEventListener('pointerdown', this._onDocPointer);
+  }
+
+  data(params, props) {
+    const prev = this.getData();
+    const open = !!prev.open;
+    const side = props.side === 'top' ? 'top' : 'bottom';
+    // Runtime flip only applies while open; closed always reflects the prop.
+    const placement = (open && prev.placement) || side;
+    const align = props.align === 'center' ? 'center' : props.align === 'end' ? 'end' : 'start';
+
+    return {
+      open,
+      side,
+      placement,
+      label: props.label != null ? String(props.label) : '',
+      panelId: props.id || `pieces-popover-${this._uid}`,
+      triggerClass: [TRIGGER_BASE, props.triggerClass || ''].join(' '),
+      panelClass: [
+        PANEL_BASE,
+        placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1',
+        ALIGN[align],
+        props.class || '',
+      ].join(' '),
+    };
+  }
+
+  // ---- open / close --------------------------------------------------------
+
+  show() {
+    if (this.getData().open) return;
+    const side = this.props.side === 'top' ? 'top' : 'bottom';
+
+    this.setData({ open: true, placement: side });
+    this.refresh();
+
+    document.addEventListener('pointerdown', this._onDocPointer);
+
+    const { show } = this.props;
+    if (typeof show === 'function') show();
+
+    // The panel mounts on the setData above; wait one frame so it exists, then
+    // measure its real height against the viewport and flip if the requested
+    // side can't hold it (same space-comparison shape as Select._measurePlacement).
+    requestAnimationFrame(() => {
+      if (!this.getData().open || !this.element) return;
+      const next = this._measurePlacement(side);
+      if (next !== this.getData().placement) {
+        this.setData({ placement: next });
+        this.refresh();
+      }
+    });
+  }
+
+  hide({ restoreFocus = true } = {}) {
+    if (!this.getData().open) return;
+    document.removeEventListener('pointerdown', this._onDocPointer);
+
+    this.setData({ open: false, placement: null });
+    this.refresh();
+
+    const { hide } = this.props;
+    if (typeof hide === 'function') hide();
+
+    if (restoreFocus) this.element?.querySelector('[data-popover-trigger]')?.focus();
+  }
+
+  // Flip to the opposite side only when the panel doesn't fit on the requested
+  // side AND the opposite side has more room — otherwise stay put. Measures the
+  // real rendered panel height (content is arbitrary, so it isn't known earlier).
+  _measurePlacement(side) {
+    const trigger = this.element?.querySelector('[data-popover-trigger]');
+    const panel = this.element?.querySelector('[data-popover-panel]');
+    if (!trigger || !panel || typeof window === 'undefined') return side;
+    const rect = trigger.getBoundingClientRect();
+    const panelH = panel.offsetHeight;
+    const margin = 8;
+    const below = window.innerHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    if (side === 'bottom') return panelH > below && above > below ? 'top' : 'bottom';
+    return panelH > above && below > above ? 'bottom' : 'top';
+  }
+
+  events = {
+    toggle: (event) => {
+      if (this.getData().open) this.hide({ restoreFocus: true });
+      else this.show();
+    },
+
+    onEscape: (event) => {
+      if (!this.getData().open) return;
+      event.preventDefault();
+      this.hide({ restoreFocus: true });
+    },
+  };
+}
+</script>

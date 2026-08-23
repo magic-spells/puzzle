@@ -1,0 +1,26 @@
+<puzzle-view>
+  <label for={ forId } class={ classes }>
+    <Slot/>
+  </label>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Label — a plain <label> for a form control. Point `for` at the control's id
+// so a click focuses it and screen readers announce the pairing. Slot content
+// is the label text; a `class` prop appends onto the base utilities.
+//
+//   <Label for="email">Email address</Label>
+//   <Label for="email" class="text-danger">Email address</Label>
+const BASE = 'block text-sm font-medium text-ink';
+
+export default class Label extends PuzzleView {
+  data(params, props) {
+    return {
+      forId: props.for,
+      classes: [BASE, props.class || ''].join(' '),
+    };
+  }
+}
+</script>

@@ -1,0 +1,114 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Skeleton</h1>
+        <p class="mt-2 text-body">
+          A pulsing placeholder for content that hasn't loaded. The variant picks
+          the shape — text line, circle, or block — and you size it with a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">class</code>
+          prop.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-sm space-y-4 rounded-xl border border-border bg-surface p-5">
+          <div class="flex items-center gap-3">
+            <Skeleton variant="circle" class="size-10" />
+            <div class="flex-1 space-y-2">
+              <Skeleton variant="text" class="w-1/2" />
+              <Skeleton variant="text" class="w-1/3" />
+            </div>
+          </div>
+          <Skeleton variant="block" class="h-32 w-full" />
+          <div class="space-y-2">
+            <Skeleton variant="text" class="w-full" />
+            <Skeleton variant="text" class="w-full" />
+            <Skeleton variant="text" class="w-2/3" />
+          </div>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="shapes" title="Shapes" code={ codeShapes }>
+          <div class="flex w-full max-w-sm flex-col gap-4">
+            <Skeleton variant="text" class="w-2/3" />
+            <div class="flex items-center gap-4">
+              <Skeleton variant="circle" class="size-12" />
+              <Skeleton variant="block" class="h-12 flex-1" />
+            </div>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Skeleton from '@/components/ui/Skeleton.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Skeleton — follows the Button exemplar shape (header → hero
+// ExampleBox → Installation → titled example sections → Toc).
+const installCmd = 'puzzle add piece skeleton';
+const usageImport = `import Skeleton from '@/components/ui/Skeleton.pzl';`;
+const usageMarkup = `<Skeleton variant="circle" class="size-10" />`;
+
+const codeHero = `<div class="space-y-4 rounded-xl border border-border bg-surface p-5">
+  <div class="flex items-center gap-3">
+    <Skeleton variant="circle" class="size-10" />
+    <div class="flex-1 space-y-2">
+      <Skeleton variant="text" class="w-1/2" />
+      <Skeleton variant="text" class="w-1/3" />
+    </div>
+  </div>
+  <Skeleton variant="block" class="h-32 w-full" />
+  <div class="space-y-2">
+    <Skeleton variant="text" class="w-full" />
+    <Skeleton variant="text" class="w-2/3" />
+  </div>
+</div>`;
+
+const codeShapes = `<Skeleton variant="text" class="w-2/3" />
+<Skeleton variant="circle" class="size-12" />
+<Skeleton variant="block" class="h-12 w-full" />`;
+
+export default class SkeletonDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeShapes,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Shapes', href: '#shapes' },
+      ],
+    };
+  }
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "quantity-input",
+  "description": "E-commerce stepper: decrement/increment buttons around a number input, always clamped to [min, max]",
+  "files": ["QuantityInput.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

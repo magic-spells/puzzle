@@ -1,0 +1,799 @@
+<puzzle-view class="w-full">
+  <article class="mx-auto w-full min-w-0 max-w-7xl">
+    <DemoHeader title="Commerce Admin">
+      A back-office admin shell built entirely from pieces — a collapsible nav rail, a
+      searchable products table with bulk-select, sort, and pagination, filter controls,
+      collections, and a full settings form. Everything below is live: switch sections,
+      filter and sort the table, run bulk actions, and save settings.
+    </DemoHeader>
+
+    <div class="flex items-stretch rounded-xl border border-border bg-surface">
+      <Sidebar
+        class="rounded-l-xl"
+        items={ navItems }
+        activePath={ activePath }
+        collapsed={ navCollapsed }
+        label="Admin"
+        @collapse={ setNavCollapsed }>
+        <div slot="header" class="flex items-center gap-2.5 px-3 py-4">
+          <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-ink">N</div>
+          {#if !navCollapsed}
+            <div class="min-w-0">
+              <p class="truncate text-sm font-semibold text-ink">Nimbus</p>
+              <p class="truncate text-xs text-muted">Supply Co.</p>
+            </div>
+          {/if}
+        </div>
+        <div slot="footer" class="flex items-center gap-3 px-1 py-1.5">
+          <div class="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-body">JR</div>
+          {#if !navCollapsed}
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium text-ink">Jordan Rae</p>
+              <p class="truncate text-xs text-muted">owner@nimbus.store</p>
+            </div>
+          {/if}
+        </div>
+      </Sidebar>
+
+      <div class="min-w-0 flex-1 p-6">
+        <Breadcrumb items={ crumbs } class="mb-4" />
+        <div class="mb-6 overflow-x-auto">
+          <Tabs variant="pills" tabs={ sectionTabs } value={ section } @change={ setSection } />
+        </div>
+
+        {#if section === 'home'}
+          <div class="space-y-6">
+            <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {#for m in metrics}
+                <div class="rounded-xl border border-border bg-surface p-4" key={ m.label }>
+                  <p class="text-sm text-muted">{ m.label }</p>
+                  <p class="mt-1 text-2xl font-semibold text-ink">{ m.value }</p>
+                  <div class="mt-2"><Badge variant={ m.variant }>{ m.delta }</Badge></div>
+                </div>
+              {/for}
+            </section>
+
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <section class="rounded-xl border border-border bg-surface p-6 lg:col-span-2">
+                <h2 class="text-sm font-medium text-ink">Store details</h2>
+                <p class="mb-2 text-sm text-muted">Reflects your current settings — edit them under Settings.</p>
+                <DescriptionList items={ storeSummary } layout="inline" divider />
+              </section>
+
+              <section class="rounded-xl border border-border bg-surface p-6">
+                <h2 class="text-sm font-medium text-ink">Status legend</h2>
+                <p class="mb-4 text-sm text-muted">How product states are labeled.</p>
+                <div class="flex flex-col items-start gap-3">
+                  <Badge variant="brand">Active</Badge>
+                  <Badge variant="default">Draft</Badge>
+                  <Badge variant="outline">Archived</Badge>
+                </div>
+              </section>
+            </div>
+          </div>
+        {/if}
+
+        {#if section === 'orders'}
+          <div class="space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-lg font-semibold text-ink">Orders</h2>
+                <p class="text-sm text-muted">Recent orders across every channel. Click a header to sort.</p>
+              </div>
+              <SearchField value={ orderQuery } placeholder="Search orders…" class="w-64 max-w-full" @change={ setOrderQuery } />
+            </div>
+            {#if hasOrders}
+              <DataTable columns={ orderColumns } rows={ orderRows } rowKey="order" pageSize={ 6 } caption="Recent orders, newest first" />
+            {:else}
+              <Empty title="No matching orders" description="Try a different search term.">
+                <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path d="M6 8h12l-1 11H7L6 8z" stroke-linejoin="round"/>
+                  <path d="M9 8V6a3 3 0 0 1 6 0v2" stroke-linecap="round"/>
+                </svg>
+              </Empty>
+            {/if}
+          </div>
+        {/if}
+
+        {#if section === 'products'}
+          <div class="space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-lg font-semibold text-ink">Products</h2>
+                <p class="text-sm text-muted">{ shownCount } of { totalProducts } products</p>
+              </div>
+              <SplitButton label="Add product" @press={ addPrimary } @select={ addSelect } actions={ addActions } />
+            </div>
+
+            <div class="flex flex-wrap items-end gap-3">
+              <SearchField value={ query } placeholder="Search products or vendors…" class="min-w-[14rem] flex-1" @change={ setQuery } />
+              <div class="w-44">
+                <Select options={ statusOptions } value={ statusFilter } indicator="caret" @change={ setStatusFilter } />
+              </div>
+              <div class="w-48">
+                <Select options={ collectionOptions } value={ collectionFilter } indicator="caret" @change={ setCollectionFilter } />
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <Checkbox label="Low stock only" checked={ lowStockOnly } @change={ setLowStock } />
+              {#if selectedCount > 0}
+                <div class="flex items-center gap-3">
+                  <span class="text-sm text-muted">{ selectedCount } selected</span>
+                  <Toolbar label="Bulk actions" items={ bulkItems } @press={ bulkAction } />
+                  <Button variant="ghost" size="sm" @press={ clearSelection }>Clear</Button>
+                </div>
+              {/if}
+            </div>
+
+            {#if hasRows}
+              <DataTable
+                columns={ productColumns }
+                rows={ filteredRows }
+                rowKey="id"
+                selectable
+                sort={ sortState }
+                @sortChange={ setSort }
+                selected={ selectedKeys }
+                @select={ setSelected }
+                page={ pageNum }
+                @pageChange={ setPage }
+                pageSize={ 6 }
+                caption="Products in your store" />
+            {:else}
+              <div class="rounded-xl border border-border bg-surface">
+                <Empty title="No products match" description="Try changing your search or filters to widen the results.">
+                  <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7"/>
+                    <path d="m20 20-3-3" stroke-linecap="round"/>
+                  </svg>
+                  <Button variant="outline" @press={ clearFilters }>Clear filters</Button>
+                </Empty>
+              </div>
+            {/if}
+
+            <section class="rounded-xl border border-border bg-surface p-6">
+              <h3 class="text-sm font-medium text-ink">Low stock — needs restocking</h3>
+              <p class="mb-4 text-sm text-muted">The lowest-inventory items still on sale, with quick per-row actions.</p>
+              {#if hasRestock}
+                <ul class="flex flex-col gap-3">
+                  {#for p in restockList}
+                    <li class="flex flex-wrap items-center gap-4 rounded-lg border border-border p-3" key={ p.id }>
+                      <div class="w-14 shrink-0">
+                        <AspectRatio ratio={ 1 } class="overflow-hidden rounded-md">
+                          <div class="flex items-center justify-center { p.thumbClass } text-base font-semibold text-body">{ p.initial }</div>
+                        </AspectRatio>
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-medium text-ink">{ p.title }</p>
+                        <p class="truncate text-xs text-muted">{ p.vendor } · { p.inventory } in stock</p>
+                      </div>
+                      <Badge variant={ p.badgeVariant }>{ p.status }</Badge>
+                      <span class="text-sm tabular-nums text-ink">${ p.price }</span>
+                      <DropdownMenu label="Manage" align="end" items={ p.menu } @select={ onRowMenu } />
+                      <Popconfirm
+                        message="Delete this product?"
+                        description="This removes it from your store and cannot be undone."
+                        confirmLabel="Delete"
+                        variant="danger"
+                        align="end"
+                        @confirm={ deleteProduct(p.id) }>
+                        <button slot="trigger" class="inline-flex h-9 cursor-pointer items-center rounded-lg px-3 text-sm font-medium text-danger transition-colors hover:bg-danger-tint outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Delete</button>
+                      </Popconfirm>
+                    </li>
+                  {/for}
+                </ul>
+              {:else}
+                <Empty title="All stocked up" description="No active products are below the low-stock threshold." />
+              {/if}
+            </section>
+          </div>
+        {/if}
+
+        {#if section === 'collections'}
+          <div class="space-y-5">
+            <div>
+              <h2 class="text-lg font-semibold text-ink">Collections</h2>
+              <p class="text-sm text-muted">Group products into curated collections. Each card has its own actions.</p>
+            </div>
+            {#if hasCollections}
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {#for c in collectionsView}
+                  <div class="rounded-xl border border-border bg-surface p-4" key={ c.id }>
+                    <AspectRatio ratio={ 16 / 9 } class="w-full overflow-hidden rounded-lg">
+                      <div class="flex items-center justify-center { c.thumbClass } text-sm font-semibold text-body">{ c.name }</div>
+                    </AspectRatio>
+                    <div class="mt-3 flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="truncate text-sm font-medium text-ink">{ c.name }</p>
+                        <p class="text-xs text-muted">{ c.count } products</p>
+                      </div>
+                      <Badge variant={ c.badgeVariant }>{ c.status }</Badge>
+                    </div>
+                    <div class="mt-3 flex items-center justify-between gap-2">
+                      <DropdownMenu label="Manage" align="start" items={ c.menu } @select={ onCollectionMenu } />
+                      <Popconfirm
+                        message="Archive this collection?"
+                        description="Products stay in your catalog, but the collection is hidden from your store."
+                        confirmLabel="Archive"
+                        variant="danger"
+                        align="end"
+                        @confirm={ archiveCollection(c.id) }>
+                        <button slot="trigger" class="inline-flex h-9 cursor-pointer items-center rounded-lg px-3 text-sm font-medium text-danger transition-colors hover:bg-danger-tint outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Archive</button>
+                      </Popconfirm>
+                    </div>
+                  </div>
+                {/for}
+              </div>
+            {:else}
+              <div class="rounded-xl border border-border bg-surface">
+                <Empty title="No collections yet" description="Collections you create will show up here.">
+                  <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <rect x="4" y="4" width="7" height="7" rx="1.5"/>
+                    <rect x="13" y="4" width="7" height="7" rx="1.5"/>
+                    <rect x="4" y="13" width="7" height="7" rx="1.5"/>
+                    <rect x="13" y="13" width="7" height="7" rx="1.5"/>
+                  </svg>
+                </Empty>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        {#if section === 'customers'}
+          <div class="space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-lg font-semibold text-ink">Customers</h2>
+                <p class="text-sm text-muted">Everyone who has bought from your store. Sortable and paged.</p>
+              </div>
+              <SearchField value={ customerQuery } placeholder="Search customers…" class="w-64 max-w-full" @change={ setCustomerQuery } />
+            </div>
+            {#if hasCustomers}
+              <DataTable columns={ customerColumns } rows={ customerRows } rowKey="email" pageSize={ 6 } caption="Customers by recency" />
+            {:else}
+              <Empty title="No matching customers" description="Try a different search term.">
+                <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path d="M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1" stroke-linecap="round"/>
+                  <circle cx="9.5" cy="8" r="3.5"/>
+                </svg>
+              </Empty>
+            {/if}
+          </div>
+        {/if}
+
+        {#if section === 'settings'}
+          <div class="space-y-6">
+            <div>
+              <h2 class="text-lg font-semibold text-ink">Settings</h2>
+              <p class="text-sm text-muted">Store profile, preferences, and media. Changes preview live on the Home tab.</p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <section class="space-y-4 rounded-xl border border-border bg-surface p-6">
+                <h3 class="text-sm font-medium text-ink">Store profile</h3>
+                <Field label="Store name" value={ storeName } @change={ setStoreName } />
+                <Field label="Contact email" type="email" value={ storeEmail } @change={ setStoreEmail } />
+                <Textarea label="Store description" rows={ 3 } value={ description } hint="Shown on your storefront header." @change={ setDescription } />
+                <Dropzone
+                  label="Store & product media"
+                  files={ logoFiles }
+                  multiple
+                  accept="image/*"
+                  maxSize={ 2097152 }
+                  hint="PNG, JPG, or SVG — up to 2 MB each."
+                  @change={ setLogo }
+                  @reject={ rejectLogo } />
+              </section>
+
+              <section class="space-y-4 rounded-xl border border-border bg-surface p-6">
+                <h3 class="text-sm font-medium text-ink">Preferences</h3>
+                <div>
+                  <label class="mb-1.5 block text-sm font-medium text-ink">Currency</label>
+                  <Select options={ currencyOptions } value={ currency } indicator="caret" @change={ setCurrency } />
+                </div>
+                <div>
+                  <label class="mb-1.5 block text-sm font-medium text-ink">Default weight unit</label>
+                  <Select options={ weightOptions } value={ weightUnit } indicator="caret" @change={ setWeightUnit } />
+                </div>
+                <TagsInput label="Product categories" value={ tags } hint="Press Enter or comma to add." @change={ setTags } />
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <NumberField label="Low-stock threshold" value={ lowStock } min={ 0 } step={ 1 } hint="Alert below this count." @change={ setLowStock2 } />
+                  <NumberField label="Tax rate (%)" value={ taxRate } min={ 0 } max={ 100 } step={ 0.5 } @change={ setTaxRate } />
+                </div>
+              </section>
+            </div>
+
+            <section class="rounded-xl border border-border bg-surface p-6">
+              <h3 class="mb-4 text-sm font-medium text-ink">Store controls</h3>
+              <div class="divide-y divide-border rounded-xl border border-border">
+                <div class="p-3"><Switch label="Maintenance mode" hint="Temporarily hide your storefront." checked={ maintenance } @change={ setMaintenance } /></div>
+                <div class="p-3"><Switch label="Email order receipts" hint="Send customers a receipt on purchase." checked={ emailReceipts } @change={ setReceipts } /></div>
+                <div class="p-3"><Switch label="Auto-archive sold-out products" hint="Move zero-inventory items to Archived." checked={ autoArchive } @change={ setAutoArchive } /></div>
+                <div class="p-3"><Switch label="Require two-factor for staff" hint="Adds a second step at sign-in." checked={ twoFactor } @change={ setTwoFactor } /></div>
+              </div>
+            </section>
+
+            <div class="flex items-center justify-end gap-3">
+              <Button variant="ghost" @press={ resetSettings }>Reset</Button>
+              <Button @press={ saveSettings }>Save settings</Button>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </div>
+  </article>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Sidebar from '../components/ui/Sidebar.pzl';
+import Tabs from '../components/ui/Tabs.pzl';
+import DataTable from '../components/ui/DataTable.pzl';
+import Toolbar from '../components/ui/Toolbar.pzl';
+import SearchField from '../components/ui/SearchField.pzl';
+import Select from '../components/ui/Select.pzl';
+import SplitButton from '../components/ui/SplitButton.pzl';
+import Badge from '../components/ui/Badge.pzl';
+import AspectRatio from '../components/ui/AspectRatio.pzl';
+import Checkbox from '../components/ui/Checkbox.pzl';
+import Empty from '../components/ui/Empty.pzl';
+import Breadcrumb from '../components/ui/Breadcrumb.pzl';
+import DropdownMenu from '../components/ui/DropdownMenu.pzl';
+import Popconfirm from '../components/ui/Popconfirm.pzl';
+import Field from '../components/ui/Field.pzl';
+import Switch from '../components/ui/Switch.pzl';
+import NumberField from '../components/ui/NumberField.pzl';
+import TagsInput from '../components/ui/TagsInput.pzl';
+import Textarea from '../components/ui/Textarea.pzl';
+import DescriptionList from '../components/ui/DescriptionList.pzl';
+import Button from '../components/ui/Button.pzl';
+import DemoHeader from '../components/docs/DemoHeader.pzl';
+import { toast } from '../components/ui/toast.js';
+
+// AdminDemo — a Shopify-style back-office admin composed from pieces. All state
+// (active section, table sort/selection/page, search + filters, settings form,
+// deletions/archives) is owned here and flows down as props; pieces call back up.
+
+// ---- icon paths (24x24, stroked) ------------------------------------------
+const ICON_HOME = 'M3 11.5 12 4l9 7.5M5.5 10v9.5h13V10';
+const ICON_ORDERS = 'M6 8h12l-1 11H7L6 8zM9 8V6a3 3 0 0 1 6 0v2';
+const ICON_PRODUCTS = 'M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM4 7.5l8 4.5 8-4.5M12 12v9';
+const ICON_CUSTOMERS = 'M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 20v-1a4 4 0 0 0-3-3.87';
+const ICON_ANALYTICS = 'M4 20V10M10 20V4M16 20v-6M21 20H3';
+const ICON_SETTINGS = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.5 12a7.5 7.5 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-2-1.2L16.6 3H12.6l-.4 2.6a7.4 7.4 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 2 1.2l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z';
+
+// ---- mock data -------------------------------------------------------------
+const PRODUCTS = [
+  { id: 'P-1001', title: 'Alpine Wool Beanie', status: 'Active', inventory: 8, price: '28.00', vendor: 'Summit Goods', collection: 'Winter' },
+  { id: 'P-1002', title: 'Trailhead Daypack 22L', status: 'Active', inventory: 34, price: '89.00', vendor: 'Ridgeline', collection: 'Outdoor' },
+  { id: 'P-1003', title: 'Merino Crew Sock 3-pack', status: 'Active', inventory: 5, price: '24.00', vendor: 'Summit Goods', collection: 'Apparel' },
+  { id: 'P-1004', title: 'Canvas Field Tote', status: 'Draft', inventory: 0, price: '54.00', vendor: 'Harbor & Co.', collection: 'Bags' },
+  { id: 'P-1005', title: 'Insulated Bottle 750ml', status: 'Active', inventory: 120, price: '32.00', vendor: 'Ridgeline', collection: 'Outdoor' },
+  { id: 'P-1006', title: 'Waxed Trucker Cap', status: 'Archived', inventory: 0, price: '26.00', vendor: 'Harbor & Co.', collection: 'Apparel' },
+  { id: 'P-1007', title: 'Packable Rain Shell', status: 'Active', inventory: 17, price: '118.00', vendor: 'Ridgeline', collection: 'Outdoor' },
+  { id: 'P-1008', title: 'Everyday Leather Wallet', status: 'Active', inventory: 9, price: '48.00', vendor: 'Harbor & Co.', collection: 'Accessories' },
+  { id: 'P-1009', title: 'Ceramic Pour-Over Set', status: 'Draft', inventory: 12, price: '64.00', vendor: 'Kettle Lane', collection: 'Home' },
+  { id: 'P-1010', title: 'Organic Cotton Tee', status: 'Active', inventory: 76, price: '22.00', vendor: 'Summit Goods', collection: 'Apparel' },
+  { id: 'P-1011', title: 'Titanium Camp Spork', status: 'Active', inventory: 4, price: '14.00', vendor: 'Ridgeline', collection: 'Outdoor' },
+  { id: 'P-1012', title: 'Linen Throw Blanket', status: 'Archived', inventory: 0, price: '72.00', vendor: 'Kettle Lane', collection: 'Home' },
+  { id: 'P-1013', title: 'Enamel Camp Mug', status: 'Active', inventory: 6, price: '18.00', vendor: 'Kettle Lane', collection: 'Home' },
+  { id: 'P-1014', title: 'Recycled Weekender Bag', status: 'Draft', inventory: 21, price: '138.00', vendor: 'Harbor & Co.', collection: 'Bags' },
+];
+
+const COLLECTIONS = [
+  { id: 'C-01', name: 'Outdoor Essentials', count: 5, status: 'Active' },
+  { id: 'C-02', name: 'Apparel', count: 4, status: 'Active' },
+  { id: 'C-03', name: 'Home & Kitchen', count: 3, status: 'Active' },
+  { id: 'C-04', name: 'Bags & Carry', count: 2, status: 'Draft' },
+  { id: 'C-05', name: 'Winter Capsule', count: 1, status: 'Archived' },
+  { id: 'C-06', name: 'New Arrivals', count: 6, status: 'Active' },
+];
+
+const ORDERS = [
+  { order: '#1031', customer: 'Maya Chen', status: 'Fulfilled', total: '128.00', date: 'Jul 18' },
+  { order: '#1030', customer: 'Liam Foster', status: 'Unfulfilled', total: '54.00', date: 'Jul 18' },
+  { order: '#1029', customer: 'Priya Nair', status: 'Fulfilled', total: '212.00', date: 'Jul 17' },
+  { order: '#1028', customer: 'Noah Kim', status: 'Partial', total: '89.00', date: 'Jul 17' },
+  { order: '#1027', customer: 'Ava Rossi', status: 'Fulfilled', total: '46.00', date: 'Jul 16' },
+  { order: '#1026', customer: 'Ethan Brooks', status: 'Unfulfilled', total: '138.00', date: 'Jul 16' },
+  { order: '#1025', customer: 'Sofia Diaz', status: 'Fulfilled', total: '72.00', date: 'Jul 15' },
+  { order: '#1024', customer: 'Owen Park', status: 'Refunded', total: '24.00', date: 'Jul 15' },
+];
+
+const CUSTOMERS = [
+  { name: 'Maya Chen', email: 'maya@example.com', orders: 14, spent: '1820.00', location: 'Portland, US' },
+  { name: 'Liam Foster', email: 'liam@example.com', orders: 3, spent: '260.00', location: 'Leeds, UK' },
+  { name: 'Priya Nair', email: 'priya@example.com', orders: 22, spent: '3140.00', location: 'Austin, US' },
+  { name: 'Noah Kim', email: 'noah@example.com', orders: 7, spent: '640.00', location: 'Seoul, KR' },
+  { name: 'Ava Rossi', email: 'ava@example.com', orders: 2, spent: '92.00', location: 'Milan, IT' },
+  { name: 'Ethan Brooks', email: 'ethan@example.com', orders: 11, spent: '1275.00', location: 'Toronto, CA' },
+  { name: 'Sofia Diaz', email: 'sofia@example.com', orders: 5, spent: '410.00', location: 'Madrid, ES' },
+  { name: 'Owen Park', email: 'owen@example.com', orders: 1, spent: '24.00', location: 'Denver, US' },
+];
+
+const METRICS = [
+  { label: 'Revenue (30d)', value: '$48,210', delta: '+12.4%', variant: 'brand' },
+  { label: 'Orders', value: '312', delta: '+4.1%', variant: 'brand' },
+  { label: 'Products live', value: '9', delta: '4 low stock', variant: 'default' },
+  { label: 'Customers', value: '1,204', delta: '+38 new', variant: 'brand' },
+];
+
+const ADD_ACTIONS = [
+  { label: 'Import from CSV', value: 'import' },
+  { label: 'Export products', value: 'export' },
+  { divider: true },
+  { label: 'Bulk edit prices', value: 'bulk-edit' },
+];
+
+const BULK_ITEMS = [
+  { value: 'active', label: 'Set active' },
+  { value: 'draft', label: 'Set draft' },
+  { type: 'separator' },
+  { value: 'archive', label: 'Archive' },
+  { value: 'delete', label: 'Delete' },
+];
+
+const PRODUCT_COLUMNS = [
+  { key: 'title', label: 'Product', sortable: true },
+  { key: 'status', label: 'Status', sortable: true },
+  { key: 'inventory', label: 'Inventory', align: 'right', sortable: true },
+  { key: 'price', label: 'Price ($)', align: 'right', sortable: true },
+  { key: 'vendor', label: 'Vendor', sortable: true },
+];
+
+const ORDER_COLUMNS = [
+  { key: 'order', label: 'Order', sortable: true },
+  { key: 'customer', label: 'Customer', sortable: true },
+  { key: 'status', label: 'Fulfillment' },
+  { key: 'total', label: 'Total ($)', align: 'right', sortable: true },
+  { key: 'date', label: 'Date', sortable: true },
+];
+
+const CUSTOMER_COLUMNS = [
+  { key: 'name', label: 'Customer', sortable: true },
+  { key: 'email', label: 'Email' },
+  { key: 'orders', label: 'Orders', align: 'right', sortable: true },
+  { key: 'spent', label: 'Spent ($)', align: 'right', sortable: true },
+  { key: 'location', label: 'Location', sortable: true },
+];
+
+const SECTION_TABS = [
+  { value: 'home', label: 'Home' },
+  { value: 'orders', label: 'Orders' },
+  { value: 'products', label: 'Products' },
+  { value: 'collections', label: 'Collections' },
+  { value: 'customers', label: 'Customers' },
+  { value: 'settings', label: 'Settings' },
+];
+
+const SECTION_TITLES = {
+  home: 'Home',
+  orders: 'Orders',
+  products: 'Products',
+  collections: 'Collections',
+  customers: 'Customers',
+  settings: 'Settings',
+};
+
+const NAV_ITEMS = [
+  { group: 'Store' },
+  { label: 'Home', href: '#home', icon: ICON_HOME },
+  { label: 'Orders', href: '#orders', icon: ICON_ORDERS, badge: '8' },
+  {
+    label: 'Products',
+    href: '#products',
+    icon: ICON_PRODUCTS,
+    children: [
+      { label: 'All products', href: '#products' },
+      { label: 'Collections', href: '#collections' },
+    ],
+  },
+  { label: 'Customers', href: '#customers', icon: ICON_CUSTOMERS },
+  { divider: true },
+  { group: 'Insights' },
+  { label: 'Analytics', href: '#home', icon: ICON_ANALYTICS },
+  { label: 'Settings', href: '#settings', icon: ICON_SETTINGS },
+];
+
+const THUMBS = [
+  'bg-gradient-to-br from-brand/30 to-brand-tint',
+  'bg-gradient-to-br from-success/30 to-success-tint',
+  'bg-gradient-to-br from-warning/30 to-warning-tint',
+  'bg-gradient-to-br from-danger/30 to-danger-tint',
+  'bg-gradient-to-br from-muted/25 to-surface-sunken',
+];
+
+const CURRENCY_OPTIONS = [
+  { value: 'USD', label: 'USD — US Dollar' },
+  { value: 'EUR', label: 'EUR — Euro' },
+  { value: 'GBP', label: 'GBP — British Pound' },
+  { value: 'JPY', label: 'JPY — Japanese Yen' },
+];
+
+const WEIGHT_OPTIONS = [
+  { value: 'kg', label: 'Kilograms (kg)' },
+  { value: 'lb', label: 'Pounds (lb)' },
+  { value: 'oz', label: 'Ounces (oz)' },
+];
+
+const DEFAULT_SETTINGS = {
+  storeName: 'Nimbus Supply Co.',
+  storeEmail: 'owner@nimbus.store',
+  description: 'Everyday carry goods, thoughtfully made for the trail and the city.',
+  currency: 'USD',
+  weightUnit: 'kg',
+  tags: ['Apparel', 'Outdoor', 'Accessories'],
+  lowStock: 10,
+  taxRate: 8.5,
+  maintenance: false,
+  emailReceipts: true,
+  autoArchive: false,
+  twoFactor: true,
+  logoFiles: [],
+};
+
+// Map a product/collection status to a Badge variant.
+function statusVariant(s) {
+  if (s === 'Active') return 'brand';
+  if (s === 'Archived') return 'outline';
+  return 'default';
+}
+
+export default class AdminDemo extends PuzzleView {
+  created() {
+    this.setData({
+      section: 'products',
+      navCollapsed: false,
+      // products filters + table
+      query: '',
+      statusFilter: 'all',
+      collectionFilter: 'all',
+      lowStockOnly: false,
+      sortState: { key: 'inventory', dir: 'asc' },
+      selectedKeys: [],
+      pageNum: 1,
+      deletedIds: [],
+      archivedCollectionIds: [],
+      // orders / customers search
+      orderQuery: '',
+      customerQuery: '',
+      // settings
+      ...DEFAULT_SETTINGS,
+    });
+  }
+
+  // Live products list with deletions removed.
+  _liveProducts() {
+    const deleted = new Set(this.getData().deletedIds || []);
+    return PRODUCTS.filter((p) => !deleted.has(p.id));
+  }
+
+  data(params, props) {
+    const d = this.getData();
+    const section = d.section || 'home';
+    const lowStock = Number(d.lowStock) || 0;
+
+    // ---- products filtering ----
+    let rows = this._liveProducts();
+    if (d.statusFilter !== 'all') rows = rows.filter((p) => p.status === d.statusFilter);
+    if (d.collectionFilter !== 'all') rows = rows.filter((p) => p.collection === d.collectionFilter);
+    if (d.lowStockOnly) rows = rows.filter((p) => p.inventory < lowStock);
+    const q = (d.query || '').trim().toLowerCase();
+    if (q) {
+      rows = rows.filter(
+        (p) => p.title.toLowerCase().includes(q) || p.vendor.toLowerCase().includes(q)
+      );
+    }
+
+    // ---- restock highlights (active, lowest inventory) ----
+    const restockList = this._liveProducts()
+      .filter((p) => p.status === 'Active')
+      .sort((a, b) => a.inventory - b.inventory)
+      .slice(0, 4)
+      .map((p, i) => ({
+        id: p.id,
+        title: p.title,
+        vendor: p.vendor,
+        inventory: p.inventory,
+        price: p.price,
+        status: p.status,
+        badgeVariant: statusVariant(p.status),
+        thumbClass: 'flex items-center justify-center ' + THUMBS[i % THUMBS.length],
+        initial: p.title.slice(0, 1),
+        menu: [
+          { label: 'Edit product', value: 'edit:' + p.id },
+          { label: 'Duplicate', value: 'dup:' + p.id },
+          { divider: true },
+          { label: 'Archive', value: 'arch:' + p.id, danger: true },
+        ],
+      }));
+
+    // ---- collections ----
+    const archived = new Set(d.archivedCollectionIds || []);
+    const collectionsView = COLLECTIONS.filter((c) => !archived.has(c.id)).map((c, i) => ({
+      id: c.id,
+      name: c.name,
+      count: c.count,
+      status: c.status,
+      badgeVariant: statusVariant(c.status),
+      thumbClass: 'flex items-center justify-center ' + THUMBS[i % THUMBS.length],
+      menu: [
+        { label: 'Edit collection', value: 'edit:' + c.id },
+        { label: 'Feature on storefront', value: 'feature:' + c.id },
+        { label: 'Duplicate', value: 'dup:' + c.id },
+      ],
+    }));
+
+    // ---- orders / customers search ----
+    const oq = (d.orderQuery || '').trim().toLowerCase();
+    const orderRows = oq
+      ? ORDERS.filter(
+          (o) => o.order.toLowerCase().includes(oq) || o.customer.toLowerCase().includes(oq)
+        )
+      : ORDERS;
+    const cq = (d.customerQuery || '').trim().toLowerCase();
+    const customerRows = cq
+      ? CUSTOMERS.filter(
+          (c) => c.name.toLowerCase().includes(cq) || c.email.toLowerCase().includes(cq)
+        )
+      : CUSTOMERS;
+
+    // ---- filter option lists ----
+    const collectionKeys = Array.from(new Set(PRODUCTS.map((p) => p.collection)));
+    const statusOptions = [
+      { value: 'all', label: 'All statuses' },
+      { value: 'Active', label: 'Active' },
+      { value: 'Draft', label: 'Draft' },
+      { value: 'Archived', label: 'Archived' },
+    ];
+    const collectionOptions = [{ value: 'all', label: 'All collections' }].concat(
+      collectionKeys.map((k) => ({ value: k, label: k }))
+    );
+
+    // ---- store summary from live settings ----
+    const storeSummary = [
+      { term: 'Store name', description: d.storeName },
+      { term: 'Contact email', description: d.storeEmail },
+      { term: 'Currency', description: d.currency },
+      { term: 'Weight unit', description: d.weightUnit },
+      { term: 'Categories', description: (d.tags || []).join(', ') || '—' },
+      { term: 'Low-stock alert', description: lowStock + ' units' },
+      { term: 'Tax rate', description: d.taxRate + '%' },
+      { term: 'Maintenance mode', description: d.maintenance ? 'On' : 'Off' },
+    ];
+
+    return {
+      ...d,
+      // nav
+      navItems: NAV_ITEMS,
+      activePath: '#' + section,
+      sectionTabs: SECTION_TABS,
+      crumbs: [{ label: 'Nimbus', href: '#home' }, { label: SECTION_TITLES[section] }],
+      metrics: METRICS,
+      storeSummary,
+      // products
+      productColumns: PRODUCT_COLUMNS,
+      filteredRows: rows,
+      hasRows: rows.length > 0,
+      shownCount: rows.length,
+      totalProducts: this._liveProducts().length,
+      selectedCount: (d.selectedKeys || []).length,
+      addActions: ADD_ACTIONS,
+      bulkItems: BULK_ITEMS,
+      statusOptions,
+      collectionOptions,
+      restockList,
+      hasRestock: restockList.length > 0,
+      // collections
+      collectionsView,
+      hasCollections: collectionsView.length > 0,
+      // orders / customers
+      orderColumns: ORDER_COLUMNS,
+      orderRows,
+      hasOrders: orderRows.length > 0,
+      customerColumns: CUSTOMER_COLUMNS,
+      customerRows,
+      hasCustomers: customerRows.length > 0,
+      // settings option lists
+      currencyOptions: CURRENCY_OPTIONS,
+      weightOptions: WEIGHT_OPTIONS,
+    };
+  }
+
+  _set(patch) {
+    this.setData(patch);
+    this.refresh();
+  }
+
+  events = {
+    // ---- navigation ----
+    setSection: (value) => this._set({ section: value }),
+    setNavCollapsed: (next) => this._set({ navCollapsed: !!next }),
+
+    // ---- products filters ----
+    setQuery: (v) => this._set({ query: v, pageNum: 1 }),
+    setStatusFilter: (v) => this._set({ statusFilter: v, pageNum: 1 }),
+    setCollectionFilter: (v) => this._set({ collectionFilter: v, pageNum: 1 }),
+    setLowStock: (checked) => this._set({ lowStockOnly: !!checked, pageNum: 1 }),
+    clearFilters: () =>
+      this._set({ query: '', statusFilter: 'all', collectionFilter: 'all', lowStockOnly: false, pageNum: 1 }),
+
+    // ---- products table (controlled) ----
+    setSort: (next) => this._set({ sortState: next }),
+    setSelected: (keys) => this._set({ selectedKeys: keys }),
+    setPage: (n) => this._set({ pageNum: n }),
+    clearSelection: () => this._set({ selectedKeys: [] }),
+
+    // ---- add product ----
+    addPrimary: () => toast({ title: 'Draft created', message: 'A new draft product is ready to edit.', variant: 'success' }),
+    addSelect: (value) => toast({ message: 'Add menu: ' + value }),
+
+    // ---- bulk actions ----
+    bulkAction: (value) => {
+      const keys = this.getData().selectedKeys || [];
+      if (value === 'delete') {
+        const deleted = (this.getData().deletedIds || []).concat(keys);
+        this._set({ deletedIds: deleted, selectedKeys: [] });
+        toast({ title: 'Products deleted', message: keys.length + ' product(s) removed.', variant: 'danger' });
+        return;
+      }
+      const label = { active: 'set to Active', draft: 'set to Draft', archive: 'archived' }[value] || value;
+      this._set({ selectedKeys: [] });
+      toast({ message: keys.length + ' product(s) ' + label + '.', variant: 'success' });
+    },
+
+    // ---- per-row product actions ----
+    onRowMenu: (value) => {
+      const [action, id] = String(value).split(':');
+      const verb = { edit: 'Editing', dup: 'Duplicated', arch: 'Archived' }[action] || 'Action on';
+      toast({ message: verb + ' ' + id });
+    },
+    deleteProduct: (id) => {
+      const deleted = (this.getData().deletedIds || []).concat([id]);
+      const selected = (this.getData().selectedKeys || []).filter((k) => k !== id);
+      this._set({ deletedIds: deleted, selectedKeys: selected });
+      toast({ title: 'Product deleted', message: id + ' was removed.', variant: 'danger' });
+    },
+
+    // ---- collections ----
+    onCollectionMenu: (value) => {
+      const [action, id] = String(value).split(':');
+      const verb = { edit: 'Editing', feature: 'Featured', dup: 'Duplicated' }[action] || 'Action on';
+      toast({ message: verb + ' collection ' + id });
+    },
+    archiveCollection: (id) => {
+      const archived = (this.getData().archivedCollectionIds || []).concat([id]);
+      this._set({ archivedCollectionIds: archived });
+      toast({ title: 'Collection archived', message: id + ' is now hidden from your store.' });
+    },
+
+    // ---- orders / customers ----
+    setOrderQuery: (v) => this._set({ orderQuery: v }),
+    setCustomerQuery: (v) => this._set({ customerQuery: v }),
+
+    // ---- settings ----
+    setStoreName: (v) => this._set({ storeName: v }),
+    setStoreEmail: (v) => this._set({ storeEmail: v }),
+    setDescription: (v) => this._set({ description: v }),
+    setCurrency: (v) => this._set({ currency: v }),
+    setWeightUnit: (v) => this._set({ weightUnit: v }),
+    setTags: (arr) => this._set({ tags: arr }),
+    setLowStock2: (n) => this._set({ lowStock: n == null ? 0 : n }),
+    setTaxRate: (n) => this._set({ taxRate: n == null ? 0 : n }),
+    setMaintenance: (c) => this._set({ maintenance: !!c }),
+    setReceipts: (c) => this._set({ emailReceipts: !!c }),
+    setAutoArchive: (c) => this._set({ autoArchive: !!c }),
+    setTwoFactor: (c) => this._set({ twoFactor: !!c }),
+    setLogo: (files) => this._set({ logoFiles: files }),
+    rejectLogo: (rejections) =>
+      toast({ message: (rejections[0] && rejections[0].message) || 'File rejected.', variant: 'danger' }),
+    saveSettings: () =>
+      toast({ title: 'Settings saved', message: 'Your store settings have been updated.', variant: 'success' }),
+    resetSettings: () => {
+      this._set({ ...DEFAULT_SETTINGS });
+      toast({ message: 'Settings reset to defaults.' });
+    },
+  };
+}
+</script>

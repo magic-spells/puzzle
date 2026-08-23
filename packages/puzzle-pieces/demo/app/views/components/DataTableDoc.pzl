@@ -1,0 +1,216 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Data Table</h1>
+        <p class="mt-2 text-body">
+          The interactive tier above
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Table</code>:
+          column sorting, row selection with select-all, and built-in pagination via the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Pagination</code>
+          piece. Sorting, selection, and page are each optional-controlled — own them in the parent, or let the table.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full">
+          <DataTable columns={ invoiceColumns } rows={ invoiceRows } rowKey="invoice" selectable pageSize={ 5 } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Pulls in the Pagination piece (a registry dependency) for the footer, and requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="sorting" title="Sorting" code={ codeSorting }>
+          <div class="flex w-full flex-col items-stretch gap-3">
+            <DataTable columns={ invoiceColumns } rows={ shortRows } rowKey="invoice" sort={ sortState } @sortChange={ setSort } />
+            <p class="text-sm text-muted">Sort: { sortLabel }</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="selection" title="Selection" code={ codeSelection }>
+          <div class="flex w-full flex-col items-stretch gap-3">
+            <DataTable columns={ invoiceColumns } rows={ shortRows } rowKey="invoice" selectable selected={ selectedKeys } @select={ setSelected } />
+            <p class="text-sm text-muted">{ selectedCount } selected</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="pagination" title="Pagination" code={ codePagination }>
+          <div class="flex w-full flex-col items-stretch gap-3">
+            <DataTable columns={ invoiceColumns } rows={ invoiceRows } rowKey="invoice" pageSize={ 4 } page={ pageNum } @pageChange={ setPageNum } />
+            <p class="text-sm text-muted">Page { pageNum }</p>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <ul class="space-y-2 text-sm text-body">
+          <li>
+            Sortable headers set
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-sort</code>
+            to <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">ascending</code> or
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">descending</code> on the active
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<th>' }</code>; the attribute is omitted (not set to "none") while unsorted.
+          </li>
+          <li>
+            Each sortable label is a real
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<button>' }</code>,
+            so headers are reachable with Tab and cycle asc → desc → off on Enter or Space. Non-sortable headers stay plain text.
+          </li>
+          <li>
+            Selection uses native <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<input type="checkbox">' }</code>: keyboard-toggleable, each row checkbox carries an
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-label</code> built from its key, and the header checkbox shows an indeterminate state when the current page is partially selected.
+          </li>
+          <li>
+            Every button and checkbox sets its focus outline color unconditionally, so focus rings never flash from a default color on the first frame.
+          </li>
+        </ul>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DataTable from '@/components/ui/DataTable.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece data-table';
+const usageImport = `import DataTable from '@/components/ui/DataTable.pzl';`;
+const usageMarkup = `<DataTable columns={ columns } rows={ rows } rowKey="invoice" selectable pageSize={ 5 } />`;
+
+const codeHero = `const columns = [
+  { key: 'invoice', label: 'Invoice', sortable: true },
+  { key: 'client', label: 'Client', sortable: true },
+  { key: 'status', label: 'Status' },
+  { key: 'amount', label: 'Amount', align: 'right', sortable: true },
+];
+
+// rowKey is the stable id used for selection; pageSize turns on pagination.
+<DataTable columns={ columns } rows={ rows } rowKey="invoice"
+           selectable pageSize={ 5 } />`;
+
+const codeSorting = `// Sort is optional-controlled: the parent owns the descriptor and
+// @sortChange hands back the next state on each header click. The table
+// applies it to the full row set (numeric compare when both cells read as
+// finite numbers, else localeCompare). Omit sort to let the table own it.
+<DataTable columns={ columns } rows={ rows } rowKey="invoice"
+           sort={ sort } @sortChange={ setSort } />
+
+events = {
+  setSort: (next) => this.setData({ sort: next }),   // { key, dir } | null
+};`;
+
+const codeSelection = `// selected is an array of rowKey values; @select fires the next array.
+// Keys are row ids, so a selection survives sorting and paging. The header
+// checkbox selects/clears the current page and goes indeterminate when
+// the page is partially selected.
+<DataTable columns={ columns } rows={ rows } rowKey="invoice"
+           selectable selected={ selected } @select={ setSelected } />
+<p>{ selected.length } selected</p>
+
+events = {
+  setSelected: (keys) => this.setData({ selected: keys }),
+};`;
+
+const codePagination = `// pageSize enables pagination (rows are sorted, THEN paged); the footer
+// shows "x–y of z" and the Pagination strip. page is optional-controlled —
+// omit it to let the table track the page itself.
+<DataTable columns={ columns } rows={ rows } rowKey="invoice"
+           pageSize={ 4 } page={ page } @pageChange={ setPage } />
+
+events = {
+  setPage: (n) => this.setData({ page: n }),
+};`;
+
+const INVOICE_COLUMNS = [
+  { key: 'invoice', label: 'Invoice', sortable: true },
+  { key: 'client', label: 'Client', sortable: true },
+  { key: 'status', label: 'Status' },
+  { key: 'amount', label: 'Amount', align: 'right', sortable: true },
+];
+
+const INVOICE_ROWS = [
+  { invoice: 'INV-1042', client: 'Acme Inc.', status: 'Paid', amount: 1200 },
+  { invoice: 'INV-1043', client: 'Globex', status: 'Pending', amount: 980 },
+  { invoice: 'INV-1044', client: 'Initech', status: 'Paid', amount: 3450 },
+  { invoice: 'INV-1045', client: 'Umbrella Co.', status: 'Overdue', amount: 540 },
+  { invoice: 'INV-1046', client: 'Soylent', status: 'Draft', amount: 120 },
+  { invoice: 'INV-1047', client: 'Hooli', status: 'Paid', amount: 2760 },
+  { invoice: 'INV-1048', client: 'Vehement Capital', status: 'Pending', amount: 1890 },
+  { invoice: 'INV-1049', client: 'Massive Dynamic', status: 'Paid', amount: 4300 },
+  { invoice: 'INV-1050', client: 'Stark Industries', status: 'Overdue', amount: 760 },
+  { invoice: 'INV-1051', client: 'Wayne Enterprises', status: 'Draft', amount: 315 },
+  { invoice: 'INV-1052', client: 'Cyberdyne', status: 'Paid', amount: 2050 },
+  { invoice: 'INV-1053', client: 'Wonka Industries', status: 'Pending', amount: 640 },
+];
+
+export default class DataTableDoc extends PuzzleView {
+  created() {
+    this.setData({ sortState: { key: 'amount', dir: 'desc' }, selectedKeys: [], pageNum: 1 });
+  }
+
+  data(params, props) {
+    const d = this.getData();
+    const sortState = d.sortState || null;
+    return {
+      ...d,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeSorting,
+      codeSelection,
+      codePagination,
+      invoiceColumns: INVOICE_COLUMNS,
+      invoiceRows: INVOICE_ROWS,
+      shortRows: INVOICE_ROWS.slice(0, 5),
+      selectedCount: (d.selectedKeys || []).length,
+      sortLabel: sortState ? `${sortState.key} · ${sortState.dir}` : 'none',
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Sorting', href: '#sorting' },
+        { label: 'Selection', href: '#selection' },
+        { label: 'Pagination', href: '#pagination' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    setSort: (next) => {
+      this.setData('sortState', next);
+      this.refresh();
+    },
+    setSelected: (keys) => {
+      this.setData('selectedKeys', keys);
+      this.refresh();
+    },
+    setPageNum: (n) => {
+      this.setData('pageNum', n);
+      this.refresh();
+    },
+  };
+}
+</script>

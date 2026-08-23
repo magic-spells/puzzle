@@ -1,0 +1,25 @@
+<puzzle-view>
+  <Code code={ code } lang={ lang } numbers={ false } class={ klass }/>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Code from '../ui/Code.pzl';
+
+// CodeBlock — a thin alias over Code for command/short-snippet panels (docs-only):
+// framed, copy button, syntax highlighting, no line-number gutter. Kept as its
+// own component so the 40 doc pages that import it stay untouched; anything
+// needing the gutter or the collapsible peek uses Code directly.
+//
+//   <CodeBlock code={ installCmd }/>
+//   <CodeBlock code={ importLine } class="mt-2"/>
+export default class CodeBlock extends PuzzleView {
+  data(params, props) {
+    return {
+      code: props.code || '',
+      lang: props.lang || false,
+      klass: props.class || '',
+    };
+  }
+}
+</script>

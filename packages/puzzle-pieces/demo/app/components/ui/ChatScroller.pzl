@@ -1,0 +1,225 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <div
+      data-scroll-viewport
+      class="overflow-y-auto overscroll-contain px-1"
+      style={ viewportStyle }
+      role="log"
+      aria-label={ label }
+      @scroll={ onScroll }>
+      <div data-scroll-inner><Slot/></div>
+    </div>
+
+    {#if !pinned}
+      <button
+        type="button"
+        class="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-body shadow-md cursor-pointer transition-colors hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
+        @click={ jumpToLatest }>
+        <svg class="size-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 3v9M4 8l4 4 4-4" />
+        </svg>
+        Jump to latest
+      </button>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ChatScroller — a stick-to-bottom message viewport, the container a chat log
+// lives in. The scrollable region carries role="log" (which gives an implicit
+// aria-live="polite"), so screen readers announce appended messages. The default
+// slot is the message list (a column of ChatMessage rows).
+//
+//   <ChatScroller height={ 420 } @pin={ (atBottom) => setPinned(atBottom) }>
+//     {#for m in messages}
+//       <ChatMessage ... />
+//     {/for}
+//   </ChatScroller>
+//
+// PINNING. "Pinned" means scrolled within PIN_THRESHOLD px (40) of the bottom.
+// While pinned, any growth of the content (a new message) auto-scrolls the
+// viewport back to the bottom so the newest message stays in view. The moment
+// the reader scrolls up past the threshold, pinning disengages and a floating
+// "Jump to latest" pill appears; clicking it smooth-scrolls to the bottom
+// (instant under prefers-reduced-motion) and re-pins. @pin(isPinned) fires
+// whenever the pinned state flips, so the parent can mirror it (badge, etc.).
+//
+// THE JUMP LATCH. A smooth jump would otherwise flicker the pill back on for
+// every intermediate frame, so the jump sets a latch that makes scroll samples
+// no-ops until it lands. A latch that only releases on arrival is a trap: the UA
+// cancels its own smooth scroll the instant the reader touches the wheel/screen,
+// no arrival sample ever comes, and pinned would stay stuck true forever (pill
+// gone, content growth still yanking the view down). So the latch releases three
+// ways — on arrival, on the reader's first wheel/touchstart (their intent wins
+// over the animation), and on a JUMP_RELEASE_MS backstop for the cases that emit
+// neither (throttled tab, a scroll that never moves). Every release re-derives
+// pinned from the real position rather than assuming it.
+//
+// GROWTH IS WATCHED WITH A ResizeObserver on an inner wrapper around the slot —
+// NOT a MutationObserver — so it catches both new nodes and any reflow (images
+// loading, a message expanding) with one cheap callback. The scroll handler is
+// rAF-throttled and only calls setData when the pinned state actually changes,
+// so ordinary scrolling never thrashes the view. Observer + rAF are torn down
+// in destroyed(). On mount the viewport starts scrolled to the bottom.
+//
+// Props:
+//   height  viewport height in px (number) → inline style; default 384
+//   label   aria-label for the log region; default 'Messages'
+//   class   appended to the root
+// Callback:
+//   @pin(isPinned)  fired when pinned-to-bottom state changes
+const PIN_THRESHOLD = 40; // px from the bottom that still counts as "pinned"
+// Backstop for a smooth jump that never reports arrival (see THE JUMP LATCH).
+const JUMP_RELEASE_MS = 2000;
+
+export default class ChatScroller extends PuzzleView {
+  #ro = null;
+  #raf = null;
+  // Suppresses scroll-driven unpinning during a programmatic smooth jump, so the
+  // pill doesn't flicker back on mid-animation. See THE JUMP LATCH above for the
+  // three ways it releases.
+  #suppress = false;
+  #jumpTimer = null;
+  // The element the intent listeners are bound to, kept so destroyed() can detach
+  // them without depending on the template still being queryable.
+  #scrollTarget = null;
+
+  #onScrollIntent = () => {
+    // The reader grabbed the wheel/screen mid-jump: the UA has cancelled the
+    // smooth scroll, so no arrival sample is coming. Release now and re-derive
+    // pinned from where they actually are.
+    if (!this.#suppress) return;
+    this.#releaseJump();
+    this.updatePinned();
+  };
+
+  data(params, props) {
+    const prev = this.getData();
+    const pinned = prev && typeof prev.pinned === 'boolean' ? prev.pinned : true;
+    const height = Number(props.height) > 0 ? Number(props.height) : 384;
+    return {
+      pinned,
+      label: props.label || 'Messages',
+      viewportStyle: `height:${height}px`,
+      rootClass: ['relative', props.class || ''].join(' '),
+    };
+  }
+
+  viewport() {
+    return this.element ? this.element.querySelector('[data-scroll-viewport]') : null;
+  }
+  inner() {
+    return this.element ? this.element.querySelector('[data-scroll-inner]') : null;
+  }
+
+  scrollToBottom(smooth) {
+    const vp = this.viewport();
+    if (!vp) return;
+    if (smooth && !this.#reduced()) {
+      vp.scrollTo({ top: vp.scrollHeight, behavior: 'smooth' });
+    } else {
+      vp.scrollTop = vp.scrollHeight;
+    }
+  }
+
+  #reduced() {
+    return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  // Drop the jump latch and its backstop together — they are always armed and
+  // disarmed as a pair.
+  #releaseJump() {
+    this.#suppress = false;
+    if (this.#jumpTimer) {
+      clearTimeout(this.#jumpTimer);
+      this.#jumpTimer = null;
+    }
+  }
+
+  mounted() {
+    // Start at the bottom (newest message visible).
+    this.scrollToBottom(false);
+    // Watch content growth; while pinned, follow it down.
+    if (typeof ResizeObserver !== 'undefined') {
+      this.#ro = new ResizeObserver(() => {
+        // Never fight a jump in flight: the jump already targets the bottom, and
+        // the observer re-engages the moment the latch releases.
+        if (this.getData().pinned && !this.#suppress) this.scrollToBottom(false);
+      });
+      const inner = this.inner();
+      if (inner) this.#ro.observe(inner);
+    }
+    // Manual scroll intent, which the `scroll` event alone cannot distinguish
+    // from the programmatic jump's own frames.
+    const vp = this.viewport();
+    if (vp) {
+      this.#scrollTarget = vp;
+      vp.addEventListener('wheel', this.#onScrollIntent, { passive: true });
+      vp.addEventListener('touchstart', this.#onScrollIntent, { passive: true });
+    }
+  }
+
+  destroyed() {
+    if (this.#ro) {
+      this.#ro.disconnect();
+      this.#ro = null;
+    }
+    if (this.#raf) {
+      cancelAnimationFrame(this.#raf);
+      this.#raf = null;
+    }
+    this.#releaseJump();
+    if (this.#scrollTarget) {
+      this.#scrollTarget.removeEventListener('wheel', this.#onScrollIntent);
+      this.#scrollTarget.removeEventListener('touchstart', this.#onScrollIntent);
+      this.#scrollTarget = null;
+    }
+  }
+
+  updatePinned() {
+    const vp = this.viewport();
+    if (!vp) return;
+    const distance = vp.scrollHeight - vp.scrollTop - vp.clientHeight;
+    const pinned = distance <= PIN_THRESHOLD;
+    // During a smooth jump, ignore intermediate positions until we land, so the
+    // pill stays hidden throughout the animation instead of blinking.
+    if (this.#suppress) {
+      if (pinned) this.#releaseJump();
+      return;
+    }
+    if (pinned !== this.getData().pinned) {
+      this.setData({ pinned });
+      const { pin } = this.props;
+      if (typeof pin === 'function') pin(pinned);
+    }
+  }
+
+  events = {
+    onScroll: () => {
+      if (this.#raf) return;
+      this.#raf = requestAnimationFrame(() => {
+        this.#raf = null;
+        this.updatePinned();
+      });
+    },
+
+    jumpToLatest: () => {
+      this.#releaseJump();
+      this.#suppress = true;
+      this.#jumpTimer = setTimeout(() => {
+        this.#jumpTimer = null;
+        this.#suppress = false;
+        this.updatePinned();
+      }, JUMP_RELEASE_MS);
+      this.scrollToBottom(true);
+      if (!this.getData().pinned) {
+        this.setData({ pinned: true });
+        const { pin } = this.props;
+        if (typeof pin === 'function') pin(true);
+      }
+    },
+  };
+}
+</script>

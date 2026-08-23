@@ -1,0 +1,32 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+
+# Puzzle cached files
+.puzzle/
+
+# Browser-automation scratch artifacts (Playwright MCP snapshots/screenshots)
+.playwright-mcp/
+
+# Local agent settings (session-specific permissions)
+.claude/settings.local.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# npm auth token lives here for publishing — never commit it
+.npmrc

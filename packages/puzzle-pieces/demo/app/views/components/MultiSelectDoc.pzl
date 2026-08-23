@@ -1,0 +1,290 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Multi-Select</h1>
+        <p class="mt-2 text-body">
+          A filterable tag combobox — the multi-value sibling of
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Combobox</code>.
+          Picks render as removable chips at the start of one bordered control; a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">combobox</code>
+          input filters the remaining options in a listbox popup. Selecting an option ADDS it and keeps
+          the popup open so you can add several. State is controlled through a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          callback that fires with the next array of values.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-72">
+          <MultiSelect options={ frameworks } value={ picks } placeholder="Add frameworks…" @change={ setPicks } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          No npm dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <section id="basic" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Basic usage</h2>
+          <p class="mb-3 text-sm text-body">
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
+            is an array; each pick becomes a chip. Selected options are hidden from the list — remove a chip
+            (its <span class="font-medium text-ink">×</span>, or Backspace on an empty input) to bring it back.
+          </p>
+          <ExampleBox code={ codeBasic }>
+            <div class="w-72">
+              <MultiSelect
+                label="Frameworks"
+                hint="Pick the ones you've shipped with"
+                options={ frameworks }
+                value={ basicPicks }
+                placeholder="Add frameworks…"
+                @change={ setBasicPicks } />
+            </div>
+          </ExampleBox>
+        </section>
+
+        <ExampleBox id="groups" title="Groups and dividers" code={ codeGroups }>
+          <div class="w-72">
+            <MultiSelect options={ techOptions } value={ tech } placeholder="Add tech…" @change={ setTech } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="error" title="Error state" code={ codeError }>
+          <div class="w-72">
+            <MultiSelect
+              label="Tags"
+              options={ frameworks }
+              value={ errPicks }
+              error="Pick at least one framework"
+              placeholder="Add frameworks…"
+              @change={ setErrPicks } />
+          </div>
+        </ExampleBox>
+
+        <section id="controlled" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Controlled open</h2>
+          <p class="mb-3 text-sm text-body">
+            Open state is optional-controlled. Omit
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">open</code>
+            and the component owns it; pass it and the parent does, reacting to
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@show</code>
+            and
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@hide</code>.
+          </p>
+          <ExampleBox code={ codeControlled }>
+            <div class="flex w-72 flex-col gap-3">
+              <MultiSelect
+                options={ frameworks }
+                value={ controlledPicks }
+                open={ msOpen }
+                placeholder="Add frameworks…"
+                @change={ setControlledPicks }
+                @show={ onShow }
+                @hide={ onHide } />
+              <p class="text-sm text-muted">
+                Parent open state:
+                <span class="font-medium text-ink">{ msOpen ? 'open' : 'closed' }</span>
+              </p>
+            </div>
+          </ExampleBox>
+        </section>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">Focus stays on the input; these keys drive the control:</p>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Type</span> — re-filters and opens the list, reseating the active option</li>
+            <li><span class="font-medium text-ink">Down / Up arrows</span> — open the list, then move the active option (wraps, skips disabled)</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last option</li>
+            <li><span class="font-medium text-ink">Enter</span> — add the active option (query clears, popup stays open)</li>
+            <li><span class="font-medium text-ink">Backspace</span> — on an empty input, remove the last chip</li>
+            <li><span class="font-medium text-ink">Escape</span> — close the list</li>
+            <li><span class="font-medium text-ink">Tab</span> — close and move focus on naturally</li>
+          </ul>
+          <ExampleBox code={ codeKeyboard }>
+            <div class="w-72">
+              <MultiSelect options={ frameworks } value={ picks } placeholder="Add frameworks…" @change={ setPicks } />
+            </div>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import MultiSelect from '@/components/ui/MultiSelect.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece multi-select';
+const usageImport = `import MultiSelect from '@/components/ui/MultiSelect.pzl';`;
+const usageMarkup = `<MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
+
+const codeHero = `const frameworks = [
+  { value: 'next', label: 'Next.js' },
+  { value: 'svelte', label: 'SvelteKit' },
+  { value: 'nuxt', label: 'Nuxt' },
+  { value: 'remix', label: 'Remix' },
+  { value: 'astro', label: 'Astro' },
+];
+
+// value is an ARRAY; @change fires with the NEXT array on add or remove.
+<MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
+
+const codeBasic = `// Selected options are hidden from the list — the chips carry them.
+// Remove a chip (× or Backspace on an empty input) to re-add it.
+setPicks(next) {
+  this.setData('picks', next);
+  this.refresh();
+}
+
+<MultiSelect
+  label="Frameworks"
+  hint="Pick the ones you've shipped with"
+  options={ frameworks }
+  value={ picks }
+  @change={ setPicks } />`;
+
+const codeGroups = `// { group } headings and { divider } rows work exactly like Select.
+// A heading drops when all its options are picked or filtered away.
+const techOptions = [
+  { group: 'Languages' },
+  { value: 'ts', label: 'TypeScript' },
+  { value: 'go', label: 'Go' },
+  { value: 'rust', label: 'Rust' },
+  { divider: true },
+  { group: 'Databases' },
+  { value: 'pg', label: 'PostgreSQL' },
+  { value: 'redis', label: 'Redis' },
+  { value: 'mongo', label: 'MongoDB', disabled: true },
+];
+
+<MultiSelect options={ techOptions } value={ tech } @change={ setTech } />`;
+
+const codeError = `// An error string paints the border/ring danger, sets aria-invalid,
+// and wires aria-describedby to the message (Field's behavior).
+<MultiSelect
+  label="Tags"
+  options={ frameworks }
+  value={ picks }
+  error="Pick at least one framework"
+  @change={ setPicks } />`;
+
+const codeControlled = `// Pass open + @show/@hide to own the open state in the parent.
+<MultiSelect
+  options={ frameworks }
+  value={ picks }
+  open={ msOpen }
+  @change={ setPicks }
+  @show={ () => this.setData('msOpen', true) }
+  @hide={ () => this.setData('msOpen', false) } />`;
+
+const codeKeyboard = `<MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
+
+export default class MultiSelectDoc extends PuzzleView {
+  created() {
+    this.setData({
+      picks: ['svelte'],
+      basicPicks: ['next', 'astro'],
+      tech: ['ts'],
+      errPicks: [],
+      controlledPicks: [],
+      msOpen: false,
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeBasic,
+      codeGroups,
+      codeError,
+      codeControlled,
+      codeKeyboard,
+      frameworks: [
+        { value: 'next', label: 'Next.js' },
+        { value: 'svelte', label: 'SvelteKit' },
+        { value: 'nuxt', label: 'Nuxt' },
+        { value: 'remix', label: 'Remix' },
+        { value: 'astro', label: 'Astro' },
+      ],
+      techOptions: [
+        { group: 'Languages' },
+        { value: 'ts', label: 'TypeScript' },
+        { value: 'go', label: 'Go' },
+        { value: 'rust', label: 'Rust' },
+        { divider: true },
+        { group: 'Databases' },
+        { value: 'pg', label: 'PostgreSQL' },
+        { value: 'redis', label: 'Redis' },
+        { value: 'mongo', label: 'MongoDB', disabled: true },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Basic usage', href: '#basic' },
+        { label: 'Groups and dividers', href: '#groups' },
+        { label: 'Error state', href: '#error' },
+        { label: 'Controlled open', href: '#controlled' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    setPicks: (v) => {
+      this.setData('picks', v);
+      this.refresh();
+    },
+    setBasicPicks: (v) => {
+      this.setData('basicPicks', v);
+      this.refresh();
+    },
+    setTech: (v) => {
+      this.setData('tech', v);
+      this.refresh();
+    },
+    setErrPicks: (v) => {
+      this.setData('errPicks', v);
+      this.refresh();
+    },
+    setControlledPicks: (v) => {
+      this.setData('controlledPicks', v);
+      this.refresh();
+    },
+    onShow: () => {
+      this.setData('msOpen', true);
+      this.refresh();
+    },
+    onHide: () => {
+      this.setData('msOpen', false);
+      this.refresh();
+    },
+  };
+}
+</script>

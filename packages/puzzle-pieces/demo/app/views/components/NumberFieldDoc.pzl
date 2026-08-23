@@ -1,0 +1,213 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Number Field</h1>
+        <p class="mt-2 text-body">
+          The general-purpose numeric form field — label, hint or error, and ARIA wiring like
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Field</code>,
+          around a numeric input with a ▲/▼ stepper. Bounds are optional and the field may be left
+          empty, so it emits a number or
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">null</code>.
+          Distinct from Quantity Input, which is an always-clamped e-commerce stepper.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex items-end gap-6">
+          <div class="w-44">
+            <NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />
+          </div>
+          <p class="text-sm text-muted">Current: { qtyLabel }</p>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="decimals" title="Decimals and precision" code={ codeDecimals }>
+          <div class="flex items-end gap-6">
+            <div class="w-44">
+              <NumberField label="Weight (kg)" value={ weight } step={ 0.1 } precision={ 1 } min={ 0 } @change={ setWeight } />
+            </div>
+            <p class="text-sm text-muted">Current: { weightLabel }</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="bounds" title="Bounds" code={ codeBounds }>
+          <p class="mb-4 max-w-prose text-sm text-body">
+            With a <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">min</code>
+            and <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">max</code>,
+            typing past a bound clamps on commit and the matching stepper button disables at the edge.
+          </p>
+          <div class="flex items-end gap-6">
+            <div class="w-44">
+              <NumberField label="Rating" value={ rating } min={ 1 } max={ 5 } @change={ setRating } />
+            </div>
+            <p class="text-sm text-muted">1–5 · Current: { ratingLabel }</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="empty" title="Empty allowed" code={ codeEmpty }>
+          <p class="mb-4 max-w-prose text-sm text-body">
+            Unbounded and optional — clearing the field emits
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">null</code>
+            instead of snapping back to a number, so validation stays the parent's job.
+          </p>
+          <div class="flex items-end gap-6">
+            <div class="w-52">
+              <NumberField label="Discount (optional)" placeholder="No discount" value={ discount } @change={ setDiscount } />
+            </div>
+            <p class="text-sm text-muted">Emitted: { discountLabel }</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="error" title="Error" code={ codeError }>
+          <div class="w-52">
+            <NumberField label="Age" value={ 15 } min={ 18 } error="Must be 18 or older" />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
+          <div class="w-44">
+            <NumberField label="Seats" value={ 4 } disabled />
+          </div>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">With the input focused:</p>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Up / Down arrows</span> — increment or decrement by <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">step</code></li>
+            <li><span class="font-medium text-ink">Page Up / Page Down</span> — increment or decrement by <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">largeStep</code> (defaults to 10× step)</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">min</code> / <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">max</code> (when bounded)</li>
+            <li><span class="font-medium text-ink">Enter</span> — commit and clamp the typed value</li>
+            <li><span class="font-medium text-ink">Blur</span> — commit and clamp on leaving the field</li>
+          </ul>
+          <ExampleBox code={ codeKeyboard }>
+            <div class="flex items-end gap-6">
+              <div class="w-44">
+                <NumberField label="Level" value={ level } min={ 0 } max={ 100 } step={ 5 } largeStep={ 25 } @change={ setLevel } />
+              </div>
+              <p class="text-sm text-muted">Current: { levelLabel }</p>
+            </div>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import NumberField from '@/components/ui/NumberField.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece number-field';
+const usageImport = `import NumberField from '@/components/ui/NumberField.pzl';`;
+const usageMarkup = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />`;
+
+const codeHero = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />
+
+// parent — @change emits a number, or null when the field is cleared
+events = {
+  setQty: (v) => this.setData('qty', v),
+};`;
+
+const codeDecimals = `// precision formats the display and rounds the emitted value; step can be fractional
+<NumberField label="Weight (kg)" value={ weight } step={ 0.1 } precision={ 1 } min={ 0 } @change={ setWeight } />`;
+
+const codeBounds = `// buttons disable at the bounds; typing past them clamps on commit (blur / Enter)
+<NumberField label="Rating" value={ rating } min={ 1 } max={ 5 } @change={ setRating } />`;
+
+const codeEmpty = `// no min/max — the field may be left blank and emits null
+<NumberField label="Discount (optional)" placeholder="No discount" value={ discount } @change={ setDiscount } />`;
+
+const codeError = `<NumberField label="Age" value={ 15 } min={ 18 } error="Must be 18 or older" />`;
+
+const codeDisabled = `<NumberField label="Seats" value={ 4 } disabled />`;
+
+const codeKeyboard = `<NumberField label="Level" value={ level } min={ 0 } max={ 100 } step={ 5 } largeStep={ 25 } @change={ setLevel } />`;
+
+const show = (v) => (v == null ? 'null' : String(v));
+
+export default class NumberFieldDoc extends PuzzleView {
+  created() {
+    this.setData({ qty: 3, weight: 68.5, rating: 3, discount: null, level: 40 });
+  }
+
+  data(params, props) {
+    const state = this.getData();
+    return {
+      ...state,
+      qtyLabel: show(state.qty),
+      weightLabel: show(state.weight),
+      ratingLabel: show(state.rating),
+      discountLabel: show(state.discount),
+      levelLabel: show(state.level),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeDecimals,
+      codeBounds,
+      codeEmpty,
+      codeError,
+      codeDisabled,
+      codeKeyboard,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Decimals and precision', href: '#decimals' },
+        { label: 'Bounds', href: '#bounds' },
+        { label: 'Empty allowed', href: '#empty' },
+        { label: 'Error', href: '#error' },
+        { label: 'Disabled', href: '#disabled' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    setQty: (v) => {
+      this.setData('qty', v);
+      this.refresh();
+    },
+    setWeight: (v) => {
+      this.setData('weight', v);
+      this.refresh();
+    },
+    setRating: (v) => {
+      this.setData('rating', v);
+      this.refresh();
+    },
+    setDiscount: (v) => {
+      this.setData('discount', v);
+      this.refresh();
+    },
+    setLevel: (v) => {
+      this.setData('level', v);
+      this.refresh();
+    },
+  };
+}
+</script>

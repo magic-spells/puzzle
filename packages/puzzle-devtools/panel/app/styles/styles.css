@@ -1,0 +1,339 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 content detection. Paths are relative to this stylesheet
+ * (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * Theming: every semantic token is an `inline` theme entry pointing at a plain
+ * custom property, so the generated utilities emit `var(--dt-…)` rather than a
+ * baked value. Flipping `<html data-theme>` therefore re-themes the whole panel
+ * with no rebuilt CSS and no class churn — panel-glue sets the attribute from
+ * chrome.devtools.panels.themeName before the bundle runs.
+ */
+@theme inline {
+	--color-canvas: var(--dt-canvas);
+	--color-surface: var(--dt-surface);
+	--color-raised: var(--dt-raised);
+	--color-ink: var(--dt-ink);
+	--color-muted: var(--dt-muted);
+	--color-faint: var(--dt-faint);
+	--color-line: var(--dt-line);
+	--color-accent: var(--dt-accent);
+	--color-accent-soft: var(--dt-accent-soft);
+	--color-ok: var(--dt-ok);
+	--color-warn: var(--dt-warn);
+	--color-danger: var(--dt-danger);
+	--color-danger-soft: var(--dt-danger-soft);
+
+	/*
+	 * Re-render heat ramp (Performance panel), cold → hot. Aliased like every
+	 * other token so `bg-heat-3` follows the data-theme flip; `values.js` names
+	 * these classes literally so Tailwind emits them.
+	 */
+	--color-heat-1: var(--dt-heat-1);
+	--color-heat-2: var(--dt-heat-2);
+	--color-heat-3: var(--dt-heat-3);
+	--color-heat-4: var(--dt-heat-4);
+
+	/*
+	 * Bridge for pieces from the puzzle-pieces registry (SplitPanel, CopyButton,
+	 * Empty, Badge). Pieces are written against the registry's own palette; every
+	 * token-backed utility they reach for is aliased onto the panel's --dt-* tiers
+	 * here, so a piece inherits the DevTools theme — including the data-theme flip
+	 * — without being edited.
+	 *
+	 * `app/styles/pieces.css` (installed alongside the pieces, hash-tracked in
+	 * pieces.lock) is deliberately NOT imported: it declares a full competing
+	 * palette including --color-surface / --color-ink / --color-line, which are
+	 * exactly the names this block already owns. Importing it would fight the
+	 * data-theme switch. Aliases keep the panel on ONE palette, and the piece
+	 * files stay verbatim so `puzzle add piece` can re-verify their hashes.
+	 *
+	 * `surface-sunken` maps to `raised` rather than `surface`: in the registry's
+	 * vocabulary "sunken" is the recessed fill behind a hover/selected row, which
+	 * is the job `--dt-raised` already does here.
+	 */
+	--color-brand: var(--dt-accent);
+	--color-brand-tint: var(--dt-accent-soft);
+	--color-brand-ink: var(--dt-canvas);
+	--color-border: var(--dt-line);
+	--color-border-strong: var(--dt-faint);
+	--color-ring: var(--dt-accent);
+	--color-surface-sunken: var(--dt-raised);
+	--color-body: var(--dt-muted);
+	--color-danger-tint: var(--dt-raised);
+
+	--font-sans: var(--dt-font-sans);
+	--font-mono: var(--dt-font-mono);
+}
+
+:root {
+	--dt-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--dt-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+	/*
+	 * Contrast budget (WCAG 2.1, computed against all THREE background tiers —
+	 * canvas, surface and raised — because `hover:bg-raised` puts otherwise-
+	 * canvas text on the lightest one):
+	 *
+	 *   ink   >= 7:1    primary text
+	 *   muted >= 4.5:1  secondary text
+	 *   faint >= 4.5:1  labels and module paths, at 9-11px
+	 *
+	 * The three tiers must stay ordered ink > muted > faint; that hierarchy is
+	 * what makes a dense panel scannable. Any token edit here needs the ratios
+	 * re-checked against every tier, not just canvas.
+	 */
+
+	/* Light — Chrome DevTools "default" theme, darkened to clear the budget. */
+	--dt-canvas: #ffffff;
+	--dt-surface: #f5f5f5;
+	--dt-raised: #ebebeb;
+	--dt-ink: #1a1a1a; /* 17.40 / 15.96 / 14.60 */
+	--dt-muted: #55595e; /*  7.05 /  6.47 /  5.92 */
+	--dt-faint: #64696e; /*  5.54 /  5.09 /  4.65 */
+	--dt-line: #d7d7d7;
+	--dt-accent: #5b3ce0; /*  6.63 /  6.08 /  5.56 */
+	--dt-accent-soft: rgba(91, 60, 224, 0.13);
+	--dt-ok: #146c34; /*  6.51 /  5.97 /  5.46 */
+	--dt-warn: #8a5300; /*  6.33 /  5.81 /  5.31 */
+	--dt-danger: #a3211a; /*  7.53 /  6.90 /  6.31 */
+	/*
+	 * The alarm wash behind the Performance panel's warnings card — `danger` what
+	 * `accent-soft` is to `accent`. Text drawn ON it, composited over the three
+	 * tiers: ink 14.70 / 13.53 / 12.42, muted 5.96 / 5.49 / 5.04, danger
+	 * 6.36 / 5.85 / 5.37. `faint` would land at 3.96 on raised and is therefore
+	 * deliberately not used on this surface.
+	 */
+	--dt-danger-soft: rgba(163, 33, 26, 0.1);
+
+	/*
+	 * Heat ramp. These fill BARS, never text, and no text is ever drawn on top of
+	 * one — that is deliberate. Washing the row background by heat was the first
+	 * design, and the numbers killed it: at the alphas needed to read as a
+	 * heatmap, `muted` fell to 3.96:1 and `faint` to 3.11:1 on the raised tier,
+	 * blowing the >= 4.5 budget above. Confining heat to a bar keeps every text
+	 * ratio in this file exactly as documented.
+	 *
+	 * The bar target is therefore the NON-TEXT 3:1 (WCAG 1.4.11), measured
+	 * against canvas / surface / raised. The cold end is deliberately below it —
+	 * "barely rendered" should barely show — and the row always prints the count
+	 * beside the bar, so no reading depends on the fill alone.
+	 */
+	--dt-heat-1: #e0b46f; /*  1.92 /  1.76 /  1.61 — cold, intentionally faint */
+	--dt-heat-2: #cf8b32; /*  2.84 /  2.61 /  2.38 */
+	--dt-heat-3: #bd5a1c; /*  4.52 /  4.15 /  3.79 */
+	--dt-heat-4: #a3211a; /*  7.53 /  6.90 /  6.31 — the danger tone, at the top */
+	/* Hatch stripes over a hot bar: the canvas colour, so they read as cut-outs. */
+	--dt-heat-hatch: rgba(255, 255, 255, 0.55);
+}
+
+/*
+ * Dark — backgrounds a step deeper AND text a step whiter than Chrome's own
+ * palette. Chrome's #202124/#e8eaed pair reads fine at its 12-13px body size;
+ * this panel runs at 10-11px, where the same ratios feel washed out.
+ */
+:root[data-theme="dark"] {
+	--dt-canvas: #17181a;
+	--dt-surface: #1f2023;
+	--dt-raised: #2b2d31;
+	--dt-ink: #f4f6f7; /* 16.39 / 15.03 / 12.72 */
+	--dt-muted: #b6bcc2; /*  9.27 /  8.50 /  7.20 */
+	--dt-faint: #959ca3; /*  6.40 /  5.87 /  4.97 */
+	--dt-line: #34363b;
+	--dt-accent: #b9a4ff; /*  8.31 /  7.62 /  6.45 */
+	--dt-accent-soft: rgba(185, 164, 255, 0.18);
+	--dt-ok: #8fd3a2; /* 10.16 /  9.31 /  7.89 */
+	--dt-warn: #ffd970; /* 13.04 / 11.95 / 10.12 */
+	--dt-danger: #ff958c; /*  8.40 /  7.70 /  6.52 */
+	/* On it: ink 12.69 / 11.57 / 9.69, muted 7.18 / 6.55 / 5.48, danger 6.50 / 5.93 / 4.97. */
+	--dt-danger-soft: rgba(255, 149, 140, 0.14);
+
+	/* Heat ramp — same non-text budget as light. See the note there. */
+	--dt-heat-1: #5c4a2a; /*  2.09 /  1.91 /  1.62 — cold, intentionally faint */
+	--dt-heat-2: #a3822f; /*  4.90 /  4.49 /  3.80 */
+	--dt-heat-3: #d98b4a; /*  6.55 /  6.01 /  5.09 */
+	--dt-heat-4: #ff958c; /*  8.40 /  7.70 /  6.52 — the danger tone, at the top */
+	--dt-heat-hatch: rgba(23, 24, 26, 0.55);
+}
+
+/* Standalone `puzzle dev` (no panel-glue, so no data-theme) follows the OS. */
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme]) {
+		--dt-canvas: #17181a;
+		--dt-surface: #1f2023;
+		--dt-raised: #2b2d31;
+		--dt-ink: #f4f6f7;
+		--dt-muted: #b6bcc2;
+		--dt-faint: #959ca3;
+		--dt-line: #34363b;
+		--dt-accent: #b9a4ff;
+		--dt-accent-soft: rgba(185, 164, 255, 0.18);
+		--dt-ok: #8fd3a2;
+		--dt-warn: #ffd970;
+		--dt-danger: #ff958c;
+		--dt-danger-soft: rgba(255, 149, 140, 0.14);
+		--dt-heat-1: #5c4a2a;
+		--dt-heat-2: #a3822f;
+		--dt-heat-3: #d98b4a;
+		--dt-heat-4: #ff958c;
+		--dt-heat-hatch: rgba(23, 24, 26, 0.55);
+	}
+}
+
+@layer base {
+	html,
+	body {
+		height: 100%;
+	}
+
+	body {
+		/* DevTools density: 12px base, tight leading, no page scroll — panes scroll. */
+		margin: 0;
+		overflow: hidden;
+		background-color: var(--dt-canvas);
+		color: var(--dt-ink);
+		font-family: var(--dt-font-sans);
+		font-size: 12px;
+		line-height: 1.45;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	#app {
+		height: 100%;
+	}
+
+	::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+
+	::-webkit-scrollbar-thumb {
+		background: var(--dt-line);
+		border: 3px solid var(--dt-canvas);
+		border-radius: 6px;
+	}
+}
+
+/*
+ * The re-render pulse (Views panel). A `flush` naming a view in its `notified`
+ * list sets the row's `dt-pulse` class for ~600ms — the one thing in the panel
+ * that says "this view just re-rendered because of that store write".
+ *
+ * Deliberately UNLAYERED: Tailwind puts its utilities in a cascade layer, and
+ * unlayered author styles win over every layered one, so a row that also
+ * carries `hover:bg-raised` still flashes. (An animation would out-rank a
+ * normal declaration anyway; being unlayered means the class works the same way
+ * if it ever grows non-animated properties.)
+ */
+@keyframes dt-pulse {
+	0% {
+		background-color: var(--dt-accent-soft);
+	}
+	100% {
+		background-color: transparent;
+	}
+}
+
+/*
+ * The pulse animates BACKGROUND-COLOR ONLY. It used to also animate an inset
+ * left shadow, which is now how SELECTION is drawn (`dt-row-selected`) — and a
+ * selected row that re-renders must show both at once, so the two effects were
+ * split onto different properties rather than fighting over one.
+ */
+.dt-pulse {
+	animation: dt-pulse 600ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dt-pulse {
+		animation-duration: 1ms;
+		background-color: var(--dt-accent-soft);
+	}
+}
+
+/*
+ * The active tree row's 2px left bar (VS Code's active-item convention). An
+ * inset box-shadow rather than a border so it costs no layout width and cannot
+ * shift the row's text by a pixel when selection moves.
+ */
+.dt-row-selected {
+	box-shadow: inset 2px 0 0 var(--dt-accent);
+}
+
+/*
+ * Indent guides. One hairline per ancestor level, painted as a repeating
+ * gradient rather than N nested elements — the tree is a FLAT keyed list, so
+ * per-level DOM would mean rebuilding row structure on every collapse.
+ *
+ * The row's inline style supplies `background-size: <depth * 12>px 100%`, which
+ * is what limits the repeat to exactly one line per ancestor; a root row gets
+ * 0px and paints none. The offset puts each guide under its parent's chevron
+ * centre (7px gutter + half of the 16px chevron box = 15, pulled 1px left by
+ * eye — Cory's call against the filled triangles' visual centre).
+ */
+.dt-tree-row {
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--dt-line) 0 1px,
+		transparent 1px 12px
+	);
+	background-repeat: no-repeat;
+	background-position: 14.5px 0;
+}
+
+/*
+ * High-waste hatching on a heat bar (Performance panel).
+ *
+ * Heat already encodes HOW MUCH a view rendered. This encodes something
+ * different on the same bar — that most of it was wasted — and it must not do
+ * that with hue alone, because the two facts would then be one indistinguishable
+ * colour axis for a red-green colour-blind reader. Stripes are a second,
+ * orthogonal channel; the wasted COUNT and its percentage are printed in the row
+ * regardless, so the pattern is the third cue rather than the only one.
+ *
+ * Unlayered for the same reason `dt-pulse` is: it has to win over the layered
+ * `bg-heat-*` utility it is painted on top of.
+ */
+.dt-heat-hatch {
+	background-image: repeating-linear-gradient(
+		45deg,
+		transparent 0 3px,
+		var(--dt-heat-hatch) 3px 6px
+	);
+}
+
+/*
+ * The recording indicator. Slower and gentler than `dt-pulse` — that one is a
+ * one-shot reaction to a flush, this one runs for the whole session, so it
+ * breathes rather than flashes.
+ */
+@keyframes dt-recording {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
+
+.dt-recording {
+	animation: dt-recording 1400ms ease-in-out infinite;
+}
+
+/*
+ * Reduced motion: the dot still has to say "recording", so it stays fully
+ * opaque instead of animating. Same bargain the pulse makes.
+ */
+@media (prefers-reduced-motion: reduce) {
+	.dt-recording {
+		animation: none;
+		opacity: 1;
+	}
+}

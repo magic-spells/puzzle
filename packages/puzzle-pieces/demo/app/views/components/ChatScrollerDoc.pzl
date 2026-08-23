@@ -1,0 +1,209 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Chat Scroller</h1>
+        <p class="mt-2 text-body">
+          A stick-to-bottom message viewport. While you're near the bottom it follows new
+          messages down; scroll up and it hands control back, surfacing a
+          <span class="font-medium text-ink">Jump to latest</span> pill. Add a message below and
+          watch it auto-follow — then scroll up first and add another.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex w-full max-w-md flex-col gap-3">
+          <ChatScroller height={ 360 } @pin={ setPinned } class="rounded-xl border border-border bg-page px-2">
+            {#for m in rows}
+              <ChatMessage
+                author={ m.author }
+                avatarName={ m.author }
+                time={ m.time }
+                align={ m.align }
+                variant={ m.variant }
+                showMeta={ m.showMeta }>{ m.body }</ChatMessage>
+            {/for}
+          </ChatScroller>
+          <div class="flex items-center gap-3">
+            <Button size="sm" @press={ addMessage }>Add message</Button>
+            <span class="text-xs text-muted">{ pinLabel }</span>
+          </div>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          The scroller is the container; the message rows are your own markup — usually a loop
+          of Chat Message rows. It owns only the scroll behavior, never the message data.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <section id="pinning" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Pinning</h2>
+        <p class="mb-3 text-sm text-body">
+          <span class="font-medium text-ink">Pinned</span> means the viewport is scrolled within
+          <span class="font-medium text-ink">40px</span> of the bottom. While pinned, a
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">ResizeObserver</code>
+          on the content watches for growth and keeps the newest message in view. Scroll up past
+          the 40px band and pinning disengages: the auto-follow stops and the
+          <span class="font-medium text-ink">Jump to latest</span> pill fades in. Clicking it
+          smooth-scrolls to the bottom (instantly under
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">prefers-reduced-motion</code>)
+          and re-pins.
+        </p>
+        <CodeBlock code={ codePinning }/>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">@pin(isPinned)</code>
+          fires whenever the pinned state flips, so the parent can mirror it — e.g. a "N new
+          messages" badge while the reader is scrolled up.
+        </p>
+      </section>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <p class="mb-3 text-sm text-body">
+          The viewport carries
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">role="log"</code>,
+          which implies
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">aria-live="polite"</code>
+          — assistive tech announces messages as they're appended, without stealing focus. Give
+          it a meaningful
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">label</code>
+          (default "Messages") so the region is named. The Jump to latest pill is a real
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">{ '<button>' }</code>
+          with a visible focus ring, reachable by keyboard.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ChatScroller from '@/components/ui/ChatScroller.pzl';
+import ChatMessage from '@/components/ui/ChatMessage.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece chat-scroller';
+const usageImport = `import ChatScroller from '@/components/ui/ChatScroller.pzl';`;
+const usageMarkup = `<ChatScroller height={ 360 } @pin={ setPinned }></ChatScroller>`;
+
+const codeHero = `// The scroller owns scrolling; the parent owns the messages. Appending
+// while pinned auto-follows; scroll up and the "Jump to latest" pill appears.
+data() {
+  return { log: seededMessages() /* ~15 rows */ };
+}
+events = {
+  addMessage: () => {
+    const log = this.getData().log.slice();
+    log.push({ author: 'You', time: 'now', body: 'Sounds good!' });
+    this.setData({ log });
+  },
+  setPinned: (atBottom) => this.setData({ pinned: atBottom }),
+};
+
+<ChatScroller height={ 360 } @pin={ setPinned }>
+  {#for m in log}
+    <ChatMessage author={ m.author } avatarName={ m.author } time={ m.time }
+                 align={ m.align } variant={ m.variant }>{ m.body }</ChatMessage>
+  {/for}
+</ChatScroller>
+<Button size="sm" @press={ addMessage }>Add message</Button>`;
+
+const codePinning = `// "Pinned" = within 40px of the bottom. Mirror it in the parent to drive
+// UI like an unread badge.
+events = {
+  setPinned: (isPinned) => this.setData({ pinned: isPinned }),
+};
+
+<ChatScroller @pin={ setPinned }> … </ChatScroller>`;
+
+// Raw conversation seed (~15 messages). align/variant/showMeta are DERIVED in
+// decorate() so consecutive same-author messages collapse into compact
+// follow-ups automatically.
+const SEED = [
+  { author: 'Ada Lovelace', time: '9:12 AM', body: 'Morning! Did the overnight build finish?' },
+  { author: 'Ada Lovelace', time: '9:12 AM', body: 'The dashboard was still deploying when I logged off.' },
+  { author: 'You', time: '9:14 AM', body: 'Morning — yep, it went green around 2am.' },
+  { author: 'You', time: '9:14 AM', body: 'All 240 tests passing.' },
+  { author: 'Grace Hopper', time: '9:20 AM', body: 'Nice. I want to walk the release notes before we ship.' },
+  { author: 'Ada Lovelace', time: '9:21 AM', body: 'Can do. I have the draft ready.' },
+  { author: 'You', time: '9:23 AM', body: 'Sharing my screen in the standup?' },
+  { author: 'Grace Hopper', time: '9:24 AM', body: 'Please. And pull up the perf graphs too.' },
+  { author: 'Grace Hopper', time: '9:24 AM', body: 'The p95 latency chart especially.' },
+  { author: 'Ada Lovelace', time: '9:26 AM', body: 'p95 dropped 18% after the caching change — it looks great.' },
+  { author: 'You', time: '9:27 AM', body: 'Love that. Ship-worthy.' },
+  { author: 'Grace Hopper', time: '9:28 AM', body: 'Agreed. Let us do a final review at 3.' },
+  { author: 'Ada Lovelace', time: '9:29 AM', body: 'Works for me.' },
+  { author: 'You', time: '9:29 AM', body: 'Same. Calendar hold sent.' },
+  { author: 'Grace Hopper', time: '9:30 AM', body: 'Perfect — talk then.' },
+];
+
+function decorate(list) {
+  return list.map((m, i) => {
+    const mine = m.author === 'You';
+    const showMeta = i === 0 || list[i - 1].author !== m.author;
+    return {
+      author: m.author,
+      time: m.time,
+      body: m.body,
+      align: mine ? 'end' : 'start',
+      variant: mine ? 'sent' : 'received',
+      showMeta,
+    };
+  });
+}
+
+export default class ChatScrollerDoc extends PuzzleView {
+  data(params, props) {
+    const prev = this.getData();
+    const log = prev && prev.log ? prev.log : SEED.slice();
+    const pinned = prev && typeof prev.pinned === 'boolean' ? prev.pinned : true;
+    return {
+      log,
+      pinned,
+      rows: decorate(log),
+      pinLabel: pinned
+        ? 'Pinned — following new messages'
+        : 'Scrolled up — auto-follow paused',
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codePinning,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Pinning', href: '#pinning' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    addMessage: () => {
+      const log = this.getData().log.slice();
+      const n = log.filter((m) => m.author === 'You').length + 1;
+      log.push({ author: 'You', time: 'now', body: `Reply #${n} — auto-scrolled into view.` });
+      this.setData({ log });
+    },
+    setPinned: (isPinned) => this.setData({ pinned: isPinned }),
+  };
+}
+</script>

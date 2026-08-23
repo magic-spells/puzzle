@@ -1,0 +1,8 @@
+{
+  "name": "menubar",
+  "description": "Desktop-app-style horizontal menu bar — top labels open dropdowns with keyboard-shortcut hints, separators, disabled and danger items, hover-switching, and full menubar keyboard nav",
+  "files": ["Menubar.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

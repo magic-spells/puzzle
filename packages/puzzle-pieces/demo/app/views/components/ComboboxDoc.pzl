@@ -1,0 +1,296 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Combobox</h1>
+        <p class="mt-2 text-body">
+          A filterable autocomplete: a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">combobox</code>
+          input over a listbox popup, rendered from an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">options</code>
+          array with ranked filtering, group headings, and full keyboard navigation. Focus stays on the
+          input the whole time; the active option is tracked with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-activedescendant</code>.
+          State is controlled through a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          callback.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-64">
+          <Combobox options={ frameworks } value={ framework } placeholder="Search frameworks…" @change={ setFramework } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          No npm dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="groups" title="Groups and dividers" code={ codeGroups }>
+          <div class="w-64">
+            <Combobox options={ foodOptions } value={ food } placeholder="Search food…" @change={ setFood } />
+          </div>
+        </ExampleBox>
+
+        <section id="filtering" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Custom filter</h2>
+          <p class="mb-3 text-sm text-body">
+            The built-in ranker matches case-insensitively, word-prefix before substring. Pass a
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">filter</code>
+            function to override it — return truthy to keep an option. Here the filter also matches each
+            country's two-letter code, so typing <span class="font-medium text-ink">us</span> finds United States.
+          </p>
+          <ExampleBox code={ codeFilter }>
+            <div class="w-64">
+              <Combobox options={ countries } value={ country } filter={ codeFilterFn } placeholder="Country or code…" @change={ setCountry } />
+            </div>
+          </ExampleBox>
+        </section>
+
+        <ExampleBox id="error" title="Error state" code={ codeError }>
+          <div class="w-64">
+            <Combobox
+              label="Framework"
+              options={ frameworks }
+              value={ errValue }
+              error="Please pick a framework"
+              placeholder="Search frameworks…"
+              @change={ setErrValue } />
+          </div>
+        </ExampleBox>
+
+        <section id="controlled" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Controlled open</h2>
+          <p class="mb-3 text-sm text-body">
+            Open state is optional-controlled. Omit
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">open</code>
+            and the combobox owns it; pass it and the parent does, reacting to
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@show</code>
+            and
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@hide</code>.
+          </p>
+          <ExampleBox code={ codeControlled }>
+            <div class="flex w-64 flex-col gap-3">
+              <Combobox
+                options={ frameworks }
+                value={ controlledValue }
+                open={ cbOpen }
+                placeholder="Search frameworks…"
+                @change={ setControlledValue }
+                @show={ onShow }
+                @hide={ onHide } />
+              <p class="text-sm text-muted">
+                Parent open state:
+                <span class="font-medium text-ink">{ cbOpen ? 'open' : 'closed' }</span>
+              </p>
+            </div>
+          </ExampleBox>
+        </section>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">Focus stays on the input; these keys drive the popup:</p>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Type</span> — re-filters and opens the list, reseating the active option</li>
+            <li><span class="font-medium text-ink">Down / Up arrows</span> — open the list, then move the active option (wraps, skips disabled)</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last option</li>
+            <li><span class="font-medium text-ink">Enter</span> — select the active option and close</li>
+            <li><span class="font-medium text-ink">Escape</span> — revert the input to the selected label and close</li>
+            <li><span class="font-medium text-ink">Tab</span> — close and move focus on naturally</li>
+          </ul>
+          <ExampleBox code={ codeKeyboard }>
+            <div class="w-64">
+              <Combobox options={ frameworks } value={ framework } placeholder="Search frameworks…" @change={ setFramework } />
+            </div>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Combobox from '@/components/ui/Combobox.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece combobox';
+const usageImport = `import Combobox from '@/components/ui/Combobox.pzl';`;
+const usageMarkup = `<Combobox options={ frameworks } value={ framework } @change={ setFramework } />`;
+
+const codeHero = `const frameworks = [
+  { value: 'next', label: 'Next.js' },
+  { value: 'svelte', label: 'SvelteKit' },
+  { value: 'nuxt', label: 'Nuxt' },
+  { value: 'remix', label: 'Remix' },
+  { value: 'astro', label: 'Astro' },
+];
+
+<Combobox options={ frameworks } value={ framework } @change={ setFramework } />`;
+
+const codeGroups = `// { group } headings and { divider } rows work exactly like Select.
+// A heading only renders while filtering when one of its options survives.
+const foodOptions = [
+  { group: 'Fruit' },
+  { value: 'apple', label: 'Apple' },
+  { value: 'banana', label: 'Banana' },
+  { value: 'cherry', label: 'Cherry' },
+  { divider: true },
+  { group: 'Vegetable' },
+  { value: 'carrot', label: 'Carrot' },
+  { value: 'potato', label: 'Potato' },
+  { value: 'okra', label: 'Okra', disabled: true },
+];
+
+<Combobox options={ foodOptions } value={ food } @change={ setFood } />`;
+
+const codeFilter = `// filter(option, query) => truthy keeps the option. Overrides the ranker.
+const codeFilter = (opt, q) => {
+  const query = q.trim().toLowerCase();
+  return (
+    opt.label.toLowerCase().includes(query) ||
+    opt.value.toLowerCase().includes(query)
+  );
+};
+
+<Combobox options={ countries } value={ country } filter={ codeFilter } @change={ setCountry } />`;
+
+const codeError = `// An error string paints the border/ring danger, sets aria-invalid,
+// and wires aria-describedby to the message (Field's behavior).
+<Combobox
+  label="Framework"
+  options={ frameworks }
+  value={ value }
+  error="Please pick a framework"
+  @change={ setValue } />`;
+
+const codeControlled = `// Pass open + @show/@hide to own the open state in the parent.
+<Combobox
+  options={ frameworks }
+  value={ value }
+  open={ cbOpen }
+  @change={ setValue }
+  @show={ () => this.setData('cbOpen', true) }
+  @hide={ () => this.setData('cbOpen', false) } />`;
+
+const codeKeyboard = `<Combobox options={ frameworks } value={ framework } @change={ setFramework } />`;
+
+const codeFilterFn = (opt, q) => {
+  const query = q.trim().toLowerCase();
+  return opt.label.toLowerCase().includes(query) || opt.value.toLowerCase().includes(query);
+};
+
+export default class ComboboxDoc extends PuzzleView {
+  created() {
+    this.setData({
+      framework: 'svelte',
+      food: 'banana',
+      country: '',
+      errValue: '',
+      controlledValue: '',
+      cbOpen: false,
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeGroups,
+      codeFilter,
+      codeError,
+      codeControlled,
+      codeKeyboard,
+      codeFilterFn,
+      frameworks: [
+        { value: 'next', label: 'Next.js' },
+        { value: 'svelte', label: 'SvelteKit' },
+        { value: 'nuxt', label: 'Nuxt' },
+        { value: 'remix', label: 'Remix' },
+        { value: 'astro', label: 'Astro' },
+      ],
+      foodOptions: [
+        { group: 'Fruit' },
+        { value: 'apple', label: 'Apple' },
+        { value: 'banana', label: 'Banana' },
+        { value: 'cherry', label: 'Cherry' },
+        { divider: true },
+        { group: 'Vegetable' },
+        { value: 'carrot', label: 'Carrot' },
+        { value: 'potato', label: 'Potato' },
+        { value: 'okra', label: 'Okra', disabled: true },
+      ],
+      countries: [
+        { value: 'us', label: 'United States' },
+        { value: 'gb', label: 'United Kingdom' },
+        { value: 'ca', label: 'Canada' },
+        { value: 'au', label: 'Australia' },
+        { value: 'de', label: 'Germany' },
+        { value: 'jp', label: 'Japan' },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Groups and dividers', href: '#groups' },
+        { label: 'Custom filter', href: '#filtering' },
+        { label: 'Error state', href: '#error' },
+        { label: 'Controlled open', href: '#controlled' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    setFramework: (v) => {
+      this.setData('framework', v);
+      this.refresh();
+    },
+    setFood: (v) => {
+      this.setData('food', v);
+      this.refresh();
+    },
+    setCountry: (v) => {
+      this.setData('country', v);
+      this.refresh();
+    },
+    setErrValue: (v) => {
+      this.setData('errValue', v);
+      this.refresh();
+    },
+    setControlledValue: (v) => {
+      this.setData('controlledValue', v);
+      this.refresh();
+    },
+    onShow: () => {
+      this.setData('cbOpen', true);
+      this.refresh();
+    },
+    onHide: () => {
+      this.setData('cbOpen', false);
+      this.refresh();
+    },
+  };
+}
+</script>

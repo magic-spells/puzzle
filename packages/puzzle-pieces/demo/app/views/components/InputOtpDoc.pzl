@@ -1,0 +1,188 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Input OTP</h1>
+        <p class="mt-2 text-body">
+          A segmented one-time-code input — real single-char cells with native caret and mobile keyboard,
+          paste distribution, and full keyboard navigation. Controlled: the parent owns the full
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
+          string and updates it from
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>,
+          while
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@complete</code>
+          fires once the code is filled.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <InputOtp value={ code } @change={ setCode } />
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          No dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="groups" title="Groups" code={ codeGroups }>
+          <InputOtp value={ grouped } groups={ [3, 3] } @change={ setGrouped } />
+        </ExampleBox>
+
+        <ExampleBox id="alphanumeric" title="Alphanumeric" code={ codeAlnum }>
+          <InputOtp type="alphanumeric" length={ 5 } value={ alnum } @change={ setAlnum } />
+        </ExampleBox>
+
+        <ExampleBox id="error" title="Error" code={ codeError }>
+          <InputOtp value={ badCode } error @change={ setBadCode } />
+        </ExampleBox>
+
+        <section id="complete" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Complete callback</h2>
+          <p class="mb-3 text-sm text-body">
+            There is no auto-submit —
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@complete</code>
+            is the parent's hook, firing once the moment the value reaches
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">length</code>.
+            Type six digits below:
+          </p>
+          <ExampleBox code={ codeComplete }>
+            <div class="flex flex-col items-center gap-4">
+              <InputOtp value={ otp } @change={ setOtp } @complete={ onComplete } />
+              {#if confirmed}
+                <p class="text-sm font-medium text-success">Code { otp } submitted</p>
+              {:else}
+                <p class="text-sm text-muted">Waiting for all six digits…</p>
+              {/if}
+            </div>
+          </ExampleBox>
+        </section>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard and paste</h2>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Type a character</span> — fills the cell and advances to the next</li>
+            <li><span class="font-medium text-ink">Paste a code</span> — distributes left-to-right from the focused cell, landing on the next empty cell</li>
+            <li><span class="font-medium text-ink">Backspace</span> — clears the current cell, or on an empty cell moves back and clears the previous one</li>
+            <li><span class="font-medium text-ink">Delete</span> — clears the current cell in place</li>
+            <li><span class="font-medium text-ink">Left / Right arrows</span> — move between cells</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last cell</li>
+          </ul>
+          <ExampleBox code={ codeKeyboard }>
+            <InputOtp value={ code } @change={ setCode } />
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import InputOtp from '@/components/ui/InputOtp.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece input-otp';
+const usageImport = `import InputOtp from '@/components/ui/InputOtp.pzl';`;
+const usageMarkup = `<InputOtp value={ code } @change={ setCode } />`;
+
+const codeHero = `<InputOtp value={ code } @change={ setCode } />
+
+// parent
+events = {
+  setCode: (v) => this.setData('code', v),
+};`;
+
+const codeGroups = `// groups={[3, 3]} inserts an aria-hidden separator between segments
+<InputOtp value={ code } groups={ [3, 3] } @change={ setCode } />`;
+
+const codeAlnum = `// type="alphanumeric" accepts [A-Za-z0-9] and uses inputmode="text"
+<InputOtp type="alphanumeric" length={ 5 } value={ code } @change={ setCode } />`;
+
+const codeError = `// error (or invalid) paints the danger border and focus ring
+<InputOtp value={ code } error @change={ setCode } />`;
+
+const codeComplete = `<InputOtp value={ otp } @change={ setOtp } @complete={ onComplete } />
+
+// parent — @complete(value) fires once when value.length === length
+events = {
+  setOtp: (v) => this.setData('otp', v),
+  onComplete: (v) => this.verify(v),
+};`;
+
+const codeKeyboard = `<InputOtp value={ code } @change={ setCode } />`;
+
+export default class InputOtpDoc extends PuzzleView {
+  created() {
+    this.setData({ code: '', grouped: '', alnum: '', badCode: '123', otp: '', confirmed: false });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeGroups,
+      codeAlnum,
+      codeError,
+      codeComplete,
+      codeKeyboard,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Groups', href: '#groups' },
+        { label: 'Alphanumeric', href: '#alphanumeric' },
+        { label: 'Error', href: '#error' },
+        { label: 'Complete callback', href: '#complete' },
+        { label: 'Keyboard and paste', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    setCode: (v) => {
+      this.setData('code', v);
+      this.refresh();
+    },
+    setGrouped: (v) => {
+      this.setData('grouped', v);
+      this.refresh();
+    },
+    setAlnum: (v) => {
+      this.setData('alnum', v);
+      this.refresh();
+    },
+    setBadCode: (v) => {
+      this.setData('badCode', v);
+      this.refresh();
+    },
+    setOtp: (v) => {
+      // A new edit that isn't yet complete clears the confirmation.
+      this.setData({ otp: v, confirmed: v.length === 6 ? this.getData().confirmed : false });
+      this.refresh();
+    },
+    onComplete: () => {
+      this.setData('confirmed', true);
+      this.refresh();
+    },
+  };
+}
+</script>

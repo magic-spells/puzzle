@@ -1,0 +1,8 @@
+{
+  "name": "split-panel",
+  "description": "Resizable two-pane layout with horizontal or vertical direction, constraints, snap points, nesting, keyboard controls, and persistence",
+  "files": ["SplitPanel.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

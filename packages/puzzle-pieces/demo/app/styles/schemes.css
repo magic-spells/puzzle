@@ -1,0 +1,124 @@
+/*
+ * Demo-side scheme overrides derived from registry/theme/*.css.
+ * The registry files are the source of truth; keep these values byte-equal.
+ */
+
+:root[data-scheme='warm'] {
+  --color-ink: light-dark(#191919, #F0EFEA);
+  --color-body: light-dark(#40403E, #BDBBB2);
+  --color-muted: light-dark(#666663, #91918D);
+  --color-faint: light-dark(#C9C8C2, #4A4945);
+
+  --color-page: light-dark(#FAFAF7, #1F1E1D);
+  --color-surface: light-dark(#FFFFFF, #262624);
+  --color-surface-sunken: light-dark(#F0F0EB, #30302E);
+
+  --color-brand: light-dark(#CC785C, #CC785C);
+  --color-brand-dark: light-dark(#B5654A, #D98B70);
+  --color-brand-tint: light-dark(#F6ECE6, #3A2E28);
+  --color-brand-ink: light-dark(#FFFFFF, #FFFFFF);
+
+  --color-danger: light-dark(#BF4D43, #E5766A);
+  --color-danger-dark: light-dark(#A83E35, #EF8D82);
+  --color-danger-tint: light-dark(#FAEEEC, #2E1B18);
+  --color-danger-ink: #ffffff;
+
+  --color-success: light-dark(#006300, #0ca30c);
+  --color-success-tint: light-dark(#ebf7eb, #122616);
+
+  --color-warning: light-dark(#b45309, #f59e0b);
+  --color-warning-tint: light-dark(#fff8eb, #2a1c07);
+
+  --color-chart-1: light-dark(#2a78d6, #3987e5);
+  --color-chart-2: #008300;
+  --color-chart-3: light-dark(#e87ba4, #d55181);
+  --color-chart-4: light-dark(#eda100, #c98500);
+  --color-chart-5: light-dark(#1baf7a, #199e70);
+  --color-chart-6: light-dark(#eb6834, #d95926);
+  --color-chart-7: light-dark(#4a3aa7, #9085e9);
+  --color-chart-8: light-dark(#e34948, #e66767);
+
+  --color-border: light-dark(#E5E4DF, #3A3936);
+  --color-border-strong: light-dark(#CFCEC5, #4C4B47);
+  --color-ring: light-dark(#61AAF2, #61AAF2);
+}
+
+:root[data-scheme='void'] {
+  --color-ink: light-dark(#111111, #F5F5F5);
+  --color-body: light-dark(#3F3F3F, #B8B8B8);
+  --color-muted: light-dark(#757575, #7E7E7E);
+  --color-faint: light-dark(#D4D4D4, #3A3A3A);
+
+  --color-page: light-dark(#FFFFFF, #000000);
+  --color-surface: light-dark(#FFFFFF, #0E0E0E);
+  --color-surface-sunken: light-dark(#F4F4F4, #191919);
+
+  --color-brand: light-dark(#111111, #FFFFFF);
+  --color-brand-dark: light-dark(#2E2E2E, #E2E2E2);
+  --color-brand-tint: light-dark(#F2F2F2, #1C1C1C);
+  --color-brand-ink: light-dark(#FFFFFF, #111111);
+
+  --color-danger: light-dark(#e03131, #fa5252);
+  --color-danger-dark: light-dark(#c92a2a, #ff6b6b);
+  --color-danger-tint: light-dark(#fff5f5, #271417);
+  --color-danger-ink: #ffffff;
+
+  --color-success: light-dark(#006300, #0ca30c);
+  --color-success-tint: light-dark(#ebf7eb, #122616);
+
+  --color-warning: light-dark(#b45309, #f59e0b);
+  --color-warning-tint: light-dark(#fff8eb, #2a1c07);
+
+  --color-chart-1: light-dark(#2a78d6, #3987e5);
+  --color-chart-2: #008300;
+  --color-chart-3: light-dark(#e87ba4, #d55181);
+  --color-chart-4: light-dark(#eda100, #c98500);
+  --color-chart-5: light-dark(#1baf7a, #199e70);
+  --color-chart-6: light-dark(#eb6834, #d95926);
+  --color-chart-7: light-dark(#4a3aa7, #9085e9);
+  --color-chart-8: light-dark(#e34948, #e66767);
+
+  --color-border: light-dark(rgb(0 0 0 / 5%), rgb(255 255 255 / 7%));
+  --color-border-strong: light-dark(rgb(0 0 0 / 12%), rgb(255 255 255 / 14%));
+  --color-ring: light-dark(#111111, #FFFFFF);
+}
+
+:root[data-scheme='dim'] {
+  --color-ink: light-dark(#1C2536, #E6EBF2);
+  --color-body: light-dark(#46536B, #A7B2C4);
+  --color-muted: light-dark(#6E7C94, #75819A);
+  --color-faint: light-dark(#C2CCDB, #3B4457);
+
+  --color-page: light-dark(#EEF2F7, #171C26);
+  --color-surface: light-dark(#FBFCFE, #1E2532);
+  --color-surface-sunken: light-dark(#E2E8F1, #27303F);
+
+  --color-brand: light-dark(#4c6ef5, #5c7cfa);
+  --color-brand-dark: light-dark(#3b5bdb, #748ffc);
+  --color-brand-tint: light-dark(#E4EAFB, #232C48);
+  --color-brand-ink: #ffffff;
+
+  --color-danger: light-dark(#e03131, #fa5252);
+  --color-danger-dark: light-dark(#c92a2a, #ff6b6b);
+  --color-danger-tint: light-dark(#fff5f5, #271417);
+  --color-danger-ink: #ffffff;
+
+  --color-success: light-dark(#006300, #0ca30c);
+  --color-success-tint: light-dark(#ebf7eb, #122616);
+
+  --color-warning: light-dark(#b45309, #f59e0b);
+  --color-warning-tint: light-dark(#fff8eb, #2a1c07);
+
+  --color-chart-1: light-dark(#2a78d6, #3987e5);
+  --color-chart-2: #008300;
+  --color-chart-3: light-dark(#e87ba4, #d55181);
+  --color-chart-4: light-dark(#eda100, #c98500);
+  --color-chart-5: light-dark(#1baf7a, #199e70);
+  --color-chart-6: light-dark(#eb6834, #d95926);
+  --color-chart-7: light-dark(#4a3aa7, #9085e9);
+  --color-chart-8: light-dark(#e34948, #e66767);
+
+  --color-border: light-dark(#D5DDE9, #2B3444);
+  --color-border-strong: light-dark(#AFBEDA, #3A4761);
+  --color-ring: light-dark(#4c6ef5, #5c7cfa);
+}
