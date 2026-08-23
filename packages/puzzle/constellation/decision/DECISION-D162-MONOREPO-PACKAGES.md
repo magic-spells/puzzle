@@ -9,14 +9,13 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      There are deliberately NO npm workspaces: each package keeps its own install and
-      lockfile, so editing any package.json dependency means regenerating that package's
-      lockfile or its `npm ci` hard-fails. Runtime resolution for sibling packages: the
-      compiler's in-repo walk (FindRuntime, compiler/internal/build/options.go) checks
-      ANCESTORS only, so it serves apps under packages/puzzle (the examples); the sibling
-      packages (pieces demo, devtools) resolve through their file: links via the
-      node_modules walk (FindInstalledRuntime) — do not break either path. The pack
-      pipeline (pin injection, verify:pack, tarball-only publish, D120) runs unchanged
+      There are deliberately NO npm workspaces: each package keeps its own install and lockfile, so
+      editing any package.json dependency means regenerating that package's lockfile or its `npm ci`
+      hard-fails. Runtime resolution for sibling packages: the compiler's in-repo walk (FindRuntime,
+      compiler/internal/build/options.go) checks ANCESTORS only, so it serves apps under
+      packages/puzzle (the examples); the sibling packages (pieces demo, devtools) resolve through
+      their file: links via the node_modules walk (FindInstalledRuntime) — do not break either path.
+      The pack pipeline (pin injection, verify:pack, tarball-only publish, D120) runs unchanged
       inside packages/puzzle; the root shell only delegates.
   - kind: verified
     text: >-
@@ -31,9 +30,23 @@ notes:
       — allowed once as a false positive; the live tree now says testKey, so the detector can never
       re-fire on new content.
     sha: c9111541b03cb8ee4528617cabddb8b92ed58a67
-verified_at: '2026-08-23T22:54:51.948Z'
-verified_sha: c9111541b03cb8ee4528617cabddb8b92ed58a67
+  - kind: verified
+    text: >-
+      Final shape merged via PR #80 at 1d9ce9f: private root shell (named plain `puzzle`), framework
+      git-mv'd to packages/puzzle (go.mod moved, module path unchanged), plugins imported + brought
+      current (eslint 48/48, prettier 46/46 — both ports also gained the LexSkip ++/-- case, BOM
+      skip, misnamed-section steering, EOF clamps; both corpus sweeps un-deadened). Release pipeline
+      proven from the new layout pre-merge: full release:prep dry run (four 0.7.0 binaries staged,
+      tarball pins verified), test:e2e-pack, verify:pack (57 files), framework vitest + go test,
+      pieces 85/85 + demo build, devtools 271/271. Go floor raised to 1.24: dyld on current macOS
+      aborts binaries without LC_UUID, which the pre-fix CI pieces job demonstrated and which
+      silently applies to the published 0.6.0 darwin CLIs — 0.7.0 shipping is the fix. Demo/devtools
+      build with the compiler binary, not `go run` (module context ends at packages/puzzle).
+    sha: 1d9ce9fa1a905467382cdc0ef8f43e9f1993ea99
+verified_at: '2026-08-23T23:41:18.496Z'
+verified_sha: 1d9ce9fa1a905467382cdc0ef8f43e9f1993ea99
 ---
+
 # D162 — Monorepo `packages/`: one repo, one release train
 
 ## Decision
