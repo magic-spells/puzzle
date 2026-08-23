@@ -1,0 +1,22 @@
+<puzzle-view class="post-detail">
+  <h1>{ post.title }</h1>
+  <p>{ post.body }</p>
+</puzzle-view>
+
+<puzzle-skeleton min-duration="300">
+  <div class="animate-pulse">
+    {#for 1...3}
+      <div class="bg-skeleton h-4"></div>
+    {/for}
+  </div>
+</puzzle-skeleton>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class PostDetail extends PuzzleView {
+  async data(params) {
+    const post=await fetch(`/api/posts/${params.id}`).then(r=>r.json())
+    return { post };
+  }
+}
+</script>

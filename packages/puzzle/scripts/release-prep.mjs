@@ -225,6 +225,8 @@ for (const rel of SCAFFOLD_TEMPLATES) {
 	console.log(`  OK  ${badgeRel} header badge = v${badgeMatch[1]}`);
 
 	for (const rel of [
+		'../puzzle-eslint/package.json',
+		'../puzzle-prettier/package.json',
 		'../puzzle-devtools/package.json',
 		'../puzzle-devtools/panel/package.json',
 		'../puzzle-devtools/extension/manifest.json',

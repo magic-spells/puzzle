@@ -1,0 +1,26 @@
+<puzzle-view class="gnarly">
+  <!-- HTML comment with a fake </puzzle-view> that must be preserved -->
+  {#if currentFilter === 'all'}
+    <div class="all">{ /}/.test(name) ? 'yes' : 'no' }</div>
+  {:else if x > 0 && y < 10}
+    <div>{ items.filter(i => i.id === '}').length }</div>
+  {/if}
+
+  {## an inline template comment with an apostrophe: don't break }
+  {#comment}
+    a raw block comment with </puzzle-view> and { unbalanced-looking } text
+  {/comment}
+
+  {#for item in items, i}
+    <span class="row {#if item.active}on{/if}">{ i + 1 }: { item.name }</span>
+  {/for}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Gnarly extends PuzzleView {
+  data() {
+    return { currentFilter: 'all', x: 5, y: 3, name: 'a', items: [] };
+  }
+}
+</script>

@@ -1,0 +1,7 @@
+<!-- A template-only component: no <script>, no <style>. -->
+<puzzle-view class="static-banner">
+  <div class="banner">
+    <h1>Welcome</h1>
+    {#if showTag}<span class="tag">new</span>{/if}
+  </div>
+</puzzle-view>

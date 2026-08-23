@@ -1,0 +1,7 @@
+<puzzle-view>
+  <div>static only</div>
+</puzzle-view>
+
+<style>
+	div { color: blue; }
+</style>
