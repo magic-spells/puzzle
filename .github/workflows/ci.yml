@@ -116,11 +116,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # Go builds the compiler binary build.mjs defaults to (../../puzzle);
+      # without a compiled panel bundle the 88 panel-app suites skip silently.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Panel suite against the working-tree runtime
+      - run: npm run build:compiler
+      - name: Panel build + full suite against the working-tree runtime
         working-directory: packages/puzzle-devtools
         run: |
           npm ci
+          npm run build
           npx vitest run
