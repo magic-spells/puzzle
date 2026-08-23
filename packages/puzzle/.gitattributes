@@ -1,0 +1,4 @@
+# Keep the language bar honest: this package is a Go compiler + JS runtime;
+# 174 .pzl demo/fixture files would otherwise bury that.
+examples/**                           linguist-documentation
+compiler/internal/codegen/testdata/** linguist-generated

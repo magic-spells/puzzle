@@ -1,0 +1,11 @@
+# The locally built compiler binary (npm run build:compiler)
+/puzzle
+# Compiler-generated integration-test fixtures (npm run build:example-modules)
+tests/fixtures/todos-compiled/
+# Compiler-generated fixture for the virtual-scroll example (npm run build:virtual-scroll)
+tests/fixtures/virtual-scroll/
+# Version stamp written by `puzzle add skills` into an install destination
+skills/puzzle/.puzzle-skill-version
+# Repo-local Go build cache (sandboxed tools that can't reach the default GOCACHE)
+.gocache/
+test-results/
