@@ -1,6 +1,6 @@
 ---
 name: D162 — Monorepo packages/ — lockstep satellites live in the framework repo
-status: built
+status: verified
 connections:
   - DECISION-D32-CLI-TOOLING
   - DECISION-D100-DEVTOOLS-BRIDGE
@@ -9,14 +9,29 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      There are deliberately NO npm workspaces at the root: the root package.json IS the
-      published @magic-spells/puzzle, and the pack pipeline (pin injection, verify:pack,
-      tarball-only publish, D120) must not change shape. Each package keeps its own npm
-      install and lockfile. Stage 2 (framework → packages/puzzle under a private workspace
-      root, the full Embla/tarot shape) is a separate future chore — and note the compiler's
-      in-repo walk (FindRuntime, compiler/internal/build/options.go) checks ANCESTORS only:
-      it is what resolves '@magic-spells/puzzle' for apps under packages/ today, and moving
-      the framework out of the ancestor chain breaks it without new resolution work.
+      There are deliberately NO npm workspaces at the root: the root package.json IS the published
+      @magic-spells/puzzle, and the pack pipeline (pin injection, verify:pack, tarball-only publish,
+      D120) must not change shape. Each package keeps its own npm install and lockfile. Stage 2
+      (framework → packages/puzzle under a private workspace root, the full Embla/tarot shape) is a
+      separate future chore — and note the compiler's in-repo walk (FindRuntime,
+      compiler/internal/build/options.go) checks ANCESTORS only: it is what resolves
+      '@magic-spells/puzzle' for apps under packages/ today, and moving the framework out of the
+      ancestor chain breaks it without new resolution work.
+  - kind: verified
+    text: >-
+      Merged to release/0.7.0 via PR #79 at c911154. Every Decision claim checked live: both subtree
+      imports carry full history (pieces @ 51d2403, devtools @ 60706aa); root suites unchanged
+      post-import (1742 vitest, go test, verify:pack — 57 tarball files, no packages/ leak;
+      test:types); pieces 85/85 + demo built by the in-repo CLI; devtools 271/271 against the
+      in-progress 0.7.0 runtime with the panel compiled through build.mjs's monorepo-binary default.
+      release:prep train asserts and publish-order lines exercised by parse + review,
+      fire-at-release by design (root still 0.6.0 mid-flight). Push-protection footnote: the
+      imported pieces history carries a fabricated sk_live_-shaped doc sample in old commits/bundles
+      — allowed once as a false positive; the live tree now says testKey, so the detector can never
+      re-fire on new content.
+    sha: c9111541b03cb8ee4528617cabddb8b92ed58a67
+verified_at: '2026-08-23T22:54:51.948Z'
+verified_sha: c9111541b03cb8ee4528617cabddb8b92ed58a67
 ---
 
 # D162 — Monorepo `packages/`: lockstep satellites live in the framework repo
