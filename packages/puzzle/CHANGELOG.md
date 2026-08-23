@@ -171,6 +171,13 @@ one is *not* a compile error; it silently builds a different product.
   undefined, `''`, and booleans all take the absent path now; numeric `0`
   stays a legitimate epoch timestamp.
 
+- **The darwin CLI binaries carry an `LC_UUID` load command.** dyld on the
+  newest macOS aborts binaries without one (`missing LC_UUID load command`,
+  Abort trap 6) — Go's linker only started emitting it by default in 1.24,
+  so binaries built with older toolchains, including the published 0.6.0
+  darwin ones, can be killed on sight there. The build floor is now Go
+  1.24 (`go.mod`), which stamps every future binary.
+
 - **Path routing populates `route.hash` (D83).** Path-mode navigation dropped
   `location.hash` from the route snapshot on the initial navigation and every
   popstate, and a same-path navigation to a byte-identical URL pushed a

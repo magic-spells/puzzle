@@ -1,6 +1,10 @@
 module github.com/magic-spells/puzzle
 
-go 1.21
+// 1.24 is the floor because its linker is the first to emit LC_UUID on
+// Darwin by default — dyld on current macOS aborts binaries without it
+// (Abort trap 6, "missing LC_UUID load command"), which would kill both
+// the shipped darwin CLI binaries and any CI-built compiler on a mac runner.
+go 1.24.0
 
 require (
 	github.com/charmbracelet/huh v0.6.0
