@@ -1,0 +1,40 @@
+{
+	"name": "@magic-spells/eslint-plugin-puzzle",
+	"version": "0.7.0",
+	"description": "ESLint plugin for Puzzle Framework .pzl files — lints the <script> body as real JS/TS and validates section structure",
+	"type": "module",
+	"license": "MIT",
+	"main": "./src/index.js",
+	"module": "./src/index.js",
+	"exports": {
+		".": "./src/index.js"
+	},
+	"files": [
+		"src",
+		"README.md"
+	],
+	"scripts": {
+		"test": "vitest run"
+	},
+	"keywords": [
+		"eslint",
+		"eslintplugin",
+		"eslint-plugin",
+		"puzzle",
+		"pzl",
+		"magic-spells"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/magic-spells/puzzle.git",
+		"directory": "packages/puzzle-eslint"
+	},
+	"sideEffects": false,
+	"peerDependencies": {
+		"eslint": ">=9"
+	},
+	"devDependencies": {
+		"eslint": "^9",
+		"vitest": "^3"
+	}
+}

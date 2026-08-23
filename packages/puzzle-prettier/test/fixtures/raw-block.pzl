@@ -1,0 +1,27 @@
+<puzzle-view>
+	<div class="carousel">
+		<pre>{#raw}{ "loop": true, "slides": [1, 2], "url": "/api/x" }{/raw}</pre>
+		<pre>{#raw}{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}{/raw}</pre>
+		<p>{#raw json}{ x }{/raw }{ y }</p>
+		<em>{#raw}outer {#raw} inner{/raw} tail</em>
+		<div>{#raw}<b data-json={ {"x": 1} }>hi { name }</b>{/ raw }</div>
+		<br/>
+	</div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A regex whose only character is the brace that used to end the runaway scan.
+const closerish = /}/g;
+
+export default class RawBlock extends PuzzleView {
+	data() {
+			return { y: closerish.source }
+	}
+}
+</script>
+
+<style>
+.carousel { color : red ; }
+</style>

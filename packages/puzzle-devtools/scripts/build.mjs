@@ -6,9 +6,10 @@
  *   node scripts/build.mjs --dev      development panel (unminified, sourcemap)
  *   node scripts/build.mjs --zip      also emit puzzle-devtools-<version>.zip
  *
- * The panel is compiled by the monorepo's compiler binary — ../../puzzle, built
- * at the repo root with `npm run build:compiler`. The framework dependency is a
- * file: link to ../.., so the npm shim would resolve a platform binary package
+ * The panel is compiled by the monorepo's compiler binary — ../puzzle/puzzle,
+ * built with `npm run build:compiler` (root delegates into packages/puzzle). The
+ * framework dependency is a file: link to ../puzzle, so the npm shim would
+ * resolve a platform binary package
  * that a working-tree link never installs; it is deliberately not a fallback.
  * PUZZLE_BIN overrides the compiler binary.
  *
@@ -39,7 +40,7 @@ const PANEL_DIST = join(PANEL_DIR, 'dist');
 const EXTENSION_DIR = join(ROOT, 'extension');
 const OUT_DIR = join(ROOT, 'dist-extension');
 
-const MONOREPO_PUZZLE_BIN = join(ROOT, '..', '..', 'puzzle');
+const MONOREPO_PUZZLE_BIN = join(ROOT, '..', 'puzzle', 'puzzle');
 const PUZZLE_BIN = process.env.PUZZLE_BIN || MONOREPO_PUZZLE_BIN;
 
 const args = process.argv.slice(2);

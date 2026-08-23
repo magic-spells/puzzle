@@ -48,7 +48,6 @@ build/Release
 # Dependency directories
 node_modules/
 jspm_packages/
-luna-builder/node_modules/
 
 # TypeScript v1 declaration files
 typings/
@@ -111,18 +110,3 @@ dist
 
 # TernJS port file
 .tern-port
-
-# Compiler-generated integration-test fixtures (npm run build:example-modules)
-tests/fixtures/todos-compiled/
-# Compiler-generated fixture for the virtual-scroll example (npm run build:virtual-scroll)
-tests/fixtures/virtual-scroll/
-
-# Version stamp written by `puzzle add skills` into an install destination. Only
-# lands here when someone --overwrites through a ~/.claude/skills/puzzle symlink
-# pointed at this checkout.
-skills/puzzle/.puzzle-skill-version
-
-# Repo-local Go build cache (sandboxed tools that can't reach the default GOCACHE)
-.gocache/
-test-results/
-/puzzle

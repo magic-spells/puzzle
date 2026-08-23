@@ -13,11 +13,14 @@ jobs:
   go:
     name: Go (compiler)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/puzzle
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - run: go vet ./...
       - run: go build ./...
       - run: go test ./...
@@ -25,6 +28,9 @@ jobs:
   js:
     name: JS (runtime)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/puzzle
     steps:
       - uses: actions/checkout@v5
       # Go is needed because `npm test` runs `build:example-modules` (pretest),
@@ -32,11 +38,12 @@ jobs:
       # compiled-variant integration suite runs against fresh compiler output.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: packages/puzzle/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm run verify:pack
@@ -47,6 +54,9 @@ jobs:
   e2e-pack:
     name: E2E (packed tarball)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/puzzle
     steps:
       - uses: actions/checkout@v5
       # Go builds the compiler (run via `go run`); Node packs + installs the
@@ -54,27 +64,32 @@ jobs:
       # builds a real app from node_modules, not the in-repo esbuild alias.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: packages/puzzle/package-lock.json
       - run: npm ci
       - run: npm run test:e2e-pack
 
   browser:
     name: Browser smoke (Playwright)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/puzzle
     steps:
       - uses: actions/checkout@v5
       # Go runs the two example dev servers Playwright's webServer starts.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: packages/puzzle/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser
@@ -93,10 +108,12 @@ jobs:
       # old repo's published-CLI build.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - uses: actions/setup-node@v5
         with:
           node-version: 25
+      - run: npm run build:compiler
+        working-directory: packages/puzzle
       - name: Registry lib tests
         working-directory: packages/puzzle-pieces
         run: |
@@ -120,7 +137,7 @@ jobs:
       # without a compiled panel bundle the 88 panel-app suites skip silently.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -130,4 +147,26 @@ jobs:
         run: |
           npm ci
           npm run build
+          npx vitest run
+
+  plugins:
+    name: Lint/format plugins
+    # Both vendor JS ports of the compiler's section splitter/lexer
+    # (packages/puzzle/compiler/internal/parser) — running them on every push is
+    # the drift alarm for grammar changes.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: ESLint plugin suite
+        working-directory: packages/puzzle-eslint
+        run: |
+          npm ci
+          npx vitest run
+      - name: Prettier plugin suite
+        working-directory: packages/puzzle-prettier
+        run: |
+          npm ci
           npx vitest run

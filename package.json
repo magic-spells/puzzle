@@ -1,124 +1,15 @@
 {
-	"name": "@magic-spells/puzzle",
-	"version": "0.6.0",
-	"description": "SPA-first JavaScript framework — single-file .pzl components, reactive data() components, Go + esbuild compiler",
+	"name": "puzzle",
+	"version": "0.0.0",
+	"private": true,
 	"type": "module",
-	"main": "./client-runtime/index.js",
-	"module": "./client-runtime/index.js",
-	"types": "./types/index.d.ts",
-	"bin": {
-		"puzzle": "./bin/puzzle.js"
-	},
-	"exports": {
-		".": {
-			"types": "./types/index.d.ts",
-			"default": "./client-runtime/index.js"
-		},
-		"./adapter": {
-			"types": "./types/adapter.d.ts",
-			"default": "./client-runtime/datastore/adapter.js"
-		},
-		"./morph": {
-			"types": "./types/morph.d.ts",
-			"default": "./client-runtime/morph.js"
-		},
-		"./router-modes": {
-			"types": "./types/router-modes.d.ts",
-			"default": "./client-runtime/router/modes.js"
-		},
-		"./ssg": {
-			"types": "./types/ssg.d.ts",
-			"default": "./client-runtime/ssg/index.js"
-		},
-		"./static": {
-			"types": "./types/static.d.ts",
-			"default": "./client-runtime/static/index.js"
-		},
-		"./testing": {
-			"types": "./types/testing.d.ts",
-			"default": "./client-runtime/testing/index.js"
-		},
-		"./fixtures": {
-			"types": "./types/fixtures.d.ts",
-			"default": "./client-runtime/fixtures/index.js"
-		},
-		"./puzzle-env": {
-			"types": "./puzzle-env.d.ts"
-		},
-		"./formatters/manifest": "./client-runtime/formatters/builtins-all.js"
-	},
-	"sideEffects": false,
-	"files": [
-		"client-runtime",
-		"!client-runtime/**/*.go",
-		"types",
-		"puzzle-env.d.ts",
-		"bin/puzzle.js",
-		"CHANGELOG.md"
-	],
-	"keywords": [
-		"puzzle",
-		"spa",
-		"framework",
-		"reactive",
-		"single-file-components",
-		"virtual-dom",
-		"client-side"
-	],
-	"homepage": "https://github.com/magic-spells/puzzle#readme",
+	"description": "Monorepo shell \u2014 the framework and everything that releases in lockstep with it live under packages/. Nothing publishes from this root.",
 	"scripts": {
-		"build:example-modules": "go run ./compiler/cmd/pzlc --mode component examples/todos/app/components/TodoItem.pzl tests/fixtures/todos-compiled/TodoItem.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/todos/app/views/Home.pzl tests/fixtures/todos-compiled/Home.compiled.js && go run ./compiler/cmd/pzlc --mode layout examples/todos/app/layouts/Default.pzl tests/fixtures/todos-compiled/Default.compiled.js",
-		"build:blog": "go run ./compiler/cmd/puzzle build examples/blog --mode development && node -e \"const fs=require('fs');['examples/blog/dist/app.js','examples/blog/dist/index.html','examples/blog/dist/styles.css','examples/blog/dist/api/posts.json'].map(f=>fs.accessSync(f))\"",
-		"build:virtual-scroll": "go run ./compiler/cmd/pzlc --mode view examples/virtual-scroll/app/views/Home.pzl tests/fixtures/virtual-scroll/Home.compiled.js",
-		"build:slot-forwarding": "go run ./compiler/cmd/pzlc --mode component tests/fixtures/slot-forwarding/Card.pzl tests/fixtures/slot-forwarding/Card.compiled.js && go run ./compiler/cmd/pzlc --mode layout tests/fixtures/slot-forwarding/WrappedLayout.pzl tests/fixtures/slot-forwarding/WrappedLayout.compiled.js",
-		"build:binding": "go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/LocalForm.pzl tests/fixtures/binding/LocalForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/RecordForm.pzl tests/fixtures/binding/RecordForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/PlainForm.pzl tests/fixtures/binding/PlainForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/TodoTitles.pzl tests/fixtures/binding/TodoTitles.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/ClobberForm.pzl tests/fixtures/binding/ClobberForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/PrimitiveForm.pzl tests/fixtures/binding/PrimitiveForm.compiled.js",
-		"build:grimoire": "go run ./compiler/cmd/puzzle build examples/grimoire --mode development && node -e \"const fs=require('fs');['examples/grimoire/dist/app.js','examples/grimoire/dist/index.html','examples/grimoire/dist/styles.css'].map(f=>fs.accessSync(f))\"",
-		"build:typed-todos": "go run ./compiler/cmd/puzzle build examples/typed-todos --mode development && node -e \"const fs=require('fs');const s=fs.readFileSync('examples/typed-todos/dist/app.js','utf8');['examples/typed-todos/dist/app.js','examples/typed-todos/dist/index.html','examples/typed-todos/dist/styles.css'].map(f=>fs.accessSync(f));if(/\\binterface\\b|: TodoRecord|import type/.test(s)){throw new Error('typed-todos bundle still contains TypeScript syntax')}\"",
-		"build": "node scripts/release-prep.mjs",
-		"build:compiler": "go build -o puzzle ./compiler/cmd/puzzle",
-		"pretest": "npm run build:example-modules && npm run build:blog && npm run build:grimoire && npm run build:typed-todos && npm run build:virtual-scroll && npm run build:slot-forwarding && npm run build:binding",
-		"test": "vitest run",
-		"test:watch": "vitest",
-		"test:browser": "playwright test",
-		"bench": "node benchmarks/runner.mjs",
-		"bench:update": "node benchmarks/runner.mjs --update-baseline",
-		"test:types": "tsc -p tests-types",
-		"test:e2e-pack": "node scripts/e2e-pack.mjs",
-		"verify:pack": "node scripts/verify-pack.mjs",
-		"measure:size": "node scripts/measure-size.mjs",
-		"verify:published": "node scripts/verify-published.mjs",
-		"prepublishOnly": "node scripts/refuse-directory-publish.mjs",
-		"prepack": "node scripts/inject-platform-pins.mjs inject",
-		"postpack": "node scripts/inject-platform-pins.mjs restore",
-		"release:prep": "node scripts/release-prep.mjs"
-	},
-	"license": "MIT",
-	"publishConfig": {
-		"access": "public",
-		"registry": "https://registry.npmjs.org/"
-	},
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/magic-spells/puzzle.git"
-	},
-	"bugs": {
-		"url": "https://github.com/magic-spells/puzzle/issues"
-	},
-	"peerDependencies": {
-		"@magic-spells/morph-engine": ">=0.1.0"
-	},
-	"peerDependenciesMeta": {
-		"@magic-spells/morph-engine": {
-			"optional": true
-		}
-	},
-	"devDependencies": {
-		"@magic-spells/morph-engine": "^0.1.1",
-		"@playwright/test": "^1.61.1",
-		"@tailwindcss/cli": "^4.3.2",
-		"jsdom": "^26.1.0",
-		"tailwindcss": "^4.3.2",
-		"typescript": "^7.0.2",
-		"vitest": "^3.2.4"
+		"test": "npm test --prefix packages/puzzle",
+		"build:compiler": "npm run build:compiler --prefix packages/puzzle",
+		"release:prep": "npm run release:prep --prefix packages/puzzle",
+		"verify:pack": "npm run verify:pack --prefix packages/puzzle",
+		"verify:published": "npm run verify:published --prefix packages/puzzle",
+		"measure:size": "npm run measure:size --prefix packages/puzzle"
 	}
 }

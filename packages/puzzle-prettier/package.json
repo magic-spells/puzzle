@@ -1,0 +1,40 @@
+{
+	"name": "@magic-spells/prettier-plugin-puzzle",
+	"version": "0.7.0",
+	"description": "Prettier 3 plugin for Puzzle Framework .pzl single-file components — formats the <script> and <style> bodies, preserves templates verbatim",
+	"type": "module",
+	"main": "./src/index.js",
+	"module": "./src/index.js",
+	"exports": {
+		".": "./src/index.js"
+	},
+	"files": [
+		"src",
+		"README.md"
+	],
+	"keywords": [
+		"prettier",
+		"prettier-plugin",
+		"puzzle",
+		"pzl",
+		"formatter",
+		"magic-spells"
+	],
+	"scripts": {
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"license": "MIT",
+	"peerDependencies": {
+		"prettier": ">=3"
+	},
+	"devDependencies": {
+		"prettier": "^3.0.0",
+		"vitest": "^3.0.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/magic-spells/puzzle.git",
+		"directory": "packages/puzzle-prettier"
+	}
+}

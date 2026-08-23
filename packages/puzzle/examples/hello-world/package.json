@@ -1,0 +1,13 @@
+{
+  "name": "hello-world",
+  "version": "0.1.0",
+  "description": "The smallest possible Puzzle app — a baseline for measuring framework size",
+  "type": "module",
+  "scripts": {
+    "dev": "puzzle dev",
+    "build": "puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^0.7.0"
+  }
+}

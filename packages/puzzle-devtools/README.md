@@ -132,8 +132,8 @@ the Performance panel and leaves the rest working.
 ## Development setup
 
 ```bash
-npm install                          # links @magic-spells/puzzle from ../.. (file: dep)
-(cd ../.. && npm run build:compiler) # the monorepo compiler binary — emits ../../puzzle
+npm install                          # links @magic-spells/puzzle from ../puzzle (file: dep)
+(cd ../puzzle && npm run build:compiler) # the monorepo compiler binary — emits ../puzzle/puzzle
 ```
 
 The panel is compiled by that binary, and the `file:` link means the test suite and the

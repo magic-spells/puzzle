@@ -9,7 +9,7 @@ connections:
 
 # The add CLI — resolver + copier
 
-**Status: SHIPPED 2026-07-17 — as `puzzle add piece <name…>` in the Puzzle Go CLI** (framework-CLI integration chosen over a standalone npm CLI; the `@magic-spells/puzzle-pieces` npm package exists only as the versioned TRANSPORT the CLI downloads — `files: ["registry"]`, versioned in lockstep with the framework's major.minor, patch free for the registry — nobody installs or imports it). Lives in `../../compiler/internal/pieces/` + `add.go`, with 22 Go tests, verified end-to-end against this registry (button; date-picker → calendar + `lib/date-math.js` transitively; conflict refusal; consumer app builds with pieces + morph-engine). Because the repo is registry-shaped ([[DECISION-REGISTRY-SHAPED-REPO]]) the CLI is a pure resolver + file-copier, never a build tool.
+**Status: SHIPPED 2026-07-17 — as `puzzle add piece <name…>` in the Puzzle Go CLI** (framework-CLI integration chosen over a standalone npm CLI; the `@magic-spells/puzzle-pieces` npm package exists only as the versioned TRANSPORT the CLI downloads — `files: ["registry"]`, versioned in lockstep with the framework's major.minor, patch free for the registry — nobody installs or imports it). Lives in `../puzzle/compiler/internal/pieces/` + `add.go`, with 22 Go tests, verified end-to-end against this registry (button; date-picker → calendar + `lib/date-math.js` transitively; conflict refusal; consumer app builds with pieces + morph-engine). Because the repo is registry-shaped ([[DECISION-REGISTRY-SHAPED-REPO]]) the CLI is a pure resolver + file-copier, never a build tool.
 
 ## Shipped contract (what this registry must stay compatible with)
 

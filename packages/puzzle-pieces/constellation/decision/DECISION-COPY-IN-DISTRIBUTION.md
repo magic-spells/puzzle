@@ -12,7 +12,7 @@ connections:
 
 ## Context
 
-Pieces are `.pzl` single-file components for the [Puzzle framework](../..). The natural instinct is to publish them as an npm package apps `import`. That does not work for `.pzl`.
+Pieces are `.pzl` single-file components for the [Puzzle framework](../puzzle). The natural instinct is to publish them as an npm package apps `import`. That does not work for `.pzl`.
 
 ## Decision
 

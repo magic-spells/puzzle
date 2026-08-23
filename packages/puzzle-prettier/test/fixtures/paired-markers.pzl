@@ -1,0 +1,30 @@
+<puzzle-view class="paired">
+  <Card>
+    <Slot name="header"><h2>{ title | capitalize }</h2></Slot>
+    <Children>
+      {#if items.length}
+        <ItemCard item={ items[0] } />
+      {:else}
+        <p>Nothing here yet</p>
+      {/if}
+    </Children>
+  </Card>
+
+  <Slot>{ count | number } remaining{#svg 'icons/empty.svg'}</Slot>
+
+  <Children/>
+  <Slot name="footer"/>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Paired extends PuzzleView {
+  data() {
+    return { title: 'paired', count: 0, items: [] };
+  }
+}
+</script>
+
+<style>
+.paired { color: red; }
+</style>
