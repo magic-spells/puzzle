@@ -1,9 +1,9 @@
 {
-	"name": "@magic-spells/puzzle-monorepo",
+	"name": "puzzle",
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "Monorepo shell — the framework and everything that releases in lockstep with it live under packages/. Nothing publishes from this root.",
+	"description": "Monorepo shell \u2014 the framework and everything that releases in lockstep with it live under packages/. Nothing publishes from this root.",
 	"scripts": {
 		"test": "npm test --prefix packages/puzzle",
 		"build:compiler": "npm run build:compiler --prefix packages/puzzle",

@@ -111,10 +111,11 @@ decision cards explain why the contract has its current shape.
   separate design.
 - **Current 0.7 data work (v1.76):** [[DECISION-D161-AUTO-FETCHING-FINDS]] —
   tracked finds fault in missing data; the settle loop commits complete passes.
-- **Monorepo (0.7.0):** [[DECISION-D162-MONOREPO-PACKAGES]] — lockstep
-  satellites live under `packages/` (puzzle-pieces, puzzle-devtools), imported
-  with full history; grammars stay in their own repos; absorbed repos are
-  archived, never deleted.
+- **Monorepo (0.7.0):** [[DECISION-D162-MONOREPO-PACKAGES]] — the repo root is
+  a private shell; the framework lives at `packages/puzzle` beside
+  puzzle-pieces, puzzle-devtools, puzzle-eslint, and puzzle-prettier, all
+  carrying the framework version; grammars stay in their own repos; absorbed
+  repos are archived, never deleted.
   The next free decision number is D163.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`

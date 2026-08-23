@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { format, sectionMap, splitSections } from './helpers.js';
 
-const EXAMPLES_DIR = '/Users/coryschulz/Code/@magic-spells/puzzle/examples';
+// The framework package is a sibling under packages/ (D162 monorepo layout), so
+// resolve its examples relative to THIS file rather than hardcoding a checkout.
+const here = dirname(fileURLToPath(import.meta.url));
+const EXAMPLES_DIR = join(here, '..', '..', 'puzzle', 'examples');
 
 function listPzl(dir) {
 	try {

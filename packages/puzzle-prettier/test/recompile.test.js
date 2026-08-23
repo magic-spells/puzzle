@@ -3,11 +3,16 @@ import { existsSync, readFileSync, writeFileSync, mkdtempSync, mkdirSync, cpSync
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { format } from './helpers.js';
 
-const PUZZLE_REPO = '/Users/coryschulz/Code/@magic-spells/puzzle';
-const COMPILER_DIR = join(PUZZLE_REPO, 'compiler');
-const EXAMPLES_DIR = join(PUZZLE_REPO, 'examples');
+// The framework package is a sibling under packages/ (D162 monorepo layout), so
+// resolve its compiler and examples relative to THIS file.
+const here = dirname(fileURLToPath(import.meta.url));
+const PUZZLE_PKG = join(here, '..', '..', 'puzzle');
+const COMPILER_DIR = join(PUZZLE_PKG, 'compiler');
+const EXAMPLES_DIR = join(PUZZLE_PKG, 'examples');
+const FIXTURES_DIR = join(here, 'fixtures');
 
 function haveGo() {
 	try {

@@ -233,8 +233,8 @@ enforced, not merely advised.
 ## Monorepo layout (D162)
 
 This package IS the framework, and it lives at `packages/puzzle` inside the
-`magic-spells/puzzle` monorepo — the repo root is a private shell
-(`@magic-spells/puzzle-monorepo`) whose scripts delegate here. Everything
+`magic-spells/puzzle` monorepo — the repo root is a private shell (named
+plain `puzzle`) whose scripts delegate here. Everything
 that versions in lockstep with the framework is a sibling under `packages/`:
 
 - `../puzzle-pieces` — the `@magic-spells/puzzle-pieces` npm transport

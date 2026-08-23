@@ -71,6 +71,26 @@ function sectionTagAt(src, i) {
 	return { name: '', isClose: false };
 }
 
+// misnamedSectionTagAt recognizes the plural near-miss section names so the
+// top-level scanner points at the correct spelling instead of falling through to
+// the generic stray-content error. A boundary is required so similarly prefixed
+// custom markup is still diagnosed as ordinary stray content. Mirrors
+// misnamedSectionTagAt.
+const MISNAMED_SECTIONS = [
+	{ bad: 'scripts', good: 'script' },
+	{ bad: 'styles', good: 'style' },
+];
+
+function misnamedSectionTagAt(src, i) {
+	for (const m of MISNAMED_SECTIONS) {
+		const prefix = '<' + m.bad;
+		if (!src.startsWith(prefix, i)) continue;
+		const after = i + prefix.length;
+		if (after >= src.length || isBoundary(src[after])) return m;
+	}
+	return null;
+}
+
 // scanOpenTag finds the end of a section's open tag (the '>'), quote- and
 // brace-aware. Returns { afterGT, attrsRaw }. Mirrors scanOpenTag.
 function scanOpenTag(src, i, name) {
@@ -163,6 +183,14 @@ function findStyleClose(s, from) {
 // from `from` for its real close tag, skipping balanced template brace groups,
 // HTML comments, template comments, and \{ \} escapes. Returns the close tag's
 // '<' index RELATIVE to `from`, or -1. Mirrors findTemplateClose.
+//
+// There is deliberately NO {#raw} case here: sections.go has none either. Section
+// splitting is byte-naive about a raw body (D150 lex-off is a LEXER concern, and
+// this port has no template lexer), so a literal close tag written inside a
+// {#raw} body ends the section in the compiler and must end it here too. What a
+// raw block DOES need is `raw` in lex.js's BLOCK_CLOSE_KEYWORDS: without it the
+// '/' in {/raw} reads as a regex opener and the brace scan runs away past the
+// section's real close tag.
 function findTemplateClose(s, from, closeTag) {
 	for (let i = from; i < s.length; ) {
 		if (s.startsWith(closeTag, i)) return i - from;
@@ -236,6 +264,10 @@ export function splitSections(src) {
 	const counts = { 'puzzle-view': 0, 'puzzle-skeleton': 0, script: 0, style: 0 };
 
 	let i = 0;
+	// A leading UTF-8 BOM is an encoding marker, not top-level template content.
+	// Keep src itself untouched so every later offset and line/column still refers
+	// to the original file.
+	if (src.startsWith('\uFEFF')) i = 1;
 	let strayOff = -1;
 	let strayFollows = '';
 	let lastClosed = '';
@@ -254,6 +286,10 @@ export function splitSections(src) {
 			if (idx < 0) throw posErr(src, i, 'unterminated comment');
 			i = idx + 3;
 			continue;
+		}
+		const misnamed = misnamedSectionTagAt(src, i);
+		if (misnamed) {
+			throw posErr(src, i, `<${misnamed.bad}> should be named <${misnamed.good}>`);
 		}
 		const { name, isClose } = sectionTagAt(src, i);
 		if (name === '' || isClose) {

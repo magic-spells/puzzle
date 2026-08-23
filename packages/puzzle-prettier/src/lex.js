@@ -71,6 +71,9 @@ export function lexScanRegexLiteral(s, i) {
 		const c = s[j];
 		if (c === '\\') {
 			j += 2;
+			// A trailing backslash must not push past EOF: the unterminated result is
+			// s.length, and lexRegexLiteralClosed indexes s[end - 1].
+			if (j > n) j = n;
 			continue;
 		}
 		if (inClass) {
@@ -124,6 +127,9 @@ export function lexSkip(s, i, prevEndsExpr) {
 		while (j < s.length) {
 			if (s[j] === '\\') {
 				j += 2;
+				// A trailing backslash must not push past EOF — an unterminated string
+				// ends AT s.length, and callers slice/index on the result.
+				if (j > s.length) j = s.length;
 				continue;
 			}
 			if (s[j] === c) {
@@ -156,6 +162,12 @@ export function lexSkip(s, i, prevEndsExpr) {
 	if (c === '/' && !prevEndsExpr) {
 		return { next: lexScanRegexLiteral(s, i), pee: true, consumed: true };
 	}
+	if ((c === '+' || c === '-') && i + 1 < s.length && s[i + 1] === c) {
+		// Prefix/postfix update operators preserve the incoming state, and BOTH
+		// bytes must be consumed: in a+++/re/ the third '+' stays a plain operator,
+		// clears the state, and correctly leaves '/' a regex opener.
+		return { next: i + 2, pee: prevEndsExpr, consumed: true };
+	}
 	if (isIdentStart(c)) {
 		let j = i;
 		while (j < s.length && isIdentChar(s[j])) j++;
@@ -173,7 +185,10 @@ function lexRegexLiteralClosed(s, open, end) {
 	return k > open && s[k] === '/';
 }
 
-const BLOCK_CLOSE_KEYWORDS = new Set(['if', 'unless', 'case', 'for', 'svg', 'comment']);
+// Block keywords whose {/kw} closer is STRUCTURAL — the one place a '/'
+// immediately after '{' is not a regex opener. Mirrors blockCloseKeywords in
+// scan.go; `raw` is D150's lex-off block.
+const BLOCK_CLOSE_KEYWORDS = new Set(['if', 'unless', 'case', 'for', 'svg', 'comment', 'raw']);
 
 // isKnownBlockCloserAt reports whether s[open:] is a complete block closer
 // ({/if}, {/for}, …). Mirrors isKnownBlockCloserAt.
