@@ -364,7 +364,24 @@ const config: PuzzleAppConfig = {
 	},
 	onError(error, info) {
 		const typedInfo: PuzzleErrorInfo = info;
-		void [error, typedInfo.phase, typedInfo.view, typedInfo.route];
+		// Every phase literal the runtime funnels must be assignable to the public
+		// union — the list the reportError call sites actually emit. A phase added to
+		// the runtime without a matching member here fails this file.
+		const emittedPhases: PuzzleErrorInfo['phase'][] = [
+			'mount',
+			'refresh',
+			'render',
+			'bind',
+			'enter',
+			'leave',
+			'unmount',
+			'navigation',
+			'transition',
+			'app-mount',
+			'app-unmount',
+			'error-view',
+		];
+		void [error, typedInfo.phase, typedInfo.view, typedInfo.route, emittedPhases];
 	},
 };
 

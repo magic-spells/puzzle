@@ -135,6 +135,7 @@ export interface PuzzleErrorInfo {
 		| 'error-view'
 		| 'enter'
 		| 'leave'
+		| 'unmount'
 		| 'transition'
 		| 'app-mount'
 		| 'app-unmount';

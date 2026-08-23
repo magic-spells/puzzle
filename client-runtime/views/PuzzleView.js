@@ -649,7 +649,30 @@ export class PuzzleView {
 			// and its closure stays spent. The owner's re-render refills it.
 			this.#errorView = null;
 			face.destroy();
-			await this.__retryParent?.refresh();
+			const owner = this.__retryParent;
+			try {
+				await owner?.refresh();
+			} catch (err) {
+				// The owner's own data() rejected — the ordinary outcome of retrying
+				// while the server is still down. Nothing re-renders this position, so the
+				// empty handoff above would strand it as a bare placeholder and break the
+				// SPEC rule that a retry never blanks its position. Refill it the way a
+				// routed load failure does: a face carrying the NEW error and a fresh
+				// callback. refresh() contains no failure of its own — every caller owns
+				// its catch — so this is the single funnel report for it, attributed to
+				// the OWNER whose data() threw. The face torn down above makes
+				// __retryErrorView's `held` teardown a no-op, and its guards refuse only
+				// when the position is no longer ours — in which case whoever took it owns
+				// what stands there.
+				const info = reportError(
+					this.ctx,
+					err,
+					{ phase: 'refresh', view: owner, route: owner?.route },
+					'[puzzle] retry through the owner failed:',
+					err
+				);
+				this.__retryErrorView(err, info);
+			}
 		};
 	}
 
@@ -1411,6 +1434,22 @@ export class PuzzleView {
 	viewDidShow() {}
 	viewWillHide() {}
 	viewDidHide() {}
+
+	/**
+	 * INTERNAL — does this instance actually OVERRIDE a hide hook? Component removal
+	 * (viewManager's unmount) has to fire the hide sequence for a view that declares
+	 * the hooks without an `animations.out`, and take the plain synchronous destroy()
+	 * for one that declares neither. viewManager cannot ask that question itself: the
+	 * import runs views → manager, so the base prototype is out of scope there.
+	 * Compared against the base methods rather than tested for existence, since every
+	 * instance inherits the no-op stubs above.
+	 */
+	get __hasHideHooks() {
+		return (
+			this.viewWillHide !== PuzzleView.prototype.viewWillHide ||
+			this.viewDidHide !== PuzzleView.prototype.viewDidHide
+		);
+	}
 
 	// ---- animation (constellation/doc/DOC-SPEC.md §12) ----------------------
 

@@ -720,7 +720,21 @@ function sameNode(a, b) {
 	// (tag, key) identity by SameValueZero — the same comparison the keyed map in
 	// patchKeyedChildren uses, so a `NaN` key matches itself (a bare `===` reads
 	// NaN !== NaN and would needlessly replace the row on every render).
-	return a.tag === b.tag && (a.key === b.key || (a.key !== a.key && b.key !== b.key));
+	//
+	// Child OWNERSHIP is part of that identity: an `island` element's children are
+	// third-party-owned and frozen by carrying the mounted child vnodes forward, so
+	// two conditional branches sharing a tag and key but disagreeing about `island`
+	// describe different subtrees, not one subtree to patch across. Patching the flip
+	// would diff stale seed vnodes against DOM the island's owner has since rewritten
+	// — currentTree would end up holding detached nodes and every later render would
+	// corrupt further. Making the flip a REPLACEMENT unmounts and remounts cleanly in
+	// both directions. Components and text vnodes never carry `island` (it is rejected
+	// on components), so neither side of this test moves for them.
+	return (
+		a.tag === b.tag &&
+		(a.key === b.key || (a.key !== a.key && b.key !== b.key)) &&
+		('island' in a.attrs) === ('island' in b.attrs)
+	);
 }
 
 function shallowEqual(a, b) {
@@ -789,10 +803,16 @@ function unmount(vnode) {
 		// GENUINE reorder concurrent with a leave, survivors order correctly but
 		// the leaver's resting spot among them is unspecified; a newly mounted
 		// sibling inserts relative to survivors and may land before or after a
-		// leaver. Pure removals keep the leaver exactly in place. Without
-		// `animations.out` this is the original synchronous, instant destroy() —
-		// zero behaviour change (the whole existing suite is the regression net).
-		if (child?.animations?.out) {
+		// leaver. Pure removals keep the leaver exactly in place. Declaring NEITHER
+		// an out-animation nor a hide hook keeps the original synchronous, instant
+		// destroy() — zero behaviour change (the whole existing suite is the
+		// regression net). Declaring a hide hook WITHOUT an animation still routes
+		// through destroyAnimated(), because viewWillHide()/viewDidHide() are
+		// lifecycle, not animation callbacks (D28): they fire in order with
+		// zero-duration semantics, exactly as the router's teardown already fires
+		// them. Nothing else changes for that view — playOut() with no `out` spec
+		// awaits no animation, so the hooks and destroy() land in the same order.
+		if (child?.animations?.out || child?.__hasHideHooks) {
 			const leavingEl = child.element;
 			if (leavingEl && leavingEl.nodeType === 1 /* ELEMENT_NODE */) {
 				leavingEls.add(leavingEl);

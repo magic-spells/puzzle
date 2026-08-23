@@ -572,6 +572,34 @@ describe('ViewManager — leave animation on component removal', () => {
 		expect(el.querySelector('.plain')).toBeNull(); // instant, no await needed
 	});
 
+	it('fires the hide hooks on removal of a component with NO animations (D28)', async () => {
+		const order = [];
+		class Hooked extends PuzzleView {
+			viewWillHide() { order.push('viewWillHide'); }
+			viewDidHide() { order.push('viewDidHide'); }
+			destroyed() { order.push('destroyed'); }
+			render() { return h('li', { class: 'hooked' }, [text('h')]); }
+		}
+		class Host extends PuzzleView {
+			created() { this.setData({ show: true }); }
+			data() { return { show: this.getData().show }; }
+			render() { return h('ul', {}, this.getData().show ? [comp(Hooked)] : []); }
+		}
+		const el = container();
+		const host = await new Host().mount(el);
+		await tick();
+
+		host.setData('show', false);
+		host.flushUpdates();
+		await tick();
+
+		// The hide hooks are LIFECYCLE, not animation callbacks: declaring them
+		// without an `animations` field still fires them in order (zero-duration
+		// semantics), exactly as the router's own teardown path does.
+		expect(order).toEqual(['viewWillHide', 'viewDidHide', 'destroyed']);
+		expect(el.querySelector('.hooked')).toBeNull();
+	});
+
 	it('keyed reorder while one item is leaving keeps the survivors correctly ordered', async () => {
 		const instances = {};
 		class Item extends Row {
