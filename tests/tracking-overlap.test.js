@@ -101,6 +101,13 @@ describe('D161 overlap — the sticky async-shape flag', () => {
 		const store = makeStore();
 		store.upsert('post', { id: 'p1', title: 'One' });
 		store.upsert('post', { id: 'p2', title: 'Two' });
+		// Drain the seeds' BATCHED notifications while nobody subscribes. The flush is
+		// rAF-scheduled (D63): on a fast machine it fires after this test's last
+		// assertion, but on a slow runner it lands mid-test — a legitimate store-change
+		// refresh on the by-then-subscribed view, and one more data() run than the
+		// counts below expect. That is exactly the flake CI hit; nothing here asserts
+		// notification behavior, so deliver-to-nobody makes the counts deterministic.
+		store.flush();
 
 		const gate = deferred();
 		let slowRuns = 0;
@@ -162,6 +169,7 @@ describe('D161 overlap — the sticky async-shape flag', () => {
 		const { calls } = serve({ p1: { id: 'p1', title: 'One' }, p2: { id: 'p2', title: 'Two' } });
 		const store = makeStore();
 		store.upsert('post', { id: 'p2', title: 'Two' });
+		store.flush(); // same seed-notification drain as above — keep the run counts deterministic
 
 		const gate = deferred();
 		class SlowView extends PuzzleView {
