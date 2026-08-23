@@ -324,14 +324,19 @@ delegation (`data-result` → `hidden.detail.result`). CSS: 287 lines, one var
   `feat/open-sourcery-library`); **PR #10 → `feat/open-sourcery-library`**:
   https://github.com/magic-spells/magic-spells-puzzle-site/pull/10. SSG build green
   (147 pages). SheetDemo lost its `top` chip until `top` lands upstream.
-- **CI (pieces) is RED for a pre-existing reason, not this PR:** the demo's
+- **CI (pieces): GREEN as of 2026-08-23 (`test pass`, run 32655073517).** The pre-existing failure was: the demo's
   `"@magic-spells/scroll-stack": "file:../../scroll-stack"` (added 2026-08-19 with the
   scroll-stack piece; these commits first reached origin today) is a dangling link on the
   runner, so `@import "@magic-spells/scroll-stack/css"` cannot resolve and the Tailwind CLI
   exits non-zero → "Tailwind pipeline is declared … could not be run". Reproduced locally
-  by dangling the link. Root `npm test` passes in CI. Fix is the owner's call: publish
-  scroll-stack 0.1.1 and depend on `^0.1.1` (preferred — matches the wrap rule), or vendor
-  its dist under `demo/vendor/scroll-stack` the way puzzle-site does. The site's only check
+  by dangling the link. FIXED (24ba0c2): npm 0.1.0 turned out to be byte-identical to the
+  local checkout (published 2026-08-20 after the repo re-init), so the demo now depends on
+  `^0.1.0` from the registry. Gotcha: editing package.json alone was not enough — the
+  lockfile kept the `link: true` entry because the linked folder satisfied the range;
+  `npm install @magic-spells/scroll-stack@^0.1.0` forced the registry re-resolution
+  (`install-links=false` is set in ~/.npmrc, which is also why file: deps symlink).
+  The site's vendor/scroll-stack copy is now equally vestigial — it can move to `^0.1.0`
+  whenever convenient. The site's only check
   (Cloudflare Workers Builds) passes on its PR.
 - Open for the owner: (1) port `top` to `../sheet` from `wip/sheet-top-position` and
   publish; (2) publish bottom-sheet 2.0.3; (3) the dialog-panel `detail === 0` fix;
