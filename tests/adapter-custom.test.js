@@ -274,6 +274,70 @@ describe('bound adapter surface and enhanced fetch', () => {
 	});
 });
 
+describe('fixtures-backed responses normalize like real ones', () => {
+	// The mock hands back a Response-SHAPED stand-in, not a real Response, so the
+	// D158 "return the fetch result, Puzzle reads it" idiom only works if
+	// isResponse() recognises the brand it carries.
+	class MockedPost extends Post {
+		static adapter = {
+			endpoint: '/posts',
+			loadMany: (fetch) => fetch(`${API}/posts`),
+			loadOne: (fetch, id) => fetch(`${API}/posts/${id}`),
+			delete: (fetch, record) => fetch(`${API}/posts/${record.id}`, { method: 'DELETE' }),
+		};
+	}
+
+	const seeded = () =>
+		installFixtures({ mock: { post: { data: [{ id: 'p1', title: 'Seeded' }] } } });
+
+	it('parses a returned mock response for loadMany and loadOne', async () => {
+		const uninstall = seeded();
+		try {
+			const store = new Store({ post: MockedPost }, { apiURL: API });
+			const many = await store.loadMany('post');
+			expect(many.map((post) => post.title)).toEqual(['Seeded']);
+
+			const one = await store.loadOne('post', 'p1');
+			expect(one.title).toBe('Seeded');
+			expect(store.findOne('post', 'p1').title).toBe('Seeded');
+		} finally {
+			uninstall();
+		}
+	});
+
+	it('a non-OK mock response fails the delete and leaves the record in the store', async () => {
+		const uninstall = installFixtures({
+			mock: { post: { data: [{ id: 'p1', title: 'Seeded' }], fail: true } },
+		});
+		try {
+			const store = new Store({ post: MockedPost }, { apiURL: API });
+			// upsert, not createRecord: a never-synced record deletes locally without
+			// ever dispatching the transport, which would not exercise the response.
+			const record = store.upsert('post', { id: 'p1', title: 'Seeded' });
+			await expect(record.delete()).rejects.toBeInstanceOf(PuzzleAdapterError);
+			expect(store.findOne('post', 'p1')).not.toBeNull();
+		} finally {
+			uninstall();
+		}
+	});
+
+	it('leaves an already-parsed author return value alone', async () => {
+		class ParsedPost extends Post {
+			static adapter = {
+				endpoint: '/posts',
+				loadMany: async (fetch) => (await fetch(`${API}/posts`)).json(),
+			};
+		}
+		const uninstall = seeded();
+		try {
+			const store = new Store({ post: ParsedPost }, { apiURL: API });
+			await expect(store.loadMany('post')).resolves.toHaveLength(1);
+		} finally {
+			uninstall();
+		}
+	});
+});
+
 describe('app-wide adapter defaults', () => {
 	it('applies to every endpoint model, beats generated REST, and leaves model config untouched', async () => {
 		const articleConfig = { endpoint: '/articles' };

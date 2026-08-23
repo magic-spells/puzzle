@@ -88,6 +88,9 @@ export class Store {
 		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
 		this._persistPending = false; // dirty flag: storage write is batched into flush()
 		this._installRelationships();
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			this._assertNoReservedFields();
+		}
 
 		if (this.storage) this._load();
 	}
@@ -104,6 +107,25 @@ export class Store {
 			? this.models[type]
 			: null;
 		return own || PuzzleModel;
+	}
+
+	/**
+	 * Dev-only registration guard: `_serializeAll` writes each record's provenance
+	 * flag as a literal `__synced` key beside the fields, and `_hydrateAll` strips
+	 * that key back off. A model that DECLARES a `__synced` field therefore loses
+	 * its value on every persist/hydrate round-trip — silently, and only after a
+	 * reload. Nobody names a field this, so the answer is a loud throw at
+	 * construction rather than an envelope the wire shape would have to carry.
+	 */
+	_assertNoReservedFields() {
+		for (const [type, Model] of Object.entries(this.models)) {
+			if (typeof Model.normalizedSchema !== 'function') continue;
+			if ('__synced' in Model.normalizedSchema()) {
+				throw new Error(
+					`[puzzle] model '${type}' declares a "__synced" field — that name is reserved by persistence; rename it`
+				);
+			}
+		}
 	}
 
 	// ---- relationships (constellation/doc/DOC-SPEC.md §21, D49) ---------------

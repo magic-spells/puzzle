@@ -15,7 +15,11 @@
  * use `res.ok`, `res.status`, `res.statusText`, `res.json()` (_fetchAdapter) and
  * `res.text()` (readBody). Only those five. The real `Response` constructor is
  * deliberately NOT used — it is not uniformly available across the Node/jsdom
- * environments this has to run in.
+ * environments this has to run in. Because it fails `instanceof Response`, the
+ * stand-in carries RESPONSE_BRAND so the adapter's `isResponse()` normalizes an
+ * author verb that returns the enhanced fetch's result (the D158 idiom) exactly
+ * as it would a real one — a brand, not a duck-type on `ok`/`status`, which user
+ * data could match.
  *
  * Two knobs exist because the runtime has no other way to reach these states:
  * `latency` makes `<puzzle-skeleton>` and its D39/D52 anti-flash minimum
@@ -25,6 +29,11 @@
  */
 
 import { stateFor } from './state.js';
+
+// Registry symbol, NOT an import from the adapter: `/fixtures` and `/adapter` are
+// separately bundled subpaths, so a shared module reference would drag one into
+// the other's graph. Symbol.for makes the two agree by key instead.
+const RESPONSE_BRAND = Symbol.for('puzzle.response');
 
 // Only the statuses this module emits; anything else reports an empty text,
 // which is what a Response with an unknown status effectively gives you anyway.
@@ -52,6 +61,7 @@ const WARNED = new WeakSet();
 export function mockResponse(status, body) {
 	const text = body === undefined ? '' : JSON.stringify(body);
 	return {
+		[RESPONSE_BRAND]: true,
 		ok: status >= 200 && status < 300,
 		status,
 		statusText: STATUS_TEXT[status] || '',
