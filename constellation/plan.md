@@ -21,7 +21,7 @@ connections:
   - FEATURE-ADD-CLI
   - RELEASE-V0-1-0
   - DECISION-COPY-IN-DISTRIBUTION
-  - DECISION-NATIVE-REBUILD
+  - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-REGISTRY-SHAPED-REPO
   - DECISION-DOCS-DEMO-SPLIT
   - DECISION-CONFIG-FIRST-API
@@ -37,12 +37,14 @@ session) and are not duplicated here.
 
 ## The whole idea in one paragraph
 
+
 `.pzl` single-file components can't ship via npm (the Puzzle compiler prunes
 `node_modules` and `.pzl` isn't resolvable there; Tailwind only scans `app/`), so pieces
 land in the consumer's own `app/components/ui/` where their `puzzle build` compiles them
 and their Tailwind scan picks up the classes. Everything downstream of that choice — the
-registry shape, the CLI, the native rebuilds — follows from it. See
-[[DECISION-COPY-IN-DISTRIBUTION]].
+registry shape, the CLI, how a piece is built (a thin wrapper over the published web
+component where possible, a native rebuild otherwise) — follows from it. See
+[[DECISION-COPY-IN-DISTRIBUTION]] and [[DECISION-WRAP-WEB-COMPONENTS]].
 
 ## How the repo fits together
 
@@ -56,9 +58,11 @@ registry shape, the CLI, the native rebuilds — follows from it. See
 
 ## The settled decisions (don't re-litigate without the maintainer)
 
+
 - [[DECISION-COPY-IN-DISTRIBUTION]] — copy-in, not npm import (npm rejected for v1).
-- [[DECISION-NATIVE-REBUILD]] — native `.pzl` rebuilds, not wrappers over the existing
-  `@magic-spells/*` web components; no custom elements.
+- [[DECISION-WRAP-WEB-COMPONENTS]] — wrap the existing `@magic-spells/*` web components
+  directly whenever possible (2026-08-22; reversed the original rebuild-everything rule);
+  port only when wrapping genuinely can't work. Ported pieces still use no custom elements.
 - [[DECISION-REGISTRY-SHAPED-REPO]] — registry-shaped from day one so the CLI stays a copier.
 - [[DECISION-CONFIG-FIRST-API]] — config-first APIs, because Puzzle has no cross-component context.
 - [[DECISION-DOCS-DEMO-SPLIT]] — docs in the demo app now, Astro on `magic-spells-site` later.

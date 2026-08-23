@@ -1,53 +1,53 @@
 <puzzle-view>
-  <dialog
-    role="alertdialog"
-    class={ panelClass }
-    aria-labelledby={ labelledby }
-    aria-describedby={ describedby }
-    @cancel={ handleCancel(event) }>
-    {#if title}
-      <h2 id={ titleId } class="text-lg font-semibold text-ink">{ title }</h2>
-    {/if}
-    {#if description}
-      <p id={ descId } class="mt-1.5 text-sm text-muted">{ description }</p>
-    {/if}
-    <div class="mt-6 flex justify-end gap-3">
-      <button type="button" class={ cancelClass } autofocus @click={ handleCancel(event) }>
-        { cancelLabel }
-      </button>
-      <button type="button" class={ confirmClass } @click={ handleConfirm(event) }>
-        { confirmLabel }
-      </button>
-    </div>
-  </dialog>
+  <dialog-panel ref="panel">
+    <dialog-backdrop class={ backdropClass }></dialog-backdrop>
+
+    <dialog
+      ref="dialog"
+      role="alertdialog"
+      class={ dialogClass }
+      aria-labelledby={ labelledby }
+      aria-describedby={ describedby }>
+      <div class={ bodyClass }>
+        {#if title}
+          <h2 id={ titleId } class="text-lg font-semibold text-ink">{ title }</h2>
+        {/if}
+        {#if description}
+          <p id={ descId } class="mt-1.5 text-sm text-muted">{ description }</p>
+        {/if}
+
+        <div class="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            data-action-hide-dialog
+            data-result="cancel"
+            autofocus
+            class={ cancelClass }>{ cancelLabel }</button>
+          <button
+            type="button"
+            data-action-hide-dialog
+            data-result="confirm"
+            class={ confirmClass }>{ confirmLabel }</button>
+        </div>
+      </div>
+    </dialog>
+  </dialog-panel>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// AlertDialog — a confirm/cancel modal for destructive or consequential actions,
-// built on the native <dialog role="alertdialog"> element. An independent thin
-// piece (NOT a composition of Dialog): it follows Dialog's native-<dialog>
-// discipline — showModal()/close() synced in mounted()/afterUpdate(), the
-// `cancel` event always preventDefault'd — but its deltas touch those internals,
-// so they live here rather than in Dialog.
+// AlertDialog — a confirm/cancel modal for destructive or consequential
+// actions, on <dialog role="alertdialog">. A consequential choice has to be
+// MADE: the backdrop is inert, there is no close (X), and the two buttons are
+// the whole surface.
 //
-// DELIBERATE DIFFERENCES FROM Dialog:
-//   - role="alertdialog" (assertive; requires an accessible name — wire `title`).
-//   - No close (X) button.
-//   - The backdrop is INERT: the backdrop-click handler is not wired at all, so
-//     clicking outside does nothing. A consequential choice must be made, not
-//     dismissed by a stray click.
-//   - Escape still cancels — a11y requires an exit. The native `cancel` event is
-//     preventDefault'd (so the browser never closes the element behind the vdom)
-//     and then routed through the SAME path as the Cancel button: props.cancel.
-//   - Initial focus lands on the Cancel button (autofocus), the safe default for
-//     a destructive prompt. showModal() honors the autofocus attribute.
-//
-// CONTROLLED BY THE PARENT. The parent owns `open` and flips it false in BOTH
-// @confirm and @cancel; AlertDialog syncs the native element to `open` in
-// mounted()/afterUpdate() (showModal when true, close when false) and never sets
-// `open` itself — it only asks the parent to confirm or cancel.
+// THIS PIECE IS A WRAPPER, NOT A PORT, and a thin variant of the Dialog
+// wrapper: same <dialog-panel> / <dialog-backdrop> custom elements from
+// @magic-spells/dialog-panel, same edge-triggered `open`, same
+// @show / @hide contract. It is a SEPARATE FILE rather than a composition of
+// Dialog because its deltas are dismiss policy, not markup, and a piece that
+// pulled in another piece would drag Dialog's whole prop surface behind it.
 //
 //   <AlertDialog
 //     open={ open }
@@ -55,26 +55,122 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //     description="This permanently removes the project and all its files."
 //     confirmLabel="Delete"
 //     destructive
-//     @confirm={ () => { remove(); this.setData({ open: false }); } }
-//     @cancel={ () => this.setData({ open: false }) } />
+//     @hide={ finish } />
 //
-// The `destructive` boolean swaps the confirm button from Button's primary recipe
-// to its destructive recipe. The two footer buttons reuse Button.pzl's exact
-// class strings so the piece matches the rest of the library. No exit animation
-// in v1 (native close is instant) — a subtle scale+fade plays on enter, skipped
-// under prefers-reduced-motion, mirroring Dialog.
+//   // events = {
+//   //   finish: ({ result }) => {
+//   //     this.setData('open', false);
+//   //     if (result === 'confirm') this.deleteProject();
+//   //   },
+//   // };
+//
+// OPEN IS EDGE-TRIGGERED, AND THE DIALOG CLOSES ITSELF. The parent owns `open`,
+// but only a CHANGE to it acts: true → show(), false → hide(). An unrelated
+// re-render never re-opens a prompt the user just answered while the parent's
+// state still says open. Both buttons close through the component and REPORT
+// through @hide; the parent's job is to flip `open` back to false there so the
+// next open is a fresh edge.
+//
+//   @show()                        the entrance settled
+//   @hide({ result, triggerElement })
+//                                  the exit finished. `result` is 'confirm',
+//                                  'cancel', or NULL when Escape closed it.
+//                                  Escape is a dismissal, not an answer, so it
+//                                  reports the same null every other overlay in
+//                                  this family reports — treat anything that is
+//                                  not 'confirm' as a cancel.
+//
+// DELIBERATE DIFFERENCES FROM Dialog
+//   * role="alertdialog" — assertive, and it REQUIRES an accessible name, so
+//     always pass `title` (or wire `labelledby` yourself).
+//   * The backdrop is inert. A click outside is refused and nothing is
+//     reported; the dialog stays open.
+//   * Escape still cancels. Accessibility requires an exit, so — unlike a
+//     Dialog with dismissible={ false } — the key is allowed through.
+//   * No close (X) button, and no size prop: a prompt is narrow.
+//   * Initial focus lands on Cancel, the safe default for a destructive
+//     prompt. showModal() honours the autofocus attribute.
+//
+// TELLING ESCAPE FROM THE BACKDROP. dialog-panel reports neither: both arrive
+// at the cancelable `beforeHide` with a null triggerElement and no reason, so
+// the guard needs to know which one is in flight before it decides. The
+// distinguishing fact is that Escape reaches the <dialog> as a native `cancel`
+// event first, so the piece listens for that in the CAPTURE phase — which runs
+// ahead of dialog-panel's own bubble-phase handler regardless of which listener
+// was registered first, and the panel may well be upgraded before this view
+// even mounts. The flag it raises lives for one macrotask, exactly long enough
+// to cover the synchronous hide() that the same event triggers. A `reason` in
+// the upstream `hidden` detail would retire the whole mechanism.
+//
+// Props
+//   open           bool, edge-triggered as above
+//   title          heading; generates its id and wires aria-labelledby
+//   description    supporting paragraph; generates its id and wires
+//                  aria-describedby
+//   labelledby / describedby
+//                  ids to wire by hand instead
+//   confirmLabel   default 'Continue'
+//   cancelLabel    default 'Cancel'
+//   destructive    swaps the confirm button to the danger recipe
+//   class          merged onto <dialog>
+//   backdropClass  merged onto <dialog-backdrop>, after the piece's overlay
+//
+// LOADING. The package registers its custom elements at module scope with
+// `class extends HTMLElement`, a ReferenceError under Node — so a top-level
+// import would crash the prerender pass of any app on static or hybrid output.
+// The import lives in mounted() instead, which never runs server-side. Markup
+// prerenders correctly either way: an un-upgraded <dialog> is closed, so a
+// closed prompt is invisible before the JS lands, and an `open` that is already
+// true when the view mounts is remembered and applied the moment the module
+// arrives.
+//
+// STYLESHEET. One, and it is not part of the copied file. Add it once to your
+// app's style entry:
+//   @import "@magic-spells/dialog-panel/css" layer(components);
+// The layer is not optional cosmetics: the stylesheet uses plain element
+// selectors, and an unlayered import would outrank every Tailwind utility on
+// the panel. Dialog, Sheet and BottomSheet need the same one import.
+//
+// WHAT DIALOG-PANEL OWNS, AND THIS PIECE MUST NOT SET. The state machine drives
+// the entrance and exit through `opacity`, `transform` and `transition` on the
+// <dialog>, plus `display` / `opacity` / `transition` on <dialog-backdrop>, all
+// keyed off the [state] attribute. Everything else on its base rule — border,
+// padding, width, max-width, max-height, overflow, box-shadow — is a plain
+// default this piece is meant to override.
+//
+// KNOWN GAPS, all upstream:
+//   * A KEYBOARD activation of either button closes the prompt but reports
+//     result null, so a confirm answered with Tab + Enter is indistinguishable
+//     from Escape. A pointerless click carries coordinates of 0,0, which
+//     dialog-panel's outside-click check reads as a backdrop tap before the
+//     delegated handler runs. The piece watches for that click in the capture
+//     phase so the button still CLOSES against the inert backdrop; recovering
+//     the result belongs upstream. Until it lands, do the irreversible work in
+//     a handler that treats a null result as a cancel.
+//   * The `hidden` detail carries no reason, which is why Escape needs the
+//     capture-phase flag described above.
 let uid = 0;
 
-// Panel styling mirrors Dialog's, capped at max-w-md (a prompt is narrow). No
-// bare display utility on the <dialog> — the stacked block content needs none,
-// and a bare `flex` would defeat the UA `dialog:not([open]) { display: none }`
-// rule and render the closed dialog in-flow.
-const PANEL =
-  'm-auto w-[calc(100%-2rem)] max-w-md rounded-xl border border-border bg-surface p-6 ' +
-  'shadow-xl text-body overscroll-contain ' +
-  '[&::backdrop]:bg-black/50 [&::backdrop]:backdrop-blur-sm';
+// The overlay. Same look the rest of the overlay family lands on (Sheet and
+// BottomSheet set the same pair through their components' custom properties).
+const OVERLAY = 'bg-black/50 backdrop-blur-sm';
 
-// Button recipes copied verbatim from Button.pzl so the footer buttons render
+// The panel, capped at max-w-md — a prompt is narrow. `m-auto` is not
+// decoration: a modal <dialog> is centred by the browser through `margin: auto`
+// against four zeroed insets, and Tailwind's preflight resets margin to 0 on
+// every element — so without this the panel pins itself to the top-left corner.
+// `open:flex` rather than a bare `flex`: a display utility that applies while
+// the dialog is closed defeats the UA's `dialog:not([open]) { display: none }`
+// and renders the panel in the page.
+const PANEL =
+  'm-auto max-w-md rounded-xl border border-border bg-surface text-body shadow-xl ' +
+  'overflow-hidden open:flex open:flex-col';
+
+// min-h-0 is what lets a flex child shrink below its content and scroll;
+// overscroll-contain keeps a bottomed-out scroll from chaining to the page.
+const BODY = 'min-h-0 flex-1 overflow-y-auto overscroll-contain p-6';
+
+// Button recipes copied verbatim from Button.pzl so the two buttons render
 // identically to <Button>. BASE + size md, then the per-variant surface.
 const BTN_BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
@@ -87,78 +183,177 @@ const BTN_OUTLINE =
   'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken';
 
 export default class AlertDialog extends PuzzleView {
+  #id = `alert-dialog-${++uid}`;
+  #panel = null;
+  #dialog = null;
+  #live = false;
+  #ready = false;
+  #lastOpen = false;
+  // Three one-macrotask facts the dismiss guard needs and the `beforeHide`
+  // detail cannot supply: the wrapper asked for this close, a close button
+  // asked for it without being able to say so, and Escape asked for it.
+  #selfHiding = false;
+  #buttonHide = false;
+  #escaping = false;
+
+  // dialog-panel's events bubble, so a nested overlay's close would otherwise
+  // reach this panel's listeners too — and be reported as, or refused as, this
+  // dialog's own.
+  #mine(event) {
+    return event.target === this.#panel;
+  }
+
+  #onShown = (event) => {
+    if (!this.#mine(event)) return;
+    this.props.show?.();
+  };
+
+  #onHidden = (event) => {
+    if (!this.#mine(event)) return;
+    const detail = event.detail || {};
+    this.props.hide?.({
+      result: detail.result ?? null,
+      triggerElement: detail.triggerElement ?? null,
+    });
+  };
+
+  // The dismiss policy in one place: a button, the parent, or Escape may close
+  // this prompt. A backdrop click — the one remaining path, which arrives with
+  // no trigger and no escape flag — is refused, and nothing is reported.
+  #onBeforeHide = (event) => {
+    if (!this.#mine(event)) return;
+    if (this.#selfHiding || this.#buttonHide || this.#escaping) return;
+    if (event.detail?.triggerElement) return;
+    event.preventDefault();
+  };
+
+  // Capture phase, on the <dialog> itself: it runs ahead of dialog-panel's own
+  // bubble-phase `cancel` handler, which is what turns Escape into hide().
+  #onCancelCapture = () => {
+    this.#escaping = true;
+    setTimeout(() => {
+      this.#escaping = false;
+    }, 0);
+  };
+
+  // Capture phase, on the root — see KNOWN GAPS. A keyboard-activated button
+  // arrives at (0,0) and is read as a backdrop tap upstream, so this is the
+  // only place the intent is still legible, and without it the inert backdrop
+  // would swallow a keyboard answer entirely.
+  #onClickCapture = (event) => {
+    if (!event.target?.closest?.('[data-action-hide-dialog]')) return;
+    this.#buttonHide = true;
+    setTimeout(() => {
+      this.#buttonHide = false;
+    }, 0);
+  };
+
   data(params, props) {
-    // Stable id generated once per instance so label/description wiring survives
-    // re-renders.
-    const id = (this._id ??= `pp-alertdialog-${++uid}`);
     const title = props.title || '';
     const description = props.description || '';
+
     return {
-      // `open` is read imperatively in syncOpen(), not by the template — returning
-      // it keeps the afterUpdate() cycle firing when the parent flips it.
-      open: !!props.open,
       title,
       description,
-      titleId: `${id}-title`,
-      descId: `${id}-desc`,
-      labelledby: title ? `${id}-title` : false,
-      describedby: description ? `${id}-desc` : false,
-      panelClass: [PANEL, props.class || ''].filter(Boolean).join(' '),
+      titleId: `${this.#id}-title`,
+      descId: `${this.#id}-desc`,
+      labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
+      describedby: props.describedby || (description ? `${this.#id}-desc` : false),
       confirmLabel: props.confirmLabel || 'Continue',
       cancelLabel: props.cancelLabel || 'Cancel',
       cancelClass: [BTN_BASE, BTN_OUTLINE].join(' '),
       confirmClass: [BTN_BASE, props.destructive ? BTN_DESTRUCTIVE : BTN_PRIMARY].join(' '),
+      bodyClass: BODY,
+      backdropClass: [OVERLAY, props.backdropClass].filter(Boolean).join(' '),
+      dialogClass: [PANEL, props.class].filter(Boolean).join(' '),
     };
   }
 
-  // Reconcile the native element with the controlled `open` prop. Idempotent: the
-  // dialog.open guards make repeat afterUpdate() calls safe and stop showModal()
-  // from throwing on an already-open dialog.
-  syncOpen() {
-    const dialog = this.element;
-    if (!dialog) return;
-    const shouldOpen = !!this.props.open;
-    if (shouldOpen && !dialog.open) {
-      dialog.showModal();
-      this.playEnter(dialog);
-    } else if (!shouldOpen && dialog.open) {
-      dialog.close();
-    }
-  }
-
-  playEnter(dialog) {
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    dialog.animate(
-      [
-        { opacity: 0, transform: 'scale(0.96)' },
-        { opacity: 1, transform: 'scale(1)' },
-      ],
-      { duration: 180, easing: 'ease-out' }
-    );
-  }
-
   mounted() {
-    this.syncOpen();
+    // Browser-only by construction — see LOADING above. The guard is belt and
+    // braces for any host that runs lifecycle hooks outside a document.
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#panel = this.refs.panel;
+    this.#dialog = this.refs.dialog;
+    this.#lastOpen = !!this.props.open;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this.#panel?.addEventListener('shown', this.#onShown);
+    this.#panel?.addEventListener('hidden', this.#onHidden);
+    this.#panel?.addEventListener('beforeHide', this.#onBeforeHide);
+    this.#panel?.addEventListener('click', this.#onClickCapture, true);
+    this.#dialog?.addEventListener('cancel', this.#onCancelCapture, true);
+
+    import('@magic-spells/dialog-panel')
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+        // A prompt that mounted already open opens now, at the first moment the
+        // elements can honour it.
+        this.#sync();
+      })
+      .catch((error) => {
+        console.error(
+          '[AlertDialog] failed to load @magic-spells/dialog-panel — the dialog will not open.',
+          error
+        );
+      });
   }
 
   afterUpdate() {
-    this.syncOpen();
+    if (!this.#live) return;
+
+    const open = !!this.props.open;
+    if (open !== this.#lastOpen) {
+      this.#lastOpen = open;
+      this.#sync();
+    }
   }
 
-  events = {
-    // Escape (native `cancel`) and the Cancel button both land here. Always
-    // preventDefault the native cancel so the browser can't close the element
-    // behind the vdom's back, then ask the parent to cancel. a11y requires an
-    // exit, so — unlike a plain non-dismissible dialog — this is never swallowed.
-    handleCancel: (event) => {
-      if (event?.type === 'cancel') event.preventDefault();
-      const { cancel } = this.props;
-      if (typeof cancel === 'function') cancel(event);
-    },
-    handleConfirm: (event) => {
-      const { confirm } = this.props;
-      if (typeof confirm === 'function') confirm(event);
-    },
-  };
+  destroyed() {
+    this.#live = false;
+    this.#panel?.removeEventListener('shown', this.#onShown);
+    this.#panel?.removeEventListener('hidden', this.#onHidden);
+    this.#panel?.removeEventListener('beforeHide', this.#onBeforeHide);
+    this.#panel?.removeEventListener('click', this.#onClickCapture, true);
+    this.#dialog?.removeEventListener('cancel', this.#onCancelCapture, true);
+    // Unbind FIRST: this close is a teardown, not an answer, and must not call
+    // back into a parent that is being torn down with us — and with the guard
+    // gone it cannot be refused either. Everything else — the top-layer dialog,
+    // the page scroll lock — is released by the element's own
+    // disconnectedCallback when Puzzle removes it.
+    if (this.#panel?.isOpen) this.#panel.hide();
+    this.#panel = null;
+    this.#dialog = null;
+  }
+
+  // Edge-triggered, never level-triggered: called only when `open` actually
+  // changed (or when the module finally landed on a prompt that mounted open).
+  // The isOpen guards make a redundant edge — the parent flipping `open` false
+  // inside @hide, for a prompt that already closed itself — a no-op.
+  #sync() {
+    if (!this.#ready || !this.#panel) return;
+    if (this.#lastOpen) {
+      if (!this.#panel.isOpen) this.#panel.show(this.#trigger());
+    } else if (this.#panel.isOpen) {
+      // Flagged so the dismiss guard lets the parent's own close through.
+      this.#selfHiding = true;
+      try {
+        this.#panel.hide();
+      } finally {
+        this.#selfHiding = false;
+      }
+    }
+  }
+
+  // The element show() returns focus to. Whatever the user was on when the
+  // parent opened the prompt is the honest answer, and it keeps focus return
+  // working with no prop to pass.
+  #trigger() {
+    const active = document.activeElement;
+    return active && active !== document.body && active.focus ? active : undefined;
+  }
 }
 </script>

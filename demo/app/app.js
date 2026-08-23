@@ -1,4 +1,5 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
+import { hashRouter } from '@magic-spells/puzzle/router-modes';
 import routes from './routes.js';
 
 // Create and configure the Puzzle app. The v1 config surface is intentionally
@@ -12,7 +13,7 @@ const app = new PuzzleApp({
 
 	// Hash-based routing so the static bundle deep-links correctly from any
 	// host without server rewrites (GitHub Pages serves only real files).
-	routerMode: 'hash',
+	routerMode: hashRouter(),
 
 	// Global formatters available in every template
 	// (display transformation only — logic belongs in data())

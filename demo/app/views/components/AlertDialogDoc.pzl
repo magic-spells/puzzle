@@ -4,23 +4,44 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Alert Dialog</h1>
         <p class="mt-2 text-body">
-          A confirm and cancel modal for consequential actions, on the native
-          alertdialog element. Backdrop clicks do nothing, Escape cancels, and focus
-          starts on Cancel — so the choice is made deliberately, never dismissed by a
-          stray click.
+          A confirm and cancel modal for consequential actions, on the native alertdialog element.
+          The backdrop is inert, there is no close X, and initial focus starts on Cancel — so the
+          choice is made deliberately, never dismissed by a stray click.
+        </p>
+        <p class="mt-3 text-body">
+          This piece is a <strong class="font-medium text-ink">wrapper</strong>, not a port, and a
+          thin variant of <a class="text-brand underline underline-offset-2" href="#/components/dialog">Dialog</a>:
+          the same
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<dialog-panel>' }</code>
+          custom element from
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/dialog-panel</code>,
+          the same edge-triggered open flag, the same close-and-notify contract. What differs is
+          the dismiss policy and the two buttons.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Both buttons close the prompt <strong class="font-medium text-ink">themselves</strong> and
+          report through
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@hide</code>,
+          whose detail carries
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">result</code>:
+          'confirm', 'cancel', or null when Escape closed it. Your job is to flip
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+          back to false there — see <a class="text-brand underline underline-offset-2" href="#usage">Usage</a>.
         </p>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <Button variant="destructive" @press={ openAlert }>Delete project…</Button>
+        <div class="flex flex-col items-center gap-2">
+          <Button variant="destructive" @press={ openAlert }>Delete project…</Button>
+          <span class="text-sm text-muted">last result: { lastResult }</span>
+        </div>
         <AlertDialog
           open={ alertOpen }
           title="Delete project?"
           description="This permanently removes the project and all of its data. This action cannot be undone."
           confirmLabel="Delete"
           destructive
-          @confirm={ confirmAlert }
-          @cancel={ cancelAlert } />
+          @hide={ closeAlert } />
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
@@ -29,6 +50,23 @@
           Copy the piece into your app — it compiles with your build and the code is yours:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Like Dialog, Sheet and Bottom Sheet, this piece has a runtime dependency: the web
+          component it wraps. All four share it, so it is installed once.
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge the component's stylesheet into your app's style entry
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
+          It owns the dialog and overlay transport — the state-driven fade, the backdrop element,
+          and the page scroll lock:
+        </p>
+        <CodeBlock code={ installCss }/>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">layer(components)</code>
+          is not optional cosmetics: the stylesheet uses plain element selectors, and an unlayered
+          import would outrank every Tailwind utility on the panel.
+        </p>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -38,6 +76,18 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+          is <strong class="font-medium text-ink">edge-triggered</strong>: only a change to it acts.
+          An unrelated re-render never re-opens a prompt the user already answered while your state
+          still says it is open.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Coming from the ported piece: @confirm and @cancel are gone, replaced by one @hide whose
+          result is 'confirm', 'cancel' or null. One callback, one place to flip open back to
+          false, and the same contract every other overlay in the library uses. title,
+          description, confirmLabel, cancelLabel and destructive all mean what they did.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
@@ -48,9 +98,89 @@
             title="Publish this post?"
             description="It will be visible to everyone right away. You can unpublish later."
             confirmLabel="Publish"
-            @confirm={ confirmPublish }
-            @cancel={ cancelConfirm } />
+            cancelLabel="Not yet"
+            @hide={ closeConfirm } />
         </ExampleBox>
+
+        <ExampleBox id="dismiss" title="The dismiss policy" code={ codeDismiss }>
+          <div class="flex flex-col items-center gap-2">
+            <Button variant="outline" @press={ openPolicy }>Try to dismiss it</Button>
+            <span class="text-sm text-muted">last result: { policyResult }</span>
+          </div>
+          <AlertDialog
+            open={ policyOpen }
+            title="Discard your draft?"
+            description="Click the backdrop: nothing happens. Press Escape: it closes, and reports null."
+            confirmLabel="Discard"
+            destructive
+            @hide={ closePolicy } />
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Props</h3>
+          <div class="text-sm">
+            {#for row in propRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Callbacks</h3>
+          <div class="text-sm">
+            {#for row in callbackRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Slots</h3>
+          <p class="text-sm text-body">
+            None. A prompt is config-first on purpose: title, description and two labelled buttons
+            are the whole surface. Reach for
+            <a class="text-brand underline underline-offset-2" href="#/components/dialog">Dialog</a>
+            the moment you need markup inside it.
+          </p>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">How the dismiss policy works</h3>
+          <div class="space-y-3 text-sm text-body">
+            <p>
+              dialog-panel reports neither Escape nor a backdrop click: both arrive at its
+              cancelable beforeHide event with nothing attached and no reason. So the piece tells
+              them apart itself. Escape reaches the dialog as a native cancel event first, and the
+              piece listens for that in the capture phase — which runs ahead of the component's own
+              handler regardless of which listener was registered first. A backdrop click raises no
+              such flag and is the one path refused.
+            </p>
+            <p>
+              Everything else goes through: either button, and the parent flipping open back to
+              false. A reason in the component's own hidden detail would retire the mechanism.
+            </p>
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Known gaps</h3>
+          <div class="space-y-3 text-sm text-body">
+            <p>
+              A <strong class="font-medium text-ink">keyboard</strong> activation of either button
+              closes the prompt but reports result: null, so a confirm answered with Tab and Enter
+              is indistinguishable from Escape. A pointerless click carries coordinates of 0,0,
+              which dialog-panel reads as a click outside the panel before the delegated handler
+              runs. The piece already watches for that click so the button still closes against the
+              inert backdrop; recovering the result is pending upstream. Until it lands, write the
+              handler so a null result is treated as a cancel — which is what the examples on this
+              page do.
+            </p>
+            <p>
+              role="alertdialog" requires an accessible name, so always pass title (or wire
+              labelledby yourself). There is no runtime warning if you forget.
+            </p>
+          </div>
+        </section>
       </div>
     </article>
 
@@ -68,73 +198,147 @@ import Toc from '@/components/docs/Toc.pzl';
 import { toast } from '@/components/ui/toast.js';
 
 const installCmd = 'puzzle add piece alert-dialog';
+const installDep = 'npm install @magic-spells/dialog-panel';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dialog-panel/css" layer(components);`;
+
 const usageImport = `import AlertDialog from '@/components/ui/AlertDialog.pzl';`;
-const usageMarkup = `<AlertDialog open={ alertOpen } title="Delete project?" description="This permanently removes the project and all of its data." confirmLabel="Delete" destructive @confirm={ confirmAlert } @cancel={ cancelAlert } />`;
+const usageMarkup = `<AlertDialog
+  open={ open }
+  title="Delete project?"
+  description="This permanently removes the project and all of its data."
+  confirmLabel="Delete"
+  destructive
+  @hide={ finish } />
+
+// events = {
+//   finish: ({ result }) => {
+//     this.setData('open', false);
+//     if (result === 'confirm') this.deleteProject();
+//   },
+// };
+
+// open is EDGE-TRIGGERED: only a change to it acts. Both buttons close the
+// prompt through the component and report through @hide — result is
+// 'confirm', 'cancel', or null when Escape closed it.`;
 
 const codeHero = `<Button variant="destructive" @press={ openAlert }>Delete project…</Button>
+<span class="text-sm text-muted">last result: { lastResult }</span>
+
 <AlertDialog
   open={ alertOpen }
   title="Delete project?"
   description="This permanently removes the project and all of its data."
   confirmLabel="Delete"
   destructive
-  @confirm={ confirmAlert }
-  @cancel={ cancelAlert } />
+  @hide={ closeAlert } />
 
-// parent owns open and flips it false in BOTH confirm and cancel
-events = {
-  openAlert: () => this.setData('alertOpen', true),
-  cancelAlert: () => this.setData('alertOpen', false),
-  confirmAlert: () => {
-    this.setData('alertOpen', false);
-    remove();
-  },
-};`;
+// events = {
+//   openAlert: () => this.setData('alertOpen', true),
+//   closeAlert: ({ result }) => {
+//     this.setData({ alertOpen: false, lastResult: result ?? 'dismissed' });
+//     if (result === 'confirm') this.deleteProject();
+//   },
+// };
+
+// destructive swaps the confirm button to the danger recipe. Initial focus
+// lands on Cancel either way — the safe default for a prompt you cannot undo.`;
 
 const codeConfirm = `<AlertDialog
   open={ confirmOpen }
   title="Publish this post?"
   description="It will be visible to everyone right away."
   confirmLabel="Publish"
-  @confirm={ confirmPublish }
-  @cancel={ cancelConfirm } />
+  cancelLabel="Not yet"
+  @hide={ closeConfirm } />
 
-// no destructive prop → the confirm button uses the primary recipe`;
+// No destructive prop, so the confirm button uses the primary recipe.
+// Both labels are free text; the results they report are always the fixed
+// 'confirm' and 'cancel'.`;
+
+const codeDismiss = `<AlertDialog
+  open={ policyOpen }
+  title="Discard your draft?"
+  description="Click the backdrop: nothing happens. Press Escape: it closes."
+  confirmLabel="Discard"
+  destructive
+  @hide={ closePolicy } />
+
+// The backdrop is inert — the piece cancels the component's beforeHide for
+// that one path, and nothing is reported. Escape is allowed through because
+// accessibility requires an exit, and it reports result: null. Anything that
+// is not 'confirm' is a cancel.`;
 
 export default class AlertDialogDoc extends PuzzleView {
   created() {
-    this.setData({ alertOpen: false, confirmOpen: false });
+    this.setData({
+      alertOpen: false,
+      confirmOpen: false,
+      policyOpen: false,
+      lastResult: '—',
+      policyResult: '—',
+    });
   }
 
   data(params, props) {
     return {
       ...this.getData(),
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
       codeConfirm,
+      codeDismiss,
+      propRows: [
+        { name: 'open', desc: 'Controlled, and EDGE-TRIGGERED: only a change acts. true opens, false closes. An unrelated re-render never re-opens a prompt the user already answered.' },
+        { name: 'title', desc: 'Heading text, with a generated id wired to aria-labelledby. role="alertdialog" REQUIRES an accessible name, so always pass this or labelledby.' },
+        { name: 'description', desc: 'Supporting paragraph, with a generated id wired to aria-describedby.' },
+        { name: 'labelledby', desc: 'Id of the labelling element, to wire by hand instead of using title.' },
+        { name: 'describedby', desc: 'Id of the describing element, to wire by hand instead of using description.' },
+        { name: 'confirmLabel', desc: 'Text on the affirmative button. Default "Continue". The result it reports is always "confirm".' },
+        { name: 'cancelLabel', desc: 'Text on the safe button, which also takes initial focus. Default "Cancel". The result it reports is always "cancel".' },
+        { name: 'destructive', desc: 'Swaps the confirm button from the primary recipe to the danger one. Presentation only — it changes no behaviour.' },
+        { name: 'class', desc: 'Merged onto the dialog element, after the piece\'s own panel classes. The panel is capped at max-w-md; a prompt is narrow.' },
+        { name: 'backdropClass', desc: 'Merged onto the dialog-backdrop element, after the piece\'s overlay classes. The backdrop is still inert.' },
+      ],
+      callbackRows: [
+        { name: '@hide(detail)', desc: 'The prompt closed. detail is { result, triggerElement }: result is "confirm", "cancel", or null when Escape closed it. Flip open back to false here, and treat anything that is not "confirm" as a cancel.' },
+        { name: '@show()', desc: 'The entrance settled and the native dialog is in the top layer, with focus on Cancel.' },
+      ],
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Non-destructive confirm', href: '#non-destructive' },
+        { label: 'Dismiss policy', href: '#dismiss' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
     openAlert: () => this.setData('alertOpen', true),
-    cancelAlert: () => this.setData('alertOpen', false),
-    confirmAlert: () => {
-      this.setData('alertOpen', false);
-      toast({ title: 'Project deleted', message: 'The project and its data were removed.', variant: 'danger' });
+    closeAlert: (detail) => {
+      const result = detail?.result ?? null;
+      this.setData({ alertOpen: false, lastResult: result ?? 'dismissed' });
+      if (result === 'confirm') {
+        toast({
+          title: 'Project deleted',
+          message: 'The project and its data were removed.',
+          variant: 'danger',
+        });
+      }
     },
     openConfirm: () => this.setData('confirmOpen', true),
-    cancelConfirm: () => this.setData('confirmOpen', false),
-    confirmPublish: () => {
+    closeConfirm: (detail) => {
       this.setData('confirmOpen', false);
-      toast({ message: 'Post published.', variant: 'success' });
+      if (detail?.result === 'confirm') toast({ message: 'Post published.', variant: 'success' });
     },
+    openPolicy: () => this.setData('policyOpen', true),
+    closePolicy: (detail) =>
+      this.setData({ policyOpen: false, policyResult: detail?.result ?? 'dismissed' }),
   };
 }
 </script>

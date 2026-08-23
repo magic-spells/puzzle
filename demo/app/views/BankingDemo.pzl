@@ -280,7 +280,7 @@
     open={ transferOpen }
     title="Send money"
     description="Move funds to a saved recipient. This is a demo — nothing is actually sent."
-    @close={ closeTransfer }>
+    @hide={ closeTransfer }>
     <div class="space-y-4">
       <div>
         <p class="mb-1.5 text-sm font-medium text-ink">From account</p>

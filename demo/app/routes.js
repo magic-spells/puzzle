@@ -77,6 +77,7 @@ import RatingDoc from './views/components/RatingDoc.pzl';
 import RichTextDoc from './views/components/RichTextDoc.pzl';
 import RichTextEditorDoc from './views/components/RichTextEditorDoc.pzl';
 import ScrollAreaDoc from './views/components/ScrollAreaDoc.pzl';
+import ScrollStackDoc from './views/components/ScrollStackDoc.pzl';
 import SearchFieldDoc from './views/components/SearchFieldDoc.pzl';
 import SelectDoc from './views/components/SelectDoc.pzl';
 import SeparatorDoc from './views/components/SeparatorDoc.pzl';
@@ -650,6 +651,13 @@ export default [
 		view: ScrollAreaDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Scroll Area — Puzzle Pieces' },
+	},
+	{
+		path: '/components/scroll-stack',
+		name: 'scroll-stack',
+		view: ScrollStackDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Scroll Stack — Puzzle Pieces' },
 	},
 	{
 		path: '/components/search-field',

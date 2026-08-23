@@ -1,6 +1,6 @@
 {
   "name": "@magic-spells/puzzle-pieces",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Copy-in UI component registry for the Puzzle framework. Fetched by `puzzle add piece` — never installed or imported directly.",
   "license": "MIT",
   "type": "module",
@@ -19,8 +19,6 @@
     "test": "node --test test/"
   },
   "devDependencies": {
-    "@magic-spells/physics-engine": "^1.0.0",
-    "@magic-spells/frame-engine": "^1.0.1",
     "marked": "^17.0.1"
   }
 }

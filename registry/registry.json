@@ -46,12 +46,14 @@
     },
     {
       "name": "alert-dialog",
-      "description": "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — no backdrop dismiss, no close X, Escape cancels, initial focus on Cancel",
+      "description": "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — inert backdrop, no close X, Escape cancels, initial focus on Cancel; wraps the @magic-spells/dialog-panel web component rather than porting it",
       "files": [
         "AlertDialog.pzl"
       ],
       "registryDependencies": [],
-      "dependencies": [],
+      "dependencies": [
+        "@magic-spells/dialog-panel"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -122,15 +124,14 @@
     },
     {
       "name": "bottom-sheet",
-      "description": "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, a dismissal-tracking scrim, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state",
+      "description": "Native-dialog bottom sheet dragged, flicked and dismissed with a finger, with optional height snap points that settle on a velocity-aware spring, a pinned footer, inset mode and a dismissal-tracking scrim; wraps the @magic-spells/bottom-sheet web component rather than porting it",
       "files": [
         "BottomSheet.pzl"
       ],
-      "registryDependencies": [
-        "lib/sheet-math.js"
-      ],
+      "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/physics-engine"
+        "@magic-spells/bottom-sheet",
+        "@magic-spells/dialog-panel"
       ],
       "targetDir": "app/components/ui"
     },
@@ -353,13 +354,13 @@
     },
     {
       "name": "dialog",
-      "description": "Modal dialog on the native <dialog> element — focus trapping, escape/backdrop dismiss, title/description ARIA wiring, footer slot",
+      "description": "Centered modal on the native <dialog> element — focus trapping, an Escape/backdrop dismiss policy, title/description ARIA wiring, size caps, an optional close button and header/footer slots; wraps the @magic-spells/dialog-panel web component rather than porting it",
       "files": [
         "Dialog.pzl"
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/morph-engine"
+        "@magic-spells/dialog-panel"
       ],
       "targetDir": "app/components/ui"
     },
@@ -778,6 +779,18 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "scroll-stack",
+      "description": "Natively scrolling list whose items animate at the scrollport edges instead of clipping — sticky stack handoff, vertical or horizontal, scroll snapping, responsive per-view item sizing, and effects driven by a progress custom property; wraps the @magic-spells/scroll-stack web component rather than porting it",
+      "files": [
+        "ScrollStack.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [
+        "@magic-spells/scroll-stack"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "search-field",
       "description": "Search input with a leading magnifier icon and a trailing clear button; submits on Enter",
       "files": [
@@ -811,19 +824,14 @@
     },
     {
       "name": "sheet",
-      "description": "One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, an optional container-transform flight out of the trigger that opened it, entrance and exit effects, a dismiss policy, and parent-controlled open state",
+      "description": "One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, drag and flick gestures, a dismiss policy, entrance and exit effects, and an optional container-transform flight out of the trigger that opened it; wraps the @magic-spells/sheet web component rather than porting it",
       "files": [
         "Sheet.pzl"
       ],
-      "registryDependencies": [
-        "lib/sheet-engine.js",
-        "lib/sheet-policy.js",
-        "lib/sheet-drag.js"
-      ],
+      "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/physics-engine",
-        "@magic-spells/frame-engine",
-        "@magic-spells/morph-engine"
+        "@magic-spells/sheet",
+        "@magic-spells/dialog-panel"
       ],
       "targetDir": "app/components/ui"
     },

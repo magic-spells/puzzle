@@ -66,9 +66,14 @@ Rules that follow from this:
 - `registryDependencies` — other registry files pulled in transitively: `lib/*.js` files go
   to `app/lib/`; sibling pieces (e.g. DatePicker → `calendar`) go to their own targetDir.
 - `dependencies` — **real npm packages, plain JS only.** `.pzl` never ships via npm, so it
-  never appears here. Examples: morph pieces → `@magic-spells/morph-engine`, sheet /
-  bottom-sheet → `@magic-spells/physics-engine`, the rich-text/markdown editors →
-  `@tiptap/*`, `code` → `highlight.js`, `markdown` → `marked`.
+  never appears here. Examples: morph pieces (Select, DatePicker) →
+  `@magic-spells/morph-engine`, `sheet` → `@magic-spells/sheet` +
+  `@magic-spells/dialog-panel` (it wraps the web component; the second is its peer, which
+  yarn 1 will not install on its own), `bottom-sheet` → `@magic-spells/bottom-sheet` + the
+  same `@magic-spells/dialog-panel` peer (also a wrapper), `dialog` and `alert-dialog` →
+  `@magic-spells/dialog-panel` alone (wrappers over it directly — one dialog-panel copy
+  serves all four overlays), the rich-text/markdown editors → `@tiptap/*`, `code` →
+  `highlight.js`, `markdown` → `marked`.
 
 ## Versioning
 
@@ -100,15 +105,13 @@ CLI — it is unrelated and must not be bumped along with the release.
   are taken by sibling projects). Browser-smoke interactive pieces in a FOREGROUNDED tab —
   Puzzle's rAF-based view scheduler stalls re-renders in a hidden/backgrounded tab.
 - **Node tests:** `npm test` at the repo root runs the DOM-free suites in `test/` against
-  `registry/lib/`: the sheet motion libs (engine, math, snap points, drag, scroll policy),
-  the markdown and rich-text document models, an InputOTP suite, and parity suites that
+  `registry/lib/`: the markdown and rich-text document models, an InputOTP suite, static
+  wiring guards for the `sheet` and `bottom-sheet` wrapper pieces, and parity suites that
   assert the demo copies are byte-identical to their `registry/` sources. These are
   repo-internal — nothing under `test/` or the root `package.json` is ever copied to a
-  consumer. The sheet assertions are ported byte-identical from the source
-  `@magic-spells/sheet` repo and pin exact numbers, not bounds; any edit to
-  `registry/lib/sheet-*.js` requires the suite green, and porting upstream changes means
-  copying their new tests with only the import paths adjusted — never loosening an
-  assertion to make a port fit.
+  consumer. Every sheet MOTION suite (engine, drag, snap points, scroll policy, dismissal
+  math) is gone with the two ports — that behavior now lives in `@magic-spells/sheet` and
+  `@magic-spells/bottom-sheet` and is tested there.
 
 ## Piece conventions
 
@@ -116,7 +119,26 @@ CLI — it is unrelated and must not be bumped along with the release.
   `registry/theme/pieces.css` (`bg-surface`, `text-ink`, `border-border`, `bg-brand`,
   `text-danger`, …). **No hex colors** inside components. `pieces.css` is a registry file —
   editing token VALUES there changes every consumer.
-- **No `<style>` blocks. No custom elements / `customElements.define`.** Pieces compile to
+- **Wrap @magic-spells web components directly whenever possible; port only when
+  wrapping genuinely can't work** (rule set 2026-08-19 as "wrap when simple", strengthened
+  2026-08-22 — see `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md`; `scroll-stack`
+  is the exemplar; `sheet` was the first conversion, 2026-08-22). A wrapper piece renders the
+  custom element's markup around `<Slot/>`, binds props to attributes, declares the npm
+  package in `piece.json.dependencies`, and upgrades it via **dynamic import in
+  `mounted()`** — never a top-level import, because the package's `class extends
+  HTMLElement` crashes Node prerendering. The component's stylesheet is imported at the
+  app entry in `layer(components)` (e.g. `@import "@magic-spells/scroll-stack/css"
+  layer(components)`) so utilities on the host still win; document it in the piece's
+  installation section. A package with a peer that ships its own CSS needs BOTH imports,
+  peer first (`sheet` → `@magic-spells/dialog-panel/css` then `@magic-spells/sheet/css`). Why wrap: a port is a fork — every upstream fix has to be
+  re-translated by hand, and the translation is where bugs enter (the 5,600-line sheet
+  port vs its 2,100-line upstream is the cautionary case). Wrapped overlays may manage
+  their own open/close state and report it (`@show` / `@hide({ result })`); the parent
+  re-syncs `open` after the fact. Piece-only extras go upstream first, not into a fork.
+  Port only when the behavior has no web component, or when the piece's value is
+  token-styled form-control markup (Calendar) where a wrapper would cost more than it
+  saves. Ported pieces still follow the rule below.
+- **In ported pieces: no `<style>` blocks, no `customElements.define`.** Ports compile to
   plain semantic HTML with ARIA and Tailwind classes. **The one sanctioned exception is
   `code`** — highlight.js generates its `.hljs-*` class names at RUNTIME and injects them
   with `innerHTML`, so they can never be Tailwind utilities and Tailwind's scan can never
