@@ -15,6 +15,17 @@ connections:
   - DOC-DATASTORE
 verified_at: '2026-08-23T19:55:27.785Z'
 verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+notes:
+  - kind: state
+    text: >-
+      mockResponse() now carries a brand — [Symbol.for('puzzle.response')]: true — that the
+      adapter's isResponse() accepts alongside real Response instances (each module declares the
+      registry symbol independently; /fixtures and /adapter are separately bundled, so a shared
+      import would drag one into the other's graph). This closes the gap where the D158 "return the
+      enhanced fetch's result" idiom worked against real fetch but not under installFixtures():
+      reads threw a misleading shape error, and a mocked non-OK response to a custom delete verb was
+      silently treated as success while the record deleted locally. The stand-in's five-member
+      surface and the no-real-Response rationale are unchanged.
 ---
 
 `store.seed(type, n)` generates believable records from the schema alone, and

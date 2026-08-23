@@ -14,6 +14,17 @@ connections:
   - COMPONENT-STORE
 verified_at: '2026-07-28T22:30:08.394Z'
 verified_sha: f639b5d1aa8f59ffe385936b7e5b5d66b1235da8
+notes:
+  - kind: gotcha
+    text: >-
+      prepareRefresh's #evalScope save/restore assumed one invocation per prepare, but withTracking
+      retries a .then-style (sync-shaped async) run behind an in-flight chain — and the retry
+      started while the ABANDONED first invocation's scope was still installed, captured it as its
+      unwind target, and restored it at the end. A discarded navigation could then leave the
+      destination scope live (view.params read the destination after discard()), and the abandoned
+      invocation's late restore could clobber the retry mid-run. Fixed (Codex review round): the
+      unwind target is captured once per prepare, each invocation installs its own scope copy, and
+      async tails restore only while they still own #evalScope. Commit/discard semantics unchanged.
 ---
 
 # D146 — transactional reused-ancestor refresh (prepare/commit)

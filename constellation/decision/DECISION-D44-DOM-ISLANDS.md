@@ -21,6 +21,14 @@ notes:
       @magic-spells/tarot-puzzle (sibling repo): reactive slot-children slides, no island, tarot's
       MutationObserver consumes the patcher's mutations as its refresh signal. Decision rule +
       shared-subtree conditions: [[DOC-THIRD-PARTY-DOM]].
+  - kind: state
+    text: >-
+      Island-ness joined (tag, key) as node identity in sameNode(): two conditional branches sharing
+      tag+key but disagreeing about `island` now REPLACE rather than patch — in both directions. The
+      parser already rejected dynamic island={expr}, but cross-branch flips were reachable and
+      patched stale carried-forward seed vnodes against DOM the island's owner had rewritten,
+      leaving currentTree pointing at detached nodes permanently. SPEC §17's Identity bullet carries
+      the contract wording.
 ---
 
 # D44 — DOM islands: the `island` attribute (v1.13)

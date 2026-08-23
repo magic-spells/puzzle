@@ -39,6 +39,17 @@ notes:
       itself, so fixture apps fault through the mock at the _network seam rather than being
       untouched.
     sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+  - kind: state
+    text: >-
+      Post-merge hardening (Codex review round): (1) _faultOne now enforces the card's
+      collection-complete ⇒ pure-local rule — it previously checked only nullish id / negative cache
+      / in-flight / verb, so a missing id on a complete type still queued a detail GET. (2) The "per
+      evaluation, never Store-global" request-map rule survives .then-style data(): a plain function
+      returning a Promise runs once inline before the store can know its shape, and that abandoned
+      first invocation's post-await finds recorded into whichever eval held _requests. Mitigated
+      with a sticky per-view `_dataAsyncShape` flag (underscore-public — the settle loop installed
+      by the adapter capability ORs it into its per-pass expectsAsync hint) plus a dev-only
+      warn-once steering to `async data()`.
 verified_at: '2026-08-23T19:12:34.759Z'
 verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
 ---

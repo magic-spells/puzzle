@@ -31,6 +31,17 @@ notes:
       position blanked here is unrecoverable without visiting another route — which is why the rule
       is invariant, not best-effort. Consequence for the single-flight latch: it must re-arm when
       the rebuild ends with the SAME face still mounted, or a blocked retry latches the button dead.
+  - kind: state
+    text: >-
+      Two alignments (Codex review round). (1) Retry: the component path vacates on dispatch and
+      relies on the owner's re-render — when the owner's refresh() itself rejected, the position
+      stayed a bare placeholder, violating "a retry never blanks its position". It now refills with
+      a face carrying the new error and a fresh callback (the routed load-failure swap, reused via
+      __retryErrorView), reporting once as phase 'refresh' attributed to the owner. (2) Phase
+      vocabulary: runtime emits twelve phases; 'unmount' was missing from the public PuzzleErrorInfo
+      union and 'render' from the SPEC list — both aligned, and the full list is pinned in
+      tests-types so a new emission site fails test:types without its union member. SPEC §60 carries
+      both amendments.
 ---
 
 # D145 — app-level `onError` + the app error view (`errorView`)

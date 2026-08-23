@@ -91,6 +91,7 @@ export default class MyComponent extends PuzzleView { ... }
 
 ## 4. `<script>` blocks are real JavaScript
 
+
 This is the most consequential rule in the spec. The contents of `<script>` must parse as standard JavaScript — no custom dialect. The compiler extracts the block and hands it to esbuild **untouched**; the Go compiler never parses JS. Editors, ESLint, Prettier, and TypeScript work with zero special tooling. (TypeScript shipped in v1.22 via `<script lang="ts">`, transpile-only — the Go compiler still treats the body as an opaque string; see §25.)
 
 Concretely, compared to older examples:
@@ -143,7 +144,7 @@ export default class TodoHome extends PuzzleView {
 
 | Member       | Kind                      | Notes |
 | ------------ | ------------------------- | ----- |
-| `data(params, props)` | method (may be `async`) | Returns the component model. Re-runs on mount, prop change, route-param change, and subscribed store changes. `setData()` does **not** re-trigger it. **Two-layer state (§35):** each successful `data()` result **replaces** the model layer wholesale — a key an earlier run returned but the new run omits disappears from `getData()` (unless `setData` wrote it). `setData` writes a separate persistent local layer: a `data()` commit wins over an *earlier* `setData` for the same key; a *later* `setData` wins until the next commit; local keys the model never returns survive every re-run. |
+| `data(params, props)` | method (may be `async`) | Returns the component model. Re-runs on mount, prop change, route-param change, and subscribed store changes. `setData()` does **not** re-trigger it. **Two-layer state (§35):** each successful `data()` result **replaces** the model layer wholesale — a key an earlier run returned but the new run omits disappears from `getData()` (unless `setData` wrote it). A successful **non-object** result (`undefined`, `null`, a primitive) contributes no model: the previous model layer stands while the run still counts as a successful load (`loaded` flips and the view re-renders) — so an early-return `data()` keeps its last committed model rather than blanking the view. `setData` writes a separate persistent local layer: a `data()` commit wins over an *earlier* `setData` for the same key; a *later* `setData` wins until the next commit; local keys the model never returns survive every re-run. |
 | `events`     | class field (object of arrows) | Template-facing handlers. Arrows only. |
 | `created` / `mounted` / `beforeUpdate` / `afterUpdate` / `destroyed` | methods | Lifecycle hooks, in that order. |
 | `animations` | class field | Declarative enter/leave animations (v1.1) — see §12. |

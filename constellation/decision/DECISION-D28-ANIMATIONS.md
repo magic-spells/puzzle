@@ -26,6 +26,15 @@ notes:
       check #leaving alongside #destroyed, and the same guard now protects the visible-trigger
       reveal path. Any future "cancel the current animation" change must audit who is awaiting that
       handle's finished.
+  - kind: state
+    text: >-
+      The component-removal path (viewManager unmount) now honors the zero-duration hook rule: a
+      child that OVERRIDES viewWillHide/viewDidHide routes through destroyAnimated() even with no
+      animations.out (detected via PuzzleView's __hasHideHooks getter — a base-prototype comparison,
+      since viewManager can't see the base class). Previously only animations.out took that path, so
+      hook-only components skipped both hide hooks on removal. Components declaring neither hooks
+      nor animations keep the synchronous instant destroy() — teardown timing changes only for the
+      hook-declaring case, whose element now lingers a microtask.
 ---
 
 # D28 — View & component animations: no-wrapper WAAPI, sequential transitions, fill-release

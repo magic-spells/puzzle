@@ -101,6 +101,7 @@ Deferred: `$emit`/event bus. (Named slots shipped in v1.21 — D53, §24; `<puzz
 
 ## 17. DOM islands (v1.13)
 
+
 The declarative "this subtree's DOM is owned by someone else" primitive. Shipped in v1.13 (D44); an additive template-grammar + runtime amendment. The motivating cases are always-on `contenteditable` surfaces (the Grimoire example's Notion-style block editor) and third-party DOM mounts (maps, charts, canvas wrappers) — anywhere the virtual DOM must stop asserting ownership below a boundary element.
 
 ```html
@@ -113,7 +114,7 @@ The declarative "this subtree's DOM is owned by someone else" primitive. Shipped
 
 - **Mount:** the island's template children render normally — they are the **seed content**, and the full template grammar (§6) is available in them.
 - **Patch:** the element's own **attributes and listeners patch normally** (dynamic `class=`, `@event` handler swaps). Its **children are never reconciled** — the patcher carries the previously mounted child vnodes forward and leaves the child DOM untouched, no matter what the browser (or third-party code) has done to it.
-- **Identity:** keyed islands move with their DOM subtree intact. A **tag or key change replaces the node and re-seeds from the template** — changing the key is the sanctioned "reset this island" lever.
+- **Identity:** keyed islands move with their DOM subtree intact. A **tag or key change replaces the node and re-seeds from the template** — changing the key is the sanctioned "reset this island" lever. **Island-ness is part of node identity too:** two conditional branches sharing a tag and key but disagreeing about `island` describe different ownership, so switching branches **replaces** the element in both directions — island→managed remounts a fresh framework-owned subtree, managed→island re-seeds and freezes. Ownership is never handed across a patch (the carried-forward vnodes of an island describe DOM its owner may have rewritten, so patching the flip would diff against a lie).
 - **The attribute never reaches the DOM** — `island` is a framework directive, stripped like `key`. Style hooks belong to the author's own classes.
 
 **Compile errors (not warnings):** a dynamic value (`island={ expr }` — island-ness cannot toggle mid-life); `island` on a component tag (it is not a prop); a component tag or any composition marker (`<Children/>`/`<Slot/>`/`<Slot name="…"/>`) anywhere inside an island subtree (a live instance inside browser-owned DOM can be destroyed out from under the framework); `island` on the `<puzzle-view>` root (the view root is the navigation/animation boundary, D20/D28).

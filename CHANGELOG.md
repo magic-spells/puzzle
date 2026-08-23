@@ -138,6 +138,81 @@ one is *not* a compile error; it silently builds a different product.
   installing globally behind your back. The success line names the scope —
   `upgraded the global CLI …` or `upgraded @magic-spells/puzzle … in <dir>`.
 
+- **Tracked `findOne` honors collection completeness (D161).** After a
+  successful no-options collection load, a tracked `findOne` for an id the
+  collection did not contain is a local `null` — no detail GET. Previously it
+  still queued one, so a stale link's 500 could turn a locally known absence
+  into a failed navigation. `findMany` already behaved this way; explicit
+  `store.loadOne` remains the force-refresh escape hatch.
+
+- **Fixture mock responses normalize like real ones (D158/D95).** Under
+  `installFixtures()`, a custom verb that returns the enhanced fetch's result —
+  the documented `loadMany: (fetch) => fetch('/v2/posts')` idiom — now parses
+  exactly as it does against a live server, and a mocked non-OK response
+  **rejects** a custom `delete` instead of being silently treated as success
+  (a test could previously pass against a failing delete). The mock's
+  Response-shaped stand-in carries an internal brand the adapter recognizes
+  alongside real `Response` instances. Also new, dev-only: declaring a model
+  field named `__synced` throws at Store construction — persistence writes its
+  provenance marker under that key, so such a field silently vanished on every
+  reload.
+
+- **A first render that throws mid-mount releases everything it built.** The
+  first-mount branch now gets the same bracketing a failed patch has had since
+  D145: components the mount had already instantiated lose their store
+  subscriptions, document-level `@event:outside` listeners, element refs, and
+  `<Portal>` outlet content, instead of leaking them forever with no DOM to
+  reach them through. `vnode.el` is also published before attrs, refs, and
+  child mounts, so the cleanup walk can reach listeners an element installed
+  before a later sibling threw.
+
+- **`date(null)` and `timeago(null)` render empty.** `new Date(null)` coerces
+  to the epoch, so they rendered "12/31/1969" and "56 years ago". null,
+  undefined, `''`, and booleans all take the absent path now; numeric `0`
+  stays a legitimate epoch timestamp.
+
+- **Path routing populates `route.hash` (D83).** Path-mode navigation dropped
+  `location.hash` from the route snapshot on the initial navigation and every
+  popstate, and a same-path navigation to a byte-identical URL pushed a
+  duplicate history entry. Both now match hash routing's behavior.
+
+- **A component retry can no longer blank its position (D145).** Pressing the
+  error view's `retry` when the owner's own `data()` also fails — the ordinary
+  outcome of retrying while the server is still down — used to leave the child
+  position empty. The position is now refilled with a face carrying the new
+  error and a fresh callback, the same swap a routed load failure performs.
+
+- **`viewWillHide()`/`viewDidHide()` fire on animation-less component removal
+  (D28).** The hooks are lifecycle, not animation callbacks — declared without
+  an `animations.out`, they now fire in order with zero-duration semantics when
+  a parent unmounts the component, as the router teardown always did.
+  Components declaring neither hooks nor animations keep the synchronous,
+  instant destroy.
+
+- **Changing `island` across conditional branches replaces the element (D44).**
+  Two branches sharing a tag and key but disagreeing about `island` describe
+  different ownership, not one subtree to patch: flipping used to diff stale
+  seed vnodes against DOM the island's owner had rewritten, permanently
+  corrupting the tree. Ownership is now part of node identity, so the flip
+  unmounts and remounts cleanly in both directions.
+
+- **The public error-phase union matches the runtime (D145).** `PuzzleErrorInfo`
+  gains the emitted `'unmount'` phase (a throwing `destroyed()` hook), and the
+  full twelve-phase list is now pinned in the type tests so a new runtime phase
+  cannot ship without its union member.
+
+- **A `.then`-style `data()` can no longer contaminate a concurrent
+  evaluation (D161).** A plain (non-`async`) `data()` returning a Promise runs
+  once inline before the store can know it is async; overlapping an in-flight
+  async evaluation, its abandoned first invocation could record store reads
+  into the *other* view's request batch, and a prepared route refresh it
+  overlapped could commit — or, after a discarded navigation, leak — the wrong
+  `params`. The view now latches the shape on first sight and every later
+  evaluation serializes like a declared-`async` one; prepared refreshes guard
+  their scope by identity; and development warns once per class: declare
+  `data()` as `async`. The residual window is one evaluation per view per
+  session, and only for `.then`-style `data()`.
+
 ### Changed
 
 - **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing
@@ -177,8 +252,11 @@ one is *not* a compile error; it silently builds a different product.
 
   A miss faults only when D158 dispatch resolves a read verb — model function,
   app default, or endpoint-generated REST — so `findOne` needs a `loadOne` and
-  `findMany` needs a `loadMany`. Fixture-driven and local-first apps are
-  untouched: no capability, no endpoint, no verb, no request. Relationships
+  `findMany` needs a `loadMany`. Local-first apps are untouched: no capability,
+  no endpoint, no verb, no request. Fixture-driven apps fault exactly like
+  production — the mock intercepts at the `_network` seam, so a tracked miss is
+  served from the mock collection and a mock 404 exercises the negative cache
+  for real. Relationships
   deliberately never fault (a 50-row list must not become 50 GETs); when a view
   needs a related record that may be missing, it adds one more tracked find on
   the foreign key, and `post.author` then resolves off the warm store.
