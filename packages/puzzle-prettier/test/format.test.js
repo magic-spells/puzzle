@@ -126,6 +126,105 @@ describe('paired composition markers (D141)', () => {
 	});
 });
 
+describe('{#raw} blocks (D150)', () => {
+	// The splitter is byte-naive about a raw BODY (sections.go has no {#raw} case
+	// either), but the `raw` closer keyword is load-bearing in lex.js: without it
+	// the '/' in {/raw} reads as a regex opener and scanBraceGroup runs away past
+	// the section's real close tag.
+	it('preserves every raw span byte-for-byte and still formats script + style', async () => {
+		const input = read('raw-block.pzl');
+		const out = await format(input);
+		const a = sectionMap(input);
+		const b = sectionMap(out);
+		expect(b['puzzle-view'].inner).toBe(a['puzzle-view'].inner);
+		expect(b['puzzle-view'].openTag).toBe(a['puzzle-view'].openTag);
+		expect(Object.keys(b).sort()).toEqual(['puzzle-view', 'script', 'style']);
+		// the canonical lexer cases survive verbatim, indentation and all
+		expect(out).toContain('{#raw}{ "loop": true, "slides": [1, 2], "url": "/api/x" }{/raw}');
+		expect(out).toContain('{#raw}{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}{/raw}');
+		expect(out).toContain('{#raw json}{ x }{/raw }{ y }');
+		expect(out).toContain('{#raw}outer {#raw} inner{/raw} tail');
+		expect(out).toContain('{#raw}<b data-json={ {"x": 1} }>hi { name }</b>{/ raw }');
+		// the surrounding sections DID get reformatted, proving the boundaries landed
+		expect(out).toContain('return { y: closerish.source };');
+		expect(out).toContain('.carousel {\n  color: red;\n}');
+	});
+
+	it('resumes normal handling after the closer (opener suffix ignored)', async () => {
+		const src = '<puzzle-view><p>{#raw json}{ x }{/raw }{ y }</p></puzzle-view>\n';
+		const out = await format(src);
+		expect(out).toBe(src);
+	});
+
+	it('does not nest — the first closer wins', async () => {
+		const src = '<puzzle-view><em>{#raw}outer {#raw} inner{/raw} tail</em></puzzle-view>\n';
+		const out = await format(src);
+		expect(out).toBe(src);
+	});
+
+	it('tolerates whitespace in the closer ({/raw}, {/ raw }, {/raw })', async () => {
+		for (const closer of ['{/raw}', '{/ raw }', '{/raw }', '{/  raw  }']) {
+			const src = `<puzzle-view><div>{#raw}a${closer}b</div></puzzle-view>\n`;
+			expect(await format(src), closer).toBe(src);
+		}
+	});
+
+	it('keeps a brace-heavy JSON body inert, including a {/raw} inside a string', async () => {
+		// The body scan is deliberately byte-naive: a {/raw} written inside a JSON
+		// string DOES close the block, exactly as scanBlockRaw does it.
+		const src =
+			'<puzzle-view>\n' +
+			'\t<pre>{#raw}{ "a": { "b": [1, 2] }, "c": "}{", "d": "/x/y" }{/raw}</pre>\n' +
+			'</puzzle-view>\n';
+		const out = await format(src);
+		expect(out).toBe(src);
+	});
+
+	it('finds the section close after {/raw} even with a self-closing tag and a regex in <script>', async () => {
+		// Regression: with `raw` missing from BLOCK_CLOSE_KEYWORDS the '/' in {/raw}
+		// opened a regex that paired off against the '/' in <br/>, then a second
+		// regex swallowed </puzzle-view> and closed on the '}' inside /}/ — the
+		// splitter reported "missing </puzzle-view>".
+		const src =
+			'<puzzle-view>{#raw}x{/raw}<br/></puzzle-view>\n<script>\nconst re = /}/;\n</script>\n';
+		const out = await format(src);
+		const b = sectionMap(out);
+		expect(Object.keys(b).sort()).toEqual(['puzzle-view', 'script']);
+		expect(b['puzzle-view'].inner).toBe('{#raw}x{/raw}<br/>');
+	});
+
+	it('finds the section close after {/raw} with a stray brace in <style>', async () => {
+		const src = '<puzzle-view>{#raw}x{/raw}</puzzle-view>\n<style>\na{color:red}\n</style>\n';
+		const b = sectionMap(src);
+		expect(b['puzzle-view'].inner).toBe('{#raw}x{/raw}');
+	});
+});
+
+describe('lexer table parity with the compiler', () => {
+	it('treats ++ / -- as update operators, not a cleared regex context', async () => {
+		// LexSkip consumes both bytes of ++/--; in `a+++/re/` the third '+' clears
+		// the state so the '/' opens a regex. Getting this wrong mis-pairs the
+		// slashes and derails the rest of the brace group.
+		const src = '<puzzle-view><b>{ a+++/}/.source }</b></puzzle-view>\n';
+		const out = await format(src);
+		expect(out).toBe(src);
+	});
+
+	it('steers a plural <scripts>/<styles> section to the singular name', async () => {
+		await expect(
+			format('<puzzle-view><a/></puzzle-view>\n<scripts>\n1\n</scripts>\n'),
+		).rejects.toThrow(/<scripts> should be named <script>/);
+		await expect(
+			format('<puzzle-view><a/></puzzle-view>\n<styles>\na{}\n</styles>\n'),
+		).rejects.toThrow(/<styles> should be named <style>/);
+	});
+
+	it('skips a leading UTF-8 BOM instead of reporting it as stray content', async () => {
+		const out = await format('﻿<puzzle-view><div>x</div></puzzle-view>\n');
+		expect(out).toBe('﻿<puzzle-view><div>x</div></puzzle-view>\n');
+	});
+});
+
 describe('options passthrough', () => {
 	it('respects singleQuote for the embedded JS', async () => {
 		const out = await format(read('ts-scripts.pzl'), { singleQuote: true });

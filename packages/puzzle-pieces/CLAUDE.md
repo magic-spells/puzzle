@@ -103,10 +103,11 @@ CLI — it is unrelated and must not be bumped along with the release.
 
 ## Verification workflow
 
-- **Compile-verify:** `cd demo && npm run build` (runs the in-repo CLI via `go run`; the
-  compiler's in-repo walk resolves `@magic-spells/puzzle` to the monorepo working tree,
-  and the demo's `file:../../puzzle` link covers editor/TS resolution). Every non-trivial
-  change must compile clean before it's done.
+- **Compile-verify:** `cd demo && npm run build` (runs the monorepo compiler binary
+  `../../puzzle/puzzle` — build it once with `npm run build:compiler` at the repo root.
+  `go run` does not work here: the demo sits outside the Go module. The demo's
+  `file:../../puzzle` link covers editor/TS resolution). Every non-trivial change must
+  compile clean before it's done.
 - **Dev server:** `cd demo && npm run dev` on **port 3070** (3000 and several other ports
   are taken by sibling projects). Browser-smoke interactive pieces in a FOREGROUNDED tab —
   Puzzle's rAF-based view scheduler stalls re-renders in a hidden/backgrounded tab.

@@ -5,8 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "go run ../../puzzle/compiler/cmd/puzzle dev --port 3070",
-    "build": "go run ../../puzzle/compiler/cmd/puzzle build"
+    "dev": "../../puzzle/puzzle dev --port 3070",
+    "build": "../../puzzle/puzzle build"
   },
   "dependencies": {
     "@magic-spells/bottom-sheet": "^2.0.2",

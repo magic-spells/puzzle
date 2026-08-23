@@ -74,8 +74,10 @@ every package in the train carries the framework's version:
   release-prep-asserted; their first npm publish is a separate decision.
 
 The pieces demo's framework dep is `file:../../puzzle` and its scripts run
-the in-repo CLI via `go run` — no published-version range exists inside the
-train, so there is no release-window state where `npm ci` cannot resolve.
+the monorepo compiler binary (`../../puzzle/puzzle` — `go run` needs module
+context, and the demo sits outside the Go module). No published-version range
+exists inside the train, so there is no release-window state where `npm ci`
+cannot resolve.
 
 **What stays out.** The three editor grammars (puzzle-vscode / puzzle-sublime
 / puzzle-zed) stay in separate repos: their distribution channels are

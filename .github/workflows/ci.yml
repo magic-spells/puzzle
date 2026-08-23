@@ -112,6 +112,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 25
+      - run: npm run build:compiler
+        working-directory: packages/puzzle
       - name: Registry lib tests
         working-directory: packages/puzzle-pieces
         run: |
