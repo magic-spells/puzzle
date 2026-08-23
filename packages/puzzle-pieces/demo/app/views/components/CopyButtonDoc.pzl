@@ -104,7 +104,7 @@ const installCmd = 'puzzle add piece copy-button';
 const usageImport = `import CopyButton from '@/components/ui/CopyButton.pzl';`;
 const usageMarkup = `<CopyButton value={ apiKey } @copy={ onCopied }/>`;
 
-const apiKey = 'sk_live_51H8x2KJvR9pT4mQdZfL7bN0';
+const apiKey = 'api_key_51H8x2KJvR9pT4mQdZfL7bN0';
 const shareUrl = 'https://puzzle-pieces.dev/components/copy-button';
 const installSnippet = 'npm install @magic-spells/puzzle';
 
