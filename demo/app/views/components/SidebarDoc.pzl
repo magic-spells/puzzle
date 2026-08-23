@@ -135,9 +135,22 @@
             + aria-hidden, so its links leave the tab order and the accessibility tree.
           </li>
           <li>
-            In the collapsed rail every icon link keeps a <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">title</code>
-            tooltip and an <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">sr-only</code>
-            label — no Tooltip dependency — so screen readers still read each destination.
+            In the collapsed rail, labels stay mounted and fade to
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">opacity-0</code>
+            rather than becoming screen-reader-only; each icon link or button keeps a
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">title</code>
+            for its sighted tooltip while the mounted label remains its accessible name.
+          </li>
+          <li>
+            Group headings stay in the accessibility tree when collapsed: their animated grid
+            track loses height, but the heading itself remains present.
+          </li>
+          <li>
+            A collapsed parent trigger carries
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-haspopup</code>
+            and swaps <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-controls</code>
+            from the inline region to the flyout panel. The panel is labelled by the trigger,
+            and Escape dismisses it and refocuses the button.
           </li>
           <li>
             Every link and button shows a visible focus ring (unconditional outline color, revealed
@@ -230,9 +243,11 @@ const codeCollapsed = `// collapsed is OPTIONAL-CONTROLLED: pass it and the pare
 
 events = { setCollapsed: (next) => this.setData('collapsed', next) };
 
-// Collapsed = an icon-only w-16 rail. Labels/badges/group headers hide,
-// each link keeps a title tooltip + sr-only label. v1 simplification:
-// a collapsed parent links to its first child instead of expanding.`;
+// Collapsed = an icon-only w-[3.75rem] rail. Icons never move: rows keep px-3
+// in both states and the rail is exactly 2× the icon's center offset. Labels
+// and badges fade and clip; group headers fade out and collapse to zero height.
+// A parent with children pops its submenu out to the right; Escape, an outside
+// click, or a scroll dismisses it.`;
 
 const codeSubmenus = `// An item with a children array renders a disclosure button + an
 // animated collapse region (inert + aria-hidden when closed). The
