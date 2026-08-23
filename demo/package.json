@@ -15,7 +15,7 @@
     "@magic-spells/morph-engine": "^0.1.2",
     "@magic-spells/physics-engine": "^1.0.1",
     "@magic-spells/puzzle": "^0.6.0",
-    "@magic-spells/scroll-stack": "file:../../scroll-stack",
+    "@magic-spells/scroll-stack": "^0.1.0",
     "@magic-spells/sheet": "^0.1.1",
     "@tiptap/core": "3.30.0",
     "@tiptap/extension-list": "3.30.0",
