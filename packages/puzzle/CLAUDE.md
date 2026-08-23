@@ -154,7 +154,7 @@ enforced, not merely advised.
   `0.6.0` is live on npm (`latest`) — the version-locked pieces resolution is
   verified end-to-end. Note `PUZZLE_PIECES_REGISTRY` is set in Cory's shell
   profile pointing at the pieces registry — now
-  `packages/puzzle-pieces/registry` in this repo; unset it when smoke-testing
+  `packages/puzzle-pieces/registry` in this monorepo; unset it when smoke-testing
   the npm transport.
 - Product line: v1 through v1.75 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
@@ -182,7 +182,7 @@ enforced, not merely advised.
 - Releases are published by hand: bump every version stamp `release:prep`
   asserts — package.json, the four platform manifests, version.go, the
   `FRAMEWORK_VERSION` literal in `client-runtime/devtools.js` (it ships in the
-  runtime), and the `packages/` train: pieces (package.json,
+  runtime), and the sibling-package train: pieces (package.json,
   demo/package.json, the demo header badge in
   `demo/app/layouts/Default.pzl`) and devtools (package.json,
   panel/package.json, extension/manifest.json). The repo manifest must **not** declare
@@ -218,11 +218,11 @@ enforced, not merely advised.
   own `"version"` field alone; that is the scaffolded app's starting version.
 - Since 0.6.0 the pieces registry is version-locked: `puzzle add piece`
   resolves `@magic-spells/puzzle-pieces` to the CLI's major.minor. Publish the
-  matching pieces release (from `packages/puzzle-pieces` — the `release:prep`
+  matching pieces release (from `../puzzle-pieces` — the `release:prep`
   summary prints it in order) at or before the CLI release, or zero-config
   `add piece` falls back to an older minor — or hard-fails when none exists.
   The devtools zip (`npm run build:compiler`, then `build:zip` in
-  `packages/puzzle-devtools`) is separate and unhurried.
+  `../puzzle-devtools`) is separate and unhurried.
 - Sweep the release-facing prose no script checks: CHANGELOG completeness for
   the version being shipped and `DOC-RELEASE-SURFACE.md`. The README size
   banner IS scripted now — `release:prep` runs
@@ -232,25 +232,31 @@ enforced, not merely advised.
 
 ## Monorepo layout (D162)
 
-The framework lives at the repo root; `packages/` holds the satellites that
-version in lockstep with it, each imported with full git history:
+This package IS the framework, and it lives at `packages/puzzle` inside the
+`magic-spells/puzzle` monorepo — the repo root is a private shell
+(`@magic-spells/puzzle-monorepo`) whose scripts delegate here. Everything
+that versions in lockstep with the framework is a sibling under `packages/`:
 
-- `packages/puzzle-pieces` — the `@magic-spells/puzzle-pieces` npm transport
-  (registry + demo + its own constellation root). Version must equal the root
-  version exactly (the D32 major.minor lock); `release:prep` asserts it and
+- `../puzzle-pieces` — the `@magic-spells/puzzle-pieces` npm transport
+  (registry + demo + its own constellation root). Version must equal this
+  package's exactly (the D32 major.minor lock); `release:prep` asserts it and
   prints the pieces publish in the release order.
-- `packages/puzzle-devtools` — the Chrome DevTools extension (D100).
-  `private: true`; its `@magic-spells/puzzle` dep is `file:../..`, so its
+- `../puzzle-devtools` — the Chrome DevTools extension (D100).
+  `private: true`; its `@magic-spells/puzzle` dep is `file:../puzzle`, so its
   vitest suite always runs against the working tree, and CI runs it on every
   push — a framework breaking change fails the build the day it lands.
+- `../puzzle-eslint` / `../puzzle-prettier` — the .pzl lint/format plugins.
+  Both vendor JS ports of this compiler's section splitter/lexer
+  (`compiler/internal/parser`), so grammar changes must land there too — CI
+  runs their suites on every push. Train-versioned, not yet published.
 
 Each package keeps its own npm install and lockfile — there are deliberately
-no npm workspaces at the root (the root manifest is the published package).
-The editor grammars (puzzle-vscode/sublime/zed) stay in separate repos —
-their distribution channels are repo-shaped — so when the template grammar
-changes, sweep them as part of the release checklist. The absorbed
-puzzle-pieces and puzzle-devtools repos are archived on GitHub, never
-deleted.
+no npm workspaces (editing any package's dependencies means regenerating its
+lockfile, or `npm ci` hard-fails). The editor grammars
+(puzzle-vscode/sublime/zed) stay in separate repos — their distribution
+channels are repo-shaped — so when the template grammar changes, sweep them
+as part of the release checklist. The absorbed puzzle-pieces and
+puzzle-devtools repos are archived on GitHub, never deleted.
 
 ## Architecture at a glance
 

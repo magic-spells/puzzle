@@ -338,6 +338,15 @@ one is *not* a compile error; it silently builds a different product.
   404 })`. Returning `null` remains a response-shape error, not an alternate
   not-found convention.
 
+- **The framework develops in a monorepo (D162).** `@magic-spells/puzzle`,
+  `@magic-spells/puzzle-pieces`, the DevTools extension, and the `.pzl`
+  lint/format plugins now live in one repository — `magic-spells/puzzle`,
+  under `packages/` — and version as one release train. Nothing about the
+  published package changes: same name, same exports, same tarball layout.
+  The npm `repository` metadata now points into `packages/puzzle`, and a
+  pieces release can no longer lag the CLI it is version-locked to — the
+  release pipeline asserts the whole train.
+
 ### Added
 
 - **`output: 'static'` pages carry the build's read state (D161).** Each

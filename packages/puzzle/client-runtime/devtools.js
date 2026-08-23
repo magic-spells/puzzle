@@ -53,7 +53,7 @@ const PROTOCOL_VERSION = 1;
 // literal — BUMP IT WITH package.json AT EVERY RELEASE (D100). `release:prep`
 // asserts this matches package.json, because the instruction above was not
 // enough on its own: it silently stayed at 0.3.0 through the 0.3.1 bump.
-const FRAMEWORK_VERSION = '0.6.0';
+const FRAMEWORK_VERSION = '0.7.0';
 
 // The global the extension installs its hook on. Referenced ONLY from DEV-gated
 // code, so production DCE drops the usages and then this const — which is what

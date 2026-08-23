@@ -2,4 +2,4 @@ package version
 
 // Version is stamped at release time via -ldflags "-X ...". Defaults to the
 // package.json version.
-var Version = "0.6.0"
+var Version = "0.7.0"
