@@ -187,4 +187,136 @@ describe('splitSections — structural errors with positions', () => {
 		const { errors } = splitSections(src, 'x.pzl');
 		expect(errors).toEqual([]);
 	});
+
+	it('<scripts>/<styles> get the singular-name steering error', () => {
+		// Mirrors misnamedSectionTagAt in sections.go: the plural spellings are the
+		// common mistake and earn a specific message, not the generic stray one.
+		const bad = splitSections('<puzzle-view><a/></puzzle-view>\n<scripts>\nconst a = 1;\n</scripts>\n', 'x.pzl');
+		expect(bad.errors[0].message).toBe('<scripts> should be named <script>');
+		expect(bad.errors[0]).toMatchObject({ line: 2, column: 1 });
+
+		const bad2 = splitSections('<puzzle-view><a/></puzzle-view>\n<styles>.a{}</styles>\n', 'x.pzl');
+		expect(bad2.errors[0].message).toBe('<styles> should be named <style>');
+
+		// A boundary is required, so similarly prefixed markup is still ordinary
+		// stray content rather than a misnamed section.
+		const other = splitSections('<puzzle-view><a/></puzzle-view>\n<scriptsomething/>\n', 'x.pzl');
+		expect(other.errors[0].message).toContain('unexpected content outside a section');
+	});
+
+	it('a leading BOM is an encoding marker, not stray content', () => {
+		const src = '\uFEFF<puzzle-view><a/></puzzle-view>\n<script>const a = 1;</script>\n';
+		const { sections, errors } = splitSections(src, 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.scripts.content).toBe('const a = 1;');
+		// The BOM stays in src, so offsets still index the real file.
+		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe('const a = 1;');
+	});
+});
+
+// Update operators are their own LexSkip case in lexskip.go: they preserve the
+// incoming prevEndsExpr so a following '/' stays division. Without that case a
+// postfix update turns `/ 2;\n</script>` into a "regex literal" that runs right
+// past the close tag and the whole file goes unlinted.
+describe('splitSections — ++/-- keep a following slash a division', () => {
+	for (const expr of ['i++ / 2', 'i-- / 2', 'i++/2']) {
+		it(`does not read the slash in \`${expr}\` as a regex literal`, () => {
+			const src = `<puzzle-view><a/></puzzle-view>\n<script>\nconst half = ${expr};\n</script>\n`;
+			const { sections, errors } = splitSections(src, 'x.pzl');
+			expect(errors).toEqual([]);
+			expect(sections.scripts.content).toBe(`\nconst half = ${expr};\n`);
+		});
+	}
+
+	it('still opens a regex after a plain operator (a+++/re/)', () => {
+		const src = '<puzzle-view><a/></puzzle-view>\n<script>\nconst r = a+++/re/.source;\n</script>\n';
+		const { sections, errors } = splitSections(src, 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.scripts.content).toContain('a+++/re/.source');
+	});
+});
+
+// D150 {#raw} blocks. The splitter never lexes a raw BODY — sections.go does not
+// either; the compiler's raw-body skip lives one stage later, in the lexer. What
+// the splitter must get right is that {/raw} is a STRUCTURAL block closer, so its
+// slash is never mistaken for a regex opener that runs past the close tag.
+describe('splitSections — {#raw} blocks (D150)', () => {
+	const wrap = (tpl, tail = '<script>\nexport default 1;\n</script>\n') =>
+		`<puzzle-view>${tpl}</puzzle-view>\n${tail}`;
+
+	it('a brace-heavy JSON body leaves the sections intact', () => {
+		const tpl = '{#raw}{ "loop": true, "slides": [{ "id": 1 }, { "id": 2 }], "labels": { "next": "}" } }{/raw}';
+		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+	});
+
+	it('the opener suffix is ignored and lexing resumes after the closer', () => {
+		// The canonical lexer_test.go case: {#raw json}{ x }{/raw }{ y }. The
+		// splitter sees the whole thing as template bytes; what matters is that the
+		// tolerant closer ends the block and { y } is still an ordinary group.
+		const tpl = '{#raw json}{ x }{/raw }{ y }';
+		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+	});
+
+	it('raw blocks do not nest — the first closer wins', () => {
+		const tpl = '{#raw}outer {#raw} inner{/raw} tail';
+		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+	});
+
+	it('tolerates whitespace in the closer ({/ raw }, {/raw })', () => {
+		for (const closer of ['{/raw}', '{/ raw }', '{/raw }']) {
+			const tpl = `<p>{#raw}x${closer}</p>`;
+			const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+			expect(errors, closer).toEqual([]);
+			expect(sections.view.content).toBe(tpl);
+		}
+	});
+
+	it('template grammar inside a raw body is inert text', () => {
+		const tpl = '{#raw}{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}{/raw}';
+		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+	});
+
+	it('{/raw} is a block closer, not a regex opener, even with extra } later', () => {
+		// The regression: with `raw` missing from blockCloseKeywords the slash in
+		// {/raw} opened a "regex literal" that ran past </puzzle-view>, and any
+		// later net-extra '}' (here a stray brace in the CSS) then closed the
+		// runaway group — yielding a bogus "missing </puzzle-view>" and dropping
+		// the <script> from linting entirely. The real compiler splits this fine.
+		const src = [
+			'<puzzle-view>{#raw}x{/raw}</puzzle-view>',
+			'<style>',
+			'.a { color: red; }}',
+			'</style>',
+			'<script>',
+			'export default 1;',
+			'</script>',
+			'',
+		].join('\n');
+		const { sections, errors } = splitSections(src, 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+		expect(sections.styles.content).toBe('\n.a { color: red; }}\n');
+	});
+
+	it('splits the raw-block fixture with zero structural errors', () => {
+		const src = fixture('raw-block.pzl');
+		const { sections, errors } = splitSections(src, 'raw-block.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toContain('{#raw}');
+		expect(sections.scripts.content).toContain('const half = i++ / 2;');
+		expect(sections.styles.scoped).toBe(true);
+		// The script span round-trips byte for byte.
+		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe(sections.scripts.content);
+	});
 });

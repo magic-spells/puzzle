@@ -93,6 +93,9 @@ function lexSkip(s, i, prevEndsExpr) {
 		while (j < s.length) {
 			if (s[j] === '\\') {
 				j += 2;
+				// A trailing backslash must not push past EOF — an unterminated
+				// string ends AT s.length, and callers slice/index on the result.
+				if (j > s.length) j = s.length;
 				continue;
 			}
 			if (s[j] === c) {
@@ -127,6 +130,15 @@ function lexSkip(s, i, prevEndsExpr) {
 	if (c === '/' && !prevEndsExpr) {
 		// Regex literal — a '/' where the previous token cannot end an expression.
 		return { next: lexScanRegexLiteral(s, i), pee: true, consumed: true };
+	}
+	if ((c === '+' || c === '-') && i + 1 < s.length && s[i + 1] === c) {
+		// Prefix and postfix update operators preserve the incoming state. For a
+		// postfix update that keeps a following '/' in division context, so
+		// `i++ / 2` is a division and not a regex literal that would swallow the
+		// section's close tag. Consuming BOTH bytes is essential: in a+++/re/ the
+		// third '+' remains a plain operator, clears the state, and correctly
+		// leaves '/' a regex opener.
+		return { next: i + 2, pee: prevEndsExpr, consumed: true };
 	}
 	if (isIdentStart(c)) {
 		let j = i;
@@ -179,6 +191,9 @@ function lexScanRegexLiteral(s, i) {
 		const c = s[j];
 		if (c === '\\') {
 			j += 2;
+			// A trailing backslash must not push past EOF: the unterminated result
+			// is s.length, and lexRegexLiteralClosed indexes s[end - 1].
+			if (j > n) j = n;
 			continue;
 		}
 		if (inClass) {
@@ -204,7 +219,20 @@ function lexScanRegexLiteral(s, i) {
 // Balanced brace scanning and template comments (mirror of scan.go)
 // ---------------------------------------------------------------------------
 
-const blockCloseKeywords = new Set(['if', 'unless', 'case', 'for', 'svg', 'comment']);
+// blockCloseKeywords mirrors scan.go: the keywords whose {/kw} spelling is a
+// STRUCTURAL block closer rather than a '{' followed by a possible regex
+// literal. `raw` joined the set with D150's {#raw} block.
+//
+// The raw BODY is deliberately NOT scanned anywhere in this file. sections.go's
+// findTemplateClose has no {#raw} case either — it walks a template body with
+// balanced brace groups and the two comment scanners only — because the
+// compiler's raw-body skip lives one stage later, in the LEXER (lexer.go
+// lexBrace → scanBlockRaw). Teaching the splitter about raw bodies would make
+// this plugin accept files the real compiler rejects, which is the one thing a
+// mirror must never do. Recognizing {/raw} as a closer here is enough: a raw
+// body's braces then balance through the ordinary group scan, exactly as they
+// do in Go.
+const blockCloseKeywords = new Set(['if', 'unless', 'case', 'for', 'svg', 'comment', 'raw']);
 
 // scanBraceGroup is the one shared balanced-brace scan. s[open] must be '{'.
 // Returns { inner, end, err }. err is a message string (never throws) so callers
@@ -438,6 +466,28 @@ function sectionTagAt(src, i) {
 		}
 	}
 	return { name: '', isClose: false };
+}
+
+// misnamedSectionNames mirrors sections.go: near-miss section spellings that get
+// a steering error instead of the generic stray-content one. The section tags are
+// singular (<script>, <style>); the plural spellings are the common mistake.
+const misnamedSectionNames = [
+	{ bad: 'scripts', good: 'script' },
+	{ bad: 'styles', good: 'style' },
+];
+
+// misnamedSectionTagAt recognizes a near-miss section name at i so the top-level
+// scanner can point at the correct spelling. A boundary is required so similarly
+// prefixed custom markup is still diagnosed as ordinary stray content. Returns
+// the matched { bad, good } pair, or null.
+function misnamedSectionTagAt(src, i) {
+	for (const m of misnamedSectionNames) {
+		const prefix = '<' + m.bad;
+		if (!src.startsWith(prefix, i)) continue;
+		const after = i + prefix.length;
+		if (after >= src.length || isBoundary(src[after])) return m;
+	}
+	return null;
 }
 
 // scanOpenTag finds the end of a section's open tag (the '>'), quote- and
@@ -747,6 +797,11 @@ export function splitSections(src, filename = 'input.pzl') {
 	};
 
 	let i = 0;
+	// A leading BOM is an encoding marker, not top-level template content
+	// (sections.go skips the 3-byte UTF-8 form; decoded into a JS string it is
+	// the single code unit U+FEFF). src itself stays untouched so every later
+	// offset, line, and column still refers to the original file.
+	if (src.startsWith('\uFEFF')) i = 1;
 	let strayOff = -1;
 	let strayFollows = '';
 	let lastClosed = '';
@@ -768,6 +823,11 @@ export function splitSections(src, filename = 'input.pzl') {
 			}
 			i = idx + 3;
 			continue;
+		}
+		const misnamed = misnamedSectionTagAt(src, i);
+		if (misnamed) {
+			err(i, '<' + misnamed.bad + '> should be named <' + misnamed.good + '>');
+			return { sections, errors };
 		}
 		const { name, isClose } = sectionTagAt(src, i);
 		if (name === '' || isClose) {

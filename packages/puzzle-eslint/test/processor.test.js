@@ -175,6 +175,27 @@ describe('ESLint end to end (JS)', () => {
 		expect(res.messages).toEqual([]);
 	});
 
+	// D150: {#raw} blocks. The raw bodies here are brace-heavy JSON and literal
+	// template grammar — inert bytes to the splitter, which must still hand the
+	// <script> body over intact and report no structural errors.
+	it('lints a file with {#raw} blocks with no structural errors or fatals', async () => {
+		const src = fixture('raw-block.pzl');
+		const blocks = processor.preprocess(src, 'raw-block.pzl');
+		expect(blocks).toHaveLength(1);
+		expect(blocks[0].filename).toBe('0_scripts.js');
+		// Positions preserved: the virtual file is the same length as the source.
+		expect(blocks[0].text.length).toBe(src.length);
+		// The template — raw bodies included — is blanked out of the JS block.
+		expect(blocks[0].text).not.toContain('{#raw}');
+		expect(blocks[0].text).not.toContain('"slides"');
+		expect(blocks[0].text).toContain('const half = i++ / 2;');
+
+		const res = await lint(src, { 'no-unused-vars': 'warn' }, { filePath: 'raw-block.pzl' });
+		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
+		expect(res.messages.filter((m) => m.ruleId === 'puzzle/no-invalid-sections')).toEqual([]);
+		expect(res.messages).toEqual([]);
+	});
+
 	it('a file with no <script> produces no JS messages', async () => {
 		const res = await lint(fixture('no-scripts.pzl'), { 'no-unused-vars': 'warn' });
 		expect(res.messages).toHaveLength(0);

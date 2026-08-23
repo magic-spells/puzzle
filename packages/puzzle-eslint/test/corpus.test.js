@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, lstatSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ESLint } from 'eslint';
 import plugin from '../src/index.js';
@@ -10,11 +10,19 @@ import { splitSections } from '../src/split.js';
 // is not present (e.g. published/standalone checkouts).
 const CORPUS_DIR = join(process.cwd(), '..', 'puzzle', 'examples');
 
+// Directories that never hold source .pzl files and, in a working checkout,
+// contain symlinks back into the repo root — following them recurses until the
+// path blows past NAME_MAX. lstat (not stat) keeps the walk off symlinks
+// generally; this list also keeps it out of build scratch.
+const SKIP_DIRS = new Set(['node_modules', 'dist', '.puzzle', '.build', '.git']);
+
 function findPzl(dir) {
 	const out = [];
 	for (const entry of readdirSync(dir)) {
+		if (SKIP_DIRS.has(entry)) continue;
 		const full = join(dir, entry);
-		const st = statSync(full);
+		const st = lstatSync(full);
+		if (st.isSymbolicLink()) continue;
 		if (st.isDirectory()) {
 			out.push(...findPzl(full));
 		} else if (entry.endsWith('.pzl')) {
