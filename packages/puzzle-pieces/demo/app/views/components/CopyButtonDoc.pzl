@@ -15,7 +15,7 @@
 
       <ExampleBox tall={ false } code={ codeHero }>
         <div class="flex flex-wrap items-center justify-center gap-3">
-          <CopyButton value={ apiKey } @copy={ onCopied }/>
+          <CopyButton value={ testKey } @copy={ onCopied }/>
           <CopyButton value={ shareUrl } label="Copy link" @copy={ onCopied }/>
         </div>
       </ExampleBox>
@@ -40,7 +40,7 @@
       <div class="mt-12 space-y-12">
         <ExampleBox id="icon-only" title="Icon-only" tall={ false } code={ codeIconOnly }>
           <div class="flex flex-wrap items-center justify-center gap-3">
-            <CopyButton value={ apiKey } @copy={ onCopied }/>
+            <CopyButton value={ testKey } @copy={ onCopied }/>
           </div>
         </ExampleBox>
 
@@ -52,17 +52,17 @@
 
         <ExampleBox id="variants" title="Variants" tall={ false } code={ codeVariants }>
           <div class="flex flex-wrap items-center justify-center gap-3">
-            <CopyButton value={ apiKey } label="Ghost" variant="ghost" @copy={ onCopied }/>
-            <CopyButton value={ apiKey } label="Outline" variant="outline" @copy={ onCopied }/>
-            <CopyButton value={ apiKey } label="Secondary" variant="secondary" @copy={ onCopied }/>
+            <CopyButton value={ testKey } label="Ghost" variant="ghost" @copy={ onCopied }/>
+            <CopyButton value={ testKey } label="Outline" variant="outline" @copy={ onCopied }/>
+            <CopyButton value={ testKey } label="Secondary" variant="secondary" @copy={ onCopied }/>
           </div>
         </ExampleBox>
 
         <ExampleBox id="sizes" title="Sizes" tall={ false } code={ codeSizes }>
           <div class="flex flex-wrap items-center justify-center gap-3">
-            <CopyButton value={ apiKey } size="sm" @copy={ onCopied }/>
-            <CopyButton value={ apiKey } size="md" @copy={ onCopied }/>
-            <CopyButton value={ apiKey } size="lg" @copy={ onCopied }/>
+            <CopyButton value={ testKey } size="sm" @copy={ onCopied }/>
+            <CopyButton value={ testKey } size="md" @copy={ onCopied }/>
+            <CopyButton value={ testKey } size="lg" @copy={ onCopied }/>
           </div>
         </ExampleBox>
 
@@ -77,7 +77,7 @@
 
         <ExampleBox id="disabled" title="Disabled" tall={ false } code={ codeDisabled }>
           <div class="flex flex-wrap items-center justify-center gap-3">
-            <CopyButton value={ apiKey } label="Copy" disabled/>
+            <CopyButton value={ testKey } label="Copy" disabled/>
           </div>
         </ExampleBox>
       </div>
@@ -102,38 +102,38 @@ import { toast } from '@/components/ui/toast.js';
 // callback are both genuinely exercised in the browser.
 const installCmd = 'puzzle add piece copy-button';
 const usageImport = `import CopyButton from '@/components/ui/CopyButton.pzl';`;
-const usageMarkup = `<CopyButton value={ apiKey } @copy={ onCopied }/>`;
+const usageMarkup = `<CopyButton value={ testKey } @copy={ onCopied }/>`;
 
-const apiKey = 'demo_key_123456789';
+const testKey = 'test_key_123456789';
 const shareUrl = 'https://puzzle-pieces.dev/components/copy-button';
 const installSnippet = 'npm install @magic-spells/puzzle';
 
-const codeHero = `<CopyButton value={ apiKey } @copy={ onCopied }/>
+const codeHero = `<CopyButton value={ testKey } @copy={ onCopied }/>
 <CopyButton value={ shareUrl } label="Copy link" @copy={ onCopied }/>`;
 
-const codeIconOnly = `<CopyButton value={ apiKey } @copy={ onCopied }/>`;
+const codeIconOnly = `<CopyButton value={ testKey } @copy={ onCopied }/>`;
 
 const codeWithLabel = `<CopyButton value={ shareUrl } label="Copy link" @copy={ onCopied }/>`;
 
-const codeVariants = `<CopyButton value={ apiKey } label="Ghost" variant="ghost" @copy={ onCopied }/>
-<CopyButton value={ apiKey } label="Outline" variant="outline" @copy={ onCopied }/>
-<CopyButton value={ apiKey } label="Secondary" variant="secondary" @copy={ onCopied }/>`;
+const codeVariants = `<CopyButton value={ testKey } label="Ghost" variant="ghost" @copy={ onCopied }/>
+<CopyButton value={ testKey } label="Outline" variant="outline" @copy={ onCopied }/>
+<CopyButton value={ testKey } label="Secondary" variant="secondary" @copy={ onCopied }/>`;
 
-const codeSizes = `<CopyButton value={ apiKey } size="sm" @copy={ onCopied }/>
-<CopyButton value={ apiKey } size="md" @copy={ onCopied }/>
-<CopyButton value={ apiKey } size="lg" @copy={ onCopied }/>`;
+const codeSizes = `<CopyButton value={ testKey } size="sm" @copy={ onCopied }/>
+<CopyButton value={ testKey } size="md" @copy={ onCopied }/>
+<CopyButton value={ testKey } size="lg" @copy={ onCopied }/>`;
 
 const codeSnippet = `<div class="flex items-center justify-between rounded-lg border border-border bg-surface-sunken px-3 py-2">
   <code>{ installSnippet }</code>
   <CopyButton value={ installSnippet } @copy={ onCopied }/>
 </div>`;
 
-const codeDisabled = `<CopyButton value={ apiKey } label="Copy" disabled/>`;
+const codeDisabled = `<CopyButton value={ testKey } label="Copy" disabled/>`;
 
 export default class CopyButtonDoc extends PuzzleView {
   data(params, props) {
     return {
-      apiKey,
+      testKey,
       shareUrl,
       installSnippet,
       installCmd,
