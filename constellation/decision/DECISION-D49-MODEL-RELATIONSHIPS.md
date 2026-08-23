@@ -1,6 +1,6 @@
 ---
 name: "D49 — hasMany/belongsTo resolve as lazy store-backed getters with FK-by-convention (v1.17)"
-status: building
+status: verified
 connections:
   - DECISION-D05-SCHEMA-BUILDERS
   - DECISION-D48-SCHEMA-VALIDATION
@@ -13,12 +13,24 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-DATA
   - FEATURE-ADAPTER-WRITE-SYNC
-verified_at: '2026-07-12T00:14:58.605Z'
+verified_at: '2026-08-23T19:13:15.487Z'
 notes:
   - kind: verified
     text: >-
       Decision implemented as written and verified at the merged main sha (480 vitest green); blog
       acceptance case landed; no deviations from the recorded contract.
+  - kind: verified
+    text: >-
+      All mechanical claims confirmed post-merge (builders, lazy getters, FK inference + D112
+      coerced identity, D48/normalizedSchema exclusion, reserved-name setter, insertion order, no
+      fault-in; relationships + auto-fetching suites green). Consequences corrected: PostDetail
+      traverses comments only — author stays an explicit tracked findOne so D161 faults the missing
+      user in. Card now binds model.js + datastore/store.js via code_refs.
+    sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+code_refs:
+  - client-runtime/model.js
+  - client-runtime/datastore/store.js
+verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
 ---
 
 # D49 — `hasMany`/`belongsTo` resolve as lazy store-backed getters with FK-by-convention (v1.17)
@@ -37,6 +49,7 @@ case). The reserved builders needed: a foreign-key convention, lazy vs eager
 resolution, and a story for how subscription tracking sees a traversal.
 
 ## Decision
+
 - **Lazy getters over the live store; no materialization; never fault-in.**
   `post.author` resolves the `user` with `post.authorId`; `post.comments`
   resolves the `comment` records whose FK matches — through private local-only
@@ -55,7 +68,8 @@ resolution, and a story for how subscription tracking sees a traversal.
   (`author:` → `authorId`); `hasMany` infers `<ownerTypeName>Id` (`post`'s `comments:`
   → `postId`). Both accept `{ key: '...' }` to override. Inference uses the model
   registry key, resolved when the Store installs getters at construction. Both blog
-  conventions match with zero options.
+  conventions match with zero options. FK-to-pk comparison uses the same coerced
+  identity as `findOne` (D112).
 - **Relationships are schema entries but not fields.** A distinct builder kind:
   excluded from `normalizedSchema()` field iteration, so defaults, primary-key lookup,
   and **D48 validation** never see them; `toJSON()` is untouched because prototype
@@ -63,7 +77,10 @@ resolution, and a story for how subscription tracking sees a traversal.
   object graph.
 - **Installed by the Store constructor** for registered models (idempotent). A
   relationship only means something relative to a registry — resolution IS a store
-  query. Store-less/unregistered classes simply have no getter installed.
+  query. Unregistered classes get no getter at all; a registered class's record
+  with no store attached resolves `null`/`[]`. Install is per prototype — the
+  first registration's inferred FK wins — and the getter routes through each
+  record's own `_store`.
 - **The property name is reserved; assignment warns and is ignored.** Incoming data
   carrying the relationship's name (an embedded server payload: `{ author: {...} }`)
   hits a warn-once setter that drops the value and points at the FK field — a
@@ -83,7 +100,11 @@ resolution, and a story for how subscription tracking sees a traversal.
   relationship builders deliberately share nothing with field builders.
 
 ## Consequences
+
 Runtime-only (model.js builders + store.js getter install); no compiler changes. The
-blog's PostDetail manual joins collapse to two schema lines + traversals in `data()`
-with identical rendered output (the acceptance case). Cycles are safe (lazy). D48
-validation and relationships compose: rules never fire on relationship entries.
+blog's PostDetail manual joins collapse to two schema lines: `post.comments` is a
+direct traversal, while `author` stays an explicit tracked `findOne` on the FK — a
+relationship never fetches, so the find is what faults a missing user in (D161) and
+lands it in the store for `post.author` and every other consumer. Cycles are safe
+(lazy). D48 validation and relationships compose: rules never fire on relationship
+entries.

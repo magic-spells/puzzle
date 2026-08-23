@@ -1,6 +1,6 @@
 ---
 name: D161 — Tracked finds fault in missing data; the settle loop commits complete passes (v1.76)
-status: building
+status: verified
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
   - DECISION-D49-MODEL-RELATIONSHIPS
@@ -31,13 +31,23 @@ notes:
       static kernel. Cost of the core seam on a no-adapter app is +177 B gzip (fault-hook branches +
       _settleData call sites); the loop itself is provably absent (grep the built bundle for
       MAX_SETTLE / "settle rounds" — both 0).
+  - kind: verified
+    text: >-
+      Post-merge claim-level verification: every Decision claim traced to code and tests (both
+      suites green — 1712 vitest, full go test; settle-loop + auto-fetching suites 44/44).
+      Fixture-eligibility wording corrected in place: installFixtures() installs the capability
+      itself, so fixture apps fault through the mock at the _network seam rather than being
+      untouched.
+    sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+verified_at: '2026-08-23T19:12:34.759Z'
+verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
 ---
 
 # D161 — Tracked finds fault in missing data; the settle loop commits complete passes (v1.76)
 
 `store.findOne`/`store.findMany` fetch what's missing — but only during a
-tracked `data()` evaluation, and the view commits only a pass whose reads all
-came up warm. Views need zero loading code; `null` in committed data means
+tracked `data()` evaluation, and the view commits only a pass that queued no
+fetches. Views need zero loading code; `null` in committed data means
 "doesn't exist," never "still loading." Closes the gap D21 left open
 (transparent query fault-in) and retires the eager-seeding idiom (mount-time
 `loadMany` + the "never load inside `data()`" footgun rule).
@@ -58,9 +68,10 @@ views, no `{#await}` templates, no separate `load()` hook.
 `data()` evaluation — refresh, routed preload, D146 prepareRefresh, component
 mount, prerender):
 
-1. Run a pass with its own pending-request set. A tracked miss returns its
-   local value (`null`/locals) and queues a deduped fetch when the model has a
-   resolvable read verb.
+1. Run a pass with its own pending-request set. A tracked read that isn't
+   already satisfied — a `findOne` miss, or a `findMany` on a type not yet
+   collection-complete — returns its local value (`null`/locals) and queues a
+   deduped fetch when the model has a resolvable read verb.
 2. Pending set non-empty ⇒ do not commit; await the batch, discard the
    intermediate pass's subscriptions, re-run.
 3. Commit the first pass that queues nothing; only that pass's subscriptions
@@ -75,7 +86,10 @@ a read verb (model function → app default → endpoint-generated REST; an
 endpoint is not required for authored verbs). `findOne` needs `loadOne`,
 `findMany` needs `loadMany`. No adapter capability, no resolvable verb,
 nullish id, negative-cached id, or collection-complete type ⇒ pure local,
-exactly the prior behavior — fixture-driven apps are untouched.
+exactly the prior behavior — local-first apps (no capability, or models with
+no endpoint and no authored read verb) are untouched. A fixtures app faults
+like a server app: `installFixtures()` installs the capability itself, and
+the mock serves the faults at the `_network` seam.
 
 **Reads outside `data()` never fetch.** Event handlers and model methods get
 local snapshots; server-backed rendering belongs in `data()` (handlers use
@@ -86,9 +100,10 @@ private local-only lookups that record the same subscription keys (D49
 amended) — `post.author` in a 50-row list must not become 50 GETs.
 
 **Read state is adapter-owned** (WeakMap keyed by Store, in the `/adapter`
-module — the D157 no-adapter bundle carries none of it): in-flight dedup by
-`recordKey` identity, a never-persisted 1000-entry negative LRU, and a
-collection-complete type set. Only a framework-normalized 404
+module — the D157 no-adapter bundle carries none of it): in-flight dedup (by
+`recordKey` identity for single records, by type for collection loads), a
+never-persisted 1000-entry negative LRU, and a collection-complete type set.
+Only a framework-normalized 404
 (`PuzzleAdapterError`) records absence; network/5xx/401/403/shape errors
 reject the run and poison nothing. Negatives clear when the identity arrives
 by any path (create, upsert, load, hydration, save reconcile/pk adoption);
@@ -103,12 +118,14 @@ collection-complete only after a successful no-options collection load
 key everywhere (model `static adapter`, `adapter.defaults()`, bound adapter).
 Every old spelling throws naming `loadMany` — including a registered model
 carrying a `loadAll` key, caught at Store init, because silent fallback to
-generated REST would quietly hit different URLs. `loadOne`/`loadMany` leave
-the taught surface (dev-mode warning when called inside a tracked run).
+generated REST would quietly hit different URLs. `loadOne`/`loadMany` are
+demoted from the taught default to escape hatches (dev-mode warning when
+called inside a tracked run).
 
-**Prerender fetches at build time** through the same loop; failures fail the
-build naming the route. Static output transfers read state (collection-
-complete types + negative identities) in a versioned data-island envelope so
+**Prerender fetches at build time** through the same loop; a non-404 fault
+failure fails the build naming the route (a 404 settles as absence, exactly
+as at runtime). Static output transfers read state (collection-complete
+types + negative identities) in a versioned data-island envelope so
 `mountStatic` doesn't refetch what the build settled; hybrid deliberately
 transfers nothing — its SPA takeover re-runs `data()` as a fresh session.
 HMR snapshots carry read state but never in-flight promises.

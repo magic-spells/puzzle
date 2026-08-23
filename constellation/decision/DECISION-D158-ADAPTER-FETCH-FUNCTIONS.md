@@ -1,6 +1,6 @@
 ---
 name: D158 — Adapters are per-model fetch functions; REST conventions are the shorthand (v1.73)
-status: building
+status: verified
 connections:
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D21-ADAPTER-READ-PATH
@@ -25,10 +25,18 @@ notes:
     text: >-
       adapter.js `responsePk == null && pk in body` (~line 569) looks unreachable after the pk guard
       above it and is NOT — the guard and this branch read body[pk] separately, so an unstable
-      accessor (a getter returning a value then null) reaches it. It protects pk-index integrity
-      (a blanked local pk while the type map still keys the old id). Do not delete it.
-verified_at: '2026-08-15T06:30:34.219Z'
-verified_sha: 9ee1bddc34d8a2a3f1ce8e310af323169b6a3799
+      accessor (a getter returning a value then null) reaches it. It protects pk-index integrity (a
+      blanked local pk while the type map still keys the old id). Do not delete it.
+  - kind: verified
+    text: >-
+      All contract claims confirmed: loadAll guards at all four sites (production-loud), Response
+      convenience, read-failure normalization + loadOne pk guard, write-return enforcement, defaults
+      context/identity, dispatch precedence gating tracked faults. Clarified in place: D125/D138
+      revision-guard attribution, and the defaults() context endpoint being the raw model value (not
+      apiURL-prefixed).
+    sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+verified_at: '2026-08-23T19:12:42.548Z'
+verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
 ---
 
 A model's `static adapter` object is a set of **fetch functions** the store
@@ -138,14 +146,14 @@ and response-body fields would be meaningless — the same reasoning the
 pk-collision guard states inline.
 
 **Returns feed the framework-owned pipeline, which no adapter reimplements:**
-upsert by primary key, D125 revision guards protecting in-flight edits, the
-`_synced` provenance flip, atomic pk adoption/re-keying, the per-record write
-chain, persistence, and subscriber notification. An adapter function owns the
-HTTP conversation only; after the return, the store's semantics are identical
-for generated and author verbs — a tracked fault and an explicit load run the
-same function. Throwing (or returning a non-OK `Response`) marks the
-operation failed; local state stays consistent and the error rethrows to the
-caller.
+upsert by primary key, the D125/D138 revision guards protecting in-flight
+edits (writes and load responses respectively), the `_synced` provenance
+flip, atomic pk adoption/re-keying, the per-record write chain, persistence,
+and subscriber notification. An adapter function owns the HTTP conversation
+only; after the return, the store's semantics are identical for generated and
+author verbs — a tracked fault and an explicit load run the same function.
+Throwing (or returning a non-OK `Response`) marks the operation failed; local
+state stays consistent and the error rethrows to the caller.
 
 **Custom methods.** Any other function key (`publish`, `findBySlug`,
 `search`) is outside the store's contract — never called by the framework.
@@ -188,13 +196,15 @@ whether a tracked find is allowed to fault at all — a verb no tier resolves
 makes the tracked path pure-local (D161). App-level functions receive
 `{ type, endpoint }` as a trailing context argument (they serve many models,
 so unlike a per-model function they cannot close over their URL; `endpoint`
-is undefined for models without one). Defaults apply to the five verbs only —
-keys that are not verb names warn in dev (except `loadAll`, which throws).
-`adapter.defaults()` returns a new recognized capability (the identity check
-accepts every capability the module created, so configured and bare
-capabilities validate alike); the defaults ride the capability value into
-each store, so two apps in one page can carry different dialects. **This is
-the LAST tier.** Sub-verb hooks (`buildURL`, `handleResponse` — Ember's
+is undefined for models without one). It is the raw model value, not
+`apiURL`-prefixed — only the generated transports prepend `apiURL`, so an app
+with a base URL prefixes `endpoint` itself. Defaults apply to the five verbs
+only — keys that are not verb names warn in dev (except `loadAll`, which
+throws). `adapter.defaults()` returns a new recognized capability (the
+identity check accepts every capability the module created, so configured and
+bare capabilities validate alike); the defaults ride the capability value
+into each store, so two apps in one page can carry different dialects. **This
+is the LAST tier.** Sub-verb hooks (`buildURL`, `handleResponse` — Ember's
 concept explosion), per-group defaults, and serializer-style transforms are
 out of scope permanently; a dialect the three tiers cannot express is written
 as whole verb functions, which fully own their conversation.

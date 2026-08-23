@@ -57,8 +57,9 @@ property descriptors.
 - [[COMPONENT-PUZZLE-MODEL]] gains `save()` and `delete()`.
 - [[COMPONENT-PUZZLE-VIEW]] gains `_settleData` — the
   [[DECISION-D161-AUTO-FETCHING-FINDS]] settle executor. Core PuzzleView holds
-  only the call seam (`!this._settleData` branches at its three entry points),
-  so a no-adapter app ships none of the loop.
+  only the call seam (`!this._settleData` branches at its two entry points —
+  refresh and prepareRefresh; preload, mount, and prerender all reach the loop
+  through refresh), so a no-adapter app ships none of the loop.
 
 Install is idempotent and realm-global: the first call wins, later ones are
 no-ops, and several apps on one page share one installed surface.

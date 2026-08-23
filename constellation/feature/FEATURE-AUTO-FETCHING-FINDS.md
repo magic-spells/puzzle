@@ -1,6 +1,6 @@
 ---
 name: v1.76 — Auto-fetching finds (tracked fault-in + settle loop)
-status: building
+status: verified
 release: RELEASE-V0-7-0
 change: feature
 connections:
@@ -15,6 +15,16 @@ connections:
   - COMPONENT-DEVSTATE
   - DOC-SPEC-DATA
   - DOC-DATASTORE
+verified_at: '2026-08-23T19:12:36.881Z'
+verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+notes:
+  - kind: verified
+    text: >-
+      Verified post-merge: settle loop, read state, rename guards, prerender/static/HMR carry, and
+      sizes (19.85/22.93 KB gzip measured, README banner matches) all confirmed. Outcome corrected:
+      chirp, music, and stays keep deliberate whole-store seeds; only footgun-workaround seeding was
+      migrated.
+    sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
 ---
 
 # v1.76 — Auto-fetching finds
@@ -38,15 +48,17 @@ call, without raising the taught surface — one rule: server data comes from
 **In (shipped):**
 - The settle loop (PuzzleView, installed by the adapter capability): a pass
   whose tracked misses queued deduped fetches is not committed; the batch is
-  awaited and `data()` re-runs; the first warm pass commits its model and
-  subscriptions. Ten rounds throw naming the view. Store notifications
-  mid-settle coalesce into one more pass; D146 prepared runs park the final
-  pass's reconcile.
-- Adapter-owned read state per Store: in-flight dedup by `recordKey`, a
-  1000-entry negative LRU for normalized 404s (never persisted), the
-  collection-complete type set (no-options collection success only, empty
-  counts), and every invalidation path. Explicit `loadOne` bypasses the
-  negative cache (force refresh); confirmed `delete()` records absence.
+  awaited and `data()` re-runs; the first pass that queues nothing commits its
+  model and subscriptions. Ten rounds throw naming the view. Store
+  notifications mid-settle coalesce into one more pass; D146 prepared runs
+  park the final pass's reconcile and keep taking live updates instead of
+  coalescing.
+- Adapter-owned read state per Store: in-flight dedup (`recordKey` identity
+  for single records, per-type for collection loads), a 1000-entry negative
+  LRU for normalized 404s (never persisted), the collection-complete type set
+  (no-options collection success only, empty counts), and every invalidation
+  path. Explicit `loadOne` bypasses the negative cache (force refresh);
+  confirmed `delete()` records absence.
 - `loadAll` → `loadMany` (One/Many everywhere) with production-loud guards at
   every old-spelling site; dev warning for explicit loads inside tracked runs.
 - Generated read failures normalize to `PuzzleAdapterError`; `loadOne`
@@ -70,8 +82,10 @@ Built on the 0.7.0 line. Runtime: store.js fault hook +
 `_findOneLocal`/`_findManyLocal`, adapter.js read state + rename + guards +
 `serializeReadState`/`hydrateReadState` (via the capabilities.js relay),
 PuzzleView `_settleData` installed by `installAdapter()`, ssg/static read
-island, devstate carry. Examples migrated off eager seeding (blog is the
-canonical auto-fetch app; its static-file "server" demonstrates the custom
-`loadOne` + 404-Response not-found convention). Covered by
+island, devstate carry. The examples that only seeded to work around the old
+footgun moved to auto-fetching finds; blog is the canonical auto-fetch app
+(its static-file "server" demonstrates the custom `loadOne` + 404-Response
+not-found convention), while chirp, music, and stays keep a deliberate
+whole-store seed, each for a documented reason of its own. Covered by
 `tests/auto-fetching-finds.test.js`, `tests/settle-loop.test.js`, and the
 extended static/HMR/store suites.
