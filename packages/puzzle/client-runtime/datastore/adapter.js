@@ -12,6 +12,7 @@ import { PuzzleView } from '../views/PuzzleView.js';
 import {
 	PuzzleModel,
 	PuzzleValidationError,
+	coerceJSONDates,
 	recordKey,
 	recordMutationRevision,
 	safeMerge,
@@ -657,16 +658,23 @@ class AdapterStoreMethods {
 	 * Public callers use upsert(), which deliberately leaves this undefined.
 	 */
 	_upsert(type, data, throughRevision) {
-		const pk = this.modelFor(type).primaryKey();
-		clearAbsent(this, type, data?.[pk]); // present now, whichever branch below runs
-		const existing = data?.[pk] != null ? this._typeMap(type).get(recordKey(data[pk])) : null;
+		const Model = this.modelFor(type);
+		const pk = Model.primaryKey();
+		// The JSON hydration boundary for EVERY read path: loadOne/loadMany (and so
+		// D161's auto-fetch faults, which route through them), the public upsert(),
+		// and the static-island rehydrate all land here. Revive declared date()
+		// fields once, for both the merge and the instantiate branch below (see
+		// coerceJSONDates).
+		const fields = coerceJSONDates(Model, data);
+		clearAbsent(this, type, fields?.[pk]); // present now, whichever branch below runs
+		const existing = fields?.[pk] != null ? this._typeMap(type).get(recordKey(fields[pk])) : null;
 		if (existing) {
-			safeMerge(existing, data, throughRevision);
+			safeMerge(existing, fields, throughRevision);
 			existing._synced = true; // came from the server (constellation/doc/DOC-SPEC.md §22, D50)
-			this._notify(type, data[pk]);
+			this._notify(type, fields[pk]);
 			return existing;
 		}
-		const record = this._instantiate(type, data);
+		const record = this._instantiate(type, fields);
 		record._synced = true; // server-sourced → PUT on first save() (§22, D50)
 		this._notify(type, record[pk]);
 		return record;
@@ -833,7 +841,10 @@ class AdapterStoreMethods {
 		// update() advances the edited fields beyond this boundary, so the response
 		// can still contribute untouched server fields without overwriting them.
 		const requestRevision = recordMutationRevision(record);
-		const body = await this._adapterResult(transport(record));
+		// Same JSON hydration boundary as _upsert: the echoed row is JSON, so its
+		// declared date() fields are revived before any merge below. Non-object
+		// bodies pass through untouched for the shape guards that follow.
+		const body = coerceJSONDates(Model, await this._adapterResult(transport(record)));
 
 		// c. success: merge a JSON-object body via the exempt path (no validation,
 		// mirroring _upsert's update branch); 204/empty keeps local state.

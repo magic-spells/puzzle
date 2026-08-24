@@ -1,6 +1,8 @@
 // Built-in template formatters. Keep this module side-effect-free so bundlers
 // can tree-shake unused named exports from compiler-generated manifests.
 
+import { DATE_ONLY, noDate, parseDateInput } from '../dates.js';
+
 // null/undefined render as empty string, never the literal "null"/"undefined"
 const str = (v) => (v == null ? '' : String(v));
 
@@ -220,16 +222,10 @@ export function number_with_delimiter(v, delimiter = ',') {
 	return parts.join('.');
 }
 
-// A bare YYYY-MM-DD string is a CALENDAR date and must display as written in every
-// time zone (D114). The ES spec parses that date-only form as UTC midnight, which
-// Intl then renders a day early for anyone west of UTC, so build LOCAL midnight from
-// the components instead. A round-trip mismatch means the components name a day
-// that doesn't exist ("2026-02-31") — coerced to Invalid Date so the callers'
-// fail-soft passes the raw value through. Deliberately NOT `new Date(v)`: the ES
-// grammar accepts any day up to 31, so that would silently roll into March —
-// TZ-dependently — while "2026-13-01" (which fails the grammar) returned raw.
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-
+// The calendar-date parse rule (D114) — DATE_ONLY, noDate and parseDateInput — is
+// shared with the datastore's JSON hydration boundary, so it lives in ../dates.js;
+// see that module for the rationale. Nothing here may re-export it: this module's
+// export list IS the formatter registry.
 const DATE_FORMATS = {
 	date:     { year: 'numeric', month: '2-digit', day: '2-digit' },
 	time:     { hour: '2-digit', minute: '2-digit' },
@@ -243,33 +239,6 @@ const TIMEZONE_FORMATTERS = new Map();
 // `timeago` takes no locale, so there is exactly one formatter to cache — built
 // on first use so importing the module never constructs an Intl object.
 let relativeTimeFormatter;
-
-/**
- * "There is no date here." `new Date(v)` coerces its argument with ToNumber, and
- * ToNumber(null) is 0, ToNumber(false) is 0, ToNumber(true) is 1, ToNumber('') is
- * 0 — so every one of those rendered the Unix epoch ("12/31/1969", "56 years ago")
- * while `undefined` correctly rendered nothing. An unset `todo.completedAt` is the
- * common case, and null is what a cleared field, an absent column and a JSON `null`
- * all arrive as. They are all absent, and absent renders like `undefined` does.
- *
- * Numeric 0 is deliberately NOT here: it is a legitimate epoch timestamp.
- */
-const noDate = (v) => v == null || v === '' || typeof v === 'boolean';
-
-function parseDateInput(v) {
-	// Invalid Date is exactly what `new Date(undefined)` already produced, so every
-	// caller's existing undefined path covers these without a second branch.
-	if (noDate(v)) return new Date(NaN);
-	if (typeof v === 'string' && DATE_ONLY.test(v)) {
-		const [y, m, d] = v.split('-').map(Number);
-		const local = new Date(y, m - 1, d);
-		if (local.getFullYear() === y && local.getMonth() === m - 1 && local.getDate() === d) {
-			return local;
-		}
-		return new Date(NaN);
-	}
-	return new Date(v);
-}
 
 export function in_timezone(v, tz = 'UTC') {
 	const d = parseDateInput(v);
