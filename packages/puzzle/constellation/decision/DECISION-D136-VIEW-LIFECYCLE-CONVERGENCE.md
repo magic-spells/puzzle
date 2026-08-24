@@ -56,25 +56,48 @@ beats waiting for a hypothetical later refresh to succeed.
 
 A leaving view is inert from `playOut()` start: it unsubscribes from the
 store immediately (not at post-animation `destroy()`), and `refresh()`,
-`setData()`, `onStoreChange()`, and `applyParentUpdate()` gain a `#leaving`
-early-return beside their `#destroyed` guard. Previously a store flush
-mid-leave re-ran `data()` and re-rendered the fading element (resurrected
-content, double-action clicks on deleted records). `#leaving` is installed
-BEFORE `viewWillHide` fires so the guards cover the hook window and a
-re-entrant `playOut()` memoizes. DOM listeners stay attached — pointer-events
-on a fading element are an app-level concern.
+`setData()`, `onStoreChange()`, `applyParentUpdate()`, `#commit()`,
+`#swapLoaded()`, and `#completeMount()` gain a `#leaving` early-return beside
+their `#destroyed` guard. Previously a store flush mid-leave re-ran `data()`
+and re-rendered the fading element (resurrected content, double-action clicks
+on deleted records); the three render/mount guards matter because a component
+declaring only hide HOOKS — no `animations.out` — now also routes through
+`destroyAnimated()`, so ordinary removal became asynchronous and an async
+`data()` could otherwise land `mounted()` and a render after the parent had
+already removed the child. `#leaving` is installed BEFORE `viewWillHide` fires
+so the guards cover the hook window and a re-entrant `playOut()` memoizes. DOM
+listeners stay attached — pointer-events on a fading element are an app-level
+concern.
 
 Inertness lasts for the leave, not for the instance. A navigation can FAIL
 mid-leave (a guard blocks it, its `data()` rejects) while this view is still the
 committed one, and the router then restores it — so the state `playOut()` set has
-to be undoable. Two fields carry the two different lifetimes: `#outTask` holds the
-spent out sequence forever, so a later navigation away swaps the restored unit out
+to be undoable. Two fields carry the two different lifetimes: `#outTask` marks the
+out sequence SPENT forever, so a later navigation away swaps the restored unit out
 instantly with no second animation, while `#leaving` names only the CURRENT inert
 interval. `_restoreFromLeaving()` clears `#leaving`, cancels the animation fill,
-and refreshes once to re-track the store subscriptions `playOut()` dropped; a
-later real leave re-arms `#leaving` from the spent `#outTask` and unsubscribes
-again. Without that second arming a restored view would leave while still
-reactive — inertness is a property of leaving, not of having left once.
+and refreshes once to re-track the store subscriptions `playOut()` dropped.
+
+A later real leave takes the spent-`#outTask` branch: it builds `#leaving` a
+FRESH promise (it is not re-armed from `#outTask`, which only ever records that
+the animation is spent) and unsubscribes again. Without that second arming a
+restored view would leave while still reactive — inertness is a property of
+leaving, not of having left once.
+
+The HOOKS are not spent with the animation. `viewWillHide`/`viewDidHide` are
+lifecycle, not animation callbacks (D28), so the spent branch carries its own
+zero-duration `viewWillHide → viewDidHide` bracket — the same treatment a view
+declaring the hooks and no animation already gets. It runs as an async task, not
+bare calls, because `#startOverlapLeave` passes `playOut()` straight into a
+`Promise.all()` where a synchronous hook throw would escape the `.catch`.
+Symmetrically, `viewDidHide()` is guarded on `#leaving` still being set, so a
+view whose leave was CANCELLED by a restore does not announce a hide while it is
+visible, live and re-subscribed.
+
+Known asymmetry: a restored view therefore carries a `viewWillHide` with no
+matching `viewDidHide` until its real departure, which fires the pair. That is
+deliberate — firing `viewDidHide` on a visible view is worse — and
+`viewWillShow()` is NOT re-fired on restore, because the view never left.
 
 ## 4. `router.start()` abort parity
 

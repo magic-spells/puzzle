@@ -621,7 +621,10 @@ one is *not* a compile error; it silently builds a different product.
   from `app/adapter.js`. Dispatch is model function → app default → generated
   endpoint transport, so a model remains the most-specific override. Defaults
   receive `{ type, endpoint }` after the normal verb arguments (`endpoint` is
-  undefined when the model has none):
+  undefined when the model has none). `endpoint` is the raw value declared on
+  the model — it is **not** `apiURL`-prefixed, because only the generated
+  transport prepends `apiURL`. An app that sets `apiURL` must prefix it in the
+  dialect itself:
 
   ```js
   // app/adapter.js

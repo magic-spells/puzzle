@@ -7,14 +7,34 @@ connections:
   - COMPONENT-FORMATTERS
   - FILE-FORMATTER-BUILTINS
   - DECISION-D112-STORE-ID-KEY-NORMALIZATION
-verified_at: '2026-08-16T04:30:59.106Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T02:50:57.337Z'
+verified_sha: d275a508b1281f6bae1cf4c8da979d0042f5cfc0
 notes:
   - kind: verified
     text: >-
       in_timezone passes calendar dates through unshifted; rationale rewritten to match; absolute
       multi-process-zone tests (subprocess per TZ) pin the output
     sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+  - kind: verified
+    text: >-
+      Re-verified after the 0.7.0 review round. The decision was always right; the CODE only now
+      implements it. Two claims — "the `iso` preset is idempotent on calendar dates" and
+      "`in_timezone` is a no-op on calendar dates" — held only for a RAW `YYYY-MM-DD` string and
+      silently failed after store hydration: `coerceJSONDates` revived the value to local midnight
+      (correct for this card's display rule) as a plain Date, and every downstream consumer tested
+      `typeof v === 'string'`, so both took the instant path. Round-tripping
+      `{publishedOn:'2026-08-23'}` through save() wrote `2026-08-22T22:00:00.000Z` in Berlin and
+      `…T15:00:00.000Z` in Tokyo — the previous day for every user east of UTC. Fixed with a
+      `CalendarDate extends Date` that carries the day/instant claim on the VALUE rather than its
+      string form: `instanceof Date` still holds (validation gate, Intl, min/max unchanged), still
+      local midnight, and its `toJSON` writes the calendar date back. Instants are byte-identical.
+      Known limit, pinned in a test: a plain `new Date(2026,7,23)` built by app code carries no
+      calendar claim and still saves as an instant — the framework cannot read intent off a plain
+      Date, so only values ARRIVING as `YYYY-MM-DD` are tagged. Verified by
+      tests/model-calendar-date-roundtrip.test.js (43 tests, subprocess-per-zone across 6 zones —
+      in-process assertions built from a local `new Date` move with the process zone and cannot
+      catch this).
+    sha: d275a508b1281f6bae1cf4c8da979d0042f5cfc0
 ---
 
 The built-in date formatters (`date`, and through it `time`/`datetime`, plus

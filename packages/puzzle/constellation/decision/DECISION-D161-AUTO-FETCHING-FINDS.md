@@ -50,6 +50,21 @@ notes:
       with a sticky per-view `_dataAsyncShape` flag (underscore-public — the settle loop installed
       by the adapter capability ORs it into its per-pass expectsAsync hint) plus a dev-only
       warn-once steering to `async data()`.
+  - kind: deviation
+    text: >-
+      KNOWN GAP against this card's "Reads outside data() never fetch" claim — the code does NOT
+      honor it yet. `_requests` stays installed for the whole lifetime of an async `data()`, across
+      every await, so an untracked query running while a view is suspended (event handler, timer,
+      model method) issues a real request AND lands in that suspended evaluation's request map — an
+      unrelated 500 can reject a view that never queried that type. Unfixable store-side: an eval's
+      post-await segments are structurally indistinguishable from foreign code (no withTracking
+      frame, call depth 0, later task), and simply dropping post-await faulting would commit empty
+      for `async data(){ await x; return {posts: findMany('post')} }`, making committed-empty mean
+      "still loading" — the exact ambiguity this card exists to prevent. The fix belongs at the
+      runtime's reentry points (PuzzleView.#withCommittedScope + the __withCommittedScope bridge)
+      and needs "restore only while you still own it" discipline, NOT a naive save/restore — a naive
+      fence clobbers an inner async eval's map when a handler calls refresh(). Shipped in 0.7.0
+      as-is; deliberate, tracked, own branch.
 verified_at: '2026-08-23T19:12:34.759Z'
 verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
 ---
@@ -92,15 +107,21 @@ mount, prerender):
    last round's request keys). Never warn-and-commit: a partial commit would
    make `null` ambiguous again.
 
-**Fetch eligibility.** A tracked miss faults only when D158 dispatch resolves
-a read verb (model function → app default → endpoint-generated REST; an
-endpoint is not required for authored verbs). `findOne` needs `loadOne`,
-`findMany` needs `loadMany`. No adapter capability, no resolvable verb,
-nullish id, negative-cached id, or collection-complete type ⇒ pure local,
-exactly the prior behavior — local-first apps (no capability, or models with
-no endpoint and no authored read verb) are untouched. A fixtures app faults
-like a server app: `installFixtures()` installs the capability itself, and
-the mock serves the faults at the `_network` seam.
+**Fetch eligibility.** A tracked miss faults only when the MODEL ITSELF
+declares server intent: its own `static adapter` names the read verb as a
+function, or it declares an `endpoint`. `findOne` needs `loadOne`, `findMany`
+needs `loadMany`. An app-wide `adapter.defaults()` supplies the *dialect* for a
+model that already qualifies — it does not by itself make a model
+server-backed, or every local-only model in a dialect app would fault to
+`GET undefined`. Only the AUTOMATIC path is gated this way: an explicit
+`store.loadOne`/`loadMany` still dispatches through the app-wide dialect
+exactly as D158 specifies, and the write verbs are untouched. No adapter
+capability, no resolvable verb, nullish id, negative-cached id, or
+collection-complete type ⇒ pure local, exactly the prior behavior —
+local-first apps (no capability, or models with no endpoint and no authored
+read verb) are untouched. A fixtures app faults like a server app:
+`installFixtures()` installs the capability itself, and the mock serves the
+faults at the `_network` seam.
 
 **Reads outside `data()` never fetch.** Event handlers and model methods get
 local snapshots; server-backed rendering belongs in `data()` (handlers use
@@ -139,7 +160,11 @@ as at runtime). Static output transfers read state (collection-complete
 types + negative identities) in a versioned data-island envelope so
 `mountStatic` doesn't refetch what the build settled; hybrid deliberately
 transfers nothing — its SPA takeover re-runs `data()` as a fresh session.
-HMR snapshots carry read state but never in-flight promises.
+HMR snapshots carry read state but never in-flight promises. Prerender runs
+in Node, which has no page origin, so `prerenderToDir` serves the staged
+output on an ephemeral loopback origin and resolves app-relative reads
+against the build output it is writing; an endpoint it cannot resolve fails
+the build with a diagnostic naming the endpoint and both remedies.
 
 ## Alternatives rejected
 

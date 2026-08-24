@@ -334,8 +334,11 @@ For an app-wide API dialect, export `adapter.defaults({ ...verbs })` instead.
 The transport ladder, most-specific first, is: model function → app default →
 endpoint-generated REST. App defaults use the same five verbs but receive a
 trailing `{ type, endpoint }` argument after the normal verb arguments;
-`endpoint` is undefined for a model without one. A model function always wins
-and keeps its existing signature unchanged:
+`endpoint` is undefined for a model without one. `endpoint` is the raw value
+declared on the model and is **not** `apiURL`-prefixed — only the generated
+transport prepends `apiURL` — so a dialect in an app that sets `apiURL` must
+prefix it itself. A model function always wins and keeps its existing
+signature unchanged:
 
 ```js
 // app/adapter.js — unwrap the same envelope for every model

@@ -191,12 +191,17 @@ import the app entry to reach it (D157's three tiers — same behavior, heavier
 pages, and the build says so).
 
 Dispatch precedence, most-specific wins: the model's own function → the app
-default → the endpoint-generated REST transport. The same precedence decides
-whether a tracked find is allowed to fault at all — a verb no tier resolves
-makes the tracked path pure-local (D161). App-level functions receive
-`{ type, endpoint }` as a trailing context argument (they serve many models,
-so unlike a per-model function they cannot close over their URL; `endpoint`
-is undefined for models without one). It is the raw model value, not
+default → the endpoint-generated REST transport. **Automatic fault eligibility
+is narrower than dispatch.** A tracked find faults only when the MODEL itself
+declares server intent — its own function for that verb, or an `endpoint`. The
+app-default tier supplies the DIALECT for a model that already qualifies; it
+does not by itself make a model server-backed, or every local-only model in a
+dialect app would fault to `GET undefined` (D161). Explicit `store.loadOne` /
+`store.loadMany` and all three write verbs still dispatch through the full
+precedence unchanged — only the automatic path is gated. App-level functions
+receive `{ type, endpoint }` as a trailing context argument (they serve many
+models, so unlike a per-model function they cannot close over their URL;
+`endpoint` is undefined for models without one). It is the raw model value, not
 `apiURL`-prefixed — only the generated transports prepend `apiURL`, so an app
 with a base URL prefixes `endpoint` itself. Defaults apply to the five verbs
 only — keys that are not verb names warn in dev (except `loadAll`, which
