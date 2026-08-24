@@ -30,7 +30,6 @@
  */
 
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 
 import {
@@ -50,35 +49,33 @@ import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js'
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
 
-// ---- build-time fetch origin ------------------------------------------------
+// ---- build-time reads -------------------------------------------------------
 
 /**
- * D161 made prerender `data()` fetch at BUILD time, which moved the read path
- * off the browser and into Node — and a browser resolves an app-relative URL
- * against the page it is on, while Node has no page. `apiURL: '/api'` plus
- * `endpoint: '/todos.json'` is the shape every example and the scaffold use, and
- * under Node it reaches `fetch('/api/todos.json')`, which throws
+ * D161 makes prerender `data()` fetch at BUILD time, which puts the read path in
+ * Node rather than the browser. A prerender read must therefore be answerable
+ * from the build machine, and exactly two shapes are:
+ *
+ * 1. A real API — `apiURL` is absolute (`https://api.example.com`), the build
+ *    fetches it for real, and the response is baked into the HTML.
+ * 2. No API — the model declares no `endpoint` and no read verb, so nothing ever
+ *    fetches (datastore/adapter.js `faultVerb`), and the app seeds the store in
+ *    `beforeMount({ store })`.
+ *
+ * An app-relative URL is neither: a browser resolves it against the page it is
+ * on, and Node has no page. `fetch('/api/todos.json')` under Node throws
  * `TypeError: Failed to parse URL from /api/todos.json` — a raw undici error
- * naming neither the route nor the fix.
+ * naming neither the route nor the fix — so a prerender pass replaces the global
+ * `fetch` with a wrapper that fails such a read with a diagnostic naming the URL
+ * and both fixes, which the per-route rewrap below prefixes with the route.
  *
  * The seam has to be the global `fetch`, not `config.apiURL`. The Store's bound
  * per-model fetch hands `input` straight through (datastore/adapter.js), so a
  * model that replaces a verb with its own function — the documented D158 escape
- * hatch, used by examples/blog and the todos scaffold to map a per-record read
- * onto a collection file — calls `fetch('/api/todos.json')` with a hardcoded
- * path that never passes through `apiURL` at all. Rewriting `apiURL` would fix
- * the generated transports and leave every authored verb broken.
- *
- * So `prerender()` wraps the global `fetch` for the duration of the pass and
- * resolves anything without a scheme against a build-time origin. The origin is
- * supplied by `prerenderToDir`, which serves the build's own staged output
- * directory on loopback — so `/api/todos.json` reads the very file the build is
- * writing, with no backend, no config, and no network. An absolute endpoint
- * (`https://api.example.com/...`) never touches any of this.
+ * hatch — calls `fetch()` with a hardcoded path that never passes through
+ * `apiURL` at all. Inspecting `apiURL` would cover the generated transports and
+ * miss every authored verb.
  */
-
-/** The origin supplier for the pass in flight — a lazy async factory, or null. */
-let buildOriginProvider = null;
 
 // Save/restore is depth-counted because prerenderToDir calls prerender: the
 // inner install must not swap the wrapper back out from under the outer one.
@@ -91,7 +88,7 @@ let nativeFetch = null;
  * Request or URL object already carries an absolute URL (constructing one from
  * a relative string is what threw in the first place), so both pass through.
  */
-function needsBuildOrigin(input) {
+function isAppRelative(input) {
 	if (typeof input !== 'string') return false;
 	try {
 		new URL(input);
@@ -107,100 +104,16 @@ function unresolvableEndpointError(url) {
 		`[puzzle] prerender cannot fetch "${url}" — a prerender read runs at build ` +
 			`time in Node, which has no page origin to resolve an app-relative URL ` +
 			`against (a browser resolves it against the page it is on; Node cannot).\n` +
-			`  Either give the app an absolute origin — apiURL: 'https://api.example.com' ` +
-			`in app/app.js — so build-time reads have somewhere to go, or serve the ` +
-			`endpoint from the app's own static files (app/public/api/…) and prerender ` +
-			`through prerenderToDir(), which resolves app-relative reads against the ` +
-			`build output it is writing.`
+			`  Have an API? Give the app an absolute origin — ` +
+			`apiURL: 'https://api.example.com' in app/app.js — so the build fetches it ` +
+			`for real.\n` +
+			`  No API? Remove \`endpoint\` from the model's \`static adapter\` — a model ` +
+			`with no endpoint and no read verb never fetches — and seed the store in ` +
+			`\`beforeMount({ store })\`.`
 	);
 }
 
-/**
- * Serve `rootDir` on an ephemeral loopback port. Read-only, GET/HEAD only, and
- * scoped to one prerender pass — it exists so a build-time read of the app's own
- * static assets resolves the same way the browser would resolve it after deploy.
- */
-function startBuildOriginServer(rootDir) {
-	const types = new Map([
-		['.json', 'application/json'],
-		['.html', 'text/html; charset=utf-8'],
-		['.js', 'text/javascript; charset=utf-8'],
-		['.css', 'text/css; charset=utf-8'],
-		['.svg', 'image/svg+xml'],
-		['.txt', 'text/plain; charset=utf-8'],
-		['.xml', 'application/xml'],
-	]);
-
-	const server = http.createServer((req, res) => {
-		if (req.method !== 'GET' && req.method !== 'HEAD') {
-			res.writeHead(405).end();
-			return;
-		}
-		let pathname;
-		try {
-			pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-		} catch {
-			res.writeHead(400).end();
-			return;
-		}
-		// Resolve inside rootDir and verify containment — a prerender read is app
-		// code, and `..` must not reach outside the build output.
-		const target = path.resolve(rootDir, '.' + pathname);
-		const rel = path.relative(rootDir, target);
-		if (rel.startsWith('..') || path.isAbsolute(rel)) {
-			res.writeHead(403).end();
-			return;
-		}
-		let body;
-		try {
-			body = fs.readFileSync(target);
-		} catch {
-			// A 404 is a real answer on the read path (D161 settles it as absence),
-			// so this must be a proper status rather than a transport failure.
-			res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found');
-			return;
-		}
-		res.writeHead(200, {
-			'Content-Type': types.get(path.extname(target).toLowerCase()) ?? 'application/octet-stream',
-			'Content-Length': body.length,
-		});
-		res.end(req.method === 'HEAD' ? undefined : body);
-	});
-
-	return new Promise((resolve, reject) => {
-		server.on('error', reject);
-		server.listen(0, '127.0.0.1', () => {
-			const { port } = server.address();
-			resolve({
-				origin: `http://127.0.0.1:${port}`,
-				close: () => new Promise((done) => server.close(done)),
-			});
-		});
-	});
-}
-
-/**
- * A lazily-started origin over `rootDir`: nothing listens until an app-relative
- * read actually happens, so a build whose endpoints are all absolute — or that
- * reads nothing at all — opens no socket.
- */
-function makeBuildOrigin(rootDir) {
-	let started = null;
-	return {
-		get: () => {
-			started ??= startBuildOriginServer(rootDir);
-			return started.then((s) => s.origin);
-		},
-		dispose: async () => {
-			if (!started) return;
-			const s = await started.catch(() => null);
-			started = null;
-			if (s) await s.close();
-		},
-	};
-}
-
-/** Install the origin-resolving `fetch` wrapper for one pass (nesting-safe). */
+/** Install the build-time `fetch` wrapper for one pass (nesting-safe). */
 function installBuildFetch() {
 	if (fetchPatchDepth++ > 0) return;
 	nativeFetch = globalThis.fetch;
@@ -208,10 +121,8 @@ function installBuildFetch() {
 	// is the function this wrapper delegates to.
 	const inner = nativeFetch;
 	globalThis.fetch = async (input, init) => {
-		if (!needsBuildOrigin(input)) return inner(input, init);
-		const origin = buildOriginProvider ? await buildOriginProvider() : null;
-		if (!origin) throw unresolvableEndpointError(input);
-		return inner(new URL(input, origin).href, init);
+		if (isAppRelative(input)) throw unresolvableEndpointError(input);
+		return inner(input, init);
 	};
 }
 
@@ -262,10 +173,10 @@ function restoreBuildFetch() {
  *   are present only in static mode.
  */
 export async function prerender(config, opts = {}) {
-	// Every build-time read in the pass below goes through the origin-resolving
-	// wrapper, so an app-relative endpoint either resolves against the origin
-	// prerenderToDir supplied or fails with a diagnostic naming it — never with
-	// undici's bare "Failed to parse URL".
+	// Every build-time read in the pass below goes through the build-fetch
+	// wrapper, so an app-relative endpoint fails with a diagnostic naming the URL
+	// and the two ways to make the read answerable from the build machine — never
+	// with undici's bare "Failed to parse URL".
 	installBuildFetch();
 	try {
 		return await prerenderPass(config, opts);
@@ -570,24 +481,6 @@ export async function prerenderToDir(config, options = {}) {
 	const { outDir, shellPath, mode = 'hybrid', only } = options;
 	if (!outDir) throw new Error('[puzzle] prerenderToDir requires an outDir');
 	if (!shellPath) throw new Error('[puzzle] prerenderToDir requires a shellPath');
-
-	// The build output IS the app's server for any app-relative read: public
-	// assets are staged into outDir before this pass runs, so serving it on
-	// loopback makes `apiURL: '/api'` + `endpoint: '/todos.json'` resolve to the
-	// dist/api/todos.json this build just wrote. Lazy — nothing listens unless an
-	// app-relative read actually happens — and always torn down.
-	const buildOrigin = makeBuildOrigin(outDir);
-	const previousProvider = buildOriginProvider;
-	buildOriginProvider = buildOrigin.get;
-	try {
-		return await prerenderToDirPass(config, options, { outDir, shellPath, mode, only });
-	} finally {
-		buildOriginProvider = previousProvider;
-		await buildOrigin.dispose();
-	}
-}
-
-async function prerenderToDirPass(config, options, { outDir, shellPath, mode, only }) {
 
 	// Validate the complete route table FIRST, before the target selector and the
 	// shell read: a bad route table should be the error a build reports either way.

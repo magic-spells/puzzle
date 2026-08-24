@@ -1,5 +1,4 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
-import adapter from './adapter.js';
 import routes from './routes.js';
 import models from './models/index.js';
 
@@ -16,18 +15,47 @@ const app = new PuzzleApp({
   // Models registration
   models,
 
-  // Install server sync for models with a static adapter config. With it
-  // installed, store.findOne()/store.findMany() inside a view's data() fetch
-  // whatever the store is missing and settle before the view commits (D161) —
-  // nothing has to be seeded by hand. No backend? Delete this import + key,
-  // app/adapter.js, app/public/api/, and the model adapter block to shrink
-  // the bundle.
-  adapter,
-
-  // Base URL for the server read path. Adapter endpoints are joined onto this,
-  // so `findMany('todo')` GETs /api/todos.json — a static JSON file copied
-  // from app/public/api/ into dist/api/ at build time.
-  apiURL: '/api',
+  // App lifecycle hook (D60), run once before the first navigation. This starter
+  // has no backend, so the store is seeded here and every read — findMany(),
+  // findOne(), createRecord(), update(), destroy() — is purely local.
+  //
+  // Have an API? Add `static adapter = { endpoint: '/todos' }` to
+  // app/models/todo.js, pass the adapter capability
+  // (`import { adapter } from '@magic-spells/puzzle/adapter'`) as an `adapter`
+  // key here, set `apiURL` to your API's base URL, and delete this seed: a
+  // tracked findOne/findMany inside a view's data() then fetches whatever the
+  // store is missing and settles before the view commits (D161), so there is
+  // still no loading code to write.
+  beforeMount({ store }) {
+    store.createRecord('todo', {
+      id: 't1',
+      text: 'Read app/views/Home.pzl — the template, the class, and data()',
+      completed: true,
+      createdAt: new Date('2026-08-01T09:00:00.000Z'),
+      updatedAt: new Date('2026-08-01T09:00:00.000Z'),
+    });
+    store.createRecord('todo', {
+      id: 't2',
+      text: 'These rows are seeded in app/app.js — beforeMount({ store })',
+      completed: false,
+      createdAt: new Date('2026-08-01T10:30:00.000Z'),
+      updatedAt: new Date('2026-08-01T10:30:00.000Z'),
+    });
+    store.createRecord('todo', {
+      id: 't3',
+      text: 'Add one above — createRecord() writes to the local store',
+      completed: false,
+      createdAt: new Date('2026-08-01T11:15:00.000Z'),
+      updatedAt: new Date('2026-08-01T11:15:00.000Z'),
+    });
+    store.createRecord('todo', {
+      id: 't4',
+      text: 'Point the model at a real API when you have one',
+      completed: false,
+      createdAt: new Date('2026-08-01T12:00:00.000Z'),
+      updatedAt: new Date('2026-08-01T12:00:00.000Z'),
+    });
+  },
 
   // Global formatters available in all templates
   // (display transformation only — logic belongs in data())
