@@ -130,3 +130,141 @@ export default class T extends PuzzleView {}
 		t.Errorf("expected exactly one emitted `key:` property, got %d:\n%s", strings.Count(got, "key:"), got)
 	}
 }
+
+// TestRawBlockSurvivesSingleRootGates covers the three bodies codegen holds to
+// one root — the {#for} body, the component template root, and the component
+// skeleton root. Writing {#raw} and {/raw} on their own lines is the natural way
+// to format a raw block, and that formatting must not count as content: the
+// newline and indentation around the markers are authoring layout, so a
+// multi-line raw block has to reach every gate with exactly the arity its
+// one-line spelling has.
+func TestRawBlockSurvivesSingleRootGates(t *testing.T) {
+	const script = "\n\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class T extends PuzzleView {}\n</script>\n"
+
+	tests := []struct {
+		name string
+		src  string
+		mode EmissionMode
+		want string
+	}{
+		{
+			name: "{#for} body, raw as the direct child",
+			src: `<puzzle-view>
+  <ul>
+    {#for item in items}
+      {#raw}
+        <li class="sample">x</li>
+      {/raw}
+    {/for}
+  </ul>
+</puzzle-view>` + script,
+			mode: ModeView,
+			want: "class: 'sample'",
+		},
+		{
+			name: "{#for} body, raw nested inside the row element",
+			src: `<puzzle-view>
+  <ul>
+    {#for item in items}
+      <li>
+        {#raw}
+          <span>x</span>
+        {/raw}
+      </li>
+    {/for}
+  </ul>
+</puzzle-view>` + script,
+			mode: ModeView,
+			want: "new ViewNode('span'",
+		},
+		{
+			name: "component template root",
+			src: `<puzzle-view>
+  {#raw}
+    <div class="doc">x</div>
+  {/raw}
+</puzzle-view>` + script,
+			mode: ModeComponent,
+			want: "class: 'doc'",
+		},
+		{
+			name: "component skeleton root",
+			src: `<puzzle-view>
+  <div class="doc">x</div>
+</puzzle-view>
+
+<puzzle-skeleton>
+  {#raw}
+    <div class="doc is-loading"></div>
+  {/raw}
+</puzzle-skeleton>` + script,
+			mode: ModeComponent,
+			want: "class: 'doc is-loading'",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := compileSrcOpts(t, tc.src, Options{Mode: tc.mode})
+			if err != nil {
+				t.Fatalf("multi-line {#raw} tripped a single-root gate: %v", err)
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("compiled output missing %q:\n%s", tc.want, got)
+			}
+		})
+	}
+}
+
+// The gate itself is not loosened: a raw block really holding two roots, or one
+// holding stray text beside a root, still fails. Only whitespace stopped being
+// mistaken for content.
+func TestRawBlockStillTripsGenuineMultiRoot(t *testing.T) {
+	const script = "\n\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class T extends PuzzleView {}\n</script>\n"
+
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "two elements in the raw body",
+			src: `<puzzle-view>
+  <ul>
+    {#for item in items}
+      {#raw}
+        <li>a</li>
+        <li>b</li>
+      {/raw}
+    {/for}
+  </ul>
+</puzzle-view>` + script,
+			want: "{#for} body must contain exactly one root element",
+		},
+		{
+			name: "raw text beside the root",
+			src: `<puzzle-view>
+  <ul>
+    {#for item in items}
+      {#raw}
+        stray words
+        <li>a</li>
+      {/raw}
+    {/for}
+  </ul>
+</puzzle-view>` + script,
+			want: "{#for} body must contain exactly one root element",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := compileSrcOpts(t, tc.src, Options{Mode: ModeView})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error: got %v, want one naming %q", err, tc.want)
+			}
+		})
+	}
+}

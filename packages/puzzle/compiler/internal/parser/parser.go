@@ -260,7 +260,53 @@ func (p *parser) parseRaw(t Token, ctx openCtx) ([]Node, *ParseError) {
 	if perr != nil {
 		return nil, perr
 	}
-	return nodes, nil
+	return demoteRawMarkerLayout(nodes), nil
+}
+
+// demoteRawMarkerLayout clears the Raw flag on the whitespace-only Text nodes at
+// the two ENDS of a parsed {#raw} span, so the enclosing body's ordinary
+// whitespace policy applies to them.
+//
+// parseRaw flattens the span into the enclosing element/block's child list, so
+// once it returns, nothing downstream can still tell "the edge of the raw span"
+// from "inside it". The edges are the only bytes in the span that belong to the
+// {#raw}/{/raw} MARKERS rather than to the captured content: writing the markers
+// on their own lines is authoring layout, and the newline plus indentation it
+// produces is not something an author is asking to preserve. Kept flagged raw,
+// it survives as a real text vnode and pushes the single-root bodies ({#for},
+// component root, component skeleton root) past their arity gate.
+//
+// A span whose entire content is whitespace is left alone: there is no content
+// for those bytes to be laying out, so {#raw} around them can only be a request
+// to keep them verbatim. Nothing here rewrites bytes — a demoted node still
+// carries its exact authored text, it just stops claiming to be raw.
+func demoteRawMarkerLayout(nodes []Node) []Node {
+	if !rawSpanHasContent(nodes) {
+		return nodes
+	}
+	demote := func(n Node) {
+		if t, ok := n.(*Text); ok && t.Raw && strings.TrimSpace(t.Value) == "" {
+			t.Raw = false
+		}
+	}
+	demote(nodes[0])
+	demote(nodes[len(nodes)-1])
+	return nodes
+}
+
+// rawSpanHasContent reports whether a parsed {#raw} span holds anything beyond
+// whitespace text — any structural node, or any text with a non-space byte.
+func rawSpanHasContent(nodes []Node) bool {
+	for _, n := range nodes {
+		t, ok := n.(*Text)
+		if !ok {
+			return true
+		}
+		if strings.TrimSpace(t.Value) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // checkCloser validates that closer t terminates ctx; returns nil (match) or a

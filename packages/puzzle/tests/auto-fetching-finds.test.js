@@ -142,7 +142,7 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it('faults through a custom model verb and through an app-wide default — no endpoint needed', async () => {
+	it('faults through a custom model verb with no endpoint — but an app-wide default alone never does', async () => {
 		const modelLoad = vi.fn(async () => [{ id: 'a1', title: 'model' }]);
 		class Article extends PuzzleModel {
 			static schema = { id: Puzzle.string().primary(), title: Puzzle.string() };
@@ -157,7 +157,11 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 		await settle(store, () => [store.findMany('article'), store.findMany('bare')]);
 
 		expect(modelLoad).toHaveBeenCalledTimes(1);
-		expect(defaultLoad).toHaveBeenCalledTimes(1);
+		// `bare` declares no adapter of its own. An app-wide dialect says HOW this
+		// app talks to its server, not WHICH models are server-backed, so a tracked
+		// find on it stays pure-local — "No adapter, no read verb ⇒ nothing changes"
+		// (SKILL.md), and there is no `endpoint` for the dialect to address anyway.
+		expect(defaultLoad).not.toHaveBeenCalled();
 		expect(store.findOne('article', 'a1').title).toBe('model');
 		expect(fetchMock).not.toHaveBeenCalled();
 	});

@@ -327,6 +327,35 @@ export function hydrateReadState(store, envelope) {
 // must not pull the sync runtime into its pages (D157).
 registerReadState({ serialize: serializeReadState, hydrate: hydrateReadState });
 
+/**
+ * D161 fetch eligibility for a TRACKED miss — deliberately stricter than D158
+ * dispatch. A model declares server intent with its OWN `static adapter`: an
+ * `endpoint` (which the generated REST tier and every app default can address)
+ * or an authored function for the verb in question. An app-wide
+ * `adapter.defaults()` dialect says HOW this app talks to its server, not WHICH
+ * models are server-backed — so on its own it must never turn a purely local
+ * model into a fetching one. Without this gate a dialect binds a read verb onto
+ * every registered model with `endpoint: undefined`, and the first tracked
+ * findMany on a local-only model issues `GET /undefined` whose failure rejects
+ * the whole view ("No adapter, no read verb ⇒ nothing changes").
+ *
+ * Only the AUTOMATIC path is gated: an explicit store.loadOne/loadMany still
+ * dispatches through the app-default tier for a model with no endpoint, which
+ * is what a type-derived dialect relies on (D158).
+ */
+function faultVerb(store, type, verb) {
+	const declared = store.modelFor(type).adapter;
+	const config =
+		declared && typeof declared === 'object' && !Array.isArray(declared) ? declared : null;
+	if (!config) return null;
+	// Bind BEFORE the eligibility test so a declared-but-unusable config still
+	// reaches the dev config warning and the loadAll guard, exactly as it did when
+	// this was a bare `typeof store.adapter(type)[verb] !== 'function'` check.
+	const bound = store.adapter(type);
+	if (typeof config[verb] !== 'function' && !config.endpoint) return null;
+	return typeof bound[verb] === 'function' ? bound[verb] : null;
+}
+
 class AdapterStoreMethods {
 	// ---- wrapped core methods (D161 read-state invalidation) --
 
@@ -579,8 +608,10 @@ class AdapterStoreMethods {
 	 * request is owed, and records the one to wait for under its diagnostic key.
 	 *
 	 * Silent (no request, no entry) when: the id is nullish or unkeyable, the type
-	 * is collection-complete, the identity is known absent, or the model resolves
-	 * no loadOne verb. A pending identical request is joined rather than reissued.
+	 * is collection-complete, the identity is known absent, or the model declares
+	 * no loadOne of its own and no endpoint (see faultVerb — an app-wide dialect
+	 * alone never makes a local model fault). A pending identical request is
+	 * joined rather than reissued.
 	 */
 	_faultOne(type, id, requests) {
 		if (id == null) return;
@@ -598,7 +629,7 @@ class AdapterStoreMethods {
 			requests.set(key, inflight);
 			return;
 		}
-		if (typeof this.adapter(type).loadOne !== 'function') return;
+		if (!faultVerb(this, type, 'loadOne')) return;
 
 		const request = (async () => {
 			try {
@@ -629,7 +660,7 @@ class AdapterStoreMethods {
 			requests.set(type, inflight);
 			return;
 		}
-		if (typeof this.adapter(type).loadMany !== 'function') return;
+		if (!faultVerb(this, type, 'loadMany')) return;
 
 		const request = (async () => {
 			try {
@@ -1107,8 +1138,14 @@ class AdapterViewMethods {
 			this._settlingToken = token;
 			this._settleDirty = false;
 		}
+		// This run still holds the settle window it opened. A SUPERSEDED run (a newer
+		// refresh reopened the window under its own token) may no longer touch
+		// `_settleDirty`: the flag it would clear is the newer run's deferred store
+		// notification, and clearing it drops that update until an unrelated later
+		// write. Every write to the flag below is gated on this, exactly as close() is.
+		const ownsWindow = () => owns && this._settlingToken === token;
 		const close = (value) => {
-			if (owns && this._settlingToken === token) {
+			if (ownsWindow()) {
 				this._settlingToken = 0;
 				this._settleDirty = false;
 			}
@@ -1124,7 +1161,7 @@ class AdapterViewMethods {
 				// A store change delivered during this run (PuzzleView's onStoreChange sets
 				// the flag rather than refreshing)
 				// takes one more pass here rather than a second competing refresh.
-				if (!parked && this._settleDirty) {
+				if (ownsWindow() && this._settleDirty) {
 					this._settleDirty = false;
 					channel.reconcile?.(false);
 					return pass();
@@ -1145,7 +1182,7 @@ class AdapterViewMethods {
 					// looks live to the committing pass's reconciliation, so an unreleased
 					// intermediate branch would strand subscriptions the final pass dropped.
 					channel.reconcile?.(false);
-					if (!parked) this._settleDirty = false;
+					if (ownsWindow()) this._settleDirty = false;
 					return isStale() ? undefined : pass();
 				},
 				(err) => {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -121,10 +122,28 @@ const (
 	installManual installKind = iota
 	installProject
 	installGlobal
-	// installWorkspace is a refusal, not an install: the binary is hoisted into
-	// a workspace root that does not itself declare the CLI, so the dependency
-	// lives in a member package this command has no safe way to pick.
+	// The kinds below are REFUSALS, not installs. Each one is a shape where the
+	// copy the user's `puzzle` resolves to cannot be upgraded by any command this
+	// tool could safely run, so it explains and stops. Silence is the defect this
+	// set exists to prevent: guessing here is how a local install ends up being
+	// written to the machine globally, or a "success" line ends up naming a copy
+	// nobody runs.
+	//
+	// installWorkspace: the binary is hoisted into a workspace or monorepo root
+	// that does not itself declare the CLI, so the dependency lives in a member
+	// package this command has no safe way to pick.
 	installWorkspace
+	// installNested: the binary belongs to a copy nested inside another package's
+	// node_modules — a transitive dependency whose version its parent pins. No
+	// direct install reaches it.
+	installNested
+	// installEphemeral: the binary is running out of a package-runner cache
+	// (`npx`, `pnpm dlx`, `bunx`). The cache is discarded, not upgraded, and the
+	// next run resolves whatever the user asks for.
+	installEphemeral
+	// installUnresolved: the install shape is genuinely unrecognised. This is the
+	// backstop that keeps an unknown from being escalated to `npm install -g`.
+	installUnresolved
 )
 
 type installContext struct {
@@ -134,6 +153,10 @@ type installContext struct {
 	dev         bool
 	executable  string
 	packageJSON string
+	// inspected is what detection actually looked at, so a refusal can name it.
+	// A diagnostic that says only "could not tell" leaves the user with nothing
+	// to check.
+	inspected []string
 }
 
 // upgradeEnvironment carries what the post-upgrade skill refresh needs: where
@@ -183,6 +206,27 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 		fmt.Fprintf(stdout, "  npm install %s@%s -w <member>\n", puzzlePackage, latest)
 		fmt.Fprintf(stdout, "  (pnpm/yarn/bun: the same add, run from that member's directory)\n")
 		return nil
+	case installNested:
+		// The parent package pins the version; installing anything here would
+		// upgrade a different copy and then report success over this one.
+		fmt.Fprintf(stdout, "This CLI is a nested dependency inside %s — another package's copy, not one you installed.\n", ctx.dir)
+		fmt.Fprintf(stdout, "Its version is pinned by whatever depends on it, so upgrading %s would leave this binary untouched.\n", puzzlePackage)
+		fmt.Fprintf(stdout, "Upgrade that package instead, or install %s@%s where you want to run it.\n", puzzlePackage, latest)
+		return nil
+	case installEphemeral:
+		fmt.Fprintf(stdout, "This CLI is running from a %s cache (%s), which is thrown away rather than upgraded.\n", ctx.manager, ctx.dir)
+		fmt.Fprintf(stdout, "Ask the runner for the version you want instead:\n")
+		fmt.Fprintf(stdout, "  npx %s@%s <command>\n", puzzlePackage, latest)
+		fmt.Fprintf(stdout, "Or install it for real — %s, or add it to a project — so there is something to upgrade.\n",
+			out.Bold("npm install -g "+puzzlePackage+"@"+latest))
+		return nil
+	case installUnresolved:
+		// Refusing is the whole point: every silent alternative here upgrades
+		// something other than the binary that is running.
+		return fmt.Errorf(
+			"could not tell how %s is installed: %s declares no %s, is not a workspace root, and is not a global root npm or pnpm reports — "+
+				"upgrade it the way you installed it rather than have this command install over something else",
+			ctx.executable, strings.Join(ctx.inspected, ", "), puzzlePackage)
 	}
 
 	name, args := upgradeCommand(ctx, latest)
@@ -341,27 +385,55 @@ func binaryReportsVersion(path, want string) bool {
 // standing in is never touched — and the install whose version is compared
 // against the registry, the install the package manager writes, and the install
 // the success line names are the same one by construction.
+//
+// Resolution starts from what is INSTALLED, not from what a manifest claims. The
+// nearest ancestor node_modules that actually holds @magic-spells/puzzle is the
+// copy this binary belongs to; a dependency stanza is a claim about a copy, and
+// a directory on disk is the copy itself. Every branch below either identifies
+// that copy's owner or refuses — nothing falls through to a global install.
 func detectInstallContext(executable string) (installContext, error) {
 	resolved := executable
 	if real, err := filepath.EvalSymlinks(executable); err == nil {
 		resolved = real
 	}
 
-	owner, ok := nodeModulesOwner(resolved)
-	if !ok {
-		// No node_modules above the binary: `go install`, or a binary built
-		// straight out of the repo. npm owns neither.
-		return installContext{kind: installManual, executable: resolved}, nil
+	nodeModules, pkgDir, searched, found := installedPuzzlePackage(resolved)
+	if !found {
+		if len(searched) == 0 {
+			// No node_modules above the binary: `go install`, or a binary built
+			// straight out of the repo. npm owns neither.
+			return installContext{kind: installManual, executable: resolved}, nil
+		}
+		// A platform binary with no @magic-spells/puzzle above it is a broken or
+		// hand-assembled tree. There is no copy to confirm against, so there is
+		// nothing this command can safely write.
+		return installContext{kind: installUnresolved, executable: resolved, inspected: searched}, nil
 	}
+	owner := filepath.Dir(nodeModules)
+	packageJSON := filepath.Join(pkgDir, "package.json")
+
+	if runner, ok := ephemeralRunnerCache(resolved); ok {
+		return installContext{kind: installEphemeral, dir: owner, manager: runner,
+			executable: resolved, packageJSON: packageJSON, inspected: []string{owner}}, nil
+	}
+	if nestedInNodeModules(owner) {
+		return installContext{kind: installNested, dir: owner,
+			executable: resolved, packageJSON: packageJSON, inspected: []string{owner}}, nil
+	}
+
+	roots := newGlobalRoots()
 
 	// pnpm's global root is a real package directory — package.json plus a
 	// lockfile, listing every global install as a dependency — so it has to be
 	// recognised before the project test, or a pnpm global would upgrade itself
 	// as though it were an app. Only the global-root shape counts: matching any
 	// `pnpm` path segment would misclassify a project that merely lives under a
-	// directory named pnpm (`~/pnpm/app`) and run `pnpm add -g` against it.
-	if isPnpmGlobalRoot(owner) {
-		return globalContext(owner, resolved, "pnpm"), nil
+	// directory named pnpm (`~/pnpm/app`) and run `pnpm add -g` against it. The
+	// shape misses a configured `global-dir`, so a pnpm-managed directory that
+	// does not match it asks pnpm itself before anything else classifies it.
+	if isPnpmGlobalRoot(owner) ||
+		(fsFileExists(filepath.Join(owner, "pnpm-lock.yaml")) && roots.is("pnpm", nodeModules)) {
+		return globalContext(resolved, "pnpm", packageJSON), nil
 	}
 
 	manifest, err := readOwnerManifest(filepath.Join(owner, "package.json"))
@@ -375,51 +447,200 @@ func detectInstallContext(executable string) (installContext, error) {
 			manager:     detectPackageManager(owner),
 			dev:         manifest.dev,
 			executable:  resolved,
-			packageJSON: filepath.Join(owner, "node_modules", "@magic-spells", "puzzle", "package.json"),
+			packageJSON: packageJSON,
+			inspected:   []string{owner},
 		}, nil
 	}
-	// A workspace root hoists its members' dependencies, so the binary can sit
-	// under a root that declares nothing itself. That is not a global install —
-	// treating it as one would run `npm install -g` as a side effect and then
-	// fail confirmation against the workspace's own hoisted copy. Which member
-	// owns the dependency is the user's call, so the command explains and stops.
-	if manifest.workspaces || fsFileExists(filepath.Join(owner, "pnpm-workspace.yaml")) {
-		return installContext{kind: installWorkspace, dir: owner, executable: resolved}, nil
+	// A workspace or monorepo root hoists its members' dependencies, so the
+	// binary can sit under a root that declares nothing itself. That is not a
+	// global install — treating it as one would run `npm install -g` as a side
+	// effect and then fail confirmation against the root's own hoisted copy.
+	// Which member owns the dependency is the user's call, so the command
+	// explains and stops.
+	if manifest.workspaces || monorepoRoot(owner) {
+		return installContext{kind: installWorkspace, dir: owner, executable: resolved,
+			packageJSON: packageJSON, inspected: []string{owner}}, nil
 	}
-	return globalContext(owner, resolved, "npm"), nil
+	// A global install is ASSERTED, never assumed: the node_modules holding this
+	// copy must be the one the package manager itself calls global. The old
+	// fallthrough — "no manifest mentions it, so it must be global" — is how a
+	// perfectly ordinary local install got `npm install -g` run against the
+	// user's machine and then hard-failed confirmation against the still-stale
+	// local copy.
+	for _, manager := range []string{"npm", "pnpm"} {
+		if roots.is(manager, nodeModules) {
+			return globalContext(resolved, manager, packageJSON), nil
+		}
+	}
+	// A local install the owner's manifest does not record: `npm install
+	// --no-save`, or a manifest edited after the fact. The copy is still local
+	// and still this binary's, so the ordinary project install upgrades exactly
+	// what the confirmation then reads back.
+	if manifest.exists && detectLockfile(owner) != "" {
+		return installContext{
+			kind:        installProject,
+			dir:         owner,
+			manager:     detectPackageManager(owner),
+			executable:  resolved,
+			packageJSON: packageJSON,
+			inspected:   []string{owner},
+		}, nil
+	}
+	return installContext{kind: installUnresolved, dir: owner, executable: resolved,
+		packageJSON: packageJSON, inspected: []string{owner}}, nil
 }
 
-// globalContext describes an install nobody's package.json declares — a global
-// prefix (`/usr/local/lib`, `/opt/homebrew/lib`, pnpm's global root). dir stays
-// empty so the package manager inherits this process's directory: `-g` does not
-// care where it runs, and picking a directory would smuggle the cwd back in.
-func globalContext(owner, executable, manager string) installContext {
+// globalContext describes a confirmed global install — a global prefix
+// (`/usr/local/lib`, `/opt/homebrew/lib`) or pnpm's global root, each one either
+// matched by shape or named by the package manager itself. dir stays empty so
+// the package manager inherits this process's directory: `-g` does not care
+// where it runs, and picking a directory would smuggle the cwd back in.
+// packageJSON is the copy found on disk beneath the running binary, so the
+// confirmation reads back the install that was just written.
+func globalContext(executable, manager, packageJSON string) installContext {
 	return installContext{
 		kind:        installGlobal,
 		manager:     manager,
 		executable:  executable,
-		packageJSON: filepath.Join(owner, "node_modules", "@magic-spells", "puzzle", "package.json"),
+		packageJSON: packageJSON,
 	}
 }
 
-// nodeModulesOwner returns the directory owning the outermost node_modules on
-// path. Outermost, not nearest: the binary sits several levels in under every
-// layout — `<root>/node_modules/@magic-spells/puzzle-<platform>/bin/puzzle`
-// hoisted, `<root>/node_modules/.pnpm/<pkg>@<v>/node_modules/…` under pnpm — and
-// only the outermost segment's parent is the root that declares the dependency.
-func nodeModulesOwner(path string) (string, bool) {
-	owner := ""
+// installedPuzzlePackage walks up from the running binary and returns the first
+// ancestor node_modules that actually CONTAINS @magic-spells/puzzle, that
+// package's directory, and every node_modules it looked in (so a refusal can say
+// where it looked).
+//
+// Nearest-that-contains-it, not outermost: the binary sits several levels in
+// under every layout — `<root>/node_modules/@magic-spells/puzzle-<platform>/bin/puzzle`
+// hoisted, `<root>/node_modules/.pnpm/<pkg>@<v>/node_modules/…` under pnpm, where
+// the store directory holds only the platform package and the walk continues to
+// the root that links the real one. Picking the outermost segment instead points
+// at whichever copy npm happened to hoist, which is exactly how a nested install
+// reported success over a copy the user never runs.
+func installedPuzzlePackage(path string) (nodeModules, pkgDir string, searched []string, ok bool) {
 	dir := path
 	for {
 		if strings.EqualFold(filepath.Base(dir), "node_modules") {
-			owner = filepath.Dir(dir)
+			searched = append(searched, dir)
+			candidate := filepath.Join(dir, "@magic-spells", "puzzle")
+			if fsFileExists(filepath.Join(candidate, "package.json")) {
+				return dir, candidate, searched, true
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return owner, owner != ""
+			return "", "", searched, false
 		}
 		dir = parent
 	}
+}
+
+// nestedInNodeModules reports whether owner is itself inside a node_modules
+// tree, i.e. the copy belongs to some other package rather than to a project or
+// a global prefix.
+func nestedInNodeModules(owner string) bool {
+	dir := owner
+	for {
+		if strings.EqualFold(filepath.Base(dir), "node_modules") {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
+}
+
+// ephemeralRunnerCache reports the package runner whose throwaway cache path
+// holds, so `puzzle upgrade` never claims to have upgraded one. npm's is
+// `~/.npm/_npx/<hash>`; pnpm and yarn use a `dlx` directory under their own
+// cache root; bun uses a `bunx-<uid>-<pkg>` temp directory.
+func ephemeralRunnerCache(path string) (string, bool) {
+	underManagerCache := false
+	for _, segment := range strings.Split(filepath.ToSlash(path), "/") {
+		lower := strings.ToLower(segment)
+		switch {
+		case lower == "_npx":
+			return "npx", true
+		case strings.HasPrefix(lower, "bunx-"):
+			return "bunx", true
+		case lower == "dlx" && underManagerCache:
+			return "dlx", true
+		case lower == "pnpm" || lower == "yarn" || lower == ".yarn" || lower == "berry":
+			underManagerCache = true
+		}
+	}
+	return "", false
+}
+
+// monorepoRootMarkers are the files that make a directory a multi-package root
+// whose node_modules hoists its members' dependencies. `workspaces` in
+// package.json covers npm/yarn/bun; these cover the tools that keep their member
+// list somewhere else, which is precisely why such a root used to look like a
+// global prefix — a package.json that never mentions the CLI.
+var monorepoRootMarkers = []string{"pnpm-workspace.yaml", "lerna.json", "nx.json", "rush.json"}
+
+func monorepoRoot(dir string) bool {
+	for _, marker := range monorepoRootMarkers {
+		if fsFileExists(filepath.Join(dir, marker)) {
+			return true
+		}
+	}
+	return false
+}
+
+// packageManagerGlobalRoot asks a package manager where its own global
+// node_modules is (`npm root -g`, `pnpm root -g` — both print an absolute path
+// and ignore the working directory). It is a var so tests can answer without a
+// package manager on PATH.
+var packageManagerGlobalRoot = func(manager string) (string, bool) {
+	bin, err := exec.LookPath(manager)
+	if err != nil {
+		return "", false
+	}
+	// A package manager that hangs must not hang `puzzle upgrade` with it; an
+	// unanswered query is a "no", which refuses rather than guesses.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, bin, "root", "-g").Output()
+	if err != nil {
+		return "", false
+	}
+	dir := strings.TrimSpace(string(output))
+	if dir == "" {
+		return "", false
+	}
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+	return filepath.Clean(dir), true
+}
+
+// globalRoots memoizes the global-root answers for one detection pass, so a
+// single `puzzle upgrade` never spawns the same query twice.
+type globalRoots struct{ seen map[string]string }
+
+func newGlobalRoots() *globalRoots { return &globalRoots{seen: map[string]string{}} }
+
+// is reports whether nodeModules is the global node_modules of manager. An
+// unanswerable query (manager not installed, command failed) is a "no", which
+// leaves the caller to refuse rather than to assume.
+func (g *globalRoots) is(manager, nodeModules string) bool {
+	root, cached := g.seen[manager]
+	if !cached {
+		root, _ = packageManagerGlobalRoot(manager)
+		g.seen[manager] = root
+	}
+	if root == "" {
+		return false
+	}
+	target := filepath.Clean(nodeModules)
+	if resolved, err := filepath.EvalSymlinks(target); err == nil {
+		target = resolved
+	}
+	return root == target
 }
 
 // ownerManifest is what the owning directory's package.json says about this
@@ -427,6 +648,7 @@ func nodeModulesOwner(path string) (string, bool) {
 // directory is a workspace root (which declares its members' dependencies on
 // their behalf without listing them itself).
 type ownerManifest struct {
+	exists     bool
 	declared   bool
 	dev        bool
 	workspaces bool
@@ -443,8 +665,13 @@ func readOwnerManifest(packageJSON string) (ownerManifest, error) {
 		return ownerManifest{}, readErr
 	}
 	var pkg struct {
-		Dependencies    map[string]json.RawMessage `json:"dependencies"`
-		DevDependencies map[string]json.RawMessage `json:"devDependencies"`
+		// EVERY dependency stanza counts. A peer or optional declaration is still
+		// the owner declaring this CLI, and reading only two of the four is how a
+		// declared local dependency was classified as a global install.
+		Dependencies         map[string]json.RawMessage `json:"dependencies"`
+		DevDependencies      map[string]json.RawMessage `json:"devDependencies"`
+		PeerDependencies     map[string]json.RawMessage `json:"peerDependencies"`
+		OptionalDependencies map[string]json.RawMessage `json:"optionalDependencies"`
 		// Present in either shape npm/yarn/bun accept — an array of globs, or an
 		// object with a `packages` key. Only presence matters here.
 		Workspaces json.RawMessage `json:"workspaces"`
@@ -454,14 +681,24 @@ func readOwnerManifest(packageJSON string) (ownerManifest, error) {
 	}
 	_, dependency := pkg.Dependencies[puzzlePackage]
 	_, devDependency := pkg.DevDependencies[puzzlePackage]
+	_, peerDependency := pkg.PeerDependencies[puzzlePackage]
+	_, optionalDependency := pkg.OptionalDependencies[puzzlePackage]
 	return ownerManifest{
-		declared:   dependency || devDependency,
-		dev:        !dependency && devDependency,
+		exists:   true,
+		declared: dependency || devDependency || peerDependency || optionalDependency,
+		// -D is only right when devDependencies is the ONLY stanza naming it;
+		// a peer or optional declaration takes the plain install.
+		dev:        devDependency && !dependency && !peerDependency && !optionalDependency,
 		workspaces: len(pkg.Workspaces) > 0,
 	}, nil
 }
 
-func detectPackageManager(dir string) string {
+// detectLockfile returns the manager owning dir's lockfile, or "" when dir has
+// none. The empty answer is load-bearing: a directory with a package.json and no
+// lockfile is not a project anybody installed into, which is what tells an
+// unrecorded local install apart from a global prefix that happens to carry a
+// package.json.
+func detectLockfile(dir string) string {
 	locks := []struct {
 		name    string
 		manager string
@@ -476,6 +713,13 @@ func detectPackageManager(dir string) string {
 		if fsFileExists(filepath.Join(dir, lock.name)) {
 			return lock.manager
 		}
+	}
+	return ""
+}
+
+func detectPackageManager(dir string) string {
+	if manager := detectLockfile(dir); manager != "" {
+		return manager
 	}
 	return "npm"
 }

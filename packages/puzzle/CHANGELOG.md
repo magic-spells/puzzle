@@ -40,6 +40,20 @@ capability:
 - **`data()` runs more than once per navigation.** It always could, under store
   notifications; the settle loop guarantees it. A `data()` with a side effect
   or a one-shot gate in it was already wrong and now fails visibly.
+- **A prerendered app fetches at BUILD time, so its endpoints must be
+  reachable from the build machine.** `output: 'hybrid'` and `output: 'static'`
+  run the same settle loop in Node, where there is no page to resolve an
+  app-relative URL against. `apiURL: '/api'` with `endpoint: '/todos.json'`
+  now resolves against the build output being written — the loopback origin
+  `prerenderToDir` serves — so an endpoint backed by a file in `app/public/`
+  (`app/public/api/todos.json` → `dist/api/todos.json`) prerenders with no
+  backend running. An endpoint that is NOT in the build output needs an
+  absolute `apiURL` the build machine can reach; an app-relative read that
+  cannot be resolved now fails the build with a diagnostic naming the route,
+  the URL, and the fix instead of `TypeError: Failed to parse URL`. A
+  build-time read also means a private API needs its credentials available to
+  the build — `beforeRequest` still runs, and a 404 settles as absence exactly
+  as it does at runtime.
 
 **`routerMode` takes a factory, not a string (0.6.0, D159).** Path routing is
 the zero-config default — omit `routerMode` entirely. Hash and memory routing
@@ -122,6 +136,38 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **`puzzle init --template todos` renders again.** The scaffolded app's `Todo`
+  model declared `endpoint: '/api/todos'` while the template shipped no backend
+  and no file behind it, so under auto-fetching finds (D161) `Home.pzl`'s
+  `store.findMany('todo')` faulted, fetched, and got the dev server's SPA
+  fallback — `200 text/html` — which failed `loadMany`'s JSON-array check,
+  rejected the settle loop, and left navigation zero with nothing to commit: a
+  blank page on the very first `npm run dev`. The template now ships
+  `app/public/api/todos.json` and reads it the way the 0.7.0 examples do
+  (`apiURL: '/api'` + `endpoint: '/todos.json'`, plus a `loadOne` that maps the
+  per-record read onto the collection file), so a fresh app renders a working
+  list with no server. The `default` template was never affected — it declares
+  no models.
+- **Prerender resolves an app-relative endpoint instead of dying on it.**
+  Because D161 moved the read path to build time, a prerendered app using the
+  app-relative endpoint shape every example ships (`apiURL: '/api'`) hit Node's
+  `fetch`, which has no page origin to resolve against, and the build died with
+  the raw `TypeError: Failed to parse URL from /api/posts.json` — no route, no
+  endpoint, no fix. `prerenderToDir` now serves the build output it is writing
+  on an ephemeral loopback origin and resolves app-relative reads against it,
+  so an endpoint backed by a file under `app/public/` prerenders with no
+  backend running. The origin starts lazily (an all-absolute app opens no
+  socket) and is always torn down; a read that genuinely cannot be resolved
+  now fails with a diagnostic naming the route, the URL, and what to
+  configure. The wrapper sits on the global `fetch`, not on `apiURL`, so an
+  authored verb that hardcodes a path (the D158 escape hatch `examples/blog`
+  uses) resolves too.
+- **`types/ssg.d.ts` knows about the read-state envelope.** `PrerenderedPage`
+  and `injectStaticShell` were never taught the `readState` field D161 added,
+  so a TypeScript consumer driving a custom prerender pipeline could not read
+  `page.readState` or pass it through — a compile error on correct code. Both
+  now carry it, typed as the exported `PrerenderReadState`
+  (`{ v, complete, absent }`).
 - **A payload key naming a model method no longer shadows it.** An ordinary
   permission flag (`{ id, name, update: true, delete: false }`) used to land as
   an own data property over `PuzzleModel.prototype.update`, so the next

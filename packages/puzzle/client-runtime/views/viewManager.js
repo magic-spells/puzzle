@@ -823,9 +823,16 @@ function unmount(vnode) {
 	}
 	if (vnode.isComponent) {
 		const child = vnode.component;
-		// A first-mount-failed component was already torn down, leaving only a comment
-		// placeholder (mountComponent's catch nulled `component`). No instance to
+		// A component vnode that never got as far as an instance, holding only a
+		// comment placeholder: the takeoverFailed path in mountComponent returns
+		// before constructing a child, so `component` is still null. No instance to
 		// destroy — just drop the placeholder node so it doesn't linger in the DOM.
+		//
+		// NOT the first-mount-failure case. mountComponent assigns `vnode.component`
+		// before it ever calls mount(), and its rejection handler clears
+		// `vnode.instance` (the Router-preloaded pin) — never `component` — so a
+		// failed mount arrives here with a DESTROYED instance and takes the
+		// isDestroyed branch below.
 		if (!child) {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (vnode.el?.parentNode) devperfMutation();
@@ -1332,7 +1339,12 @@ function setAttr(el, name, value, owner = null) {
 	}
 
 	if (PROPS.has(name)) {
-		el[name] = name === 'value' ? stringify(value) : Boolean(value);
+		// The attribute NAME rides along as the diagnostic label, exactly as the
+		// removal path below passes it: display.js dedups its undefined-value warning
+		// by label, so an unlabeled `<input value={ missing }>` both warned as a
+		// nameless "undefined template value" and collapsed into the same '' key as
+		// every other unlabeled site — only the first of them ever warned.
+		el[name] = name === 'value' ? stringify(value, name) : Boolean(value);
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 			devperfMutation();
 		// keep boolean ATTRIBUTES coherent for CSS selectors like [disabled]

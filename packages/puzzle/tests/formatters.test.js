@@ -372,11 +372,17 @@ describe('FormatterRegistry', () => {
 			}
 		});
 
-		it('in_timezone hands an absent value the Invalid Date undefined already got', () => {
+		it('in_timezone renders an absent value empty, like every other date formatter', () => {
+			// It used to return the Invalid Date `undefined` produced. That reads as
+			// harmless until it is piped: in_timezone is a mid-pipeline stage, and
+			// `{ x | in_timezone:'UTC' | date }` handed `date` a Date object — which
+			// noDate() does not consider absent — so an unset field rendered the
+			// literal text "Invalid Date" instead of nothing.
 			for (const empty of [null, undefined, '', false, true]) {
-				const shifted = f.in_timezone(empty, 'America/New_York');
-				expect(shifted).toBeInstanceOf(Date);
-				expect(Number.isNaN(shifted.getTime())).toBe(true);
+				expect(f.in_timezone(empty, 'America/New_York')).toBe('');
+				expect(f.date(f.in_timezone(empty, 'America/New_York'))).toBe('');
+				expect(f.datetime(f.in_timezone(empty, 'America/New_York'))).toBe('');
+				expect(f.timeago(f.in_timezone(empty, 'America/New_York'))).toBe('');
 			}
 		});
 

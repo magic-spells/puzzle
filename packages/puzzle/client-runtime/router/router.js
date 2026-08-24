@@ -2715,7 +2715,63 @@ export class Router {
 			this.#scrollKey = this.#adoptEntryKey();
 			savedPosition = this.#positions.get(this.#scrollKey) || null;
 		}
+		// SAME-DOCUMENT FRAGMENT MOVE (D41): the popped path differs from the
+		// committed one in its '#fragment' ALONE — `/docs` ⇄ `/docs#faq`. Every
+		// engine routes such a move through popstate, so without this guard path
+		// routing ran the whole navigation pipeline for something that is not a
+		// route change at all. Two ways in, both real:
+		//   • a bare `<a href="#faq">` click, which #handleClick deliberately hands
+		//     to the browser — the browser then pushes a NEW entry (history.state
+		//     null) and fires popstate BEFORE hashchange in Chromium, Firefox and
+		//     WebKit alike. modes.js' "fragment navigations fire popstate" bet is
+		//     right, and it holds for path routing too, not just hash routing.
+		//   • ordinary back/forward traversal ACROSS that pair.
+		// D41 settles what to do about it: "native in-page anchors are not the
+		// router's business". Hash routing has always honored that on pop (the
+		// #currentPath → null return above, D34); path routing is the default and
+		// had no equivalent, so an anchor jump re-ran every ancestor's data(),
+		// scrolled the window back to top a microtask after the browser had landed
+		// on the element, moved focus to the leaf view root and announced the
+		// route — for a URL whose route, params and query never moved.
+		if (this.#state && sameDocKey(path) === sameDocKey(this.#state.path)) {
+			this.#applyFragmentPop(path, savedPosition);
+			return;
+		}
 		this.#navigate(path, { push: false, pop: true, savedPosition });
+	}
+
+	/**
+	 * Settle a same-document fragment pop WITHOUT navigating (D41). The route did
+	 * not change, so nothing loads, nothing refreshes, focus is not moved and the
+	 * live region stays silent (v1.56, D93 — an in-page anchor is not a route
+	 * announcement). Two things still have to happen:
+	 *
+	 * 1. **#state's URL parts move.** `current.hash` is contractually the raw
+	 *    leading-'#' fragment (D83) and #currentPath folds the fragment into the
+	 *    path, so leaving #state behind would make `current.path`/`current.hash`
+	 *    lie about an address bar the user can plainly read — and would make
+	 *    push()'s sameNavKey guard wrong in both directions (a re-click on the
+	 *    anchored nav link would push a duplicate entry; a push back to the bare
+	 *    path would no-op). Mutated in place: `current` re-derives from #state on
+	 *    every read, and the committed chain/views/params are genuinely unchanged.
+	 * 2. **Scroll, but only when a position was actually saved.** A saved position
+	 *    means this is a genuine back/forward traversal onto an entry the router
+	 *    has already seen, and restore semantics win exactly as they do for any
+	 *    other pop (#resolveScroll's `pop → savedPosition` rule). A FRESH fragment
+	 *    navigation lands on a brand-new entry — #adoptEntryKey just stamped its
+	 *    key, so #positions has nothing under it — and there the browser's own
+	 *    anchor scroll is the correct landing; overriding it with {0,0} is the bug
+	 *    this guard exists to remove. #scrollKey bookkeeping already ran in the
+	 *    caller and is untouched, so ordinary back/forward still restores.
+	 */
+	#applyFragmentPop(rawPath, savedPosition) {
+		const loc = parseLocation(rawPath);
+		this.#state.path = rawPath;
+		this.#state.pathname = loc.pathname;
+		this.#state.query = loc.query;
+		this.#state.hash = loc.hash;
+		// savedPosition is non-null only when #scrollEnabled() was true above.
+		if (savedPosition) window.scrollTo(savedPosition.x, savedPosition.y);
 	}
 
 	/**
@@ -3111,4 +3167,18 @@ function sameNavKey(rawPath) {
 	const cut = rawPath.search(/[?#]/);
 	if (cut === -1) return stripTrailingSlash(rawPath);
 	return stripTrailingSlash(rawPath.slice(0, cut)) + rawPath.slice(cut);
+}
+
+/**
+ * Comparison key for the popstate SAME-DOCUMENT test: sameNavKey with the
+ * '#fragment' dropped, so two paths compare equal exactly when they name the
+ * same document and differ in their fragment alone (`/docs` vs `/docs#faq`, or
+ * `/docs#faq` vs `/docs#api`). Query stays in the key — a popstate that changed
+ * `?q=` is a real navigation, not an in-page anchor move. Reuses sameNavKey's
+ * trailing-slash rule so the guard agrees with #match and push() about when a
+ * trailing slash is insignificant.
+ */
+function sameDocKey(rawPath) {
+	const cut = rawPath.indexOf('#');
+	return sameNavKey(cut === -1 ? rawPath : rawPath.slice(0, cut));
 }

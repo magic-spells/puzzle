@@ -3,6 +3,7 @@ package codegen
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/magic-spells/puzzle/compiler/internal/parser"
 )
@@ -255,5 +256,101 @@ export default class T extends PuzzleView { data() { return { foo: 1 }; } }
 `)
 	if warningFor(res2.Warnings, "foo") != nil {
 		t.Errorf("the exported name foo (renamed to bar) must not warn: %#v", res2.Warnings)
+	}
+}
+
+// TestImportScanTerminatesOnUnclassifiedToken pins the loop-progress invariant
+// of collectImportClause. tokenizeJS emits a jsTok that is neither an identifier
+// (ident == ""), punctuation (ch == 0), nor an opaque unit for a NUL byte in the
+// <script> — every other byte lands in one of those three classes. Such a token
+// once matched no branch of the clause reader, so `puzzle build` and the dev
+// watcher spun a core forever instead of compiling. Each case runs under a
+// deadline: a regression must fail this test in seconds, not hang CI until its
+// job timeout.
+func TestImportScanTerminatesOnUnclassifiedToken(t *testing.T) {
+	// The NUL is placed at every position an import clause can reach: after the
+	// keyword, mid-clause, inside braces, around `as`, and around `from`.
+	scripts := []string{
+		"import\x00 a from 'x';",
+		"import a\x00 from 'x';",
+		"import a \x00from 'x';",
+		"import { a\x00, b } from 'x';",
+		"import { a as\x00 b } from 'x';",
+		"import { a \x00as b } from 'x';",
+		"import * \x00as ns from 'x';",
+		"import type\x00 { T } from 'x';",
+		"import { type\x00 T } from 'x';",
+		"import a from\x00 'x';",
+		"import a from 'x'\x00;",
+		"import '\x00side-effect';",
+		"import\x00",
+		"\x00",
+		"import a, { b as c, type d } from 'x';\x00import e from 'y';",
+	}
+
+	for _, script := range scripts {
+		t.Run(strings.ReplaceAll(script, "\x00", "<NUL>"), func(t *testing.T) {
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				toks := tokenizeJS(script)
+				// Both consumers of the clause reader, plus the tokenizer itself.
+				_ = scriptImportBindings(toks)
+				_ = scriptTopLevelBindings(toks)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				// A live-locked goroutine cannot be reclaimed; fail the process
+				// rather than let the run wedge.
+				t.Fatal("import scan did not terminate — collectImportClause stopped advancing")
+			}
+		})
+	}
+}
+
+// TestNulByteScriptStillCompiles is the same defect at the level the user meets
+// it: a .pzl whose <script> carries a NUL must return from Compile rather than
+// hang the build. The byte itself is not the compiler's business — <script>
+// bytes are opaque and esbuild reports on them — so the only contract here is
+// termination.
+func TestNulByteScriptStillCompiles(t *testing.T) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		compileResult(t, "<puzzle-view><span>{ n }</span></puzzle-view>\n\n<script>\n"+
+			"import { PuzzleView } from '@magic-spells/puzzle';\n"+
+			"import { MAX\x00 } from './limits.js';\n"+
+			"export default class T extends PuzzleView { data() { return { n: MAX }; } }\n"+
+			"</script>\n")
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Compile did not terminate on a <script> containing a NUL byte")
+	}
+}
+
+// TestImportClauseStepAlwaysAdvances proves the invariant directly against every
+// token class the type can hold, including the unclassified one. This is the
+// guard that makes the class of bug unrepresentable rather than merely absent
+// from today's inputs.
+func TestImportClauseStepAlwaysAdvances(t *testing.T) {
+	toks := []jsTok{
+		{ident: "a"},                  // identifier
+		{ch: '{'},                     // punctuation
+		{opaque: true},                // string / regex / template literal
+		{opaque: true, comment: true}, // comment
+		{},                            // NUL: no ident, no ch, not opaque
+		{ident: "as"},
+		{ident: "from"},
+		{ident: "type"},
+	}
+	for j := range toks {
+		inNamed := false
+		next, _ := importClauseStep(toks, j, &inNamed, func(string, int) {})
+		if next <= j {
+			t.Errorf("importClauseStep(%d) on %#v returned %d — must advance", j, toks[j], next)
+		}
 	}
 }

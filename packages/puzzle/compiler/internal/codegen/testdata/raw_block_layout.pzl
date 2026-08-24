@@ -1,0 +1,29 @@
+<puzzle-view>
+  <ul>
+    {#for item in items}
+      {#raw}
+        <li class="sample">{ item.title }</li>
+      {/raw}
+    {/for}
+  </ul>
+  <ol>
+    {#for item in items}{#raw}<li class="oneline">{ item.title }</li>{/raw}{/for}
+  </ol>
+  <pre>{#raw}
+const a = 1;
+  const b = 2;
+{/raw}</pre>
+  <p>before{#raw}
+
+{/raw}after</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class RawBlockLayout extends PuzzleView {
+  data() {
+    return { items: [] };
+  }
+}
+</script>
