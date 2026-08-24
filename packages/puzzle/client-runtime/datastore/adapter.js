@@ -42,6 +42,7 @@ let installed = false;
 // installAdapter() overwrites them on the prototype (D157 keeps the read-state
 // bookkeeping out of store.js, so the hooks it needs are added from out here).
 const baseCreateRecord = Store.prototype.createRecord;
+const baseRemoveRecord = Store.prototype.removeRecord;
 const baseHydrateAll = Store.prototype._hydrateAll;
 const baseInstallRelationships = Store.prototype._installRelationships;
 
@@ -371,6 +372,23 @@ class AdapterStoreMethods {
 		return record;
 	}
 
+	/**
+	 * Removing a record by ANY path — `record.destroy()`, a confirmed
+	 * `delete()` — records that identity absent, so a tracked findOne on a type
+	 * that is not collection-complete returns null instead of faulting the id
+	 * straight back in (D161). Anything that brings the id back clears the entry:
+	 * createRecord, _upsert via loadOne/loadMany/upsert, and the hydration sweep.
+	 * `loadOne` is the explicit refresh.
+	 */
+	removeRecord(record) {
+		const type = record._type;
+		if (!type) return baseRemoveRecord.call(this, record);
+		// Key the identity BEFORE the base call — it detaches the record.
+		const key = identityKey(type, record[this.modelFor(type).primaryKey()]);
+		baseRemoveRecord.call(this, record);
+		if (key !== null) markAbsent(readStateFor(this), key);
+	}
+
 	_hydrateAll(data, options) {
 		baseHydrateAll.call(this, data, options);
 		sweepAbsent(this); // storage / static-island / HMR restore all land here
@@ -515,6 +533,11 @@ class AdapterStoreMethods {
 	 * Imperative: it always issues a request and deliberately BYPASSES the negative
 	 * cache, which makes it the force-refresh escape hatch for an id the framework
 	 * has recorded as absent. A 404 refreshes that entry; success clears it (D161).
+	 *
+	 * Permissive about identity: whatever record the server returns for this key is
+	 * upserted, so a lookup by a non-primary key — `loadOne('post', 'my-slug')`
+	 * against a slug-resolving endpoint — works. Only the automatic fault path is
+	 * strict (see _loadOne).
 	 */
 	loadOne(type, id) {
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -523,7 +546,7 @@ class AdapterStoreMethods {
 		return this._loadOne(type, id);
 	}
 
-	async _loadOne(type, id) {
+	async _loadOne(type, id, strict = false) {
 		const existing = this._typeMap(type).get(recordKey(id));
 		const revisionAtDispatch = existing ? recordMutationRevision(existing) : undefined;
 		let data;
@@ -551,16 +574,23 @@ class AdapterStoreMethods {
 				`[puzzle] loadOne('${type}', id) requires primary key "${pk}" on the record`
 			);
 		}
-		// Identity guard (D161), checked BEFORE any mutation: a response for some
-		// other record would leave the requested id still missing, so an implicit
-		// fault would re-request it every settle round until the cap. Normalized, so
-		// a numeric id answering a string request is the same identity.
-		if (recordKey(data[pk]) !== recordKey(id)) {
+		// Identity guard (D161), checked BEFORE any mutation and only on the AUTOMATIC
+		// fault path: there, a response for some other record leaves the requested id
+		// still missing, so the settle loop re-requests it every round until the cap.
+		// An explicit loadOne is one-shot — no storm to prevent — and may legitimately
+		// resolve a non-primary key, so it takes whatever record the server returns.
+		// Normalized, so a numeric id answering a string request is the same identity.
+		if (strict && recordKey(data[pk]) !== recordKey(id)) {
 			throw new Error(
 				`[puzzle] loadOne('${type}', ${JSON.stringify(id)}) returned a record with primary key ${JSON.stringify(data[pk])} — the response must be the requested record`
 			);
 		}
 		const record = this._upsert(type, data, revisionAtDispatch);
+		// _upsert clears the negative entry for the key the RESPONSE carried. On the
+		// permissive path those keys can differ, so clear the REQUESTED one too — a
+		// slug the server just resolved is not an absent identity. Redundant whenever
+		// the response's primary key is the requested id, which is every strict call.
+		clearAbsent(this, type, id);
 		this._persist();
 		return record;
 	}
@@ -633,7 +663,7 @@ class AdapterStoreMethods {
 
 		const request = (async () => {
 			try {
-				await this._loadOne(type, id);
+				await this._loadOne(type, id, true);
 			} catch (err) {
 				// A 404 is an answer: the identity is absent, the round resolves, and the
 				// committed null means "does not exist". Everything else fails the run.
@@ -1022,12 +1052,9 @@ class AdapterStoreMethods {
 		// unconditionally evicts the id, so without this guard an in-flight delete of A
 		// would evict an unrelated B that reused A's id.
 		if (this._typeMap(type).get(requestKey) === record) {
-			this.removeRecord(record); // notifies as usual
-			// A CONFIRMED delete proves server absence, so a later tracked findOne for
-			// this id returns null without re-requesting. Local destroy() proves
-			// nothing and deliberately records nothing (D161).
-			const key = identityKey(type, requestKey);
-			if (key !== null) markAbsent(readStateFor(this), key);
+			// notifies as usual, and records the identity absent (D161) — so does the
+			// never-synced branch above, and so does a local destroy().
+			this.removeRecord(record);
 		}
 		return record;
 	}

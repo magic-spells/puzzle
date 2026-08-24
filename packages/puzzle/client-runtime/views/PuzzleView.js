@@ -163,6 +163,9 @@ export class PuzzleView {
 	// #endEvalRun for why the unwind target has to be derived from this list
 	// rather than captured up front.
 	#evalRuns = [];
+	// Open #withCommittedScope frames. The fence suppresses #evalScope for the whole
+	// dynamic extent of the OUTERMOST one, so only its exit restores the invariant.
+	#fenceDepth = 0;
 	// False until the FIRST data() result actually SWAPS in (v1.8, D39; v1.20
 	// D52 moves the flip from data-commit to swap time). While false and a
 	// renderSkeleton() is declared (compiled from <puzzle-skeleton>), renders
@@ -1919,8 +1922,9 @@ export class PuzzleView {
 			// _restoreFromLeaving(), which cancels the out animation and so RESOLVES the
 			// await above. A cleared #leaving means this view is back on screen, live and
 			// re-subscribed: firing its closing hook there would announce a departure
-			// that did not happen. Its eventual real leave re-arms #leaving and fires
-			// the full bracket through the spent-#outTask branch above.
+			// that did not happen. The restore fires the SHOW bracket instead, and the
+			// eventual real leave re-arms #leaving and fires the full hide bracket
+			// through the spent-#outTask branch above.
 			if (this.#destroyed || !this.#leaving) return;
 			this.viewDidHide();
 		})();
@@ -1950,14 +1954,29 @@ export class PuzzleView {
 	 * it because playOut() unsubscribed the view — Store.withTracking inside refresh
 	 * re-establishes exactly the queries data() still makes.
 	 *
-	 * Recovery runs inside the router's synchronous failure window. Contain both a
-	 * synchronous data() throw and an async rejection here so restoring the old view
-	 * can never turn a handled navigation failure into a rejecting router promise.
+	 * playOut() fired viewWillHide() before its animation, so a restored view owes
+	 * a SHOW bracket: it is on screen again, live and re-subscribed, and a view that
+	 * stopped a timer in viewWillHide would otherwise stay frozen while visible.
+	 * Hooks are lifecycle, not animation callbacks (D28), so the pair fires
+	 * back-to-back with zero-duration semantics — the same treatment the D73
+	 * visible-trigger path gives an enter it cannot hold, and the spent-#outTask
+	 * branch of playOut() gives the hide bracket.
+	 *
+	 * Recovery runs inside the router's synchronous failure window. Contain the show
+	 * hooks, a synchronous data() throw and an async rejection here so restoring the
+	 * old view can never turn a handled navigation failure into a rejecting router
+	 * promise.
 	 */
 	_restoreFromLeaving() {
 		if (this.#destroyed || !this.#leaving) return;
 		this.#leaving = null;
 		this._cancelOutAnimation();
+		// Guarded SEPARATELY, not as one bracket: the restart work a restored view
+		// owes lives in viewDidShow (the timer viewWillHide stopped), so letting a
+		// throwing viewWillShow skip it would leave exactly the frozen-while-visible
+		// view this bracket exists to wake.
+		this.#fireRestoreHook(() => this.viewWillShow());
+		if (!this.#destroyed) this.#fireRestoreHook(() => this.viewDidShow());
 		try {
 			this.refresh()?.catch((err) =>
 				this.#handleBackgroundRefreshFailure(
@@ -1968,6 +1987,26 @@ export class PuzzleView {
 		} catch (err) {
 			this.#handleBackgroundRefreshFailure(
 				'[puzzle] data() failed while restoring a stalled outgoing view:',
+				err
+			);
+		}
+	}
+
+	/**
+	 * Run one show hook from the restore path. Recovery runs inside the router's
+	 * synchronous failure window, so a throw here must be reported and swallowed —
+	 * never allowed to turn a handled navigation failure into a rejecting router
+	 * promise, and never allowed to skip the hook that follows it.
+	 */
+	#fireRestoreHook(hook) {
+		try {
+			hook();
+		} catch (err) {
+			reportError(
+				this.ctx,
+				err,
+				{ phase: 'enter', view: this, route: this.route },
+				'[puzzle] show hook failed while restoring a stalled outgoing view:',
 				err
 			);
 		}
@@ -2196,14 +2235,35 @@ export class PuzzleView {
 	 * and a known residue: app code that captures `this` into a setTimeout or a
 	 * fetch().then() DURING the gate and dereferences params/route after the fence
 	 * returns. There is no async-local scope primitive in the browser to close that.
+	 *
+	 * The restore target is the INVARIANT — the newest evaluation still in flight,
+	 * or null — never the value captured on the way in, and for exactly the reason
+	 * prepareRefresh derives its unwind target from #evalRuns. `fn` can START an
+	 * evaluation inside the fence: an unguarded route reaches prepareRefresh
+	 * synchronously from router.push() (an empty guard chain adds no await), so a
+	 * DOM handler on view V that pushes a params-only navigation reusing V begins a
+	 * prepared run whose data() suspends at its first await and returns here still
+	 * live. Restoring a captured value would overwrite that live run's scope, and
+	 * every params/route read after its await would report the committed route.
+	 *
+	 * Fences nest (flushUpdates fences its whole body and #renderNow fences again
+	 * inside it), so only the OUTERMOST exit restores the invariant; an inner exit
+	 * re-suppresses it, because leaving anything but null there would un-fence the
+	 * rest of its enclosing body. What the depth count does not buy back: a run that
+	 * BEGINS inside the fence installs its scope immediately, so everything after a
+	 * synchronous router.push() in that same frame reads the destination. That is a
+	 * residue of the same family as the setTimeout one above — the alternative is
+	 * stranding the live run — and there is no browser primitive to close it.
 	 */
 	#withCommittedScope(fn) {
-		const prevScope = this.#evalScope;
 		this.#evalScope = null;
+		this.#fenceDepth++;
 		try {
 			return fn();
 		} finally {
-			this.#evalScope = prevScope;
+			this.#fenceDepth--;
+			this.#evalScope =
+				this.#fenceDepth > 0 ? null : (this.#evalRuns[this.#evalRuns.length - 1] ?? null);
 		}
 	}
 
