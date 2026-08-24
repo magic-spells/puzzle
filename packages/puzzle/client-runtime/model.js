@@ -311,16 +311,28 @@ const COLLIDES_METHOD = 2;
 const COLLIDES_RESERVED = 3;
 
 /**
- * Follow the same resolved-property path [[Set]] would follow, stopping before
- * Object.prototype (its dangerous names are already covered by POLLUTION_SKIP),
- * and report what the key collides with. A model getter or method may live on
- * any superclass, not only the concrete model's immediate prototype. Finding the
- * FIRST descriptor matters too: an OWN property legitimately shadows an
- * inherited one and remains assignable.
+ * Follow the same resolved-property path [[Set]] would follow — all the way to
+ * Object.prototype — and report what the key collides with. A model getter or
+ * method may live on any superclass, not only the concrete model's immediate
+ * prototype. Finding the FIRST descriptor matters too: an OWN property
+ * legitimately shadows an inherited one and remains assignable.
+ *
+ * Object.prototype is IN the walk. POLLUTION_SKIP covers only the three names
+ * that can re-prototype a record (`__proto__`/`constructor`/`prototype`); it
+ * says nothing about the primitive-conversion pair. A payload key `toString` or
+ * `valueOf` lands as an own DATA property, and the record then has no callable
+ * conversion method at all — `String(record)`, `${record}`, and every template
+ * that interpolates the whole record throw
+ * `TypeError: Cannot convert object to primitive value`, blanking the render.
+ * That is the same "a data field silently shadows a method" failure the model-
+ * method rule exists to stop, so it takes the same answer: drop the value and
+ * warn. Object.prototype's other methods (`hasOwnProperty`, `toLocaleString`,
+ * `isPrototypeOf`, `propertyIsEnumerable`) ride along under the one rule rather
+ * than an enumerated list that the next Object.prototype addition would outdate.
  */
 function resolveCollision(target, key) {
 	let owner = target;
-	while (owner && owner !== Object.prototype) {
+	while (owner) {
 		const descriptor = Object.getOwnPropertyDescriptor(owner, key);
 		if (descriptor) {
 			// Accessor: getter-only is unassignable (strict-mode throw); an accessor
@@ -517,9 +529,14 @@ export function safeMerge(record, src, throughRevision) {
  * Does `key` resolve to a plain method on this model's prototype chain?
  * Stops before Object.prototype, mirroring resolveCollision's walk.
  */
+// Walks to Object.prototype for the same reason resolveCollision does: a schema
+// field named `toString`/`valueOf` is unusable by construction, so the two walks
+// must agree on what "is a method" means. If this one stopped short, such a field
+// would register cleanly and then never hold data — the exact trap this check
+// exists to close.
 function resolvesToMethod(proto, key) {
 	let owner = proto;
-	while (owner && owner !== Object.prototype) {
+	while (owner) {
 		const descriptor = Object.getOwnPropertyDescriptor(owner, key);
 		if (descriptor) return !('get' in descriptor) && typeof descriptor.value === 'function';
 		owner = Object.getPrototypeOf(owner);
@@ -528,20 +545,30 @@ function resolvesToMethod(proto, key) {
 }
 
 /**
- * Reject a schema entry whose NAME is already a method on the model — checked
- * once, when the Store registers the model, so the mistake surfaces at app
- * construction instead of as a `TypeError: record.update is not a function`
+ * Reject a schema entry whose NAME the record shape has already spoken for —
+ * checked once, when the Store registers the model, so the mistake surfaces at
+ * app construction instead of as a `TypeError: record.update is not a function`
  * from inside app code the first time a payload carries the key.
  *
- * A field named after a method is unusable by construction: the merge paths drop
- * the incoming value (it would otherwise shadow the method), so the field could
- * never hold data. Both plain fields and relationships are checked —
- * a relationship additionally installs a prototype getter, which would replace
- * the method for every record of the class.
+ * Two families, one failure: a field the merge paths refuse to write can never
+ * hold data, so `required` on it fails forever and save() rejects with no
+ * request ever sent — a silence with nothing pointing at the name.
  *
- * Covers PuzzleModel's own verbs (update/destroy/validate/toJSON, plus
- * save/delete once the adapter capability is installed — PuzzleApp installs it
- * before constructing the Store) and any method the author's subclass declares.
+ * - **Methods.** A field named after a method would shadow it, so every write
+ *   path drops the incoming value. Both plain fields and relationships are
+ *   checked — a relationship additionally installs a prototype getter, which
+ *   would replace the method for every record of the class. Covers PuzzleModel's
+ *   own verbs (update/destroy/validate/toJSON, plus save/delete once the adapter
+ *   capability is installed — PuzzleApp installs it before constructing the
+ *   Store), any method the author's subclass declares, and Object.prototype's
+ *   (see resolveCollision on why `toString`/`valueOf` are load-bearing).
+ * - **Reserved record fields** (MERGE_SKIP): the framework internals
+ *   `_store`/`_type`/`_synced`/`_deleted` and the pollution family
+ *   `__proto__`/`constructor`/`prototype`. These are not method collisions —
+ *   nothing shadows anything — so the method walk above never saw them, and a
+ *   schema could declare one and register cleanly. `_type` is Sanity's field
+ *   convention and `_deleted` is CouchDB/PouchDB's, so this is a name a real
+ *   payload arrives with, not a hypothetical.
  */
 export function assertSchemaNames(Model, type) {
 	if (typeof Model !== 'function' || !Model.prototype) return;
@@ -549,6 +576,13 @@ export function assertSchemaNames(Model, type) {
 	if (!schema || typeof schema !== 'object') return;
 	const proto = Model.prototype;
 	for (const name of Object.keys(schema)) {
+		// Reserved first: `constructor` is in both families, and "reserved" is the
+		// more useful thing to tell someone who declared it.
+		if (MERGE_SKIP.has(name)) {
+			throw new Error(
+				`[puzzle] model "${type}" declares schema entry "${name}", which is a reserved record field — every merge path (update, upsert, save response, storage hydration) drops it, so the field can never hold data: a required rule on it fails forever and save() rejects without dispatching. Rename the field.`
+			);
+		}
 		if (!resolvesToMethod(proto, name)) continue;
 		throw new Error(
 			`[puzzle] model "${type}" declares schema entry "${name}", which is a method on ${Model.name || 'the model class'} — a field cannot shadow a model method (payloads carrying it are dropped). Rename the field or the method.`
@@ -586,8 +620,15 @@ function dateFieldsFor(Model) {
  *
  * A bare `YYYY-MM-DD` is a calendar date and becomes LOCAL midnight (D114, the
  * same rule the date formatters use); anything unparseable is left exactly as it
- * arrived so validation still reports it. Serialization needs nothing: Date's
- * own toJSON emits the ISO string again.
+ * arrived so validation still reports it.
+ *
+ * Serialization is a round trip, not a one-way convert. An instant needs
+ * nothing — Date's own toJSON emits the ISO string again — but a calendar date
+ * revived to a plain local-midnight Date would go back out as `toISOString()`,
+ * a UTC instant naming the PREVIOUS day for everyone east of UTC: a
+ * `2026-08-23` loaded in Berlin saved as `2026-08-22T22:00:00.000Z`. So a
+ * date-only value revives to a CalendarDate (dates.js), whose toJSON writes the
+ * calendar date back byte-identically in every zone.
  *
  * Non-destructive — the payload is copied only if something actually changes.
  */

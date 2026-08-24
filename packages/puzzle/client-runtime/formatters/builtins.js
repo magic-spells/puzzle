@@ -1,7 +1,7 @@
 // Built-in template formatters. Keep this module side-effect-free so bundlers
 // can tree-shake unused named exports from compiler-generated manifests.
 
-import { DATE_ONLY, noDate, parseDateInput } from '../dates.js';
+import { calendarISO, isCalendarDate, noDate, parseDateInput } from '../dates.js';
 
 // null/undefined render as empty string, never the literal "null"/"undefined"
 const str = (v) => (v == null ? '' : String(v));
@@ -222,10 +222,16 @@ export function number_with_delimiter(v, delimiter = ',') {
 	return parts.join('.');
 }
 
-// The calendar-date parse rule (D114) — DATE_ONLY, noDate and parseDateInput — is
-// shared with the datastore's JSON hydration boundary, so it lives in ../dates.js;
-// see that module for the rationale. Nothing here may re-export it: this module's
-// export list IS the formatter registry.
+// The calendar-date parse rule (D114) — noDate, parseDateInput, and the
+// CalendarDate tag its `isCalendarDate`/`calendarISO` pair reads — is shared with
+// the datastore's JSON hydration boundary, so it lives in ../dates.js; see that
+// module for the rationale. Nothing here may re-export it: this module's export
+// list IS the formatter registry.
+//
+// Calendar-date branches below test the PARSED value, never `typeof v ===
+// 'string'`. By the time a value reaches a template it has usually been through
+// the store, which revives a `date()` field to a Date on the way in — a
+// string-shaped test sees an instant there and silently takes the wrong branch.
 const DATE_FORMATS = {
 	date:     { year: 'numeric', month: '2-digit', day: '2-digit' },
 	time:     { hour: '2-digit', minute: '2-digit' },
@@ -241,6 +247,11 @@ const TIMEZONE_FORMATTERS = new Map();
 let relativeTimeFormatter;
 
 export function in_timezone(v, tz = 'UTC') {
+	// An absent value has no instant to re-express, and the fail-soft below would
+	// hand the next formatter in the pipe an Invalid Date — `{ x | in_timezone:'UTC'
+	// | date }` then rendered the literal text "Invalid Date" for an unset field.
+	// Same empty answer as date()/timeago(), for the same reason.
+	if (noDate(v)) return '';
 	const d = parseDateInput(v);
 	// A bare YYYY-MM-DD names a DAY, not an instant, so there is nothing to
 	// re-express in another zone — return D114's local midnight untouched.
@@ -248,7 +259,7 @@ export function in_timezone(v, tz = 'UTC') {
 	// clock in `tz` lands on the day before (or after) for any viewer whose own
 	// offset differs, making a calendar date render differently per viewer — the
 	// exact TZ dependence D114 removed from `date`/`timeago`.
-	if (typeof v === 'string' && DATE_ONLY.test(v)) return d;
+	if (isCalendarDate(d)) return d;
 	// An unknown time-zone identifier throws RangeError at DateTimeFormat
 	// construction, and formatToParts throws on an invalid date — fail soft to the
 	// un-shifted date so a bad tz/date never crashes the render.
@@ -283,7 +294,7 @@ export function date(v, preset = 'date', locale = undefined) {
 
 	// The ISO form of a calendar date is the calendar date itself — toISOString() on
 	// its local midnight would emit a time-zone-dependent instant.
-	if (preset === 'iso') return typeof v === 'string' && DATE_ONLY.test(v) ? v : d.toISOString();
+	if (preset === 'iso') return isCalendarDate(d) ? calendarISO(d) : d.toISOString();
 
 	const resolvedPreset = Object.hasOwn(DATE_FORMATS, preset) ? preset : 'date';
 	const options = DATE_FORMATS[resolvedPreset];

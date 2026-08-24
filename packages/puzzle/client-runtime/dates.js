@@ -29,13 +29,65 @@ export const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
  */
 export const noDate = (v) => v == null || v === '' || typeof v === 'boolean';
 
+/**
+ * The local-midnight Date a calendar date parses to, tagged so it stays
+ * recognizable as a DAY after parsing.
+ *
+ * `typeof v === 'string' && DATE_ONLY.test(v)` can only classify the value at
+ * the moment it is still text. The datastore revives a `date()` field the
+ * instant a payload lands, so every consumer downstream of hydration sees a
+ * Date and cannot tell "2026-07-24" (a day) from an instant that happens to
+ * fall on local midnight. That ambiguity is not cosmetic: the calendar date
+ * would be serialized back as `toISOString()` — a UTC instant, which east of
+ * UTC names the PREVIOUS day — so a Rails/Django `DateField` round-tripped
+ * through save() came back one day earlier. Carrying the classification on the
+ * value itself keeps D114's rule intact across the string→Date boundary.
+ *
+ * A subclass, not a flag property: `instanceof Date` still holds (validation's
+ * type gate, Intl, relational comparison, every app-side check), the tag cannot
+ * be lost to a spread or a structured copy of the FIELD, and `toJSON` — the one
+ * hook `JSON.stringify` consults, which is what every write path goes
+ * through — writes the calendar date back exactly as it arrived.
+ */
+export class CalendarDate extends Date {
+	toJSON() {
+		// Match Date.prototype.toJSON's contract for a non-finite date: null, not
+		// a "NaN-NaN-NaN" string. Unreachable through parseDateInput (it only
+		// constructs one after the round-trip check), but a direct construction
+		// must not be able to poison a payload.
+		return Number.isNaN(this.getTime()) ? null : calendarISO(this);
+	}
+}
+
+/** True when a value is a calendar date — a DAY — rather than an instant. */
+export const isCalendarDate = (v) => v instanceof CalendarDate;
+
+/**
+ * The `YYYY-MM-DD` a CalendarDate names, read off its LOCAL fields — the
+ * components it was built from. Never `toISOString()`: that re-expresses local
+ * midnight as a UTC instant, which is the whole bug.
+ */
+export function calendarISO(d) {
+	return (
+		String(d.getFullYear()).padStart(4, '0') +
+		'-' +
+		String(d.getMonth() + 1).padStart(2, '0') +
+		'-' +
+		String(d.getDate()).padStart(2, '0')
+	);
+}
+
 export function parseDateInput(v) {
 	// Invalid Date is exactly what `new Date(undefined)` already produced, so every
 	// caller's existing undefined path covers these without a second branch.
 	if (noDate(v)) return new Date(NaN);
+	// Already classified — re-parsing through `new Date(v)` below would clone it
+	// into a plain Date and throw the classification away, which is exactly how a
+	// revived field lost its calendar identity on the way to a formatter.
+	if (isCalendarDate(v)) return v;
 	if (typeof v === 'string' && DATE_ONLY.test(v)) {
 		const [y, m, d] = v.split('-').map(Number);
-		const local = new Date(y, m - 1, d);
+		const local = new CalendarDate(y, m - 1, d);
 		if (local.getFullYear() === y && local.getMonth() === m - 1 && local.getDate() === d) {
 			return local;
 		}
