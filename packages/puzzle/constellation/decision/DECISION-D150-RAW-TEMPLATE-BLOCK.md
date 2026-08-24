@@ -102,3 +102,12 @@ Static JSON/options blocks and brace-heavy examples compile without escaping
 each brace. The parser, codegen, client DOM path, and prerender path are covered
 as one round-trip contract. Existing templates and the deferred dynamic raw-HTML
 boundary are unchanged.
+
+**A raw block is formattable, so its outer whitespace is layout, not content.**
+The whitespace-only text nodes at each end of a raw span have the raw flag
+cleared and fall back to ordinary text handling; the raw content itself is never
+rewritten. Without that demotion the newlines an author writes to indent a
+multi-line `{#raw}` survived as real text vnodes, and every gate that counts
+roots saw them — a `{#for}` body, a component template root, and a component
+skeleton root all broke on a block that was formatted rather than written on one
+line.

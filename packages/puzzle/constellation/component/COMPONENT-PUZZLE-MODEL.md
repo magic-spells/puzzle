@@ -60,3 +60,34 @@ Assignment uses pollution-safe copy helpers. Fresh data rejects
 `_store`, `_type`, `_synced`, and `_deleted`. Framework internals, sync
 provenance, and the removed-instance flag are non-enumerable. Primary keys are
 immutable after indexing.
+
+**A payload key can never shadow a method.** A key resolving to a function on
+the model prototype — `update`, `destroy`, `toJSON`, an author method, or an
+`Object.prototype` name like `toString`/`valueOf` — is dropped on every write
+path rather than assigned over the method. The collision walk runs the whole
+prototype chain to `Object.prototype`, because a `toString` payload key silently
+blanked a render before it did. The Store closes the same hole one level earlier:
+at registration `assertSchemaNames` throws for a schema entry that is a reserved
+record field (the merge set drops it, so the field could never hold data — a
+`required` rule on it would fail forever) or that resolves to a prototype method.
+It is hoisted ahead of relationship installation so a bad name is reported before
+anything is built on it.
+
+**`update()` drops reserved keys instead of throwing mid-patch**, so a caller
+handing it a whole server object gets the legal subset applied rather than a
+half-written record; D125 revision stamps land only on the keys that were
+actually applied. Advisory collision warnings sit behind `__PUZZLE_DEV__` and
+strip from production.
+
+**Declared `date()` fields carry the day/instant distinction on the value.**
+`client-runtime/dates.js` owns the shared rule (D114) and every JSON boundary
+funnels through it — upsert, loads, save responses, storage restore, and D161's
+auto-fetch faults (which reach `_upsert`, so they needed no new boundary). A
+bare `YYYY-MM-DD` revives as a `CalendarDate`, a `Date` subclass whose `toJSON`
+re-emits the calendar date read off its **local** fields. Anything else revives
+as an ordinary `Date` and is byte-identical to before. The subclass rather than
+a flag is what makes it survive: `instanceof Date` still holds for validation,
+`Intl`, and comparison, the tag cannot be lost to a spread of the field, and
+`toJSON` is the single hook every write path already goes through. Without it a
+date-only field revived to local midnight and serialized via `Date#toJSON` as a
+UTC instant, so every user east of UTC saved the previous day.

@@ -31,6 +31,7 @@ router-only, independently shippable" (the old FEATURE-SCROLL-FOLLOWUPS card, no
 [[FEATURE-V1-10-SCROLL-FOLLOWUPS]]).
 
 ## Decision
+
 Sub-decisions, each with its rejected alternative:
 
 - **Anchor is a default-behavior refinement, resolved at commit.** On a **push**
@@ -55,6 +56,22 @@ Sub-decisions, each with its rejected alternative:
   `url.pathname + url.search + url.hash` (previously the hash was dropped). A bare
   `#anchor` href is still left to the browser — native in-page anchors are not the
   router's business.
+- **A same-document fragment pop is settled in place, never navigated.** The
+  browser routes both ways in — a bare `#anchor` click the interceptor deliberately
+  declined, and ordinary back/forward across the `/docs` ⇄ `/docs#faq` pair —
+  through `popstate`, in Chromium, Firefox and WebKit alike. Path routing compares
+  the popped path to the committed one ignoring the fragment and, on a match,
+  settles without navigating: nothing loads, nothing refreshes, focus does not move,
+  and the live region stays silent (an in-page anchor is not a route announcement,
+  D93). Two things still happen — `#state`'s URL parts are mutated in place, so
+  `current.path`/`current.hash` keep matching the address bar and `push()`'s
+  `sameNavKey` guard stays correct in both directions; and scroll is restored **only**
+  when a position was actually saved, because a fresh fragment entry has none and
+  the browser's own anchor landing is the correct one. Hash routing has always
+  honored this through `#currentPath`'s "not a route fragment" null return (D34);
+  path routing is the default and had no equivalent, so an anchor jump re-ran every
+  ancestor's `data()` and scrolled back to top for a URL whose route, params and
+  query never moved.
 - **Hash mode uses the in-fragment double-hash convention.** `push('/docs#faq')`
   writes `#/docs#faq`; `location.hash` returns the whole fragment, `#currentPath`'s
   existing `#/` parse yields `/docs#faq`, and matching already strips at `#`. An

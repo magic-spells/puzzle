@@ -86,8 +86,9 @@ transitions:
     to: mounted
     guard: the router is recovering a navigation that failed after this leave started
     action: >-
-      cancel the retained out effect, clear the leaving guard, and refresh to re-establish the
-      subscription playOut dropped; the out sequence stays spent
+      cancel the retained out effect, clear the leaving guard, fire viewWillShow() then
+      viewDidShow() at zero duration to re-open the show bracket playOut() closed, and refresh to
+      re-establish the subscription it dropped; the out sequence stays spent
   - from: mounted
     to: failed
     guard: a framework-contained mount, render or refresh failure
@@ -218,6 +219,16 @@ the leave, the outgoing unit is restored — the retained out effect is
 cancelled and a refresh re-establishes the subscription. The out sequence stays
 spent, so a later navigation away swaps the unit out instantly with no second
 animation.
+
+**The restore fires the show bracket.** `playOut()` already fired
+`viewWillHide()`, so a unit put back on screen has been told it is hiding and
+must be told it is showing again: the restore fires `viewWillShow()` then
+`viewDidShow()` at zero duration. Hooks are lifecycle, not animation callbacks
+(D28) — without the bracket, a view that starts something in `viewDidShow` and
+stops it in `viewWillHide` stayed stopped while fully visible. A throwing hook
+is reported, never raised into the router's synchronous failure window, and a
+throw in `viewWillShow` does not skip `viewDidShow` — that hook owns the restart
+the pairing depends on.
 
 ## `failed` describes a position, not a live instance
 

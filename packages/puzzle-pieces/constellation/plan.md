@@ -7,12 +7,12 @@ connected_repos:
       The Puzzle framework — the .pzl compiler + runtime pieces are built for. Has its own
       constellation plan.
   - name: morph-engine
-    path: ../morph-engine
+    path: ../../../morph-engine
     description: >-
       @magic-spells/morph-engine — the one published npm dep morph pieces (Select, Dialog,
       DatePicker) declare.
   - name: magic-spells-site
-    path: ../magic-spells-site
+    path: ../../../magic-spells-site
     description: Astro marketing site — the future home of long-form public docs (DECISION-DOCS-DEMO-SPLIT).
 connections:
   - DIAGRAM-TOPOLOGY

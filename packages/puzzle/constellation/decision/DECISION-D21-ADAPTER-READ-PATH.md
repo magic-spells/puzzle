@@ -58,8 +58,19 @@ into views, and without a second fetching surface for developers to learn.
   negative cache — the force-refresh idiom). Both return promises, both stay
   off the taught beginner surface, and both warn in dev when called inside a
   tracked run.
-- A model with no resolvable read verb makes the tracked path pure-local and
-  the explicit loads a rejected promise with a clear message.
+- **An explicit `loadOne` may resolve a non-primary key.** The response-identity
+  guard — which drops a record whose key is not the one requested — is scoped to
+  the **automatic** fault path, where the storm it prevents actually exists: a
+  mismatched response leaves the requested id still missing, so the settle loop
+  re-requests it every round until the cap. An explicit call is one-shot and
+  cannot loop, so `loadOne('post', 'my-slug')` against a slug-resolving endpoint
+  upserts what came back.
+- A model that the tracked path cannot fault for stays pure-local there; the
+  explicit loads reject with a clear message when no verb resolves at all.
+  Fault eligibility is deliberately narrower than dispatch — a model qualifies
+  on its **own** declared verb or `endpoint`, never on the app-wide dialect
+  tier alone (D158) — so an app that sets `adapter.defaults()` does not thereby
+  make every local-only model fetchable.
 
 ## Alternatives rejected
 
