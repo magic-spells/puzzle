@@ -1,7 +1,7 @@
 ---
 name: Puzzle datastore
 status: verified
-verified_at: '2026-08-23T19:55:29.161Z'
+verified_at: '2026-08-24T05:28:11.795Z'
 connections:
   - DOC-SPEC
   - DOC-MODELS
@@ -12,7 +12,11 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - FILE-STORE
   - FILE-PUZZLE-MODEL
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+notes:
+  - kind: verified
+    text: 'Store API''s identity-guard sentence narrowed to the automatic fault path — PR #84.'
+    sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
 ---
 
 # Puzzle datastore
@@ -62,7 +66,7 @@ when the app passes the `/adapter` capability to `PuzzleApp`.
 | `upsert(type, objectOrArray)` | Apply server-authoritative object(s) by explicit primary key, preserving identity and marking records synchronized. |
 | `request(type, path?, options?)` | Custom adapter request with method/body/headers; 204/empty responses map to `null`. |
 
-**Record identity ignores number/string spelling (D112).** The store indexes
+**Record identity is number/string-insensitive (D112).** The store indexes
 number primary keys by their string form, so `findOne('todo', id)` returns the
 same record whether `id` is `7` or `'7'` — which matters because route params are
 always strings while JSON payloads usually carry numbers. `belongsTo`/`hasMany`
@@ -91,8 +95,11 @@ URL plus init in, `Response` out, with no prefixing or JSON magic — and adds t
 D91 hook plus fixtures interception. A framework verb may return its Response
 for Puzzle to status-check and parse, or return parsed data directly. In both
 cases Puzzle applies the same primary-key/shape guards and framework-owned
-reconciliation — including the D158 identity guard: a `loadOne` response whose
-pk differs from the requested id rejects before mutation. Non-OK reads throw
+reconciliation. On the automatic fault path, the D158 identity guard rejects a
+`loadOne` response whose pk differs from the requested id before mutation, so
+an implicit fault can never miss forever; an explicit `store.loadOne` accepts
+whatever record the server returns (a slug-resolving endpoint, say) and clears
+the requested id's negative entry on success. Non-OK reads throw
 `PuzzleAdapterError` (generated transports included); a custom `loadOne`
 signals not-found with `new Response(null, { status: 404 })` — returning `null`
 is a shape error. Global fetch is legal but bypasses the hook and mock seam.
@@ -104,32 +111,6 @@ The endpoint-generated `loadMany` serializes non-nullish option values with
 `URLSearchParams`; authored transports receive the exact options object. Pages
 accumulate in the identity map rather than replacing the collection, and an
 options-bearing load never marks the type complete.
-
-**Shaping outgoing requests: `beforeRequest` (D91).** Generated transports,
-enhanced fetch calls, and `request()` funnel through one place, and the optional
-synchronous `beforeRequest(init, { type, method, url })` config hook shapes the
-`init` before it goes out. This is the auth-header seam; it is deliberately
-synchronous, so inline token refresh is not supported.
-
-Local record methods:
-
-- `record.update(patch)`: validate patched fields, mutate locally, notify;
-- `record.destroy()`: remove locally, mark this instance deleted, and notify;
-- `record.validate()`: return `{ valid, errors }` without throwing;
-- `record.save()`: validate the full record, dispatch `create` when new or
-  `update` when synchronized, then safely apply the response; the endpoint
-  defaults are POST and PUT respectively;
-- `record.delete()`: dispatch delete first, then remove locally on success; the
-  endpoint default treats 404 as success. Once
-  removed, later calls on the same instance resolve without another request;
-- `record.toJSON()`: return enumerable data only.
-
-`PuzzleValidationError` represents local schema failures.
-`PuzzleAdapterError`, exported from `@magic-spells/puzzle/adapter`, carries HTTP/request context — `.status`, `.statusText`,
-and `.body` (parsed JSON when parseable, else text). A failed save keeps the
-dirty local record for retry; a failed delete keeps it in the store. Only the
-first save adopts server keys: on an update-save a differing response pk warns
-and is ignored while other fields still merge.
 
 ## Validation boundaries
 

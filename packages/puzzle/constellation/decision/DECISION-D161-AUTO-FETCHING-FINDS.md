@@ -65,8 +65,14 @@ notes:
       and needs "restore only while you still own it" discipline, NOT a naive save/restore — a naive
       fence clobbers an inner async eval's map when a handler calls refresh(). Shipped in 0.7.0
       as-is; deliberate, tracked, own branch.
-verified_at: '2026-08-23T19:12:34.759Z'
-verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+  - kind: verified
+    text: >-
+      destroy() now records absence like delete(); identity guard narrowed to the automatic fault
+      path; loopback build server removed, prerender rule is absolute apiURL | endpoint-less+seed |
+      diagnostic — PRs #83/#84.
+    sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+verified_at: '2026-08-24T05:28:09.597Z'
+verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
 ---
 
 # D161 — Tracked finds fault in missing data; the settle loop commits complete passes (v1.76)
@@ -137,14 +143,17 @@ module — the D157 no-adapter bundle carries none of it): in-flight dedup (by
 never-persisted 1000-entry negative LRU, and a collection-complete type set.
 Only a framework-normalized 404
 (`PuzzleAdapterError`) records absence; network/5xx/401/403/shape errors
-reject the run and poison nothing. Negatives clear when the identity arrives
-by any path (create, upsert, load, hydration, save reconcile/pk adoption);
-confirmed `delete()` records absence, local `destroy()` does not. Explicit
-`loadOne` bypasses the negative cache — the force-refresh escape hatch. A
-`loadOne` response whose pk differs from the requested id rejects before
-mutation (otherwise an implicit fault misses forever). A type is
-collection-complete only after a successful no-options collection load
-(empty-array success counts); options-bearing loads stay partial.
+reject the run and poison nothing. Removing a record by any path — confirmed
+`delete()` or local `destroy()` — records absence; the identity clears on any
+load/create that returns it (create, upsert, load, hydration, save
+reconcile/pk adoption). Explicit `loadOne` bypasses the negative cache as the
+refresh escape hatch, and on success also clears the *requested* id's entry.
+Only the AUTOMATIC fault path rejects a response whose pk differs from the
+requested id before mutation — an implicit fault would otherwise miss
+forever; explicit `store.loadOne` accepts what the server returns (a
+slug-resolving endpoint, say). A type is collection-complete only after a
+successful no-options collection load (empty-array success counts);
+options-bearing loads stay partial.
 
 **One/Many rename.** `store.loadAll` → `store.loadMany`, and the adapter verb
 key everywhere (model `static adapter`, `adapter.defaults()`, bound adapter).
@@ -161,10 +170,13 @@ types + negative identities) in a versioned data-island envelope so
 `mountStatic` doesn't refetch what the build settled; hybrid deliberately
 transfers nothing — its SPA takeover re-runs `data()` as a fresh session.
 HMR snapshots carry read state but never in-flight promises. Prerender runs
-in Node, which has no page origin, so `prerenderToDir` serves the staged
-output on an ephemeral loopback origin and resolves app-relative reads
-against the build output it is writing; an endpoint it cannot resolve fails
-the build with a diagnostic naming the endpoint and both remedies.
+in Node, which has no page origin: a prerender read must be answerable from
+the build machine. An absolute `apiURL` is fetched for real; a model
+declaring no `endpoint` and no read verb never faults, so its data comes from
+seeding the store in `beforeMount({ store })`; an app-relative URL fails the
+build with a diagnostic naming the URL and both remedies. The seam is the
+global `fetch`, not `apiURL` — an authored D158 verb can hardcode a path that
+never touches `apiURL` at all.
 
 ## Alternatives rejected
 

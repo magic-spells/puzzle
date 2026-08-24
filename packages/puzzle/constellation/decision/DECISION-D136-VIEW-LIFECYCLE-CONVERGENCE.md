@@ -11,8 +11,14 @@ connections:
   - DOC-VIEW-LIFECYCLE
   - FILE-PUZZLE-VIEW
   - FILE-VIEW-MANAGER
-verified_at: '2026-08-23T19:55:19.533Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T05:28:08.520Z'
+verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+notes:
+  - kind: verified
+    text: >-
+      Restore now fires the show bracket (viewWillShow → viewDidShow) instead of leaving it dangling
+      — PR #84.
+    sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
 ---
 
 # D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown (v1.64)
@@ -94,10 +100,13 @@ Symmetrically, `viewDidHide()` is guarded on `#leaving` still being set, so a
 view whose leave was CANCELLED by a restore does not announce a hide while it is
 visible, live and re-subscribed.
 
-Known asymmetry: a restored view therefore carries a `viewWillHide` with no
-matching `viewDidHide` until its real departure, which fires the pair. That is
-deliberate — firing `viewDidHide` on a visible view is worse — and
-`viewWillShow()` is NOT re-fired on restore, because the view never left.
+`_restoreFromLeaving()` also fires the show bracket: `viewWillShow()` then
+`viewDidShow()`, zero-duration, each hook contained separately so a throwing
+`viewWillShow` still lets `viewDidShow` fire and neither can reject the
+router's navigation promise or skip the refresh that follows. A view pulled
+back onto screen resumes exactly as it would on a fresh show — its eventual
+real leave still fires the full `viewWillHide → viewDidHide` pair through the
+spent-`#outTask` branch above.
 
 ## 4. `router.start()` abort parity
 

@@ -1,6 +1,6 @@
 ---
 name: Server adapter runtime (@magic-spells/puzzle/adapter)
-status: built
+status: verified
 connections:
   - FILE-ADAPTER
   - COMPONENT-STORE
@@ -32,6 +32,14 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - FEATURE-ADAPTER-WRITE-SYNC
   - FEATURE-STORE-PUBLIC-UPSERT
+verified_at: '2026-08-24T05:28:13.551Z'
+verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+notes:
+  - kind: verified
+    text: >-
+      Invariants + Gotchas re-truthed: removal-records-absence, fault-path-only identity guard, no
+      build-time server — PRs #83/#84.
+    sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
 ---
 
 # Server adapter runtime
@@ -143,9 +151,15 @@ un-warned internal loaders.
   every started fault promise carries a rejection observer** — a data pass that
   throws or is superseded can never leave an unhandled rejection or a stuck
   in-flight key.
-- **A `loadOne` response must be the record asked for**: a pk that differs from
-  the requested id under `recordKey` normalization rejects before mutation, on
-  the explicit and implicit paths alike.
+- **Removing a record records it absent.** `record.destroy()` and a confirmed
+  `record.delete()` both go through `removeRecord`, which marks the identity
+  absent — any load/create that returns it clears the entry.
+- **A `loadOne` response must be the record asked for, but only on the
+  automatic fault path**: there, a pk that differs from the requested id under
+  `recordKey` normalization rejects before mutation, so an implicit fault can
+  never miss forever. Explicit `store.loadOne` is permissive — it accepts
+  whatever record the server returns and clears the requested id's negative
+  entry on success.
 
 ## Gotchas
 
@@ -170,5 +184,8 @@ un-warned internal loaders.
   `upsert`, `save`, hydration, and options-bearing loads never mark a type
   complete, so paginated partial loads keep accumulating and page 2 can't
   masquerade as the whole collection. An empty-array success DOES mark complete.
-- A confirmed `record.delete()` records a negative entry (the server said
-  gone); a local `destroy()` does not — it proves nothing about the server.
+- A prerender read must be answerable from the build machine: an absolute
+  `apiURL` is fetched for real, a model with no `endpoint` and no read verb
+  never faults (seed the store in `beforeMount`), and an app-relative URL fails
+  the build with a diagnostic — there is no build-time server standing in for
+  one.

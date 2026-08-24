@@ -7,8 +7,8 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-ANIMATIONS
   - DECISION-D145-ERROR-BOUNDARIES
-verified_at: '2026-08-14T05:01:28.752Z'
-verified_sha: d74916a0e021b6bb86394551171838fbab161347
+verified_at: '2026-08-24T05:28:12.855Z'
+verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
 notes:
   - kind: verified
     text: >-
@@ -16,9 +16,11 @@ notes:
       census); §N numbers unchanged
     sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
   - kind: verified
-    text: >-
-      §60 added: the app-level onError + errorView contract (v1.67/v1.71, from D145).
+    text: '§60 added: the app-level onError + errorView contract (v1.67/v1.71, from D145).'
     sha: d74916a0e021b6bb86394551171838fbab161347
+  - kind: verified
+    text: '§12 hook contract gained the restore show-bracket amendment — PR #84.'
+    sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
 ---
 
 The frozen v1 contract for the view runtime: animations, skeleton loading, `this.memo()`, app lifecycle hooks, cross-view morphs, element refs, scroll-triggered enters, and the `flip` directive. See [[DOC-SPEC]] for the section index and the rest of the contract.
@@ -38,7 +40,7 @@ animations = {
 
 Each spec compiles to `el.animate([from, to], { duration, easing, delay, fill: 'both' })`. `from`/`to` are WAAPI keyframe objects; `duration`/`delay` are milliseconds; `easing` is any CSS easing string. Either key may be omitted (that phase then runs instantly). A malformed spec **warns once and is skipped** — it never breaks rendering. *(Amended in v1.40: an `in` spec may also carry `trigger: 'visible'` + `triggerOffset` to defer the enter until the element scrolls into view — §39, D73.)*
 
-**Animation target.** The instance's own root element — for views and layouts the `<puzzle-view>` element; for reusable components the single root element the template requires (D20). There is **no wrapper element**; the single-root rule makes the root the animation handle.
+**Animation target.** The instance's own root element — for views and layouts the `<puzzle-view>` element; for reusable components the single root element the template requires (D20). There is **no wrapper element** — the single-root rule makes the root the animation handle.
 
 **Out animations in lists require keys.** The keyed reconciler patches around a leaving element (`leavingEls`); the indexed (unkeyed) path has no leaver awareness, so survivors can visibly misorder while an unkeyed sibling fades out. Supported pattern: key the list items. Development builds warn once per session when an unkeyed list unmounts an out-animated component.
 
@@ -49,7 +51,7 @@ Each spec compiles to `el.animate([from, to], { duration, easing, delay, fill: '
 - Show path: `viewWillShow()` → `in` animation → `viewDidShow()`.
 - Hide path: `viewWillHide()` → `out` animation → `viewDidHide()`.
 
-Hooks are lifecycle, not animation callbacks — **they fire in order even when no `animations` field is declared** (zero-duration semantics). They compose with the existing hooks: `mounted()` precedes `viewWillShow()`; `viewDidHide()` precedes `destroyed()`. *(Amended, D118: a throwing `destroyed()` is caught and logged — the surrounding teardown cascade (parent destroys, `Router.stop()`, `PuzzleApp.unmount()`) always completes; the last unguarded user hook on the teardown path could previously strand the app half-torn-down with `_mounted` still true.)* *(Amended, D136: the order holds for anchor-race superseded async mounts too — an enter requested while the first render is still pending defers and replays after `mounted()` on the real root, instead of firing the show hooks against the comment anchor before `mounted()` and losing the enter animation. And a LEAVING view is inert from `playOut()` start: store subscription dropped immediately, `refresh`/`setData`/store-change/parent-update deliveries ignored — the fading element no longer re-renders mid-leave.)*
+Hooks are lifecycle, not animation callbacks — **they fire in order even when no `animations` field is declared** (zero-duration semantics). They compose with the existing hooks: `mounted()` precedes `viewWillShow()`; `viewDidHide()` precedes `destroyed()`. *(Amended, D118: a throwing `destroyed()` is caught and logged — the surrounding teardown cascade (parent destroys, `Router.stop()`, `PuzzleApp.unmount()`) always completes; the last unguarded user hook on the teardown path could previously strand the app half-torn-down with `_mounted` still true.)* *(Amended, D136: the order holds for anchor-race superseded async mounts too — an enter requested while the first render is still pending defers and replays after `mounted()` on the real root, instead of firing the show hooks against the comment anchor before `mounted()` and losing the enter animation. A LEAVING view is inert from `playOut()` start: store subscription dropped immediately, `refresh`/`setData`/store-change/parent-update deliveries ignored — the fading element no longer re-renders mid-leave. And a view RESTORED after a failed navigation mid-leave fires the show bracket again — `viewWillShow()` → `viewDidShow()`, zero-duration, each hook contained separately — before its eventual real leave fires the hide bracket in full.)*
 
 **View transitions are sequential in v1.1.** After the new view's `data()` resolves (the D19 gate), the old view plays `out` and is destroyed; then — in one synchronous block, atomically with the new view mounting (§30, D61) — the URL and title commit and the new view plays `in`. A navigation superseded or failed while the old view is animating out commits nothing. The enter animation is **non-blocking** (fire-and-forget) — navigation is not held open waiting for it. Cross-fade / overlapping transitions are deferred (they need a positioning strategy). *(Amended: overlap shipped in v1.24, §26; the location-commit placement moved in v1.28, §30 — v1.1–v1.27 committed URL/title before the out animation.)*
 
