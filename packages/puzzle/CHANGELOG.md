@@ -43,17 +43,16 @@ capability:
 - **A prerendered app fetches at BUILD time, so its endpoints must be
   reachable from the build machine.** `output: 'hybrid'` and `output: 'static'`
   run the same settle loop in Node, where there is no page to resolve an
-  app-relative URL against. `apiURL: '/api'` with `endpoint: '/todos.json'`
-  now resolves against the build output being written — the loopback origin
-  `prerenderToDir` serves — so an endpoint backed by a file in `app/public/`
-  (`app/public/api/todos.json` → `dist/api/todos.json`) prerenders with no
-  backend running. An endpoint that is NOT in the build output needs an
-  absolute `apiURL` the build machine can reach; an app-relative read that
-  cannot be resolved now fails the build with a diagnostic naming the route,
-  the URL, and the fix instead of `TypeError: Failed to parse URL`. A
-  build-time read also means a private API needs its credentials available to
-  the build — `beforeRequest` still runs, and a 404 settles as absence exactly
-  as it does at runtime.
+  app-relative URL against — so a prerender read has exactly two answerable
+  shapes. Have an API: give the app an absolute `apiURL`
+  (`https://api.example.com`) the build machine can reach, and the build fetches
+  it for real. Have no API: declare no `endpoint` and no read verb on the model
+  — such a model never fetches — and seed the store in `beforeMount({ store })`.
+  An app-relative read is neither, and fails the build with a diagnostic naming
+  the route, the URL, and both fixes instead of
+  `TypeError: Failed to parse URL`. A build-time read also means a private API
+  needs its credentials available to the build — `beforeRequest` still runs, and
+  a 404 settles as absence exactly as it does at runtime.
 
 **`routerMode` takes a factory, not a string (0.6.0, D159).** Path routing is
 the zero-config default — omit `routerMode` entirely. Hash and memory routing
@@ -142,26 +141,23 @@ one is *not* a compile error; it silently builds a different product.
   `store.findMany('todo')` faulted, fetched, and got the dev server's SPA
   fallback — `200 text/html` — which failed `loadMany`'s JSON-array check,
   rejected the settle loop, and left navigation zero with nothing to commit: a
-  blank page on the very first `npm run dev`. The template now ships
-  `app/public/api/todos.json` and reads it the way the 0.7.0 examples do
-  (`apiURL: '/api'` + `endpoint: '/todos.json'`, plus a `loadOne` that maps the
-  per-record read onto the collection file), so a fresh app renders a working
-  list with no server. The `default` template was never affected — it declares
-  no models.
-- **Prerender resolves an app-relative endpoint instead of dying on it.**
-  Because D161 moved the read path to build time, a prerendered app using the
-  app-relative endpoint shape every example ships (`apiURL: '/api'`) hit Node's
+  blank page on the very first `npm run dev`. The starter declares no server: it
+  seeds its store in `beforeMount({ store })`, its `Todo` model carries no
+  `static adapter` block, and the app config carries no `apiURL` — so every
+  read, write, and delete is local and a fresh app renders a working list the
+  moment it starts. `app.js` documents the upgrade to a real API. The `default`
+  template was never affected — it declares no models.
+- **Prerender fails an app-relative endpoint with a diagnostic, not a raw URL
+  parse error.** Because D161 moved the read path to build time, a prerendered
+  app using an app-relative endpoint shape (`apiURL: '/api'`) hit Node's
   `fetch`, which has no page origin to resolve against, and the build died with
   the raw `TypeError: Failed to parse URL from /api/posts.json` — no route, no
-  endpoint, no fix. `prerenderToDir` now serves the build output it is writing
-  on an ephemeral loopback origin and resolves app-relative reads against it,
-  so an endpoint backed by a file under `app/public/` prerenders with no
-  backend running. The origin starts lazily (an all-absolute app opens no
-  socket) and is always torn down; a read that genuinely cannot be resolved
-  now fails with a diagnostic naming the route, the URL, and what to
-  configure. The wrapper sits on the global `fetch`, not on `apiURL`, so an
-  authored verb that hardcodes a path (the D158 escape hatch `examples/blog`
-  uses) resolves too.
+  endpoint, no fix. Such a read now fails with a diagnostic naming the route,
+  the URL, and both fixes: an absolute `apiURL` the build machine can reach, or
+  a model with no `endpoint` and no read verb plus a store seeded in
+  `beforeMount({ store })`. The check sits on the global `fetch`, not on
+  `apiURL`, so an authored verb that hardcodes a path (the D158 escape hatch
+  `examples/blog` uses) is diagnosed too.
 - **`types/ssg.d.ts` knows about the read-state envelope.** `PrerenderedPage`
   and `injectStaticShell` were never taught the `readState` field D161 added,
   so a TypeScript consumer driving a custom prerender pipeline could not read
