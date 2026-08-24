@@ -15,6 +15,12 @@ connections:
   - DOC-RELEASE-SURFACE
 verified_at: '2026-08-23T19:55:21.762Z'
 verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+code_refs:
+  - client-runtime/datastore/adapter.js
+  - client-runtime/capabilities.js
+  - client-runtime/app.js
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/fixtures/index.js
 ---
 
 The server adapter — the D21 read path, the D50 write path, `store.request()`,

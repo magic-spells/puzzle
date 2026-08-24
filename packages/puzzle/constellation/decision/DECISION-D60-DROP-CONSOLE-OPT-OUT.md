@@ -1,10 +1,19 @@
 ---
 name: 'D60 — build.dropConsole: production console-strip becomes opt-out'
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-24T18:51:09.019Z'
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D12-TAILWIND-FIRST
+code_refs:
+  - compiler/internal/config/config.go
+  - compiler/internal/build/build.go
+  - compiler/internal/build/prerender_pages.go
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+notes:
+  - kind: verified
+    text: Claims re-verified against the current Go compiler code; no drift found.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # D60 — build.dropConsole: production console-strip becomes opt-out

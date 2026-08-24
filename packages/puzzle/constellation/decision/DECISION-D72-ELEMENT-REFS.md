@@ -21,6 +21,10 @@ notes:
       ref:this.__ref("newTodoInput") exactly (call site + method definition = the only two __ref
       occurrences), no ref DOM attribute. Merge with round-5's viewManager/PuzzleView changes
       auto-resolved and re-verified.
+code_refs:
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/views/viewManager.js
+  - client-runtime/ssg/serialize.js
 ---
 
 # D72 — Element refs: static `ref="name"` → `this.refs.name` (v1.39)

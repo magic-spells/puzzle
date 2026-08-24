@@ -8,16 +8,26 @@ connections:
   - DOC-SPEC-TEMPLATE
   - DECISION-D40-ELSE-IF
   - DECISION-D46-INLINE-SVG
-verified_at: '2026-07-17T21:32:34.193Z'
+verified_at: '2026-08-24T18:51:14.809Z'
 notes:
   - kind: verified
     text: >-
-      Verified at merge: Go suites green on cold cache; vitest 736
-      green; examples/todos dist byte-identical between a main-built and branch-built compiler; e2e
-      probe (inline + block comment wrapping deliberately broken {#if} markup in Home.pzl) built
-      clean with zero comment text in dist/ and app.js still byte-identical. styles.css caveat found
-      and documented: Tailwind's raw-source scanner can lift utility-shaped words (block, inline)
-      out of ANY comment — CSS-only, never the JS bundle.
+      Verified at merge: Go suites green on cold cache; vitest 736 green; examples/todos dist
+      byte-identical between a main-built and branch-built compiler; e2e probe (inline + block
+      comment wrapping deliberately broken {#if} markup in Home.pzl) built clean with zero comment
+      text in dist/ and app.js still byte-identical. styles.css caveat found and documented:
+      Tailwind's raw-source scanner can lift utility-shaped words (block, inline) out of ANY comment
+      — CSS-only, never the JS bundle.
+  - kind: verified
+    text: Claims re-verified against the current Go compiler code; no drift found.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+code_refs:
+  - compiler/internal/parser/attr.go
+  - compiler/internal/parser/lexer.go
+  - compiler/internal/parser/parser.go
+  - compiler/internal/parser/scan.go
+  - compiler/internal/parser/sections.go
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # D70 — Template comments: `{## }` inline + `{#comment}…{/comment}` raw block (v1.37)

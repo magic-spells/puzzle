@@ -25,6 +25,13 @@ notes:
       invocation's late restore could clobber the retry mid-run. Fixed (Codex review round): the
       unwind target is captured once per prepare, each invocation installs its own scope copy, and
       async tails restore only while they still own #evalScope. Commit/discard semantics unchanged.
+code_refs:
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/router/router.js
+  - client-runtime/datastore/store.js
+  - client-runtime/datastore/adapter.js
+  - client-runtime/views/viewManager.js
+  - client-runtime/devtools.js
 ---
 
 # D146 — transactional reused-ancestor refresh (prepare/commit)

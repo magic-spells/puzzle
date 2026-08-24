@@ -19,6 +19,10 @@ notes:
       codegen.ScopeID (FNV-1a over slash-normalized relative path), root-only stamp covering
       view/component/skeleton renders, plugin-side @scope wrapping with an id-agreement test;
       unscoped goldens byte-identical; 540 vitest + all Go green.
+code_refs:
+  - compiler/internal/codegen/codegen.go
+  - compiler/internal/parser/sections.go
+  - compiler/internal/plugin/plugin.go
 ---
 
 # D59 — Scoped styles: `<style scoped>` via native `@scope` wrapping

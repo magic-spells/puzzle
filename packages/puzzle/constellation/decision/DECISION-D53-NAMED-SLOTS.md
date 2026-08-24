@@ -36,6 +36,8 @@ notes:
       error). Lowercase `<slot>`/`<children>` are positioned steering errors. The partition/expand
       mechanics and call-site `slot=` attr rules still hold. See
       DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS.
+code_refs:
+  - client-runtime/views/viewManager.js
 ---
 
 # D53 — Named slots: `<slot name>` with fallbacks, filled by `slot="…"` attributes on direct component children (v1.21)

@@ -6,6 +6,8 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - DOC-CODE-REVIEW
   - DECISION-D17-RENDER-FUNCTIONS-VDOM
+code_refs:
+  - client-runtime/views/PuzzleView.js
 ---
 
 # D15 — `PuzzleView` is a plain class, not a web component

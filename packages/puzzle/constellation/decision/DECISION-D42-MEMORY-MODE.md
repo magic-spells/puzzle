@@ -19,6 +19,10 @@ notes:
       Rewritten for the D159 surface: memoryRouter({ initialPath }) replaces the routerInitialPath
       app-config field; memory semantics unchanged and re-checked against modes.js.
     sha: d74916a0e021b6bb86394551171838fbab161347
+code_refs:
+  - client-runtime/router/modes.js
+  - client-runtime/router/router.js
+  - client-runtime/app.js
 ---
 
 # D42 — memory routing (`routerMode: memoryRouter()`, URL-less) + go/back/forward API (v1.11)

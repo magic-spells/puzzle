@@ -11,6 +11,8 @@ connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
   - DECISION-D29-LOOP-COUNTER
+code_refs:
+  - client-runtime/router/router.js
 ---
 
 # D30 — Nested routes: children arrays, chain-prefix reuse, root-only layouts (v1.3)

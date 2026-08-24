@@ -10,6 +10,9 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC
   - FEATURE-V1-29-COMPOSITION-FIXES
+code_refs:
+  - compiler/internal/codegen/codegen.go
+  - compiler/internal/codegen/expr.go
 ---
 
 # D62 — data-independent `@event` handlers emit per-instance cached closures

@@ -15,6 +15,8 @@ notes:
   - kind: verified
     text: all five containment fixes + mount epoch landed with revert-proven tests
     sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+code_refs:
+  - client-runtime/views/viewManager.js
 ---
 
 Four containment gaps closed in one round, all with the same posture the

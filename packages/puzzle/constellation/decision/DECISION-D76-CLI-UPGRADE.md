@@ -7,8 +7,8 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-BUILD
   - FEATURE-V1-32-RELEASE-HARDENING
-verified_at: '2026-08-15T20:07:07.526Z'
-verified_sha: c4e46b0daf84d3c06f8008d0bf9f823ec6f855cb
+verified_at: '2026-08-24T18:51:21.850Z'
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 notes:
   - kind: verified
     text: >-
@@ -16,6 +16,14 @@ notes:
       documented-but-cwd-first); verified at the release/0.7.0 merge — detection table,
       chdir-inertness, and global-from-inside-a-project stub tests all green.
     sha: c4e46b0daf84d3c06f8008d0bf9f823ec6f855cb
+  - kind: verified
+    text: Claims re-verified against the current Go compiler code; no drift found.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+code_refs:
+  - compiler/cmd/puzzle/main.go
+  - compiler/cmd/puzzle/upgrade.go
+  - compiler/internal/dev/dev.go
+  - compiler/internal/update/update.go
 ---
 
 # D76 — Update notification + `puzzle upgrade` (v1.43)

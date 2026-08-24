@@ -14,8 +14,14 @@ connections:
   - DECISION-D70-TEMPLATE-COMMENTS
   - DECISION-D113-SSG-RAWTEXT-RULE
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
-verified_at: '2026-08-15T06:05:58.384Z'
-verified_sha: 61a37ae80b9104220be7d20d2ca9a4660cb4ec2f
+verified_at: '2026-08-24T18:51:36.546Z'
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+code_refs:
+  - client-runtime/views/viewManager.js
+notes:
+  - kind: verified
+    text: Raw-span whitespace demotion truthed against the parser's demoteRawMarkerLayout.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # D150 — Raw template block: lex braces as literal text while preserving HTML

@@ -10,6 +10,8 @@ connections:
   - FEATURE-V1-35-CROSS-VIEW-MORPH
   - DOC-SPEC
 verified_at: '2026-07-17T07:52:47.299Z'
+code_refs:
+  - client-runtime/morph.js
 ---
 
 # D68 — Cross-view morphs: capture-at-leave promotes sibling-swap flights into `enableMorph` (v1.35)

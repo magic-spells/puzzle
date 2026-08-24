@@ -21,6 +21,10 @@ notes:
       snapshot-iterated delivery, empty-set unobserve, empty-bucket disconnect), PuzzleView
       #deferredEnter/#useVisibleTrigger/#resolveAnchor/#abortEnter wiring incl.
       destroy-resolves-pending playIn and playOut unwind. No deviations from the card's contract.
+code_refs:
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/views/animate.js
+  - client-runtime/views/visibility.js
 ---
 
 # D73 — Scroll-triggered enter animations: `trigger: 'visible'` on the `in` spec (v1.40)

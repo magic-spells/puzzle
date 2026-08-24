@@ -128,8 +128,14 @@ connections:
   - DECISION-D118-LIFECYCLE-HOOK-CONTAINMENT
   - DECISION-D28-ANIMATIONS
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
-verified_at: '2026-08-23T19:55:49.079Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T18:49:30.658Z'
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+notes:
+  - kind: verified
+    text: >-
+      Restore show-bracket truthed in body and in the leaving→mounted transition, against
+      _restoreFromLeaving's viewWillShow/viewDidShow pair in PuzzleView.js.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # PuzzleView lifecycle machine

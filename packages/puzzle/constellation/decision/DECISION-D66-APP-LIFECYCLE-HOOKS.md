@@ -17,6 +17,8 @@ notes:
       error channels logged, sync beforeUnmount pre-teardown, mount()-time non-function validation,
       unmount()/#teardown() split. All ten seed-after-mount examples swept to beforeMount; music's
       seedReady export + six view preambles deleted. 13 new tests; 553 vitest + all Go green.
+code_refs:
+  - client-runtime/app.js
 ---
 
 # D66 — App lifecycle hooks: `beforeMount` / `mounted` / `beforeUnmount`

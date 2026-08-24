@@ -8,8 +8,8 @@ connections:
   - DECISION-D78-AGENT-SKILL-DISTRIBUTION
   - DECISION-D97-UPGRADE-SKILL-REFRESH
   - DECISION-D77-INIT-PROMPTS
-verified_at: '2026-07-24T22:56:54.920Z'
-verified_sha: b64de21995a88b303d63bee37e8bc7f00cabb741
+verified_at: '2026-08-24T18:51:23.550Z'
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 notes:
   - kind: verified
     text: >-
@@ -26,6 +26,13 @@ notes:
       compiler packages, vitest 1223/1223 (the count grew from 1170 because D100's DevTools bridge
       tests landed in the same merge).
     sha: b64de21995a88b303d63bee37e8bc7f00cabb741
+  - kind: verified
+    text: Claims re-verified against the current Go compiler code; no drift found.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+code_refs:
+  - compiler/cmd/puzzle/add.go
+  - compiler/cmd/puzzle/add_skills.go
+  - compiler/cmd/puzzle/upgrade.go
 ---
 
 # D99 — `puzzle add skills` asks instead of refusing, and `puzzle upgrade skills` (v1.62)

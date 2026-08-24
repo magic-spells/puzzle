@@ -9,17 +9,25 @@ connections:
   - DOC-USER-GUIDE
   - DECISION-D03-SCRIPTS-REAL-JS
   - DECISION-D67-SSG-STATIC-BUILD
-verified_at: '2026-07-21T21:31:58.788Z'
+verified_at: '2026-08-24T18:51:16.515Z'
 notes:
   - kind: verified
     text: >-
-      Verified at merge: all Go packages green + 788/788 vitest on merged
-      main. Resolution proven end-to-end, not just unit-tested — examples/chirp and examples/stays
-      build with their converted '@/components/…' imports and the aliased component's markup lands
-      in dist/app.js; `puzzle build --static` on examples/static-docs exercises the separate
-      prerender BuildOptions; `puzzle dev` serves the aliased bundle (watch path). Renumbered from
-      D73/§39/v1.40 during the merge — main had taken those for scroll-trigger animations (D73) and
-      <children/> (D74) while the branch was open.
+      Verified at merge: all Go packages green + 788/788 vitest on merged main. Resolution proven
+      end-to-end, not just unit-tested — examples/chirp and examples/stays build with their
+      converted '@/components/…' imports and the aliased component's markup lands in dist/app.js;
+      `puzzle build --static` on examples/static-docs exercises the separate prerender BuildOptions;
+      `puzzle dev` serves the aliased bundle (watch path). Renumbered from D73/§39/v1.40 during the
+      merge — main had taken those for scroll-trigger animations (D73) and <children/> (D74) while
+      the branch was open.
+  - kind: verified
+    text: Claims re-verified against the current Go compiler code; no drift found.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+code_refs:
+  - compiler/internal/build/options.go
+  - compiler/cmd/puzzle/initcmd.go
+  - compiler/internal/scaffold/scaffold.go
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # D75 — The `@` app import alias (v1.42)

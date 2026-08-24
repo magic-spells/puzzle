@@ -24,6 +24,10 @@ notes:
       The "only #<base>/... fragments are routes" wording predates this — a hand-authored app-root
       link (href="#/myapp", the same shareable URL the parse path deliberately supports) no longer
       bypasses the router.
+code_refs:
+  - client-runtime/router/router.js
+  - client-runtime/router/modes.js
+  - client-runtime/app.js
 ---
 
 # D51 — One `routerBase`, applied at the path-shape boundary: pathname prefix (history), in-fragment prefix (hash), inert (memory) (v1.19)

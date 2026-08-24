@@ -7,6 +7,16 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - FLOW-BUILD
   - DECISION-D26-TAILWIND-PIPELINE
+code_refs:
+  - compiler/internal/build/watch.go
+  - compiler/internal/build/watch_static.go
+  - compiler/internal/dev/dev.go
+  - compiler/internal/plugin/plugin.go
+  - compiler/internal/styles/proc_other.go
+  - compiler/internal/styles/proc_unix.go
+  - compiler/internal/styles/resolve.go
+  - compiler/internal/styles/styles.go
+  - compiler/internal/styles/watch.go
 ---
 
 # D27 — Fast dev rebuilds: direct CLI resolution + warm Tailwind watcher + esbuild incremental context (amends D26)

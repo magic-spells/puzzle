@@ -24,6 +24,9 @@ notes:
       #commitLocation PERSISTS that captured value — so the decision's actual goal (a
       superseded/failed nav commits nothing, including scroll) still holds; only the measurement
       moved back to click time.
+code_refs:
+  - client-runtime/router/router.js
+  - client-runtime/router/modes.js
 ---
 
 # D61 — URL/history/title commit atomically with the incoming mount

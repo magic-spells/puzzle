@@ -29,6 +29,12 @@ notes:
       packages green in a clean worktree at this sha (compiled-fixture pretest run first — fresh
       checkouts need it).
     sha: a72c1eb93fd8d536a9c270b0b3513c96c363705c
+code_refs:
+  - client-runtime/fixtures/index.js
+  - client-runtime/fixtures/state.js
+  - client-runtime/fixtures/generator.js
+  - client-runtime/fixtures/mock.js
+  - client-runtime/datastore/adapter.js
 ---
 
 The D95 fixture/mock system moves out of the core store into a self-contained

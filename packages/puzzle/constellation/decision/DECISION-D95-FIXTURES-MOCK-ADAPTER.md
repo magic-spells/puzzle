@@ -26,6 +26,10 @@ notes:
       reads threw a misleading shape error, and a mocked non-OK response to a custom delete verb was
       silently treated as success while the record deleted locally. The stand-in's five-member
       surface and the no-real-Response rationale are unchanged.
+code_refs:
+  - client-runtime/fixtures/index.js
+  - client-runtime/fixtures/generator.js
+  - client-runtime/fixtures/mock.js
 ---
 
 `store.seed(type, n)` generates believable records from the schema alone, and

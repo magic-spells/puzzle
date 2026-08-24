@@ -8,6 +8,9 @@ connections:
   - DOC-COMPILER-DESIGN
   - DOC-SPEC-ANATOMY
   - DECISION-D03-SCRIPTS-REAL-JS
+code_refs:
+  - compiler/internal/codegen/classname.go
+  - compiler/internal/codegen/codegen.go
 ---
 
 # D24 — Compiled component name comes from the export default class declaration

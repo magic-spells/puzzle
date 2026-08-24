@@ -22,6 +22,13 @@ notes:
       module paths and props inspection all working. One cosmetic follow-up in the extension repo:
       detail-pane header/props layout squished in short docks (value previews collapse to ellipsis).
     sha: acb9aefb0dcb65bd4cbd379d1f8877dbb089700c
+code_refs:
+  - client-runtime/devtools.js
+  - client-runtime/app.js
+  - client-runtime/router/router.js
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/datastore/store.js
+  - client-runtime/devstate.js
 ---
 
 Puzzle gets a Chrome DevTools extension. The framework ships only a dev-only

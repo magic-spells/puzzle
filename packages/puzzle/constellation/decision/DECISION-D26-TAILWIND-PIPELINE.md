@@ -8,6 +8,16 @@ connections:
   - FLOW-BUILD
   - DECISION-D12-TAILWIND-FIRST
   - DECISION-D03-SCRIPTS-REAL-JS
+code_refs:
+  - compiler/cmd/puzzle/add.go
+  - compiler/internal/build/build.go
+  - compiler/internal/config/config.go
+  - compiler/internal/dev/dev.go
+  - compiler/internal/styles/resolve.go
+  - compiler/internal/styles/styles.go
+  - compiler/internal/styles/watch.go
+  - compiler/internal/scaffold/templates/todos/package.json
+  - compiler/internal/scaffold/templates/todos/puzzle.config.js
 ---
 
 # D26 — Tailwind pipeline: node-read config, one-shot-per-build CLI, unified composition

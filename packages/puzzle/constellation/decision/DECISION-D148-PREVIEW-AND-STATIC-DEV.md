@@ -21,6 +21,15 @@ notes:
       Cache-Control: no-cache on HTML (preview.go:162), and --fixtures + output:'static' is refused
       at dev startup (dev/dev.go:204). compiler/internal/{preview,serve} tests pass.
     sha: f2aef082b4b17fb4ded5da94da53a547e2fe66b1
+code_refs:
+  - compiler/cmd/puzzle/main.go
+  - compiler/internal/build/prerender.go
+  - compiler/internal/build/prerender_pages.go
+  - compiler/internal/build/watch_static.go
+  - compiler/internal/dev/dev.go
+  - compiler/internal/keys/keys.go
+  - compiler/internal/preview/preview.go
+  - compiler/internal/serve/serve.go
 ---
 
 # D148 — `puzzle preview` + real static serving in dev

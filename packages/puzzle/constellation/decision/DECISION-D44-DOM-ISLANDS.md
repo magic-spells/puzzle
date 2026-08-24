@@ -29,6 +29,8 @@ notes:
       patched stale carried-forward seed vnodes against DOM the island's owner had rewritten,
       leaving currentTree pointing at detached nodes permanently. SPEC §17's Identity bullet carries
       the contract wording.
+code_refs:
+  - client-runtime/views/viewManager.js
 ---
 
 # D44 — DOM islands: the `island` attribute (v1.13)

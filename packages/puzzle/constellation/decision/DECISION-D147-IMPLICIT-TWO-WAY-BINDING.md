@@ -30,6 +30,9 @@ notes:
       byte-exact, real-Chrome pass (caret, IME composition events, number-on-change, ''→null,
       range). Final whole-branch review + scoped re-review clean.
     sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
+code_refs:
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/views/viewManager.js
 ---
 
 # D147 — implicit two-way form binding

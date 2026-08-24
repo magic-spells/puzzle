@@ -7,6 +7,10 @@ connections:
   - DOC-SPEC-BUILD
   - DECISION-D78-AGENT-SKILL-DISTRIBUTION
   - DECISION-D76-CLI-UPGRADE
+code_refs:
+  - compiler/cmd/puzzle/add.go
+  - compiler/cmd/puzzle/add_skills.go
+  - compiler/cmd/puzzle/upgrade.go
 ---
 
 # D97 — `puzzle upgrade` offers to refresh the installed agent skill (v1.60)

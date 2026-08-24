@@ -10,6 +10,9 @@ connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
   - DECISION-D32-CLI-TOOLING
+code_refs:
+  - client-runtime/router/router.js
+  - client-runtime/app.js
 ---
 
 # D33 — Router-owned window scroll: top on push, per-entry restore on back/forward (v1.5)

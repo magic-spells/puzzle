@@ -11,6 +11,8 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC
+code_refs:
+  - client-runtime/router/router.js
 ---
 
 # D65 — Per-route/per-view transitionMode override, resolved destination-only

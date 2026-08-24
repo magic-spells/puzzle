@@ -1,7 +1,7 @@
 ---
 name: "D41 — Anchor-target scrolling + sessionStorage position persistence (v1.10)"
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-24T18:49:19.449Z'
 connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
@@ -11,6 +11,15 @@ connections:
   - DECISION-D34-HASH-ROUTING
   - DECISION-D39-SKELETON
   - FEATURE-V1-10-SCROLL-FOLLOWUPS
+code_refs:
+  - client-runtime/router/router.js
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+notes:
+  - kind: verified
+    text: >-
+      Path-mode same-document fragment-pop guard added to the Decision section, verified against
+      router.js's #onPopState sameDocKey branch and #applyFragmentPop.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # D41 — Anchor-target scrolling + sessionStorage position persistence (v1.10)

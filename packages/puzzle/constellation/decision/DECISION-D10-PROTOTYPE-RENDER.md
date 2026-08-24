@@ -1,12 +1,19 @@
 ---
 name: "D10 — Generated `render()` attached via prototype assignment"
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-24T18:51:05.833Z'
 connections:
   - COMPONENT-CODEGEN
   - DOC-COMPILER-DESIGN
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
+code_refs:
+  - compiler/internal/codegen/codegen.go
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+notes:
+  - kind: verified
+    text: Claims re-verified against the current Go compiler code; no drift found.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # D10 — Generated `render()` attached via prototype assignment

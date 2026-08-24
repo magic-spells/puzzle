@@ -8,6 +8,8 @@ connections:
   - DOC-SPEC-ROUTER
 verified_at: '2026-08-16T04:33:12.228Z'
 verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+code_refs:
+  - client-runtime/router/router.js
 ---
 
 The D93 focus stamp also cuts both focus-ring channels for its lifetime: when the router stamps its transient `tabindex="-1"`, it sets inline `outline: none !important` **and** `box-shadow: none !important`, and undoes both on the same `blur` that lifts the tabindex — a pre-existing inline value is put back exactly as found (value and priority), everything else removed outright.

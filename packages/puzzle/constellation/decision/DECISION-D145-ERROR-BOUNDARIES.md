@@ -42,6 +42,10 @@ notes:
       union and 'render' from the SPEC list — both aligned, and the full list is pinned in
       tests-types so a new emission site fails test:types without its union member. SPEC §60 carries
       both amendments.
+code_refs:
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/views/viewManager.js
+  - client-runtime/router/router.js
 ---
 
 # D145 — app-level `onError` + the app error view (`errorView`)

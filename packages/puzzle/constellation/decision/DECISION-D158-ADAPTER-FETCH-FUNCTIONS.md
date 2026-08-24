@@ -37,6 +37,8 @@ notes:
     sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
 verified_at: '2026-08-23T19:12:42.548Z'
 verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+code_refs:
+  - client-runtime/datastore/adapter.js
 ---
 
 A model's `static adapter` object is a set of **fetch functions** the store

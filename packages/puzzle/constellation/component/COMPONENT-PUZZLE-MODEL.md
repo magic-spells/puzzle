@@ -5,8 +5,15 @@ connections:
   - COMPONENT-STORE
   - DOC-MODELS
   - FILE-PUZZLE-MODEL
-verified_at: '2026-08-16T04:27:36.538Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T18:51:40.562Z'
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+notes:
+  - kind: verified
+    text: >-
+      Method-name payload protection, assertSchemaNames registration guard, reserved-key update()
+      drop, and the CalendarDate/dates.js revival rule all truthed against model.js, store.js and
+      dates.js.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # PuzzleModel and `Puzzle.*`

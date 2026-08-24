@@ -11,6 +11,9 @@ connections:
   - DOC-SPEC-VIEW
   - DOC-PUZZLE-FILE
   - DECISION-D19-NAVIGATION-COMMIT
+code_refs:
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/router/router.js
 ---
 
 # D39 — `<puzzle-skeleton>`: declarative loading template, auto-swapped (v1.8)

@@ -12,6 +12,11 @@ connections:
   - COMPONENT-CODEGEN
 verified_at: '2026-08-16T04:33:06.402Z'
 verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+code_refs:
+  - client-runtime/views/portal.js
+  - client-runtime/app.js
+  - client-runtime/static/index.js
+  - client-runtime/ssg/serialize.js
 ---
 
 # D144 — Portal (scoped v1)

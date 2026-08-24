@@ -73,6 +73,14 @@ notes:
     sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
 verified_at: '2026-08-24T05:28:09.597Z'
 verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+code_refs:
+  - client-runtime/datastore/adapter.js
+  - client-runtime/datastore/store.js
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/capabilities.js
+  - client-runtime/devstate.js
+  - client-runtime/ssg/index.js
+  - client-runtime/static/index.js
 ---
 
 # D161 — Tracked finds fault in missing data; the settle loop commits complete passes (v1.76)

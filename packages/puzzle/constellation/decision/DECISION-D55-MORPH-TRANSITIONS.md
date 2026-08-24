@@ -24,6 +24,10 @@ notes:
       exactly ONE live listener with working morphs. Tests: tests/morph-teardown.test.js.
     sha: d9591d6
 verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+code_refs:
+  - client-runtime/morph.js
+  - client-runtime/router/router.js
+  - client-runtime/app.js
 ---
 
 # D55 — Shared-element morph route transitions: `data-puzzle-morph` pairing + a single router morph-handler slot (v1.23)

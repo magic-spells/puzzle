@@ -16,6 +16,9 @@ notes:
       Verified: full Go suite + 365 vitest green; end-to-end puzzle init/build/dev
       exercised ({#svg} inlined vnode in bundle, .svg-edit live reload, missing-file recovery
       covered by build/watch tests).
+code_refs:
+  - client-runtime/views/viewManager.js
+  - client-runtime/ssg/serialize.js
 ---
 
 # D46 — `{#svg 'path'}` compile-time SVG inlining (v1.14)

@@ -35,6 +35,10 @@ notes:
       hook-only components skipped both hide hooks on removal. Components declaring neither hooks
       nor animations keep the synchronous instant destroy() — teardown timing changes only for the
       hook-declaring case, whose element now lingers a microtask.
+code_refs:
+  - client-runtime/router/router.js
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/views/viewManager.js
 ---
 
 # D28 — View & component animations: no-wrapper WAAPI, sequential transitions, fill-release

@@ -20,6 +20,12 @@ notes:
       #commitState. Everything else in D19 stands unchanged: the data() gate (pushState only after
       loads resolve — still true, commit just moved later), monotonic tokens/last-wins,
       rejection-stays-put (now airtight rather than mostly-true), catch-all 404, layout reuse.
+code_refs:
+  - client-runtime/router/router.js
+  - client-runtime/router/modes.js
+  - client-runtime/router/routePath.js
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/ssg/index.js
 ---
 
 # D19 — Navigation semantics: commit-ordered URL, nav tokens, catch-all 404, layout reuse

@@ -16,6 +16,11 @@ notes:
     text: >-
       Decision implemented as written and verified at the merged main sha (480 vitest green); no
       deviations from the recorded contract.
+code_refs:
+  - client-runtime/model.js
+  - client-runtime/datastore/store.js
+  - client-runtime/datastore/adapter.js
+  - client-runtime/fixtures/generator.js
 ---
 
 # D48 — Schema validation enforces at the local write boundary: throw on write, `{ valid, errors }` to render (v1.16)

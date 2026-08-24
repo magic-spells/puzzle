@@ -14,6 +14,11 @@ connections:
   - DOC-RELEASE-SURFACE
 verified_at: '2026-08-15T06:05:59.557Z'
 verified_sha: 61a37ae80b9104220be7d20d2ca9a4660cb4ec2f
+code_refs:
+  - client-runtime/router/modes.js
+  - client-runtime/router/router.js
+  - client-runtime/app.js
+  - client-runtime/ssg/index.js
 ---
 
 Hash and memory routing are opt-in imports, not config strings. Path mode

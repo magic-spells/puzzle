@@ -1,25 +1,42 @@
 ---
-name: "D25 — Formatter calls compile to bare __f.name(...); the __missing typo-guard is deferred"
+name: D25 — v1 formatter call form and callback-prop wrapping
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-CODEGEN
   - COMPONENT-FORMATTERS
   - DECISION-D14-TODOS-MILESTONE
+code_refs:
+  - compiler/internal/codegen/codegen.go
+  - compiler/internal/codegen/expr.go
 ---
 
-# D25 — Formatter calls compile to bare __f.name(...); the __missing typo-guard is deferred
+# D25 — v1 formatter call form and callback-prop wrapping
 
-Settled (v1). The compiler emits bare `__f.name(...)` formatter calls — matching golden file #1 — and defers the `__missing` typo-guard as a later DX improvement.
+Two things were settled here for v1. The live one is that callback props on
+component tags compile with the same handler wrapper as DOM events. The other —
+that formatter calls emit bare `__f.name(...)` with the typo-guard deferred —
+was answered differently in v1.12 and now belongs to
+[[DECISION-D43-FORMATTER-MISSING-GUARD]].
 
 ## Context
 COMPILER_DESIGN §d specified `(__f.name || __f.__missing)(…)` so a typo'd formatter fails with a named error; golden file #1 (the Phase 1 fixture the runtime was proven against, [[DECISION-D14-TODOS-MILESTONE]]) emits bare `__f.date(…)`.
 
 ## Decision
-The compiler emits bare calls — the fixture is the correctness definition and the failure mode without the guard (`TypeError: __f.dat is not a function`) is still debuggable. The guard is deferred as a DX improvement (needs a `__missing` formatter registered in the runtime registry plus the wrapped call form).
 
-Also settled here: callback props on component tags compile with the same `(event) => this.events.h(…)` wrapper as DOM events (APP_ANATOMY §1 form), superseding COMPILER_DESIGN's looser "pass the handler reference" phrasing.
+v1 emitted bare calls: the fixture was the correctness definition and the
+failure mode without the guard (`TypeError: __f.dat is not a function`) was
+still debuggable, so the guard was deferred as a DX improvement needing a
+`__missing` formatter in the runtime registry plus the wrapped call form.
+
+**That deferral ended in v1.12.** Codegen emits the guarded form and
+[[DECISION-D43-FORMATTER-MISSING-GUARD]] owns the question now — go there for
+the current contract, not to this card.
+
+Callback props on component tags compile with the same
+`(event) => this.events.h(…)` wrapper as DOM events (APP_ANATOMY §1 form),
+superseding COMPILER_DESIGN's looser "pass the handler reference" phrasing.
+That half is unchanged and still current.
 
 ## Alternatives rejected
-- **The `(__f.name || __f.__missing)(…)` wrapped form** (COMPILER_DESIGN §d) — deferred; the fixture emits bare calls and the unguarded failure mode is still debuggable.
 - **COMPILER_DESIGN's "pass the handler reference" phrasing for callback props** — superseded by the `(event) => this.events.h(…)` wrapper form (APP_ANATOMY §1).

@@ -22,6 +22,8 @@ notes:
       736 suite green; browser QA on the music demo — trigger→target forward flight (click AND pure
       programmatic hash nav), zero reverse flights on back, plain Info-dialog live pair round-trips,
       no residue.
+code_refs:
+  - client-runtime/morph.js
 ---
 
 # D69 — Directional morph roles: `data-puzzle-morph-trigger` / `data-puzzle-morph-target` (v1.36)

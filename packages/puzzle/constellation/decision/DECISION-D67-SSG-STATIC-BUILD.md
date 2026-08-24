@@ -30,6 +30,10 @@ notes:
       new PLACEHOLDER_TAG ('#') arity-padding vnodes that codegen now injects into
       {#if}/{#unless}/{#case} branches (see COMPONENT-VIEW-MANAGER / COMPONENT-CODEGEN), so
       prerendered HTML is unaffected by the padding.
+code_refs:
+  - client-runtime/ssg/index.js
+  - client-runtime/ssg/serialize.js
+  - client-runtime/router/router.js
 ---
 
 # D67 — Static site generation as an additive build output mode

@@ -9,6 +9,9 @@ connections:
   - DECISION-D84-HEAD-MANAGEMENT
   - DOC-SPEC
   - DOC-ROUTER
+code_refs:
+  - client-runtime/router/router.js
+  - client-runtime/app.js
 ---
 
 After every committed navigation the router moves focus to the incoming view's root and announces the new title in a framework-owned live region. `focusBehavior` mirrors `scrollBehavior`'s shape: omit for the default, `false` to opt out, a function to choose the target.

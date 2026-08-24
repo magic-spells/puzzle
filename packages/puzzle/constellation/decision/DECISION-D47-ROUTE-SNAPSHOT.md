@@ -10,6 +10,9 @@ connections:
   - FEATURE-V1-15-ROUTE-SNAPSHOT
   - DOC-ROUTER
   - DOC-SPEC
+code_refs:
+  - client-runtime/router/router.js
+  - client-runtime/views/PuzzleView.js
 ---
 
 # D47 — Per-navigation route snapshot: `this.route` through the D19 gate (v1.15)

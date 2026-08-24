@@ -6,8 +6,8 @@ connections:
   - DOC-SPEC
   - COMPONENT-ROUTER
   - DOC-VIEW-LIFECYCLE
-verified_at: '2026-08-16T04:32:34.721Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T18:51:28.273Z'
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 notes:
   - kind: verified
     text: >-
@@ -15,6 +15,13 @@ notes:
       census); §N numbers unchanged. Finally collects the twelve router sections that ship-date
       ordering had scattered.
     sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+  - kind: verified
+    text: §15 popstate paragraph extended to cover path mode's same-document fragment-pop guard.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+code_refs:
+  - client-runtime/router/router.js
+  - client-runtime/router/modes.js
+  - client-runtime/router/routePath.js
 ---
 
 The frozen v1 contract for routing: the router surface, scroll behavior, hash and base-path modes, the `this.route` snapshot, transitions, atomic location commit, query snapshot plus `replace()`, route head management, route guards, and focus management. See [[DOC-SPEC]] for the section index and the rest of the contract.

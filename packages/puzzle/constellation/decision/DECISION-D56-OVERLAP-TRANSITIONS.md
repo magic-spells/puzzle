@@ -21,6 +21,9 @@ notes:
       DESTINATION-ONLY: only the incoming side's config is ever consulted, so there is never a
       tie to break. This card's own contract — app-level opt-in as the baseline, fixed-pin
       positioning, D19/D61 commit timing, D30 one-animator rule — is otherwise unchanged.
+code_refs:
+  - client-runtime/router/router.js
+  - client-runtime/app.js
 ---
 
 # D56 — Overlapping route transitions: opt-in `transitionMode` with fixed-pin positioning (amends D28)

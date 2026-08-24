@@ -1,7 +1,7 @@
 ---
 name: 'D21 — Server data: tracked finds fault in through the model''s adapter declaration'
 status: verified
-verified_at: '2026-08-23T19:12:39.721Z'
+verified_at: '2026-08-24T18:51:34.759Z'
 connections:
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
@@ -12,7 +12,7 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
-verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 notes:
   - kind: verified
     text: >-
@@ -21,6 +21,11 @@ notes:
       gate is collection-completeness, not a per-record miss, and only a no-options load marks a
       collection complete.
     sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+  - kind: verified
+    text: >-
+      Explicit loadOne's non-primary-key resolution and the fault-path-only identity guard truthed
+      against datastore/adapter.js.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # D21 — Server data: tracked finds fault in through the model's adapter declaration

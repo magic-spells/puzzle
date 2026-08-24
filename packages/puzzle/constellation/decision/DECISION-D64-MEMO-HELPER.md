@@ -8,6 +8,8 @@ connections:
   - DOC-SPEC
   - DOC-USER-GUIDE
   - FEATURE-V1-29-COMPOSITION-FIXES
+code_refs:
+  - client-runtime/views/PuzzleView.js
 ---
 
 # D64 — `this.memo(key, deps, factory)` for reference-stable derived values

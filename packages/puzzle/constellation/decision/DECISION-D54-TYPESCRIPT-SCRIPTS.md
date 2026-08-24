@@ -1,7 +1,7 @@
 ---
 name: "D54 — TypeScript scripts: <script lang=\"ts\"> transpile-only via esbuild (v1.22)"
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-24T18:51:07.507Z'
 connections:
   - DECISION-D03-SCRIPTS-REAL-JS
   - DECISION-D09-GO-ESBUILD-COMPILER
@@ -14,6 +14,17 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
   - DOC-COMPILER-DESIGN
+code_refs:
+  - compiler/cmd/puzzle/initcmd.go
+  - compiler/cmd/pzlc/main.go
+  - compiler/internal/parser/sections.go
+  - compiler/internal/plugin/plugin.go
+  - compiler/internal/scaffold/scaffold.go
+verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+notes:
+  - kind: verified
+    text: Claims re-verified against the current Go compiler code; no drift found.
+    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # D54 — TypeScript scripts: `<script lang="ts">`, transpile-only (v1.22)

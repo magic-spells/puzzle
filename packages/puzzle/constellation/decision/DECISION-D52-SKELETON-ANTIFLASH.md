@@ -19,6 +19,8 @@ notes:
       delay-before-show rejected) and verified at the merged main sha (480 vitest + all Go green).
       One refinement recorded on COMPONENT-PUZZLE-VIEW: loaded flips at swap time, coinciding with
       data-commit when no hold is configured.
+code_refs:
+  - client-runtime/views/PuzzleView.js
 ---
 
 # D52 — Skeleton anti-flash: opt-in `min-duration` hold; the error slot resolves won't-build (v1.20)

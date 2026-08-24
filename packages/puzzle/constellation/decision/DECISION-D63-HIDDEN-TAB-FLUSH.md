@@ -7,6 +7,9 @@ connections:
   - DOC-DATASTORE
   - FEATURE-V1-29-COMPOSITION-FIXES
 verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+code_refs:
+  - client-runtime/datastore/store.js
+  - client-runtime/app.js
 ---
 
 # D63 — store flush scheduling gains a hidden-tab timer fallback

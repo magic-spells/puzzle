@@ -6,6 +6,9 @@ connections:
   - COMPONENT-CODEGEN
   - COMPONENT-VIEW-MANAGER
   - DOC-PUZZLE-FILE
+code_refs:
+  - client-runtime/views/viewManager.js
+  - client-runtime/ssg/serialize.js
 ---
 
 # D20 — `<puzzle-view>` element for views/layouts only; reusable components render inline

@@ -18,6 +18,10 @@ notes:
       Rewritten for the D159 factory selection surface (hashRouter() from /router-modes); hash
       semantics unchanged and re-checked against router.js + modes.js.
     sha: d74916a0e021b6bb86394551171838fbab161347
+code_refs:
+  - client-runtime/router/modes.js
+  - client-runtime/router/router.js
+  - client-runtime/app.js
 ---
 
 # D34 — Hash routing: routerMode config, path-shaped API, popstate-only (v1.6)

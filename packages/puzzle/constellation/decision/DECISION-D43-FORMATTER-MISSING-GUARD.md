@@ -19,6 +19,8 @@ notes:
       could engage. Bracket access with a JSON-quoted name matches the runtime registry's arbitrary
       string keys; goldens (formatter_chain, golden #1 TodoItem) updated, diffs
       formatter-access-only.
+code_refs:
+  - client-runtime/formatters.js
 ---
 
 # D43 — Formatter calls compile with the `__missing` typo-guard: warn once, pass through (v1.12)

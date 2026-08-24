@@ -17,6 +17,8 @@ notes:
       survives per-patch handler swaps (the decision's core), but it is now CLEARED when the binding
       is actually removed (removeAttr, or nulled via the setAttr inline-if path). Previously a
       removed-then-re-added @event:once binding read the stale flag and never fired.
+code_refs:
+  - client-runtime/views/viewManager.js
 ---
 
 # D38 — Event modifiers: `@event:modifier={...}` (v1.7)

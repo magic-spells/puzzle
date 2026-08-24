@@ -8,6 +8,20 @@ connections:
   - DOC-SPEC-BUILD
   - DECISION-D13-CLI-DEV-BUILD
   - DECISION-D03-SCRIPTS-REAL-JS
+code_refs:
+  - compiler/cmd/puzzle/initcmd.go
+  - compiler/cmd/puzzle/generate.go
+  - compiler/cmd/puzzle/add.go
+  - compiler/cmd/puzzle/doctor.go
+  - compiler/cmd/puzzle/info.go
+  - compiler/internal/scaffold/scaffold.go
+  - compiler/internal/generate/generate.go
+  - compiler/internal/pieces/fetcher.go
+  - compiler/internal/pieces/npm.go
+  - compiler/internal/pieces/pieces.go
+  - compiler/internal/pieces/lock.go
+  - compiler/internal/scaffold/templates/default/package.json
+  - compiler/internal/scaffold/templates/todos/package.json
 ---
 
 # D32 — CLI tooling: init/generate/add/doctor/info (v1.4)

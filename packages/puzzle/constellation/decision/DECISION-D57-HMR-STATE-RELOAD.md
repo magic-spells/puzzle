@@ -10,6 +10,11 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-STORE
   - DOC-SPEC
+code_refs:
+  - client-runtime/devstate.js
+  - client-runtime/app.js
+  - client-runtime/views/PuzzleView.js
+  - client-runtime/datastore/store.js
 ---
 
 # D57 — HMR as state-preserving dev reload: snapshot/restore across the SSE reload, not per-module swap
