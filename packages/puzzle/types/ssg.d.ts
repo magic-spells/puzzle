@@ -22,6 +22,21 @@ export interface ResolvedRouteHead {
 	socialImage: string | null;
 }
 
+/**
+ * What a prerendered page's records cannot say on their own (v1.76, D161): the
+ * adapter read state the build settled, handed to the browser kernel in its own
+ * island so `mountStatic` does not refetch what prerender already resolved.
+ * Versioned so an older kernel can reject a newer envelope.
+ */
+export interface PrerenderReadState {
+	/** Envelope version — `1` today; a kernel rejects anything it does not know. */
+	v: number;
+	/** Model type names settled collection-complete by a no-options load. */
+	complete: string[];
+	/** Identity keys (`type` + separator + `id`) settled as absent by a 404. */
+	absent: string[];
+}
+
 /** A prerendered page. `html`/`title`/`head` are null for a `prerender: false` route. */
 export interface PrerenderedPage {
 	/** The route's full path (`/`, `/components/panel-stack`, …). */
@@ -39,6 +54,12 @@ export interface PrerenderedPage {
 	 * records) that rides into the inline data island — static mode only.
 	 */
 	data?: Record<string, any[]>;
+	/**
+	 * The adapter read state this page settled (D161) — static mode only, and
+	 * attached only when the app has an adapter AND something was actually read,
+	 * so an adapter-less page omits the key entirely.
+	 */
+	readState?: PrerenderReadState;
 	/** The page's view/layout `__pzlModule` stamps — static mode only. */
 	modules?: { views: string[]; layout: string | null };
 	/** The page's plain-JSON route snapshot — static mode only. */
@@ -210,9 +231,10 @@ export declare function injectShell(
 /**
  * Static-mode (D79) shell surgery: stamp `data-puzzle-static` on the target (unless
  * `content` is null — a prerender:false page keeps an empty, unmarked target), inject
- * the inline JSON data island (with `<` escaped so `</script>` can't break out) and
- * the per-page `/_puzzle/<slug>.js` module script, and replace the title. The caller
- * has already stripped the app-bundle `<script>` from `shell`.
+ * the inline JSON data island (with `<` escaped so `</script>` can't break out), the
+ * read-state island beside it when `readState` is non-empty (D161), and the per-page
+ * `/_puzzle/<slug>.js` module script, and replace the title. The caller has already
+ * stripped the app-bundle `<script>` from `shell`.
  */
 export declare function injectStaticShell(
 	shell: string,
@@ -223,6 +245,12 @@ export declare function injectStaticShell(
 		head?: ResolvedRouteHead | null;
 		slug: string;
 		data: object;
+		/**
+		 * The page's settled read state (D161). Omitted or null emits no read
+		 * island at all, so an adapter-less build produces the exact bytes it did
+		 * before the envelope existed.
+		 */
+		readState?: PrerenderReadState | null;
 		/**
 		 * The already-normalized route base prefix (`''` for a root deploy) prepended
 		 * to the per-page `/_puzzle/<slug>.js` module href so a sub-path deploy

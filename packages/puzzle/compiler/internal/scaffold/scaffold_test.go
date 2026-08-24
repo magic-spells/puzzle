@@ -105,6 +105,7 @@ func TestCreateTodos(t *testing.T) {
 		"app/layouts/Default.pzl",
 		"app/models/index.js",
 		"app/models/todo.js",
+		"app/public/api/todos.json",
 		"app/public/index.html",
 		"app/routes.js",
 		"app/styles/styles.css",
@@ -124,6 +125,72 @@ func TestCreateTodos(t *testing.T) {
 	}
 	if !strings.Contains(string(pkg), `"name": "tasks"`) {
 		t.Errorf("todos package.json missing app name:\n%s", pkg)
+	}
+}
+
+// TestTodosEndpointIsBackedByAShippedFile pins the D161 contract for the todos
+// template: `Home.pzl` calls `store.findMany('todo')` inside data(), so with the
+// adapter capability installed that tracked read FAULTS and fetches before the
+// view may commit. A scaffolded app ships no backend, so the URL it fetches must
+// resolve to a static file inside app/public/ — otherwise `puzzle dev` serves the
+// SPA fallback (200 text/html), _loadMany rejects on the non-array body, and
+// navigation #0 renders a blank page. Assert the declared apiURL + endpoint join
+// to a file that actually exists rather than trusting the two literals to agree.
+func TestTodosEndpointIsBackedByAShippedFile(t *testing.T) {
+	parent := t.TempDir()
+	res, err := Create(parent, "tasks", "todos")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	read := func(rel string) string {
+		b, err := os.ReadFile(filepath.Join(res.Dir, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+
+	// Pull the two literals out of the scaffolded source.
+	find := func(src, key, file string) string {
+		i := strings.Index(src, key)
+		if i < 0 {
+			t.Fatalf("%s does not declare %s", file, key)
+		}
+		rest := src[i+len(key):]
+		start := strings.IndexAny(rest, "'\"")
+		if start < 0 {
+			t.Fatalf("%s: %s has no string literal", file, key)
+		}
+		quote := rest[start]
+		end := strings.IndexByte(rest[start+1:], quote)
+		if end < 0 {
+			t.Fatalf("%s: %s literal is unterminated", file, key)
+		}
+		return rest[start+1 : start+1+end]
+	}
+
+	apiURL := find(read("app/app.js"), "apiURL:", "app/app.js")
+	endpoint := find(read("app/models/todo.js"), "endpoint:", "app/models/todo.js")
+
+	url := strings.TrimSuffix(apiURL, "/") + "/" + strings.TrimPrefix(endpoint, "/")
+	if !strings.HasPrefix(url, "/") {
+		t.Fatalf("joined read URL %q is not app-absolute (apiURL %q + endpoint %q)", url, apiURL, endpoint)
+	}
+
+	// Everything under app/public/ is copied to the site root at build time, so
+	// the joined URL must name a file there.
+	backing := filepath.Join(res.Dir, "app", "public", filepath.FromSlash(strings.TrimPrefix(url, "/")))
+	if _, err := os.Stat(backing); err != nil {
+		t.Fatalf("todos template fetches %q (apiURL %q + endpoint %q) but ships no file at app/public%s: %v",
+			url, apiURL, endpoint, url, err)
+	}
+
+	// A JSON array is what _loadMany requires; anything else rejects the settle
+	// pass and blanks the first navigation.
+	body := read("app/public" + url)
+	if trimmed := strings.TrimLeft(body, " \t\r\n"); !strings.HasPrefix(trimmed, "[") {
+		t.Errorf("app/public%s must be a JSON array for loadMany('todo'); got: %.40s", url, trimmed)
 	}
 }
 

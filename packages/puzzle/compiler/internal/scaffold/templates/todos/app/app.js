@@ -16,10 +16,18 @@ const app = new PuzzleApp({
   // Models registration
   models,
 
-  // Install server sync for models with a static adapter config. No backend?
-  // Delete this import + key, app/adapter.js, and the model adapter block
-  // to shrink the bundle.
+  // Install server sync for models with a static adapter config. With it
+  // installed, store.findOne()/store.findMany() inside a view's data() fetch
+  // whatever the store is missing and settle before the view commits (D161) —
+  // nothing has to be seeded by hand. No backend? Delete this import + key,
+  // app/adapter.js, app/public/api/, and the model adapter block to shrink
+  // the bundle.
   adapter,
+
+  // Base URL for the server read path. Adapter endpoints are joined onto this,
+  // so `findMany('todo')` GETs /api/todos.json — a static JSON file copied
+  // from app/public/api/ into dist/api/ at build time.
+  apiURL: '/api',
 
   // Global formatters available in all templates
   // (display transformation only — logic belongs in data())
