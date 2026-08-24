@@ -140,71 +140,94 @@ func collectImportClause(toks []jsTok, j int, bind func(name string, off int)) i
 
 	inNamedClause := false
 	for j < len(toks) {
-		t := toks[j]
-		if t.opaque {
-			if t.comment {
-				j++
-				continue
-			}
-			// A string here is a bare `import 'x'` specifier: no bindings. Consume it
-			// and an optional trailing ';'.
-			j++
-			if j < len(toks) && toks[j].ch == ';' {
-				j++
-			}
-			return j
+		next, end := importClauseStep(toks, j, &inNamedClause, bind)
+		if next <= j {
+			// Progress is the LOOP's invariant, not any single branch's promise.
+			// tokenizeJS emits a token that is neither identifier, punctuation, nor
+			// an opaque unit for a NUL byte in the <script>; before this guard such
+			// a token matched no branch and spun `puzzle build` and the dev watcher
+			// forever, burning a core instead of producing a diagnostic.
+			next = j + 1
 		}
-		if t.ch != 0 {
-			switch t.ch {
-			case '{':
-				inNamedClause = true
-			case '}':
-				inNamedClause = false
-			}
-			j++
-			continue
-		}
-		if t.ident != "" {
-			switch t.ident {
-			case "from":
-				j++ // 'from'
-				if k, ok := nextNonCommentToken(toks, j); ok && toks[k].opaque && !toks[k].comment {
-					j = k + 1 // module specifier string
-				}
-				if j < len(toks) && toks[j].ch == ';' {
-					j++
-				}
-				return j
-			case "as":
-				// `X as local` / `* as ns` — the LOCAL binding is the next ident.
-				j++
-				if k, ok := nextNonCommentToken(toks, j); ok && toks[k].ident != "" {
-					bind(toks[k].ident, toks[k].off)
-					j = k + 1
-				}
-				continue
-			default:
-				// TS 4.5 inline modifiers: `type X` and `type X as Y` are
-				// erased and introduce no value binding. `{ type }` still imports a
-				// binding named `type`, while `{ type as Y }` is a normal rename.
-				if inNamedClause && t.ident == "type" && inlineTypeOnlySpecifier(toks, j+1) {
-					j = skipNamedImportSpecifier(toks, j+1)
-					continue
-				}
-				// A binding name — UNLESS the next token is `as` (then the local name
-				// is the one after `as`, added by the case above; the pre-`as` name is
-				// the exported name, not a local binding).
-				if k, ok := nextNonCommentToken(toks, j+1); ok && toks[k].ident == "as" {
-					j = k
-					continue
-				}
-				bind(t.ident, t.off)
-				j++
-				continue
-			}
+		j = next
+		if end {
+			break
 		}
 	}
 	return j
+}
+
+// importClauseStep consumes ONE token of an import binding clause and reports
+// the index to continue from plus whether the statement ended there. Every
+// branch is written to return an index greater than j, but collectImportClause
+// enforces that rather than trusting it: a token class no branch recognises must
+// cost one skipped token, never a hang.
+func importClauseStep(toks []jsTok, j int, inNamedClause *bool, bind func(name string, off int)) (int, bool) {
+	t := toks[j]
+	switch {
+	case t.opaque:
+		if t.comment {
+			return j + 1, false
+		}
+		// A string here is a bare `import 'x'` specifier: no bindings. Consume it
+		// and an optional trailing ';'.
+		j++
+		if j < len(toks) && toks[j].ch == ';' {
+			j++
+		}
+		return j, true
+
+	case t.ch != 0:
+		switch t.ch {
+		case '{':
+			*inNamedClause = true
+		case '}':
+			*inNamedClause = false
+		}
+		return j + 1, false
+
+	case t.ident == "from":
+		j++ // 'from'
+		if k, ok := nextNonCommentToken(toks, j); ok && toks[k].opaque && !toks[k].comment {
+			j = k + 1 // module specifier string
+		}
+		if j < len(toks) && toks[j].ch == ';' {
+			j++
+		}
+		return j, true
+
+	case t.ident == "as":
+		// `X as local` / `* as ns` — the LOCAL binding is the next ident.
+		j++
+		if k, ok := nextNonCommentToken(toks, j); ok && toks[k].ident != "" {
+			bind(toks[k].ident, toks[k].off)
+			j = k + 1
+		}
+		return j, false
+
+	case t.ident != "":
+		// TS 4.5 inline modifiers: `type X` and `type X as Y` are erased and
+		// introduce no value binding. `{ type }` still imports a binding named
+		// `type`, while `{ type as Y }` is a normal rename.
+		if *inNamedClause && t.ident == "type" && inlineTypeOnlySpecifier(toks, j+1) {
+			return skipNamedImportSpecifier(toks, j+1), false
+		}
+		// A binding name — UNLESS the next token is `as` (then the local name is
+		// the one after `as`, added by the case above; the pre-`as` name is the
+		// exported name, not a local binding).
+		if k, ok := nextNonCommentToken(toks, j+1); ok && toks[k].ident == "as" {
+			return k, false
+		}
+		bind(t.ident, t.off)
+		return j + 1, false
+
+	default:
+		// Neither identifier, punctuation, nor an opaque unit — a NUL byte is the
+		// one shape tokenizeJS produces here. It carries no import grammar, so it
+		// is stepped over; the <script> bytes stay the user's and esbuild reports
+		// on them.
+		return j + 1, false
+	}
 }
 
 // nextNonCommentToken returns the next token that participates in import

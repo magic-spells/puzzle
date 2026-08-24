@@ -36,6 +36,35 @@ func realTempDir(t *testing.T) string {
 	return dir
 }
 
+// installPuzzlePackage writes the @magic-spells/puzzle copy that detection now
+// resolves from. Detection reads the INSTALLED tree rather than trusting a
+// dependency stanza, so a fixture without this file describes a broken install,
+// not a project — which is exactly what it is meant to describe when omitted.
+func installPuzzlePackage(t *testing.T, owner, ver string) string {
+	t.Helper()
+	packageJSON := filepath.Join(owner, "node_modules", "@magic-spells", "puzzle", "package.json")
+	mustWrite(t, packageJSON, `{"version":"`+ver+`"}`)
+	return packageJSON
+}
+
+// stubGlobalRoots answers the `npm root -g` / `pnpm root -g` queries detection
+// makes when nothing cheaper has classified the install. Keys are manager names,
+// values the global node_modules each one reports; an absent key means "that
+// manager cannot be asked", which is a refusal, not a global.
+//
+// Every upgrade test stubs this, including with an empty map: without it the
+// suite would shell out to whatever npm the developer happens to have, and a
+// fixture could accidentally match (or fail to match) their real global root.
+func stubGlobalRoots(t *testing.T, roots map[string]string) {
+	t.Helper()
+	previous := packageManagerGlobalRoot
+	packageManagerGlobalRoot = func(manager string) (string, bool) {
+		dir, ok := roots[manager]
+		return dir, ok
+	}
+	t.Cleanup(func() { packageManagerGlobalRoot = previous })
+}
+
 // TestDetectInstallContextFromExecutable pins the whole resolution table of §41.
 // Every case is a shape of executable path; none of them involves the working
 // directory, which detection must not read at all.
@@ -51,7 +80,15 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 		packageJSON string
 		lockfile    string
 		// files are extra fixtures, keyed by path relative to root.
-		files       map[string]string
+		files map[string]string
+		// installedIn is the directory (relative to root) whose node_modules
+		// actually holds @magic-spells/puzzle. Empty means the package is absent
+		// from the tree entirely.
+		installedIn string
+		// globalRoots is what each package manager answers when asked for its
+		// global node_modules, keyed by manager, valued as a path relative to
+		// root. Nothing here means neither manager can confirm a global install.
+		globalRoots map[string]string
 		wantKind    installKind
 		wantOwner   string // relative to root; the owning dir, or "" for a global
 		wantManager string
@@ -69,6 +106,7 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 		},
 		{
 			name:        "hoisted project dependency",
+			installedIn: "app",
 			executable:  filepath.Join("app", "node_modules", platform),
 			ownerRel:    "app",
 			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
@@ -79,6 +117,7 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 		},
 		{
 			name:        "project dev dependency keeps the field",
+			installedIn: "app",
 			executable:  filepath.Join("app", "node_modules", ".bin", "puzzle"),
 			ownerRel:    "app",
 			packageJSON: `{"devDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
@@ -91,7 +130,8 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 		{
 			// The `.pnpm` store sits INSIDE the project's node_modules, so a
 			// pnpm project must not be mistaken for a pnpm global.
-			name: "pnpm project through the .pnpm store",
+			name:        "pnpm project through the .pnpm store",
+			installedIn: "app",
 			executable: filepath.Join("app", "node_modules", ".pnpm",
 				"@magic-spells+"+platformPackageName()+"@0.6.0", "node_modules", platform),
 			ownerRel:    "app",
@@ -103,6 +143,7 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 		},
 		{
 			name:        "bun project without a lockfile defaults to npm",
+			installedIn: "app",
 			executable:  filepath.Join("app", "node_modules", platform),
 			ownerRel:    "app",
 			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
@@ -112,6 +153,7 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 		},
 		{
 			name:        "bun lockfile",
+			installedIn: "app",
 			executable:  filepath.Join("app", "node_modules", platform),
 			ownerRel:    "app",
 			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
@@ -125,6 +167,7 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			// the root. Classifying that as global would install -g behind the
 			// user's back and then fail against the workspace's own copy.
 			name:        "npm workspaces root hoisting a member's dependency",
+			installedIn: "mono",
 			executable:  filepath.Join("mono", "node_modules", platform),
 			ownerRel:    "mono",
 			packageJSON: `{"name":"mono","workspaces":["packages/*"]}`,
@@ -137,6 +180,7 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 		},
 		{
 			name:        "pnpm workspace root",
+			installedIn: "mono",
 			executable:  filepath.Join("mono", "node_modules", ".pnpm", "@magic-spells+puzzle@0.6.0", "node_modules", platform),
 			ownerRel:    "mono",
 			packageJSON: `{"name":"mono"}`,
@@ -152,6 +196,7 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			// A workspace root that declares the CLI itself is an ordinary
 			// project: the dependency test runs before the workspace guard.
 			name:        "workspace root that declares the CLI is a project",
+			installedIn: "mono",
 			executable:  filepath.Join("mono", "node_modules", platform),
 			ownerRel:    "mono",
 			packageJSON: `{"workspaces":["packages/*"],"devDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
@@ -162,9 +207,13 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			wantDev:     true,
 		},
 		{
-			name:       "npm global prefix",
-			executable: filepath.Join("opt", "homebrew", "lib", "node_modules", platform),
-			wantKind:   installGlobal,
+			// A global prefix is now CONFIRMED, not inferred: npm itself names
+			// this node_modules as its global root.
+			name:        "npm global prefix",
+			executable:  filepath.Join("opt", "homebrew", "lib", "node_modules", platform),
+			installedIn: filepath.Join("opt", "homebrew", "lib"),
+			globalRoots: map[string]string{"npm": filepath.Join("opt", "homebrew", "lib", "node_modules")},
+			wantKind:    installGlobal,
 			// No package.json above node_modules at all.
 			wantManager: "npm",
 		},
@@ -173,6 +222,8 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			executable:  filepath.Join("usr", "local", "lib", "node_modules", platform),
 			ownerRel:    filepath.Join("usr", "local", "lib"),
 			packageJSON: `{"dependencies":{"typescript":"^5.0.0"}}`,
+			installedIn: filepath.Join("usr", "local", "lib"),
+			globalRoots: map[string]string{"npm": filepath.Join("usr", "local", "lib", "node_modules")},
 			wantKind:    installGlobal,
 			wantManager: "npm",
 		},
@@ -187,6 +238,7 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			ownerRel:    filepath.Join("home", "Library", "pnpm", "global", "5"),
 			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
 			lockfile:    "pnpm-lock.yaml",
+			installedIn: filepath.Join("home", "Library", "pnpm", "global", "5"),
 			wantKind:    installGlobal,
 			wantManager: "pnpm",
 		},
@@ -199,9 +251,142 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			ownerRel:    filepath.Join("home", "pnpm", "app"),
 			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
 			lockfile:    "package-lock.json",
+			installedIn: filepath.Join("home", "pnpm", "app"),
 			wantKind:    installProject,
 			wantOwner:   filepath.Join("home", "pnpm", "app"),
 			wantManager: "npm",
+		},
+		{
+			// EVERY dependency stanza is a declaration. Reading only
+			// dependencies/devDependencies sent this shape to `npm install -g`.
+			name:        "peerDependencies is a declaration",
+			executable:  filepath.Join("app", "node_modules", platform),
+			ownerRel:    "app",
+			packageJSON: `{"peerDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "package-lock.json",
+			installedIn: "app",
+			wantKind:    installProject,
+			wantOwner:   "app",
+			wantManager: "npm",
+		},
+		{
+			name:        "optionalDependencies is a declaration",
+			executable:  filepath.Join("app", "node_modules", platform),
+			ownerRel:    "app",
+			packageJSON: `{"optionalDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "pnpm-lock.yaml",
+			installedIn: "app",
+			wantKind:    installProject,
+			wantOwner:   "app",
+			wantManager: "pnpm",
+		},
+		{
+			// `npm install --no-save`: installed, never recorded. Still a LOCAL
+			// install, and still the copy this binary runs from.
+			name:        "unrecorded local install stays local",
+			executable:  filepath.Join("app", "node_modules", platform),
+			ownerRel:    "app",
+			packageJSON: `{"name":"app","dependencies":{"lodash":"^4.0.0"}}`,
+			lockfile:    "package-lock.json",
+			installedIn: "app",
+			wantKind:    installProject,
+			wantOwner:   "app",
+			wantManager: "npm",
+		},
+		{
+			// lerna keeps its member list in lerna.json, so the root package.json
+			// mentions neither `workspaces` nor the CLI — the shape that used to
+			// read as a global prefix.
+			name:        "lerna monorepo root",
+			executable:  filepath.Join("mono", "node_modules", platform),
+			ownerRel:    "mono",
+			packageJSON: `{"name":"mono","devDependencies":{"lerna":"^8.0.0"}}`,
+			lockfile:    "package-lock.json",
+			installedIn: "mono",
+			files: map[string]string{
+				filepath.Join("mono", "lerna.json"):                      `{"packages":["packages/*"]}`,
+				filepath.Join("mono", "packages", "app", "package.json"): `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			},
+			wantKind:  installWorkspace,
+			wantOwner: "mono",
+		},
+		{
+			name:        "nx monorepo root",
+			executable:  filepath.Join("mono", "node_modules", platform),
+			ownerRel:    "mono",
+			packageJSON: `{"name":"mono"}`,
+			lockfile:    "package-lock.json",
+			installedIn: "mono",
+			files: map[string]string{
+				filepath.Join("mono", "nx.json"): `{}`,
+			},
+			wantKind:  installWorkspace,
+			wantOwner: "mono",
+		},
+		{
+			// npx caches declare the package they fetched, so the manifest test
+			// called this a project and "upgraded" a directory npm throws away.
+			name:        "npx cache is not a project",
+			executable:  filepath.Join("home", ".npm", "_npx", "9d3ab", "node_modules", platform),
+			ownerRel:    filepath.Join("home", ".npm", "_npx", "9d3ab"),
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "package-lock.json",
+			installedIn: filepath.Join("home", ".npm", "_npx", "9d3ab"),
+			wantKind:    installEphemeral,
+			wantOwner:   filepath.Join("home", ".npm", "_npx", "9d3ab"),
+			wantManager: "npx",
+		},
+		{
+			// A non-hoisted copy belongs to the package it is nested under. The
+			// outermost-node_modules rule pointed at the project's hoisted copy
+			// instead and reported success over a binary nobody runs.
+			name:        "nested non-hoisted copy is not the project's",
+			executable:  filepath.Join("app", "node_modules", "some-tool", "node_modules", platform),
+			ownerRel:    "app",
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "package-lock.json",
+			installedIn: filepath.Join("app", "node_modules", "some-tool"),
+			files: map[string]string{
+				filepath.Join("app", "node_modules", "@magic-spells", "puzzle", "package.json"): `{"version":"0.6.0"}`,
+			},
+			wantKind:  installNested,
+			wantOwner: filepath.Join("app", "node_modules", "some-tool"),
+		},
+		{
+			// A configured pnpm `global-dir` with $PNPM_HOME unset matches no path
+			// shape, so pnpm itself is asked before the manifest test can call it
+			// a project and run a non-global `pnpm add` inside it.
+			name: "pnpm global-dir with PNPM_HOME unset",
+			executable: filepath.Join("tools", "global", "5", "node_modules", ".pnpm",
+				"@magic-spells+puzzle@0.6.0", "node_modules", platform),
+			ownerRel:    filepath.Join("tools", "global", "5"),
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "pnpm-lock.yaml",
+			installedIn: filepath.Join("tools", "global", "5"),
+			globalRoots: map[string]string{"pnpm": filepath.Join("tools", "global", "5", "node_modules")},
+			wantKind:    installGlobal,
+			wantManager: "pnpm",
+		},
+		{
+			// Nothing declares it, no manager calls it global, no lockfile says a
+			// package manager ever ran here. Refusing is the only safe answer.
+			name:        "unrecognised shape refuses",
+			executable:  filepath.Join("opt", "vendor", "node_modules", platform),
+			ownerRel:    filepath.Join("opt", "vendor"),
+			packageJSON: `{"name":"vendor"}`,
+			installedIn: filepath.Join("opt", "vendor"),
+			wantKind:    installUnresolved,
+			wantOwner:   filepath.Join("opt", "vendor"),
+		},
+		{
+			// A platform binary with no @magic-spells/puzzle above it: a broken or
+			// hand-assembled tree with no copy to confirm against.
+			name:        "platform package with no puzzle package above it refuses",
+			executable:  filepath.Join("app", "node_modules", platform),
+			ownerRel:    "app",
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "package-lock.json",
+			wantKind:    installUnresolved,
 		},
 	}
 
@@ -221,6 +406,14 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			for rel, body := range tt.files {
 				mustWrite(t, filepath.Join(root, rel), body)
 			}
+			if tt.installedIn != "" {
+				installPuzzlePackage(t, filepath.Join(root, tt.installedIn), "0.6.0")
+			}
+			roots := map[string]string{}
+			for manager, rel := range tt.globalRoots {
+				roots[manager] = filepath.Join(root, rel)
+			}
+			stubGlobalRoots(t, roots)
 
 			ctx, err := detectInstallContext(filepath.Join(root, tt.executable))
 			if err != nil {
@@ -256,6 +449,9 @@ func TestDetectInstallContextPnpmHome(t *testing.T) {
 	owner := filepath.Join(home, "global", "5")
 	mustWrite(t, filepath.Join(owner, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`)
 	mustWrite(t, filepath.Join(owner, "pnpm-lock.yaml"), "")
+	installPuzzlePackage(t, owner, "0.6.0")
+	// $PNPM_HOME alone must settle this — no manager is asked.
+	stubGlobalRoots(t, nil)
 
 	executable := filepath.Join(owner, "node_modules", ".pnpm", "@magic-spells+puzzle@0.6.0",
 		"node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
@@ -278,6 +474,8 @@ func TestDetectInstallContextResolvesSymlinkedBin(t *testing.T) {
 	project := realTempDir(t)
 	mustWrite(t, filepath.Join(project, "package.json"), `{"devDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`)
 	mustWrite(t, filepath.Join(project, "pnpm-lock.yaml"), "")
+	installPuzzlePackage(t, project, "0.6.0")
+	stubGlobalRoots(t, nil)
 
 	real := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
 	mustWriteExecutable(t, real, "#!/bin/sh\n")
@@ -308,7 +506,11 @@ func TestDetectInstallContextIgnoresWorkingDirectory(t *testing.T) {
 	mustWrite(t, filepath.Join(project, "pnpm-lock.yaml"), "")
 	chdir(t, project)
 
-	global := filepath.Join(realTempDir(t), "opt", "homebrew", "lib", "node_modules",
+	prefix := filepath.Join(realTempDir(t), "opt", "homebrew", "lib")
+	installPuzzlePackage(t, prefix, "0.6.0")
+	stubGlobalRoots(t, map[string]string{"npm": filepath.Join(prefix, "node_modules")})
+
+	global := filepath.Join(prefix, "node_modules",
 		"@magic-spells", platformPackageName(), "bin", "puzzle")
 	ctx, err := detectInstallContext(global)
 	if err != nil {
@@ -444,7 +646,8 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			project := realTempDir(t)
 			mustWrite(t, filepath.Join(project, "package.json"), `{"`+tt.field+`":{"@magic-spells/puzzle":"0.1.0"}}`)
 			mustWrite(t, filepath.Join(project, tt.lockfile), "")
-			installedPackage := filepath.Join(project, "node_modules", "@magic-spells", "puzzle", "package.json")
+			installedPackage := installPuzzlePackage(t, project, "0.1.0")
+			stubGlobalRoots(t, nil)
 			// The CLI being upgraded is the project's own copy, and the process
 			// is standing somewhere else entirely: the project is reached
 			// through the executable, never through the cwd.
@@ -556,6 +759,13 @@ func TestUpgradeGlobalCLIFromInsideAProject(t *testing.T) {
 				mustWrite(t, filepath.Join(globalRoot, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.5.0"}}`)
 				mustWrite(t, filepath.Join(globalRoot, "pnpm-lock.yaml"), "")
 			}
+			installPuzzlePackage(t, globalRoot, version.Version)
+			// npm names its own global root; pnpm's is matched by shape.
+			roots := map[string]string{}
+			if tt.manager == "npm" {
+				roots["npm"] = filepath.Join(globalRoot, "node_modules")
+			}
+			stubGlobalRoots(t, roots)
 			executable := filepath.Join(globalRoot, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
 
 			stubDir := t.TempDir()
@@ -576,8 +786,11 @@ func TestUpgradeGlobalCLIFromInsideAProject(t *testing.T) {
 			if got := readLines(t, argsPath); !reflect.DeepEqual(got, tt.wantArgs) {
 				t.Fatalf("argv = %#v, want %#v", got, tt.wantArgs)
 			}
-			if fsFileExists(filepath.Join(project, "node_modules")) {
-				t.Error("the surrounding project was installed into")
+			// fsFileExists is false for DIRECTORIES, and node_modules is nothing
+			// but a directory — the assertion this replaces could not fail, so the
+			// launch-day regression it guards would have sailed through it.
+			if installed, detail := installedInto(t, project); installed {
+				t.Errorf("the surrounding project was installed into: %s", detail)
 			}
 			want := "✓ upgraded the global CLI " + version.Version + " → " + testLatest
 			if !strings.Contains(stdout.String(), want) {
@@ -602,6 +815,7 @@ func TestUpgradeWorkspaceRootExplainsAndStops(t *testing.T) {
 	update.CacheDir = t.TempDir()
 	t.Cleanup(func() { update.CacheDir = oldCacheDir })
 
+	stubGlobalRoots(t, nil)
 	mono := realTempDir(t)
 	mustWrite(t, filepath.Join(mono, "package.json"), `{"name":"mono","workspaces":["packages/*"]}`)
 	mustWrite(t, filepath.Join(mono, "package-lock.json"), "")
@@ -952,6 +1166,8 @@ func runUpgradeWithStubs(t *testing.T, home string, interactive bool, seedProjec
 	project := realTempDir(t)
 	mustWrite(t, filepath.Join(project, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"0.1.0"}}`)
 	mustWrite(t, filepath.Join(project, "package-lock.json"), "")
+	installPuzzlePackage(t, project, "0.1.0")
+	stubGlobalRoots(t, nil)
 	// The running CLI is the project's own — the shape the refresh candidates
 	// (platform package, then node_modules/.bin) are written for.
 	executable := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
@@ -1042,4 +1258,378 @@ func readLines(t *testing.T, path string) []string {
 		return nil
 	}
 	return strings.Split(trimmed, "\n")
+}
+
+// installedInto reports whether anything created a node_modules inside project,
+// and describes what it found. It exists because fsFileExists — the predicate
+// the launch-day assertion used — returns false for a DIRECTORY, and
+// node_modules is nothing but a directory. That assertion therefore passed
+// whether or not the command had installed into the project, which is the one
+// thing it was written to catch.
+func installedInto(t *testing.T, project string) (bool, string) {
+	t.Helper()
+	dir := filepath.Join(project, "node_modules")
+	info, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, ""
+	}
+	if err != nil {
+		t.Fatalf("checking %s: %v", dir, err)
+	}
+	if !info.IsDir() {
+		return true, dir + " exists as a non-directory"
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("reading %s: %v", dir, err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return true, dir + " exists, containing " + strings.Join(names, " ")
+}
+
+// TestInstalledIntoDetectsADirectory is the guard on the guard, pinning both
+// halves of the defect it replaces: fsFileExists is blind to a directory, and
+// installedInto is not. Without this, a future edit could quietly restore the
+// vacuous form and every "the project was left alone" assertion in this file
+// would go back to being unfalsifiable.
+func TestInstalledIntoDetectsADirectory(t *testing.T) {
+	project := t.TempDir()
+	if installed, detail := installedInto(t, project); installed {
+		t.Fatalf("a clean project must not read as installed into: %s", detail)
+	}
+
+	nodeModules := filepath.Join(project, "node_modules")
+	if err := os.MkdirAll(filepath.Join(nodeModules, "@magic-spells", "puzzle"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if fsFileExists(nodeModules) {
+		t.Fatal("fsFileExists now reports directories — this test's premise has changed, re-read the assertions it backs")
+	}
+	installed, detail := installedInto(t, project)
+	if !installed {
+		t.Fatal("installedInto missed a node_modules directory — the assertion is vacuous again")
+	}
+	if !strings.Contains(detail, "@magic-spells") {
+		t.Errorf("detail should name what it found, got %q", detail)
+	}
+}
+
+// stubLatest points the registry check at testLatest and redirects the update
+// cache, so an upgrade test neither reaches the network nor writes the real one.
+func stubLatest(t *testing.T) {
+	t.Helper()
+	oldFetchLatest := fetchLatest
+	fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
+	t.Cleanup(func() { fetchLatest = oldFetchLatest })
+
+	oldCacheDir := update.CacheDir
+	update.CacheDir = t.TempDir()
+	t.Cleanup(func() { update.CacheDir = oldCacheDir })
+}
+
+// faithfulManagerStub stands in for npm/pnpm on PATH. It answers `root -g` from
+// the environment — so detection's global-root query runs for real rather than
+// through a Go stub — records the argv and cwd of any other invocation, and then
+// installs where the real manager would: `-g` writes under the global root, and
+// everything else writes ./node_modules in the directory it was invoked from.
+//
+// Emulating that difference is the whole point. A confirmation step that reads a
+// LOCAL copy must not be satisfiable by a command that installed GLOBALLY; with
+// a stub that writes one fixed path, the two failures in this class cancel out
+// and the test passes against the broken code.
+const faithfulManagerStub = `#!/bin/sh
+if [ "$1" = "root" ] && [ "$2" = "-g" ]; then
+  printf '%s\n' "$PUZZLE_TEST_GLOBAL_ROOT"
+  exit 0
+fi
+printf '%s\n' "$@" > "$PUZZLE_TEST_ARGS"
+pwd > "$PUZZLE_TEST_CWD"
+target="$PWD/node_modules/@magic-spells/puzzle"
+for arg in "$@"; do
+  case "$arg" in
+    -g|--global) target="$PUZZLE_TEST_GLOBAL_ROOT/@magic-spells/puzzle" ;;
+  esac
+done
+mkdir -p "$target"
+printf '{"version":"%s"}\n' "$PUZZLE_TEST_VERSION" > "$target/package.json"
+`
+
+// upgradeStubs puts faithful npm/pnpm/yarn/bun stubs on PATH and returns a
+// reader for the argv they recorded (nil when none ran) and for the cwd of the
+// last install.
+func upgradeStubs(t *testing.T, globalRoot string) (argv func() []string, cwd func() string) {
+	t.Helper()
+	stubDir := t.TempDir()
+	argsPath := filepath.Join(stubDir, "args")
+	cwdPath := filepath.Join(stubDir, "cwd")
+	for _, manager := range []string{"npm", "pnpm", "yarn", "bun"} {
+		mustWriteExecutable(t, filepath.Join(stubDir, manager), faithfulManagerStub)
+	}
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PUZZLE_TEST_ARGS", argsPath)
+	t.Setenv("PUZZLE_TEST_CWD", cwdPath)
+	t.Setenv("PUZZLE_TEST_GLOBAL_ROOT", globalRoot)
+	t.Setenv("PUZZLE_TEST_VERSION", testLatest)
+	return func() []string {
+			if !fsFileExists(argsPath) {
+				return nil
+			}
+			return readLines(t, argsPath)
+		}, func() string {
+			if !fsFileExists(cwdPath) {
+				return ""
+			}
+			data, err := os.ReadFile(cwdPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return strings.TrimSpace(string(data))
+		}
+}
+
+// TestUpgradeNeverEscalatesALocalInstallToGlobal is the HIGH finding, end to
+// end. Every shape here is a LOCAL install whose owning package.json does not
+// name the CLI in dependencies/devDependencies. Each one used to fall through to
+// `npm install -g @magic-spells/puzzle@latest` — a write to the user's machine
+// they never asked for — and then hard-fail confirmation against the local copy
+// that command had not touched. The invariant: a global install happens only
+// when the copy really is global.
+func TestUpgradeNeverEscalatesALocalInstallToGlobal(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+
+	tests := []struct {
+		name     string
+		manifest string
+		extra    map[string]string
+		// wantArgs nil means no package manager may run at all.
+		wantArgs   []string
+		wantStdout []string
+	}{
+		{
+			// lerna keeps its member list in lerna.json, so the root manifest
+			// names neither `workspaces` nor the CLI: the exact shape the old
+			// classifier read as "nobody declares it, must be global".
+			name:     "lerna monorepo root",
+			manifest: `{"name":"mono","devDependencies":{"lerna":"^8.0.0"}}`,
+			extra: map[string]string{
+				"lerna.json": `{"packages":["packages/*"]}`,
+				filepath.Join("packages", "app", "package.json"): `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			},
+			wantStdout: []string{"-w <member>"},
+		},
+		{
+			name:       "dependency declared in peerDependencies",
+			manifest:   `{"name":"app","peerDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			wantArgs:   []string{"install", "@magic-spells/puzzle@" + testLatest},
+			wantStdout: []string{"✓ upgraded @magic-spells/puzzle"},
+		},
+		{
+			// `npm install --no-save`: present in node_modules, absent from the
+			// manifest. Installed is installed.
+			name:       "installed with --no-save",
+			manifest:   `{"name":"app","dependencies":{"lodash":"^4.0.0"}}`,
+			wantArgs:   []string{"install", "@magic-spells/puzzle@" + testLatest},
+			wantStdout: []string{"✓ upgraded @magic-spells/puzzle"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stubLatest(t)
+
+			owner := realTempDir(t)
+			mustWrite(t, filepath.Join(owner, "package.json"), tt.manifest)
+			mustWrite(t, filepath.Join(owner, "package-lock.json"), "")
+			for rel, body := range tt.extra {
+				mustWrite(t, filepath.Join(owner, rel), body)
+			}
+			installPuzzlePackage(t, owner, version.Version)
+			executable := filepath.Join(owner, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+
+			// A real global prefix, somewhere else entirely, that must come out of
+			// this untouched.
+			globalRoot := filepath.Join(realTempDir(t), "opt", "homebrew", "lib", "node_modules")
+			if err := os.MkdirAll(globalRoot, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			argv, cwd := upgradeStubs(t, globalRoot)
+			chdir(t, realTempDir(t))
+
+			var stdout, stderr bytes.Buffer
+			if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, false, emptyHomeEnvironment(t)); err != nil {
+				t.Fatalf("runUpgrade: %v\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
+			}
+
+			got := argv()
+			for _, arg := range got {
+				if arg == "-g" || arg == "--global" {
+					t.Fatalf("a local install was escalated to a global one: %#v", got)
+				}
+			}
+			if fsFileExists(filepath.Join(globalRoot, "@magic-spells", "puzzle", "package.json")) {
+				t.Error("the user's global prefix was installed into")
+			}
+			if tt.wantArgs == nil {
+				if got != nil {
+					t.Fatalf("a package manager ran: %#v", got)
+				}
+				// The success MARKER, not the word: these refusals legitimately
+				// talk about upgrading, they just must never claim to have done it.
+				if strings.Contains(stdout.String(), "✓ upgraded") {
+					t.Fatalf("nothing was upgraded, so nothing may claim it was:\n%s", stdout.String())
+				}
+				if _, err := update.ReadCache(); err == nil {
+					t.Error("a refusal must not write the update cache")
+				}
+				if !strings.Contains(stdout.String(), owner) {
+					t.Errorf("the refusal must name the directory it inspected (%s):\n%s", owner, stdout.String())
+				}
+			} else {
+				if !reflect.DeepEqual(got, tt.wantArgs) {
+					t.Fatalf("argv = %#v, want %#v", got, tt.wantArgs)
+				}
+				if cwd() != owner {
+					t.Errorf("install ran in %q, want %q", cwd(), owner)
+				}
+			}
+			for _, want := range tt.wantStdout {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("output missing %q:\n%s", want, stdout.String())
+				}
+			}
+		})
+	}
+}
+
+// TestUpgradeRefusesCopiesItCannotUpgrade covers the shapes that used to report
+// SUCCESS while upgrading a copy the user's `puzzle` does not resolve to. Both
+// ran a package manager, both confirmed a version, both printed the ✓ line —
+// and both left the running binary exactly as stale as it was.
+func TestUpgradeRefusesCopiesItCannotUpgrade(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+
+	tests := []struct {
+		name string
+		// build returns the executable to upgrade and the directory the refusal
+		// must name.
+		build      func(t *testing.T) (executable, named string)
+		wantStdout []string
+	}{
+		{
+			// An npx cache declares the package it fetched, so the manifest test
+			// called it a project and "upgraded" a directory npm discards.
+			name: "npx cache",
+			build: func(t *testing.T) (string, string) {
+				cache := filepath.Join(realTempDir(t), ".npm", "_npx", "9d3ab7f0")
+				mustWrite(t, filepath.Join(cache, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`)
+				mustWrite(t, filepath.Join(cache, "package-lock.json"), "")
+				installPuzzlePackage(t, cache, version.Version)
+				return filepath.Join(cache, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle"), cache
+			},
+			wantStdout: []string{"npx", "cache"},
+		},
+		{
+			// A non-hoisted copy belongs to the package it is nested under. The
+			// old outermost-node_modules rule pointed the install at the project's
+			// hoisted copy, confirmed THAT one, and reported success over a binary
+			// nobody runs.
+			name: "nested non-hoisted copy",
+			build: func(t *testing.T) (string, string) {
+				app := realTempDir(t)
+				mustWrite(t, filepath.Join(app, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`)
+				mustWrite(t, filepath.Join(app, "package-lock.json"), "")
+				installPuzzlePackage(t, app, "0.6.0")
+				tool := filepath.Join(app, "node_modules", "some-tool")
+				mustWrite(t, filepath.Join(tool, "package.json"), `{"name":"some-tool","dependencies":{"@magic-spells/puzzle":"0.5.0"}}`)
+				installPuzzlePackage(t, tool, "0.5.0")
+				return filepath.Join(tool, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle"), tool
+			},
+			wantStdout: []string{"nested dependency"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stubLatest(t)
+			executable, named := tt.build(t)
+
+			globalRoot := filepath.Join(realTempDir(t), "opt", "homebrew", "lib", "node_modules")
+			if err := os.MkdirAll(globalRoot, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			argv, _ := upgradeStubs(t, globalRoot)
+			chdir(t, realTempDir(t))
+
+			var stdout, stderr bytes.Buffer
+			if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, false, emptyHomeEnvironment(t)); err != nil {
+				t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
+			}
+			if got := argv(); got != nil {
+				t.Fatalf("a package manager ran: %#v", got)
+			}
+			out := stdout.String()
+			if strings.Contains(out, "✓ upgraded") {
+				t.Fatalf("nothing was upgraded, so nothing may claim it was:\n%s", out)
+			}
+			if !strings.Contains(out, named) {
+				t.Errorf("the refusal must name %s:\n%s", named, out)
+			}
+			for _, want := range tt.wantStdout {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+			if _, err := update.ReadCache(); err == nil {
+				t.Error("a refusal must not write the update cache")
+			}
+		})
+	}
+}
+
+// TestUpgradePnpmGlobalDirWithoutPnpmHome covers the last misclassification: a
+// configured pnpm `global-dir` matches no path shape, and with $PNPM_HOME unset
+// there was nothing left to recognise it by — so the global root's own
+// package.json (which lists every global install as a dependency) made it look
+// like a project, and `puzzle upgrade` ran a NON-global `pnpm add` inside it.
+// That reports success without ever relinking the global bin.
+//
+// This is also the one test that exercises the global-root query for real: the
+// answer comes from `pnpm root -g` through the PATH stub, not from a Go double.
+func TestUpgradePnpmGlobalDirWithoutPnpmHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	stubLatest(t)
+	t.Setenv("PNPM_HOME", "")
+
+	// `tools` is named nothing pnpm-ish, which is exactly the point.
+	owner := filepath.Join(realTempDir(t), "tools", "global", "5")
+	mustWrite(t, filepath.Join(owner, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`)
+	mustWrite(t, filepath.Join(owner, "pnpm-lock.yaml"), "")
+	installPuzzlePackage(t, owner, version.Version)
+	globalRoot := filepath.Join(owner, "node_modules")
+	executable := filepath.Join(globalRoot, ".pnpm", "@magic-spells+puzzle@0.6.0",
+		"node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+
+	argv, _ := upgradeStubs(t, globalRoot)
+	chdir(t, realTempDir(t))
+
+	var stdout, stderr bytes.Buffer
+	if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, false, emptyHomeEnvironment(t)); err != nil {
+		t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
+	}
+	want := []string{"add", "-g", "@magic-spells/puzzle@" + testLatest}
+	if got := argv(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("argv = %#v, want %#v", got, want)
+	}
+	if !strings.Contains(stdout.String(), "upgraded the global CLI") {
+		t.Fatalf("a global upgrade must say so:\n%s", stdout.String())
+	}
 }
