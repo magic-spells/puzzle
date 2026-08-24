@@ -158,6 +158,11 @@ export class PuzzleView {
 	// params/route getters read it, and every entry point save/restores it (exact
 	// stack discipline for nested synchronous evals, mirroring Store._tracking).
 	#evalScope = null;
+	// Every prepared evaluation of THIS view that is currently in flight, oldest
+	// first. #evalScope is the last entry (or null) — see #beginEvalRun /
+	// #endEvalRun for why the unwind target has to be derived from this list
+	// rather than captured up front.
+	#evalRuns = [];
 	// False until the FIRST data() result actually SWAPS in (v1.8, D39; v1.20
 	// D52 moves the flip from data-commit to swap time). While false and a
 	// renderSkeleton() is declared (compiled from <puzzle-skeleton>), renders
@@ -508,7 +513,30 @@ export class PuzzleView {
 				);
 			}
 		} else {
-			target[key] = value;
+			// Contain the assignment exactly like the record arm above. The write target
+			// is app-supplied and need not be writable: `route.query` is frozen (D83), so
+			// `data() { return { query: this.route.query } }` with `value={ query.q }` is
+			// enough — as is any getter-only property — and in strict mode (every module
+			// is) the assignment THROWS. Bare, that throw escapes the DOM listener on
+			// every keystroke as an uncaught window error, never reaching the D145 funnel.
+			// The input keeps the typed text either way; only the write is lost.
+			try {
+				target[key] = value;
+			} catch (err) {
+				reportError(
+					this.ctx,
+					err,
+					{ phase: 'bind', view: this, route: this.route },
+					'[puzzle] bound write rejected:',
+					err
+				);
+				// Stop here rather than falling through. Nothing was written, so the
+				// clobber diagnostic below has no write to watch for and the refresh
+				// would re-render byte-identical state whose only visible effect is
+				// snapping the control back mid-keystroke. The input keeps the typed
+				// text; the error explains why it did not stick.
+				return;
+			}
 			// Arm only the plain-object arm: a record replacement is legitimate identity
 			// churn and its validated update/store flush owns reactivity. The next render
 			// consumes this entry after __bind has shown whether the exact object returned
@@ -890,7 +918,14 @@ export class PuzzleView {
 	 * so mounted() fires exactly once and never on a torn-down view.
 	 */
 	#completeMount() {
-		if (this.#mounted || this.#destroyed) return;
+		// D136 §3 — a LEAVING view is inert. Since 0.7.0 a plain hide hook (no
+		// animations.out) also routes removal through destroyAnimated(), so ordinary
+		// component removal is asynchronous and this can be reached after the owner
+		// let go: an async data() resolving mid-leave would otherwise fire mounted()
+		// on a view already on its way out (re-subscribing, starting timers, taking
+		// focus). Same guard the setData/refresh/applyParentUpdate/onStoreChange
+		// entry points carry.
+		if (this.#mounted || this.#destroyed || this.#leaving) return;
 		this.#mounted = true;
 		// Dev HMR (constellation/doc/DOC-SPEC.md §27, D57): join the live-view registry at the
 		// #mounted-true convergence point, so the snapshot can key and read this
@@ -1126,26 +1161,33 @@ export class PuzzleView {
 		// unwound by the discard) rather than at evaluation time.
 		const pending = {};
 
-		// Establish/restore #evalScope around EVERY invocation (withTracking may retry
+		// Establish/retire #evalScope around EVERY invocation (withTracking may retry
 		// fn behind an in-flight async chain) and across the async tail.
 		//
-		// Two details make that retry safe. First, the unwind target is captured ONCE
-		// here, not per invocation: the retry is a fresh top-level evaluation of the
-		// same prepare, not a nested one, so every invocation unwinds to whatever was
-		// live when the prepare started (an invocation that captured its own `prev`
-		// would capture the ABANDONED invocation's still-installed scope and leave it
-		// behind for good). Second, each invocation installs its OWN copy of `scope` —
-		// commit() below still reads the outer object — so the async tail can tell
-		// whether the scope it installed is still the live one. It may not be: the
-		// abandoned invocation's `.then` runs LATE, after the retry installed its own
-		// scope, and restoring there would clobber the live scope mid-run and leave the
-		// retry evaluating (or committing) against the wrong params/route. So the tail
-		// restores only while it still owns #evalScope. The synchronous paths cannot
-		// interleave and restore unconditionally, as before.
-		const outer = this.#evalScope;
+		// THE INVARIANT: #evalScope is the most recently installed evaluation that is
+		// still IN FLIGHT, and null once they have all unwound. That is why the unwind
+		// target is derived from #evalRuns at retire time rather than captured up
+		// front — neither capture point is correct on its own:
+		//
+		//   • Per INVOCATION is wrong for a retry. withTracking may abandon an
+		//     invocation mid-flight and re-run the same prepare behind the busy chain;
+		//     the retry would capture the abandoned invocation's still-installed scope
+		//     and, since that abandoned tail resolves later and finds itself no longer
+		//     on top, restore a scope nothing will ever retire.
+		//   • Once per PREPARE is wrong for OVERLAP. A prepare created while an
+		//     earlier prepare is suspended captures that earlier scope, but the store
+		//     serializes async evaluations, so it does not actually run until the
+		//     earlier one has already unwound — restoring to it resurrects a
+		//     destination that never committed and pins params/route there for the
+		//     life of the view.
+		//
+		// Retiring by identity out of #evalRuns is correct under either ordering: an
+		// abandoned invocation settling late is removed from the middle and leaves the
+		// live top alone, and the last one out always lands on null. Each invocation
+		// still installs its OWN copy of `scope` — commit() below reads the outer
+		// object — so entries stay distinguishable by identity.
 		const run = () => {
-			const mine = { ...scope };
-			this.#evalScope = mine;
+			const mine = this.#beginEvalRun(scope);
 			let out;
 			try {
 				out =
@@ -1153,23 +1195,23 @@ export class PuzzleView {
 						? devperfRunData(this, scope.params, scope.props)
 						: this.data(scope.params, scope.props);
 			} catch (err) {
-				this.#evalScope = outer;
+				this.#endEvalRun(mine);
 				throw err;
 			}
 			if (out && typeof out.then === 'function') {
 				this.#noteAsyncShape();
 				return out.then(
 					(model) => {
-						if (this.#evalScope === mine) this.#evalScope = outer;
+						this.#endEvalRun(mine);
 						return model;
 					},
 					(err) => {
-						if (this.#evalScope === mine) this.#evalScope = outer;
+						this.#endEvalRun(mine);
 						throw err;
 					}
 				);
 			}
-			this.#evalScope = outer;
+			this.#endEvalRun(mine);
 			return out;
 		};
 
@@ -1253,7 +1295,25 @@ export class PuzzleView {
 						);
 					}
 				} else {
-					this.#commit(++this.#runToken, model);
+					// Contained exactly like the re-derive arm above, and for the same
+					// reason: this runs inside the router's SYNCHRONOUS commit window,
+					// after #commitLocation. A render() throwing here — the ordinary
+					// `{ user.name }` null-deref when the new id has no record — would
+					// otherwise escape into #commitState with the URL and router.current
+					// already moved, reject push() with a raw TypeError, abort the commit
+					// loop before the remaining prepared ancestors adopt their destination
+					// params, and mount no error view at all (D61 atomicity and D145
+					// containment broken together). Every other refresh() caller funnels;
+					// so does this one.
+					try {
+						this.#commit(++this.#runToken, model);
+					} catch (err) {
+						this.#handleViewFailure(
+							'[puzzle] render failed during a prepared commit:',
+							err,
+							'refresh'
+						);
+					}
 				}
 			},
 			discard: () => {
@@ -1784,9 +1844,34 @@ export class PuzzleView {
 			// animation must not replay — but D136's leave-inertness rule is about the
 			// LEAVE, not about the animation: re-arm #leaving and drop the subscription
 			// this view re-took during recovery, or it stays reactive on its way out.
-			this.#leaving = this.#outTask;
+			//
+			// The HOOKS are not spent with it. viewWillHide/viewDidHide are lifecycle,
+			// not animation callbacks (D28), so a genuine departure fires them in order
+			// with zero-duration semantics — exactly the treatment a view declaring the
+			// hooks and no animation already gets. Without this, the only leave the user
+			// ever really made fired neither hook and went straight to destroyed().
+			// #outTask keeps naming the spent OUT so a third leave still skips the
+			// animation; #leaving names this interval and carries the hook bracket.
 			this.ctx.store?.unsubscribe(this);
-			return this.#outTask;
+			let resolveLeaving;
+			let rejectLeaving;
+			this.#leaving = new Promise((resolve, reject) => {
+				resolveLeaving = resolve;
+				rejectLeaving = reject;
+			});
+			// An async task, not a bare call: a throwing user hook must REJECT the
+			// returned promise the way the full path does, never throw synchronously
+			// out of playOut() — #startOverlapLeave passes this straight into a
+			// Promise.all(), where a sync throw would escape its .catch entirely.
+			const spentTask = (async () => {
+				if (this.#destroyed) return;
+				this.viewWillHide();
+				await this.#runAnimation(undefined);
+				if (this.#destroyed || !this.#leaving) return;
+				this.viewDidHide();
+			})();
+			spentTask.then(resolveLeaving, rejectLeaving);
+			return this.#leaving;
 		}
 		let resolveLeaving;
 		let rejectLeaving;
@@ -1830,7 +1915,13 @@ export class PuzzleView {
 			}
 			this.viewWillHide();
 			await this.#runAnimation(out, { retainOut: true });
-			if (this.#destroyed) return; // interrupted by destroy() — order preserved by it
+			// Interrupted by destroy() — order preserved by it — or by
+			// _restoreFromLeaving(), which cancels the out animation and so RESOLVES the
+			// await above. A cleared #leaving means this view is back on screen, live and
+			// re-subscribed: firing its closing hook there would announce a departure
+			// that did not happen. Its eventual real leave re-arms #leaving and fires
+			// the full bracket through the spent-#outTask branch above.
+			if (this.#destroyed || !this.#leaving) return;
 			this.viewDidHide();
 		})();
 		leavingTask.then(resolveLeaving, rejectLeaving);
@@ -1935,7 +2026,9 @@ export class PuzzleView {
 	// ---- internals -----------------------------------------------------------
 
 	#commit(token, model) {
-		if (token !== this.#runToken || this.#destroyed) return; // superseded
+		// superseded, torn down, or LEAVING — see #completeMount for why removal is
+		// now asynchronous for any view declaring a hide hook (D136 §3).
+		if (token !== this.#runToken || this.#destroyed || this.#leaving) return;
 		// Two-layer state (Change C, SPEC §4). A successful data() result REPLACES the
 		// model layer wholesale — keys an earlier run returned but this one omits
 		// disappear (unless the local layer still holds them) — then #recompose()
@@ -1977,6 +2070,11 @@ export class PuzzleView {
 	 * D52), and on every post-load refresh.
 	 */
 	#swapLoaded() {
+		// Reachable independently of #commit through the D52 hold timer, so it carries
+		// the leave guard in its own right (D136 §3): a min-duration hold expiring
+		// after the owner removed the view must not paint the real template over a
+		// subtree that is on its way out.
+		if (this.#destroyed || this.#leaving) return;
 		this.#loaded = true;
 		this.#renderNow();
 		// Anchor-race gate (Change A): a superseded initial async mount() deferred its
@@ -2051,6 +2149,32 @@ export class PuzzleView {
 	/** Milliseconds left before the anti-flash hold expires (v1.20, D52). */
 	#holdRemaining() {
 		return (this.skeletonMinDuration ?? 0) - (Date.now() - this.#skeletonShownAt);
+	}
+
+	/**
+	 * Install a prepared evaluation's scope (D146) and return the entry that
+	 * retires it. The entry is a fresh copy of `scope`, so overlapping invocations
+	 * of the same prepare stay distinguishable by identity.
+	 */
+	#beginEvalRun(scope) {
+		const mine = { ...scope };
+		this.#evalRuns.push(mine);
+		this.#evalScope = mine;
+		return mine;
+	}
+
+	/**
+	 * Retire one prepared evaluation. #evalScope falls back to whatever evaluation
+	 * is still in flight — the newest one — or to null when this was the last, which
+	 * is what keeps a superseded or abandoned invocation from being resurrected as
+	 * some later invocation's unwind target (see the invariant in prepareRefresh).
+	 * Idempotent: a tail that already retired its entry finds nothing to remove.
+	 */
+	#endEvalRun(mine) {
+		const at = this.#evalRuns.lastIndexOf(mine);
+		if (at === -1) return;
+		this.#evalRuns.splice(at, 1);
+		this.#evalScope = this.#evalRuns[this.#evalRuns.length - 1] ?? null;
 	}
 
 	/**
