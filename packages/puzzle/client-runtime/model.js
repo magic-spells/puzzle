@@ -14,6 +14,8 @@
  * { valid, errors } without throwing.
  */
 
+import { parseDateInput } from './dates.js';
+
 /**
  * Normalize record identity at every index/comparison boundary — never a
  * record's fields (D112).
@@ -298,54 +300,102 @@ const MUTATION_REVISIONS = new WeakMap();
 // Warn-once state is allocated lazily inside the development gate below. A
 // production build still must walk descriptors to avoid the strict-mode throw,
 // but it should not allocate diagnostic bookkeeping it can never read.
-let COMPUTED_GETTER_WARNINGS;
+let COLLISION_WARNINGS;
+
+// What a payload key resolved to on the record's prototype chain. 0 = nothing in
+// the way (assign it).
+const COLLIDES_GETTER = 1;
+const COLLIDES_METHOD = 2;
+// Not a chain lookup — the key is in a skip set (reserved internal / pollution
+// family). Only the update() path reports it; see assignSkipping.
+const COLLIDES_RESERVED = 3;
 
 /**
  * Follow the same resolved-property path [[Set]] would follow, stopping before
- * Object.prototype (its dangerous names are already covered by POLLUTION_SKIP).
- * A model getter may live on any superclass, not only the concrete model's
- * immediate prototype. Finding the FIRST descriptor matters too: an own data
- * property legitimately shadows an older getter and remains assignable.
+ * Object.prototype (its dangerous names are already covered by POLLUTION_SKIP),
+ * and report what the key collides with. A model getter or method may live on
+ * any superclass, not only the concrete model's immediate prototype. Finding the
+ * FIRST descriptor matters too: an OWN property legitimately shadows an
+ * inherited one and remains assignable.
  */
-function resolvesToGetterOnly(target, key) {
+function resolveCollision(target, key) {
 	let owner = target;
 	while (owner && owner !== Object.prototype) {
 		const descriptor = Object.getOwnPropertyDescriptor(owner, key);
-		if (descriptor) return 'get' in descriptor && descriptor.set === undefined;
+		if (descriptor) {
+			// Accessor: getter-only is unassignable (strict-mode throw); an accessor
+			// WITH a setter keeps its setter behavior, D49 relationships included.
+			if ('get' in descriptor) {
+				return descriptor.set === undefined ? COLLIDES_GETTER : 0;
+			}
+			// A method inherited from the model class (or PuzzleModel itself). An own
+			// data property already shadows whatever is behind it and stays assignable.
+			if (owner !== target && typeof descriptor.value === 'function') return COLLIDES_METHOD;
+			return 0;
+		}
 		owner = Object.getPrototypeOf(owner);
 	}
-	return false;
+	return 0;
 }
 
-/** Shared body of safeAssign/safeMerge: assign every allowed own key. */
-function assignSkipping(target, src, skipSet, allow) {
+/** Warn once per (model class, key) that an incoming value was dropped. */
+function warnCollision(target, key, reason) {
+	COLLISION_WARNINGS ||= new WeakMap();
+	const Model = target.constructor;
+	let warned = COLLISION_WARNINGS.get(Model);
+	if (!warned) {
+		warned = new Set();
+		COLLISION_WARNINGS.set(Model, warned);
+	}
+	if (warned.has(key)) return;
+	warned.add(key);
+	const name = Model.name || 'PuzzleModel';
+	console.warn(
+		reason === COLLIDES_GETTER
+			? `[puzzle] "${key}" collides with a computed getter on model "${name}" — the incoming value was ignored`
+			: reason === COLLIDES_METHOD
+				? `[puzzle] "${key}" collides with a method on model "${name}" — the incoming value was ignored`
+				: `[puzzle] "${key}" is a reserved record field on model "${name}" — the incoming value was ignored`
+	);
+}
+
+/**
+ * Shared body of safeAssign/safeMerge: assign every allowed own key.
+ *
+ * `applied` marks the LOCAL update() path: accepted keys are collected into it
+ * for the mutation stamp (a skipped key must never be stamped), and a
+ * reserved-key skip warns in development — a patch is author-written, so a
+ * dropped key there is a mistake worth naming, while a server payload carrying a
+ * reserved key is routine and stays silent.
+ */
+function assignSkipping(target, src, skipSet, allow, applied) {
 	for (const key of Object.keys(src)) {
-		if (skipSet.has(key)) continue;
+		if (skipSet.has(key)) {
+			if (applied && (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)) {
+				warnCollision(target, key, COLLIDES_RESERVED);
+			}
+			continue;
+		}
 		if (allow && !allow(key)) continue;
-		// Computed properties are plain prototype getters (SPEC §7). ESM is
-		// strict mode, so assigning a payload key that resolves to one throws in
-		// the MIDDLE of this loop: earlier fields land, later fields do not, and a
-		// save response never reaches its post-merge _synced flip. Match D49's
-		// reserved-relationship posture: drop the colliding value and warn once.
-		if (resolvesToGetterOnly(target, key)) {
+		// Computed properties are plain prototype getters (SPEC §7), and model
+		// methods are plain prototype functions. ESM is strict mode, so assigning a
+		// payload key that resolves to a getter-only property throws in the MIDDLE
+		// of this loop: earlier fields land, later fields do not, and a save
+		// response never reaches its post-merge _synced flip. A key resolving to a
+		// METHOD does not throw — it does something quieter and worse, writing an
+		// own data property that SHADOWS the method, so the next
+		// `record.update(...)` / `save()` / `toJSON()` fails as "not a function"
+		// deep inside app code. Both take D49's reserved-relationship posture: drop
+		// the colliding value and warn once.
+		const collision = resolveCollision(target, key);
+		if (collision) {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-				COMPUTED_GETTER_WARNINGS ||= new WeakMap();
-				const Model = target.constructor;
-				let warned = COMPUTED_GETTER_WARNINGS.get(Model);
-				if (!warned) {
-					warned = new Set();
-					COMPUTED_GETTER_WARNINGS.set(Model, warned);
-				}
-				if (!warned.has(key)) {
-					warned.add(key);
-					console.warn(
-						`[puzzle] "${key}" collides with a computed getter on model "${Model.name || 'PuzzleModel'}" — the incoming value was ignored`
-					);
-				}
+				warnCollision(target, key, collision);
 			}
 			continue;
 		}
 		target[key] = src[key];
+		if (applied) applied.push(key);
 	}
 	return target;
 }
@@ -387,7 +437,20 @@ function safeAssign(target, src) {
 }
 
 /**
- * safeAssign plus the local-mutation stamp — the update() path only.
+ * The update() assignment path: MERGE_SKIP semantics plus the local-mutation
+ * stamp.
+ *
+ * It skips the SAME reserved set as safeMerge, not just the pollution family.
+ * `_type` is installed with `Object.defineProperty` and is therefore read-only,
+ * so `record.update({ title, _type, done })` used to throw TypeError in the
+ * MIDDLE of the copy under strict mode — `title` applied, `done` lost,
+ * `recordChanged()` never reached — while `update({ _store: null })` quietly
+ * detached a record the store still indexes. Neither is worth a throw: a
+ * reserved key in a patch is dropped and warned about once, exactly like a
+ * getter/method collision.
+ *
+ * Only the keys that actually LANDED are stamped; stamping a skipped key would
+ * make save reconciliation preserve a local value that was never written.
  *
  * Construction deliberately does NOT stamp. A stamp costs a key array, a
  * `{current, fields: Map}` state object and one Map entry per field, and every
@@ -405,11 +468,9 @@ function safeAssign(target, src) {
  * now compares `k <= j`. Same predicate.
  */
 function safeAssignTracked(target, src) {
-	safeAssign(target, src);
-	recordMutation(
-		target,
-		Object.keys(src).filter((key) => !POLLUTION_SKIP.has(key))
-	);
+	const applied = [];
+	assignSkipping(target, src, MERGE_SKIP, null, applied);
+	recordMutation(target, applied);
 	return target;
 }
 
@@ -450,6 +511,103 @@ export function safeMerge(record, src, throughRevision) {
 		MERGE_SKIP,
 		(key) => (state?.fields.get(key) ?? 0) <= throughRevision
 	);
+}
+
+/**
+ * Does `key` resolve to a plain method on this model's prototype chain?
+ * Stops before Object.prototype, mirroring resolveCollision's walk.
+ */
+function resolvesToMethod(proto, key) {
+	let owner = proto;
+	while (owner && owner !== Object.prototype) {
+		const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+		if (descriptor) return !('get' in descriptor) && typeof descriptor.value === 'function';
+		owner = Object.getPrototypeOf(owner);
+	}
+	return false;
+}
+
+/**
+ * Reject a schema entry whose NAME is already a method on the model — checked
+ * once, when the Store registers the model, so the mistake surfaces at app
+ * construction instead of as a `TypeError: record.update is not a function`
+ * from inside app code the first time a payload carries the key.
+ *
+ * A field named after a method is unusable by construction: the merge paths drop
+ * the incoming value (it would otherwise shadow the method), so the field could
+ * never hold data. Both plain fields and relationships are checked —
+ * a relationship additionally installs a prototype getter, which would replace
+ * the method for every record of the class.
+ *
+ * Covers PuzzleModel's own verbs (update/destroy/validate/toJSON, plus
+ * save/delete once the adapter capability is installed — PuzzleApp installs it
+ * before constructing the Store) and any method the author's subclass declares.
+ */
+export function assertSchemaNames(Model, type) {
+	if (typeof Model !== 'function' || !Model.prototype) return;
+	const schema = Model.schema;
+	if (!schema || typeof schema !== 'object') return;
+	const proto = Model.prototype;
+	for (const name of Object.keys(schema)) {
+		if (!resolvesToMethod(proto, name)) continue;
+		throw new Error(
+			`[puzzle] model "${type}" declares schema entry "${name}", which is a method on ${Model.name || 'the model class'} — a field cannot shadow a model method (payloads carrying it are dropped). Rename the field or the method.`
+		);
+	}
+}
+
+// Per-model list of `date()` field names, computed once. normalizedSchema()
+// rebuilds an object on every call, and hydration runs per record in a loop.
+const DATE_FIELDS = new WeakMap();
+
+function dateFieldsFor(Model) {
+	let fields = DATE_FIELDS.get(Model);
+	if (!fields) {
+		fields = [];
+		for (const [name, def] of Object.entries(Model.normalizedSchema())) {
+			if (def && def.type === 'date') fields.push(name);
+		}
+		DATE_FIELDS.set(Model, fields);
+	}
+	return fields;
+}
+
+/**
+ * Revive schema-declared `date()` fields on a JSON-sourced payload — the
+ * hydration boundary for every read path (upsert / loadMany / loadOne / save
+ * response / storage restore).
+ *
+ * JSON has no Date type, so a `Puzzle.date()` field arrives as an ISO string (or
+ * epoch millis). §20 validation deliberately does NOT coerce, so an uncoerced
+ * string fails `min`/`max` on that field — and save() validates the FULL record
+ * before dispatching, so one server-supplied date string makes every later
+ * save() reject with no request ever sent. Converting where JSON enters keeps
+ * the validation rules strict and gives app code the Date it declared.
+ *
+ * A bare `YYYY-MM-DD` is a calendar date and becomes LOCAL midnight (D114, the
+ * same rule the date formatters use); anything unparseable is left exactly as it
+ * arrived so validation still reports it. Serialization needs nothing: Date's
+ * own toJSON emits the ISO string again.
+ *
+ * Non-destructive — the payload is copied only if something actually changes.
+ */
+export function coerceJSONDates(Model, data) {
+	if (!data || typeof data !== 'object' || typeof Model?.normalizedSchema !== 'function') {
+		return data;
+	}
+	const fields = dateFieldsFor(Model);
+	if (fields.length === 0) return data;
+	let out = data;
+	for (const field of fields) {
+		if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
+		const value = data[field];
+		if (typeof value !== 'string' && typeof value !== 'number') continue;
+		const parsed = parseDateInput(value);
+		if (Number.isNaN(parsed.getTime())) continue; // unparseable → leave it for §20
+		if (out === data) out = { ...data };
+		out[field] = parsed;
+	}
+	return out;
 }
 
 export class PuzzleModel {

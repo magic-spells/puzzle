@@ -122,6 +122,42 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **A payload key naming a model method no longer shadows it.** An ordinary
+  permission flag (`{ id, name, update: true, delete: false }`) used to land as
+  an own data property over `PuzzleModel.prototype.update`, so the next
+  `record.update({...})` threw `TypeError: not a function` inside app code — and
+  a payload key named `toJSON` silently broke persistence, the DevTools
+  snapshot, and pre-save validation. Every write path (construction, `update()`,
+  and the server/storage merges) now drops a key that resolves to a **method**
+  on the prototype chain, warning once per model+key in development — the same
+  posture already used for computed getters (D149) and relationships (D49).
+  Relationship accessors are unaffected: they are getters *with* setters and
+  keep their setter behavior. Schemas are also checked when the Store registers
+  a model: a schema entry named after a model method (framework verb or one of
+  your own) throws at app construction in development, naming the model and the
+  field.
+- **`date()` fields hydrated from JSON are revived as `Date`s.** JSON has no
+  Date type, so a `Puzzle.date()` field arriving from `loadMany`/`loadOne`/
+  `upsert`, a save response, or a `storage:` round trip was a string — and
+  `min`/`max` on a date field reject a non-`Date` value (`"startsAt" must be a
+  date`). Since `save()` validates the whole record before dispatching, one
+  server-supplied date string made **every** later save reject with no request
+  ever sent, while `update()` (which validates only patched keys) hid the
+  problem until then. Declared date fields are now converted where JSON enters:
+  ISO datetimes and epoch millis via `new Date(v)`, a bare `YYYY-MM-DD` as local
+  midnight (the D114 calendar-date rule the date formatters use). Validation
+  stays strict — an unparseable value is left exactly as it arrived so §20 still
+  reports it — and serialization is unchanged (`Date#toJSON` emits ISO).
+- **`update()` with a reserved key applies the rest of the patch.** `_type` is
+  defined non-writable, so `record.update({ title, _type, done })` threw
+  `TypeError: Cannot assign to read only property '_type'` **mid-loop** under
+  strict mode: `title` landed, `done` was lost, and `recordChanged()` never ran,
+  leaving a half-applied record with no re-render. `update({ _store: null })`
+  meanwhile succeeded and detached a record the store still indexed. The patch
+  path now skips the same reserved set the server merge does
+  (`_store`/`_type`/`_synced`/`_deleted` plus the prototype-pollution family),
+  dropping those keys with a development warning instead of throwing, and stamps
+  D125 mutation revisions on only the keys that actually landed.
 - **`puzzle upgrade` resolves the install it is upgrading from the running
   executable (D76).** Documented since 0.5.0, but the resolution still walked up
   from the current directory, so a globally installed CLI invoked inside a

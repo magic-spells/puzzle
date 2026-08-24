@@ -20,6 +20,8 @@
 import {
 	PuzzleModel,
 	PuzzleValidationError,
+	assertSchemaNames,
+	coerceJSONDates,
 	recordKey,
 	safeMerge,
 } from '../model.js';
@@ -87,10 +89,14 @@ export class Store {
 		this._flushScheduled = false;
 		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
 		this._persistPending = false; // dirty flag: storage write is batched into flush()
-		this._installRelationships();
+		// Both authoring guards run BEFORE _installRelationships so a relationship
+		// named after a model method is caught rather than quietly replacing that
+		// method with a getter.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			this._assertNoReservedFields();
+			this._assertNoMethodFields();
 		}
+		this._installRelationships();
 
 		if (this.storage) this._load();
 	}
@@ -125,6 +131,19 @@ export class Store {
 					`[puzzle] model '${type}' declares a "__synced" field — that name is reserved by persistence; rename it`
 				);
 			}
+		}
+	}
+
+	/**
+	 * Registration-time schema check: a schema entry may not be named after a
+	 * model method. Development-only, like every other authoring diagnostic here:
+	 * the schema is static, so the throw fires the first time the app is opened in
+	 * dev, and production keeps the runtime protection either way (assignSkipping
+	 * drops a colliding key on every write path, in every build).
+	 */
+	_assertNoMethodFields() {
+		for (const [type, Model] of Object.entries(this.models)) {
+			assertSchemaNames(Model, type);
 		}
 	}
 
@@ -881,13 +900,17 @@ export class Store {
 
 		for (const [type, records] of Object.entries(data)) {
 			if (!Array.isArray(records)) continue;
-			const pk = this.modelFor(type).primaryKey();
+			const Model = this.modelFor(type);
+			const pk = Model.primaryKey();
 			for (const recordData of records) {
 				// Per-record fail-soft (mirrors the outer guard): a null/array/primitive
 				// entry would slip through _instantiate as a garbage record; skip it.
 				if (!recordData || typeof recordData !== 'object' || Array.isArray(recordData)) continue;
 				const hasMarker = Object.prototype.hasOwnProperty.call(recordData, '__synced');
-				const { __synced: marker, ...fields } = recordData;
+				const { __synced: marker, ...rest } = recordData;
+				// A persisted blob is JSON: revive declared date() fields before they
+				// reach a record (see coerceJSONDates).
+				const fields = coerceJSONDates(Model, rest);
 				const syncedTo = hasMarker ? marker === true : true;
 
 				const id = fields[pk];
