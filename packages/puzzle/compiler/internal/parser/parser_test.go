@@ -823,6 +823,96 @@ func TestParseRaw(t *testing.T) {
 	})
 }
 
+// rawTextFlags renders a node list as one string per node: `raw(…)` for text
+// still claiming raw bytes, `text(…)` for text back under the ordinary
+// whitespace policy, and `<tag>` for anything structural.
+func rawTextFlags(nodes []Node) []string {
+	out := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		switch t := n.(type) {
+		case *Text:
+			if t.Raw {
+				out = append(out, "raw("+t.Value+")")
+			} else {
+				out = append(out, "text("+t.Value+")")
+			}
+		case *Element:
+			out = append(out, "<"+t.Tag+">")
+		default:
+			out = append(out, "node")
+		}
+	}
+	return out
+}
+
+// TestParseRawMarkerLayout pins the boundary D150 has to draw between the bytes
+// a {#raw} body preserves and the newline/indentation an author spends writing
+// {#raw} and {/raw} on their own lines. The span is flattened into the enclosing
+// child list, so only the parser can still see which text nodes sit at its two
+// ends; leaving those flagged raw materializes formatting as text vnodes and
+// trips the single-root gates ({#for} body, component root, component skeleton).
+func TestParseRawMarkerLayout(t *testing.T) {
+	t.Run("span edges demote, interior stays raw", func(t *testing.T) {
+		root := parseContent(t, "{#raw}\n    <b>a</b>   <i>b</i>\n  {/raw}")
+		got := rawTextFlags(root.Children)
+		want := []string{
+			"text(\n    )", "<b>", "raw(   )", "<i>", "text(\n  )",
+		}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Fatalf("raw span nodes:\n got %q\nwant %q", got, want)
+		}
+	})
+
+	t.Run("edge bytes are demoted, never rewritten", func(t *testing.T) {
+		root := parseContent(t, "{#raw}\n\t  <b>a</b>{/raw}")
+		lead, ok := root.Children[0].(*Text)
+		if !ok {
+			t.Fatalf("first node: got %#v, want Text", root.Children[0])
+		}
+		if lead.Raw {
+			t.Fatalf("leading marker layout still flagged raw")
+		}
+		if lead.Value != "\n\t  " {
+			t.Fatalf("leading bytes: got %q, want %q", lead.Value, "\n\t  ")
+		}
+	})
+
+	t.Run("an all-whitespace span is content, not layout", func(t *testing.T) {
+		// {#raw} wrapped around nothing but whitespace can only be a request to
+		// keep it: there is no content for those bytes to be laying out.
+		root := parseContent(t, "<p>before{#raw}\n  \t\n{/raw}after</p>")
+		p := elementChildren(root.Children)[0].(*Element)
+		got := rawTextFlags(p.Children)
+		want := []string{"text(before)", "raw(\n  \t\n)", "text(after)"}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Fatalf("whitespace-only raw span:\n got %q\nwant %q", got, want)
+		}
+	})
+
+	t.Run("only the outermost span edges demote", func(t *testing.T) {
+		// Text at the edges of a NESTED element inside the span is captured
+		// content, not marker layout, so it keeps its bytes verbatim.
+		root := parseContent(t, "{#raw}\n  <pre>\n  x\n  </pre>\n{/raw}")
+		pre := elementChildren(root.Children)[0].(*Element)
+		got := rawTextFlags(pre.Children)
+		want := []string{"raw(\n  x\n  )"}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Fatalf("nested raw content:\n got %q\nwant %q", got, want)
+		}
+	})
+
+	t.Run("script/style bodies are untouched", func(t *testing.T) {
+		// The RAWTEXT path captures the whole body as one node; its edges are
+		// content the JSON/CSS author wrote, and no gate ever counts them.
+		root := parseContent(t, "<script type=\"application/json\">{#raw}\n  { \"a\": 1 }\n{/raw}</script>")
+		script := elementChildren(root.Children)[0].(*Element)
+		text := script.Children[0].(*Text)
+		if !text.Raw || text.Value != "\n  { \"a\": 1 }\n" {
+			t.Fatalf("script raw body: got raw=%v %q", text.Raw, text.Value)
+		}
+	})
+}
+
 func TestParseRawErrors(t *testing.T) {
 	tests := []struct {
 		name       string

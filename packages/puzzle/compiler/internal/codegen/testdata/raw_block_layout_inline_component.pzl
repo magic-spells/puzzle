@@ -1,0 +1,19 @@
+<puzzle-view>
+  {#raw}
+    <div class="doc-sample">
+      <b>{ literal }</b>
+    </div>
+  {/raw}
+</puzzle-view>
+
+<puzzle-skeleton>
+  {#raw}
+    <div class="doc-sample is-loading"></div>
+  {/raw}
+</puzzle-skeleton>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class RawBlockLayoutInlineComponent extends PuzzleView {}
+</script>
