@@ -275,16 +275,50 @@ describe('D161 — negative cache', () => {
 		expect(serializeReadState(store).absent).toEqual([]);
 	});
 
-	it('a confirmed delete() records absence; a local destroy() does not', async () => {
+	it('a confirmed delete() and a local destroy() both record absence', async () => {
 		fetchMock.mockImplementation(async () => json(undefined, 204));
 		const store = makeStore();
-		const kept = store.upsert('post', { id: 'p1', title: 'a' });
-		const dropped = store.upsert('post', { id: 'p2', title: 'b' });
+		const deleted = store.upsert('post', { id: 'p1', title: 'a' });
+		const destroyed = store.upsert('post', { id: 'p2', title: 'b' });
 
-		await kept.delete();
-		dropped.destroy();
+		await deleted.delete();
+		destroyed.destroy();
 
+		expect(serializeReadState(store).absent).toEqual(['post p1', 'post p2']);
+	});
+
+	it('after a destroy() a tracked findOne commits null and requests nothing', async () => {
+		const store = makeStore();
+		store.upsert('post', { id: 'p1', title: 'a' }).destroy();
+
+		const { value, requests } = trackedPass(store, () => store.findOne('post', 'p1'));
+		expect(value).toBeNull();
+		expect(requests.size).toBe(0);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('loadOne clears the absence a destroy() recorded', async () => {
+		const store = makeStore();
+		store.upsert('post', { id: 'p1', title: 'a' }).destroy();
 		expect(serializeReadState(store).absent).toEqual(['post p1']);
+
+		fetchMock.mockImplementation(async () => json({ id: 'p1', title: 'back' }));
+		await store.loadOne('post', 'p1');
+
+		expect(store.findOne('post', 'p1').title).toBe('back');
+		expect(serializeReadState(store).absent).toEqual([]);
+	});
+
+	it('loadMany clears the absence a destroy() recorded', async () => {
+		const store = makeStore();
+		store.upsert('post', { id: 'p1', title: 'a' }).destroy();
+		expect(serializeReadState(store).absent).toEqual(['post p1']);
+
+		fetchMock.mockImplementation(async () => json([{ id: 'p1', title: 'back' }]));
+		await store.loadMany('post');
+
+		expect(store.findOne('post', 'p1').title).toBe('back');
+		expect(serializeReadState(store).absent).toEqual([]);
 	});
 
 	it('an explicit loadOne bypasses the negative cache and its outcome refreshes the entry', async () => {
@@ -319,25 +353,51 @@ describe('D161 — negative cache', () => {
 });
 
 describe('D161 — loadOne identity guard', () => {
-	it('rejects a response for a different record before it mutates the store', async () => {
+	it('the fault path rejects a response for a different record before it mutates the store', async () => {
 		fetchMock.mockImplementation(async () => json({ id: 'other', title: 'wrong record' }));
 		const store = makeStore();
 
-		await expect(store.loadOne('post', 'p1')).rejects.toThrow(
+		await expect(settle(store, () => store.findOne('post', 'p1'))).rejects.toThrow(
 			/returned a record with primary key "other"/
 		);
 		expect(store.findOne('post', 'other')).toBeNull();
 		expect(store.findOne('post', 'p1')).toBeNull();
 	});
 
-	it('accepts a numeric response id for a string request (recordKey normalization)', async () => {
+	it('the fault path accepts a numeric response id for a string request (recordKey normalization)', async () => {
 		class NumPost extends PuzzleModel {
 			static schema = { id: Puzzle.number().primary(), title: Puzzle.string() };
 			static adapter = { endpoint: '/api/posts' };
 		}
 		fetchMock.mockImplementation(async () => json({ id: 7, title: 'seven' }));
 		const store = makeStore({ post: NumPost });
-		await expect(store.loadOne('post', '7')).resolves.toMatchObject({ title: 'seven' });
+
+		const { value } = await settle(store, () => store.findOne('post', '7'));
+		expect(value).toMatchObject({ title: 'seven' });
+	});
+
+	it('an explicit loadOne resolves a non-primary key against a slug endpoint', async () => {
+		class SlugPost extends PuzzleModel {
+			static schema = {
+				id: Puzzle.number().primary(),
+				slug: Puzzle.string(),
+				title: Puzzle.string(),
+			};
+			static adapter = { endpoint: '/api/posts' };
+		}
+		const store = makeStore({ post: SlugPost });
+
+		// A prior 404 on the slug recorded it absent — the entry the successful
+		// resolve below has to clear, even though the record comes back under 42.
+		fetchMock.mockImplementation(async () => json({}, 404));
+		await expect(store.loadOne('post', 'my-slug')).rejects.toBeInstanceOf(PuzzleAdapterError);
+		expect(serializeReadState(store).absent).toEqual(['post my-slug']);
+
+		fetchMock.mockImplementation(async () => json({ id: 42, slug: 'my-slug', title: 't' }));
+		const record = await store.loadOne('post', 'my-slug');
+		expect(record.title).toBe('t');
+		expect(store.findOne('post', 42)).toBe(record);
+		expect(serializeReadState(store).absent).toEqual([]);
 	});
 });
 

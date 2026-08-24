@@ -862,6 +862,148 @@ describe('Router transitions — incomplete navigations do not strand an in-flig
 		expect(router.current.path).toBe('/two');
 	});
 
+	it('a show hook throwing during the restore is contained, not raised to the navigation', async () => {
+		waapi = installFakeAnimate();
+		const log = [];
+		let shows = 0;
+		// The restore's show bracket runs inside the router's synchronous failure
+		// window: an escaping throw would turn a handled navigation failure into a
+		// rejecting push() promise and abandon the rest of the recovery.
+		class One extends PuzzleView {
+			animations = { out: OUT };
+			viewWillShow() {
+				log.push('one:willShow');
+			}
+			viewDidShow() {
+				log.push('one:didShow');
+				if (++shows > 1) throw new Error('show hook boom');
+			}
+			viewWillHide() {
+				log.push('one:willHide');
+			}
+			render() {
+				return h('puzzle-view', { class: 'one' }, [text('ONE')]);
+			}
+		}
+		const Two = makeView('two', log);
+		class Bad extends PuzzleView {
+			async data() {
+				throw new Error('boom');
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'one', view: One, layout: PlainLayout },
+			{ path: '/two', name: 'two', view: Two, layout: PlainLayout },
+			{ path: '/bad', name: 'bad', view: Bad, layout: PlainLayout },
+		];
+		const { router, el } = await boot(routes);
+		await settle();
+		expect(log).toEqual(['one:willShow', 'one:didShow']); // the mount's own enter
+		log.length = 0;
+
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const p1 = router.push('/two');
+		await tick();
+		expect(log).toEqual(['one:willHide']); // parked in its out phase
+
+		let rejection = null;
+		await router.push('/bad').catch((err) => (rejection = err));
+		await p1.catch((err) => (rejection = err));
+		await tick();
+
+		expect(rejection).toBeNull();
+		// The doomed nav's fresh 'two' is torn down as usual; the restore's bracket
+		// landed in between, and no closing hook fired on the view that stayed.
+		expect(log).toEqual(['one:willHide', 'one:willShow', 'one:didShow', 'two:destroyed']);
+		expect(errSpy).toHaveBeenCalledWith(
+			'[puzzle] show hook failed while restoring a stalled outgoing view:',
+			expect.any(Error)
+		);
+		// Recovery still completed: the committed view is back on screen and the
+		// stall is cleared, so a later navigation works.
+		expect(el.querySelector('.one')).not.toBeNull();
+		expect(router.current.route.name).toBe('one');
+		await router.push('/two');
+		await settle();
+		expect(el.querySelector('.two')).not.toBeNull();
+		expect(router.current.path).toBe('/two');
+	});
+
+	it('a throwing viewWillShow during the restore still lets viewDidShow and the refresh run', async () => {
+		waapi = installFakeAnimate();
+		const log = [];
+		let shows = 0;
+		let dataRuns = 0;
+		// The two hooks are guarded separately: the restart work a restored view owes
+		// lives in viewDidShow (the timer viewWillHide stopped), so a throwing
+		// viewWillShow must not skip it — that would leave the frozen-while-visible
+		// view this bracket exists to wake.
+		class One extends PuzzleView {
+			animations = { out: OUT };
+			viewWillShow() {
+				log.push('one:willShow');
+				if (++shows > 1) throw new Error('will-show boom');
+			}
+			viewDidShow() {
+				log.push('one:didShow');
+			}
+			viewWillHide() {
+				log.push('one:willHide');
+			}
+			data() {
+				dataRuns++;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'one' }, [text('ONE')]);
+			}
+		}
+		const Two = makeView('two', log);
+		class Bad extends PuzzleView {
+			async data() {
+				throw new Error('boom');
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'one', view: One, layout: PlainLayout },
+			{ path: '/two', name: 'two', view: Two, layout: PlainLayout },
+			{ path: '/bad', name: 'bad', view: Bad, layout: PlainLayout },
+		];
+		const { router, el } = await boot(routes);
+		await settle();
+		log.length = 0;
+		const runsAtBoot = dataRuns;
+
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const p1 = router.push('/two');
+		await tick();
+		expect(log).toEqual(['one:willHide']);
+
+		let rejection = null;
+		await router.push('/bad').catch((err) => (rejection = err));
+		await p1.catch((err) => (rejection = err));
+		await tick();
+
+		expect(rejection).toBeNull();
+		// viewWillShow threw and was reported — and viewDidShow fired anyway.
+		expect(log).toEqual(['one:willHide', 'one:willShow', 'one:didShow', 'two:destroyed']);
+		expect(errSpy).toHaveBeenCalledWith(
+			'[puzzle] show hook failed while restoring a stalled outgoing view:',
+			expect.any(Error)
+		);
+		// …and the recovery refresh below the bracket still ran, so the restored view
+		// is re-subscribed rather than left inert.
+		expect(dataRuns).toBe(runsAtBoot + 1);
+		expect(el.querySelector('.one')).not.toBeNull();
+		expect(router.current.route.name).toBe('one');
+	});
+
 	it('restores local updates and store tracking on the outgoing view after a failed navigation', async () => {
 		waapi = installFakeAnimate();
 		let one = null;

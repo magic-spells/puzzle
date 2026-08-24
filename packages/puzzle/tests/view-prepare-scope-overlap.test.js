@@ -88,6 +88,96 @@ describe('prepareRefresh eval-scope unwinding', () => {
 		expect(instance.route.route.name).toBe('later');
 	});
 
+	it('a prepare STARTED inside a committed-scope fence keeps its scope past the await', async () => {
+		// The ViewManager wraps every patch-managed DOM listener in the owner's
+		// __withCommittedScope, and an unguarded route reaches prepareRefresh
+		// SYNCHRONOUSLY from router.push() (an empty guard chain adds no await). So a
+		// handler that pushes a params-only navigation reusing its own view begins a
+		// prepared run inside the fence — a run that outlives the fence. Restoring a
+		// value captured on the way in would overwrite that live run's scope with the
+		// pre-fence one, and every this.params/this.route read after its first await
+		// would report the COMMITTED route instead of the destination.
+		let gate = Promise.resolve();
+		class Detail extends PuzzleView {
+			async data() {
+				await gate;
+				// Read through the getter AFTER the await — the suspension is where
+				// the scope has to still be the destination's.
+				return { id: this.params.id };
+			}
+			render() {
+				return h('puzzle-view', { class: 'detail' }, [text(String(this.getData().id ?? ''))]);
+			}
+		}
+
+		const view = await mountView(Detail, { params: { id: 1 }, route: snapshot(1) });
+		handles.push(view);
+		const instance = view.instance;
+		expect(view.element.textContent).toBe('1');
+
+		const blocked = deferred();
+		gate = blocked.promise;
+		const prepared = instance.__withCommittedScope(() =>
+			instance.prepareRefresh({ params: { id: 2 }, route: snapshot(2) })
+		);
+		await tick();
+
+		blocked.resolve();
+		await prepared.ready;
+		prepared.commit();
+		await settled();
+
+		expect(instance.params.id).toBe(2);
+		expect(view.element.textContent).toBe('2');
+	});
+
+	it('an inner fence exit does not un-fence the body that encloses it', async () => {
+		// Fences nest for real: flushUpdates fences its whole body so the error
+		// context below it reads committed state, and #renderNow fences again inside
+		// it. The inner exit must leave the scope suppressed, or everything after the
+		// nested call in the enclosing body would read the destination route again.
+		let gate = Promise.resolve();
+		class Detail extends PuzzleView {
+			async data() {
+				await gate;
+				return { id: this.params.id };
+			}
+			render() {
+				return h('puzzle-view', { class: 'detail' }, [text(String(this.getData().id ?? ''))]);
+			}
+		}
+
+		const view = await mountView(Detail, { params: { id: 1 }, route: snapshot(1) });
+		handles.push(view);
+		const instance = view.instance;
+
+		const blocked = deferred();
+		gate = blocked.promise;
+		const prepared = instance.prepareRefresh({ params: { id: 2 }, route: snapshot(2) });
+		await tick();
+		expect(instance.params.id).toBe(2); // the destination scope is live
+
+		// A DOM handler landing during the gate, with a nested fence inside it.
+		instance.setData('n', 1); // arms the flushUpdates → #renderNow fence
+		const seen = [];
+		instance.__withCommittedScope(() => {
+			seen.push(instance.params.id);
+			instance.flushUpdates();
+			seen.push(instance.params.id);
+		});
+		expect(seen).toEqual([1, 1]);
+
+		// The live run owns the scope again once the OUTER fence exits.
+		expect(instance.params.id).toBe(2);
+
+		blocked.resolve();
+		await prepared.ready;
+		prepared.commit();
+		await settled();
+		expect(instance.params.id).toBe(2);
+		expect(view.element.textContent).toBe('2');
+	});
+
 	it('a within-prepare retry still unwinds to the pre-prepare scope', async () => {
 		// The case the capture-once comment was written for: a .then-shaped data()
 		// reveals itself as async while another evaluation already holds the store's

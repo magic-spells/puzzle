@@ -302,6 +302,30 @@ one is *not* a compile error; it silently builds a different product.
   `data()` as `async`. The residual window is one evaluation per view per
   session, and only for `.then`-style `data()`.
 
+- **A view restored from a failed navigation fires its show bracket.** The
+  leave sequence fires `viewWillHide()` before its out animation, so when the
+  router's failed-navigation recovery puts the still-committed view back on
+  screen — live, re-subscribed, visible — the view had been told it was hiding
+  and never told it was showing again. A view that pairs `viewDidShow()` start
+  with `viewWillHide()` stop (a ticking clock, a poll, a carousel) stayed frozen
+  in plain sight. The restore now fires `viewWillShow()` → `viewDidShow()`
+  back-to-back at zero duration, the same treatment the leave path already gives
+  its hide bracket: hooks are lifecycle, not animation callbacks (D28). The
+  eventual real departure still fires the full hide bracket, and a throwing hook
+  is reported without disturbing the navigation being recovered.
+
+- **`this.params`/`this.route` after an `await` report the destination again.**
+  Every patch-managed DOM listener runs inside its owner's committed-scope fence
+  (D146), and an unguarded route reaches `prepareRefresh` synchronously from
+  `router.push()` — so a handler that pushed a params-only navigation reusing
+  its own view started the prepared evaluation *inside* the fence. On the way
+  out the fence restored the scope it had captured on the way in, overwriting
+  the live evaluation's, and every `this.params`/`this.route` read after the
+  first `await` in that `data()` reported the committed route instead of the
+  destination. The fence now restores the invariant — the newest evaluation
+  still in flight, or none — exactly as `prepareRefresh` derives its own unwind
+  target, and nested fences restore it only when the outermost one exits.
+
 ### Changed
 
 - **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing
@@ -361,9 +385,16 @@ one is *not* a compile error; it silently builds a different product.
   `loadMany(type, options)` — including `{}` — stays partial and accumulating;
   absent identities go in a never-persisted 1000-entry LRU and clear the moment
   the identity arrives by any path (create, upsert, load, hydration, save
-  reconcile, primary-key adoption); a confirmed `record.delete()` records
-  absence but a local `destroy()` does not; and explicit `store.loadOne` bypasses
-  the negative cache, which makes it the force-refresh escape hatch. `data()`
+  reconcile, primary-key adoption); removing a record by any path — a confirmed
+  `record.delete()` or a local `record.destroy()` — records that identity absent,
+  so an optimistic delete cannot fault the row straight back in; and explicit
+  `store.loadOne` bypasses
+  the negative cache, which makes it the force-refresh escape hatch. Only the
+  automatic fault path requires the response to carry the requested primary key
+  (a mismatch there would re-request the id every settle round); an explicit
+  `store.loadOne` is one-shot and upserts whatever record the server returns, so
+  `store.loadOne('post', 'my-slug')` against a slug-resolving endpoint works.
+  `data()`
   now runs however many times the waterfall needs, so keep it a pure derivation.
 
   The eager-seed idiom is retired. The 0.6.0 advice — seed whole collections
