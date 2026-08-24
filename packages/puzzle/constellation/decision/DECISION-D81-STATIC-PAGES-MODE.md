@@ -1,7 +1,7 @@
 ---
 name: "D81 — True static-pages output mode; old mode renamed 'hybrid'"
 status: verified
-verified_at: '2026-08-23T19:55:22.459Z'
+verified_at: '2026-08-24T21:11:50.859Z'
 connections:
   - DECISION-D67-SSG-STATIC-BUILD
   - DECISION-D01-SPA-ONLY
@@ -28,15 +28,15 @@ notes:
     sha: d9591d6
   - kind: decision
     text: >-
-      Two more static/hybrid policies (2026-07-24). (1) HYBRID IS PATH-MODE ONLY: hybrid
-      prerenders path-shaped files, but a hash/memory router boots at '/' and renders the home route
-      over every prerendered page. routerMode is PuzzleApp runtime config the Go build can't
-      inspect, so prerender() now THROWS for mode==='hybrid' with routerMode 'hash'|'memory' (fails
-      the Go build) — a non-path app must use output:'static'. (2) STATIC IGNORES STORAGE:
-      config.storage is a live object that JSON-serializes to a dead `{}` across the build→summary
-      boundary; the Store then treats `{}` as truthy and its persistence calls no-op silently. So a
-      static build no longer threads storage (dropped from the summary + the Go staticSummary struct
-      + staticEntrySource) and WARNS when config.storage is set. A direct mountStatic({storage})
+      Two more static/hybrid policies (2026-07-24). (1) HYBRID IS PATH-MODE ONLY: hybrid prerenders
+      path-shaped files, but a hash/memory router boots at '/' and renders the home route over every
+      prerendered page. routerMode is PuzzleApp runtime config the Go build can't inspect, so
+      prerender() now THROWS for mode==='hybrid' with routerMode 'hash'|'memory' (fails the Go
+      build) — a non-path app must use output:'static'. (2) STATIC IGNORES STORAGE: config.storage
+      is a live object that JSON-serializes to a dead `{}` across the build→summary boundary; the
+      Store then treats `{}` as truthy and its persistence calls no-op silently. So a static build
+      no longer threads storage (dropped from the summary + the Go staticSummary struct +
+      staticEntrySource) and WARNS when config.storage is set. A direct mountStatic({storage})
       caller still gets real persistence (the param stays on mountStatic/buildStaticContext).
     sha: d9591d6
   - kind: state
@@ -51,7 +51,13 @@ notes:
       consumed as scratch and os.RemoveAll'd while the build reported success (reproduced in both
       modes). The guard probes the post-copyPublic STAGING state so app/public vs flat public/
       resolution and file-vs-dir spellings can't dodge it.
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D81 — True static-pages output mode; old mode renamed 'hybrid'

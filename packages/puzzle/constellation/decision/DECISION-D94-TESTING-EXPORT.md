@@ -10,8 +10,15 @@ connections:
   - DECISION-D63-HIDDEN-TAB-FLUSH
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
   - DOC-SPEC
-verified_at: '2026-08-16T04:49:17.243Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:11:50.859Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 An export subpath for app authors — `mountView`, `createTestApp`, `settled`,

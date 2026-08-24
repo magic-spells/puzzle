@@ -1,7 +1,7 @@
 ---
 name: "Dev-server API proxy (puzzle.config.js dev.proxy)"
 status: verified
-verified_at: '2026-08-16T04:35:10.235Z'
+verified_at: '2026-08-24T21:11:50.859Z'
 connections:
   - COMPONENT-DEV-SERVER
   - FILE-DEV-SERVER
@@ -11,10 +11,16 @@ connections:
 notes:
   - kind: state
     text: >-
-      Found by the habit-lab test app (2026-07-22): the first Puzzle app with a
-      live backend had to hand-roll CORS middleware and use an absolute apiURL
-      because puzzle dev cannot forward /api/* to another port.
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+      Found by the habit-lab test app (2026-07-22): the first Puzzle app with a live backend had to
+      hand-roll CORS middleware and use an absolute apiURL because puzzle dev cannot forward /api/*
+      to another port.
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 release: RELEASE-V0-1-2
 change: feature
 ---

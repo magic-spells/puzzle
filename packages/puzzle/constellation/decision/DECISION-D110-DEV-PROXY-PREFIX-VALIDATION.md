@@ -7,8 +7,8 @@ connections:
   - FILE-DEV-SERVER
   - FEATURE-DEV-PROXY
   - DECISION-D08-MINIMAL-CONFIG
-verified_at: '2026-08-16T04:35:02.669Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:11:50.859Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -16,6 +16,12 @@ notes:
       duplicate-after-trim route, and dev.handler() keeps the registered-set guard as defense in
       depth. Both suites green.
     sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 `dev.proxy` now rejects two prefix shapes at config load: `/` (the root proxy)

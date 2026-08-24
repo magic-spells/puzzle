@@ -3,14 +3,21 @@ name: >-
   D131 — The zero-production-bytes oracle is metafile attribution plus sentinel absence, never
   artifact identity
 status: verified
-verified_at: '2026-08-16T04:35:05.484Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:11:50.859Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 connections:
   - DECISION-D121-DEV-PERFORMANCE-PROFILING
   - DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL
   - DECISION-D57-HMR-STATE-RELOAD
   - DOC-SPEC-BUILD
   - FILE-DEVPERF
+notes:
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D131 — The zero-production-bytes oracle is attribution, not artifact identity

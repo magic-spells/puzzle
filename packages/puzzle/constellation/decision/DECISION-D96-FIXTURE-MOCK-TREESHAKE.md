@@ -9,8 +9,15 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC
   - DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY
-verified_at: '2026-08-16T04:34:36.636Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:11:50.859Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 **SUPERSEDED by [[DECISION-D98-FIXTURES-MODULE-FLAG]] (v1.61, same release — never published).** The scan/define approach had two structural hazards D98 records: a compiler older than these defines ships the whole runtime (fail-safe probes), and the conservative token scan compiles an app's own `store.seed()` seeding into production. The fixtures/mock scan bits reverted; D89's scanning stays — its `flip` half only, since [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] later retired the head-tags half too. Kept for rationale.

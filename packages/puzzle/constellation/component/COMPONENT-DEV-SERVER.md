@@ -1,7 +1,7 @@
 ---
 name: Dev server & watcher
 status: verified
-verified_at: '2026-08-14T05:01:14.680Z'
+verified_at: '2026-08-24T21:11:50.859Z'
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-DEVSTATE
@@ -23,7 +23,13 @@ notes:
       Static-dev public classification aligned with the SPA bundle-input test and verified against
       route_deps.go classify.
     sha: e76df0fd873bd4739a754d9861197a9f24074a5f
-verified_sha: d74916a0e021b6bb86394551171838fbab161347
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Dev server (`puzzle dev`)

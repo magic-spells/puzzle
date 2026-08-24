@@ -10,8 +10,8 @@ connections:
   - COMPONENT-SSG
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-BUILD-WATCH
-verified_at: '2026-08-16T04:35:06.268Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:11:50.859Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -19,6 +19,12 @@ notes:
       imported public module is attributed to its pages, a render-wide one forces a full render, a
       deleted one forces a full render, and only a path in neither graph set is copy-only.
     sha: e76df0fd873bd4739a754d9861197a9f24074a5f
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D155 — route-level invalidation in static dev

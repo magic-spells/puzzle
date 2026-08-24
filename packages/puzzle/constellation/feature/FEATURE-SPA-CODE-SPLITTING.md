@@ -15,14 +15,18 @@ connections:
 notes:
   - kind: state
     text: >-
-      Motivating case (2026-08-13): the Constellation viewer's
-      `import('mermaid')` was inlined into app.js, growing it from ~340KB to
-      3.4MB. Workaround shipped there: vendor mermaid's chunked ESM build as
-      static assets and load it with a native browser import() whose URL lives
-      in a variable so esbuild leaves it alone. This feature makes that
-      workaround unnecessary.
-verified_at: '2026-08-16T04:34:46.188Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+      Motivating case (2026-08-13): the Constellation viewer's `import('mermaid')` was inlined into
+      app.js, growing it from ~340KB to 3.4MB. Workaround shipped there: vendor mermaid's chunked
+      ESM build as static assets and load it with a native browser import() whose URL lives in a
+      variable so esbuild leaves it alone. This feature makes that workaround unnecessary.
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-08-24T21:11:50.859Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 release: RELEASE-V0-6-0
 change: feature
 ---

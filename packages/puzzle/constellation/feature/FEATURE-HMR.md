@@ -1,7 +1,7 @@
 ---
 name: HMR with state preservation
 status: verified
-verified_at: '2026-08-23T19:55:29.977Z'
+verified_at: '2026-08-24T21:11:50.859Z'
 connections:
   - DECISION-D57-HMR-STATE-RELOAD
   - DECISION-D27-FAST-DEV-REBUILDS
@@ -20,23 +20,29 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified: tests/hmr-dev-reload.test.js (13 — end-to-end transplant, one-shot +
-      expiry + corrupt-blob fail-soft, safe-filter units, window publish/clear, storage-less safety)
-      + Go TestBuildDevDefineDCE (dev bundle keeps __puzzleHMR/__PUZZLE_APP__, prod DCEs both) +
-      dev.go client test; live proof on examples/todos: dev build carries the hooks, prod build's
-      only residue is the inert empty __devSnapshot method (48128 B). Gotcha baked into the code +
-      test: the __PUZZLE_DEV__ probe MUST be spelled inline at each gate — a hoisted `const DEV`
-      does not constant-propagate into class-method scopes and left dead `Z && …` guards in the prod
-      bundle (measured, fixed in review). 532 vitest + all Go green.
+      Verified: tests/hmr-dev-reload.test.js (13 — end-to-end transplant, one-shot + expiry +
+      corrupt-blob fail-soft, safe-filter units, window publish/clear, storage-less safety) + Go
+      TestBuildDevDefineDCE (dev bundle keeps __puzzleHMR/__PUZZLE_APP__, prod DCEs both) + dev.go
+      client test; live proof on examples/todos: dev build carries the hooks, prod build's only
+      residue is the inert empty __devSnapshot method (48128 B). Gotcha baked into the code + test:
+      the __PUZZLE_DEV__ probe MUST be spelled inline at each gate — a hoisted `const DEV` does not
+      constant-propagate into class-method scopes and left dead `Z && …` guards in the prod bundle
+      (measured, fixed in review). 532 vitest + all Go green.
   - kind: verified
     text: >-
-      v1.32: two-phase restore (body updated) — store transplants pre-nav-#0 in _hydrateAll
-      replace mode (HMR beats configured storage on duplicate pks, identity preserved), view-local
-      layer restores post-mount; snapshots serialize view._localState() only (derived values
-      recomputed, never pinned). Fixes the masked bug where store-derived views rendered empty until
-      the next mutation after a dev reload. DCE guard green; hmr-dev-reload.test.js grew
+      v1.32: two-phase restore (body updated) — store transplants pre-nav-#0 in _hydrateAll replace
+      mode (HMR beats configured storage on duplicate pks, identity preserved), view-local layer
+      restores post-mount; snapshots serialize view._localState() only (derived values recomputed,
+      never pinned). Fixes the masked bug where store-derived views rendered empty until the next
+      mutation after a dev reload. DCE guard green; hmr-dev-reload.test.js grew
       first-paint/override/derived-recompute coverage.
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 release: RELEASE-V0-1-0
 change: feature
 ---

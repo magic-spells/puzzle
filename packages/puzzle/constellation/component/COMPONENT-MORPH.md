@@ -12,7 +12,7 @@ connections:
   - COMPONENT-PUZZLE-APP
   - DOC-ROUTER
   - FILE-MORPH
-verified_at: '2026-08-16T04:34:16.256Z'
+verified_at: '2026-08-24T21:11:50.859Z'
 notes:
   - kind: gotcha
     text: >-
@@ -39,7 +39,13 @@ notes:
       residual known gap: any author inline style with !important (logical OR physical) still beats
       the pin's normal-priority declarations.
     sha: ed27cae
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Morph integration

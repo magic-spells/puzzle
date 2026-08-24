@@ -1,7 +1,7 @@
 ---
 name: Todos end-to-end integration test
 status: verified
-verified_at: '2026-08-23T19:55:54.577Z'
+verified_at: '2026-08-24T21:11:50.859Z'
 framework: vitest
 connections:
   - FLOW-REACTIVITY
@@ -23,11 +23,11 @@ notes:
       endurance. Fixture = compiler golden file #1.
   - kind: verified
     text: >-
-      Re-verified: suite body extracted to tests/helpers/todos-suite.js (runTodosSuite)
-      and now runs TWICE — fixture variant (todos-app.test.js) and compiled variant
-      (todos-app-compiled.test.js, modules fresh-compiled from the real .pzl sources by pzlc on
-      every npm test). Zero behavioral differences; 144/144. The v1 loop is closed: compiler output
-      passes the exact suite the runtime was proven against.
+      Re-verified: suite body extracted to tests/helpers/todos-suite.js (runTodosSuite) and now runs
+      TWICE — fixture variant (todos-app.test.js) and compiled variant (todos-app-compiled.test.js,
+      modules fresh-compiled from the real .pzl sources by pzlc on every npm test). Zero behavioral
+      differences; 144/144. The v1 loop is closed: compiler output passes the exact suite the
+      runtime was proven against.
   - kind: verified
     text: >-
       TodoItem extraction (v1.1 Step 3): rows are real components (todo prop + @toggle/@remove
@@ -42,11 +42,17 @@ notes:
   - kind: verified
     text: >-
       Re-verified at the v1.16–v1.21 merge (fresh baseline — old one unreachable after squash). Both
-      lanes green in the 480-test run; compiled fixtures rebuilt by the pretest Go build
-      (which now carries the v1.12 formatter-guard emission and v1.20/v1.21 codegen — byte-identical
-      for the todos fixtures, which use neither min-duration nor named slots). Todos app semantics
-      untouched by v1.16–v1.21 (its schema rules were already satisfied by the app's writes).
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+      lanes green in the 480-test run; compiled fixtures rebuilt by the pretest Go build (which now
+      carries the v1.12 formatter-guard emission and v1.20/v1.21 codegen — byte-identical for the
+      todos fixtures, which use neither min-duration nor named slots). Todos app semantics untouched
+      by v1.16–v1.21 (its schema rules were already satisfied by the app's writes).
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Todos integration test

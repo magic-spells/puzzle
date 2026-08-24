@@ -7,8 +7,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
-verified_at: '2026-08-23T19:54:19.892Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:11:50.859Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: gotcha
     text: >-
@@ -35,6 +35,12 @@ notes:
       resolveExpr could consume) is deliberately NOT done — resolveExpr rewrites rather than skips,
       which is why it is the holdout. Note codegen already imports parser and routes five other call
       sites through LexSkip, so there is no layering obstacle if that refactor is ever funded.
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Render-function codegen
