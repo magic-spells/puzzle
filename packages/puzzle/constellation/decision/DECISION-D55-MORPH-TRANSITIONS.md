@@ -1,7 +1,7 @@
 ---
 name: "D55 — Shared-element morph route transitions: data-puzzle-morph pairing + a single router morph-handler slot (v1.23)"
 status: verified
-verified_at: '2026-07-24T05:49:34.855Z'
+verified_at: '2026-08-24T21:39:23.520Z'
 connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
@@ -23,7 +23,13 @@ notes:
       still clears all other state so re-arming starts clean. Net: mount→unmount→remount leaves
       exactly ONE live listener with working morphs. Tests: tests/morph-teardown.test.js.
     sha: d9591d6
-verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/morph.js
   - client-runtime/router/router.js
@@ -56,7 +62,9 @@ views mount and die), the router simply knows.
 - **Pairing is identity-based** (the `view-transition-name` / Hero-tag /
   layoutId model): `data-puzzle-morph="<shared-id>"` on both elements. The
   attribute names the surface; the navigation direction picks which way to fly.
-  No role attribute — the dialog is target on open, source on close.
+  A plain `data-puzzle-morph` element both launches and receives; the explicit
+  `-trigger` (launch-only) and `-target` (receive-only) roles are the opt-in
+  refinement over that default.
 - **The router grows exactly ONE morph-agnostic slot**:
   `setMorphHandler({ enter(el, {initial}), leave(el): Promise|null })`. Two
   call sites in `#swap`: `leave(oldAnimator.element)` starts as the out phase

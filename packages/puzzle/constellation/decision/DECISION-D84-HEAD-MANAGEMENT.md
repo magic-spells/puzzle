@@ -14,8 +14,8 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-RUNTIME
   - FEATURE-V1-50-HEAD-MANAGEMENT
-verified_at: '2026-08-23T19:55:26.372Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: decision
     text: >-
@@ -40,6 +40,12 @@ notes:
       always-in + syncTags gated) appended to this card's body — prior stamp (d9591d6) predated that
       section. Confirmed syncTitle/syncTags exist as described.
     sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D84 — Route head management: reserved `meta` fields, SSG-first (v1.50)

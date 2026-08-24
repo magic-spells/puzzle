@@ -7,8 +7,15 @@ summary: The public npm manifest — exports map, files allowlist, bin shim, and
 connections:
   - DOC-RELEASE-SURFACE
   - DECISION-D116-PACK-TIME-PIN-INJECTION
-verified_at: '2026-08-16T04:34:34.488Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # package.json
@@ -33,7 +40,9 @@ owns the shape; per-mechanism rationale lives on the connected cards.
   ([[DECISION-D116-PACK-TIME-PIN-INJECTION]]).
 - **No tracked `optionalDependencies`** — the four platform pins are injected
   by `prepack` and removed by `postpack` (D116); verify-pack fails if the
-  working-tree OR committed manifest carries them.
+  working-tree manifest carries them before or after packing; its
+  committed-manifest check currently resolves `HEAD:package.json` from the
+  monorepo top and so inspects the private root shell, not this file.
 - **`bin`** — the `puzzle` shim that resolves and execs the platform binary.
 - Also the version source the release scripts assert against `version.go`
   and the four platform manifests.

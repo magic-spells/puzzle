@@ -13,14 +13,21 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-verified_at: '2026-08-23T19:55:21.762Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/datastore/adapter.js
   - client-runtime/capabilities.js
   - client-runtime/app.js
   - client-runtime/views/PuzzleView.js
   - client-runtime/fixtures/index.js
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 The server adapter — the D21 read path, the D50 write path, `store.request()`,
@@ -104,10 +111,11 @@ cheapest page first:
 `app/adapter.js` is therefore an optimization and an organizing convention, never
 a requirement.
 
-**Misconfiguration is loud in dev.** At PuzzleApp construction, a registered
-model with a truthy `static adapter` while no capability was passed produces a
-dev-only warning naming the model and the fix ("pass `adapter` from
-`@magic-spells/puzzle/adapter` to PuzzleApp"). The check inspects config only
+**Misconfiguration is loud in dev.** At PuzzleApp mount — just before the Store
+is constructed — a registered model with a truthy `static adapter` while no
+capability was passed produces a dev-only warning naming the model and the fix
+("pass `adapter` from `@magic-spells/puzzle/adapter` to PuzzleApp"). The check
+inspects config only
 — core never references the adapter module — and production builds strip it.
 `record.save()` without the capability stays a natural
 `TypeError: record.save is not a function` — no stubs, no compiled-out error
@@ -129,7 +137,9 @@ text (the D96 lesson).
 
 The per-record write-chain state lives at adapter-module scope keyed by store
 (WeakMap — the fixtures `state.js` precedent), so the Store constructor
-carries no adapter fields beyond `apiURL`/`beforeRequest`. The D161 read-state
+carries no adapter machinery beyond three inert config assignments: `apiURL`,
+`beforeRequest`, and `_a` (the opaque capability, retained only so the adapter
+module can read its D158 defaults). The D161 read-state
 caches (in-flight dedup, negative LRU, collection-complete set) follow the
 same WeakMap pattern, and the static kernel reaches the read-state codecs
 through a `capabilities.js` relay rather than importing this module.

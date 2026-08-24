@@ -35,8 +35,14 @@ notes:
       revision-guard attribution, and the defaults() context endpoint being the raw model value (not
       apiURL-prefixed).
     sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
-verified_at: '2026-08-23T19:12:42.548Z'
-verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/datastore/adapter.js
 ---
@@ -126,9 +132,10 @@ and author `Response` returns, so a non-OK GET throws `PuzzleAdapterError`
 (status + body) rather than a plain `Error` — the D161 negative cache keys
 off exactly `status === 404`, and everything else stays a retryable failure
 that poisons nothing. A `loadOne` response whose primary key differs from the
-requested id under `recordKey` normalization rejects **before** upsert, on
-the explicit and implicit paths alike: upserting a different id would satisfy
-nothing, and an implicit fault would re-miss every settle round until the cap.
+requested id under `recordKey` normalization rejects **before** upsert on the
+implicit fault path only — an implicit fault would otherwise re-miss every
+settle round until the cap; an explicit `store.loadOne()` stays permissive so
+it can resolve a non-primary key such as a slug.
 
 **Write returns are enforced, not coerced.** `create`/`update` must resolve to
 an object carrying the primary key, or to nullish for "no echo". Any other 2xx

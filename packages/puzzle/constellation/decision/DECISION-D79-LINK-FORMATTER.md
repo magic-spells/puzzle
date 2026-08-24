@@ -14,8 +14,8 @@ connections:
   - FILE-ROUTER
   - FILE-FORMATTER-REGISTRY
   - COMPONENT-SSG
-verified_at: '2026-08-16T04:35:45.609Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -24,6 +24,12 @@ notes:
       tests (tests/router-url.test.js), examples/music converted (21 hrefs, all pzlc-clean). Full
       suites green: 833 vitest, go test ./... all ok, tsc types clean.
     sha: 5be830df5735ed947f41d4b947a7f856be415291
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D79 — Path-shaped template links: `router.url()` + the router-bound `link` formatter (v1.46)
@@ -78,14 +84,15 @@ Sub-decisions, each with its rejected alternative:
   mode-agnostic; the mode is resolved at render time. **Rejected.**
 - **Registered by the app, not shipped as a pure built-in.** Built-ins are
   pure named exports fed through the D31 tree-shake manifest; `link` needs the
-  live router. `PuzzleApp.mount()` registers it right after constructing the
-  router — **only if absent**, so a user-supplied `link` in
-  `config.formatters` wins (the same if-absent idiom as the required
-  built-ins). The closure reads `this.router` off the app lazily, so
-  unmount/re-mount never strands a stale router. The D31 scanner ignores the
-  name (not on the built-ins allowlist — same handling as any custom
-  formatter), and the D43 guard means templates using `| link` on an older
-  runtime degrade to pass-through with one console.error instead of crashing.
+  live router. `PuzzleApp.mount()` registers it while wiring the formatter
+  registry, one step before the Router is constructed — **only if absent**, so
+  a user-supplied `link` in `config.formatters` wins (the same if-absent idiom
+  as the required built-ins). The closure reads `this.router` off the app
+  lazily, so the ordering is immaterial and unmount/re-mount never strands a
+  stale router. The D31 scanner ignores the name (not on the built-ins
+  allowlist — same handling as any custom formatter), and the D43 guard means
+  templates using `| link` on an older runtime degrade to pass-through with
+  one console.error instead of crashing.
 - **Formatter body is fail-soft, per formatter convention.** Nullish → `''`,
   non-strings coerced via `String()` then passed through `url()` (a coerced
   non-path like `'5'` doesn't start with `/` and passes through). The throw

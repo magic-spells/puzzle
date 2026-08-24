@@ -31,8 +31,14 @@ notes:
       Re-verified after D112: recordKey index normalization reviewed line-by-line against the card's
       identity-rule paragraph; store suites + full runs green at merged main.
     sha: 11f64be1b6828318f5085a5dc16ebe8f53ebfbd4
-verified_at: '2026-08-23T19:55:11.534Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Store
@@ -44,8 +50,10 @@ duplicates, indexes the instance, and schedules notifications. `findOne` and
 tracked `data()` run with the adapter capability installed, fault missing data
 in: a miss returns its local value synchronously and adds a deduped fetch
 promise to the run's pending set ([[DECISION-D161-AUTO-FETCHING-FINDS]]).
-Untracked reads, nullish/unkeyable ids, and stores without a resolvable read
-verb stay pure-local. Record
+Untracked reads, nullish/unkeyable ids, collection-complete types, known-absent
+identities, and models that declare no `adapter` endpoint or read function of
+their own stay pure-local — an app-wide `adapter.defaults()` dialect never
+turns a local-only model into a fetching one. Record
 `update()`/`destroy()` call back into the Store. Record identity is
 number/string-insensitive ([[DECISION-D112-STORE-ID-KEY-NORMALIZATION]]):
 every id-keyed access to the record index — and both sides of `hasMany`'s FK

@@ -12,13 +12,20 @@ connections:
   - DECISION-D94-TESTING-EXPORT
   - DOC-SPEC-ROUTER
   - DOC-RELEASE-SURFACE
-verified_at: '2026-08-15T06:05:59.557Z'
-verified_sha: 61a37ae80b9104220be7d20d2ca9a4660cb4ec2f
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/router/modes.js
   - client-runtime/router/router.js
   - client-runtime/app.js
   - client-runtime/ssg/index.js
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 Hash and memory routing are opt-in imports, not config strings. Path mode
@@ -44,7 +51,8 @@ behavior as the built-in path — no indirection cost for the default. A mode
 object supplies the deviations at the seams the router already owns:
 
 - **URL read**: the hash branch of `#currentPath` (fragment parsing, base
-  stripping) moves into `hashRouter()`'s `readPath(location, base)`.
+  stripping) moves into `hashRouter()`'s `readPath(base)`, which reads
+  `location.hash` itself.
 - **URL write**: `#encodedUrl`'s hash arm becomes the mode's
   `encode(path, base)`; the module-level `encodeURL` keeps history encoding
   inline and delegates to a mode object when one is present.

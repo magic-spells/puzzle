@@ -1,15 +1,22 @@
 ---
 name: D63 — store flush scheduling gains a hidden-tab timer fallback
 status: verified
-verified_at: '2026-08-16T04:32:27.359Z'
+verified_at: '2026-08-24T21:39:15.808Z'
 connections:
   - COMPONENT-STORE
   - DOC-DATASTORE
   - FEATURE-V1-29-COMPOSITION-FIXES
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/datastore/store.js
   - client-runtime/app.js
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D63 — store flush scheduling gains a hidden-tab timer fallback

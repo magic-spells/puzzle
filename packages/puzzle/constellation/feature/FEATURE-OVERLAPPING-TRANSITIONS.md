@@ -1,7 +1,7 @@
 ---
 name: Cross-fade / overlapping route transitions
 status: verified
-verified_at: '2026-08-23T19:55:33.210Z'
+verified_at: '2026-08-24T21:39:15.808Z'
 connections:
   - DECISION-D56-OVERLAP-TRANSITIONS
   - DECISION-D28-ANIMATIONS
@@ -16,22 +16,28 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified: tests/router-overlap.test.js (8 — pin styles + coexistence, hook
-      ordering, sequential-default guard, mid-overlap interruption with exactly-once destroys,
-      reused-layout patch-driven teardown, instant-out, config validation) + tests/app.test.js
-      passthrough case; full suite 532 vitest + all Go packages green. Review pass by
-      the orchestrator added the settle-handler .catch (a throwing viewWillHide/viewDidHide would
-      otherwise strand the pinned leaver + surface an unhandled rejection) and the PuzzleApp
-      transitionMode conditional passthrough.
+      Verified: tests/router-overlap.test.js (8 — pin styles + coexistence, hook ordering,
+      sequential-default guard, mid-overlap interruption with exactly-once destroys, reused-layout
+      patch-driven teardown, instant-out, config validation) + tests/app.test.js passthrough case;
+      full suite 532 vitest + all Go packages green. Review pass by the orchestrator added the
+      settle-handler .catch (a throwing viewWillHide/viewDidHide would otherwise strand the pinned
+      leaver + surface an unhandled rejection) and the PuzzleApp transitionMode conditional
+      passthrough.
   - kind: verified
     text: >-
-      v1.32: overlap semantics unchanged by the hardening pass (the router diffs —
-      #observeMount, #runPendingPush finally, #pendingIndex, departure-scroll capture — are all
-      orthogonal to the pin/concurrent-play machinery). Now exercised in REAL browsers: the
-      Playwright suite asserts outgoing+incoming coexist mid-transition and no inline position:fixed
-      pin survives settle, on Chromium AND WebKit. Documented as EXPERIMENTAL for 0.1.0 in README
-      (interaction-matrix caution: overlap×morph, overlap×nested-reused-layout).
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+      v1.32: overlap semantics unchanged by the hardening pass (the router diffs — #observeMount,
+      #runPendingPush finally, #pendingIndex, departure-scroll capture — are all orthogonal to the
+      pin/concurrent-play machinery). Now exercised in REAL browsers: the Playwright suite asserts
+      outgoing+incoming coexist mid-transition and no inline position:fixed pin survives settle, on
+      Chromium AND WebKit. Documented as EXPERIMENTAL for 0.1.0 in README (interaction-matrix
+      caution: overlap×morph, overlap×nested-reused-layout).
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 release: RELEASE-V0-1-0
 change: feature
 ---

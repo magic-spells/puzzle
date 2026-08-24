@@ -7,17 +7,23 @@ connections:
   - FILE-PARSER
   - FILE-PARSER-SECTIONS
   - FILE-PARSER-SCANNER
-verified_at: '2026-08-23T19:55:12.089Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: gotcha
     text: >-
       Nested <style> elements are legal template markup (verified during D113), but the template
       brace grammar applies inside them: `.a > .b { color: red }` compiles to invalid JS
-      (`String(__d.color: __d.red)`) because `{ … }` is an interpolation everywhere in a template.
+      (`__s(__d.color: __d.red, …)`) because `{ … }` is an interpolation everywhere in a template.
       Authors must escape the braces (`\{ \}`), which compiles correctly. Same applies to braces in
       nested <script> bodies. Pre-existing behavior, not a D113 change — docs/error-message
       improvement candidate.
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Template parser

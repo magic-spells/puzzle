@@ -1,5 +1,5 @@
 ---
-name: D100 — DevTools runtime bridge + wire protocol; extension in its own repo (v1.63)
+name: D100 — DevTools runtime bridge + wire protocol (v1.63)
 status: verified
 connections:
   - DECISION-D57-HMR-STATE-RELOAD
@@ -11,17 +11,24 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-DEVSTATE
   - DOC-SPEC
-verified_at: '2026-08-16T04:35:03.380Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
       Real-Chrome smoke passed (Cory, 2026-07-24): load-unpacked extension against a live `puzzle
       dev` app (stays, port 3400, framework 0.3.0) — connected handshake with correct
       framework/protocol versions, 18 live views tracked, flush keys streaming, Views tree with
-      module paths and props inspection all working. One cosmetic follow-up in the extension repo:
-      detail-pane header/props layout squished in short docks (value previews collapse to ellipsis).
+      module paths and props inspection all working. One cosmetic follow-up in
+      `packages/puzzle-devtools`: detail-pane header/props layout squished in short docks (value
+      previews collapse to ellipsis).
     sha: acb9aefb0dcb65bd4cbd379d1f8877dbb089700c
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/devtools.js
   - client-runtime/app.js
@@ -33,8 +40,8 @@ code_refs:
 
 Puzzle gets a Chrome DevTools extension. The framework ships only a dev-only
 **runtime bridge** (`client-runtime/devtools.js`) speaking a versioned wire
-protocol; the extension itself lives in its own public repo,
-`magic-spells/puzzle-devtools`, and never imports framework internals.
+protocol; the extension lives beside the framework in this monorepo at
+`packages/puzzle-devtools` and never imports framework internals.
 
 ## Not a reversal of D60
 
@@ -60,11 +67,12 @@ invisible without tooling.
 
 
 
-**Repo split (Cory's call).** Extension in `magic-spells/puzzle-devtools`
-(public from day one): independent release cadence (Chrome Web Store vs npm),
-separate issues/PRs, a different contributor audience. The ONLY interface
-between the repos is the protocol documented in SPEC §55; the extension repo
-mirrors the message constants and links to the SPEC rather than sharing code.
+**Package split (D162).** The extension lives beside the framework in this
+monorepo at `packages/puzzle-devtools` — a separately released, `private: true`
+package with its own cadence (Chrome Web Store zip vs npm). Its only interface
+to the runtime is the protocol documented in SPEC §55: it mirrors the message
+constants and links to the SPEC rather than sharing code, and its
+`file:../puzzle` dependency runs its suite against the working tree.
 
 **Bridge shape.** `client-runtime/devtools.js` follows `devstate.js`'s
 conventions exactly (module-scope `DEV` const is legal at module level; inline
@@ -91,15 +99,16 @@ clear mismatch state rather than misrendering.
 instances hang off `vnode.component`) and derives roots as views that are no
 one's child — deliberately avoiding any read of the router's private state.
 
-**Extension architecture** (other repo): MV3; `page-hook.js` injected at
-`document_start` owns the hook object and buffers events until a panel
-connects; content script relays; background service worker routes per-tab; the
-panel is a **Puzzle app** (dogfooding — protocol messages upsert into a Puzzle
-store, panels are plain reactive views), themed to Chrome DevTools' light/dark.
-v1 shipped the Views panel (model/local layers side by side) and the Store
-record inspector, and the panel set grows with the protocol — the subscriptions
-graph and the D122 Performance panel among them. What is built over there is
-tracked over there; this card owns only the runtime half.
+**Extension architecture** (`packages/puzzle-devtools`): MV3; `page-hook.js`
+injected at `document_start` owns the hook object and buffers events until a
+panel connects; content script relays; background service worker routes
+per-tab; the panel is a **Puzzle app** (dogfooding — protocol messages upsert
+into a Puzzle store, panels are plain reactive views), themed to Chrome
+DevTools' light/dark. v1 shipped the Views panel (model/local layers side by
+side) and the Store record inspector, and the panel set grows with the
+protocol — the subscriptions graph and the D122 Performance panel among them.
+The extension's internals are tracked on its own cards; this card owns only the
+runtime half.
 
 ## Consequences
 
@@ -120,10 +129,6 @@ tracked over there; this card owns only the runtime half.
 
 ## Alternatives rejected
 
-- **Extension in the main repo** — initially recommended (protocol churn is a
-  two-repo tax while young), overridden by Cory for independent releases and
-  a separate contributor surface; accepted because the version-negotiated
-  protocol must exist anyway once mixed versions are in the wild.
 - **Extension-injected instrumentation of `__PUZZLE_APP__` with no framework
   bridge** — works only because dev builds are unminified, and monkey-patching
   store/router internals from outside drifts with every release; the

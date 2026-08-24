@@ -1,7 +1,7 @@
 ---
 name: Router navigation, matching, and commit atomicity
 kind: integration
-status: built
+status: verified
 framework: vitest
 connections:
   - COMPONENT-ROUTER
@@ -28,8 +28,16 @@ connections:
   - DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH
   - DECISION-D159-ROUTER-MODE-FACTORIES
   - DOC-TESTING
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
-
 
 # Router navigation, matching, and commit atomicity
 
@@ -59,6 +67,9 @@ Guarantees:
   persistence, and hash-mode anchors.
 - focus and announcement on commit, tabindex hygiene, skip cases, disabling, and
   a custom behavior.
+- a same-document fragment pop settles in place — `#state`'s
+  path/pathname/query/hash move and a saved position restores, with no load, no
+  focus move and no announcement.
 - head sync at the commit point and nothing else, with hybrid takeover leaving
   prerendered tags intact.
 - route guards, a throwing leave hook not leaking the incoming chain, and the
@@ -67,4 +78,4 @@ Guarantees:
 - the shared route-tree helpers, with a drift guard asserting SSG enumeration and
   the router table stay in agreement.
 
-Covers 15 files under `tests/`.
+Covers 17 files under `tests/`.

@@ -12,14 +12,20 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-DATA
   - FILE-ADAPTER
-verified_at: '2026-08-23T19:55:29.264Z'
+verified_at: '2026-08-24T21:39:15.808Z'
 notes:
   - kind: verified
     text: >-
       Verified at the merged main sha: save/delete/request semantics reviewed against SPEC §22 at
       ship (validate-first, POST/PUT provenance, pk adoption, confirmed deletes);
       tests/adapter-write.test.js (27) + full suite green (480 vitest).
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 release: RELEASE-V0-1-0
 change: feature
 ---

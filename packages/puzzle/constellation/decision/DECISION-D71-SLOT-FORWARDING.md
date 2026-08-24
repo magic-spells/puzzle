@@ -11,7 +11,7 @@ connections:
   - FILE-COMPILER-INTERNAL-PARSER-SLOT
   - FILE-TESTS-SLOT-FORWARDING-TEST
   - FILE-TESTS-SLOT-FORWARDING-COMPILED-TEST
-verified_at: '2026-08-16T04:33:00.918Z'
+verified_at: '2026-08-24T21:39:23.520Z'
 notes:
   - kind: verified
     text: >-
@@ -22,16 +22,21 @@ notes:
       paragraph and DOC-DECISIONS index line landed in the same commit.
   - kind: verified
     text: >-
-      Re-verified: expandNode/expandChildList/expandSlots/partitionSlots untouched since
-      the prior stamp; slot.go's only change is the additive D72 ref-on-slot rejection firing
-      before the D71 named-marker rule. Forwarding semantics intact.
+      Re-verified: expandNode/expandChildList/expandSlots/partitionSlots untouched since the prior
+      stamp; slot.go's only change is the additive D72 ref-on-slot rejection firing before the D71
+      named-marker rule. Forwarding semantics intact.
   - kind: state
     text: >-
-      Respelled by D74 (v1.41): the forwarding form is now `<Card><children/></Card>` (or `<Slot/>`
-      in a layout — same marker node); bare lowercase `<slot/>` in that position is a positioned
-      compile error like everywhere else. Forwarding semantics, the named-marker rejection, and the
-      expansion walk are unchanged. See DECISION-D74-CHILDREN-MARKER.
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+      The forwarding form is `<Card><Children/></Card>` (or `<Slot/>` in a layout — same marker
+      node); a lowercase spelling in that position is a positioned compile error. Forwarding
+      semantics, the named-marker rejection, and the expansion walk are unchanged.
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D71 — Default-child forwarding through a component invocation

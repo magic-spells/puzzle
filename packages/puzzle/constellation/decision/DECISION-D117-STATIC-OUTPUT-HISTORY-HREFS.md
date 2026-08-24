@@ -8,14 +8,20 @@ connections:
   - DECISION-D79-LINK-FORMATTER
   - COMPONENT-SSG
   - FILE-SSG-RUNTIME
-verified_at: '2026-08-23T19:55:13.483Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
       history forced in both stubs, warning emitted, unit + real static-docs build verified
       path-shaped hrefs
     sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 Under `output: 'static'`, the router stub that backs `router.url()` and the

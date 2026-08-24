@@ -19,8 +19,15 @@ connections:
   - FEATURE-DELETE-IDEMPOTENCY
   - DOC-TESTING
   - FILE-ADAPTER
-verified_at: '2026-08-23T19:55:49.676Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Adapter server sync
@@ -45,5 +52,5 @@ replacement, cannot change what the request fundamentally is, receives a frozen
 context, rejects the operation when it throws, and an AbortSignal it attaches
 actually aborts.
 
-Covers 3 files under `tests/`. The mock adapter used by app authors is proven
+Covers 4 files under `tests/`. The mock adapter used by app authors is proven
 separately with the fixtures module.

@@ -13,8 +13,8 @@ connections:
   - DECISION-D98-FIXTURES-MODULE-FLAG
   - DOC-SPEC
   - DOC-DATASTORE
-verified_at: '2026-08-23T19:55:27.785Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: state
     text: >-
@@ -26,6 +26,12 @@ notes:
       reads threw a misleading shape error, and a mocked non-OK response to a custom delete verb was
       silently treated as success while the record deleted locally. The stand-in's five-member
       surface and the no-real-Response rationale are unchanged.
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/fixtures/index.js
   - client-runtime/fixtures/generator.js

@@ -1,11 +1,20 @@
 ---
 name: 0.1.0 — first public release
-status: built
+status: verified
 version: 0.1.0
 connections:
   - DOC-BUILD-PLAN
   - FILE-PACKAGE
   - DECISION-D01-SPA-ONLY
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # 0.1.0 — first public release

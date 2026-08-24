@@ -10,14 +10,20 @@ connections:
   - COMPONENT-SSG
   - COMPONENT-DEVSTATE
   - DECISION-D153-PUZZLE-SCRATCH-DIR
-verified_at: '2026-08-14T05:01:29.002Z'
-verified_sha: d74916a0e021b6bb86394551171838fbab161347
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
       Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
       census); §N numbers unchanged
     sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 The frozen v1 contract for the toolchain: the CLI surface, dev HMR and build-error reporting, the `hybrid`/`static` output modes, update notification and `puzzle upgrade`, interactive `puzzle init`, the `/testing` utilities, the `--fixtures` switch, and the DevTools bridge. See [[DOC-SPEC]] for the section index and the rest of the contract.
@@ -159,9 +165,9 @@ A dedicated export subpath (D94, amended by D121) — `mountView`, `createTestAp
 
 ## 55. The DevTools bridge and wire protocol (v1.63)
 
-The Puzzle DevTools Chrome extension lives in its own repo
-(`magic-spells/puzzle-devtools`); the framework ships only a **dev-only runtime
-bridge** (D100), and this section is the contract between the two. This is NOT
+The Puzzle DevTools Chrome extension lives at `packages/puzzle-devtools` in this
+monorepo (D162); the framework ships only a **dev-only runtime bridge** (D100),
+and this section is the contract between the two packages. This is NOT
 the D60-rejected app-config devtools hook: there is zero config surface and
 zero production bytes — the extension injects `window.__PUZZLE_DEVTOOLS_HOOK__`
 at `document_start`, and the bridge registers into it when present. No hook →

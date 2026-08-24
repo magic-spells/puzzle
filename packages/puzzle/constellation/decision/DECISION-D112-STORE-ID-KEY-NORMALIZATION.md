@@ -11,8 +11,8 @@ connections:
   - COMPONENT-STORE
   - FILE-STORE
   - FILE-ADAPTER
-verified_at: '2026-08-23T19:55:12.749Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -21,6 +21,12 @@ notes:
       10 of the 13 new tests fail against pre-fix HEAD, pinning the bug; the other 3 pin behavior
       the fix must not change ('01' ≠ 1, null-FK short-circuit).
     sha: 11f64be1b6828318f5085a5dc16ebe8f53ebfbd4
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 The record Map (`type → Map(id → record)`) keys **number** primary keys by

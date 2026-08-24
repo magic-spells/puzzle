@@ -9,8 +9,8 @@ connections:
   - DOC-EVENTS
   - FILE-VIEW-MANAGER
   - FILE-PARSER
-verified_at: '2026-08-23T19:55:36.751Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -18,6 +18,12 @@ notes:
       panel survives its own opening interaction (capture race), inside pointerdown/click never
       dismisses, outside pointerdown closes; golden pins '@click' + '@click:outside' coexisting.
     sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 release: RELEASE-V0-2-0
 change: feature
 ---

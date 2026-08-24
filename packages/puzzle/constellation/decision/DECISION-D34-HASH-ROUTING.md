@@ -1,7 +1,7 @@
 ---
 name: "D34 — Hash routing: routerMode config, path-shaped API, popstate-only (v1.6)"
 status: verified
-verified_at: '2026-08-14T05:01:16.821Z'
+verified_at: '2026-08-24T21:39:15.808Z'
 connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
@@ -11,13 +11,19 @@ connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
   - DECISION-D30-NESTED-ROUTES
-verified_sha: d74916a0e021b6bb86394551171838fbab161347
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
       Rewritten for the D159 factory selection surface (hashRouter() from /router-modes); hash
       semantics unchanged and re-checked against router.js + modes.js.
     sha: d74916a0e021b6bb86394551171838fbab161347
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/router/modes.js
   - client-runtime/router/router.js

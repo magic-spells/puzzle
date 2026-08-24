@@ -9,8 +9,15 @@ connections:
   - DOC-SPEC-DATA
   - FILE-STORE
   - FILE-ADAPTER
-verified_at: '2026-08-23T19:55:19.765Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D137 — `loadMany`/`loadOne` require the primary key on every server record (v1.64)
@@ -41,7 +48,8 @@ Both loaders preflight the pk exactly like `upsert()`. Unchanged by design:
   a shape check beside the existing array/object guards, not validation.
 
 Amends the §8 read-path contract (D21); closes the half-fixed hazard D50's
-provenance rules documented. `loadOne` additionally rejects a response whose
-pk differs from the requested id under `recordKey` normalization
-([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]) — same before-mutation posture,
-guarding the [[DECISION-D161-AUTO-FETCHING-FINDS]] implicit fault path.
+provenance rules documented. On the [[DECISION-D161-AUTO-FETCHING-FINDS]]
+automatic fault path only, `loadOne` also rejects a response whose pk differs
+from the requested id under `recordKey` normalization
+([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]) — an explicit `store.loadOne()`
+stays permissive so a lookup by a non-primary key (a slug) can resolve.

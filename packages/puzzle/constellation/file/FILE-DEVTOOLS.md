@@ -14,8 +14,15 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC-BUILD
-verified_at: '2026-08-16T04:34:54.254Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 Source binding for [[DECISION-D100-DEVTOOLS-BRIDGE]]; the wire contract itself

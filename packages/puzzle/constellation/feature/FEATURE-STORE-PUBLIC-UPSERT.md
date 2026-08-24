@@ -1,7 +1,7 @@
 ---
 name: "Public store.upsert() for custom-action responses"
 status: verified
-verified_at: '2026-08-23T19:55:33.918Z'
+verified_at: '2026-08-24T21:39:15.808Z'
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
   - DECISION-D50-ADAPTER-WRITE-SYNC
@@ -12,10 +12,16 @@ connections:
 notes:
   - kind: state
     text: >-
-      Found by the habit-lab test app (2026-07-22): its checkIn() custom action
-      receives fresh server state ({habit, checkin}) but must throw it away and
-      re-fetch via two loadOne GETs, because Store._upsert is private.
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+      Found by the habit-lab test app (2026-07-22): its checkIn() custom action receives fresh
+      server state ({habit, checkin}) but must throw it away and re-fetch via two loadOne GETs,
+      because Store._upsert is private.
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 release: RELEASE-V0-1-2
 change: feature
 ---

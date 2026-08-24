@@ -1,6 +1,6 @@
 ---
 name: Adapter server sync
-status: built
+status: verified
 triggers:
   - kind: manual
 connections:
@@ -28,6 +28,15 @@ connections:
   - FEATURE-ADAPTER-WRITE-SYNC
   - FEATURE-STORE-PUBLIC-UPSERT
   - FILE-ADAPTER
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Adapter server sync
@@ -95,8 +104,10 @@ moved by an endpoint-generated REST default or by a function the author wrote.
    `PuzzleAdapterError` with status and body.
 10. Shape and key guards run **before any mutation**: loads require object
     shapes carrying the primary key on every element, checked up front and
-    all-or-nothing ([[DECISION-D137-LOAD-PK-GUARD]]), and a `loadOne` response
-    pk must match the requested id under `recordKey` normalization; writes
+    all-or-nothing ([[DECISION-D137-LOAD-PK-GUARD]]), and — on the tracked
+    fault path only — a `loadOne` response pk must match the requested id
+    under `recordKey` normalization; an explicit `loadOne` is permissive so it
+    can resolve a non-primary key. Writes
     require a pk-bearing object or a nullish no-echo.
 11. Identity is re-checked against the key captured in step 6. If this is no
     longer the indexed record there, every local effect is skipped and the verb

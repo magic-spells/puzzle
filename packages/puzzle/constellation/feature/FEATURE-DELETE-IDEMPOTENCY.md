@@ -1,7 +1,7 @@
 ---
 name: "record.delete() self-idempotency"
 status: verified
-verified_at: '2026-08-23T19:55:29.874Z'
+verified_at: '2026-08-24T21:39:15.808Z'
 connections:
   - DECISION-D50-ADAPTER-WRITE-SYNC
   - COMPONENT-PUZZLE-MODEL
@@ -12,11 +12,16 @@ connections:
 notes:
   - kind: state
     text: >-
-      Found by the habit-lab test app (2026-07-22), Sync Lab scenario 5: the
-      documented "DELETE treats 2xx and 404 both as success" contract holds at
-      store.deleteRecord, but a second record.delete() on the same reference
-      rejects locally before any network call.
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+      Found by the habit-lab test app (2026-07-22), Sync Lab scenario 5: the documented "DELETE
+      treats 2xx and 404 both as success" contract holds at store.deleteRecord, but a second
+      record.delete() on the same reference rejects locally before any network call.
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 release: RELEASE-V0-1-2
 change: fix
 ---

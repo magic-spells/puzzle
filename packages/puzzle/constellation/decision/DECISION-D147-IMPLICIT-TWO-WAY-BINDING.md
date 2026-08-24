@@ -20,8 +20,8 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - FLOW-REACTIVITY
   - DOC-SPEC-TEMPLATE
-verified_at: '2026-07-29T05:19:15.902Z'
-verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -30,6 +30,12 @@ notes:
       byte-exact, real-Chrome pass (caret, IME composition events, number-on-change, ''→null,
       range). Final whole-branch review + scoped re-review clean.
     sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
@@ -265,8 +271,7 @@ layer); explicit `bind:`/opt-out syntax (the three no-syntax escapes cover it).
   writing back. `@keydown:enter`/`@blur` edit buffers are the shape to look for;
   `examples/music` binds through `String(...)` for exactly that reason, since a
   live write would let Escape-to-cancel commit the text it exists to discard.
-  Compile-and-grep for `__bind(` is the audit, not eyeballing templates; the
-  consumer-side procedure is `notes/Puzzle-Upgrade-Binding.md`.
+  Compile-and-grep for `__bind(` is the audit, not eyeballing templates.
 - The `:bind` suffix is greppable and visible in DevTools listener listings.
 - SSG/static serialization strips `@`-prefixed attrs already, so prerendered
   markup carries the controlled initial value and no bind artifacts; hybrid

@@ -1,6 +1,6 @@
 ---
 name: App-author test utilities (@magic-spells/puzzle/testing)
-status: built
+status: verified
 connections:
   - FILE-TESTING
   - FILE-TESTING-SETTLED
@@ -31,8 +31,16 @@ connections:
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
   - DECISION-D63-HIDDEN-TAB-FLUSH
   - FEATURE-DEV-PERFORMANCE-PROFILING
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
-
 
 # App-author test utilities
 

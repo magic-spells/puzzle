@@ -12,8 +12,8 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-STORE
-verified_at: '2026-07-28T22:30:08.394Z'
-verified_sha: f639b5d1aa8f59ffe385936b7e5b5d66b1235da8
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: gotcha
     text: >-
@@ -25,6 +25,12 @@ notes:
       invocation's late restore could clobber the retry mid-run. Fixed (Codex review round): the
       unwind target is captured once per prepare, each invocation installs its own scope copy, and
       async tails restore only while they still own #evalScope. Commit/discard semantics unchanged.
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/router/router.js

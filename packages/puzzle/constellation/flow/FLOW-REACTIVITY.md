@@ -14,7 +14,7 @@ connections:
   - FILE-VIEW-MANAGER
   - DECISION-D62-HANDLER-CACHING
   - DECISION-D161-AUTO-FETCHING-FINDS
-verified_at: '2026-08-23T19:55:48.268Z'
+verified_at: '2026-08-24T21:39:15.808Z'
 notes:
   - kind: gotcha
     text: >-
@@ -27,7 +27,13 @@ notes:
       identity; the store carries live data. If a framework-level answer is ever wanted
       (always-refresh children, or record versioning), it needs a D-number — SPEC §4's
       shallow-differ rule is the documented contract.
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Reactivity flow

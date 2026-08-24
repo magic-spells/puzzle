@@ -8,8 +8,8 @@ connections:
   - FILE-DEVTOOLS
   - FILE-DEVPERF
   - DOC-SPEC-BUILD
-verified_at: '2026-08-16T04:35:04.082Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: state
     text: >-
@@ -19,6 +19,12 @@ notes:
       contract). The live perf-warning push to the panel stays unconditional, which is the
       documented intent (loop detection must not require an active recording).
     sha: ed27cae
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D122 — Expose the dev profiler over the DevTools bridge, additively on protocol v1

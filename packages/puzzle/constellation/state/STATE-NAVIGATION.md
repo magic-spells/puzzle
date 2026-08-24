@@ -1,6 +1,6 @@
 ---
 name: Navigation state machine
-status: built
+status: verified
 states:
   - name: idle
     initial: true
@@ -116,6 +116,15 @@ connections:
   - DECISION-D83-QUERY-REPLACE
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
   - DECISION-D159-ROUTER-MODE-FACTORIES
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Navigation state machine

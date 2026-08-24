@@ -9,8 +9,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
-verified_at: '2026-08-15T06:05:57.715Z'
-verified_sha: 61a37ae80b9104220be7d20d2ca9a4660cb4ec2f
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -42,6 +42,12 @@ notes:
       union and 'render' from the SPEC list — both aligned, and the full list is pinned in
       tests-types so a new emission site fails test:types without its union member. SPEC §60 carries
       both amendments.
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
@@ -65,9 +71,10 @@ info, ...consoleArgs)`. `new PuzzleApp({ onError })` registers the hook;
 without one, the funnel replays the exact `console.error` call the catch site
 always made. The hook receives `(error, info)` with a frozen stable
 `info = { phase, view, route }`. The phase set is closed, and it is these
-eleven:
+twelve, with `render` joining the view positions:
 
-- **View positions** — `mount`, `refresh`, `bind`, `enter`, `leave`, `unmount`.
+- **View positions** — `mount`, `refresh`, `render`, `bind`, `enter`, `leave`,
+  `unmount`.
 - **Navigation** — `navigation`, `transition`.
 - **App lifecycle** — `app-mount`, `app-unmount`.
 - **Terminal** — `error-view`, the one phase that never produces a replacement.

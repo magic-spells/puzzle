@@ -1,6 +1,6 @@
 ---
 name: Release flow
-status: built
+status: verified
 triggers:
   - kind: manual
 connections:
@@ -18,29 +18,42 @@ connections:
   - FLOW-BUILD
   - RELEASE-V0-3-0
   - RELEASE-V0-3-1
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
-
 
 # Release flow
 
 Publishing Puzzle means publishing **five** npm packages by hand from one
 machine: the root `@magic-spells/puzzle` plus the four
 `@magic-spells/puzzle-<platform>-<arch>` packages carrying the compiled Go CLI.
-None of it is automated. `.github/workflows/ci.yml` runs the two suites,
-`verify:pack`, `test:types`, the packed-tarball e2e and the browser smoke — on
-`main` and on pull requests into it. It has no publish job, and it never sees
-the `release/x.y.z` branch the work actually happens on, so on a release branch
-every gate below is one a human runs.
+None of it is automated. The monorepo-root `.github/workflows/ci.yml` runs
+seven jobs — the Go and JS suites, `verify:pack`, `test:types`, the
+packed-tarball e2e, the browser smoke, and the pieces/devtools/lint-plugin
+suites — on push and on pull requests for both `main` and `release/**`, so a
+release branch is covered; it has no publish job, and publishing is entirely
+by hand.
 
 The order is not stylistic. Publish the root before its platform packages, or
 publish it from the repo directory instead of from the packed tarball, and npm
 accepts a release that installs cleanly with no working `puzzle` command behind
 it ([[DECISION-D120-TARBALL-PUBLISH]]).
 
-1. **Bump every place the version is written by hand** — `package.json`,
-   `compiler/internal/version/version.go`, the four `npm/puzzle-*/package.json`
-   manifests, and the `FRAMEWORK_VERSION` literal in
-   `client-runtime/devtools.js`. None of the five derives from another.
+1. **Bump every place the version is written by hand** — this package's
+   `package.json`, `compiler/internal/version/version.go`, the four
+   `npm/puzzle-*/package.json` manifests, the `FRAMEWORK_VERSION` literal in
+   `client-runtime/devtools.js`, and the eight monorepo train stamps
+   (`puzzle-pieces` package + demo package + demo header badge,
+   `puzzle-eslint`, `puzzle-prettier`, `puzzle-devtools` package + panel
+   package + extension manifest); none derives from another, and
+   `release:prep` asserts all of them.
    - `FRAMEWORK_VERSION` is a literal that **ships**: the ESM bundle cannot
      import `package.json`, and the value is reported to the DevTools extension
      ([[DECISION-D100-DEVTOOLS-BRIDGE]]). A comment asking the releaser to bump
@@ -60,7 +73,7 @@ it ([[DECISION-D120-TARBALL-PUBLISH]]).
    script (step 6) but written by hand.
 4. **Run both suites** — `npx vitest run`, and `go test ./...` inside
    `compiler/`. `release:prep` prints this as a reminder and does not enforce
-   it, and CI has not run them on a release branch.
+   it; CI runs both suites on every push to a `release/**` branch.
 5. **Publish the matching `@magic-spells/puzzle-pieces` release**, at or before
    this one. `puzzle add piece` resolves pieces to the CLI's own major.minor
    ([[DECISION-D32-CLI-TOOLING]]), so a lagging pieces release silently drops
@@ -71,7 +84,8 @@ it ([[DECISION-D120-TARBALL-PUBLISH]]).
    at the first problem.
    - Restores `package.json` first: an aborted pack leaves the injected pins
      behind, because npm skips `postpack` when the pack step itself fails.
-   - Asserts the five version fields agree and both range sweeps are clean.
+   - Asserts every hand-written version stamp agrees — those in this package
+     plus the eight across the release train — and both range sweeps are clean.
    - Delegates to `verify:pack`, which packs a **real** tarball and reads the
      manifest and entry list back out of it.
    - Runs `measure-size --check`, which builds `examples/hello-world` and
@@ -84,7 +98,8 @@ it ([[DECISION-D120-TARBALL-PUBLISH]]).
 7. **Publish the four platform packages first**, as ordinary directory
    publishes. They declare no injected dependencies, so nothing is stripped from
    under them.
-8. **Publish the root LAST, as the packed tarball `release:prep` named** —
+8. **Publish the root LAST, as the packed tarball `release:prep` named**, from
+   `packages/puzzle` where it was packed —
    `npm publish ./magic-spells-puzzle-<version>.tgz --access public`.
    - Never `npm publish` from the repo directory. `prepublishOnly` refuses that
      path outright, and npm runs `prepublishOnly` only for a directory publish,
@@ -122,9 +137,11 @@ lands.
 
 - `verify:pack` proves the **artifact** — that the bytes npm produced carry the
   right pins and only the runtime, the declarations and the bin shim. It also
-  asserts the working-tree manifest is pin-free before AND after packing, and
-  that `HEAD:package.json` is clean, which is the regression test for a
-  `postpack` that never ran.
+  asserts the working-tree manifest is pin-free before AND after packing, which
+  is the regression test for a `postpack` that never ran. Its committed-manifest
+  check adds nothing to that today: `HEAD:package.json` resolves from the
+  monorepo top, so it inspects the private root shell and cannot prove this
+  package's committed manifest is pin-free.
 - `e2e-pack` proves the **runtime resolves** from a real install. It runs while
   the platform packages are deliberately unpublished, so it can never catch a
   missing binary.

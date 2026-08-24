@@ -27,8 +27,15 @@ connections:
   - DOC-TESTING
   - COMPONENT-ROUTER
   - COMPONENT-VIEW-MANAGER
-verified_at: '2026-08-23T19:55:54.482Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Hybrid and static prerender output
@@ -59,9 +66,13 @@ the kernel adopting the envelope, faulting normally without one, ignoring an
 empty or foreign-version envelope, dropping an absence whose record rode the
 data island, and surviving a corrupt envelope without losing records.
 
+Build-time reads: the prerender pass's global-`fetch` wrapper, which fails an
+app-relative endpoint with a diagnostic naming the URL and both fixes instead of
+a bare parse error, and passes absolute URLs through.
+
 Head management: per-field leaf-to-root resolution, managed head surgery into
 both the hybrid shell and the static shell, and head tags landing before any JS
 in the emitted output. Head tag injection is build-time only — there is no
 runtime consumer, and the tests are written to keep it that way.
 
-Covers 9 files under `tests/`.
+Covers 10 files under `tests/`.

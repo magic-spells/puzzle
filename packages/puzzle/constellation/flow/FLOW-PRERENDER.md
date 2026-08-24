@@ -33,8 +33,15 @@ connections:
   - DOC-SPEC-BUILD
   - FEATURE-V1-33-SSG
   - FEATURE-V1-47-STATIC-PAGES
-verified_at: '2026-08-23T19:55:47.676Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Prerender flow
@@ -59,10 +66,10 @@ identical. [[DECISION-D01-SPA-ONLY]] holds for the runtime in both modes.
 
 1. **The output mode resolves before anything is bundled.** A `--static` /
    `--hybrid` flag that disagrees with `output` in the config is a hard error
-   naming both; otherwise the non-empty side wins. A plain SPA build warns per
-   literal `meta.description` / `canonical` / `socialImage` key it finds in the
-   route table, because those fields can only ever become tags at prerender
-   time.
+   naming both; otherwise the non-empty side wins. A plain SPA build warns once
+   per conventionally named route module (`app/**/routes.js|.ts`) in which it
+   finds a literal `meta.description` / `canonical` / `socialImage` key, because
+   those fields can only ever become tags at prerender time.
 2. **Prerendering runs after the shell and public assets are in staging, and
    before the swap.** The shell is the injection template, so it must already be
    there; the swap must come after, so a prerender failure discards staging and
@@ -246,7 +253,8 @@ fault the settle loop cannot satisfy fails the same way; a route path
 escaping the output directory; a RAWTEXT breakout; a `public/` asset colliding
 with generated output or a reserved scratch name; and — static only — a rendered
 route whose view or layout is a hand-written class carrying no compiled module
-stamp, or two routes normalizing to the same output file.
+stamp (two routes normalizing to one output file is warn-and-skip, not a
+failure — see the invariants below).
 
 Warn-only divergences worth knowing: a hybrid route with a `guard` still ships
 its markup publicly (a guard is a router gate, not a secrecy boundary —

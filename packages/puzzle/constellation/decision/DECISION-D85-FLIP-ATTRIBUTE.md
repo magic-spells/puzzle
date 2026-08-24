@@ -12,8 +12,8 @@ connections:
   - FILE-ANIMATE
   - FILE-SSG-SERIALIZER
   - FEATURE-V1-51-FLIP
-verified_at: '2026-08-16T04:33:10.796Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -21,6 +21,12 @@ notes:
       component-props-aware AST scan) appended to this card's body — prior stamp (df909f7) predated
       that section.
     sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D85 — FLIP keyed-reorder animation via a `flip` directive attribute (v1.51)

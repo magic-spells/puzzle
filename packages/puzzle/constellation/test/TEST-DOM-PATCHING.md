@@ -1,7 +1,7 @@
 ---
 name: ViewManager DOM patching, events, and bindings
 kind: unit
-status: built
+status: verified
 framework: vitest
 connections:
   - COMPONENT-VIEW-MANAGER
@@ -24,8 +24,16 @@ connections:
   - DOC-EVENTS
   - DOC-THIRD-PARTY-DOM
   - DOC-TESTING
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
-
 
 # ViewManager DOM patching, events, and bindings
 

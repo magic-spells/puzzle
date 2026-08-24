@@ -6,14 +6,20 @@ status: verified
 connections:
   - FEATURE-V1-32-RELEASE-HARDENING
   - FILE-PACKAGE
-verified_at: '2026-08-16T04:34:44.770Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
       verify-pack real-tarball rework + release:prep restore-first landed; negative tests proved the
       old check passed under --ignore-scripts and a broken postpack
     sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 The four `@magic-spells/puzzle-<platform>-<arch>` optionalDependencies do not
@@ -51,8 +57,10 @@ along:
   (2) the packed file list comes from `tar -tzf`, fed to the same
   allowlist/REQUIRED checks as before; (3) after packing, the REPO manifest
   must be clean again — that is the postpack regression test; (4) the
-  COMMITTED manifest (`git show HEAD:package.json`) must carry no
-  `optionalDependencies`. This exercises prepack/postpack end to end and
+  COMMITTED manifest must carry no `optionalDependencies` — read it as
+  `git show HEAD:./package.json`, because a bare `HEAD:package.json` resolves
+  from the monorepo top and silently inspects the private root shell instead.
+  This exercises prepack/postpack end to end and
   fails on a hook that didn't run, a pin that didn't match, or a leftover
   mutation.
 - **`release:prep` runs `inject-platform-pins.mjs restore` as its first

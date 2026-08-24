@@ -1,7 +1,7 @@
 ---
 name: Compiler design
 status: verified
-verified_at: '2026-08-23T19:55:28.452Z'
+verified_at: '2026-08-24T21:39:23.520Z'
 connections:
   - DOC-SPEC
   - DOC-COMPILATION-FLOW
@@ -15,7 +15,14 @@ connections:
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
   - FILE-ESBUILD-PLUGIN
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Compiler design
@@ -31,8 +38,9 @@ and an optional `<puzzle-skeleton>`. The section scanner is aware of quoted
 strings, comments, regular expressions, and template literals so tag-like text
 inside JavaScript does not end a section early.
 
-The parser reports source positions from the original file. Duplicate,
-misordered, missing, or malformed top-level sections fail compilation.
+The parser reports source positions from the original file. Duplicate, missing,
+or malformed top-level sections fail compilation; section order is deliberately
+not constrained.
 
 ## Template parser
 
@@ -46,9 +54,9 @@ syntax. Attribute values have their own mixed-text/interpolation/conditional
 grammar; an inline `{#if}` there may not contain elements or `{#for}` (parse
 error).
 
-The parser validates boundaries that are cheapest to enforce structurally:
-one root, legal marker spelling/placement, static ref/slot/island names,
-component/event forms, and directive nesting.
+The parser validates the boundaries that are cheapest to enforce structurally:
+legal marker spelling/placement, static ref/slot/island names, component/event
+forms, and directive nesting; single-root arity is a codegen gate.
 
 ## Code generation
 

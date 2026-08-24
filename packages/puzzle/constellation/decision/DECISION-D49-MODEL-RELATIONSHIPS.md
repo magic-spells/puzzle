@@ -13,7 +13,7 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-DATA
   - FEATURE-ADAPTER-WRITE-SYNC
-verified_at: '2026-08-23T19:13:15.487Z'
+verified_at: '2026-08-24T21:39:15.808Z'
 notes:
   - kind: verified
     text: >-
@@ -27,10 +27,16 @@ notes:
       traverses comments only — author stays an explicit tracked findOne so D161 faults the missing
       user in. Card now binds model.js + datastore/store.js via code_refs.
     sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/model.js
   - client-runtime/datastore/store.js
-verified_sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D49 — `hasMany`/`belongsTo` resolve as lazy store-backed getters with FK-by-convention (v1.17)

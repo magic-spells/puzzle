@@ -22,8 +22,8 @@ connections:
   - COMPONENT-DEV-SERVER
   - FLOW-BUILD
   - FLOW-REACTIVITY
-verified_at: '2026-08-14T05:01:26.065Z'
-verified_sha: d74916a0e021b6bb86394551171838fbab161347
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -31,6 +31,12 @@ notes:
       npm transport, splitting vs not-shipped list, SPA-default phrasing, formatters/manifest
       subpath — all reconciled against the release/0.6.0 code.
     sha: d74916a0e021b6bb86394551171838fbab161347
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Puzzle release surface
@@ -179,14 +185,14 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## Routing and motion
 
-- History, hash, and memory modes; nested relative children; index routes;
-  catch-all routes; merged params; top-level layouts; route titles + managed
-  head metadata (`meta` title/description/canonical/socialImage, per-field
-  leaf→root inheritance with explicit-null suppression, D84). Delivery is
-  split: the browser syncs `document.title` on every navigation, while the
-  marked `<head>` tags are baked per page by the prerender and never touched
-  at runtime (D111) — so they are inert in the default SPA build (no `output`
-  key configured).
+- Path routing (the inline default, D159), hash, and memory modes; nested
+  relative children; index routes; catch-all routes; merged params; top-level
+  layouts; route titles + managed head metadata (`meta`
+  title/description/canonical/socialImage, per-field leaf→root inheritance
+  with explicit-null suppression, D84). Delivery is split: the browser syncs
+  `document.title` on every navigation, while the marked `<head>` tags are
+  baked per page by the prerender and never touched at runtime (D111) — so
+  they are inert in the default SPA build (no `output` key configured).
 - `push`, `replace` (no history entry, scroll untouched by default, D83),
   `go`, `back`, and `forward`; guarded same-origin link interception;
   router base paths and anchors; `router.url()` + the built-in `link`
@@ -229,7 +235,7 @@ second specification. Decision cards hold rationale and git holds chronology.
   the server adapter itself (D157): nothing imports `/fixtures` unless
   `puzzle dev|build --fixtures` generates the wiring, and nothing imports
   `/adapter` unless an app passes its capability (or fixtures needs its seam).
-  entry from `app/fixtures.js`. Source maps are **opt-in** —
+  Source maps are **opt-in** —
   `build.sourceMap` (default off) emits linked maps for SPA + true-static prod
   bundles; dev keeps linked maps regardless (D88).
 - Code splitting is **opt-in** — `build.splitting` (default off, D160) makes

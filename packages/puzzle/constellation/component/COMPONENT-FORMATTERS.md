@@ -1,7 +1,7 @@
 ---
 name: Formatter registry
 status: verified
-verified_at: '2026-08-16T04:28:30.612Z'
+verified_at: '2026-08-24T21:39:23.520Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-CODEGEN
@@ -27,11 +27,12 @@ notes:
   - kind: gotcha
     text: >-
       Intl objects in the date family are CACHED in module-level Maps and reused for the app's
-      lifetime — `date` keyed on (locale, resolved preset), `timeago` on locale, `in_timezone` on
-      the tz argument. Constructing them per call cost ~37us each; measured against the real
-      exported date(), 100k calls went 3725ms -> 122ms (~30x). Anything added here must stay
-      stateless for reuse: Intl.DateTimeFormat/RelativeTimeFormat are safe because
-      format()/formatToParts() carry no per-call state. Do not cache anything that does.
+      lifetime — `date` keyed on (locale, resolved preset), `in_timezone` on the tz argument, and
+      `timeago` — which takes no locale — held in a single lazily-built module-level slot.
+      Constructing them per call cost ~37us each; measured against the real exported date(), 100k
+      calls went 3725ms -> 122ms (~30x). Anything added here must stay stateless for reuse:
+      Intl.DateTimeFormat/RelativeTimeFormat are safe because format()/formatToParts() carry no
+      per-call state. Do not cache anything that does.
 
 
       Two non-obvious constraints hold the design together. (1) It must be a keyed Map, NOT a
@@ -48,7 +49,13 @@ notes:
 
       Preset resolution uses Object.hasOwn before the lookup, so an unknown preset name collapses
       onto the `date` entry instead of minting one per typo.
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Formatter registry

@@ -9,12 +9,18 @@ connections:
   - COMPONENT-ANIMATIONS
   - COMPONENT-DEVSTATE
   - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
-verified_at: '2026-07-25T05:24:11.803Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: all five containment fixes + mount epoch landed with revert-proven tests
     sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/views/viewManager.js
 ---

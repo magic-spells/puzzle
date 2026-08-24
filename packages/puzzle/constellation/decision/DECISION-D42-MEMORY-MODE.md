@@ -1,7 +1,7 @@
 ---
 name: "D42 — memory routing (routerMode: memoryRouter(), URL-less) + go/back/forward API (v1.11)"
 status: verified
-verified_at: '2026-08-14T05:01:18.187Z'
+verified_at: '2026-08-24T21:39:15.808Z'
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
@@ -12,13 +12,19 @@ connections:
   - DECISION-D33-ROUTER-SCROLL
   - DECISION-D19-NAVIGATION-COMMIT
   - FEATURE-V1-11-MEMORY-MODE
-verified_sha: d74916a0e021b6bb86394551171838fbab161347
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
       Rewritten for the D159 surface: memoryRouter({ initialPath }) replaces the routerInitialPath
       app-config field; memory semantics unchanged and re-checked against modes.js.
     sha: d74916a0e021b6bb86394551171838fbab161347
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/router/modes.js
   - client-runtime/router/router.js

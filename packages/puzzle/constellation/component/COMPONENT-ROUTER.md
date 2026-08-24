@@ -11,9 +11,9 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      A reused ancestor's gated data() runs against the DESTINATION params/snapshot but commits
-      only inside #commitState (D146). Anything the router adds on a non-committing exit path
-      must discard the prepared runs, or their tracked subscriptions strand on a live ancestor.
+      A reused ancestor's gated data() runs against the DESTINATION params/snapshot but commits only
+      inside #commitState (D146). Anything the router adds on a non-committing exit path must
+      discard the prepared runs, or their tracked subscriptions strand on a live ancestor.
   - kind: verified
     text: >-
       Re-verified after the 2026-07-24 deep-review round. Corrected two stale claims: the commit no
@@ -21,8 +21,14 @@ notes:
       else), and url() now delegates to the exported encodeURL shared with both prerender paths.
       Added the dev-only route-commit emit to the D100 bridge.
     sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
-verified_at: '2026-08-16T04:29:00.714Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Router

@@ -10,8 +10,8 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-ASSEMBLE
   - FILE-STATIC-MOUNT
-verified_at: '2026-08-23T19:55:35.326Z'
-verified_sha: 95a69be36bf38f6d1c43fb9caa9056e2530c4ceb
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
   - kind: verified
     text: >-
@@ -19,6 +19,12 @@ notes:
       check — replace() per keystroke with zero history growth, back-after-replace lands on the
       rewritten entry, this.route.query live in data().
     sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 release: RELEASE-V0-2-0
 change: feature
 ---
@@ -38,8 +44,10 @@ match/load/cancel/atomic-commit pipeline. Ship [[DECISION-D83-QUERY-REPLACE]].
   deferral now `{ path, replace }`), a `replace` boolean through `#navigate`
   into `#commitLocation` (`replaceState` keeping the current scroll key /
   memory `stack[index]` overwrite), replace leaves scroll alone by default.
-  SSG parity: `ssg/assemble.js` snapshot + `serializeRouteJSON` + the static
-  kernel snapshot all carry the three new fields.
+  SSG parity: `ssg/assemble.js`'s `makeRouteSnapshot` carries the three new
+  fields for both the prerender snapshot and the static kernel's rebuilt one;
+  `serializeRouteJSON` stays `{ path, params, chain }` because a static path's
+  pathname/query/hash are constants the kernel re-derives.
 - In (types): `RouteSnapshot` + `Router.replace` in `types/index.d.ts`.
 - Out (per D83): the internal action-enum refactor, sticky/serialized query
   params, query-into-params merging, reactive query writes.
