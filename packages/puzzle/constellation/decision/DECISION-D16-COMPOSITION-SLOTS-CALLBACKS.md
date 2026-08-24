@@ -1,7 +1,7 @@
 ---
 name: 'D16 — Component composition: content markers + callback props; no `$emit`'
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-24T19:04:13.357Z'
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-CODEGEN
@@ -12,6 +12,13 @@ code_refs:
   - compiler/internal/parser/parser.go
   - compiler/internal/parser/ast.go
   - compiler/internal/codegen/codegen.go
+verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+notes:
+  - kind: verified
+    text: >-
+      Composition primitives re-truthed: capitalized markers and named slots are shipped, not
+      deferred; grammar ownership moved to D134/D141 and scoped slots stated as the remaining gap.
+    sha: c809db6680eb9355961897756f54e97f1164b88f
 ---
 
 # D16 — Component composition: content markers + callback props; no `$emit`

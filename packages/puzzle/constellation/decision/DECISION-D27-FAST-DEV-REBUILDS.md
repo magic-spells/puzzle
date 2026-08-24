@@ -1,7 +1,7 @@
 ---
 name: "D27 — Fast dev rebuilds: direct CLI resolution + warm Tailwind watcher + esbuild incremental context (amends D26)"
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-24T19:03:17.385Z'
 connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-ESBUILD-PLUGIN
@@ -17,6 +17,13 @@ code_refs:
   - compiler/internal/styles/resolve.go
   - compiler/internal/styles/styles.go
   - compiler/internal/styles/watch.go
+verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+notes:
+  - kind: verified
+    text: >-
+      Dev fallback behavior and the rebuild timing label re-truthed against dev.go and
+      watch_static.go.
+    sha: c809db6680eb9355961897756f54e97f1164b88f
 ---
 
 # D27 — Fast dev rebuilds: direct CLI resolution + warm Tailwind watcher + esbuild incremental context (amends D26)
@@ -32,6 +39,9 @@ D26 chose "one-shot per rebuild, no `--watch` child" for simplicity, accepting t
 - **esbuild incremental context in `dev`.** `internal/build` exposes `NewWatchBuilder(root) → { Rebuild(); CSS(); Dispose() }` backed by `api.Context`, so rebuilds reuse esbuild's caches (only changed inputs re-read). `build.Build` is unchanged for production. The `.pzl` plugin's `<style>` collector — now shared across incremental rebuilds via one persistent `Plugin` — was made reset-correct: `onLoad` set-or-**deletes** by `<style>` presence (a file edited to drop its block loses its entry), and `CSS()` prunes entries whose file no longer exists (a deleted `.pzl`, whose `onLoad` never re-runs).
 
 ## Consequences
-**Fallback behavior (never leave dev without CSS updates):** if the config can't be read, the incremental context can't be created, or the watcher can't start, dev degrades to the D26 one-shot path (config error / no builder → full `build.Build` per change; watcher-start failure → one-shot Tailwind per compose). If the warm child **dies unexpectedly** mid-session, dev logs it and switches that session to one-shot composition. "rebuilt in Xms" stays honest — it now reflects esbuild(-incremental) + compose only, with Tailwind off that path; the watcher's readiness is logged once at startup.
+
+**Fallback behavior (never leave dev without CSS updates):** if the incremental context can't be created, dev warns and degrades to the D26 one-shot path — a full `build.Build` per change, slower but producing identical output, running Tailwind itself. If the warm child can't start, or **dies unexpectedly** mid-session, dev logs it and composes with a one-shot Tailwind run for the rest of the session. An unreadable `puzzle.config.js` does not stop dev either: it prints one warning and keeps going with zero-value defaults — no Tailwind pipeline and no `dev.proxy`, but still the incremental builder — advising a restart once the config is fixed.
+
+**"rebuilt in Xms" stays honest**, and what it covers follows the serving mode: on the SPA path, the incremental esbuild rebuild plus the compose; on the static path, the whole staged rebuild that mode requires (app bundle, compose, prerender bundle + node render, per-page bundles — [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]). The Tailwind CLI is off both paths while the warm child is alive; the watcher's readiness is logged once at startup.
 
 **Measured (examples/todos, this environment):** warm dev rebuilds dropped from ~300–800ms (one-shot Tailwind per rebuild) to **~10–15ms** (esbuild incremental + compose), comfortably under the 200ms target.

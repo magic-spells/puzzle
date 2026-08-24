@@ -1,7 +1,7 @@
 ---
 name: D62 — data-independent @event handlers emit per-instance cached closures
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-24T19:03:25.442Z'
 connections:
   - DECISION-D16-COMPOSITION-SLOTS-CALLBACKS
   - DECISION-D18-PER-NODE-LISTENERS
@@ -13,6 +13,13 @@ connections:
 code_refs:
   - compiler/internal/codegen/codegen.go
   - compiler/internal/codegen/expr.go
+verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+notes:
+  - kind: verified
+    text: >-
+      Cacheability detection re-truthed against expr.go: one resolveExprTrackingScope pass,
+      referencesLoopScope ANDed with the __d. check.
+    sha: c809db6680eb9355961897756f54e97f1164b88f
 ---
 
 # D62 — data-independent `@event` handlers emit per-instance cached closures
@@ -58,13 +65,16 @@ unchanged — `this.events` lookup still happens at fire time.
   from the render scope beyond `event`**: literals, `event`, `this.…`, and JS
   globals are fine (all are evaluated at fire time *inside* the closure).
 
-Detection is a two-pass resolution, no new lexer:
-`resolveExpr(args, fullScope) == resolveExpr(args, {event}) &&
-!strings.Contains(out, "__d.")`. The equal-outputs check catches loop/scope
-variables (in the reduced scope they'd get `__d.`-prefixed and the outputs
-diverge); the substring check catches data references (identical in both
-passes). False negatives (a string literal containing `"__d."`) just miss the
-cache — harmless.
+Detection is a single resolution pass, no new lexer: `resolveExprTrackingScope`
+resolves the arguments once — with `event` added to the render scope — and
+reports, alongside the emitted JS, whether it referenced any identifier from
+the render/loop scope. A site is cacheable iff that flag is false **and** the
+emitted args contain no `__d.`. The flag catches loop and scope variables; the
+substring check catches render-data reads. Keeping the reference check inside
+the resolver makes it follow the resolver's own lexical rules — property names
+and text inside literals/comments/regexes do not count, identifiers inside
+template-literal interpolations do. False negatives (a string literal
+containing `"__d."`) just miss the cache — harmless.
 
 **Non-cacheable sites emit byte-identical to v1.28**: call forms capturing
 render data (`save(draft)` → `__d.draft`) or loop variables

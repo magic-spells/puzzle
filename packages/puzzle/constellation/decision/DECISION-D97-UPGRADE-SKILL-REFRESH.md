@@ -1,6 +1,6 @@
 ---
 name: 'D97 — `puzzle upgrade` offers to refresh the installed agent skill (v1.60)'
-status: built
+status: verified
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
@@ -11,6 +11,12 @@ code_refs:
   - compiler/cmd/puzzle/add.go
   - compiler/cmd/puzzle/add_skills.go
   - compiler/cmd/puzzle/upgrade.go
+verified_at: '2026-08-24T19:03:31.037Z'
+verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+notes:
+  - kind: verified
+    text: Skill-refresh failure paths and the re-exec probe re-truthed against upgrade.go.
+    sha: c809db6680eb9355961897756f54e97f1164b88f
 ---
 
 # D97 — `puzzle upgrade` offers to refresh the installed agent skill (v1.60)
@@ -59,7 +65,11 @@ never satisfies a 0.2.1 check). No candidate verifies → print the manual comma
 rather than reinstall the stale skill we are carrying.
 
 **Nothing here can fail the upgrade.** The package is installed by this point; a
-skill copy is a courtesy on top. Every failure prints and returns nil.
+skill copy is a courtesy on top. Anything with something actionable to say
+prints one `!` line and the upgrade still succeeds — a symlinked destination, no
+verifiable binary, a failed child run. Where there is nothing to report the
+refresh simply returns: no resolvable home directory, an unreadable config dir,
+no installed skill anywhere, or a declined prompt.
 
 **Non-TTY prints a hint, never writes.** One `!` line naming the installed
 destinations and the command to run, preserving the D32/D77/D78
@@ -100,8 +110,11 @@ public, not hidden: pinning a project-local `.claude` is a legitimate manual use
 - The feature only takes effect from the *next* upgrade onward: the binary that
   performs an upgrade must itself carry this code, so a release upgrading INTO
   v1.60 does nothing, and v1.60 → later releases refresh.
-- The re-exec spawns `--version` plus the install (two child processes; via
-  `node_modules/.bin/puzzle` those go through the node shim).
+- The re-exec spawns one `--version` probe per candidate until one answers with
+  the target version, then the install itself: two child processes when the
+  first candidate is the right binary, one more for every candidate before it
+  that is missing or reports something else (via `node_modules/.bin/puzzle`
+  those go through the node shim).
 - `puzzle add skills --overwrite` is unchanged for direct users, symlinked
   destinations included — the skip was upgrade-path policy, not a new `add`
   semantic. *(Superseded in part by [[DECISION-D99-SKILL-REFRESH-PROMPT]]: `add

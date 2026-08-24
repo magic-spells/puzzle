@@ -1,7 +1,7 @@
 ---
 name: D25 — v1 formatter call form and callback-prop wrapping
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-24T19:04:22.414Z'
 connections:
   - COMPONENT-CODEGEN
   - COMPONENT-FORMATTERS
@@ -9,6 +9,13 @@ connections:
 code_refs:
   - compiler/internal/codegen/codegen.go
   - compiler/internal/codegen/expr.go
+verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+notes:
+  - kind: verified
+    text: >-
+      Retitled and re-truthed: the bare-call/deferred-guard claim now defers to D43; the
+      callback-prop wrapper half is unchanged and still current.
+    sha: c809db6680eb9355961897756f54e97f1164b88f
 ---
 
 # D25 — v1 formatter call form and callback-prop wrapping

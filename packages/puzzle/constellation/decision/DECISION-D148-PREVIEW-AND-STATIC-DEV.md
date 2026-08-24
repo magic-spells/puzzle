@@ -10,8 +10,8 @@ connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC-BUILD
-verified_at: '2026-08-16T04:35:06.172Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-08-24T19:03:32.784Z'
+verified_sha: c809db6680eb9355961897756f54e97f1164b88f
 notes:
   - kind: verified
     text: >-
@@ -21,6 +21,11 @@ notes:
       Cache-Control: no-cache on HTML (preview.go:162), and --fixtures + output:'static' is refused
       at dev startup (dev/dev.go:204). compiler/internal/{preview,serve} tests pass.
     sha: f2aef082b4b17fb4ded5da94da53a547e2fe66b1
+  - kind: verified
+    text: >-
+      Preview mode resolution re-truthed against preview.go: the marker is read from dist/index.html
+      alone.
+    sha: c809db6680eb9355961897756f54e97f1164b88f
 code_refs:
   - compiler/cmd/puzzle/main.go
   - compiler/internal/build/prerender.go
@@ -87,12 +92,20 @@ exactly the bug class a preview should expose.
   child) is [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]. `--fixtures` + static is
   rejected at dev startup (D98's rule, failed fast instead of once per
   rebuild).
-- **Preview mode resolution: config wins, artifact breaks ties.** A build via
-  `--static`/`--hybrid` flag leaves no config key, so preview reads the mode
-  back from the artifact's own marker (`data-puzzle-static` /
-  `data-puzzle-ssg`) when the config is silent, and says so; an explicit
-  config always wins, and a config/artifact disagreement (or an `app.js`
-  shape mismatch) warns instead of guessing.
+- **Preview mode resolution: config wins, artifact breaks ties.** An explicit
+  `output` key is the request and always wins, and a config that will not load
+  is fatal here — falling back to the zero Config would preview a static site
+  with SPA semantics, the exact mismatch preview exists to expose. When the
+  config is silent (the build used the `--static`/`--hybrid` FLAG), preview
+  reads the mode back from the marker the prerenderer stamps into
+  `dist/index.html` — `data-puzzle-static` / `data-puzzle-ssg` — and says which
+  one it found; a config/artifact disagreement warns that `dist/` predates the
+  config instead of guessing. The marker is read from the ROOT page only, so a
+  flag-built site whose root route is `prerender: false` writes an unmarked
+  `dist/index.html` and previews as an SPA — for static output the `app.js`
+  shape check still warns (a static build ships none), a flag-built hybrid site
+  is indistinguishable from an SPA build, and naming `output` in the config
+  removes the ambiguity for both.
 - Preview defaults to port 4000 — not dev's 3000 — so `dev` + `preview`
   side by side never silently port-scan past each other. HTML is served
   `Cache-Control: no-cache` (a host usually wouldn't) so a stale page can

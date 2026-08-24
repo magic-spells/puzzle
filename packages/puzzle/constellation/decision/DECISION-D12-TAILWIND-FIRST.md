@@ -1,7 +1,7 @@
 ---
 name: D12 — Tailwind-first styling; unscoped `<style>` is global CSS
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-24T19:04:17.751Z'
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
@@ -13,6 +13,11 @@ code_refs:
   - compiler/internal/plugin/plugin.go
   - compiler/internal/styles/styles.go
   - compiler/internal/scaffold/templates/todos/puzzle.config.js
+verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+notes:
+  - kind: verified
+    text: Scoped-style deferral removed; the opt-in `<style scoped>` contract now defers to D59.
+    sha: c809db6680eb9355961897756f54e97f1164b88f
 ---
 
 # D12 — Tailwind-first styling; unscoped `<style>` is global CSS

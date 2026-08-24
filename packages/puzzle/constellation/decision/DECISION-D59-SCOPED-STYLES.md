@@ -11,7 +11,7 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DOC-PUZZLE-FILE
   - DOC-SPEC
-verified_at: '2026-07-14T07:08:05.177Z'
+verified_at: '2026-08-24T19:03:23.810Z'
 notes:
   - kind: verified
     text: >-
@@ -19,10 +19,16 @@ notes:
       codegen.ScopeID (FNV-1a over slash-normalized relative path), root-only stamp covering
       view/component/skeleton renders, plugin-side @scope wrapping with an id-agreement test;
       unscoped goldens byte-identical; 540 vitest + all Go green.
+  - kind: verified
+    text: >-
+      Root scope stamping re-truthed against codegen.go, including the resolved-{#svg} root that
+      takes no stamp.
+    sha: c809db6680eb9355961897756f54e97f1164b88f
 code_refs:
   - compiler/internal/codegen/codegen.go
   - compiler/internal/parser/sections.go
   - compiler/internal/plugin/plugin.go
+verified_sha: c809db6680eb9355961897756f54e97f1164b88f
 ---
 
 # D59 — Scoped styles: `<style scoped>` via native `@scope` wrapping
@@ -60,10 +66,17 @@ seven characters of opt-in.
      absolute path — golden byte-reproducibility across machines; same
      stability posture as the {#svg} asset keys, D46).
   2. Codegen adds one **static attribute** `data-<scopeId>` to the template
-     root element's attrs (the `<puzzle-view>` tag's vnode). Root-only — with
-     `@scope`, descendants are covered by the cascade; there is no Vue-style
-     per-node stamping. View-mode skeletons reuse the `<puzzle-view>` root
-     attrs (D39), so skeleton renders are covered for free.
+     root's attrs — the `<puzzle-view>` tag's vnode in view mode, the single
+     root element or component in component mode. Root-only — with `@scope`,
+     descendants are covered by the cascade; there is no Vue-style per-node
+     stamping. View-mode skeletons reuse the `<puzzle-view>` root attrs (D39),
+     so skeleton renders are covered for free; a component skeleton's own root
+     element takes its own stamp. One root takes no stamp: a component (or
+     component skeleton) whose single root is a resolved `{#svg}` element
+     emits raw markup carrying only the SVG file's own attrs — and under D46
+     dedup that markup is shared across files — so a scoped block in such a
+     file matches nothing. Wrap the `{#svg}` in a real root element to scope
+     it.
   3. The esbuild plugin's per-file styles collector stores the block wrapped:
      `@scope ([data-<scopeId>]) {\n<verbatim body>\n}`. Aggregation, sorting,
      pruning, and the Tailwind pipeline are untouched — `@scope` is plain CSS
