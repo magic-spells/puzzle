@@ -31,15 +31,17 @@ notes:
 
 # Release flow
 
-Publishing Puzzle means publishing **five** npm packages by hand from one
-machine: the root `@magic-spells/puzzle` plus the four
-`@magic-spells/puzzle-<platform>-<arch>` packages carrying the compiled Go CLI.
+Publishing Puzzle means publishing **six** npm packages by hand from one
+machine: the root `@magic-spells/puzzle` plus the five
+`@magic-spells/puzzle-<platform>-<arch>` packages carrying the compiled Go CLI
+(macOS and Linux on arm64/x64, and Windows on x64 — Windows-on-ARM runs the x64
+binary under emulation, so there is no `win32-arm64` package).
 None of it is automated. The monorepo-root `.github/workflows/ci.yml` runs
-seven jobs — the Go and JS suites, `verify:pack`, `test:types`, the
-packed-tarball e2e, the browser smoke, and the pieces/devtools/lint-plugin
-suites — on push and on pull requests for both `main` and `release/**`, so a
-release branch is covered; it has no publish job, and publishing is entirely
-by hand.
+eight jobs — the Go and JS suites, the Windows Go suite + CLI smoke,
+`verify:pack`, `test:types`, the packed-tarball e2e, the browser smoke, and the
+pieces/devtools/lint-plugin suites — on push and on pull requests for both
+`main` and `release/**`, so a release branch is covered; it has no publish job,
+and publishing is entirely by hand.
 
 The order is not stylistic. Publish the root before its platform packages, or
 publish it from the repo directory instead of from the packed tarball, and npm
@@ -47,7 +49,7 @@ accepts a release that installs cleanly with no working `puzzle` command behind
 it ([[DECISION-D120-TARBALL-PUBLISH]]).
 
 1. **Bump every place the version is written by hand** — this package's
-   `package.json`, `compiler/internal/version/version.go`, the four
+   `package.json`, `compiler/internal/version/version.go`, the five
    `npm/puzzle-*/package.json` manifests, the `FRAMEWORK_VERSION` literal in
    `client-runtime/devtools.js`, and the eight monorepo train stamps
    (`puzzle-pieces` package + demo package + demo header badge,
@@ -64,7 +66,7 @@ it ([[DECISION-D120-TARBALL-PUBLISH]]).
    These carry no version field of their own, so no bump touches them.
    - The scaffold manifests are `go:embed`ed into the CLI binary. A stale range
      ships a broken `puzzle init` that **no JS-only republish can repair** — the
-     four platform binaries have to be rebuilt. Caret ranges do not cross a 0.x
+     platform binaries have to be rebuilt. Caret ranges do not cross a 0.x
      minor, so `^0.6.0` installs `0.6.x` into an app scaffolded by a `0.7.0`
      binary. Leave each template's own `version` field alone; that is the
      scaffolded app's starting version, not Puzzle's.
@@ -91,11 +93,13 @@ it ([[DECISION-D120-TARBALL-PUBLISH]]).
    - Runs `measure-size --check`, which builds `examples/hello-world` and
      `examples/todos` in production and fails if the README's gzip figures no
      longer match.
-   - Cross-compiles the four CLI binaries, copies `LICENSE.txt` beside each,
-     and runs the host-platform binary's `--version`.
-   - Packs the root tarball, reads the four pins back out of the packed bytes,
-     and prints the publish commands in the required order.
-7. **Publish the four platform packages first**, as ordinary directory
+   - Cross-compiles the five CLI binaries, copies `LICENSE.txt` beside each,
+     and runs the host-platform binary's `--version`. The Windows target is
+     the one whose output file is named `puzzle.exe`; every other target ships
+     an extensionless `bin/puzzle`.
+   - Packs the root tarball, reads every platform pin back out of the packed
+     bytes, and prints the publish commands in the required order.
+7. **Publish the five platform packages first**, as ordinary directory
    publishes. They declare no injected dependencies, so nothing is stripped from
    under them.
 8. **Publish the root LAST, as the packed tarball `release:prep` named**, from
@@ -114,7 +118,7 @@ it ([[DECISION-D120-TARBALL-PUBLISH]]).
 
 ## Why the root goes last, and as a file
 
-The four platform pins do not live in the tracked manifest
+The platform pins do not live in the tracked manifest
 ([[DECISION-D116-PACK-TIME-PIN-INJECTION]]): between a version bump and the
 publish those versions do not exist on the registry, which desyncs
 `package-lock.json` and breaks `npm ci`. `prepack` injects them; `postpack`
@@ -145,6 +149,12 @@ lands.
 - `e2e-pack` proves the **runtime resolves** from a real install. It runs while
   the platform packages are deliberately unpublished, so it can never catch a
   missing binary.
+- The Windows CI job proves the **win32-x64 target is real**: it runs the Go
+  suite on `windows-latest` and then scaffolds and builds an app with a freshly
+  built `puzzle.exe`. Nothing in the release pipeline itself executes a
+  cross-compiled binary for a platform other than the host — step 6's smoke test
+  can only run the host's — so that job is the only standing proof the Windows
+  binary works at all.
 - `verify:published` proves the **release**. It is the only one that runs after
   publishing, and the only one that answers whether someone installing right now
   gets a CLI that runs.

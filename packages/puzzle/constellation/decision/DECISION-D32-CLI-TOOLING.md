@@ -62,6 +62,6 @@ Sub-decisions, each with its rejected alternative:
 
 ## Consequences
 
-The scaffolded `package.json` pins `@magic-spells/puzzle` at the release its binary ships with, so that range is part of the release sweep `release:prep` asserts: a caret range does not cross a 0.x minor, so a stale pin installs an older runtime into an app scaffolded by a newer CLI. Because the templates are `go:embed`ed, correcting it means rebuilding the four platform binaries — a JS-only republish cannot carry it.
+The scaffolded `package.json` pins `@magic-spells/puzzle` at the release its binary ships with, so that range is part of the release sweep `release:prep` asserts: a caret range does not cross a 0.x minor, so a stale pin installs an older runtime into an app scaffolded by a newer CLI. Because the templates are `go:embed`ed, correcting it means rebuilding every platform binary — a JS-only republish cannot carry it.
 
 Non-breaking: `dev`/`build` are unchanged; this is an additive amendment (v1.4).

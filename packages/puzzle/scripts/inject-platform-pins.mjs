@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Inject/restore the four platform-binary optionalDependencies around `npm pack`.
+// Inject/restore the platform-binary optionalDependencies around `npm pack`.
 //
 // The repo's package.json must NOT carry these pins: between a version bump and
 // the actual publish the pinned versions do not exist on the registry, which
@@ -23,12 +23,13 @@ import { readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// Same four packages as scripts/release-prep.mjs MATRIX and bin/puzzle.js.
+// Same packages as scripts/release-prep.mjs MATRIX and bin/puzzle.js.
 export const PLATFORM_PACKAGES = [
 	'@magic-spells/puzzle-darwin-arm64',
 	'@magic-spells/puzzle-darwin-x64',
 	'@magic-spells/puzzle-linux-arm64',
 	'@magic-spells/puzzle-linux-x64',
+	'@magic-spells/puzzle-win32-x64',
 ];
 
 /** Return a copy of the manifest with the platform pins injected at its version. */

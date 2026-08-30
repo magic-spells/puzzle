@@ -69,7 +69,7 @@ func stubGlobalRoots(t *testing.T, roots map[string]string) {
 // Every case is a shape of executable path; none of them involves the working
 // directory, which detection must not read at all.
 func TestDetectInstallContextFromExecutable(t *testing.T) {
-	platform := filepath.Join("@magic-spells", platformPackageName(), "bin", "puzzle")
+	platform := filepath.Join("@magic-spells", platformPackageName(), "bin", platformBinaryName())
 
 	tests := []struct {
 		name string
@@ -454,7 +454,7 @@ func TestDetectInstallContextPnpmHome(t *testing.T) {
 	stubGlobalRoots(t, nil)
 
 	executable := filepath.Join(owner, "node_modules", ".pnpm", "@magic-spells+puzzle@0.6.0",
-		"node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+		"node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName())
 	ctx, err := detectInstallContext(executable)
 	if err != nil {
 		t.Fatal(err)
@@ -477,7 +477,7 @@ func TestDetectInstallContextResolvesSymlinkedBin(t *testing.T) {
 	installPuzzlePackage(t, project, "0.6.0")
 	stubGlobalRoots(t, nil)
 
-	real := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+	real := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName())
 	mustWriteExecutable(t, real, "#!/bin/sh\n")
 	link := filepath.Join(project, "node_modules", ".bin", "puzzle")
 	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
@@ -511,7 +511,7 @@ func TestDetectInstallContextIgnoresWorkingDirectory(t *testing.T) {
 	stubGlobalRoots(t, map[string]string{"npm": filepath.Join(prefix, "node_modules")})
 
 	global := filepath.Join(prefix, "node_modules",
-		"@magic-spells", platformPackageName(), "bin", "puzzle")
+		"@magic-spells", platformPackageName(), "bin", platformBinaryName())
 	ctx, err := detectInstallContext(global)
 	if err != nil {
 		t.Fatal(err)
@@ -651,7 +651,7 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			// The CLI being upgraded is the project's own copy, and the process
 			// is standing somewhere else entirely: the project is reached
 			// through the executable, never through the cwd.
-			executable := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+			executable := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName())
 			chdir(t, realTempDir(t))
 
 			stubDir := t.TempDir()
@@ -766,7 +766,7 @@ func TestUpgradeGlobalCLIFromInsideAProject(t *testing.T) {
 				roots["npm"] = filepath.Join(globalRoot, "node_modules")
 			}
 			stubGlobalRoots(t, roots)
-			executable := filepath.Join(globalRoot, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+			executable := filepath.Join(globalRoot, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName())
 
 			stubDir := t.TempDir()
 			argsPath := filepath.Join(stubDir, "args")
@@ -823,7 +823,7 @@ func TestUpgradeWorkspaceRootExplainsAndStops(t *testing.T) {
 	// A stale hoisted copy: the version confirmation would have read this one
 	// and reported a mismatch, which is the second half of the wrong behaviour.
 	mustWrite(t, filepath.Join(mono, "node_modules", "@magic-spells", "puzzle", "package.json"), `{"version":"0.6.0"}`)
-	executable := filepath.Join(mono, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+	executable := filepath.Join(mono, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName())
 
 	stubDir := t.TempDir()
 	ranPath := filepath.Join(stubDir, "ran")
@@ -1170,7 +1170,7 @@ func runUpgradeWithStubs(t *testing.T, home string, interactive bool, seedProjec
 	stubGlobalRoots(t, nil)
 	// The running CLI is the project's own — the shape the refresh candidates
 	// (platform package, then node_modules/.bin) are written for.
-	executable := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+	executable := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName())
 
 	stubDir := t.TempDir()
 	mustWriteExecutable(t, filepath.Join(stubDir, "npm"),
@@ -1449,7 +1449,7 @@ func TestUpgradeNeverEscalatesALocalInstallToGlobal(t *testing.T) {
 				mustWrite(t, filepath.Join(owner, rel), body)
 			}
 			installPuzzlePackage(t, owner, version.Version)
-			executable := filepath.Join(owner, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+			executable := filepath.Join(owner, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName())
 
 			// A real global prefix, somewhere else entirely, that must come out of
 			// this untouched.
@@ -1531,7 +1531,7 @@ func TestUpgradeRefusesCopiesItCannotUpgrade(t *testing.T) {
 				mustWrite(t, filepath.Join(cache, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`)
 				mustWrite(t, filepath.Join(cache, "package-lock.json"), "")
 				installPuzzlePackage(t, cache, version.Version)
-				return filepath.Join(cache, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle"), cache
+				return filepath.Join(cache, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName()), cache
 			},
 			wantStdout: []string{"npx", "cache"},
 		},
@@ -1549,7 +1549,7 @@ func TestUpgradeRefusesCopiesItCannotUpgrade(t *testing.T) {
 				tool := filepath.Join(app, "node_modules", "some-tool")
 				mustWrite(t, filepath.Join(tool, "package.json"), `{"name":"some-tool","dependencies":{"@magic-spells/puzzle":"0.5.0"}}`)
 				installPuzzlePackage(t, tool, "0.5.0")
-				return filepath.Join(tool, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle"), tool
+				return filepath.Join(tool, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName()), tool
 			},
 			wantStdout: []string{"nested dependency"},
 		},
@@ -1616,7 +1616,7 @@ func TestUpgradePnpmGlobalDirWithoutPnpmHome(t *testing.T) {
 	installPuzzlePackage(t, owner, version.Version)
 	globalRoot := filepath.Join(owner, "node_modules")
 	executable := filepath.Join(globalRoot, ".pnpm", "@magic-spells+puzzle@0.6.0",
-		"node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+		"node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName())
 
 	argv, _ := upgradeStubs(t, globalRoot)
 	chdir(t, realTempDir(t))

@@ -25,6 +25,63 @@ jobs:
       - run: go build ./...
       - run: go test ./...
 
+  windows:
+    name: Go + CLI smoke (Windows)
+    # The only job that proves the shipped win32-x64 binary is real: nothing else
+    # in CI runs on Windows, and the platform-specific risks are all in the Go
+    # side (path separators, the dist/ swap, the no-op keys fallback). There is
+    # deliberately no Windows vitest job — the runtime JS is platform-independent
+    # and jsdom does not care which OS it runs on.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: packages/puzzle/go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # One command per step on purpose: GitHub's pwsh wrapper only propagates
+      # the LAST command's exit code, so chaining these in one `run` block would
+      # let a failing `go vet` pass as long as `go test` succeeded.
+      - run: go vet ./...
+        working-directory: packages/puzzle/compiler
+      - run: go build ./...
+        working-directory: packages/puzzle/compiler
+      - run: go test ./...
+        working-directory: packages/puzzle/compiler
+      # End-to-end proof that the binary we ship for win32-x64 scaffolds and
+      # builds a real app. The scaffold is created OUTSIDE the checkout so the
+      # compiler's in-repo runtime walk cannot satisfy the import for us;
+      # PUZZLE_RUNTIME points it at the working-tree runtime instead, because the
+      # scaffold's `@magic-spells/puzzle` range is unpublished on a release
+      # branch — so the app's own dependency is dropped and only the template's
+      # Tailwind devDependencies are installed. Every native call is exit-checked
+      # for the same reason the Go steps are split.
+      - name: Scaffold and build an app with the Windows binary
+        shell: pwsh
+        working-directory: packages/puzzle
+        run: |
+          function Assert-Ok($what) {
+            if ($LASTEXITCODE -ne 0) { throw "$what exited $LASTEXITCODE" }
+          }
+          $runtime = (Get-Location).Path
+          $exe = Join-Path $env:RUNNER_TEMP 'puzzle.exe'
+          go build -o $exe ./compiler/cmd/puzzle
+          Assert-Ok 'go build'
+          Set-Location $env:RUNNER_TEMP
+          & $exe init smokeapp
+          Assert-Ok 'puzzle init'
+          Set-Location (Join-Path $env:RUNNER_TEMP 'smokeapp')
+          npm pkg delete "dependencies.@magic-spells/puzzle"
+          Assert-Ok 'npm pkg delete'
+          npm install --no-audit --no-fund
+          Assert-Ok 'npm install'
+          $env:PUZZLE_RUNTIME = $runtime
+          & $exe build
+          Assert-Ok 'puzzle build'
+          if (-not (Test-Path 'dist\index.html')) { throw 'puzzle build produced no dist\index.html' }
+
   js:
     name: JS (runtime)
     runs-on: ubuntu-latest

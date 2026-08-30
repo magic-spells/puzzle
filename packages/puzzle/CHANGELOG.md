@@ -465,6 +465,26 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Added
 
+- **Windows x64 CLI binaries.** `npm install @magic-spells/puzzle` on Windows
+  now resolves a real `puzzle.exe` instead of failing with "no prebuilt CLI
+  binary available for this platform". A fifth platform package,
+  `@magic-spells/puzzle-win32-x64`, joins the four existing ones as a pinned
+  `optionalDependency` of the root package, and the bin shim resolves
+  `bin/puzzle.exe` through it. Windows-on-ARM runs the x64 binary under
+  emulation, so there is deliberately no `win32-arm64` package. `puzzle upgrade`
+  learned the same spelling — the platform package is keyed the way Node spells
+  the platform (`win32`), not the way Go does (`windows`), which is what it had
+  been deriving the name from.
+
+  CI gained a `windows-latest` job that runs the compiler's Go suite and then
+  scaffolds and builds a real app with the Windows binary, so the target is
+  verified on every push rather than at release time.
+
+  One deliberate gap: the interactive keyboard controls in `puzzle dev` (the
+  single-key restart/quit shortcuts) are Unix-only and are silently absent on
+  Windows. The dev server, watcher, rebuilds, and live reload all work; only the
+  keystroke shortcuts do not. Use Ctrl-C to stop the server.
+
 - **`output: 'static'` pages carry the build's read state (D161).** Each
   prerendered page already ships its records in a `data-puzzle-static-data`
   island; it now ships what the build *learned* beside them, so `mountStatic`

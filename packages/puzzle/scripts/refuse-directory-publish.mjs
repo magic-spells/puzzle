@@ -6,7 +6,7 @@
 // `spec.type === 'directory'`). That asymmetry is exactly the distinction we need,
 // so this hook can only fire on the broken path.
 //
-// Why a directory publish is always wrong for this package: the four platform
+// Why a directory publish is always wrong for this package: the platform
 // optionalDependencies are injected at pack time by prepack and removed again by
 // postpack, so the repo manifest stays lockfile-clean between a version bump and
 // the publish. But a directory publish re-reads package.json from disk AFTER
@@ -35,6 +35,7 @@ Publish the packed tarball instead:
   npm publish ./npm/puzzle-darwin-x64   --access public
   npm publish ./npm/puzzle-linux-arm64  --access public
   npm publish ./npm/puzzle-linux-x64    --access public
+  npm publish ./npm/puzzle-win32-x64    --access public
   npm publish ./magic-spells-puzzle-<version>.tgz --access public   # root LAST
 
 Then confirm the registry really got the pins:

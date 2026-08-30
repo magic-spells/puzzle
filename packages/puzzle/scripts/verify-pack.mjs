@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Asserts the npm tarball for @magic-spells/puzzle ships ONLY the runtime, its
 // public TypeScript declarations, and the CLI bin shim (package.json "files":
-// client-runtime, types, puzzle-env.d.ts, bin/puzzle.js). Also asserts the four
+// client-runtime, types, puzzle-env.d.ts, bin/puzzle.js). Also asserts the
 // per-platform optionalDependencies are declared and version-pinned to the root.
 //
 // This check inspects a REAL tarball, not a report about one. It runs `npm pack`
@@ -65,6 +65,7 @@ const PLATFORM_DEPS = [
 	'@magic-spells/puzzle-darwin-x64',
 	'@magic-spells/puzzle-linux-x64',
 	'@magic-spells/puzzle-linux-arm64',
+	'@magic-spells/puzzle-win32-x64',
 ];
 
 function isAllowed(p) {
@@ -177,7 +178,7 @@ function fromTarball(args, what) {
 	}
 }
 
-// --- 3. The TARBALL manifest must carry exactly the four pins ---------------
+// --- 3. The TARBALL manifest must carry exactly the platform pins -----------
 const tarPkg = (() => {
 	const text = fromTarball(['-xOzf', tarball, 'package/package.json'], 'package/package.json');
 	try {

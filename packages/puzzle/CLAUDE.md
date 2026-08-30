@@ -48,7 +48,7 @@ for verifying your own change.
 
 Two footguns in the scripts: `npm run build` at the repo root is aliased to
 `node scripts/release-prep.mjs`, so it runs the whole release preparation —
-cross-compiling four Go binaries and packing a tarball — not a framework build.
+cross-compiling five Go binaries and packing a tarball — not a framework build.
 And `release:prep` hard-fails on the `@magic-spells/puzzle` ranges in the
 scaffold templates and every `examples/*/package.json`, so that sweep is
 enforced, not merely advised.
@@ -169,8 +169,10 @@ enforced, not merely advised.
 - Public package: `@magic-spells/puzzle`, with root, `./adapter`, `./morph`,
   `./router-modes`, `./ssg`, `./static`, `./testing`, `./fixtures`, and
   `./puzzle-env` exports
-  plus a `puzzle` binary shim and four
-  optional platform binary packages (macOS/Linux, arm64/x64).
+  plus a `puzzle` binary shim and five
+  optional platform binary packages (macOS/Linux arm64/x64, Windows x64 —
+  Windows-on-ARM runs the x64 binary under emulation, so there is no
+  win32-arm64 package).
 - Architecture: SPA-first browser runtime with two optional prerender output
   modes. `output: 'hybrid'` emits content-complete HTML the same SPA runtime
   takes over at navigation zero; `output: 'static'` emits true static pages —
@@ -180,7 +182,7 @@ enforced, not merely advised.
   routing, data, TypeScript, morphs, static output, DOM islands, canvas, and
   virtual scrolling.
 - Releases are published by hand: bump every version stamp `release:prep`
-  asserts — package.json, the four platform manifests, version.go, the
+  asserts — package.json, the five platform manifests, version.go, the
   `FRAMEWORK_VERSION` literal in `client-runtime/devtools.js` (it ships in the
   runtime), and the sibling-package train: pieces (package.json,
   demo/package.json, the demo header badge in
@@ -189,7 +191,7 @@ enforced, not merely advised.
   `optionalDependencies` — the platform pins are injected at pack time by
   `scripts/inject-platform-pins.mjs` (`prepack` injects, `postpack` restores),
   and `npm run verify:pack` fails if the repo manifest carries them. Then run
-  `npm run release:prep`, publish the four platform packages, then the root.
+  `npm run release:prep`, publish the five platform packages, then the root.
   **The root is published as the packed tarball it prints — `npm publish
   ./magic-spells-puzzle-<version>.tgz` — never as `npm publish` in the repo
   directory** (D120): a directory publish re-reads the manifest after `postpack`
