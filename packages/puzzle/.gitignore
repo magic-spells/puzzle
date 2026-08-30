@@ -8,4 +8,6 @@ tests/fixtures/virtual-scroll/
 skills/puzzle/.puzzle-skill-version
 # Repo-local Go build cache (sandboxed tools that can't reach the default GOCACHE)
 .gocache/
+# Local browser-compiler outputs (scripts/build-wasm.mjs)
+/artifacts/wasm/
 test-results/

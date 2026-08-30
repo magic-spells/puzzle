@@ -94,6 +94,9 @@ func (c *compiler) resolveInlineSVG(nodes []parser.Node, assetsDir string, inlin
 // positioned inside the svg file itself (File set) so the build points at the svg.
 func (c *compiler) resolveOneSVG(n *parser.InlineSVG, assetsDir string, inlined *[]string) (*parser.Element, error) {
 	src := n.Src
+	if c.assetReadsUnavailable != "" {
+		return nil, c.cgErr(n.SrcPos, fmt.Sprintf("cannot inline %q — %s", src, c.assetReadsUnavailable))
+	}
 	if assetsDir == "" {
 		return nil, c.cgErr(n.SrcPos, fmt.Sprintf("cannot inline %q — this project has no app/assets/ directory", src))
 	}

@@ -261,6 +261,36 @@ func TestInlineSVGNoAssetsDir(t *testing.T) {
 	}
 }
 
+func TestInlineSVGAssetReadsUnavailable(t *testing.T) {
+	src := "<puzzle-view>\n  {#svg 'icons/heart.svg'}\n</puzzle-view>\n"
+	sec, err := parser.SplitSections(src, "app/views/Playground.pzl")
+	if err != nil {
+		t.Fatalf("split: %v", err)
+	}
+	res, err := Compile(sec, Options{
+		Filename:              "app/views/Playground.pzl",
+		Mode:                  ModeView,
+		AssetsDir:             "/must/not/be/read",
+		AssetReadsUnavailable: "asset reads are not available in the playground",
+	})
+	if err == nil {
+		t.Fatal("expected an unavailable-assets error")
+	}
+	pe, ok := err.(*parser.ParseError)
+	if !ok {
+		t.Fatalf("err: got %T, want *parser.ParseError", err)
+	}
+	if pe.File != "app/views/Playground.pzl" || pe.Line != 2 || pe.Col <= 0 {
+		t.Errorf("position: got %s:%d:%d, want app/views/Playground.pzl:2:<positive>", pe.File, pe.Line, pe.Col)
+	}
+	if !strings.Contains(pe.Message, "asset reads are not available in the playground") {
+		t.Errorf("message %q missing playground guidance", pe.Message)
+	}
+	if len(res.InlinedFiles) != 0 {
+		t.Errorf("InlinedFiles = %v, want empty because no path was resolved or read", res.InlinedFiles)
+	}
+}
+
 func TestInlineSVGMalformedFileReportsSVGPath(t *testing.T) {
 	dir := writeAssets(t, map[string]string{"icons/bad.svg": `<div><span/></div>`})
 	_, err := compileTemplate(t, `<puzzle-view>{#svg 'icons/bad.svg'}</puzzle-view>`, dir)

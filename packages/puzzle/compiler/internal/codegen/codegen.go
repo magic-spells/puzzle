@@ -55,6 +55,15 @@ func ScopeID(filename string) string {
 	return fmt.Sprintf("pzl-%08x", h.Sum32())
 }
 
+// ScopedCSS wraps a <style scoped> body in the native @scope rule keyed by
+// ScopeID(filename) — the same id the root stamp uses, so the rule and the
+// data-<scopeId> attribute always agree. It is the SINGLE source of the wrapper
+// text: the esbuild plugin emits it during a real build, and cmd/pzl-wasm emits
+// it for the playground, which has no build pipeline to run.
+func ScopedCSS(filename, styles string) string {
+	return "@scope ([data-" + ScopeID(filename) + "]) {\n" + styles + "\n}"
+}
+
 // EmissionMode selects the render root shape (constellation/doc/DOC-DECISIONS.md D20).
 type EmissionMode int
 
@@ -86,6 +95,12 @@ type Options struct {
 	// any {#svg} then fails with a "this project has no app/assets/ directory"
 	// error.
 	AssetsDir string
+	// AssetReadsUnavailable, when non-empty, rejects every filesystem-backed
+	// asset reference before path resolution or reading. The value is the
+	// environment-specific explanation appended to the positioned diagnostic.
+	// Browser compilation sets this because its source is intentionally
+	// filesystem-free; ordinary CLI/plugin builds leave it empty.
+	AssetReadsUnavailable string
 
 	// SVGDedup selects the dedup emission for {#svg} (v1.14 D46 amendment): each
 	// use site becomes a call to a per-asset shared factory imported from a
@@ -183,7 +198,12 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		}
 	}
 
-	c := &compiler{file: opts.Filename, svgDedup: opts.SVGDedup, svgCache: opts.SVGCache}
+	c := &compiler{
+		file:                  opts.Filename,
+		svgDedup:              opts.SVGDedup,
+		svgCache:              opts.SVGCache,
+		assetReadsUnavailable: opts.AssetReadsUnavailable,
+	}
 	scope := map[string]bool{}
 
 	// Resolve {#svg} nodes (v1.14, D46): read each referenced file and splice an
@@ -376,6 +396,10 @@ func moduleStampPath(opts Options) string {
 
 type compiler struct {
 	file string
+	// assetReadsUnavailable is non-empty in source-only environments such as
+	// the browser playground. resolveOneSVG checks it before touching filepath
+	// or SVGCache, so an asset reference can never reach os.ReadFile there.
+	assetReadsUnavailable string
 
 	// svgCache memoizes {#svg} asset reads + scans for the whole build. Nil is
 	// valid and means "read and scan every time" (pzlc standalone, goldens).

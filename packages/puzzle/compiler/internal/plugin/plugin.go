@@ -185,10 +185,12 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 		if sec.StylesScoped {
 			// Scoped styles (v1.27, D59): wrap the verbatim block in a native
 			// @scope rule keyed by the SAME scope id codegen stamped on the root
-			// (codegen.ScopeID over the same app-relative `name`), so the rule and
-			// the data-<scopeId> attribute always agree. Aggregation/sorting/
-			// pruning and the Tailwind pipeline are untouched — @scope is plain CSS.
-			out.cssBody = "@scope ([data-" + codegen.ScopeID(name) + "]) {\n" + sec.Styles + "\n}"
+			// (codegen.ScopedCSS over the same app-relative `name`), so the rule and
+			// the data-<scopeId> attribute always agree — and the playground's WASM
+			// compiler, which cannot import this package, emits the same bytes from
+			// the same helper. Aggregation/sorting/pruning and the Tailwind pipeline
+			// are untouched — @scope is plain CSS.
+			out.cssBody = codegen.ScopedCSS(name, sec.Styles)
 		}
 	}
 
