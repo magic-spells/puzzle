@@ -283,6 +283,11 @@ import {
 	validateTopLevelPath,
 } from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
+import {
+	hasLazyRouteViews,
+	resolveRouteViews,
+	validateRouteView,
+} from './lazy.js';
 import { devtoolsRouteCommit } from '../devtools.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
 import { reportError } from '../errors.js';
@@ -524,14 +529,18 @@ export class Router {
 				// position (D19). Its fullPaths key '*' is unique and never a regex.
 				validateTransitionMode(route.transitionMode, 'the catch-all route');
 				validateGuard(route.guard, 'the catch-all route');
+				validateRouteView(route.view, 'view on the catch-all route');
+				if (route.layout != null) validateRouteView(route.layout, 'layout on the catch-all route');
 				this.#catchAll = {
 					chain: [route],
 					fullPaths: ['*'],
+					fullPath: '*',
 					regex: null,
 					paramNames: [],
 					layout: route.layout ?? null,
 					guards: route.guard ? [route.guard] : [],
 				};
+				finishEntry(this.#catchAll);
 				continue;
 			}
 			walkRouteTree(route, this.#routes, makeEntry);
@@ -1220,6 +1229,46 @@ export class Router {
 			}
 		}
 
+		// Resolve the matched route's explicit lazy markers (D163) only AFTER every
+		// guard allowed the navigation — a blocked or redirected route never downloads
+		// — and before a view/layout constructor or data() can run. resolveRouteViews
+		// starts the whole chain + layout together; each marker memoizes fulfillment
+		// and shares its in-flight promise, while a rejection is cleared so retry
+		// reaches the loader again.
+		//
+		// A route with NO markers never enters this branch: makeEntry precomputed its
+		// class list once, at route-compile time, so the whole pipeline below reads
+		// `viewClasses[i]` while a lazy-free navigation stays byte-for-byte the
+		// synchronous path it was — no added array, no added microtask (the same
+		// reason the guard block above is skipped when a route declares none).
+		let viewClasses = entry.viewClasses;
+		let LayoutClass = entry.layout;
+		if (entry.hasLazy) {
+			let resolvedViews;
+			try {
+				resolvedViews = await resolveRouteViews(entry);
+			} catch (err) {
+				const info = reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: to },
+					'[puzzle] lazy route view failed to load:',
+					err
+				);
+				// Pre-commit failure, exactly like the data() failure below: no fresh view
+				// exists yet, so URL, history and the mounted tree are all untouched and
+				// this is a plain failed push (D61).
+				this.#recoverFailedNavigation(token);
+				if (retryView && token === this.#token) {
+					await retryView.__retryErrorView?.(err, info);
+				}
+				return;
+			}
+			if (token !== this.#token) return;
+			viewClasses = resolvedViews.views;
+			LayoutClass = resolvedViews.layout;
+		}
+
 		// keep = shared chain PREFIX length by node object identity. Reused
 		// ancestors keep their instances; everything from `keep` down is fresh.
 		// A chain containing a failed routed view can reuse nothing: keep stays 0
@@ -1251,7 +1300,7 @@ export class Router {
 		const reusedViews = cur ? cur.views.slice(0, keep) : [];
 		const freshViews = [];
 		for (let i = keep; i < entry.chain.length; i++) {
-			freshViews.push(new entry.chain[i].view(this.#ctx));
+			freshViews.push(new viewClasses[i](this.#ctx));
 		}
 
 		// Layout is ROOT-only: reuse the instance iff its class matches (a shared
@@ -1262,12 +1311,12 @@ export class Router {
 			cur.layout &&
 			!pendingLayoutOut &&
 			!cur.layoutInvalid &&
-			cur.layoutClass === entry.layout
+			cur.layoutClass === LayoutClass
 		);
 		const layout = reuseLayout
 			? cur.layout
-			: entry.layout
-				? new entry.layout(this.#ctx)
+			: LayoutClass
+				? new LayoutClass(this.#ctx)
 				: null;
 
 		// LOAD (pre-commit, parallel, D19 gate). Fresh views preload (created +
@@ -1479,6 +1528,7 @@ export class Router {
 					views,
 					keys: cur.keys,
 					layout,
+					layoutClass: LayoutClass,
 					scroll,
 					// D146: the whole chain was prepared above; #commitState commits every
 					// prepared ancestor immediately after #state, still adjacent to
@@ -1515,7 +1565,7 @@ export class Router {
 			let childVnode = null;
 			for (let i = entry.chain.length - 1; i >= 0; i--) {
 				const vnode = new ViewNode(
-					entry.chain[i].view,
+					viewClasses[i],
 					{ key: keys[i] },
 					childVnode ? [childVnode] : []
 				);
@@ -1538,7 +1588,7 @@ export class Router {
 			) {
 				let takeoverVnode = rootVnode;
 				if (layout) {
-					takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
+					takeoverVnode = new ViewNode(LayoutClass, {}, [rootVnode]);
 					takeoverVnode.instance = layout;
 				}
 				const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
@@ -1570,6 +1620,7 @@ export class Router {
 				views,
 				keys,
 				layout,
+				layoutClass: LayoutClass,
 				reuseLayout,
 				keep,
 				rootVnode,
@@ -2157,7 +2208,7 @@ export class Router {
 			views: next.views,
 			keys: next.keys,
 			layout: next.layout,
-			layoutClass: next.entry.layout,
+			layoutClass: next.layoutClass,
 			chainInvalid:
 				layoutInvalid || !!next.chainInvalid || next.views.some((view) => view.isDestroyed),
 			layoutInvalid,
@@ -2927,6 +2978,15 @@ function makeEntry(chain, fullPaths) {
 		validateTransitionMode(node.transitionMode, `route "${node.path}"`);
 		validateGuard(node.guard, `route "${node.path}"`);
 	});
+	// Preserve the established path/layout/guard diagnostic precedence above.
+	// View-class validation is new with lazy(), so it runs only after the whole
+	// chain has passed those older structural checks.
+	chain.forEach((node, index) => {
+		validateRouteView(node.view, `view on route ${JSON.stringify(node.path)}`);
+		if (index === 0 && node.layout != null) {
+			validateRouteView(node.layout, `layout on route ${JSON.stringify(node.path)}`);
+		}
+	});
 	// A DECLARED trailing slash is as insignificant as an incoming one: #match strips
 	// one from every pathname it tests, so a route compiled verbatim from '/docs/'
 	// would have a regex nothing could ever reach. Strip it once here (never from the
@@ -2957,7 +3017,7 @@ function makeEntry(chain, fullPaths) {
 			return escapeRegExp(normalizeRoutePath(seg));
 		})
 		.join('/');
-	return {
+	const entry = {
 		chain,
 		fullPaths,
 		fullPath: leafPath,
@@ -2967,6 +3027,20 @@ function makeEntry(chain, fullPaths) {
 		layout: chain[0].layout ?? null,
 		guards: chain.map((node) => node.guard).filter(Boolean),
 	};
+	finishEntry(entry);
+	return entry;
+}
+
+/**
+ * Settle an entry's D163 class list ONCE, at route-compile time. `hasLazy` picks
+ * the navigation path; a lazy-free entry also gets its `viewClasses` array here so
+ * #navigate never allocates one per navigation. A lazy entry leaves it undefined —
+ * resolveRouteViews builds the array each time, since a marker's fulfillment can
+ * arrive after this runs.
+ */
+function finishEntry(entry) {
+	entry.hasLazy = hasLazyRouteViews(entry);
+	entry.viewClasses = entry.hasLazy ? undefined : entry.chain.map((node) => node.view);
 }
 
 // ---- dev-only warnings ------------------------------------------------------

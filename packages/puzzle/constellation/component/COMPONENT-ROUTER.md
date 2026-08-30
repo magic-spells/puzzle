@@ -8,6 +8,7 @@ connections:
   - COMPONENT-MORPH
   - COMPONENT-SSG
   - FILE-ROUTER
+  - DECISION-D163-LAZY-ROUTE-VIEWS
 notes:
   - kind: gotcha
     text: >-
@@ -59,9 +60,14 @@ Children use relative paths; empty children are index routes; layouts are
 top-level only; merged params reach every view; nearest leaf metadata wins for
 title and transition settings. Top-level `*` is the catch-all. Duplicate params,
 absolute child paths, nested catch-alls/layouts, invalid transition modes,
-non-function guards, and invalid base/memory config fail at construction. Each
+non-function guards, a `view`/`layout` that is neither a `PuzzleView` subclass
+nor a `lazy()` marker (D163 — a bare function gets its own message steering to
+`lazy()`; this check runs after the older structural ones so their diagnostics
+keep precedence), and invalid base/memory config fail at construction. Each
 leaf entry compiles its inherited guard chain (`entry.guards`, root→leaf,
-catch-all included; D87).
+catch-all included; D87), and settles its view/layout class list once: an entry
+with no `lazy()` marker carries a precomputed class array, so nothing about the
+lazy path costs a lazy-free app anything per navigation.
 
 **The canonical internal form of a path is percent-encoded** — the form
 `location.pathname` reports, which is the one input the router cannot change.
@@ -91,8 +97,24 @@ frozen snapshots, `from` null on nav #0), token-rechecked across awaits.
 a string verdict redirects through public `replace()` (denied URL never enters
 history; ten guard redirects without a commit trip the cycle cap, reset in
 `#commitState`). An empty guard chain adds no await — unguarded navigation
-keeps its synchronous path to construction. The router then computes the
-shared route-node prefix, preloads fresh views, prepares reused ancestors
+keeps its synchronous path to construction.
+
+Lazy route views resolve next ([[DECISION-D163-LAZY-ROUTE-VIEWS]]), and this
+ordering is the contract: only once every guard has ALLOWED the navigation does
+any `lazy()` marker in the matched chain start loading, so a blocked or
+redirected route never downloads its code. All markers in the chain — every
+level's view plus the top-level layout — start together and settle through one
+`Promise.all`, before the reuse calculation (so layout reuse compares resolved
+classes), before any constructor, and before any `data()`. A loader rejection
+is an ordinary pre-commit failure: it reports through `onError` as the existing
+`navigation` phase, runs the shared failed-navigation recovery, and leaves URL,
+history, and the mounted tree untouched, so `errorView` retry re-enters the
+normal same-location rebuild and re-invokes the loader. An entry with no
+markers skips this branch entirely and stays byte-for-byte the synchronous path
+it was.
+
+The router then computes the shared route-node prefix, preloads fresh views,
+prepares reused ancestors
 (D146 — run in the gate, committed with the navigation)
 with one frozen
 `{ path, pathname, query, hash, route, params, chain }` snapshot (parsed once

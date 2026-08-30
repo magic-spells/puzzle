@@ -1420,6 +1420,60 @@ func TestSplittingOffByDefault(t *testing.T) {
 	}
 }
 
+// TestLazyRouteBuildSplittingModes proves the public lazy() route spelling is a
+// real esbuild split point when opted in, and remains functional as an inlined
+// dynamic import when splitting is off.
+func TestLazyRouteBuildSplittingModes(t *testing.T) {
+	requireSSGRuntime(t)
+	for _, tt := range []struct {
+		name      string
+		splitting bool
+		config    string
+	}{
+		{
+			name:      "splitting on emits the route view as a chunk",
+			splitting: true,
+			config:    "export default { build: { splitting: true } };\n",
+		},
+		{
+			name:   "splitting off inlines the route view",
+			config: "export default { build: { splitting: false } };\n",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeSSGFixture(t, lazyRouteFixture(tt.config))
+			if err := Build(root, Options{Development: false}); err != nil {
+				t.Fatalf("lazy-route SPA Build failed: %v", err)
+			}
+
+			appJS := readFile(t, filepath.Join(root, "dist", "app.js"))
+			chunks := globChunks(t, filepath.Join(root, "dist", chunksDirName))
+			if tt.splitting {
+				if strings.Contains(appJS, lazyRouteViewMarker) {
+					t.Fatal("lazy route view was inlined into app.js despite build.splitting")
+				}
+				found := false
+				for _, chunk := range chunks {
+					if strings.Contains(readFile(t, chunk), lazyRouteViewMarker) {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("no dist/%s chunk contains the lazy route view", chunksDirName)
+				}
+				return
+			}
+
+			if len(chunks) != 0 {
+				t.Fatalf("splitting-off lazy route emitted %d chunk(s), want none", len(chunks))
+			}
+			if !strings.Contains(appJS, lazyRouteViewMarker) {
+				t.Fatal("splitting-off app.js does not contain the inlined lazy route view")
+			}
+		})
+	}
+}
+
 // TestStaticModeLeavesNoOrphanChunks proves the static-mode force-off: the SPA
 // pass's output is discarded in static mode (app.js is deleted before the swap),
 // so splitting it would strand chunks nothing imports.

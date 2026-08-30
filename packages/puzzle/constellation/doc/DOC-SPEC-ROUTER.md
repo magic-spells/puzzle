@@ -288,6 +288,7 @@ Client-side navigation middleware (D87). Any route node — root, child, or the 
 
 ## 51. Router focus management + route announcement: `focusBehavior` (v1.56)
 
+
 After every committed navigation the router moves focus to the incoming view and announces the new title (D93) — the runtime half of the accessibility story §43 started at compile time. `focusBehavior` mirrors `scrollBehavior` (§14): omit for the default, `false` to opt out entirely, a function to choose the target.
 
 - **Where it runs.** In `#commitState`, the same synchronous post-mount / pre-paint window that owns scroll, and **strictly after** the scroll block so the window position is final first.
@@ -299,3 +300,26 @@ After every committed navigation the router moves focus to the incoming view and
 - **`push`, `replace`, and `pop` all move focus.** Browsers do not restore focus for client-side navigation. *(Amended, D135: a **params-only replace** — the committed leaf is reused, `keep === chain.length` — moves no focus and makes no announcement. It is §44's URL-backed transient-state churn — a filter keystroke rewriting `?q=` — not a route change; focusing the leaf root stole the input's focus on every character. This is the focus half of §44's "replace never touches scroll by default". Params-only pushes still take the normal focus + announcement path.)*
 - **A custom function that declines focus still announces** — the route changed. Focus is applied before the announcement, because a polite update issued immediately before a focus change is routinely dropped by assistive tech. A throw is logged and treated as falsy, matching §14's posture.
 - **Output modes:** `output: 'static'` pages have no router (§36), so they get neither focus management nor a live region.
+
+## 62. Lazy route views: `lazy()` (v1.77)
+
+A route's `view` or `layout` may be a **loader** instead of a class, so that class downloads on first navigation rather than riding in the initial bundle (D163). This is the route-level counterpart to §59's dependency-level `build.splitting`, and it composes with it: `lazy()` is the authoring seam, `build.splitting` decides whether the loader's `import()` becomes its own chunk.
+
+```js
+import { lazy } from '@magic-spells/puzzle';
+
+export default [
+  { path: '/admin', view: lazy(() => import('./views/Admin.pzl')), layout: DefaultLayout },
+];
+```
+
+- **`lazy(loader)` returns an opaque branded marker.** It is a frozen object registered in a module-private WeakMap; membership is the only test, so nothing can forge one structurally. `loader` must be a zero-argument function returning a promise; the promise may resolve to a module namespace (its `default` export is used — a namespace without one is an error naming the module and the fix) or directly to a `PuzzleView` subclass.
+- **A bare function in a view position is an error, not a loader.** Route compilation accepts only a `PuzzleView` subclass or a marker; a function gets a message steering to `lazy()`, and every other value gets one naming what it is. Puzzle does not guess whether a function is a class or a loader — the same posture §9's `routerMode` takes with a mode string (D159). This validation runs after the existing path/layout/guard/transition-mode checks, so their diagnostics keep precedence.
+- **Accepted anywhere a view class is:** top-level routes, nested children, index routes, the catch-all, and the top-level `layout`.
+- **Resolution happens after guards, before construction.** In the navigation pipeline (§9), markers resolve only once every inherited guard (§48) has allowed the navigation, and before the chain-prefix reuse calculation, any view/layout constructor, or any `data()`. A blocked or redirected route therefore never downloads its code, and layout reuse compares the *resolved* class.
+- **The whole matched chain loads in parallel.** Every level's marker plus the layout's start before anything is awaited and settle through one `Promise.all` — a nested shell and its index pane load concurrently, not in chain order.
+- **A loader rejection is a failed push.** It happens before any fresh instance exists, so URL, history, and the mounted tree are untouched (§30). It reports through `onError` as the existing **`navigation`** phase — no new phase — so §60's `errorView` and its retry apply unchanged, and retry re-enters the ordinary same-location rebuild.
+- **Memoization is asymmetric.** Fulfillment is cached for the marker's lifetime (the app's, since markers live in the route table), so a second visit costs nothing. **Rejection is never cached**: the in-flight slot is cleared before any consumer of the shared promise observes the failure, so a retry always reaches the loader again. Concurrent navigations to routes sharing a marker share one in-flight load.
+- **No loading UI.** The previous view stays mounted until the incoming one commits, exactly as it does for a slow `data()`. The §16 skeleton path is not extended here — a skeleton cannot render before its own module has arrived.
+- **Prerender awaits the same markers** in both output modes (§36). Static mode's per-page module collection reads `__pzlModule` off the **resolved** class, so a lazily referenced view still ships in that page's bundle; static pages have no router and therefore no runtime laziness at all. Hybrid takeover is unaffected.
+- **A route table with no markers is unchanged.** Each entry's class list is settled once, at compile time, so a lazy-free navigation allocates nothing extra and adds no microtask — the same "costs nothing when unused" property §48's empty guard chain has.

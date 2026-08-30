@@ -9,9 +9,12 @@ connections:
   - FILE-DEV-SERVER
   - FILE-CONFIG
   - FILE-CLI
+  - FILE-ROUTER
   - COMPONENT-SSG
+  - COMPONENT-ROUTER
   - DECISION-D09-GO-ESBUILD-COMPILER
   - DECISION-D160-SPA-CODE-SPLITTING
+  - DECISION-D163-LAZY-ROUTE-VIEWS
 notes:
   - kind: state
     text: >-
@@ -75,16 +78,35 @@ Measured on a starter app with `chart.js` behind an `await import()`:
 `app.js` 263.4 KB → 63.6 KB (89.8 KB → 20.9 KB gzip), the 199.3 KB remainder in
 one chunk, total shipped bytes unchanged.
 
-## Phase 2 (separate design) — lazy route views
+## Phase 2 — shipped (v1.77, [[DECISION-D163-LAZY-ROUTE-VIEWS]])
 
-`view: () => import('./views/Heavy.pzl')` in routes.js: router awaits the
-import, loading/error states, prerender interplay. Not built; Phase 1 alone
-solves the heavy-dependency class of problem.
+Phase 1 splits what a *dependency* costs; phase 2 splits what a *route* costs.
+`lazy(loader)` from the package root marks a route `view` or `layout` as
+on-demand — `view: lazy(() => import('./views/Admin.pzl'))` — and the
+[[COMPONENT-ROUTER]] load phase resolves those markers after guards pass and
+before any constructor or `data()` runs. The two phases compose without
+touching each other: `lazy()` is the authoring seam, `build.splitting` is the
+packaging switch, and the loader's `import()` is an ordinary dynamic import
+that phase 1's machinery chunks (or, with splitting off, esbuild inlines while
+`lazy()` keeps working).
+
+The semantics that matter are on the decision card: a branded marker rather
+than bare-function detection, one parallel `Promise.all` across the matched
+chain, fulfillment memoized for the app's lifetime while rejection never is,
+loader failure as an ordinary failed push through the `navigation` error phase,
+and no new loading UI — the previous view holds until commit.
+
+`examples/blog` is the acceptance case: its whole `/settings` shell and three
+panes are lazy with `build: { splitting: true }`, emitting four named chunks,
+and `npm run build:blog` gates it in `pretest`.
 
 ## Interactions
 
 - SSG/hybrid: the prerender pass splits across page entries on its own, and
   Phase 1 does not double-handle it — SPA splitting applies to the browser
-  bundle pass only, and static mode forces it off.
+  bundle pass only, and static mode forces it off. Phase 2's markers are awaited
+  by the Node prerender pass in both modes, and static-mode per-page module
+  collection reads the stamp off the resolved class, so a lazily referenced
+  view still ships in its page bundle ([[COMPONENT-SSG]]).
 - `--fixtures`, dev proxy, live reload: unaffected; chunks are ordinary static
   outputs and `serve.Resolve` is name-agnostic.

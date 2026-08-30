@@ -133,6 +133,31 @@ one is *not* a compile error; it silently builds a different product.
 
 ## 0.7.0 — Unreleased
 
+### Added
+
+- **Route views and layouts can load on demand with `lazy()`.** Wrap a dynamic
+  import such as `view: lazy(() => import('./views/Admin.pzl'))` to defer that
+  class until its route passes guards. A matched route's lazy views and layout
+  resolve in parallel before construction and `data()`; successful loads are
+  shared and cached, and the current view remains mounted while they load — no
+  separate loading UI or skeleton path is introduced. Failures leave the
+  current URL and DOM intact and can be retried through the existing navigation
+  error path. With
+  `build.splitting: true` each import can become a chunk; splitting-off and
+  static builds inline the same lazy modules and keep their runtime/prerender
+  behavior. `examples/blog` splits its whole `/settings` section this way.
+
+### Changed
+
+- **A route's `view`/`layout` is validated when the route table compiles.** It
+  must be a `PuzzleView` subclass or a `lazy()` marker; anything else now throws
+  a named error from the `Router` constructor instead of failing later at
+  construction time. A bare loader function gets its own message pointing at
+  `lazy()`, because Puzzle deliberately does not guess whether a function is a
+  view class or a loader. If your app passed something that is not a
+  `PuzzleView` subclass in a view position, it fails at boot now rather than at
+  first navigation.
+
 ### Fixed
 
 - **`puzzle init --template todos` renders again.** The scaffolded app's `Todo`

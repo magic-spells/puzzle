@@ -28,6 +28,12 @@ import { normalizeRoutePath } from '../router/routePath.js';
  * @param {object} [route] an already-built static route snapshot. The static
  *   browser kernel supplies this so `ctx.router.current` and `this.route` share
  *   the exact same object during preload.
+ * @param {{views: Function[], layout: Function|null}} [resolved] classes already
+ *   resolved from the entry's `lazy()` markers (D163). ONLY the Node prerender
+ *   pass passes it — that is the one caller whose entries can hold markers, and
+ *   keeping the resolver out of this module keeps `lazy()` out of every static
+ *   page bundle (the static browser kernel zips real classes onto its route JSON,
+ *   so a marker can never reach it).
  * @returns {Promise<{ topVnode: import('../views/ViewNode.js').ViewNode,
  *   route: object, instances: object[] }>} `topVnode` is the assembled tree (the
  *   layout vnode when a layout wraps the chain, else the root view vnode);
@@ -35,13 +41,15 @@ import { normalizeRoutePath } from '../router/routePath.js';
  *   preloaded view/layout instances (root→leaf, layout last) so the caller can
  *   e.g. skipEnter() each one.
  */
-export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)) {
-	const { chain, layout: LayoutClass } = entry;
+export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry), resolved = null) {
+	const { chain } = entry;
+	const viewClasses = resolved ? resolved.views : chain.map((node) => node.view);
+	const LayoutClass = resolved ? resolved.layout : entry.layout;
 
 	// Preload each chain level's view (root → leaf), then the layout.
 	const instances = [];
-	for (const node of chain) {
-		const view = new node.view(ctx);
+	for (let i = 0; i < chain.length; i++) {
+		const view = new viewClasses[i](ctx);
 		await view.preload({ params: {}, props: {}, route });
 		instances.push(view);
 	}
@@ -50,7 +58,7 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 	// preloaded instance (mirrors router.js #navigate ~945-958).
 	let childVnode = null;
 	for (let i = chain.length - 1; i >= 0; i--) {
-		const vnode = new ViewNode(chain[i].view, {}, childVnode ? [childVnode] : []);
+		const vnode = new ViewNode(viewClasses[i], {}, childVnode ? [childVnode] : []);
 		vnode.instance = instances[i];
 		childVnode = vnode;
 	}

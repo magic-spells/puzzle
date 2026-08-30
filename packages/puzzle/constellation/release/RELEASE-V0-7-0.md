@@ -6,8 +6,10 @@ connections:
   - RELEASE-V0-6-0
   - DOC-RELEASE-SURFACE
   - FEATURE-AUTO-FETCHING-FINDS
+  - FEATURE-SPA-CODE-SPLITTING
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D162-MONOREPO-PACKAGES
+  - DECISION-D163-LAZY-ROUTE-VIEWS
   - DECISION-D76-CLI-UPGRADE
   - FLOW-RELEASE
 notes:
@@ -48,6 +50,14 @@ it usable is that **a committed `null` means the record does not exist**, never
 else in the design exists to protect that promise. The eager-seed idiom 0.6.0
 taught is retired, though a leftover seed still works.
 
+Alongside it, v1.77 lazy route views ([[DECISION-D163-LAZY-ROUTE-VIEWS]]) close
+the phase 2 D160 named when it shipped code splitting: `lazy(loader)` marks a
+route `view` or `layout` as on-demand, and the router resolves those markers
+after guards pass and before anything constructs. A gated route never
+downloads, a failed load is an ordinary failed push, and the previous view
+holds until the new one commits — there is no new loading UI, because a lazy
+route is just a slow route.
+
 The second thread is repo shape. [[DECISION-D162-MONOREPO-PACKAGES]] pulls the
 framework, the pieces registry, the DevTools extension, and the `.pzl`
 lint/format plugins into one repository under `packages/`, versioning as one
@@ -80,6 +90,15 @@ capability):**
 
 **Added:**
 
+- `lazy()` (D163), a new root export: `view: lazy(() => import('./X.pzl'))` in a
+  route or layout position defers that class until the route is navigated to
+  and its guards allow it. Markers across the matched chain resolve in
+  parallel, fulfillment is memoized for the app's lifetime while a rejection
+  never is (so retry re-invokes the loader), and a loader failure reports as
+  `phase: 'navigation'` with URL, history, and DOM untouched. `build.splitting`
+  (D160) turns each loader into a chunk; both prerender modes await the same
+  markers. `examples/blog` splits its `/settings` section as the acceptance
+  case.
 - `output: 'static'` pages carry the build's read state in a second inline
   island (versioned, omitted when the build settled nothing), so `mountStatic`
   does not refetch every collection and re-404 every id the build already
@@ -95,6 +114,14 @@ capability):**
   under emulation, so there is deliberately no `win32-arm64` package. The
   `puzzle dev` single-key shortcuts stay Unix-only and are simply absent there;
   Ctrl-C still stops the server.
+
+**Changed:**
+
+- A route's `view`/`layout` is validated when the route table compiles (D163):
+  it must be a `PuzzleView` subclass or a `lazy()` marker, and a bare loader
+  function gets its own message steering to `lazy()`. A value that is neither
+  used to fail later, at construction on first navigation; it now fails from
+  the `Router` constructor.
 
 **Fixed — data layer:**
 
@@ -167,9 +194,10 @@ capability):**
 - The darwin CLI binaries carry an `LC_UUID` load command; the build floor is
   Go 1.24.
 
-Sizes grew with the settle loop: roughly 20.6 KB gzip for hello-world and
-23.6 KB for todos, against 19.6 / 22.7 in 0.6.0. `release:prep` re-measures and
-fails on a stale banner.
+Sizes grew with the settle loop and again with `lazy()`: roughly 21.9 KB gzip
+for hello-world and 24.8 KB for todos, against 19.6 / 22.7 in 0.6.0.
+`release:prep` re-measures and fails on a stale banner — the README figures
+still read 20.6 / 23.6 and must be regenerated before ship.
 
 ## Upgrade notes
 
@@ -198,12 +226,19 @@ untouched.
   in `beforeMount({ store })`. An app-relative read is neither and fails the
   build with a diagnostic. A private API needs its credentials available to the
   build.
+- **A non-`PuzzleView` value in a route `view`/`layout` now throws at boot.**
+  Not a break for any working app — such a value would have failed at first
+  navigation anyway — but the failure moved earlier, to the `Router`
+  constructor, and a bare function is called out by name (D163).
 
 ## Still open before ship
 
 The matching `@magic-spells/puzzle-pieces` 0.7.0 publish (version-locked — it
 must land at or before the CLI release), `release:prep`, and the prose sweep.
-`DOC-RELEASE-SURFACE` still describes the 0.6.0 surface with a single
-forward-looking mention of tracked fault-in. The CHANGELOG's 0.7.0 section is
-close to complete but carries two stale claims and is missing the compiler,
-fragment-pop, local-model-fault, and `upgrade` hardening items listed above.
+`DOC-RELEASE-SURFACE` has been brought forward for D163 but still describes the
+0.6.0 surface elsewhere. The CHANGELOG's 0.7.0 section carries the lazy-route
+entries but is still missing the compiler, fragment-pop, local-model-fault, and
+`upgrade` hardening items listed above, and two of its claims went stale
+(date-only fields now serialize as `YYYY-MM-DD` via `CalendarDate#toJSON`;
+`upgrade` no longer falls through to "must be global"). The README size banner
+is stale by measurement and `release:prep` will fail on it.

@@ -47,8 +47,10 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## Package and application
 
+
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
-  `PuzzleValidationError`, and compiler support exports.
+  `PuzzleValidationError`, `lazy` (the D163 route-view loader marker), and
+  compiler support exports.
 - Subpaths: `@magic-spells/puzzle/adapter`, `/morph`, `/router-modes`, `/ssg`,
   `/static`, `/testing`, `/fixtures`, and `/puzzle-env`. (`/router-modes` exports
   `hashRouter()` and `memoryRouter({ initialPath })`, the opt-in router modes —
@@ -190,6 +192,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## Routing and motion
 
+
 - Path routing (the inline default, D159), hash, and memory modes; nested
   relative children; index routes; catch-all routes; merged params; top-level
   layouts; route titles + managed head metadata (`meta`
@@ -206,6 +209,18 @@ second specification. Decision cards hold rationale and git holds chronology.
   views construct or load — allow / block / redirect (replace semantics,
   loop-capped). SPA-runtime only; hybrid/static prerender passes warn on
   guarded routes.
+- Lazy route views (D163): `lazy(loader)` from the package root marks a route
+  `view` or `layout` as on-demand —
+  `view: lazy(() => import('./views/Admin.pzl'))`. The marker is branded, so a
+  bare loader function in a view position is a construction-time error naming
+  `lazy()`; so is any other non-`PuzzleView` value. Markers resolve only after
+  every guard allows the navigation (a blocked route never downloads), all in
+  parallel across the matched chain, before construction and `data()`.
+  Fulfillment is memoized for the app's lifetime and rejection never is, so
+  retry re-invokes the loader; a failed load is an ordinary failed push
+  reported as `phase: 'navigation'`, with URL and DOM untouched and no new
+  loading UI — the previous view holds. Both prerender modes await the same
+  markers and static per-page bundles carry the resolved classes.
 - The route snapshot carries `path`, `pathname`, parsed frozen `query`
   (repeated keys → arrays), and `hash` (D83); query never merges into params.
 - Load-then-commit navigation with chain-prefix reuse and atomic
@@ -341,11 +356,14 @@ Event handlers and formatters surface uncaught.
 
 ## Deliberately not shipped
 
-No SSR server, hydration, lazy route loading (code splitting itself is the
-opt-in `build.splitting`, D160),
-named-route navigation, scoped slots, array refs, built-in virtual list,
-per-module hot swap, Sass pipeline, event bus, global keyboard API, app-level
-computed/settings/methods, or app-config devtools hook (the D100 bridge is
-extension-injected, not config). Query fault-in left this list with D161:
-tracked `findOne`/`findMany` now fault in automatically through the adapter
-capability (in the codebase for 0.7.0).
+
+No SSR server, hydration, named-route navigation, scoped slots, array refs,
+built-in virtual list, per-module hot swap, Sass pipeline, event bus, global
+keyboard API, app-level computed/settings/methods, or app-config devtools hook
+(the D100 bridge is extension-injected, not config). Two entries left this list
+in 0.7.0: query fault-in with D161 (tracked `findOne`/`findMany` now fault in
+automatically through the adapter capability) and lazy route loading with D163
+(`lazy()` marks a route `view`/`layout` as on-demand; `build.splitting`, D160,
+remains the separate opt-in that makes each one a chunk). Route-level *link
+preloading* — prefetching a route's chunk on hover or viewport entry — is still
+not shipped.

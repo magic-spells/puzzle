@@ -20,6 +20,7 @@ import {
 	Puzzle,
 	PuzzleValidationError,
 	displayValue,
+	lazy,
 } from '@magic-spells/puzzle';
 import type {
 	PuzzleAppConfig,
@@ -39,6 +40,8 @@ import type {
 	FocusBehavior,
 	PuzzleErrorInfo,
 	PuzzleErrorViewProps,
+	LazyView,
+	PuzzleViewConstructor,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -281,6 +284,27 @@ const routes: Route[] = [
 		children: [{ path: 'edit', name: 'todo-edit', view: TodoListView, guard: requireAdmin }],
 	},
 ];
+
+// D163: lazy route views/layouts are explicit branded markers. A loader may
+// resolve to a class directly or to the module-namespace shape import() returns.
+const lazyClass: LazyView = lazy(async () => TodoListView);
+const lazyNamespace: LazyView = lazy(async () => ({ default: TodoListView }));
+const lazyConstructor: PuzzleViewConstructor = TodoListView;
+void lazyConstructor;
+routes.push({ path: '/lazy', view: lazyClass, layout: lazyNamespace });
+
+// A bare loader never occupies a view position — lazy() is the explicit API.
+// @ts-expect-error a loader function is not a PuzzleView constructor or LazyView.
+routes.push({ path: '/bare-loader', view: async () => TodoListView });
+
+// The marker brand cannot be forged by a structural look-alike.
+// @ts-expect-error only lazy() produces LazyView.
+const forgedLazy: LazyView = {};
+void forgedLazy;
+
+// A module namespace must carry the route class as its default export.
+// @ts-expect-error named-only modules do not satisfy the lazy loader contract.
+lazy(async () => ({ NamedView: TodoListView }));
 
 const upcase: Formatter = (s: unknown) => String(s).toUpperCase();
 
