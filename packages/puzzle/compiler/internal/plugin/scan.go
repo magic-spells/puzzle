@@ -3,6 +3,7 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -47,6 +48,10 @@ type Usage struct {
 	HasFlip    bool
 	HasPortal  bool
 	HasRawAt   bool
+	// HasLazy is the one bit that does NOT come from a template: lazy() route
+	// views (D163) are declared in the app's JavaScript/TypeScript, so the walk
+	// reads those files too (see scanScriptUsage).
+	HasLazy bool
 }
 
 // Features are the build-wide DCE bits — one boolean per gated runtime module —
@@ -57,6 +62,7 @@ type Features struct {
 	Flip   bool
 	Portal bool
 	RawAt  bool
+	Lazy   bool
 }
 
 // Features projects the scan result onto the define bits. It is exported for
@@ -67,13 +73,22 @@ func (u Usage) Features() Features {
 		Flip:   u.HasFlip,
 		Portal: u.HasPortal,
 		RawAt:  u.HasRawAt,
+		Lazy:   u.HasLazy,
 	}
 }
 
 // ScanUsage walks scanRoot for first-party source usage that controls runtime
-// tree-shaking: it parses .pzl templates for formatter chains, flip attributes,
-// Portal nodes, and raw blocks. All are template facts, so only .pzl files are
-// read.
+// tree-shaking. Two kinds of file contribute:
+//
+//   - .pzl templates are fully parsed for formatter chains, flip attributes,
+//     Portal nodes, and raw blocks — all TEMPLATE facts.
+//   - .js/.mjs/.cjs/.jsx/.ts/.mts/.cts/.tsx modules are read as TEXT and pattern-
+//     matched for lazy() route views (D163). That is a SCRIPT fact — `lazy()` is
+//     called from routes.js, never from a template — so it is the one bit a
+//     template parse could never see. The match is deliberately loose (see
+//     scanScriptUsage); the cost of a false positive is one small module left in
+//     the bundle, and .pzl script sections are covered because a .pzl is read
+//     whole before it is split.
 //
 // The scan deliberately errs toward OVER-inclusion: it walks the whole project
 // (not just app/) so a component imported from a sibling directory still
@@ -105,6 +120,63 @@ func ScanFormatters(scanRoot string) (map[string]bool, error) {
 		return nil, err
 	}
 	return usage.Formatters, nil
+}
+
+// lazyCallRe matches a call to something NAMED lazy — `lazy(`, `lazy (`, and
+// `puzzle.lazy(` all count. It cannot match `lazyLoad(`, `isLazy(` or
+// `app_lazy(`: the `\b` and the immediate `(` pin the token exactly.
+var lazyCallRe = regexp.MustCompile(`\blazy\s*\(`)
+
+// puzzleImportRe matches the binding clause of an `import`/`export … from
+// '@magic-spells/puzzle'` statement, so a renamed binding
+// (`import { lazy as page } from …`) is still recognised as lazy usage even
+// though `page(` never looks like a lazy call. The clause of a module statement
+// contains no quote or semicolon, so excluding both keeps the match inside one
+// statement without needing a real parser.
+var puzzleImportRe = regexp.MustCompile(`(?s)\b(?:import|export)\b([^;'"]*)\bfrom\s*['"]@magic-spells/puzzle['"]`)
+
+var lazyIdentRe = regexp.MustCompile(`\blazy\b`)
+
+// scriptScanExts are the source extensions read as TEXT for script-level usage.
+// .pzl is not here — a template file is read and parsed by scanFileUsage, which
+// runs the same text match over its whole source so a `lazy()` call inside a
+// .pzl <script> section counts too.
+var scriptScanExts = map[string]bool{
+	".js":  true,
+	".mjs": true,
+	".cjs": true,
+	".jsx": true,
+	".ts":  true,
+	".mts": true,
+	".cts": true,
+	".tsx": true,
+}
+
+// scanScriptUsage answers the script-level feature questions from a file's raw
+// bytes. Today that is one bit: does this module use D163 `lazy()` route views?
+//
+// Detection is regex-level ON PURPOSE. The compiler never parses script bodies
+// (a public invariant — .pzl scripts are real JS/TS bytes Go does not rewrite),
+// and the bias here is the same as the rest of the scan: a false positive
+// leaves ~0.9 KB gzip of resolver in a bundle that does not need it, while a
+// false negative compiles the resolver OUT of an app that does, breaking every
+// lazy route. So two independent rules both count, and either one is enough:
+//
+//   - a `lazy(`-shaped call anywhere in the file, however the name was obtained
+//     (bare import, namespace import, dynamic import destructuring);
+//   - a `lazy` specifier in an import/export clause from '@magic-spells/puzzle',
+//     which covers the renamed binding a call-shape match cannot see.
+func scanScriptUsage(src string, usage *fileUsage) {
+	if lazyCallRe.MatchString(src) {
+		usage.hasLazy = true
+		return
+	}
+	for _, m := range puzzleImportRe.FindAllStringSubmatch(src, -1) {
+		if lazyIdentRe.MatchString(m[1]) {
+			usage.hasLazy = true
+			return
+		}
+	}
 }
 
 // skipScanDir reports whether a directory should be pruned from the usage scan:

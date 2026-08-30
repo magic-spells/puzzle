@@ -62,6 +62,7 @@ afterEach(() => {
 		setErrorConfig(context, null, null);
 	}
 	document.body.replaceChildren();
+	delete globalThis.__PUZZLE_HAS_LAZY__;
 });
 
 describe('lazy route views', () => {
@@ -299,5 +300,48 @@ describe('lazy route views', () => {
 					},
 				])
 		).toThrow(/wrap dynamic imports with lazy\(\(\) => import/);
+	});
+});
+
+// The D89 usage gate. The compiler defines __PUZZLE_HAS_LAZY__ false for an app
+// whose source never calls lazy(), which folds every router→lazy.js reference
+// dead so the resolver tree-shakes out. Here the define is a global, so the same
+// probes are exercised without a build.
+describe('__PUZZLE_HAS_LAZY__ gate', () => {
+	it('resolves lazy routes when the define is on', async () => {
+		globalThis.__PUZZLE_HAS_LAZY__ = true;
+		const Lazy = lazy(async () => ({ default: LazyView }));
+		const { router, el } = await boot([
+			{ path: '/', view: HomeView },
+			{ path: '/late', view: Lazy },
+		]);
+
+		await router.push('/late');
+		expect(el.querySelector('.lazy')).not.toBeNull();
+	});
+
+	// The scan cannot see a marker produced inside node_modules (it walks
+	// first-party source only), so a compiled-out build can still be handed one.
+	// It must fail loudly at route-compile time rather than mount the opaque
+	// marker as if it were a view class.
+	it('rejects a marker that reaches the route table with the define off', () => {
+		const Lazy = lazy(async () => ({ default: LazyView }));
+		globalThis.__PUZZLE_HAS_LAZY__ = false;
+		expect(() => new Router([{ path: '/', view: Lazy }])).toThrow(
+			/lazy\(\) support was compiled out/
+		);
+	});
+
+	// Validation itself is NOT part of what the gate removes — it lives in
+	// router.js precisely so a lazy-free app keeps its route-table diagnostics.
+	it('keeps ordinary route-view validation with the define off', async () => {
+		globalThis.__PUZZLE_HAS_LAZY__ = false;
+		expect(
+			() =>
+				new Router([{ path: '/', view: () => import('./fixtures/lazy-route-named-only.js') }])
+		).toThrow(/wrap dynamic imports with lazy\(\(\) => import/);
+
+		const { el } = await boot([{ path: '/', view: HomeView }]);
+		expect(el.querySelector('.home')).not.toBeNull();
 	});
 });

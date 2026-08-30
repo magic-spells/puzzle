@@ -138,6 +138,30 @@ func TestUsageScannerMatchesColdScan(t *testing.T) {
 		t.Fatal("raw removed by an edit was still reported")
 	}
 
+	// The memo covers SCRIPT files too, not just templates: lazy() lives in
+	// routes.js, so an edit there has to move HasLazy in both directions.
+	routes := filepath.Join(root, "app", "routes.js")
+	writePZL(t, routes, "export default [{ path: '/', view: A }];\n")
+	u = assertSame("plain routes module")
+	if u.HasLazy {
+		t.Fatal("a lazy-free routes module reported HasLazy")
+	}
+
+	writePZL(t, routes, "import { lazy } from '@magic-spells/puzzle';\nexport default [{ path: '/', view: lazy(() => import('./views/A.pzl')) }];\n")
+	u = assertSame("routes module adds lazy")
+	if !u.HasLazy {
+		t.Fatal("lazy() added to routes.js was not seen")
+	}
+
+	writePZL(t, routes, "export default [{ path: '/', view: A }];\n")
+	u = assertSame("routes module drops lazy")
+	if u.HasLazy {
+		t.Fatal("lazy() removed from routes.js was still reported")
+	}
+	if err := os.Remove(routes); err != nil {
+		t.Fatal(err)
+	}
+
 	// A brand new file contributes.
 	c := filepath.Join(root, "app", "views", "C.pzl")
 	writePZL(t, c, flipView)

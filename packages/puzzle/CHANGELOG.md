@@ -146,6 +146,13 @@ one is *not* a compile error; it silently builds a different product.
   `build.splitting: true` each import can become a chunk; splitting-off and
   static builds inline the same lazy modules and keep their runtime/prerender
   behavior. `examples/blog` splits its whole `/settings` section this way.
+  An app that never calls `lazy()` does not pay for the feature: the build's
+  usage scan (D89) sets `__PUZZLE_HAS_LAZY__` false and the resolver
+  tree-shakes out, worth ~0.6 KB gzip off every lazy-free SPA. Detection now
+  reads the app's `.js`/`.ts` modules as well as its templates, since `lazy()`
+  is called from `routes.js` — as always the scan skips `node_modules` and
+  build output, and a marker that reaches the route table anyway fails loudly
+  at route-compile time rather than mounting as if it were a view class.
 
 ### Changed
 

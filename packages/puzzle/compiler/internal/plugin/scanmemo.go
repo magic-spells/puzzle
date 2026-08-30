@@ -5,7 +5,8 @@ package plugin
 // ScanUsage is a serial walk that READS AND FULLY PARSES every .pzl in the
 // project (SplitSections + ParseTemplate, plus ParseSkeleton when present) to
 // answer the formatter union plus the D85 flip, D144 Portal, and D150 raw-block
-// feature facts. All are properties of the source
+// feature facts, and additionally READS (never parses) every .js/.ts-family
+// module for the D163 lazy() bit. All are properties of the source
 // tree, and a one-shot build runs the walk once — fine.
 //
 // A dev session runs it on EVERY rebuild, over a tree in which exactly one file
@@ -41,6 +42,7 @@ type fileUsage struct {
 	hasFlip    bool
 	hasPortal  bool
 	hasRawAt   bool
+	hasLazy    bool
 }
 
 // scanStamp identifies a file version cheaply enough to check without reading.
@@ -66,7 +68,7 @@ func NewUsageScanner() *UsageScanner {
 	return &UsageScanner{entries: map[string]scanEntry{}}
 }
 
-// Scan walks scanRoot and returns the project-wide Usage, parsing only the .pzl
+// Scan walks scanRoot and returns the project-wide Usage, re-reading only the
 // files whose mtime or size changed since the previous Scan. It follows
 // ScanUsage's contract exactly — same walk, same pruned directories, same
 // fail-soft handling of unreadable or unparseable files — so the two are
@@ -93,7 +95,8 @@ func (s *UsageScanner) Scan(scanRoot string) (Usage, error) {
 			}
 			return nil
 		}
-		if filepath.Ext(path) != ".pzl" {
+		ext := filepath.Ext(path)
+		if ext != ".pzl" && !scriptScanExts[ext] {
 			return nil
 		}
 		seen[path] = true
@@ -137,6 +140,9 @@ func mergeFileUsage(usage *Usage, fu fileUsage) {
 	if fu.hasRawAt {
 		usage.HasRawAt = true
 	}
+	if fu.hasLazy {
+		usage.HasLazy = true
+	}
 }
 
 // scanFileUsage reads and parses one .pzl and returns its contribution. It is
@@ -153,6 +159,19 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 	if strings.TrimSpace(raw) == "" {
 		return fileUsage{}
 	}
+
+	// Script-level facts come from the RAW bytes and apply to both kinds of file:
+	// a plain .js/.ts module, and a .pzl whose <script> section calls lazy(). This
+	// runs before the template parse so a .pzl the parser rejects still
+	// contributes its script usage — the fail-soft path must not lose a bit whose
+	// false negative breaks the app.
+	one := fileUsage{}
+	scanScriptUsage(raw, &one)
+
+	if filepath.Ext(path) != ".pzl" {
+		return one
+	}
+
 	name := filepath.ToSlash(path)
 	if rel, err := filepath.Rel(root, path); err == nil && !strings.HasPrefix(rel, "..") {
 		name = filepath.ToSlash(rel)
@@ -160,26 +179,28 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 
 	sec, err := parser.SplitSections(raw, name)
 	if err != nil {
-		return fileUsage{}
+		return one
 	}
 	tree, err := parser.ParseTemplate(sec, name)
 	if err != nil {
-		return fileUsage{}
+		return one
 	}
 
-	one := Usage{Formatters: map[string]bool{}}
-	collectUsage(tree, &one, allow)
+	tpl := Usage{Formatters: map[string]bool{}}
+	collectUsage(tree, &tpl, allow)
 	// Codegen also emits formatter calls inside renderSkeleton(), so a builtin
 	// used ONLY in a skeleton must be seeded too.
 	if sec.HasSkeleton {
 		if skel, serr := parser.ParseSkeleton(sec, name); serr == nil && skel != nil {
-			collectUsage(skel, &one, allow)
+			collectUsage(skel, &tpl, allow)
 		}
 	}
 
-	fu := fileUsage{hasFlip: one.HasFlip, hasPortal: one.HasPortal, hasRawAt: one.HasRawAt}
-	for formatter := range one.Formatters {
-		fu.formatters = append(fu.formatters, formatter)
+	one.hasFlip = tpl.HasFlip
+	one.hasPortal = tpl.HasPortal
+	one.hasRawAt = tpl.HasRawAt
+	for formatter := range tpl.Formatters {
+		one.formatters = append(one.formatters, formatter)
 	}
-	return fu
+	return one
 }

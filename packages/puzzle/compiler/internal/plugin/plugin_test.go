@@ -540,11 +540,145 @@ export default class Home extends PuzzleView {}
 	}
 }
 
-// The scan reads .pzl templates ONLY. Managed-head field names in plain .js/.ts
-// modules used to flip a HasHeadTags bit here; that bit is gone — the managed
-// tags are emitted exclusively by the build-time SSG injector, so there is no
-// runtime module left to gate. Route meta must therefore leave the scan's
-// remaining bits alone, and a JS/TS module can never contribute usage at all.
+// D163 lazy() route views are declared in app SCRIPTS, not templates, so the
+// walk reads .js/.ts-family files too. The bias is the scan's usual one: a false
+// positive leaves the resolver in a bundle that does not need it, a false
+// negative compiles it OUT of an app whose lazy routes then cannot load. Both
+// detection rules are covered here, plus the decoys that must NOT trip it.
+func TestScanUsageLazy(t *testing.T) {
+	const view = `<puzzle-view><h1>Home</h1></puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`
+	for _, tt := range []struct {
+		name  string
+		files map[string]string
+		want  bool
+	}{
+		{
+			name:  "no lazy anywhere",
+			files: map[string]string{"app/routes.js": "export default [{ path: '/', view: Home }];\n"},
+		},
+		{
+			name: "lazy() call in routes.js",
+			files: map[string]string{"app/routes.js": `import { lazy } from '@magic-spells/puzzle';
+export default [{ path: '/late', view: lazy(() => import('./views/Late.pzl')) }];
+`},
+			want: true,
+		},
+		{
+			name: "lazy() call in a TypeScript routes module",
+			files: map[string]string{"app/routes.ts": `import { lazy } from '@magic-spells/puzzle';
+export default [{ path: '/late', view: lazy(() => import('./views/Late.pzl')) }] as const;
+`},
+			want: true,
+		},
+		{
+			// The call-shape rule cannot see a renamed binding, so the import clause
+			// is matched independently. This is the false negative the two rules
+			// exist to prevent.
+			name: "renamed import specifier with no lazy( call",
+			files: map[string]string{"app/routes.js": `import { PuzzleApp, lazy as page } from '@magic-spells/puzzle';
+export default [{ path: '/late', view: page(() => import('./views/Late.pzl')) }];
+`},
+			want: true,
+		},
+		{
+			name: "multi-line import clause",
+			files: map[string]string{"app/routes.js": `import {
+  PuzzleApp,
+  lazy as page,
+} from '@magic-spells/puzzle';
+export default [{ path: '/late', view: page(() => import('./views/Late.pzl')) }];
+`},
+			want: true,
+		},
+		{
+			// Namespace access still reads as a lazy( call.
+			name:  "namespace call",
+			files: map[string]string{"app/routes.js": "import * as puzzle from '@magic-spells/puzzle';\nexport const r = puzzle.lazy(() => import('./views/Late.pzl'));\n"},
+			want:  true,
+		},
+		{
+			// A .pzl is read whole before it is split, so a lazy() call in its
+			// <script> section counts exactly like one in a plain module.
+			name: "lazy() inside a .pzl script section",
+			files: map[string]string{"app/views/Nested.pzl": `<puzzle-view><h1>Nested</h1></puzzle-view>
+<script>
+import { PuzzleView, lazy } from '@magic-spells/puzzle';
+export const child = lazy(() => import('./Deep.pzl'));
+export default class Nested extends PuzzleView {}
+</script>
+`},
+			want: true,
+		},
+		{
+			name:  "similar identifiers are not lazy calls",
+			files: map[string]string{"app/routes.js": "import { lazyLoad } from './util.js';\nexport const a = lazyLoad(1), b = isLazy(2), c = app_lazy(3);\n"},
+		},
+		{
+			// Same posture as flip/Portal: installed packages are outside the
+			// first-party walk, and the runtime fails loudly rather than silently
+			// when a marker still reaches the route table.
+			name:  "node_modules is pruned",
+			files: map[string]string{"node_modules/pkg/routes.js": "import { lazy } from '@magic-spells/puzzle';\nexport default [{ view: lazy(() => import('./P.pzl')) }];\n"},
+		},
+		{
+			name:  "build output is pruned",
+			files: map[string]string{"dist/app.js": "import { lazy } from '@magic-spells/puzzle';\nlazy(() => import('./P.pzl'));\n"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			files := map[string]string{"app/views/Home.pzl": view}
+			for rel, body := range tt.files {
+				files[rel] = body
+			}
+			root := writeApp(t, files)
+
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if usage.HasLazy != tt.want {
+				t.Errorf("HasLazy = %v, want %v", usage.HasLazy, tt.want)
+			}
+			// The script pass must not disturb the template bits.
+			if usage.HasFlip || usage.HasPortal || usage.HasRawAt {
+				t.Errorf("template bits moved: %+v", usage.Features())
+			}
+		})
+	}
+}
+
+// A .pzl the template parser REJECTS still contributes its script-level usage:
+// the parse failure is fail-soft by design, and losing the lazy bit there would
+// be exactly the false negative that breaks an app's lazy routes.
+func TestScanUsageLazySurvivesBrokenTemplate(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/views/Broken.pzl": `<puzzle-view>{#if oops}<p>broken</p></puzzle-view>
+<script>
+import { lazy } from '@magic-spells/puzzle';
+export const child = lazy(() => import('./Deep.pzl'));
+</script>
+`,
+	})
+
+	usage, err := ScanUsage(root)
+	if err != nil {
+		t.Fatalf("ScanUsage: %v", err)
+	}
+	if !usage.HasLazy {
+		t.Error("HasLazy = false — a broken template swallowed its script's lazy() usage")
+	}
+}
+
+// The scan parses .pzl TEMPLATES only; it reads .js/.ts modules as text for the
+// D163 lazy bit and nothing else. Managed-head field names in plain modules used
+// to flip a HasHeadTags bit here; that bit is gone — the managed tags are emitted
+// exclusively by the build-time SSG injector, so there is no runtime module left
+// to gate. Route meta must therefore leave every remaining bit alone.
 func TestScanUsageIgnoresNonTemplateSource(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/routes.ts": "export default [{ path: '/', meta: { title: 'Home', description: 'A page', canonical: '/', socialImage: '/card.png' } }];\n",
@@ -584,8 +718,9 @@ func TestPluginFeaturesCarryEveryUsageBit(t *testing.T) {
 		HasFlip:    true,
 		HasPortal:  true,
 		HasRawAt:   true,
+		HasLazy:    true,
 	})
-	want := Features{Flip: true, Portal: true, RawAt: true}
+	want := Features{Flip: true, Portal: true, RawAt: true, Lazy: true}
 	if got := pl.Features(); got != want {
 		t.Errorf("Features() = %+v, want %+v", got, want)
 	}
