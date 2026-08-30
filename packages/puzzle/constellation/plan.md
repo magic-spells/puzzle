@@ -25,7 +25,6 @@ decision cards explain why the contract has its current shape.
 
 ## Current state
 
-
 - **Published:** `0.1.0` (2026-07-21), `0.1.1` (interactive `puzzle init`
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
   skills` installer, D78/v1.45) are live on npm — MIT, five packages, manual
@@ -126,7 +125,8 @@ decision cards explain why the contract has its current shape.
   puzzle-pieces, puzzle-devtools, puzzle-eslint, and puzzle-prettier, all
   carrying the framework version; grammars stay in their own repos; absorbed
   repos are archived, never deleted.
-  The next free decision number is D164.
+- **Playground compiler Phase 1:** [[FEATURE-PLAYGROUND-WASM-COMPILER]] / [[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]] adds the esbuild-free parser+codegen WASM module, its synchronous JS globals, the pinned worker envelope, filesystem-free asset diagnostics, and size/dependency/smoke gates. The worker and UI remain later phases.
+- The next free decision number is D165.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
@@ -274,8 +274,10 @@ stays unscheduled); `<svelte:window>`-style global event bindings;
 per-subtree provide/inject;
 `puzzle check` / an LSP over the compiler's existing positioned diagnostics;
 i18n; `build --analyze`; deploy presets; Astro-style content
-collections; and a WASM playground. (`puzzle preview` left this list in 0.5.0
-— [[DECISION-D148-PREVIEW-AND-STATIC-DEV]]/v1.69. Dynamic components were
+collections; and the remaining WASM playground worker/UI phases — Phase 1's
+parser+codegen module is now [[FEATURE-PLAYGROUND-WASM-COMPILER]]. (`puzzle
+preview` left this list in 0.5.0 —
+[[DECISION-D148-PREVIEW-AND-STATIC-DEV]]/v1.69. Dynamic components were
 re-reviewed 2026-07-28 and stay cut: `{#if}`/`{#case}` over imported
 components covers the enumerable case, and compile-time import resolution
 makes an open-ended `is={}` real design work, not sugar.)
@@ -341,6 +343,7 @@ makes an open-ended `is={}` real design work, not sugar.)
 
 - [[COMPONENT-TEMPLATE-PARSER]] — `.pzl` sections, grammar, and errors.
 - [[COMPONENT-CODEGEN]] — render emission and expression resolution.
+- [[COMPONENT-PLAYGROUND-COMPILER]] — esbuild-free in-browser parser/codegen bridge and its build/smoke boundary.
 - [[COMPONENT-ESBUILD-PLUGIN]] — bundling, config, styles, aliases, outputs.
 - [[COMPONENT-COMPILER-CLI]] — CLI commands, scaffolds, generators, pieces.
 - [[COMPONENT-DEV-SERVER]] — watch/rebuild/server/SSE loop.
