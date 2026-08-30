@@ -283,11 +283,15 @@ import {
 	validateTopLevelPath,
 } from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
-import {
-	hasLazyRouteViews,
-	resolveRouteViews,
-	validateRouteView,
-} from './lazy.js';
+// D163's resolver, reached ONLY through `typeof __PUZZLE_HAS_LAZY__ …` probes
+// (the D89 gate). The build's usage scan sets the define false for a project
+// whose source never calls lazy(); MinifySyntax then folds all three call sites
+// below and lazy.js tree-shakes out. Undefined (vitest / a third-party bundler)
+// ⇒ probe is true, so behavior is identical. Each probe MUST be inlined at its
+// site — a named const is not constant-propagated by esbuild and would keep the
+// import alive.
+import { hasLazyRouteViews, isLazyView, resolveRouteViews } from './lazy.js';
+import { describeValue, isViewClass } from './viewClass.js';
 import { devtoolsRouteCommit } from '../devtools.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
 import { reportError } from '../errors.js';
@@ -1241,9 +1245,14 @@ export class Router {
 		// `viewClasses[i]` while a lazy-free navigation stays byte-for-byte the
 		// synchronous path it was — no added array, no added microtask (the same
 		// reason the guard block above is skipped when a route declares none).
+		//
+		// The `__PUZZLE_HAS_LAZY__` probe leads so an app with no lazy() in its
+		// source pays nothing at all: `entry.hasLazy` is a runtime property esbuild
+		// cannot fold, so without the probe the resolveRouteViews reference here
+		// would keep lazy.js in every bundle.
 		let viewClasses = entry.viewClasses;
 		let LayoutClass = entry.layout;
-		if (entry.hasLazy) {
+		if ((typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) && entry.hasLazy) {
 			let resolvedViews;
 			try {
 				resolvedViews = await resolveRouteViews(entry);
@@ -3039,8 +3048,43 @@ function makeEntry(chain, fullPaths) {
  * arrive after this runs.
  */
 function finishEntry(entry) {
-	entry.hasLazy = hasLazyRouteViews(entry);
+	entry.hasLazy =
+		(typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) &&
+		hasLazyRouteViews(entry);
 	entry.viewClasses = entry.hasLazy ? undefined : entry.chain.map((node) => node.view);
+}
+
+/**
+ * Fail fast while the route table is compiled. A bare function is never treated
+ * as a possible loader; authors must opt in with lazy().
+ *
+ * This runs in every app, lazy or not, so it lives here rather than in lazy.js:
+ * routing a validation call through the resolver module would pin lazy.js into
+ * every bundle and defeat the __PUZZLE_HAS_LAZY__ gate. When the gate is off,
+ * a marker that reached the route table anyway (an installed package building
+ * routes — the same blind spot the D89 scan has for flip) is not silently
+ * mistaken for a view class: it falls through to the throw below, which names
+ * the compiled-out gate.
+ */
+function validateRouteView(value, label) {
+	if (isViewClass(value)) return;
+	if ((typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) && isLazyView(value)) {
+		return;
+	}
+	if (typeof value === 'function') {
+		throw new Error(
+			`[puzzle] ${label} must be a PuzzleView class, not a loader function — ` +
+				"wrap dynamic imports with lazy(() => import('./views/Page.pzl'))"
+		);
+	}
+	throw new Error(
+		`[puzzle] ${label} must be a PuzzleView class or lazy() marker (got ${describeValue(value)})` +
+			(typeof __PUZZLE_HAS_LAZY__ !== 'undefined' && !__PUZZLE_HAS_LAZY__
+				? ' — lazy() support was compiled out because the build scan found no lazy() ' +
+					'in project source (it does not scan files outside the project root, ' +
+					'node_modules, or build output)'
+				: '')
+	);
 }
 
 // ---- dev-only warnings ------------------------------------------------------

@@ -248,9 +248,14 @@ second specification. Decision cards hold rationale and git holds chronology.
   render functions attach to the user class prototype.
 - Production: ES2022, minified, console calls stripped by default, tree-shaken
   formatter manifest, collected component CSS. The D89 usage scan also gates
-  a whole module — `views/flip.js`, behind `__PUZZLE_HAS_FLIP__`, now the only
-  usage define (D111 retired the managed-head one, so the scan reads only
-  `.pzl`) — so an app pays only for what it uses; the fixture
+  whole modules behind literal defines — `views/flip.js`
+  (`__PUZZLE_HAS_FLIP__`), `views/portal.js` (`__PUZZLE_HAS_PORTAL__`), the
+  D150 literal-`@` shim (`__PUZZLE_HAS_RAW_AT__`), and `router/lazy.js`
+  (`__PUZZLE_HAS_LAZY__`) — so an app pays only for what it uses. The first
+  three are template facts; lazy is a script fact, so the scan reads the app's
+  `.js`/`.ts` modules as well as its `.pzl` files (D111 retired the
+  managed-head define, which was the scan's earlier and much looser reason to
+  open a script). The fixture
   generator and mock adapter are excluded structurally instead (D98), as is
   the server adapter itself (D157): nothing imports `/fixtures` unless
   `puzzle dev|build --fixtures` generates the wiring, and nothing imports

@@ -232,7 +232,7 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		pathsOnlyTouchPublic(changed, currentPublic, b.publicSource) &&
 		!pathsTouchInputs(changed, b.bundleInputs)
 
-	if !publicOnly && pathsHavePZL(changed) {
+	if !publicOnly && pathsHaveScanInput(changed) {
 		endScan := prof.Phase("usage scan")
 		out.UsageScanned = true
 		if err := b.refreshUsage(); err != nil {
@@ -358,9 +358,21 @@ func (b *WatchBuilder) writeSplitOutputs(result api.BuildResult) error {
 	return nil
 }
 
-func pathsHavePZL(changed []string) bool {
+// pathsHaveScanInput reports whether this rebuild's changed set contains a file
+// the usage walk READS, which is exactly when a usage bit can have moved and the
+// frozen Define set may need replacing.
+//
+// The predicate is `plugin.IsScanInput`, never a local extension list. It used
+// to test for `.pzl` alone, which was correct while every usage bit was a
+// template fact; D163's lazy bit is sourced from `routes.js`, so a `.pzl`-only
+// gate meant a developer adding their FIRST `lazy()` mid-session rebuilt against
+// `__PUZZLE_HAS_LAZY__ = false` and hit the compiled-out route-view throw until
+// they touched an unrelated template or restarted `puzzle dev`. Anything that
+// widens what the scanner reads must widen this with it, which is why both sides
+// call the same function.
+func pathsHaveScanInput(changed []string) bool {
 	for _, path := range changed {
-		if filepath.Ext(path) == ".pzl" {
+		if plugin.IsScanInput(path) {
 			return true
 		}
 	}
