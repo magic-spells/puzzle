@@ -29,6 +29,19 @@ notes:
       {#raw}/single-root, {#svg} attribute, TS import-clause, fragment-pop, local-model-fault, and
       upgrade global-assert fixes, and two of its claims went stale (date-only fields now serialize
       as YYYY-MM-DD via CalendarDate#toJSON; upgrade no longer falls through to "must be global").
+  - kind: state
+    text: >-
+      Close-out checklist carried from the (now deleted) plans/V0-7-0-PLAN.md, 2026-08-30: all
+      feature work merged or in PR #90 (snippets). Before publish: (1) CHANGELOG completeness — the
+      card's missing-items list plus Windows binaries, lazy routes + __PUZZLE_HAS_LAZY__ gate,
+      playground WASM core (D164), puzzle check (D165), snippets (D166); (2) DOC-RELEASE-SURFACE
+      rewrite to 0.7.0 surface (five platform packages, lazy(), puzzle check, snippets); (3) D165 +
+      D166 decision cards + SPEC sections + SKILL.md marker rewrite; (4) release:prep re-measures
+      README size banner LAST (snippets moved figures ~+50 B); (5) pieces 0.7.0 publish at/before
+      CLI (now includes data-table cell snippets + new virtual-list piece round); (6) editor
+      grammars (vscode/sublime/zed) gain the Snippet marker; (7) site: llms.txt + playground (site
+      PR #3) go live at Cory's manual wrangler deploy + domain cutover; re-vendor puzzle-skill.md at
+      the site's 0.7.0 bump (drift gate enforces).
 ---
 
 # 0.7.0 — reads take care of themselves
