@@ -25,6 +25,7 @@ decision cards explain why the contract has its current shape.
 
 ## Current state
 
+
 - **Published:** `0.1.0` (2026-07-21), `0.1.1` (interactive `puzzle init`
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
   skills` installer, D78/v1.45) are live on npm — MIT, five packages, manual
@@ -65,7 +66,7 @@ decision cards explain why the contract has its current shape.
   round (D121/D122 profiler + DevTools protocol), the Grok review rounds
   (D132/D133), D134 capitalized composition markers with marker fallback
   bodies (D141), and the D135–D143 hardening set.
-- **`0.5.0` is PUBLISHED** (2026-08-07, the current `latest`,
+- **`0.5.0` is PUBLISHED** (2026-08-07,
   `verify:published`-clean): D144 `<Portal>` scoped v1
   (v1.66), D145 error boundaries (v1.67), D146 transactional reused-ancestor
   refresh, D147 implicit two-way form binding
@@ -83,40 +84,49 @@ decision cards explain why the contract has its current shape.
   with `@event:outside` logical containment, Portal slide-over vs native
   `<dialog>` modal); its dogfooding pass produced the Portal
   component-root steering error (wrapper idiom documented in D144).
-- **Next minor:** [[DECISION-D150-RAW-TEMPLATE-BLOCK]] adds the static
+- **`0.6.0` is PUBLISHED** (2026-08-15, the current `latest`):
+  [[DECISION-D150-RAW-TEMPLATE-BLOCK]] adds the static
   `{#raw}…{/raw}` lex-off block for author-written braces while preserving
-  ordinary HTML parsing and the existing parent-aware SSG RAWTEXT policy.
+  ordinary HTML parsing and the existing parent-aware SSG RAWTEXT policy;
+  the pieces npm transport; the D151–D156 build/dev performance round; the
+  errorView amendment; and D157–D160 (below).
 - **0.6 errorView amendment (v1.71, breaking):**
   [[DECISION-D145-ERROR-BOUNDARIES]] rewritten — error fallback UI is one
   app-level `errorView` compiled view with `{ error, info, retry }` props;
   per-view `errorContent()`/ViewNode authoring removed, retry re-runs the
   normal navigation/refresh pipeline, `boundary` phase renamed `error-view`.
   Byte-neutral by measurement; adopted as an API simplification.
-- **Current 0.6 compiler hardening:**
+- **0.6 compiler hardening:**
   [[FEATURE-BUILD-PIPELINE-PERFORMANCE-HARDENING]] / [[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]]
   pins the restored SPA startup boundary, removes unrelated warm-rebuild work,
   adds dev phase profiles, and overlaps side-effect-safe one-shot phases while
   keeping prerender execution and atomic output behind a success barrier.
-- **Current 0.6 adapter work (v1.72–v1.73):**
+- **0.6 adapter work (v1.72–v1.73):**
   [[DECISION-D157-ADAPTER-SUBPATH]] moves server sync behind the opt-in
   `@magic-spells/puzzle/adapter` capability. [[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]
   makes each model adapter a set of per-verb fetch functions: endpoint shorthand
   generates REST defaults, author verbs win, enhanced fetch carries auth and
   fixture interception, and framework reconciliation stays transport-agnostic.
-- **Current 0.6 bundle work (v1.75):** [[DECISION-D160-SPA-CODE-SPLITTING]] /
+- **0.6 bundle work (v1.75):** [[DECISION-D160-SPA-CODE-SPLITTING]] /
   [[FEATURE-SPA-CODE-SPLITTING]] make a dynamic `import()` a lazy chunk under
   `dist/chunks/` behind `build: { splitting: true }` — default off, forced off
   in static mode, pruned across dev rebuilds — and add a per-dependency
-  composition report to the build size banner. Phase 2 (lazy route views) is a
-  separate design.
+  composition report to the build size banner.
 - **Current 0.7 data work (v1.76):** [[DECISION-D161-AUTO-FETCHING-FINDS]] —
   tracked finds fault in missing data; the settle loop commits complete passes.
+- **Current 0.7 routing work (v1.77):** [[DECISION-D163-LAZY-ROUTE-VIEWS]] is
+  D160's phase 2 — `lazy(loader)` marks a route `view`/`layout` as on-demand,
+  resolved after guards pass and before construction, in parallel across the
+  matched chain. Fulfillment memoizes for the app's lifetime and rejection
+  never does; a failed load is an ordinary failed push through the
+  `navigation` error phase; both prerender modes await the same markers.
+  `examples/blog` splits its `/settings` section behind `build.splitting`.
 - **Monorepo (0.7.0):** [[DECISION-D162-MONOREPO-PACKAGES]] — the repo root is
   a private shell; the framework lives at `packages/puzzle` beside
   puzzle-pieces, puzzle-devtools, puzzle-eslint, and puzzle-prettier, all
   carrying the framework version; grammars stay in their own repos; absorbed
   repos are archived, never deleted.
-  The next free decision number is D163.
+  The next free decision number is D164.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
@@ -144,8 +154,10 @@ decision cards explain why the contract has its current shape.
     genuinely fail-soft, island validation descends into slot fallback, the
     lexer no longer panics on a trailing backslash, and generated static-page
     entries observe their own mount rejection.
-- Element actions and lazy routes were reviewed and deferred (the SPEC deferred
-  list carries the rationale). `<Portal>` shipped its scoped v1 in 0.5.0
+- Element actions were reviewed and deferred (the SPEC deferred list carries
+  the rationale). Lazy routes left that list in 0.7.0
+  ([[DECISION-D163-LAZY-ROUTE-VIEWS]], v1.77); link preloading is the half
+  still deferred. `<Portal>` shipped its scoped v1 in 0.5.0
   ([[DECISION-D144-PORTAL]], v1.66) — named outlets remain the deferred half. Pieces migration to
   `@event:outside` is queued for AFTER 0.2.0 ships — older compilers reject
   unknown modifiers.
