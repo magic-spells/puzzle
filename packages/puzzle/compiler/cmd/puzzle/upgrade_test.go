@@ -65,6 +65,53 @@ func stubGlobalRoots(t *testing.T, roots map[string]string) {
 	t.Cleanup(func() { packageManagerGlobalRoot = previous })
 }
 
+// TestPlatformPackageNames pins the five names bin/puzzle.js resolves through,
+// as literal strings for every shipped GOOS/GOARCH pair. The expectations are
+// written out rather than computed, because the whole point is to catch the
+// translation drifting: a test that built them by calling the function under
+// test would have agreed with "puzzle-windows-x64" just as happily. It also
+// pins the file inside bin/, which is the other half npm resolves.
+//
+// Keep this table in step with PLATFORM_PACKAGES in bin/puzzle.js and the MATRIX
+// in scripts/release-prep.mjs; the three are maintained by hand and this is the
+// only one that fails when they disagree.
+func TestPlatformPackageNames(t *testing.T) {
+	tests := []struct {
+		goos   string
+		goarch string
+		pkg    string
+		binary string
+	}{
+		{goos: "darwin", goarch: "arm64", pkg: "puzzle-darwin-arm64", binary: "puzzle"},
+		{goos: "darwin", goarch: "amd64", pkg: "puzzle-darwin-x64", binary: "puzzle"},
+		{goos: "linux", goarch: "amd64", pkg: "puzzle-linux-x64", binary: "puzzle"},
+		{goos: "linux", goarch: "arm64", pkg: "puzzle-linux-arm64", binary: "puzzle"},
+		{goos: "windows", goarch: "amd64", pkg: "puzzle-win32-x64", binary: "puzzle.exe"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.goos+"/"+tt.goarch, func(t *testing.T) {
+			if got := platformPackageNameFor(tt.goos, tt.goarch); got != tt.pkg {
+				t.Errorf("platformPackageNameFor(%q, %q) = %q, want %q", tt.goos, tt.goarch, got, tt.pkg)
+			}
+			if got := platformBinaryNameFor(tt.goos); got != tt.binary {
+				t.Errorf("platformBinaryNameFor(%q) = %q, want %q", tt.goos, got, tt.binary)
+			}
+		})
+	}
+}
+
+// The wrappers must be the same translation applied to the running host, or the
+// table above would pin a function nothing calls.
+func TestPlatformPackageNameUsesHost(t *testing.T) {
+	if got, want := platformPackageName(), platformPackageNameFor(runtime.GOOS, runtime.GOARCH); got != want {
+		t.Errorf("platformPackageName() = %q, want %q", got, want)
+	}
+	if got, want := platformBinaryName(), platformBinaryNameFor(runtime.GOOS); got != want {
+		t.Errorf("platformBinaryName() = %q, want %q", got, want)
+	}
+}
+
 // TestDetectInstallContextFromExecutable pins the whole resolution table of §41.
 // Every case is a shape of executable path; none of them involves the working
 // directory, which detection must not read at all.

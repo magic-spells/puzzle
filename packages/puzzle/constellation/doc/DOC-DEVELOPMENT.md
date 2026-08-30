@@ -98,6 +98,15 @@ so a feature branch PR'd into a release branch is covered. There is no publish
 job — releasing is entirely by hand ([[FLOW-RELEASE]]). Run both suites locally
 anyway; CI is a backstop, not a substitute for verifying your own change.
 
+Golden codegen fixtures live in `compiler/internal/codegen/testdata/`.
+Regenerate intentionally with:
+
+```sh
+go test ./internal/codegen -update
+```
+
+Review generated diffs; never update goldens merely to silence a failure.
+
 ## CLI development
 
 

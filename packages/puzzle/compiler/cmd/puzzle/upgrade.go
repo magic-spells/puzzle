@@ -361,21 +361,33 @@ func upgradedBinaryCandidates(ctx installContext) []string {
 // platformPackageName mirrors bin/puzzle.js, which keys the platform packages by
 // process.platform/process.arch: Node spells amd64 "x64" and windows "win32".
 func platformPackageName() string {
-	goos := runtime.GOOS
-	if goos == "windows" {
-		goos = "win32"
-	}
-	arch := runtime.GOARCH
-	if arch == "amd64" {
-		arch = "x64"
-	}
-	return "puzzle-" + goos + "-" + arch
+	return platformPackageNameFor(runtime.GOOS, runtime.GOARCH)
 }
 
 // platformBinaryName is the file inside a platform package's bin/ — Windows
 // needs the .exe suffix to execute it at all.
 func platformBinaryName() string {
-	if runtime.GOOS == "windows" {
+	return platformBinaryNameFor(runtime.GOOS)
+}
+
+// platformPackageNameFor is the pure translation the two wrappers above exist to
+// expose: it takes the GOOS/GOARCH pair rather than reading the running host, so
+// every shipped target can be asserted from one test on one machine. Reading
+// runtime.GOOS directly is what let the Windows name sit wrong until Windows
+// binaries shipped — a mac and a Linux runner both agreed with the bug.
+func platformPackageNameFor(goos, goarch string) string {
+	if goos == "windows" {
+		goos = "win32"
+	}
+	if goarch == "amd64" {
+		goarch = "x64"
+	}
+	return "puzzle-" + goos + "-" + goarch
+}
+
+// platformBinaryNameFor is the same split for the file inside bin/.
+func platformBinaryNameFor(goos string) string {
+	if goos == "windows" {
 		return "puzzle.exe"
 	}
 	return "puzzle"
