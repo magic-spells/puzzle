@@ -142,10 +142,10 @@ lands.
 - `verify:pack` proves the **artifact** — that the bytes npm produced carry the
   right pins and only the runtime, the declarations and the bin shim. It also
   asserts the working-tree manifest is pin-free before AND after packing, which
-  is the regression test for a `postpack` that never ran. Its committed-manifest
-  check adds nothing to that today: `HEAD:package.json` resolves from the
-  monorepo top, so it inspects the private root shell and cannot prove this
-  package's committed manifest is pin-free.
+  is the regression test for a `postpack` that never ran, and that the
+  **committed** manifest is pin-free too — read as `git show HEAD:./package.json`
+  with cwd at this package, because a bare `HEAD:package.json` resolves from the
+  monorepo top and would silently inspect the private root shell instead.
 - `e2e-pack` proves the **runtime resolves** from a real install. It runs while
   the platform packages are deliberately unpublished, so it can never catch a
   missing binary.

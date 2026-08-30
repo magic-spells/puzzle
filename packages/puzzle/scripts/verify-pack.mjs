@@ -294,11 +294,16 @@ if (repoPkgAfter.optionalDependencies) {
 // --- 6. …and the COMMITTED manifest must be clean too -----------------------
 // Fail-soft: no git (a tarball-only checkout, a CI image without git) downgrades
 // this to a warning rather than blocking a release.
+// The `./` prefix is load-bearing: a bare `HEAD:package.json` is resolved from
+// the REPO ROOT regardless of cwd, which since the monorepo move reads the
+// private root shell manifest — a file that never carries pins, so the check
+// would pass vacuously. `HEAD:./package.json` is cwd-relative, and cwd is this
+// package.
 {
 	let committed = null;
 	try {
 		committed = JSON.parse(
-			execFileSync('git', ['show', 'HEAD:package.json'], {
+			execFileSync('git', ['show', 'HEAD:./package.json'], {
 				cwd: repoRoot,
 				encoding: 'utf8',
 				stdio: ['ignore', 'pipe', 'pipe'],
@@ -306,7 +311,7 @@ if (repoPkgAfter.optionalDependencies) {
 		);
 	} catch (err) {
 		console.error(
-			`verify-pack: WARN — could not read HEAD:package.json via git (${err.message.trim().split('\n')[0]}); ` +
+			`verify-pack: WARN — could not read HEAD:./package.json via git (${err.message.trim().split('\n')[0]}); ` +
 				'skipping the committed-manifest check.'
 		);
 	}

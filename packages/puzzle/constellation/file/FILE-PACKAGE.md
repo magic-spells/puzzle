@@ -40,9 +40,10 @@ owns the shape; per-mechanism rationale lives on the connected cards.
   ([[DECISION-D116-PACK-TIME-PIN-INJECTION]]).
 - **No tracked `optionalDependencies`** — the five platform pins are injected
   by `prepack` and removed by `postpack` (D116); verify-pack fails if the
-  working-tree manifest carries them before or after packing; its
-  committed-manifest check currently resolves `HEAD:package.json` from the
-  monorepo top and so inspects the private root shell, not this file.
+  working-tree manifest carries them before or after packing, and its
+  committed-manifest check reads this file as `git show HEAD:./package.json` —
+  the `./` is load-bearing, since a bare `HEAD:package.json` resolves from the
+  monorepo top and would inspect the private root shell instead.
 - **`bin`** — the `puzzle` shim that resolves and execs the platform binary.
   It keys the platform packages by `process.platform`/`process.arch`, so the
   Windows package is `puzzle-win32-x64` (not `-windows-`) and the file it
