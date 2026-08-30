@@ -5,6 +5,7 @@ connections:
   - FEATURE-SPA-CODE-SPLITTING
   - DECISION-D160-SPA-CODE-SPLITTING
   - DECISION-D159-ROUTER-MODE-FACTORIES
+  - DECISION-D89-FEATURE-USAGE-TREESHAKE
   - DECISION-D87-ROUTE-GUARDS
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D61-ATOMIC-LOCATION-COMMIT
@@ -125,6 +126,8 @@ like a slow route.
 
 ## Build and prerender interplay
 
+
+
 `build.splitting: true` (D160) turns each loader's `import()` into a chunk under
 `dist/chunks/` through machinery that needed no changes. With splitting off,
 esbuild inlines the import and `lazy()` still works — same semantics, one fewer
@@ -138,10 +141,31 @@ referenced view lands in its page bundle like any eager one. Static output
 therefore has no runtime laziness at all, which is correct: those pages have no
 router and their kernel zips real classes onto the page's route JSON.
 
-Cost containment is part of the decision. An app with no `lazy()` anywhere pays
-nothing per navigation — each entry's class list is settled once, when the route
-table compiles, so the lazy-free path allocates nothing and adds no microtask.
-The resolver is kept out of `ssg/assemble.js` for the same reason: that module
+Cost containment is part of the decision, at two levels.
+
+Per navigation: an app with no `lazy()` anywhere allocates nothing and adds no
+microtask, because each entry's class list is settled once, when the route table
+compiles.
+
+Per bundle: an app with no `lazy()` anywhere does not ship the resolver at all.
+`router/lazy.js` sits behind the `__PUZZLE_HAS_LAZY__` define
+([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]), which the build's usage scan sets
+false when no first-party source calls `lazy()` — worth ~0.6 KB gzip on a
+lazy-free SPA, which is most of what the feature costs. Two structural
+consequences follow and must be preserved by anything that touches this module:
+
+- **`validateRouteView` lives in `router.js`, not here.** Route-view validation
+  runs in every app, so a call into `lazy.js` for it would pin the module into
+  every bundle. The class-shape helpers the two share (`isViewClass`,
+  `describeValue`) live in `router/viewClass.js` so neither module imports the
+  other.
+- **A marker that reaches a compiled-out build fails loudly.** The scan does not
+  read `node_modules`, so a package that builds route tables could hand an app a
+  marker the build never saw. With the define false, `isLazyView` is folded away
+  and the marker falls through to `validateRouteView`'s throw, whose message
+  then names the compiled-out gate. It is never mistaken for a view class.
+
+The resolver is kept out of `ssg/assemble.js` for a related reason: that module
 is shared with the static browser kernel, which can never see a marker, and
 importing it there put ~500 B gzip of dead machinery in every static page
 bundle.

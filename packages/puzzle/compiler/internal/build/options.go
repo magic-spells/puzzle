@@ -100,9 +100,16 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 
 // bundleDefines builds the literal define map. The __PUZZLE_HAS_* values are
 // SOURCE facts: plugin.ScanUsage reads templates for flip, Portal, and raw-block
-// usage.
+// usage, and app scripts for lazy() route views.
 // __PUZZLE_DEV__, __PUZZLE_TAKEOVER__ and __PUZZLE_CAPTURE__ are BUILD facts
 // carried by bundleFlags.
+//
+// __PUZZLE_HAS_LAZY__ = false folds the router's three references to
+// router/lazy.js (the entry's hasLazy computation, the navigation-path resolve,
+// and the route-table validator's marker check), which drops the resolver out of
+// every app that never calls lazy() — D163's module, ~0.6 KB gzip. It is the
+// only usage bit answered from SCRIPT source rather than templates, since lazy()
+// is called from routes.js.
 //
 // __PUZZLE_TAKEOVER__ = false strips the router's three `data-puzzle-ssg`
 // branches, which drops the last importer of ssg/preload.js so the module
@@ -122,6 +129,7 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		"__PUZZLE_HAS_FLIP__":   strconv.FormatBool(f.Flip),
 		"__PUZZLE_HAS_PORTAL__": strconv.FormatBool(f.Portal),
 		"__PUZZLE_HAS_RAW_AT__": strconv.FormatBool(f.RawAt),
+		"__PUZZLE_HAS_LAZY__":   strconv.FormatBool(f.Lazy),
 		"__PUZZLE_TAKEOVER__":   strconv.FormatBool(flags.Takeover),
 		"__PUZZLE_CAPTURE__":    strconv.FormatBool(flags.Capture),
 	}

@@ -56,9 +56,10 @@ Those entries are never removed: a stale one can only over-report consumers, and
 an over-reported consumer costs one re-render.
 
 The project usage walk has the same shape of problem: it reads and fully parses
-every `.pzl` to answer the formatter union and three runtime feature facts
-(`flip`, Portal, and any raw block), which a one-shot build pays once and a dev
-session would otherwise pay per rebuild.
+every `.pzl` to answer the formatter union and three template feature facts
+(`flip`, Portal, and any raw block), and additionally READS — never parses —
+every `.js`/`.ts`-family module for the D163 `lazy()` bit, which a one-shot
+build pays once and a dev session would otherwise pay per rebuild.
 `plugin.UsageScanner` is that walk with a per-file memo keyed by path + mtime +
 size; `ScanUsage` is a one-shot scanner over the same `scanFileUsage`, so the
 two cannot answer differently. Both long-lived builders keep one scanner for the
@@ -194,13 +195,21 @@ skipped and generated/vendor trees are pruned. Parsed `.pzl` ASTs seed
 the virtual formatter manifest from observed built-ins, while element attrs or
 component props named `flip`, `*parser.Portal` nodes, and parser-recorded raw
 blocks drive the literal `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, and
-`__PUZZLE_HAS_RAW_AT__` esbuild defines. There is no managed-head gate (D111),
-so the walk reads only `.pzl` files. The scan runs ONCE per `build.Build`
+`__PUZZLE_HAS_RAW_AT__` esbuild defines. There is no managed-head gate (D111).
+A fourth define, `__PUZZLE_HAS_LAZY__`, gates D163's `router/lazy.js`, and it is
+the one bit a template parse could never answer — `lazy()` is called from
+`routes.js` — so the walk also reads `.js`/`.mjs`/`.cjs`/`.jsx`/`.ts`/`.mts`/
+`.cts`/`.tsx` as TEXT, matching either a `lazy(`-shaped call or a `lazy`
+specifier in an `import`/`export … from '@magic-spells/puzzle'` clause (the
+second rule catches the renamed binding the first cannot see). A `.pzl` runs
+that same text match over its whole source BEFORE the template parse, so a
+`lazy()` call in a `<script>` section counts and a file the parser rejects still
+contributes the bit. The scan runs ONCE per `build.Build`
 and its immutable result is threaded to every pass through a `passContext` —
 the constructor build code uses instead of `plugin.New`, so a pass cannot start
 from an unscanned zero `Usage` and drop a used runtime module. The
 long-lived builders compare the complete feature struct and replace a context
-when any bit changes; they re-scan only when a `.pzl` changed. Esbuild
+when any bit changes; they re-scan only when a watched source changed. Esbuild
 re-runs the formatter virtual module's `OnLoad` on every rebuild; this is
 regression-guarded by `TestFormatterManifestFreshAcrossIncrementalRebuilds`.
 

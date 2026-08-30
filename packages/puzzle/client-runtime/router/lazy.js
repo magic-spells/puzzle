@@ -5,9 +5,16 @@
  * a function that loads one. Route validation never guesses which kind of
  * function it received: a loader is accepted only through the branded marker
  * stored in this module's WeakMap.
+ *
+ * Every reference to this module from router.js sits behind the
+ * `__PUZZLE_HAS_LAZY__` probe (D89 pattern), so an app whose source never calls
+ * `lazy()` folds all three call sites dead and tree-shakes the whole module
+ * out. That is why `validateRouteView` lives in router.js and the shared
+ * class-shape helpers live in viewClass.js: route validation runs in every app,
+ * lazy or not, and must not be what keeps the resolver alive.
  */
 
-import { PuzzleView } from '../views/PuzzleView.js';
+import { describeValue, isViewClass } from './viewClass.js';
 
 const lazyViews = new WeakMap();
 
@@ -38,23 +45,6 @@ export function lazy(loader) {
 /** Whether a route value is an opaque marker produced by lazy(). */
 export function isLazyView(value) {
 	return value != null && typeof value === 'object' && lazyViews.has(value);
-}
-
-/**
- * Fail fast while the route table is compiled. A bare function is never
- * treated as a possible loader; authors must opt in with lazy().
- */
-export function validateRouteView(value, label) {
-	if (isLazyView(value) || isViewClass(value)) return;
-	if (typeof value === 'function') {
-		throw new Error(
-			`[puzzle] ${label} must be a PuzzleView class, not a loader function — ` +
-				"wrap dynamic imports with lazy(() => import('./views/Page.pzl'))"
-		);
-	}
-	throw new Error(
-		`[puzzle] ${label} must be a PuzzleView class or lazy() marker (got ${describe(value)})`
-	);
 }
 
 /** Whether any class position in an entry is lazy. */
@@ -166,18 +156,11 @@ function normalizeLoadedView(loaded, modulePath, label) {
 	if (!isViewClass(ViewClass)) {
 		const source = modulePath ? ` from ${JSON.stringify(modulePath)}` : '';
 		throw new TypeError(
-			`[puzzle] ${label()}: lazy() resolved${source} to ${describe(ViewClass)}, ` +
+			`[puzzle] ${label()}: lazy() resolved${source} to ${describeValue(ViewClass)}, ` +
 				'not a PuzzleView class'
 		);
 	}
 	return ViewClass;
-}
-
-function isViewClass(value) {
-	return (
-		typeof value === 'function' &&
-		(value === PuzzleView || value.prototype instanceof PuzzleView)
-	);
 }
 
 function isPromiseLike(value) {
@@ -199,10 +182,4 @@ function importSpecifier(loader) {
 		/(?:\bimport|[A-Za-z_$][\w$]*import[\w$]*)\s*\(\s*(['"])([^'"]+)\1\s*\)/i
 	);
 	return match?.[2] ?? null;
-}
-
-function describe(value) {
-	if (value === null) return 'null';
-	if (value === undefined) return 'undefined';
-	return typeof value;
 }

@@ -426,11 +426,20 @@ func TestBuildTakeoverDefineDCE(t *testing.T) {
 // tests build. The three feature fields add exact template usage; routeMeta is
 // appended to the route object literal; extraFiles adds sibling modules.
 type definesFixture struct {
-	flipAttr   string
-	portal     bool
-	raw        bool
-	routeMeta  string
-	extraFiles map[string]string
+	flipAttr string
+	portal   bool
+	raw      bool
+	// lazy adds a second route whose view is a D163 lazy() marker, declared in
+	// the routes module named by lazyRoutesExt (".js" when empty) so the same
+	// fixture can prove the usage scan reads TypeScript route tables too.
+	lazy          bool
+	lazyRoutesExt string
+	// lazyRenamedImport declares the marker through a renamed binding
+	// (`lazy as page`), which no `lazy(`-shaped match can see — only the
+	// import-clause rule catches it.
+	lazyRenamedImport bool
+	routeMeta         string
+	extraFiles        map[string]string
 }
 
 // writeDefinesFixture materializes a minimal app that imports the runtime (so the
@@ -452,11 +461,23 @@ func writeDefinesFixture(t *testing.T, fx definesFixture) string {
 			imports += "import './" + strings.TrimPrefix(rel, "app/") + "';\n"
 		}
 	}
+	routesExt := fx.lazyRoutesExt
+	if routesExt == "" {
+		routesExt = ".js"
+	}
+	routesImport := ""
+	extraRoute := ""
+	if fx.lazy {
+		// The extension is explicit so esbuild resolves a .ts routes table from a
+		// .js entry without any TS-flavored extension rewriting.
+		routesImport = "import lateRoutes from './routes" + routesExt + "';\n"
+		extraRoute = ", ...lateRoutes"
+	}
 	appJS := `import { PuzzleApp } from '@magic-spells/puzzle';
 import Home from './views/Home.pzl';
-` + imports + `const app = new PuzzleApp({
+` + routesImport + imports + `const app = new PuzzleApp({
   target: '#app',
-  routes: [{ path: '/', view: Home` + fx.routeMeta + ` }],
+  routes: [{ path: '/', view: Home` + fx.routeMeta + ` }` + extraRoute + `],
 });
 app.mount();
 export default app;
@@ -491,6 +512,23 @@ export default class Home extends PuzzleView {
 		"app/views/Home.pzl":    view,
 		"app/public/index.html": index,
 	}
+	if fx.lazy {
+		marker := "lazy"
+		clause := "{ lazy }"
+		if fx.lazyRenamedImport {
+			marker = "page"
+			clause = "{ lazy as page }"
+		}
+		files["app/routes"+routesExt] = `import ` + clause + ` from '@magic-spells/puzzle';
+export default [{ path: '/late', view: ` + marker + `(() => import('./views/Late.pzl')) }];
+`
+		files["app/views/Late.pzl"] = `<puzzle-view><p>late</p></puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Late extends PuzzleView {}
+</script>
+`
+	}
 	for rel, body := range fx.extraFiles {
 		files[rel] = body
 	}
@@ -516,6 +554,18 @@ const portalMarker = "data-puzzle-portal"
 
 const rawAtEscape = "@@"
 
+// lazyResolverMarker is a throw message unique to router/lazy.js's RESOLVER half
+// — the part __PUZZLE_HAS_LAZY__ removes. Like flipEasing it is a string
+// literal, so it survives minification and its absence is real evidence the
+// module tree-shook away. It is deliberately NOT one of the validator's
+// messages: validateRouteView lives in router.js and ships in every app.
+const lazyResolverMarker = "lazy() loader must return a promise"
+
+// lazyCompiledOutMarker is the suffix validateRouteView appends only when the
+// define is literally false — proof the gate reached the runtime, and the loud
+// failure an unscanned marker gets instead of silently mounting as a view class.
+const lazyCompiledOutMarker = "lazy() support was compiled out"
+
 // headTagMarker is the `data-puzzle-head` attribute the SSG stamps on every
 // managed tag — the same kind of minification-proof literal as flipEasing. It
 // must appear in PRERENDERED HTML and never in a browser bundle.
@@ -533,10 +583,15 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape} {
+	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker} {
 		if strings.Contains(string(withoutJS), marker) {
 			t.Errorf("bundle without feature usage retained %q", marker)
 		}
+	}
+	// The gate must be OBSERVABLY off, not merely unreferenced: a marker that
+	// reaches the route table anyway has to fail loudly.
+	if !strings.Contains(string(withoutJS), lazyCompiledOutMarker) {
+		t.Errorf("bundle without lazy() usage lost the compiled-out route-view diagnostic")
 	}
 
 	with := writeDefinesFixture(t, definesFixture{flipAttr: " flip"})
@@ -567,6 +622,38 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	rawJS := readFile(t, filepath.Join(withRaw, "dist", "app.js"))
 	if !strings.Contains(rawJS, rawAtEscape) {
 		t.Errorf("bundle with {#raw} should retain the %q literal-attribute shim", rawAtEscape)
+	}
+}
+
+// TestBuildLazyDefineDCE pins the D163 half of the D89 gate. lazy() is declared
+// in app SCRIPTS, so this is the one usage bit whose detection reads .js/.ts
+// modules — each variant here is a way the scan could miss one and compile the
+// resolver out of an app that needs it.
+func TestBuildLazyDefineDCE(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		fx   definesFixture
+	}{
+		{name: "js routes", fx: definesFixture{lazy: true}},
+		{name: "ts routes", fx: definesFixture{lazy: true, lazyRoutesExt: ".ts"}},
+		{
+			name: "renamed import specifier",
+			fx:   definesFixture{lazy: true, lazyRenamedImport: true},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeDefinesFixture(t, tt.fx)
+			if err := Build(root, Options{Development: false}); err != nil {
+				t.Fatalf("Build with lazy() usage failed: %v", err)
+			}
+			js := readFile(t, filepath.Join(root, "dist", "app.js"))
+			if !strings.Contains(js, lazyResolverMarker) {
+				t.Errorf("bundle with lazy() route views should retain %q", lazyResolverMarker)
+			}
+			if strings.Contains(js, lazyCompiledOutMarker) {
+				t.Errorf("bundle with lazy() route views baked the compiled-out diagnostic")
+			}
+		})
 	}
 }
 
