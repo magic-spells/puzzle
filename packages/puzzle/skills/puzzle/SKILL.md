@@ -38,9 +38,11 @@ my-app/
 
 CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
 `dev` (SSE live reload, state-preserving full-page refresh), `build` (`--static`,
-`--hybrid`, `--mode production|development`), `preview` (serve an existing
-`dist/` with production-host semantics), `init`, `generate`, `add` (tailwind integration,
-`piece <name…>`, `skills`), `upgrade`, `doctor`, `info`.
+`--hybrid`, `--mode production|development`), `check` (run the app-installed
+TypeScript compiler over `.pzl` scripts and template expressions), `preview`
+(serve an existing `dist/` with production-host semantics), `init`, `generate`,
+`add` (tailwind integration, `piece <name…>`, `skills`), `upgrade`, `doctor`,
+`info`.
 
 - `dev` and `build` both take `--fixtures` (see Fixtures below).
 - `dev` and `build` both take `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`):
@@ -117,8 +119,8 @@ helpers — the project term is *formatter*, never *filter*),
 grammar off inside — literal braces compile as-is, HTML still parses; no
 nesting, and attribute-value use is a compile error),
 `@event={ handler }` with modifiers, component imports used as capitalized tags.
-`<script lang="ts">` for TypeScript (transpile-only — types stripped, never
-checked, at compile).
+`<script lang="ts">` for TypeScript (build remains transpile-only; run
+`puzzle check` separately for static checks).
 
 Rules that bite:
 
@@ -127,14 +129,30 @@ Rules that bite:
   raw-markup exception is compile-time `{#svg 'path.svg'}` inline SVG.
   `{#raw}` is not a second one — it only turns the brace lexer off; no runtime
   value can reach inside it.
-- **Two marker tags, three meanings.** `<Children/>` marks where a component's
+- **Three marker tags, four meanings.** `<Children/>` marks where a component's
   default children render; `<Slot name="x"/>` declares a named region (the
   caller routes a direct child in with a static `slot="x"` attribute);
-  `<Slot/>` is the ROUTER outlet where a child route or routed view renders.
-  A marker is self-closing, or paired with a fallback body that renders only
-  when nothing fills it (`<Slot name="trigger"><b>Open</b></Slot>`) — supplied
-  content replaces the fallback entirely. Lowercase `<children>`/`<slot>` are
-  compile errors.
+  `<Slot/>` is the ROUTER outlet where a child route or routed view renders;
+  `<Snippet>` passes a reusable template that the component may stamp repeatedly
+  with fresh data. Composition `<Children>` and named `<Slot>` markers may carry
+  data attributes, and a snippet declares matching parameters as bare
+  attributes; binding is by name. `fits="x"` routes it to `<Slot name="x">`,
+  while omitted `fits` targets `<Children>`. Ordinary Children/Slot markers may
+  be paired with fallback content, which supplied content replaces entirely. A
+  Snippet must be paired and be a direct child of a component call; composition
+  markers and `ref=` are forbidden inside its body. Lowercase
+  `<children>`/`<slot>`/`<snippet>` steer to the capitalized marker spellings
+  with compile errors.
+
+  ```html
+  <UserList>
+    <Snippet fits="row" user><strong>{ user.name }</strong></Snippet>
+  </UserList>
+
+  <!-- inside UserList.pzl: one marker in the loop produces N stamps -->
+  {#for user in users}<Slot name="row" user={ user } />{/for}
+  ```
+
 - **`<Portal>` teleports overlays.** `<Portal>…</Portal>` (paired-only,
   attribute-free) mounts its children into a framework-created outlet beside
   the app root while staying in the owner's component tree — for modals and
@@ -256,7 +274,9 @@ Form controls bind themselves — write NO input handler:
   `prerender: false`), and static output warns too (no router — guards never
   run there).
 - `:param` and `*` supported; `*` catch-all must stay **last** (routes match in
-  order). Route views/layouts must be **statically imported** in routes.js.
+  order). Route views/layouts may be statically imported or wrapped in
+  `lazy(() => import('./View.pzl'))`; guards run before a lazy module downloads,
+  and `build.splitting: true` lets the dynamic import become its own chunk.
 - **Head metadata lives on `meta`** (puzzle ≥ 0.2.0): `title`, `description`,
   `canonical`, `socialImage` — static strings, each inherited leaf→root
   independently (`null` suppresses an inherited value). Define root-route
