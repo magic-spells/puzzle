@@ -24,6 +24,14 @@ notes:
       matched the runtime, and the card was rewritten to state what the code actually does. Verified
       at this sha with the framework suite green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      The package also exports `OverNestingDepth` (compiler/internal/parser/depth.go, D164): a
+      token-level scan that reports whether a template nests past a caller-supplied limit, without
+      building an AST. It exists for the playground's WASM compiler, whose process cannot survive a
+      Go fatal error — the recursive-descent parser exhausts the stack on a pathologically deep
+      source, so "parse it and then measure the tree" is not available there. Nothing in a native
+      build calls it.
 ---
 
 # Template parser

@@ -53,6 +53,63 @@ assert.equal(asset.errors.length, 1, `asset source returned unexpected diagnosti
 assert.match(asset.errors[0].message, /not available in the playground/);
 assert.equal(asset.errors[0].line, 2, `asset error is not positioned at its source line: ${JSON.stringify(asset.errors[0])}`);
 
+// The protocol carries CSS as well as JS (D164): a playground with no build
+// pipeline has nowhere else to get a component's styles from.
+const plainStyled = globalThis.__pzlCompile(
+  `<puzzle-view>\n  <p>styled</p>\n</puzzle-view>\n\n<style>\n  p { color: red; }\n</style>`,
+  { filename: 'app/components/Plain.pzl' }
+);
+assert.deepEqual(plainStyled.errors, [], `styled component failed: ${JSON.stringify(plainStyled.errors)}`);
+assert.match(plainStyled.css, /p \{ color: red; \}/, 'unscoped css was not returned');
+assert.doesNotMatch(plainStyled.css, /@scope/, 'unscoped css was wrapped in @scope');
+
+const scopedStyled = globalThis.__pzlCompile(
+  `<puzzle-view>\n  <p>styled</p>\n</puzzle-view>\n\n<style scoped>\n  p { color: blue; }\n</style>`,
+  { filename: 'app/components/Scoped.pzl' }
+);
+assert.deepEqual(scopedStyled.errors, [], `scoped component failed: ${JSON.stringify(scopedStyled.errors)}`);
+const scopeMatch = /@scope \(\[data-(pzl-[0-9a-f]{8})\]\)/.exec(scopedStyled.css);
+assert.ok(scopeMatch, `scoped css is not an @scope rule: ${JSON.stringify(scopedStyled.css)}`);
+assert.match(scopedStyled.css, /p \{ color: blue; \}/, 'scoped css lost its body');
+assert.ok(
+  scopedStyled.js.includes(`data-${scopeMatch[1]}`),
+  'the @scope id does not match the data-<scopeId> stamp codegen emitted'
+);
+
+assert.equal(compiled.css, '', 'a file with no <style> returned css');
+
+// Input guards (D164). Both must answer with a diagnostic and leave the
+// instance alive: a Go fatal error here would be permanent, because a dead
+// instance throws "Go program has already exited" on every later call.
+const stillAlive = (what) => {
+  const after = globalThis.__pzlCompile(homeSource, options);
+  assert.deepEqual(after.errors, [], `the instance did not survive ${what}`);
+};
+
+const deepSource = `<puzzle-view>\n${'<div>'.repeat(20_000)}x${'</div>'.repeat(20_000)}\n</puzzle-view>`;
+const deep = globalThis.__pzlCompile(deepSource, { filename: 'app/views/Deep.pzl' });
+assert.equal(deep.errors.length, 1, `over-deep source returned ${JSON.stringify(deep.errors)}`);
+assert.match(deep.errors[0].message, /nesting exceeds playground limit/);
+assert.ok(deep.errors[0].line > 0, 'the nesting diagnostic is not positioned');
+stillAlive('an over-deep source');
+
+const longSource = `<puzzle-view>\n  <p>${'x'.repeat(600 * 1024)}</p>\n</puzzle-view>`;
+const long = globalThis.__pzlCompile(longSource, { filename: 'app/views/Long.pzl' });
+assert.equal(long.errors.length, 1, `over-long source returned ${JSON.stringify(long.errors)}`);
+assert.match(long.errors[0].message, /source exceeds playground limit/);
+stillAlive('an over-long source');
+
+// A hostile options object: the getter throws while Go is reading it. recover()
+// turns that into a diagnostic rather than an exited program.
+const hostileOptions = {
+  get filename() {
+    throw new Error('hostile getter');
+  }
+};
+const hostile = globalThis.__pzlCompile(homeSource, hostileOptions);
+assert.equal(hostile.errors.length, 1, `a throwing options getter returned ${JSON.stringify(hostile.errors)}`);
+stillAlive('a throwing options getter');
+
 const timings = [];
 for (let i = 0; i < 50; i += 1) {
   const started = performance.now();

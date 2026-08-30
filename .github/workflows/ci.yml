@@ -24,6 +24,16 @@ jobs:
       - run: go vet ./...
       - run: go build ./...
       - run: go test ./...
+      # cmd/pzl-wasm sits behind a `js && wasm` build tag, so the `go build
+      # ./...` above never compiles it — the playground compiler (D164) could
+      # break for weeks without CI noticing. This is the cheapest proof it still
+      # builds; the artifact itself is produced on demand by
+      # scripts/build-wasm.mjs and nothing is uploaded here.
+      - name: Build the playground WASM compiler
+        run: go build -o /dev/null ./compiler/cmd/pzl-wasm
+        env:
+          GOOS: js
+          GOARCH: wasm
 
   windows:
     name: Go + CLI smoke (Windows)

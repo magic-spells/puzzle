@@ -41,6 +41,12 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      `ScopedCSS(filename, styles)` now owns the D59 `@scope ([data-<scopeId>]) { … }` wrapper text
+      next to `ScopeID`, which derives the id. The esbuild plugin calls it during a real build and
+      the playground WASM compiler calls it in the browser (D164), so the two cannot drift; the
+      emitted bytes are unchanged.
 ---
 
 # Render-function codegen

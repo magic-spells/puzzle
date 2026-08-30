@@ -55,6 +55,15 @@ func ScopeID(filename string) string {
 	return fmt.Sprintf("pzl-%08x", h.Sum32())
 }
 
+// ScopedCSS wraps a <style scoped> body in the native @scope rule keyed by
+// ScopeID(filename) — the same id the root stamp uses, so the rule and the
+// data-<scopeId> attribute always agree. It is the SINGLE source of the wrapper
+// text: the esbuild plugin emits it during a real build, and cmd/pzl-wasm emits
+// it for the playground, which has no build pipeline to run.
+func ScopedCSS(filename, styles string) string {
+	return "@scope ([data-" + ScopeID(filename) + "]) {\n" + styles + "\n}"
+}
+
 // EmissionMode selects the render root shape (constellation/doc/DOC-DECISIONS.md D20).
 type EmissionMode int
 
