@@ -133,11 +133,11 @@ func TestWatchBuilderReplacesContextWhenUsageDefinesFlip(t *testing.T) {
 		t.Fatalf("initial features = %+v, want all false", got)
 	}
 
-	assertReplace := func(name, source string, want plugin.Features) {
+	editReplaces := func(name, path, source string, want plugin.Features) {
 		t.Helper()
 		before := b.ctx
-		write(t, home, source)
-		if _, err := b.Rebuild([]string{home}); err != nil {
+		write(t, path, source)
+		if _, err := b.Rebuild([]string{path}); err != nil {
 			t.Fatalf("%s Rebuild: %v", name, err)
 		}
 		if b.ctx == before {
@@ -147,6 +147,10 @@ func TestWatchBuilderReplacesContextWhenUsageDefinesFlip(t *testing.T) {
 			t.Errorf("%s defined = %+v, want %+v", name, b.defined, want)
 		}
 	}
+	assertReplace := func(name, source string, want plugin.Features) {
+		t.Helper()
+		editReplaces(name, home, source, want)
+	}
 
 	assertReplace("Portal on", `<puzzle-view><Portal><p>remote</p></Portal></puzzle-view>
 <script>import { PuzzleView } from '@magic-spells/puzzle'; export default class Home extends PuzzleView {}</script>
@@ -155,6 +159,20 @@ func TestWatchBuilderReplacesContextWhenUsageDefinesFlip(t *testing.T) {
 <script>import { PuzzleView } from '@magic-spells/puzzle'; export default class Home extends PuzzleView {}</script>
 `, plugin.Features{RawAt: true})
 	assertReplace("all off", strings.ReplaceAll(viewTmpl, "%MARKER%", "PLAIN"), plugin.Features{})
+
+	// The D163 lazy bit comes from a SCRIPT, not a template, so a rebuild whose
+	// changed set holds only a .js file must still re-scan. While the rescan gate
+	// tested for `.pzl` alone, a developer adding their first lazy() during
+	// `puzzle dev` kept rebuilding against a frozen __PUZZLE_HAS_LAZY__ = false
+	// and hit the compiled-out route-view throw until they touched a template.
+	routes := filepath.Join(root, "app", "routes.js")
+	editReplaces("lazy on from routes.js", routes,
+		"import { lazy } from '@magic-spells/puzzle';\n"+
+			"export default [{ path: '/', view: lazy(() => import('./views/Home.pzl')) }];\n",
+		plugin.Features{Lazy: true})
+	editReplaces("lazy off from routes.js", routes,
+		"import Home from './views/Home.pzl';\nexport default [{ path: '/', view: Home }];\n",
+		plugin.Features{})
 }
 
 // TestWatchBuilderCSSResetOnDelete proves the shared <style> collector drops a
@@ -530,9 +548,11 @@ func TestWatchBuilderClassifiesIncrementalWorkFromChangedPaths(t *testing.T) {
 	root := scratchApp(t)
 	home := filepath.Join(root, "app", "views", "Home.pzl")
 	appJS := filepath.Join(root, "app", "app.js")
+	data := filepath.Join(root, "app", "data.json")
 	asset := filepath.Join(root, "app", "public", "logo.txt")
 	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME"))
-	write(t, appJS, "import Home from './views/Home.pzl';\nconsole.log(Home);\n")
+	write(t, appJS, "import Home from './views/Home.pzl';\nimport data from './data.json';\nconsole.log(Home, data);\n")
+	write(t, data, `{"marker":"ONE"}`)
 	write(t, asset, "LOGO-ONE")
 
 	b, err := NewWatchBuilder(root, WatchOptions{})
@@ -552,13 +572,28 @@ func TestWatchBuilderClassifiesIncrementalWorkFromChangedPaths(t *testing.T) {
 		t.Fatalf("initial metadata = %+v, want public sync and initial CSS commit", initial)
 	}
 
-	write(t, appJS, "import Home from './views/Home.pzl';\nconsole.log(Home); // js-only\n")
-	jsOnly, err := b.Rebuild([]string{appJS})
+	// A SCRIPT edit re-scans. It reads as an unrelated phase, but is not one:
+	// the D163 lazy bit is sourced from a .js/.ts module, so skipping the scan
+	// here would leave the frozen __PUZZLE_HAS_LAZY__ stale for the rest of the
+	// session (see plugin.IsScanInput).
+	write(t, appJS, "import Home from './views/Home.pzl';\nimport data from './data.json';\nconsole.log(Home, data); // js-only\n")
+	scriptOnly, err := b.Rebuild([]string{appJS})
 	if err != nil {
-		t.Fatalf("JS-only Rebuild: %v", err)
+		t.Fatalf("script-only Rebuild: %v", err)
 	}
-	if jsOnly.UsageScanned || jsOnly.PublicSynced || jsOnly.CSSChanged || !jsOnly.BundleBuilt {
-		t.Errorf("JS-only metadata = %+v, want every unrelated phase skipped", jsOnly)
+	if !scriptOnly.UsageScanned || scriptOnly.PublicSynced || scriptOnly.CSSChanged || !scriptOnly.BundleBuilt {
+		t.Errorf("script-only metadata = %+v, want usage scan and bundle only", scriptOnly)
+	}
+
+	// A bundle input the scan does NOT read still skips it — the D156 shortcut is
+	// narrowed by what the scanner reads, not abandoned.
+	write(t, data, `{"marker":"TWO"}`)
+	dataOnly, err := b.Rebuild([]string{data})
+	if err != nil {
+		t.Fatalf("data-only Rebuild: %v", err)
+	}
+	if dataOnly.UsageScanned || dataOnly.PublicSynced || dataOnly.CSSChanged || !dataOnly.BundleBuilt {
+		t.Errorf("data-only metadata = %+v, want every unrelated phase skipped", dataOnly)
 	}
 
 	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME-TEMPLATE-ONLY"))

@@ -112,6 +112,21 @@ have re-pinned `lazy.js` and defeated the gate.
 
 Defines are recomputed for one-shot, watch/dev, prerender, and per-page static bundles. Dev builds do NOT force any bit on — they take the scan's answer like every other pass. esbuild **freezes `Define` when a context is created**, so each long-lived builder compares the complete `Features` value and replaces its context when any bit flips — otherwise a mid-session edit adding or removing flip, Portal, raw, or lazy usage would build against stale defines while the incremental graph stayed warm. The dev scanner's per-file memo (path + mtime + size) covers the script files too, so reading them adds no per-rebuild parse cost.
 
+**What kind of file can move a bit is a THIRD place that must agree, and it is
+the one that has already been wrong.** The static dev builder re-scans on every
+rebuild, but the SPA `WatchBuilder` re-scans only when the changed set holds a
+file the walk actually reads — a real optimization, and a trap. That predicate
+tested for `.pzl` alone, which was right while every bit was a template fact and
+silently wrong the moment lazy arrived: a developer adding their first `lazy()`
+to `routes.js` mid-session kept rebuilding against a frozen
+`__PUZZLE_HAS_LAZY__ = false` and hit the compiled-out route-view throw until
+they touched an unrelated template or restarted `puzzle dev`. The fix is
+structural, not a second list: `plugin.IsScanInput` is the single predicate, the
+walk and `build.pathsHaveScanInput` both call it, and
+`TestWatchBuilderReplacesContextWhenUsageDefinesFlip` now drives a `.js` edit
+through the builder in both directions. Any future widening of what the scanner
+reads goes in that one function.
+
 ## Alternatives rejected
 
 - **A virtual "features manifest" module** (D31's exact shape) — defines are simpler here: each feature is one boolean, not a name subset, so there is nothing to enumerate into a module.
@@ -135,8 +150,8 @@ saved. `examples/overlays` sets `HasPortal` and its production bundle retains
 `data-puzzle-portal`. Existing flip users continue to retain `flip.js`.
 
 The lazy gate saves a comparable slice on the 0.7.0 line: `examples/todos`
-25,446 → 24,854 gzip-9 (**592 bytes**), `examples/hello-world` 22,389 → 21,816
-(**573 bytes**). `examples/blog`, which uses `lazy()`, is unchanged (+1 byte).
+25,446 → 24,868 gzip-9 (**578 bytes**), `examples/hello-world` 22,389 → 21,831
+(**558 bytes**). `examples/blog`, which uses `lazy()`, is unchanged (+1 byte).
 
 Three costs are accepted and should be re-examined if they bite:
 

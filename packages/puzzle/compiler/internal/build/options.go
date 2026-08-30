@@ -107,7 +107,7 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 // __PUZZLE_HAS_LAZY__ = false folds the router's three references to
 // router/lazy.js (the entry's hasLazy computation, the navigation-path resolve,
 // and the route-table validator's marker check), which drops the resolver out of
-// every app that never calls lazy() — D163's module, ~0.9 KB gzip. It is the
+// every app that never calls lazy() — D163's module, ~0.6 KB gzip. It is the
 // only usage bit answered from SCRIPT source rather than templates, since lazy()
 // is called from routes.js.
 //

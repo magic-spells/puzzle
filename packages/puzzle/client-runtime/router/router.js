@@ -3081,7 +3081,8 @@ function validateRouteView(value, label) {
 		`[puzzle] ${label} must be a PuzzleView class or lazy() marker (got ${describeValue(value)})` +
 			(typeof __PUZZLE_HAS_LAZY__ !== 'undefined' && !__PUZZLE_HAS_LAZY__
 				? ' — lazy() support was compiled out because the build scan found no lazy() ' +
-					'in project source (it does not scan node_modules or build output)'
+					'in project source (it does not scan files outside the project root, ' +
+					'node_modules, or build output)'
 				: '')
 	);
 }

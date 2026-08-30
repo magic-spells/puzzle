@@ -95,8 +95,7 @@ func (s *UsageScanner) Scan(scanRoot string) (Usage, error) {
 			}
 			return nil
 		}
-		ext := filepath.Ext(path)
-		if ext != ".pzl" && !scriptScanExts[ext] {
+		if !IsScanInput(path) {
 			return nil
 		}
 		seen[path] = true

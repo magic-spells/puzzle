@@ -3,6 +3,7 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -137,6 +138,17 @@ var puzzleImportRe = regexp.MustCompile(`(?s)\b(?:import|export)\b([^;'"]*)\bfro
 
 var lazyIdentRe = regexp.MustCompile(`\blazy\b`)
 
+// IsScanInput reports whether the usage walk READS this path — a `.pzl`
+// template or a script module. It is the single source of truth for that
+// question: the walk itself uses it, and so does the dev/watch builder deciding
+// whether a batch of changed files can move a usage bit. Those two must never
+// disagree, or a mid-session edit to a file the walk reads would rebuild against
+// a stale, frozen Define set (see build.pathsHaveScanInput).
+func IsScanInput(path string) bool {
+	ext := filepath.Ext(path)
+	return ext == ".pzl" || scriptScanExts[ext]
+}
+
 // scriptScanExts are the source extensions read as TEXT for script-level usage.
 // .pzl is not here — a template file is read and parsed by scanFileUsage, which
 // runs the same text match over its whole source so a `lazy()` call inside a
@@ -158,7 +170,7 @@ var scriptScanExts = map[string]bool{
 // Detection is regex-level ON PURPOSE. The compiler never parses script bodies
 // (a public invariant — .pzl scripts are real JS/TS bytes Go does not rewrite),
 // and the bias here is the same as the rest of the scan: a false positive
-// leaves ~0.9 KB gzip of resolver in a bundle that does not need it, while a
+// leaves ~0.6 KB gzip of resolver in a bundle that does not need it, while a
 // false negative compiles the resolver OUT of an app that does, breaking every
 // lazy route. So two independent rules both count, and either one is enough:
 //
