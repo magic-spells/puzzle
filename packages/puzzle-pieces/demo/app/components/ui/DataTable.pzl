@@ -28,17 +28,16 @@
             {/if}
             {#for col in columns}
               <th scope="col" class={ col.thClass } aria-sort={ col.ariaSort } key={ col.key }>
-                {#if col.sortable}
-                  <button type="button" class={ sortBtnClass } @click={ sortBy(col.dataKey, event) }>
-                    <span>{ col.label }</span>
+                <span class={ col.headerClass }>
+                  <span><Slot name="header-cell" col={ col }>{ col.label }</Slot></span>
+                  {#if col.sortable}
                     <svg class="size-3.5 shrink-0" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path class={ col.upClass } d="M4 7l3-3 3 3" />
                       <path class={ col.downClass } d="M4 9l3 3 3-3" />
                     </svg>
-                  </button>
-                {:else}
-                  { col.label }
-                {/if}
+                    <button type="button" class={ sortHitClass } aria-label={ col.sortLabel } @click={ sortBy(col.dataKey, event) }></button>
+                  {/if}
+                </span>
               </th>
             {/for}
           </tr>
@@ -63,7 +62,7 @@
                   </td>
                 {/if}
                 {#for cell in row.cells}
-                  <td class={ cell.tdClass } key={ cell.key }>{ cell.value }</td>
+                  <td class={ cell.tdClass } key={ cell.key }><Slot name="cell" cell={ cell } row={ row }>{ cell.value }</Slot></td>
                 {/for}
               </tr>
             {/for}
@@ -107,6 +106,20 @@ import Pagination from './Pagination.pzl';
 //   <DataTable columns={ columns } rows={ rows } rowKey="invoice"
 //              selectable pageSize={ 5 } />
 //
+//   // A supplied cell snippet is stamped once per body cell. Branch on
+//   // cell.dataKey and repeat the plain value for cells that stay standard.
+//   <DataTable columns={ columns } rows={ rows } rowKey="invoice">
+//     <Snippet fits="cell" cell row>
+//       {#if cell.dataKey === 'status'}
+//         <Badge variant={ cell.value === 'Paid' ? 'brand' : 'outline' }>
+//           { cell.value }
+//         </Badge>
+//       {:else}
+//         { cell.value }
+//       {/if}
+//     </Snippet>
+//   </DataTable>
+//
 // PROPS
 //   columns   [{ key, label, align?, sortable? }] — Table's schema plus a per-column
 //             `sortable` flag. align: 'left' (default) | 'right' | 'center'. Cell
@@ -132,6 +145,13 @@ import Pagination from './Pagination.pzl';
 //   pageSize  number — when > 0, enables pagination (rows are sorted, THEN paged).
 //   page      OPTIONAL-CONTROLLED 1-based current page. Omit → table-owned; pass → parent-owned.
 //
+// SNIPPETS (caller-owned; omitting either keeps today's text fallback unchanged)
+//   <Snippet fits="cell" cell row>       stamped inside every body <td>. `cell`
+//             exposes value, dataKey, column, and tdClass. `row` retains the
+//             source row's fields and exposes the original object as row.source.
+//   <Snippet fits="header-cell" col>     stamped at each header-label position;
+//             sortable headers keep a full-label real button over that markup.
+//
 // CALLBACKS  (value-first; every one fires in BOTH controlled and uncontrolled mode)
 //   @sortChange(next)     next sort descriptor ({ key, dir } | null) after a header click.
 //   @select(keys, event)  the next array of selected rowKey values.
@@ -152,10 +172,11 @@ import Pagination from './Pagination.pzl';
 // selected as the user sorts and pages.
 //
 // A11Y. Sortable headers carry aria-sort ("ascending" / "descending"; the attribute
-// is OMITTED when unsorted rather than set to "none"), and the header label is a
-// real <button> so it is keyboard-operable; a small inline SVG chevron pair shows
-// the active direction (paths only — never SVG <text>). Non-sortable headers stay
-// plain text. Row checkboxes are native <input type="checkbox"> (styled with
+// is OMITTED when unsorted rather than set to "none"), and an aria-labelled real
+// <button> overlays the full label + chevron hit area so it is keyboard-operable;
+// a small inline SVG chevron pair shows the active direction (paths only — never
+// SVG <text>). Non-sortable headers stay plain text. Row checkboxes are native
+// <input type="checkbox"> (styled with
 // Checkbox's box classes) with an aria-label built from the row's key; the header
 // checkbox toggles select/clear-all for the CURRENT page and shows an indeterminate
 // state when the page is partially selected (the `indeterminate` DOM property is set
@@ -172,13 +193,16 @@ const ALIGN = {
 const TH_BASE = 'whitespace-nowrap px-4 py-3 text-sm font-medium text-muted';
 const TD_BASE = 'px-4 py-3 text-sm text-body';
 
-// The sortable-header trigger. Inline-flex so it honors the <th>'s text-align
-// (right/center columns push the button to that edge). Outline color is set
-// unconditionally (outline-ring) so focus doesn't flash — see the header note.
-const SORT_BTN =
-  'group inline-flex items-center gap-1.5 whitespace-nowrap rounded cursor-pointer select-none ' +
+// The sortable-header visual wrapper + full-area overlay button. Inline-flex
+// honors the <th>'s text-align (right/center columns push it to that edge).
+// Outline color is unconditional so focus doesn't flash — see the header note.
+const SORT_HEADER =
+  'group relative inline-flex items-center gap-1.5 whitespace-nowrap rounded cursor-pointer select-none ' +
   'text-muted transition-colors hover:text-ink ' +
-  'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
+  'outline-ring';
+const SORT_HIT =
+  'absolute inset-0 rounded cursor-pointer outline-ring ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2';
 
 // Checkbox box, lifted verbatim from the Checkbox piece (appearance-none native
 // input + tick overlay). The header variant adds the indeterminate paint.
@@ -308,14 +332,18 @@ export default class DataTable extends PuzzleView {
     const columns = rawColumns.map((col, i) => {
       const align = ALIGN[col.align] || ALIGN.left;
       const key = col.key != null ? String(col.key) : `col-${i}`;
+      const label = col.label != null ? String(col.label) : '';
+      const sortable = !!col.sortable;
       const active = sortKey != null && String(col.key) === String(sortKey);
       const asc = active && sortDir === 'asc';
       const desc = active && sortDir === 'desc';
       return {
         key,
         dataKey: col.key,
-        label: col.label != null ? String(col.label) : '',
-        sortable: !!col.sortable,
+        label,
+        sortable,
+        headerClass: sortable ? SORT_HEADER : '',
+        sortLabel: `Sort by ${label}`,
         thClass: `${TH_BASE} ${align}`,
         tdClass: `${TD_BASE} ${align}`,
         ariaSort: active ? (asc ? 'ascending' : 'descending') : false,
@@ -344,7 +372,10 @@ export default class DataTable extends PuzzleView {
         ? String(row == null || row[rowKey] == null ? '' : row[rowKey])
         : String(globalIndex);
       const checked = selectedSet.has(selectKey);
+      const sourceFields = row && typeof row === 'object' ? row : {};
       return {
+        ...sourceFields,
+        source: row,
         key: selectKey || `row-${globalIndex}`,
         selectKey,
         checked,
@@ -357,6 +388,8 @@ export default class DataTable extends PuzzleView {
           return {
             key: `${col.key}-${selectKey}-${c}`,
             value: v == null ? '' : v,
+            dataKey: col.dataKey,
+            column: col,
             tdClass: col.tdClass,
           };
         }),
@@ -383,7 +416,7 @@ export default class DataTable extends PuzzleView {
       colspan: (columns.length || 1) + (selectable ? 1 : 0),
       caption: props.caption || '',
       emptyText: props.empty || 'No results.',
-      sortBtnClass: SORT_BTN,
+      sortHitClass: SORT_HIT,
       checkInputRow: CHECK_INPUT,
       checkInputHead: CHECK_INPUT_HEAD,
       headerChecked: allSelected,
