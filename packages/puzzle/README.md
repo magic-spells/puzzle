@@ -83,8 +83,9 @@ npm install -D @magic-spells/puzzle
 
 The CLI is a prebuilt Go binary delivered through per-platform optional
 dependencies (no compiler toolchain, no postinstall step). Prebuilt binaries ship
-for **macOS (arm64, x64)** and **Linux (x64, arm64)**; npm downloads only the one
-matching your machine. Once installed, `puzzle` is on your `PATH` for npm scripts:
+for **macOS (arm64, x64)**, **Linux (x64, arm64)**, and **Windows (x64)**; npm
+downloads only the one matching your machine. Windows-on-ARM runs the x64 binary
+under emulation. Once installed, `puzzle` is on your `PATH` for npm scripts:
 
 ```jsonc
 // package.json
@@ -110,10 +111,10 @@ npm run dev
 The generated app depends on `@magic-spells/puzzle` locally, so collaborators
 who clone it only need `npm install` — no global CLI required.
 
-### Unsupported platforms (e.g. Windows) or building from source
+### Other platforms, or building from source
 
-The prebuilt binary covers macOS and Linux. On any other platform — or if you
-prefer to build the CLI yourself — install it from source with Go:
+The prebuilt binaries cover macOS, Linux, and Windows. On any other platform — or
+if you prefer to build the CLI yourself — install it from source with Go:
 
 ```bash
 go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest

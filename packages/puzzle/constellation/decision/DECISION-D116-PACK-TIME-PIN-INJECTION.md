@@ -22,7 +22,8 @@ notes:
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
-The four `@magic-spells/puzzle-<platform>-<arch>` optionalDependencies do not
+The `@magic-spells/puzzle-<platform>-<arch>` optionalDependencies — five of them
+since Windows x64 landed in 0.7.0 — do not
 live in the tracked manifest. `scripts/inject-platform-pins.mjs` writes them —
 version-matched to the root — in `prepack` and removes them in `postpack`, and
 `scripts/verify-pack.mjs` validates the mechanism by packing a **real tarball**
@@ -52,8 +53,9 @@ along:
 ## Decision
 
 - **verify-pack packs for real**: `npm pack --json --pack-destination` into a
-  temp dir, then (1) the tarball's `package/package.json` must carry all four
-  pins `===` the root version and nothing else in `optionalDependencies`;
+  temp dir, then (1) the tarball's `package/package.json` must carry every
+  platform pin `===` the root version and nothing else in
+  `optionalDependencies`;
   (2) the packed file list comes from `tar -tzf`, fed to the same
   allowlist/REQUIRED checks as before; (3) after packing, the REPO manifest
   must be clean again — that is the postpack regression test; (4) the
@@ -63,6 +65,10 @@ along:
   This exercises prepack/postpack end to end and
   fails on a hook that didn't run, a pin that didn't match, or a leftover
   mutation.
+- The expected pin set is maintained in two places on purpose —
+  `inject-platform-pins.mjs` (what gets written) and `verify-pack.mjs` (what
+  must be there) — and verify-pack compares the two lists by CONTENTS, not by
+  count, so adding a platform to one and not the other fails loudly.
 - **`release:prep` runs `inject-platform-pins.mjs restore` as its first
   step**, so a previously-aborted pack can never feed a stale pinned manifest
   into a release.

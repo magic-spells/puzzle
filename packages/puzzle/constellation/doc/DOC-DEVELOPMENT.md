@@ -77,21 +77,26 @@ for the counters production compiles out, and `probe-route-churn.mjs` /
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs four parallel jobs: **go** (`go vet`,
-`go build`, `go test` over `./...`), **js** (`npm test`, `npm run verify:pack`,
-`npm run test:types`), **e2e-pack** (`npm run test:e2e-pack`), and **browser**
-(a Playwright chromium + webkit smoke via `npm run test:browser`). Three of the
-four install Go as well as Node, because `npm test`'s pretest, the packed-tarball
-build, and Playwright's example dev servers all shell out to the real compiler.
+The monorepo-root `.github/workflows/ci.yml` runs eight parallel jobs:
+**go** (`go vet`, `go build`, `go test` over `./...`), **windows** (the same Go
+three on `windows-latest`, then a CLI smoke that scaffolds an app with a
+freshly built `puzzle.exe` and builds it), **js** (`npm test`,
+`npm run verify:pack`, `npm run test:types`), **e2e-pack**
+(`npm run test:e2e-pack`), **browser** (a Playwright chromium + webkit smoke via
+`npm run test:browser`), **pieces**, **devtools**, and **plugins** (the sibling
+packages' own suites, run against this working tree). Most of them install Go as
+well as Node, because `npm test`'s pretest, the packed-tarball build, the
+sibling builds, and Playwright's example dev servers all shell out to the real
+compiler.
 
-**It triggers only on push and pull_request against `main`.** Day-to-day work
-happens on `release/*` and `feat/*` branches, and a PR from a feature branch
-into a release branch never targets `main` — so the normal workflow gets **zero
-CI coverage** and the local suites are the only gate until a release branch
-merges to `main`. Run both required suites yourself; do not wait for a green
-check that will not appear.
+There is deliberately **no Windows JS job**: the runtime is platform-independent
+browser JavaScript under jsdom, and everything platform-specific lives in the Go
+compiler and CLI.
 
-There is no publish workflow. Releases are packed and published by hand.
+**It triggers on push and pull_request against both `main` and `release/**`**,
+so a feature branch PR'd into a release branch is covered. There is no publish
+job — releasing is entirely by hand ([[FLOW-RELEASE]]). Run both suites locally
+anyway; CI is a backstop, not a substitute for verifying your own change.
 
 Golden codegen fixtures live in `compiler/internal/codegen/testdata/`.
 Regenerate intentionally with:

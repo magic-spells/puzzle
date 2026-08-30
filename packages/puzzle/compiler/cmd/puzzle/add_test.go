@@ -117,6 +117,9 @@ func TestAddTailwindSkipsStylesWhenImportPresent(t *testing.T) {
 }
 
 func TestAddTailwindSurfacesStylesWriteError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a read-only directory mode does not block file creation on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("running as root: directory permissions don't prevent writes")
 	}

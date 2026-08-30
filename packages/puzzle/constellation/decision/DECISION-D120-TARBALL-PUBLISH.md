@@ -45,9 +45,11 @@ actually resolves a binary.
 
 ## Context
 
-D116 moved the four platform pins out of the tracked manifest into `prepack` /
+D116 moved the platform pins out of the tracked manifest into `prepack` /
 `postpack`, and hardened `verify-pack` to inspect a real tarball rather than the
-injection function. Both of those are right, and neither catches this.
+injection function. Both of those are right, and neither catches this. (There
+were four platform packages when this was written; Windows x64 made it five in
+0.7.0. The count is not load-bearing here — the mechanism is.)
 
 `npm publish` on a directory does not upload the manifest from the tarball it
 just built. In `lib/commands/publish.js` (npm 11) it packs at roughly L111 —
@@ -85,8 +87,10 @@ Three changes enforce it:
   whole mechanism: it is unreachable from a tarball publish, so an unconditional
   failure blocks exactly the wrong path and nothing else.
 - **`release:prep` packs the artifact it names.** Step 6 packs the root tarball
-  and reads the four pins back out of the packed bytes, so the filename printed
-  in the summary is one whose manifest has been proven correct.
+  and reads every platform pin back out of the packed bytes, so the filename
+  printed in the summary is one whose manifest has been proven correct. The
+  expected pin set is derived from the build matrix rather than restated, so a
+  new platform (Windows x64, 0.7.0) extends the assertion by being added to it.
 - **`verify:published` checks the registry after the fact, and then stops
   reasoning and installs.** It reads the packument — the pins, their version
   match, that each pinned platform version actually exists, `bin.puzzle` intact —

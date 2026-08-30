@@ -10,7 +10,7 @@
  *      `go run`, since the published binary doesn't exist pre-publish).
  *   3. Point the app's `@magic-spells/puzzle` dependency at the packed tarball
  *      (`file:…`) and `npm install`. Now the RUNTIME resolves from real
- *      node_modules. The four per-platform binary optionalDependencies are
+ *      node_modules. The per-platform binary optionalDependencies are
  *      unpublished, so they fail to resolve — npm tolerates missing OPTIONAL
  *      deps, which is exactly what we assert by the install succeeding.
  *   4. Build the app with the REPO compiler. Because the app lives outside the

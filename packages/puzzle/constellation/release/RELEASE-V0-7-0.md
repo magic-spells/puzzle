@@ -9,6 +9,7 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D162-MONOREPO-PACKAGES
   - DECISION-D76-CLI-UPGRADE
+  - FLOW-RELEASE
 notes:
   - kind: state
     text: >-
@@ -54,6 +55,14 @@ train. Nothing about the published package changes — same name, exports, and
 tarball layout — but a pieces release can no longer lag the CLI it is
 version-locked to.
 
+The third is reach: the CLI ships a Windows x64 binary, so the release goes out
+as six npm packages instead of five and `npm install` on Windows resolves a real
+`puzzle.exe` rather than printing the unsupported-platform message. A
+`windows-latest` CI job runs the Go suite and scaffolds and builds an app with
+that binary on every push, which is the only standing proof the target works —
+nothing in the release pipeline can execute a cross-compiled binary for a
+platform other than the host ([[FLOW-RELEASE]]).
+
 Everything else is correctness. A pre-release review round and a decisions
 round closed a long tail across the model layer, the view lifecycle, the
 router, the compiler, and the CLI.
@@ -77,6 +86,15 @@ capability):**
   settled. Hybrid transfers nothing new by design.
 - HMR preserves the collection-complete set and the negative cache across a dev
   reload. In-flight promises are never carried.
+- A Windows x64 CLI binary, as a fifth platform package
+  (`@magic-spells/puzzle-win32-x64`, packing `bin/puzzle.exe`) pinned as an
+  `optionalDependency` like the other four. The packages are keyed the way Node
+  spells the platform — `win32`, not Go's `windows` — because the bin shim looks
+  them up by `process.platform`/`process.arch`; `puzzle upgrade` derived that
+  name in Go and had it wrong until now. Windows-on-ARM runs the x64 binary
+  under emulation, so there is deliberately no `win32-arm64` package. The
+  `puzzle dev` single-key shortcuts stay Unix-only and are simply absent there;
+  Ctrl-C still stops the server.
 
 **Fixed — data layer:**
 

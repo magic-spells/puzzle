@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Asserts the npm tarball for @magic-spells/puzzle ships ONLY the runtime, its
 // public TypeScript declarations, and the CLI bin shim (package.json "files":
-// client-runtime, types, puzzle-env.d.ts, bin/puzzle.js). Also asserts the four
+// client-runtime, types, puzzle-env.d.ts, bin/puzzle.js). Also asserts the
 // per-platform optionalDependencies are declared and version-pinned to the root.
 //
 // This check inspects a REAL tarball, not a report about one. It runs `npm pack`
@@ -65,6 +65,7 @@ const PLATFORM_DEPS = [
 	'@magic-spells/puzzle-darwin-x64',
 	'@magic-spells/puzzle-linux-x64',
 	'@magic-spells/puzzle-linux-arm64',
+	'@magic-spells/puzzle-win32-x64',
 ];
 
 function isAllowed(p) {
@@ -177,7 +178,7 @@ function fromTarball(args, what) {
 	}
 }
 
-// --- 3. The TARBALL manifest must carry exactly the four pins ---------------
+// --- 3. The TARBALL manifest must carry exactly the platform pins -----------
 const tarPkg = (() => {
 	const text = fromTarball(['-xOzf', tarball, 'package/package.json'], 'package/package.json');
 	try {
@@ -293,11 +294,16 @@ if (repoPkgAfter.optionalDependencies) {
 // --- 6. …and the COMMITTED manifest must be clean too -----------------------
 // Fail-soft: no git (a tarball-only checkout, a CI image without git) downgrades
 // this to a warning rather than blocking a release.
+// The `./` prefix is load-bearing: a bare `HEAD:package.json` is resolved from
+// the REPO ROOT regardless of cwd, which since the monorepo move reads the
+// private root shell manifest — a file that never carries pins, so the check
+// would pass vacuously. `HEAD:./package.json` is cwd-relative, and cwd is this
+// package.
 {
 	let committed = null;
 	try {
 		committed = JSON.parse(
-			execFileSync('git', ['show', 'HEAD:package.json'], {
+			execFileSync('git', ['show', 'HEAD:./package.json'], {
 				cwd: repoRoot,
 				encoding: 'utf8',
 				stdio: ['ignore', 'pipe', 'pipe'],
@@ -305,7 +311,7 @@ if (repoPkgAfter.optionalDependencies) {
 		);
 	} catch (err) {
 		console.error(
-			`verify-pack: WARN — could not read HEAD:package.json via git (${err.message.trim().split('\n')[0]}); ` +
+			`verify-pack: WARN — could not read HEAD:./package.json via git (${err.message.trim().split('\n')[0]}); ` +
 				'skipping the committed-manifest check.'
 		);
 	}

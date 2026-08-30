@@ -14,9 +14,9 @@
 // `npm install @magic-spells/puzzle@<version>` right now, do they get a CLI?
 //
 //   1. The root version exists on the registry.
-//   2. Its packument declares all four platform optionalDependencies, each pinned
+//   2. Its packument declares every platform optionalDependency, each pinned
 //      EXACTLY to the root version.
-//   3. Each of those four platform versions actually exists on the registry (a pin
+//   3. Each of those platform versions actually exists on the registry (a pin
 //      to a missing version installs nothing — optional deps fail silently).
 //   4. The root packument still declares the `puzzle` bin.
 //   5. A REAL install into a temp dir produces a `puzzle` that runs and reports
@@ -80,7 +80,7 @@ if (!manifest) {
 }
 console.log(`  OK  ${name}@${version} is published`);
 
-// --- 2. The packument declares the four pins, version-matched ---------------
+// --- 2. The packument declares the platform pins, version-matched -----------
 // The failure this exists for: correct tarball, pin-less packument.
 const pins = manifest.optionalDependencies;
 if (!pins || Object.keys(pins).length === 0) {
@@ -116,7 +116,7 @@ for (const dep of PLATFORM_PACKAGES) {
 	if (!doc.versions?.[version]) {
 		fail(
 			`${dep}@${version} is not on the registry, but ${name}@${version} pins it`,
-			'Publish the four platform packages BEFORE the root package — a pin to a\n' +
+			'Publish the platform packages BEFORE the root package — a pin to a\n' +
 				'missing version fails silently and installs no binary.'
 		);
 	}

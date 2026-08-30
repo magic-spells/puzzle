@@ -19,6 +19,17 @@ notes:
   - kind: verified
     text: Claims re-verified against the current Go compiler code; no drift found.
     sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+  - kind: gotcha
+    text: >-
+      The post-upgrade "find the binary npm just installed" step derives the platform package name
+      in Go, and Node's spelling is not Go's: `runtime.GOOS` is `windows` where the package is
+      `puzzle-win32-x64`, and `runtime.GOARCH` is `amd64` where the package is `-x64`. Both are
+      translated in `platformPackageName()` (cmd/puzzle/upgrade.go). The arch half was handled from
+      the start; the OS half only mattered once Windows binaries shipped in 0.7.0, and it was wrong
+      until then. The file inside `bin/` differs too — `puzzle.exe` on Windows — hence
+      `platformBinaryName()`. Still unhandled on Windows: the `node_modules/.bin/puzzle` fallback
+      candidate is a shell script npm pairs with a `.cmd`, so exec'ing it fails and the candidate is
+      simply skipped; the hoisted platform binary is tried first, so the common layouts still work.
 code_refs:
   - compiler/cmd/puzzle/main.go
   - compiler/cmd/puzzle/upgrade.go

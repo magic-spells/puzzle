@@ -344,7 +344,7 @@ func upgradedBinaryCandidates(ctx installContext) []string {
 		return []string{
 			// Hoisted layouts (npm/yarn/bun) expose the platform binary directly;
 			// pnpm keeps it in the store, so fall back to the package-manager shim.
-			filepath.Join(ctx.dir, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle"),
+			filepath.Join(ctx.dir, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName()),
 			filepath.Join(ctx.dir, "node_modules", ".bin", "puzzle"),
 		}
 	}
@@ -358,13 +358,39 @@ func upgradedBinaryCandidates(ctx installContext) []string {
 	return append(candidates, ctx.executable)
 }
 
-// platformPackageName mirrors bin/puzzle.js: Node spells amd64 "x64".
+// platformPackageName mirrors bin/puzzle.js, which keys the platform packages by
+// process.platform/process.arch: Node spells amd64 "x64" and windows "win32".
 func platformPackageName() string {
-	arch := runtime.GOARCH
-	if arch == "amd64" {
-		arch = "x64"
+	return platformPackageNameFor(runtime.GOOS, runtime.GOARCH)
+}
+
+// platformBinaryName is the file inside a platform package's bin/ — Windows
+// needs the .exe suffix to execute it at all.
+func platformBinaryName() string {
+	return platformBinaryNameFor(runtime.GOOS)
+}
+
+// platformPackageNameFor is the pure translation the two wrappers above exist to
+// expose: it takes the GOOS/GOARCH pair rather than reading the running host, so
+// every shipped target can be asserted from one test on one machine. Reading
+// runtime.GOOS directly is what let the Windows name sit wrong until Windows
+// binaries shipped — a mac and a Linux runner both agreed with the bug.
+func platformPackageNameFor(goos, goarch string) string {
+	if goos == "windows" {
+		goos = "win32"
 	}
-	return "puzzle-" + runtime.GOOS + "-" + arch
+	if goarch == "amd64" {
+		goarch = "x64"
+	}
+	return "puzzle-" + goos + "-" + goarch
+}
+
+// platformBinaryNameFor is the same split for the file inside bin/.
+func platformBinaryNameFor(goos string) string {
+	if goos == "windows" {
+		return "puzzle.exe"
+	}
+	return "puzzle"
 }
 
 // binaryReportsVersion runs `<path> --version` and compares the trailing field

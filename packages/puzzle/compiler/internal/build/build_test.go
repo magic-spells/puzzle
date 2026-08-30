@@ -1935,9 +1935,13 @@ func TestCopyPublicLiveDistSkipsUnchanged(t *testing.T) {
 
 	// Mark the destination so a rewrite is detectable even if the timestamps
 	// happen to land identically: WriteFileAtomic renames a fresh file into
-	// place, which resets the mode we set here.
-	if err := os.Chmod(target, 0o600); err != nil {
-		t.Fatal(err)
+	// place, which resets the mode we set here. Windows has no unix permission
+	// bits to set, so the mtime check below carries the assertion there.
+	modeSentinel := runtime.GOOS != "windows"
+	if modeSentinel {
+		if err := os.Chmod(target, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	copied, err = copyPublic(root, dist, copyIntoLiveDist)
@@ -1951,7 +1955,7 @@ func TestCopyPublicLiveDistSkipsUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Mode().Perm() != 0o600 {
+	if modeSentinel && after.Mode().Perm() != 0o600 {
 		t.Errorf("unchanged public file was rewritten (mode reset to %v)", after.Mode().Perm())
 	}
 	if !after.ModTime().Equal(before.ModTime()) {
