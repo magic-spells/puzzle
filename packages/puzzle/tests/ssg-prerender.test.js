@@ -12,6 +12,7 @@ import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { memoryRouter } from '../client-runtime/router/modes.js';
+import { lazy } from '../client-runtime/router/lazy.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -91,6 +92,25 @@ const SHELL =
 	'<!doctype html><html><head><title>Shell</title></head><body><div id="app"></div></body></html>';
 
 describe('SSG prerender (M1)', () => {
+	it('awaits lazy views and layouts in the DOM-free chain assembler', async () => {
+		const viewLoader = vi.fn(async () => ({ default: Profile }));
+		const layoutLoader = vi.fn(async () => Layout);
+		const { pages } = await prerender({
+			target: '#app',
+			routes: [
+				{
+					path: '/lazy',
+					view: lazy(viewLoader),
+					layout: lazy(layoutLoader),
+				},
+			],
+		});
+
+		expect(pages[0].html).toBe('<div class="layout"><p>Ada</p></div>');
+		expect(viewLoader).toHaveBeenCalledTimes(1);
+		expect(layoutLoader).toHaveBeenCalledTimes(1);
+	});
+
 	it('enumerates static routes incl. nested children and renders the layout chain', async () => {
 		const { pages } = await prerender(config());
 		const byPath = Object.fromEntries(pages.map((p) => [p.path, p]));

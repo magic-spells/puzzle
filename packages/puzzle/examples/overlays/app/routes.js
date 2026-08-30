@@ -1,11 +1,11 @@
-import HomeView from './views/Home.pzl';
+import { lazy } from '@magic-spells/puzzle';
 import DefaultLayout from './layouts/Default.pzl';
 
 export default [
   {
     path: '/',
     name: 'home',
-    view: HomeView,
+		view: lazy(() => import('./views/Home.pzl')),
     layout: DefaultLayout,
     meta: {
       title: 'Overlays — Puzzle <Portal>',

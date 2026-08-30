@@ -1,4 +1,7 @@
-// Plain SPA output. Portals serialize to nothing under the prerenderers
-// (D144), so an overlay showcase has nothing to gain from `hybrid`/`static` —
-// every panel here appears at takeover anyway.
-export default {};
+// The environment switch keeps this example useful for exercising both lazy
+// route build shapes: an emitted chunk when true and an inlined import when
+// false/unset. `puzzle build --static` still overrides splitting for its
+// per-page bundles.
+export default {
+	build: { splitting: process.env.PUZZLE_SPLITTING === 'true' },
+};

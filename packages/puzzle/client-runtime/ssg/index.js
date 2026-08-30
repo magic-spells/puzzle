@@ -46,6 +46,7 @@ import { findShadowedPaths, isDynamicSegment } from '../router/routePath.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr, escapeScriptJson } from './serialize.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js';
+import { isLazyView, resolveRouteViews } from '../router/lazy.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
 
@@ -377,7 +378,7 @@ async function prerenderPass(config, opts = {}) {
 		if (only && !only.has(fullPath)) {
 			const page = { path: fullPath, html: null, title: null, head: null, reused: true };
 			if (chain.some((route) => route.prerender === false)) page.prerender = false;
-			page.modules = collectModules(entry);
+			page.modules = await collectModules(entry);
 			page.route = serializeRouteJSON(entry);
 			pages.push(page);
 			continue;
@@ -391,7 +392,7 @@ async function prerenderPass(config, opts = {}) {
 		if (chain.some((route) => route.prerender === false)) {
 			const ctx = await createPageContext(entry);
 			const page = { path: fullPath, html: null, title: null, head: null, prerender: false };
-			if (isStatic) attachStaticFields(page, entry, ctx);
+			if (isStatic) await attachStaticFields(page, entry, ctx);
 			pages.push(page);
 			continue;
 		}
@@ -419,7 +420,7 @@ async function prerenderPass(config, opts = {}) {
 			});
 		}
 		const page = { path: fullPath, html: rendered.html, title: rendered.title, head: rendered.head };
-		if (isStatic) attachStaticFields(page, entry, ctx);
+		if (isStatic) await attachStaticFields(page, entry, ctx);
 		pages.push(page);
 	}
 
@@ -866,7 +867,7 @@ async function renderRoute(entry, ctx) {
  * chain's `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot the
  * browser kernel zips its view classes onto. Mutates `page` in place.
  */
-function attachStaticFields(page, entry, ctx) {
+async function attachStaticFields(page, entry, ctx) {
 	page.data = ctx.store._serializeAll();
 	// What the records cannot say (D161): which collections this page settled
 	// completely, and which identities it settled as absent. Attached only when the
@@ -874,7 +875,7 @@ function attachStaticFields(page, entry, ctx) {
 	// HTML is unchanged.
 	const readState = serializeReadState(ctx.store);
 	if (hasReadState(readState)) page.readState = readState;
-	page.modules = collectModules(entry);
+	page.modules = await collectModules(entry);
 	page.route = serializeRouteJSON(entry);
 }
 
@@ -885,12 +886,16 @@ function attachStaticFields(page, entry, ctx) {
  * cannot ship a per-page module for it, so this is a build error naming the route
  * and class.
  */
-function collectModules(entry) {
+
+async function collectModules(entry) {
+	const resolved = await resolveRouteViews(entry);
 	const views = [];
-	for (const node of entry.chain) {
-		views.push(requireStamp(node.view, entry.fullPath, 'view'));
+	for (const ViewClass of resolved.views) {
+		views.push(requireStamp(ViewClass, entry.fullPath, 'view'));
 	}
-	const layout = entry.layout ? requireStamp(entry.layout, entry.fullPath, 'layout') : null;
+	const layout = resolved.layout
+		? requireStamp(resolved.layout, entry.fullPath, 'layout')
+		: null;
 	return { views, layout };
 }
 
@@ -904,9 +909,14 @@ function collectModules(entry) {
 function collectSkippedModules(entry) {
 	const views = [];
 	for (const node of entry.chain) {
-		if (typeof node.view?.__pzlModule === 'string') views.push(node.view.__pzlModule);
+		if (!isLazyView(node.view) && typeof node.view?.__pzlModule === 'string') {
+			views.push(node.view.__pzlModule);
+		}
 	}
-	const layout = typeof entry.layout?.__pzlModule === 'string' ? entry.layout.__pzlModule : null;
+	const layout =
+		!isLazyView(entry.layout) && typeof entry.layout?.__pzlModule === 'string'
+			? entry.layout.__pzlModule
+			: null;
 	return { views, layout };
 }
 

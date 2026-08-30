@@ -8,7 +8,7 @@
  * `tsc --strict`, not full soundness.
  *
  * Source of truth: constellation/doc/DOC-SPEC.md and the client-runtime sources.
- * Covers the four package exports { PuzzleApp, PuzzleView, PuzzleModel, Puzzle }
+ * Covers the package exports { PuzzleApp, PuzzleView, PuzzleModel, Puzzle, lazy }
  * plus the internal/compiler-support exports re-exported from the package root.
  */
 
@@ -31,6 +31,23 @@ export interface PuzzleAdapterCapability {
 	readonly [puzzleAdapterCapabilityBrand]: true;
 }
 
+declare const puzzleLazyViewBrand: unique symbol;
+
+/** Opaque route-view marker produced by `lazy()`. */
+export interface LazyView {
+	readonly [puzzleLazyViewBrand]: true;
+}
+
+/** A module namespace returned by a lazy route import. */
+export interface LazyViewModule {
+	default: PuzzleViewConstructor;
+}
+
+/** Explicitly mark an async route view/layout loader. */
+export declare function lazy(
+	loader: () => Promise<LazyViewModule | PuzzleViewConstructor>
+): LazyView;
+
 /**
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
  * PuzzleView subclasses (constructors) — typed loosely so `.pzl` default
@@ -40,8 +57,8 @@ export interface PuzzleAdapterCapability {
 export interface Route {
 	path: string;
 	name?: string;
-	view: any;
-	layout?: any;
+	view: PuzzleViewConstructor | LazyView;
+	layout?: PuzzleViewConstructor | LazyView;
 	/** Route-entry guard (v1.53, D87), inherited root → leaf and run before views load. */
 	guard?: GuardFn;
 	/**

@@ -17,6 +17,7 @@
 import { ViewNode } from '../views/ViewNode.js';
 import { encodeURL, normalizeBase } from '../router/router.js';
 import { normalizeRoutePath } from '../router/routePath.js';
+import { resolveRouteViews } from '../router/lazy.js';
 
 /**
  * Instantiate + preload the layout+view chain for one route and assemble it into
@@ -36,12 +37,13 @@ import { normalizeRoutePath } from '../router/routePath.js';
  *   e.g. skipEnter() each one.
  */
 export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)) {
-	const { chain, layout: LayoutClass } = entry;
+	const { chain } = entry;
+	const { views: viewClasses, layout: LayoutClass } = await resolveRouteViews(entry);
 
 	// Preload each chain level's view (root → leaf), then the layout.
 	const instances = [];
-	for (const node of chain) {
-		const view = new node.view(ctx);
+	for (let i = 0; i < chain.length; i++) {
+		const view = new viewClasses[i](ctx);
 		await view.preload({ params: {}, props: {}, route });
 		instances.push(view);
 	}
@@ -50,7 +52,7 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 	// preloaded instance (mirrors router.js #navigate ~945-958).
 	let childVnode = null;
 	for (let i = chain.length - 1; i >= 0; i--) {
-		const vnode = new ViewNode(chain[i].view, {}, childVnode ? [childVnode] : []);
+		const vnode = new ViewNode(viewClasses[i], {}, childVnode ? [childVnode] : []);
 		vnode.instance = instances[i];
 		childVnode = vnode;
 	}
@@ -66,7 +68,7 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 		topVnode = layoutVnode;
 	}
 
-	return { topVnode, route, instances };
+	return { topVnode, route, instances, viewClasses, LayoutClass };
 }
 
 /**

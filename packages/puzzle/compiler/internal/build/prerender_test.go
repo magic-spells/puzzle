@@ -157,6 +157,39 @@ export default class NotFound extends PuzzleView {}
 	}
 }
 
+// lazyRouteFixture is a small app whose /about route reaches its .pzl class only
+// through the public lazy() API. It is shared by the SPA splitting tests and the
+// true-static build test so both browser bundle shapes and the Node prerender
+// pass exercise the same authoring surface.
+const lazyRouteViewMarker = "LAZY_ROUTE_VIEW_MARKER_XYZ"
+
+func lazyRouteFixture(configSource string) ssgFixtureFiles {
+	files := baseSSGFixture()
+	files["app/routes.js"] = `import { lazy } from '@magic-spells/puzzle';
+import Home from './views/Home.pzl';
+import NotFound from './views/NotFound.pzl';
+import DefaultLayout from './layouts/Default.pzl';
+
+export default [
+  { path: '/', name: 'home', view: Home, layout: DefaultLayout },
+  { path: '/about', name: 'about', view: lazy(() => import('./views/About.pzl')), layout: DefaultLayout },
+  { path: '*', name: 'not-found', view: NotFound, layout: DefaultLayout },
+];
+`
+	files["app/views/About.pzl"] = `<puzzle-view>
+  <h1>` + lazyRouteViewMarker + `</h1>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class About extends PuzzleView {}
+</script>
+`
+	if configSource != "" {
+		files["puzzle.config.js"] = configSource
+	}
+	return files
+}
+
 // TestBuildHybridEmitsPerRouteHTML is the integration run for the HYBRID mode
 // (formerly 'static'): an Output:"hybrid" build of a fixture app writes one
 // index.html per STATIC route (directory style), each carrying the SSG takeover

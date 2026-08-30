@@ -507,6 +507,36 @@ func TestBuildStaticEmitsPages(t *testing.T) {
 	}
 }
 
+// TestBuildStaticPrerendersLazyRoute proves the Node pass awaits lazy() and the
+// generated per-page browser entry imports the resolved .pzl class by its module
+// stamp. Static mode forces SPA splitting off, but the route must still render
+// and remain interactive through its page bundle.
+func TestBuildStaticPrerendersLazyRoute(t *testing.T) {
+	requireStaticRuntime(t)
+	files := lazyRouteFixture(
+		"export default { output: 'static', build: { splitting: true } };\n",
+	)
+	root := writeSSGFixture(t, files)
+	if err := Build(root, Options{Development: false}); err != nil {
+		t.Fatalf("static lazy-route Build failed: %v", err)
+	}
+
+	dist := filepath.Join(root, "dist")
+	about := readFile(t, filepath.Join(dist, "about", "index.html"))
+	if !strings.Contains(about, lazyRouteViewMarker) {
+		t.Fatalf("lazy route was not prerendered into dist/about/index.html:\n%s", about)
+	}
+	if _, err := os.Stat(filepath.Join(dist, "app.js")); !os.IsNotExist(err) {
+		t.Fatalf("static lazy-route build must not ship app.js (err=%v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(dist, chunksDirName)); !os.IsNotExist(err) {
+		t.Fatalf("static lazy-route build must not ship SPA chunks (err=%v)", err)
+	}
+	if bundles := staticPageBundleSources(t, dist); !strings.Contains(bundles, lazyRouteViewMarker) {
+		t.Fatal("static page bundles do not contain the resolved lazy route class")
+	}
+}
+
 // inlineAdapterFixture is a static app whose adapter is configured IN app.js —
 // `adapter.defaults({ loadMany })` passed straight into the config, the shape a
 // small app writes before it ever grows an app/adapter.js. Its one model is

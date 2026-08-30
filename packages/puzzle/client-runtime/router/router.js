@@ -283,6 +283,11 @@ import {
 	validateTopLevelPath,
 } from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
+import {
+	hasLazyRouteViews,
+	resolveRouteViews,
+	validateRouteView,
+} from './lazy.js';
 import { devtoolsRouteCommit } from '../devtools.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
 import { reportError } from '../errors.js';
@@ -524,14 +529,18 @@ export class Router {
 				// position (D19). Its fullPaths key '*' is unique and never a regex.
 				validateTransitionMode(route.transitionMode, 'the catch-all route');
 				validateGuard(route.guard, 'the catch-all route');
+				validateRouteView(route.view, 'view on the catch-all route');
+				if (route.layout != null) validateRouteView(route.layout, 'layout on the catch-all route');
 				this.#catchAll = {
 					chain: [route],
 					fullPaths: ['*'],
+					fullPath: '*',
 					regex: null,
 					paramNames: [],
 					layout: route.layout ?? null,
 					guards: route.guard ? [route.guard] : [],
 				};
+				this.#catchAll.hasLazy = hasLazyRouteViews(this.#catchAll);
 				continue;
 			}
 			walkRouteTree(route, this.#routes, makeEntry);
@@ -1220,6 +1229,32 @@ export class Router {
 			}
 		}
 
+		// Resolve the matched route's explicit lazy markers only AFTER every guard
+		// allowed the navigation, and before a view/layout constructor or data() can
+		// run. resolveRouteViews starts the whole chain + layout together; each marker
+		// memoizes fulfillment and shares its in-flight promise, while a rejection is
+		// cleared so retry reaches the loader again.
+		let resolvedViews;
+		try {
+			resolvedViews = entry.hasLazy ? await resolveRouteViews(entry) : resolveRouteViews(entry);
+		} catch (err) {
+			const info = reportError(
+				this.#ctx,
+				err,
+				{ phase: 'navigation', route: to },
+				'[puzzle] lazy route view failed to load:',
+				err
+			);
+			this.#recoverFailedNavigation(token);
+			if (retryView && token === this.#token) {
+				await retryView.__retryErrorView?.(err, info);
+			}
+			return;
+		}
+		if (token !== this.#token) return;
+		const viewClasses = resolvedViews.views;
+		const LayoutClass = resolvedViews.layout;
+
 		// keep = shared chain PREFIX length by node object identity. Reused
 		// ancestors keep their instances; everything from `keep` down is fresh.
 		// A chain containing a failed routed view can reuse nothing: keep stays 0
@@ -1251,7 +1286,7 @@ export class Router {
 		const reusedViews = cur ? cur.views.slice(0, keep) : [];
 		const freshViews = [];
 		for (let i = keep; i < entry.chain.length; i++) {
-			freshViews.push(new entry.chain[i].view(this.#ctx));
+			freshViews.push(new viewClasses[i](this.#ctx));
 		}
 
 		// Layout is ROOT-only: reuse the instance iff its class matches (a shared
@@ -1262,12 +1297,12 @@ export class Router {
 			cur.layout &&
 			!pendingLayoutOut &&
 			!cur.layoutInvalid &&
-			cur.layoutClass === entry.layout
+			cur.layoutClass === LayoutClass
 		);
 		const layout = reuseLayout
 			? cur.layout
-			: entry.layout
-				? new entry.layout(this.#ctx)
+			: LayoutClass
+				? new LayoutClass(this.#ctx)
 				: null;
 
 		// LOAD (pre-commit, parallel, D19 gate). Fresh views preload (created +
@@ -1479,6 +1514,7 @@ export class Router {
 					views,
 					keys: cur.keys,
 					layout,
+					layoutClass: LayoutClass,
 					scroll,
 					// D146: the whole chain was prepared above; #commitState commits every
 					// prepared ancestor immediately after #state, still adjacent to
@@ -1515,7 +1551,7 @@ export class Router {
 			let childVnode = null;
 			for (let i = entry.chain.length - 1; i >= 0; i--) {
 				const vnode = new ViewNode(
-					entry.chain[i].view,
+					viewClasses[i],
 					{ key: keys[i] },
 					childVnode ? [childVnode] : []
 				);
@@ -1538,7 +1574,7 @@ export class Router {
 			) {
 				let takeoverVnode = rootVnode;
 				if (layout) {
-					takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
+					takeoverVnode = new ViewNode(LayoutClass, {}, [rootVnode]);
 					takeoverVnode.instance = layout;
 				}
 				const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
@@ -1570,6 +1606,7 @@ export class Router {
 				views,
 				keys,
 				layout,
+				layoutClass: LayoutClass,
 				reuseLayout,
 				keep,
 				rootVnode,
@@ -2157,7 +2194,7 @@ export class Router {
 			views: next.views,
 			keys: next.keys,
 			layout: next.layout,
-			layoutClass: next.entry.layout,
+			layoutClass: next.layoutClass,
 			chainInvalid:
 				layoutInvalid || !!next.chainInvalid || next.views.some((view) => view.isDestroyed),
 			layoutInvalid,
@@ -2927,6 +2964,15 @@ function makeEntry(chain, fullPaths) {
 		validateTransitionMode(node.transitionMode, `route "${node.path}"`);
 		validateGuard(node.guard, `route "${node.path}"`);
 	});
+	// Preserve the established path/layout/guard diagnostic precedence above.
+	// View-class validation is new with lazy(), so it runs only after the whole
+	// chain has passed those older structural checks.
+	chain.forEach((node, index) => {
+		validateRouteView(node.view, `view on route ${JSON.stringify(node.path)}`);
+		if (index === 0 && node.layout != null) {
+			validateRouteView(node.layout, `layout on route ${JSON.stringify(node.path)}`);
+		}
+	});
 	// A DECLARED trailing slash is as insignificant as an incoming one: #match strips
 	// one from every pathname it tests, so a route compiled verbatim from '/docs/'
 	// would have a regex nothing could ever reach. Strip it once here (never from the
@@ -2957,7 +3003,7 @@ function makeEntry(chain, fullPaths) {
 			return escapeRegExp(normalizeRoutePath(seg));
 		})
 		.join('/');
-	return {
+	const entry = {
 		chain,
 		fullPaths,
 		fullPath: leafPath,
@@ -2967,6 +3013,8 @@ function makeEntry(chain, fullPaths) {
 		layout: chain[0].layout ?? null,
 		guards: chain.map((node) => node.guard).filter(Boolean),
 	};
+	entry.hasLazy = hasLazyRouteViews(entry);
+	return entry;
 }
 
 // ---- dev-only warnings ------------------------------------------------------
