@@ -3,6 +3,7 @@ package serve
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -64,8 +65,12 @@ func TestListenStrictPortFailsOnBusyPort(t *testing.T) {
 		ln.Close()
 		t.Fatalf("strict mode bound port %d, want an error", BoundPort(ln, 0))
 	}
-	if !strings.Contains(err.Error(), "address already in use") {
-		t.Errorf("error should name the bind failure, got: %v", err)
+	// The OS supplies the tail of this message and every platform words it
+	// differently ("address already in use" on unix, "Only one usage of each
+	// socket address…" on Windows). What the user needs is the same everywhere:
+	// the operation that failed and the port it failed on.
+	if !strings.Contains(err.Error(), "bind:") || !strings.Contains(err.Error(), strconv.Itoa(busy)) {
+		t.Errorf("error should name the bind failure and the port %d, got: %v", busy, err)
 	}
 }
 

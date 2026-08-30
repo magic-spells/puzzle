@@ -695,10 +695,7 @@ func TestWatchRebuildOnChange(t *testing.T) {
 	if err := os.WriteFile(seed, []byte("<puzzle-view>changed</puzzle-view>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	changed := waitRebuild(t, rebuilds, "modify existing file")
-	if !containsPath(changed, seed) {
-		t.Fatalf("modify existing file changed paths = %v, want %s", changed, seed)
-	}
+	waitRebuildFor(t, rebuilds, "modify existing file", seed)
 
 	// 2. Create a NEW subdirectory → the dir Create both triggers a rebuild and
 	//    (the regression fix) adds the dir to the watch.
@@ -714,10 +711,7 @@ func TestWatchRebuildOnChange(t *testing.T) {
 	if err := os.WriteFile(button, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	changed = waitRebuild(t, rebuilds, "create file in new subdirectory")
-	if !containsPath(changed, button) {
-		t.Fatalf("create file in new subdirectory changed paths = %v, want %s", changed, button)
-	}
+	waitRebuildFor(t, rebuilds, "create file in new subdirectory", button)
 }
 
 // TestPartitionChanges proves a config-file change is split out of the rebuild
@@ -981,6 +975,27 @@ func waitRebuild(t *testing.T, ch <-chan []string, what string) []string {
 		t.Fatalf("no rebuild after %s", what)
 	}
 	return nil
+}
+
+// waitRebuildFor drains rebuild batches until one names want. A burst can split
+// across the debounce window: Windows reports the parent directory's own write
+// alongside the file's, and runWatcher keeps directories out of the path set, so
+// the first batch can legitimately be a pathless rebuild delivered before the
+// file's own event arrives. The contract is that the edit surfaces, not that it
+// lands in the very first batch.
+func waitRebuildFor(t *testing.T, ch <-chan []string, what, want string) []string {
+	t.Helper()
+	deadline := time.After(8 * time.Second)
+	for {
+		select {
+		case changed := <-ch:
+			if containsPath(changed, want) {
+				return changed
+			}
+		case <-deadline:
+			t.Fatalf("no rebuild naming %s after %s", want, what)
+		}
+	}
 }
 
 func containsPath(paths []string, want string) bool {
