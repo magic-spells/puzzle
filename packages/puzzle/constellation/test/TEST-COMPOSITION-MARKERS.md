@@ -19,11 +19,12 @@ connections:
   - DOC-TESTING
 ---
 
-# Composition markers, slots, and Portal
+# Composition markers, scoped Templates, slots, and Portal
 
 Proves the composition surface that the public invariants ride on: `<Children>`
 as the component default marker, `<Slot name="x">` as named composition,
-`<Slot>` as the router outlet, and `<Portal>` as the out-of-tree escape.
+`<Slot>` as the router outlet, `<Template>` as caller-owned stamped content,
+and `<Portal>` as the out-of-tree escape.
 
 Guarantees:
 
@@ -36,6 +37,10 @@ Guarantees:
   the router, and through the SSG serializer.
 - marker fallback bodies: a paired marker's body renders only while nothing
   fills the position, and disappears the moment something does.
+- scoped Template parsing/emission and runtime stamping: marker/ref body
+  exclusions, distinct marker-site uniqueness, per-stamp args/fresh vnodes,
+  stateful variable-length output under the legal loop shape, caller/component
+  refreshes, diagnostics, serialization, and warning-free hybrid/static takeover.
 - Portal mounting into the framework outlet, teardown, and its interaction with
   the outside-click modifier.
 
@@ -43,4 +48,5 @@ Slot forwarding runs in two lanes — a handwritten fixture and a layout compile
 by the real compiler — so the marker contract is proven against actual emission,
 not just against a hand-shaped vnode tree.
 
-Covers 6 files under `tests/`.
+Covers focused parser/codegen fixtures plus the scoped-template, takeover, and
+existing composition suites under `tests/`.

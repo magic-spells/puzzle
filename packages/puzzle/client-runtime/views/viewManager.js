@@ -104,12 +104,18 @@ export class ViewManager {
 	 * Render a new tree: first call mounts, subsequent calls diff + patch.
 	 * Slot markers are expanded against `slotChildren` before diffing.
 	 */
-	render(rawTree) {
+	render(rawTree, slotsExpanded = false) {
 		// D145's "never patched over an unknown tree" is an invariant of the manager.
 		// Route the next ordinary render through a fresh mount so it never diffs
 		// against vnodes whose DOM links may be detached.
-		if (this.treeUnknown) return this.renderFresh(rawTree);
-		const newTree = expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
+		if (this.treeUnknown) return this.renderFresh(rawTree, slotsExpanded);
+		// SSG/static takeover preloads nested components by walking the expanded
+		// tree and stores that exact tree for mount. Expanding it again cannot change
+		// the output, but it loses the first pass's template-use state and emits a
+		// false unused-template warning. All ordinary renders still expand here.
+		const newTree = slotsExpanded
+			? rawTree
+			: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
 		if (!this.currentTree) {
 			// A FIRST mount throws too (a component's class-field initializer, a
 			// `String(symbol)` in a text node), and it needs the same D145 machinery —
@@ -189,8 +195,10 @@ export class ViewManager {
 	 * document, and portaled content sits outside the range entirely — none of it
 	 * is reachable again once currentTree becomes the error face.
 	 */
-	renderFresh(rawTree) {
-		const newTree = expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
+	renderFresh(rawTree, slotsExpanded = false) {
+		const newTree = slotsExpanded
+			? rawTree
+			: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
 		releaseAborted(this.unknownTrees);
 		this.unknownTrees = null;
 		const range = this.unknownRange;
@@ -453,7 +461,11 @@ function expandChildList(kids, parts) {
 					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 						warnTemplateShape(tmpl, k.attrs.args || {}, markerName, parts.component);
 					}
-					for (const stamped of tmpl.attrs.fn(k.attrs.args || {})) out.push(stamped);
+					const stampedNodes = tmpl.attrs.fn(k.attrs.args || {});
+					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+						warnTemplateOutputMarker(stampedNodes, markerName, parts.component);
+					}
+					for (const stamped of stampedNodes) out.push(stamped);
 					continue;
 				}
 				if (
@@ -529,6 +541,29 @@ function warnPlainScopedContent(name, args, component) {
 		`plain content cannot fill args-bearing slot "${name}" handing over ` +
 			`(${Object.keys(args).join(', ')}) — provide a matching <Template>; rendering the fallback`
 	);
+}
+
+function warnTemplateOutputMarker(nodes, name, component) {
+	if (!templateOutputHasMarker(nodes)) return;
+	warnScopedTemplate(
+		component,
+		`output-marker:${name}`,
+		`template fits "${name}" returned a composition marker — markers inside ` +
+			`<Template> bodies are compile errors and belong in the component's own template`
+	);
+}
+
+function templateOutputHasMarker(nodes) {
+	for (const node of nodes) {
+		if (node == null || typeof node === 'string') continue;
+		if (node.isSlot || node.isTemplate) return true;
+		if (
+			typeof node.children !== 'string' &&
+			node.children.length > 0 &&
+			templateOutputHasMarker(node.children)
+		) return true;
+	}
+	return false;
 }
 
 function warnUnusedTemplates(parts, component) {

@@ -105,6 +105,58 @@ describe('scoped templates — runtime join (D166)', () => {
 		expect(el.querySelectorAll('span')[2]).toBe(spans[2]);
 	});
 
+	it('keeps same-key stateful output local to each keyed wrapper as one loop marker changes arity', async () => {
+		let nextInstance = 0;
+		class StatefulStamp extends PuzzleView {
+			created() { this.instanceId = ++nextInstance; }
+			data(params, props) { return { label: props.label }; }
+			render() {
+				return h('button', { class: 'stateful-stamp' }, [
+					text(`${this.getData().label}:${this.instanceId}`),
+				]);
+			}
+		}
+		class VariableStampList extends PuzzleView {
+			created() {
+				this.setData({
+					rows: [
+						{ id: 1, label: 'A', extra: false },
+						{ id: 2, label: 'B', extra: false },
+					],
+				});
+			}
+			render() {
+				return h('ul', {}, this.getData().rows.map((row) =>
+					h('li', { key: row.id }, [marker('row', { row })])
+				));
+			}
+		}
+
+		const view = new VariableStampList();
+		mounted.push(view);
+		const el = container();
+		await view.mount(el, {
+			children: [template('row', ['row'], ({ row }) => {
+				const stateful = comp(StatefulStamp, { key: 'stateful', label: row.label });
+				return row.extra
+					? [h('i', { class: 'extra' }, [text('extra')]), stateful]
+					: [stateful];
+			})],
+		});
+		const before = [...el.querySelectorAll('.stateful-stamp')];
+		const labels = before.map((node) => node.textContent);
+
+		view.setData('rows', view.getData().rows.map((row) =>
+			row.id === 1 ? { ...row, extra: true } : row
+		));
+		view.flushUpdates();
+
+		const after = [...el.querySelectorAll('.stateful-stamp')];
+		expect(el.querySelectorAll('.extra')).toHaveLength(1);
+		expect(after).toEqual(before);
+		expect(after.map((node) => node.textContent)).toEqual(labels);
+	});
+
 	it('renders marker fallbacks when no template is supplied', async () => {
 		const view = new Regions();
 		mounted.push(view);
@@ -244,6 +296,24 @@ describe('scoped templates — development diagnostics', () => {
 		await view.mount(el, { children: [h('span', {}, [text('plain')])] });
 		expect(el.textContent).toBe('fallback');
 		expect(warn.mock.calls.some(([message]) => message.includes('plain content cannot fill args-bearing slot "default"'))).toBe(true);
+	});
+
+	it('warns defensively when hand-built Template output still contains a marker', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		class DefensiveMarkerHost extends PuzzleView {
+			render() { return h('div', {}, [marker('row', { item: 1 })]); }
+		}
+		const view = new DefensiveMarkerHost();
+		mounted.push(view);
+		await view.mount(container(), {
+			children: [template('row', ['item'], () => [
+				h('section', {}, [marker('', null)]),
+			])],
+		});
+
+		expect(warn).toHaveBeenCalledWith(
+			'[puzzle] template fits "row" returned a composition marker — markers inside <Template> bodies are compile errors and belong in the component\'s own template'
+		);
 	});
 });
 

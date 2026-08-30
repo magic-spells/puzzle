@@ -83,18 +83,19 @@ the parser's — an unterminated literal must end at exactly `len(expr)`, since
 the copy path slices `expr[i:j]`.
 
 Emission covers host/component vnodes, coalesced text/interpolation,
-formatters, dynamic/mixed attrs, events, slots, portals, refs, islands, inline
-SVG, conditionals/case, and item/range loops. Markers emit `new ViewNode(SLOT_TAG)`
-/ `new ViewNode(SLOT_TAG, { name })` when self-closing (or empty-paired), and
-carry their fallback body as the marker vnode's children through the ordinary
-child-emission path when paired (D141) — formatters, control flow, components,
-and `{#svg}` all work inside a fallback. `<Portal>` (D144) emits one
+formatters, dynamic/mixed attrs, events, slots, scoped Templates, portals, refs,
+islands, inline SVG, conditionals/case, and item/range loops. Markers emit
+`new ViewNode(SLOT_TAG)` with optional `name`, per-render `args`, and fallback
+children. Caller `<Template>` declarations emit `TEMPLATE_TAG` metadata vnodes:
+their ordered `params` plus a fresh `fn({ ...params })` closure whose body keeps
+caller scope while parameters shadow it. `<Portal>` (D144) emits one
 `PORTAL_TAG` vnode carrying the teleported children through that same
 child-emission path; a component template whose ROOT is a `<Portal>` is a
 positioned error steering to a wrapper element. The injected import line is
 built per file from what the file actually needs: `ViewNode` always, `SLOT_TAG`
-when a marker is present in the template or skeleton, `PORTAL_TAG` when a
-portal is, and `displayValue as __s` when an interpolation coerces for display.
+when a marker is present, `TEMPLATE_TAG` when a scoped Template is present,
+`PORTAL_TAG` when a portal is, and `displayValue as __s` when an interpolation
+coerces for display.
 
 Raw-block bodies arrive as static Text/Element AST nodes whose text carries the
 parser's `Raw` bit, so their text takes only the JS-string path and never

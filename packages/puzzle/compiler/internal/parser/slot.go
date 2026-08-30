@@ -8,16 +8,17 @@ import "strings"
 //
 // Two reserved tags have three roles:
 //
-//   <Children>…fallback…</Children> — the DEFAULT marker (call-site content).
-//   It takes no attributes.
+//   <Children item={ item }>…fallback…</Children> — the DEFAULT marker
+//   (call-site content), optionally handing named values to a scoped Template.
 //
 //   <Slot>…fallback…</Slot> — the same unnamed marker used as the ROUTER OUTLET
 //   (D30).
 //
-//   <Slot name="x">…fallback…</Slot> — a NAMED slot. `name` is static,
-//   non-empty, and per-template-unique; "default" and "children" are reserved
-//   and steer to <Children/>. Local shape checks run in slotMarkerFromAttrs; the
-//   per-body uniqueness check runs in validateSlots.
+//   <Slot name="x" item={ item }>…fallback…</Slot> — a NAMED slot. `name` is
+//   static, non-empty, and per-template-unique; "default" and "children" are
+//   reserved and steer to <Children/>. Other valued attrs hand data to a scoped
+//   Template. Local shape checks run in slotMarkerFromAttrs; the per-body
+//   uniqueness check runs in validateSlots.
 //
 //   Call site (<Card><h2 slot="header">…</h2></Card>): the parser's job is
 //   VALIDATION ONLY — a static `slot` attribute rides through codegen unchanged
@@ -198,24 +199,22 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 				if inCallSite {
 					return errAt(file, node.Pos, "<Slot name=%q> inside a component invocation is not supported — only the bare default <Children/> or <Slot/> forwards through a component", node.Name)
 				}
-				if len(node.Args) == 0 {
-					if prev, dup := seen[node.Name]; dup {
-						return errAt(file, node.Pos, "duplicate slot name %q — already declared at %d:%d", node.Name, prev.Line, prev.Col)
-					}
-					seen[node.Name] = node.Pos
+				if prev, dup := seen[node.Name]; dup {
+					return errAt(file, node.Pos, "duplicate slot name %q — already declared at %d:%d", node.Name, prev.Line, prev.Col)
 				}
+				seen[node.Name] = node.Pos
 			} else {
 				// The default marker (<Children/> or <Slot/>, D134) is unique per
-				// body too: two of them would splice the SAME slotChildren vnodes
-				// into both markers at runtime, corrupting the DOM. Both spellings
-				// produce a Name-less *Slot and key under "default" (a reserved,
-				// unreachable name — slotMarkerFromAttrs rejects name="default").
-				if len(node.Args) == 0 {
-					if prev, dup := seen["default"]; dup {
-						return errAt(file, node.Pos, "duplicate default marker (<Children/>/<Slot/>) — already declared at %d:%d", prev.Line, prev.Col)
-					}
-					seen["default"] = node.Pos
+				// body too: distinct AST declarations share one reconciliation
+				// namespace even when they hand args to a scoped template. One marker
+				// declaration inside a {#for} remains legal because this walk visits
+				// that AST site once; runtime stamping supplies the N instances. Both
+				// spellings produce a Name-less *Slot and key under "default" (a
+				// reserved, unreachable name — slotMarkerFromAttrs rejects it).
+				if prev, dup := seen["default"]; dup {
+					return errAt(file, node.Pos, "duplicate default marker (<Children/>/<Slot/>) — already declared at %d:%d", prev.Line, prev.Col)
 				}
+				seen["default"] = node.Pos
 			}
 			if nested := nestedFallbackMarker(node.Children); nested != nil {
 				return fallbackMarkerErr(nested, file)
@@ -243,8 +242,14 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 			// uniqueness check must keep counting in here.
 			for _, child := range node.Children {
 				if tmpl, ok := child.(*Template); ok {
-					// A template body is a separate call-site body: markers and nested
-					// component invocations validate normally, but uniqueness does not
+					// A Template body is stamped output, not another composition owner.
+					// Component invocations remain legal in it, but any marker anywhere
+					// below them would survive stamping unexpanded. Reject that marker at
+					// its own position, matching D141's fallback-body strictness.
+					if nested := nestedTemplateBodyMarker(tmpl.Body); nested != nil {
+						return templateBodyMarkerErr(nested, file)
+					}
+					// The body is still a separate validation scope: uniqueness does not
 					// leak into or out of the enclosing template.
 					if perr := walkSlots(tmpl.Body, file, map[string]Position{}, true); perr != nil {
 						return perr
@@ -335,6 +340,57 @@ func nestedFallbackMarker(nodes []Node) Node {
 		}
 	}
 	return nil
+}
+
+// nestedTemplateBodyMarker returns the first composition marker anywhere in
+// caller-owned stamped output. Unlike nestedFallbackMarker, component and
+// Portal boundaries do not create an escape hatch: their call-site children are
+// part of the same fn() output and an inner marker would still reach the runtime
+// unexpanded.
+func nestedTemplateBodyMarker(nodes []Node) Node {
+	for _, n := range nodes {
+		switch node := n.(type) {
+		case *Slot, *Template:
+			return node
+		case *Portal:
+			if found := nestedTemplateBodyMarker(node.Children); found != nil {
+				return found
+			}
+		case *Element:
+			if found := nestedTemplateBodyMarker(node.Children); found != nil {
+				return found
+			}
+		case *Component:
+			if found := nestedTemplateBodyMarker(node.Children); found != nil {
+				return found
+			}
+		case *If:
+			if found := nestedTemplateBodyMarker(node.Then); found != nil {
+				return found
+			}
+			if found := nestedTemplateBodyMarker(node.Else); found != nil {
+				return found
+			}
+		case *For:
+			if found := nestedTemplateBodyMarker(node.Body); found != nil {
+				return found
+			}
+		case *Case:
+			for _, clause := range node.Clauses {
+				if found := nestedTemplateBodyMarker(clause.Body); found != nil {
+					return found
+				}
+			}
+			if found := nestedTemplateBodyMarker(node.Else); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
+}
+
+func templateBodyMarkerErr(n Node, file string) *ParseError {
+	return errAt(file, nodePos(n), "a composition marker cannot appear inside a <Template> body — stamped output cannot declare composition positions; put the marker in the component's own template")
 }
 
 // validateCallSiteSlots enforces the call-site slot rules on the DIRECT children

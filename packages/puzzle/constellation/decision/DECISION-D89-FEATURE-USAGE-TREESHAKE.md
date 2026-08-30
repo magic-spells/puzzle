@@ -39,9 +39,10 @@ name: 'D89 — pay-for-what-you-use runtime: feature-usage scan drives DCE defin
 
 Runtime features an app can prove it does not use disappear from its bundle, via
 one build-time usage scan and literal esbuild defines. The active gates are
-`__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__`, and
-`__PUZZLE_HAS_LAZY__`; the former managed-head gate was retired by D111.
-Three are exact template facts; lazy is a script fact, which is why the scan
+`__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__`,
+`__PUZZLE_HAS_SCOPED_TEMPLATES__`, and `__PUZZLE_HAS_LAZY__`; the former
+managed-head gate was retired by D111. Four are template facts; lazy is a
+script fact, which is why the scan
 reads the app's `.js`/`.ts` modules as well as its `.pzl` files.
 This generalizes [[DECISION-D31-FORMATTER-TREESHAKE]]'s per-app inclusion
 discipline from formatters to runtime feature seams, using
@@ -91,6 +92,9 @@ have re-pinned `lazy.js` and defeated the gate.
 - **Portal — exact.** Any `*parser.Portal` node sets `HasPortal`; its children
   still recurse for the other usage facts. Raw-block sample markup named
   `<Portal>` parses as an ordinary element and does not set the bit.
+- **scoped Templates — exact.** Any `*parser.Template` node or args-bearing
+  Slot/Children marker sets `HasScopedTemplates`; the gate covers template
+  partition/stamping plus its development diagnostics.
 - **raw `@` attributes — deliberately over-inclusive.** Any parsed `{#raw}`
   block in the template or skeleton sets `HasRawAt`, even when its body has no
   `@`-prefixed attribute. A false positive costs only the small shim; a false

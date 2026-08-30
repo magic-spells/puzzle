@@ -2351,7 +2351,10 @@ export class PuzzleView {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				devperfRenderStart(this);
 			}
-			this.#vm.render(tree);
+			// A takeover-prepared tree was already slot-expanded while nested
+			// components were preloaded. Preserve that exact tree and its template-use
+			// accounting instead of expanding it a second time in ViewManager.
+			this.#vm.render(tree, preparedTree !== undefined);
 		} else if (this.#vm.currentTree) {
 			// A HAND-WRITTEN render() that returned a tree before and returns null now
 			// (compiled templates always emit a root vnode, so this is authored-view

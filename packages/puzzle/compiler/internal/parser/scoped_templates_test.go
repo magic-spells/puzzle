@@ -109,10 +109,11 @@ func TestParseScopedTemplateCompositionRules(t *testing.T) {
 	ok := []string{
 		`<List><Template user>x</Template><p slot="footer">plain footer</p></List>`,
 		`<List><Template fits="row" user>x</Template><Template fits="heading" group>h</Template></List>`,
-		`<div><Children user={ first }/><Slot user={ second }/></div>`,
+		// One args-bearing marker AST site inside a loop is the intended N-stamp
+		// shape. walkSlots visits the declaration once, regardless of iterations.
 		`<ul>{#for user in users}<li><Children user={ user }/></li>{/for}</ul>`,
-		`<Slot name="outer"><Card><Template user><Children user={ user }/></Template></Card></Slot>`,
-		`<List><Template item><Card><Template cell>{ cell }</Template></Card></Template></List>`,
+		// Component invocations themselves remain ordinary legal stamped output.
+		`<List><Template item><Card><span>{ item }</span></Card></Template></List>`,
 	}
 	for _, content := range ok {
 		if _, err := Parse([]byte(`<puzzle-view>`+content+`</puzzle-view>`+"\n<script></script>"), "test.pzl"); err != nil {
@@ -123,5 +124,67 @@ func TestParseScopedTemplateCompositionRules(t *testing.T) {
 	_, err := Parse([]byte(`<puzzle-view><div><Children/><Slot/></div></puzzle-view>`+"\n<script></script>"), "test.pzl")
 	if err == nil || !strings.Contains(err.Error(), "duplicate default marker") {
 		t.Fatalf("no-args duplicate markers must stay rejected, got %v", err)
+	}
+
+	duplicates := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "distinct args-bearing named marker declarations",
+			src:  `<div><Slot name="row" item={ first }/><Slot name="row" item={ second }/></div>`,
+			want: `duplicate slot name "row"`,
+		},
+		{
+			name: "distinct args-bearing default marker declarations",
+			src:  `<div><Children item={ first }/><Slot item={ second }/></div>`,
+			want: "duplicate default marker",
+		},
+	}
+	for _, tc := range duplicates {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte(`<puzzle-view>`+tc.src+`</puzzle-view>`+"\n<script></script>"), "test.pzl")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("distinct marker declarations must be rejected with %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestParseScopedTemplateBodyRejectsCompositionMarkers(t *testing.T) {
+	tests := []struct {
+		name   string
+		body   string
+		marker string
+	}{
+		{"direct Children", `<Children item={ item }/>`, `<Children item={ item }/>`},
+		{"direct named Slot", `<Slot name="row" item={ item }/>`, `<Slot name="row" item={ item }/>`},
+		{"nested below element", `<section><Slot/></section>`, `<Slot/>`},
+		{"nested below control flow", `{#if item}<Children item={ item }/>{/if}`, `<Children item={ item }/>`},
+		{"nested below component invocation", `<Card><Children item={ item }/></Card>`, `<Children item={ item }/>`},
+		{"nested Template declaration", `<Card><Template cell>{ cell }</Template></Card>`, `<Template cell>`},
+		{"nested below Portal", `<Portal><Slot name="overlay" item={ item }/></Portal>`, `<Slot name="overlay" item={ item }/>`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			src := `<puzzle-view><List><Template item>` + tc.body + `</Template></List></puzzle-view>` + "\n<script></script>"
+			_, err := Parse([]byte(src), "test.pzl")
+			if err == nil {
+				t.Fatal("expected positioned parse error")
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("error = %T (%v), want *ParseError", err, err)
+			}
+			wantMessage := "a composition marker cannot appear inside a <Template> body — stamped output cannot declare composition positions; put the marker in the component's own template"
+			if pe.Message != wantMessage {
+				t.Fatalf("message = %q, want %q", pe.Message, wantMessage)
+			}
+			wantCol := strings.Index(src, tc.marker) + 1
+			if pe.Line != 1 || pe.Col != wantCol {
+				t.Fatalf("position = %d:%d, want 1:%d at inner marker", pe.Line, pe.Col, wantCol)
+			}
+		})
 	}
 }

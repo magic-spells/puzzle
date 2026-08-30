@@ -132,6 +132,13 @@ the default bucket, `<Slot name="x"/>` fills named buckets, and `<Slot/>` is
 the router outlet by convention. An unfilled marker expands its fallback
 children — supplied content wins completely — and contributes no nodes when it
 has none (D141).
+`TEMPLATE_TAG` children form a third bucket keyed by `fits`; an args-bearing
+marker calls the matching Template function for fresh vnodes on every stamp.
+Development diagnoses shape mismatches, unused templates, plain fills for
+args-bearing markers, and defensive marker vnodes in function output. Hybrid
+and static takeover preload against an expanded tree and mount that exact tree
+without expanding it again, preserving both pinned component instances and the
+first pass's template-use accounting.
 Buckets are null-prototype objects and forwarding descends through component
 call-site children while preserving pinned routed instances.
 
