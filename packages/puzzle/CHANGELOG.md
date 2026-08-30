@@ -145,7 +145,18 @@ one is *not* a compile error; it silently builds a different product.
   error path. With
   `build.splitting: true` each import can become a chunk; splitting-off and
   static builds inline the same lazy modules and keep their runtime/prerender
-  behavior.
+  behavior. `examples/blog` splits its whole `/settings` section this way.
+
+### Changed
+
+- **A route's `view`/`layout` is validated when the route table compiles.** It
+  must be a `PuzzleView` subclass or a `lazy()` marker; anything else now throws
+  a named error from the `Router` constructor instead of failing later at
+  construction time. A bare loader function gets its own message pointing at
+  `lazy()`, because Puzzle deliberately does not guess whether a function is a
+  view class or a loader. If your app passed something that is not a
+  `PuzzleView` subclass in a view position, it fails at boot now rather than at
+  first navigation.
 
 ### Fixed
 

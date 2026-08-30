@@ -43,16 +43,21 @@ export interface LazyViewModule {
 	default: PuzzleViewConstructor;
 }
 
-/** Explicitly mark an async route view/layout loader. */
+/**
+ * Explicitly mark an async route view/layout loader (v1.77, D163):
+ * `view: lazy(() => import('./views/Admin.pzl'))`. A BARE loader function in a
+ * `view`/`layout` position is deliberately a type error — the runtime never
+ * guesses which kind of function it was handed.
+ */
 export declare function lazy(
 	loader: () => Promise<LazyViewModule | PuzzleViewConstructor>
 ): LazyView;
 
 /**
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
- * PuzzleView subclasses (constructors) — typed loosely so `.pzl` default
- * exports and compiled classes both assign cleanly. Nested via `children`
- * (v1.3, D30).
+ * PuzzleView subclasses (constructors) or `lazy()` markers (D163). `.pzl`
+ * default exports and compiled classes are typed `any` by the compiler shim, so
+ * they still assign cleanly. Nested via `children` (v1.3, D30).
  */
 export interface Route {
 	path: string;

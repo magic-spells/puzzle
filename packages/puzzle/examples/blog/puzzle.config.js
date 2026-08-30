@@ -6,4 +6,11 @@ export default {
 	styles: {
 		use: ['tailwindcss'],
 	},
+	// Opt in to SPA code splitting (D160) so the lazy() /settings routes in
+	// app/routes.js (D163) land in dist/chunks/ instead of app.js. Splitting is
+	// off by default; turning it off here leaves the app working identically,
+	// with those modules inlined.
+	build: {
+		splitting: true,
+	},
 };

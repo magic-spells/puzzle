@@ -540,7 +540,7 @@ export class Router {
 					layout: route.layout ?? null,
 					guards: route.guard ? [route.guard] : [],
 				};
-				this.#catchAll.hasLazy = hasLazyRouteViews(this.#catchAll);
+				finishEntry(this.#catchAll);
 				continue;
 			}
 			walkRouteTree(route, this.#routes, makeEntry);
@@ -1229,31 +1229,45 @@ export class Router {
 			}
 		}
 
-		// Resolve the matched route's explicit lazy markers only AFTER every guard
-		// allowed the navigation, and before a view/layout constructor or data() can
-		// run. resolveRouteViews starts the whole chain + layout together; each marker
-		// memoizes fulfillment and shares its in-flight promise, while a rejection is
-		// cleared so retry reaches the loader again.
-		let resolvedViews;
-		try {
-			resolvedViews = entry.hasLazy ? await resolveRouteViews(entry) : resolveRouteViews(entry);
-		} catch (err) {
-			const info = reportError(
-				this.#ctx,
-				err,
-				{ phase: 'navigation', route: to },
-				'[puzzle] lazy route view failed to load:',
-				err
-			);
-			this.#recoverFailedNavigation(token);
-			if (retryView && token === this.#token) {
-				await retryView.__retryErrorView?.(err, info);
+		// Resolve the matched route's explicit lazy markers (D163) only AFTER every
+		// guard allowed the navigation — a blocked or redirected route never downloads
+		// — and before a view/layout constructor or data() can run. resolveRouteViews
+		// starts the whole chain + layout together; each marker memoizes fulfillment
+		// and shares its in-flight promise, while a rejection is cleared so retry
+		// reaches the loader again.
+		//
+		// A route with NO markers never enters this branch: makeEntry precomputed its
+		// class list once, at route-compile time, so the whole pipeline below reads
+		// `viewClasses[i]` while a lazy-free navigation stays byte-for-byte the
+		// synchronous path it was — no added array, no added microtask (the same
+		// reason the guard block above is skipped when a route declares none).
+		let viewClasses = entry.viewClasses;
+		let LayoutClass = entry.layout;
+		if (entry.hasLazy) {
+			let resolvedViews;
+			try {
+				resolvedViews = await resolveRouteViews(entry);
+			} catch (err) {
+				const info = reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: to },
+					'[puzzle] lazy route view failed to load:',
+					err
+				);
+				// Pre-commit failure, exactly like the data() failure below: no fresh view
+				// exists yet, so URL, history and the mounted tree are all untouched and
+				// this is a plain failed push (D61).
+				this.#recoverFailedNavigation(token);
+				if (retryView && token === this.#token) {
+					await retryView.__retryErrorView?.(err, info);
+				}
+				return;
 			}
-			return;
+			if (token !== this.#token) return;
+			viewClasses = resolvedViews.views;
+			LayoutClass = resolvedViews.layout;
 		}
-		if (token !== this.#token) return;
-		const viewClasses = resolvedViews.views;
-		const LayoutClass = resolvedViews.layout;
 
 		// keep = shared chain PREFIX length by node object identity. Reused
 		// ancestors keep their instances; everything from `keep` down is fresh.
@@ -3013,8 +3027,20 @@ function makeEntry(chain, fullPaths) {
 		layout: chain[0].layout ?? null,
 		guards: chain.map((node) => node.guard).filter(Boolean),
 	};
-	entry.hasLazy = hasLazyRouteViews(entry);
+	finishEntry(entry);
 	return entry;
+}
+
+/**
+ * Settle an entry's D163 class list ONCE, at route-compile time. `hasLazy` picks
+ * the navigation path; a lazy-free entry also gets its `viewClasses` array here so
+ * #navigate never allocates one per navigation. A lazy entry leaves it undefined —
+ * resolveRouteViews builds the array each time, since a marker's fulfillment can
+ * arrive after this runs.
+ */
+function finishEntry(entry) {
+	entry.hasLazy = hasLazyRouteViews(entry);
+	entry.viewClasses = entry.hasLazy ? undefined : entry.chain.map((node) => node.view);
 }
 
 // ---- dev-only warnings ------------------------------------------------------

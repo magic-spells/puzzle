@@ -17,8 +17,12 @@ const lazyViews = new WeakMap();
  * in-flight slot so an explicit retry calls the loader again.
  */
 export function lazy(loader) {
+	// Config-time throws are plain Errors, matching the route-shape validators
+	// (validateGuard/validateTransitionMode) this sits beside. Only the load-time
+	// failures below — the ones that reach onError as a navigation-phase error —
+	// are TypeErrors.
 	if (typeof loader !== 'function') {
-		throw new TypeError(`[puzzle] lazy() expects a loader function (got ${typeof loader})`);
+		throw new Error(`[puzzle] lazy() expects a loader function (got ${typeof loader})`);
 	}
 
 	const marker = Object.freeze({});
@@ -43,12 +47,12 @@ export function isLazyView(value) {
 export function validateRouteView(value, label) {
 	if (isLazyView(value) || isViewClass(value)) return;
 	if (typeof value === 'function') {
-		throw new TypeError(
+		throw new Error(
 			`[puzzle] ${label} must be a PuzzleView class, not a loader function — ` +
 				"wrap dynamic imports with lazy(() => import('./views/Page.pzl'))"
 		);
 	}
-	throw new TypeError(
+	throw new Error(
 		`[puzzle] ${label} must be a PuzzleView class or lazy() marker (got ${describe(value)})`
 	);
 }
@@ -61,26 +65,53 @@ export function hasLazyRouteViews(entry) {
 /**
  * Resolve every view/layout position in one matched entry. All lazy markers are
  * started before Promise.all awaits any one of them, so nested chains and their
- * layout load in parallel. Entries with no markers stay synchronous.
+ * layout load in parallel. Entries whose markers all resolved earlier stay
+ * synchronous, so a warm lazy route adds no microtask to the navigation.
+ *
+ * Each position's diagnostic label is a THUNK: it names the route and chain
+ * index, and only a failing load ever pays to build that string.
  *
  * @returns {{ views: Function[], layout: Function|null }|Promise<{ views: Function[], layout: Function|null }>}
  */
 export function resolveRouteViews(entry) {
-	const path = entry.fullPath ?? entry.fullPaths?.[entry.fullPaths.length - 1] ?? '(unknown)';
-	const positions = entry.chain.map((node, index) => ({
-		value: node.view,
-		label: `view on route ${JSON.stringify(node.path ?? path)} (matched ${JSON.stringify(path)}, chain index ${index})`,
-	}));
-	positions.push({
-		value: entry.layout,
-		label: `layout for route ${JSON.stringify(path)}`,
-	});
-
-	const resolved = positions.map(({ value, label }) =>
-		value == null ? null : isLazyView(value) ? resolveLazyView(value, label) : value
-	);
-	if (!resolved.some(isPromiseLike)) return splitResolved(resolved);
+	const chain = entry.chain;
+	const resolved = new Array(chain.length + 1);
+	let awaited = false;
+	for (let i = 0; i < chain.length; i++) {
+		const value = chain[i].view;
+		if (isLazyView(value)) {
+			const position = resolveLazyView(value, () => viewLabel(entry, i));
+			if (isPromiseLike(position)) awaited = true;
+			resolved[i] = position;
+		} else {
+			resolved[i] = value ?? null;
+		}
+	}
+	const layout = entry.layout;
+	if (isLazyView(layout)) {
+		const position = resolveLazyView(layout, () => layoutLabel(entry));
+		if (isPromiseLike(position)) awaited = true;
+		resolved[chain.length] = position;
+	} else {
+		resolved[chain.length] = layout ?? null;
+	}
+	if (!awaited) return splitResolved(resolved);
 	return Promise.all(resolved).then(splitResolved);
+}
+
+/** The matched leaf path, however the caller's entry shape spells it. */
+function entryPath(entry) {
+	return entry.fullPath ?? entry.fullPaths?.[entry.fullPaths.length - 1] ?? '(unknown)';
+}
+
+function viewLabel(entry, index) {
+	const path = entryPath(entry);
+	const declared = entry.chain[index].path ?? path;
+	return `view on route ${JSON.stringify(declared)} (matched ${JSON.stringify(path)}, chain index ${index})`;
+}
+
+function layoutLabel(entry) {
+	return `layout for route ${JSON.stringify(entryPath(entry))}`;
 }
 
 function splitResolved(resolved) {
@@ -90,13 +121,17 @@ function splitResolved(resolved) {
 function resolveLazyView(marker, label) {
 	const state = lazyViews.get(marker);
 	if (state.value) return state.value;
+	// Concurrent navigations to routes sharing a marker share ONE in-flight load.
+	// The settle handlers below clear `pending` before any consumer of this promise
+	// observes the outcome, so a retry after a rejection always reaches the loader
+	// again and a fulfillment is never re-run.
 	if (state.pending) return state.pending;
 
 	state.pending = Promise.resolve()
 		.then(() => {
 			const result = state.loader();
 			if (!isPromiseLike(result)) {
-				throw new TypeError(`[puzzle] ${label}: lazy() loader must return a promise`);
+				throw new TypeError(`[puzzle] ${label()}: lazy() loader must return a promise`);
 			}
 			return result;
 		})
@@ -119,7 +154,7 @@ function normalizeLoadedView(loaded, modulePath, label) {
 	let ViewClass = loaded;
 	if (loaded != null && typeof loaded === 'object') {
 		if (!Object.prototype.hasOwnProperty.call(loaded, 'default')) {
-			const source = modulePath ? JSON.stringify(modulePath) : `the module loaded for ${label}`;
+			const source = modulePath ? JSON.stringify(modulePath) : `the module loaded for ${label()}`;
 			throw new TypeError(
 				`[puzzle] lazy route module ${source} has no default export — ` +
 					'export the PuzzleView class as default'
@@ -131,7 +166,7 @@ function normalizeLoadedView(loaded, modulePath, label) {
 	if (!isViewClass(ViewClass)) {
 		const source = modulePath ? ` from ${JSON.stringify(modulePath)}` : '';
 		throw new TypeError(
-			`[puzzle] ${label}: lazy() resolved${source} to ${describe(ViewClass)}, ` +
+			`[puzzle] ${label()}: lazy() resolved${source} to ${describe(ViewClass)}, ` +
 				'not a PuzzleView class'
 		);
 	}

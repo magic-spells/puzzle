@@ -853,7 +853,12 @@ function hasGuard(routes) {
  */
 async function renderRoute(entry, ctx) {
 	const { chain } = entry;
-	const { topVnode } = await assembleChain(entry, ctx);
+	// D163: the prerender pass is the one assembleChain caller whose entries can
+	// still hold lazy() markers, so it resolves them here and hands the classes
+	// down. Fulfillment is memoized per marker, so the collectModules pass below
+	// reuses this load instead of re-importing.
+	const resolved = await resolveRouteViews(entry);
+	const { topVnode } = await assembleChain(entry, ctx, makeRouteSnapshot(entry), resolved);
 	const html = await serialize(topVnode, { ctx });
 	const head = resolveHead(chain);
 	return { html, title: head.title, head };

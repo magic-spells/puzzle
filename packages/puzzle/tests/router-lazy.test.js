@@ -147,6 +147,42 @@ describe('lazy route views', () => {
 		errorSpy.mockRestore();
 	});
 
+	it('clears a shared in-flight promise that rejects, so the next push reloads', async () => {
+		// Two concurrent navigations awaiting ONE rejecting load is the race the
+		// memoization asymmetry has to survive: the in-flight slot must be empty by
+		// the time either consumer sees the failure, or the marker would hand the
+		// settled rejection to every later navigation forever.
+		const pending = deferred();
+		let attempt = 0;
+		const loader = vi.fn(() => {
+			if (++attempt === 1) return pending.promise;
+			return Promise.resolve(LazyView);
+		});
+		const Lazy = lazy(loader);
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { router, el } = await boot([
+			{ path: '/', view: HomeView },
+			{ path: '/one', view: Lazy },
+			{ path: '/two', view: Lazy },
+		]);
+
+		const first = router.push('/one');
+		await tick();
+		const second = router.push('/two');
+		await tick();
+		expect(loader).toHaveBeenCalledTimes(1);
+
+		pending.reject(new Error('chunk 500'));
+		await Promise.all([first, second]);
+		expect(router.current.path).toBe('/');
+
+		await router.push('/two');
+		expect(loader).toHaveBeenCalledTimes(2);
+		expect(router.current.path).toBe('/two');
+		expect(el.querySelector('.lazy')).not.toBeNull();
+		errorSpy.mockRestore();
+	});
+
 	it('runs guards before starting a lazy download', async () => {
 		const loader = vi.fn(async () => LazyView);
 		const { router, el } = await boot([
