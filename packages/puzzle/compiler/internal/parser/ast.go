@@ -61,11 +61,11 @@ type Slot struct {
 	Pos      Position
 }
 
-// Template is caller-provided parameterized composition content (D166). Fits
+// Snippet is caller-provided parameterized composition content (D166). Fits
 // routes it to a named marker (empty means the default <Children> marker),
 // Params are the bare attribute declarations in source order, and Body is
 // compiled into a fresh vnode-producing function at the call site.
-type Template struct {
+type Snippet struct {
 	Fits   string
 	Params []string
 	Body   []Node
@@ -161,7 +161,7 @@ type InlineSVG struct {
 func (*Element) isNode()       {}
 func (*Component) isNode()     {}
 func (*Slot) isNode()          {}
-func (*Template) isNode()      {}
+func (*Snippet) isNode()       {}
 func (*Portal) isNode()        {}
 func (*Text) isNode()          {}
 func (*Interpolation) isNode() {}

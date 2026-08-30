@@ -2,18 +2,18 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import UserList from '../components/UserList.pzl';
 
-export default class ScopedTemplateDefault extends PuzzleView {
+export default class ScopedSnippetDefault extends PuzzleView {
   data() { return { users: [], title: 'People' }; }
 }
 
-import { ViewNode, TEMPLATE_TAG, displayValue as __s } from '@magic-spells/puzzle';
+import { ViewNode, SNIPPET_TAG, displayValue as __s } from '@magic-spells/puzzle';
 
-ScopedTemplateDefault.prototype.render = function () {
+ScopedSnippetDefault.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', {}, [
     new ViewNode(UserList, { users: __d.users }, [
-      new ViewNode(TEMPLATE_TAG, {
+      new ViewNode(SNIPPET_TAG, {
         fits: '',
         params: ['user'],
         fn: ({ user }) => ([
@@ -25,4 +25,4 @@ ScopedTemplateDefault.prototype.render = function () {
     ]),
   ]);
 };
-ScopedTemplateDefault.__pzlModule = 'scoped_template_default.pzl';
+ScopedSnippetDefault.__pzlModule = 'scoped_snippet_default.pzl';

@@ -20,7 +20,7 @@ import {
 	Puzzle,
 	PuzzleValidationError,
 	ViewNode,
-	TEMPLATE_TAG,
+	SNIPPET_TAG,
 	displayValue,
 	lazy,
 } from '@magic-spells/puzzle';
@@ -80,17 +80,17 @@ import type { RenderProfile } from '@magic-spells/puzzle/testing';
 
 const renderedNull: string = displayValue(null);
 const renderedNamedValue: string = displayValue(0, 'count');
-const generatedTemplateNode = new ViewNode(TEMPLATE_TAG, {
+const generatedSnippetNode = new ViewNode(SNIPPET_TAG, {
 	fits: 'row',
 	params: ['item'],
 	fn: ({ item }: { item: unknown }) => [item],
 });
-const templateTag: string = TEMPLATE_TAG;
-const isGeneratedTemplate: boolean = generatedTemplateNode.isTemplate;
+const snippetTag: string = SNIPPET_TAG;
+const isGeneratedSnippet: boolean = generatedSnippetNode.isSnippet;
 void renderedNull;
 void renderedNamedValue;
-void templateTag;
-void isGeneratedTemplate;
+void snippetTag;
+void isGeneratedSnippet;
 
 // ---------------------------------------------------------------------------
 // PuzzleModel + schema builders (§7, §20–§22)

@@ -1,8 +1,8 @@
 
 import { PuzzleView } from '@magic-spells/puzzle';
-import ScopedList from './ScopedList.compiled.js';
+import SnippetList from './SnippetList.compiled.js';
 
-export default class ScopedTemplatesHost extends PuzzleView {
+export default class SnippetsHost extends PuzzleView {
   created() {
     this.setData({
       users: [{ id: 1, name: 'Ada' }, { id: 2, name: 'Grace' }],
@@ -21,24 +21,24 @@ export default class ScopedTemplatesHost extends PuzzleView {
   };
 }
 
-import { ViewNode, TEMPLATE_TAG, displayValue as __s } from '@magic-spells/puzzle';
+import { ViewNode, SNIPPET_TAG, displayValue as __s } from '@magic-spells/puzzle';
 
-ScopedTemplatesHost.prototype.render = function () {
+SnippetsHost.prototype.render = function () {
   const __d = this.getData();
 
-  return new ViewNode('puzzle-view', { class: 'scoped-host' }, [
-    new ViewNode(ScopedList, {
+  return new ViewNode('puzzle-view', { class: 'snippets-host' }, [
+    new ViewNode(SnippetList, {
       users: __d.users,
       group: __d.group,
     }, [
-      new ViewNode(TEMPLATE_TAG, {
+      new ViewNode(SNIPPET_TAG, {
         fits: 'heading',
         params: ['group'],
         fn: ({ group }) => ([
             new ViewNode('text', { value: __s(group.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ' / ' + __s(__d.suffix, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'suffix' : 0) }),
           ]),
       }),
-      new ViewNode(TEMPLATE_TAG, {
+      new ViewNode(SNIPPET_TAG, {
         fits: 'row',
         params: ['user', 'group'],
         fn: ({ user, group }) => ([
@@ -50,7 +50,7 @@ ScopedTemplatesHost.prototype.render = function () {
             ]),
           ]),
       }),
-      new ViewNode(TEMPLATE_TAG, {
+      new ViewNode(SNIPPET_TAG, {
         fits: '',
         params: ['group'],
         fn: ({ group }) => ([
@@ -60,4 +60,4 @@ ScopedTemplatesHost.prototype.render = function () {
     ]),
   ]);
 };
-ScopedTemplatesHost.__pzlModule = 'ScopedTemplatesHost.pzl';
+SnippetsHost.__pzlModule = 'SnippetsHost.pzl';

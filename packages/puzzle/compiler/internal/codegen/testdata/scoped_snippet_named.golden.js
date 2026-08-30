@@ -2,18 +2,18 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import GroupedList from '../components/GroupedList.pzl';
 
-export default class ScopedTemplateNamed extends PuzzleView {
+export default class ScopedSnippetNamed extends PuzzleView {
   data() { return { groups: [] }; }
 }
 
-import { ViewNode, TEMPLATE_TAG, displayValue as __s } from '@magic-spells/puzzle';
+import { ViewNode, SNIPPET_TAG, displayValue as __s } from '@magic-spells/puzzle';
 
-ScopedTemplateNamed.prototype.render = function () {
+ScopedSnippetNamed.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', {}, [
     new ViewNode(GroupedList, { groups: __d.groups }, [
-      new ViewNode(TEMPLATE_TAG, {
+      new ViewNode(SNIPPET_TAG, {
         fits: 'heading',
         params: ['group'],
         fn: ({ group }) => ([
@@ -22,7 +22,7 @@ ScopedTemplateNamed.prototype.render = function () {
             ]),
           ]),
       }),
-      new ViewNode(TEMPLATE_TAG, {
+      new ViewNode(SNIPPET_TAG, {
         fits: 'row',
         params: ['user', 'group'],
         fn: ({ user, group }) => ([
@@ -37,4 +37,4 @@ ScopedTemplateNamed.prototype.render = function () {
     ]),
   ]);
 };
-ScopedTemplateNamed.__pzlModule = 'scoped_template_named.pzl';
+ScopedSnippetNamed.__pzlModule = 'scoped_snippet_named.pzl';

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode, SLOT_TAG, TEMPLATE_TAG } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG, SNIPPET_TAG } from '../client-runtime/views/ViewNode.js';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -9,7 +9,7 @@ const text = (value) => new ViewNode('text', { value });
 const comp = (View, props = {}, children = []) => new ViewNode(View, props, children);
 const marker = (name, args, fallback = []) =>
 	new ViewNode(SLOT_TAG, { ...(name ? { name } : {}), ...(args ? { args } : {}) }, fallback);
-const template = (fits, params, fn) => new ViewNode(TEMPLATE_TAG, { fits, params, fn });
+const snippet = (fits, params, fn) => new ViewNode(SNIPPET_TAG, { fits, params, fn });
 
 const mounted = [];
 const container = () => {
@@ -40,8 +40,8 @@ class Regions extends PuzzleView {
 	}
 }
 
-describe('scoped templates — runtime join (D166)', () => {
-	it('routes default and named templates and hands data by name', async () => {
+describe('snippets — runtime join (D166)', () => {
+	it('routes default and named snippets and hands data by name', async () => {
 		const users = [{ id: 1, name: 'Ada' }, { id: 2, name: 'Grace' }];
 		const group = { title: 'Core' };
 		const view = new Regions();
@@ -50,11 +50,11 @@ describe('scoped templates — runtime join (D166)', () => {
 		await view.mount(el, {
 			props: { users, group },
 			children: [
-				template('heading', ['group'], ({ group: g }) => [text(g.title)]),
-				template('row', ['user', 'group'], ({ user, group: g }) => [
+				snippet('heading', ['group'], ({ group: g }) => [text(g.title)]),
+				snippet('row', ['user', 'group'], ({ user, group: g }) => [
 					h('span', { class: 'person' }, [text(`${g.title}/${user.name}`)]),
 				]),
-				template('', ['group'], ({ group: g }) => [text(`default:${g.title}`)]),
+				snippet('', ['group'], ({ group: g }) => [text(`default:${g.title}`)]),
 			],
 		});
 
@@ -64,7 +64,7 @@ describe('scoped templates — runtime join (D166)', () => {
 			'Core/Grace',
 		]);
 		expect(el.querySelector('aside').textContent).toBe('default:Core');
-		expect(el.querySelectorAll('#template')).toHaveLength(0);
+		expect(el.querySelectorAll('#snippet')).toHaveLength(0);
 	});
 
 	it('stamps fresh vnodes for every keyed row and patches one changed stamp independently', async () => {
@@ -89,7 +89,7 @@ describe('scoped templates — runtime join (D166)', () => {
 		mounted.push(view);
 		const el = container();
 		await view.mount(el, {
-			children: [template('', ['row'], ({ row }) => [h('span', {}, [text(row.name)])])],
+			children: [snippet('', ['row'], ({ row }) => [h('span', {}, [text(row.name)])])],
 		});
 		const before = [...el.querySelectorAll('li')];
 		const spans = [...el.querySelectorAll('span')];
@@ -136,7 +136,7 @@ describe('scoped templates — runtime join (D166)', () => {
 		mounted.push(view);
 		const el = container();
 		await view.mount(el, {
-			children: [template('row', ['row'], ({ row }) => {
+			children: [snippet('row', ['row'], ({ row }) => {
 				const stateful = comp(StatefulStamp, { key: 'stateful', label: row.label });
 				return row.extra
 					? [h('i', { class: 'extra' }, [text('extra')]), stateful]
@@ -157,7 +157,7 @@ describe('scoped templates — runtime join (D166)', () => {
 		expect(after.map((node) => node.textContent)).toEqual(labels);
 	});
 
-	it('renders marker fallbacks when no template is supplied', async () => {
+	it('renders marker fallbacks when no snippet is supplied', async () => {
 		const view = new Regions();
 		mounted.push(view);
 		const el = container();
@@ -169,7 +169,7 @@ describe('scoped templates — runtime join (D166)', () => {
 		expect(el.querySelector('aside').textContent).toBe('fallback default');
 	});
 
-	it('caller state changes rebuild template closures and template events stay in caller scope', async () => {
+	it('caller state changes rebuild snippet closures and snippet events stay in caller scope', async () => {
 		class Repeater extends PuzzleView {
 			render() {
 				return h('div', {}, [marker('', { item: 'row' })]);
@@ -182,7 +182,7 @@ describe('scoped templates — runtime join (D166)', () => {
 			render() {
 				const count = this.getData().count;
 				return h('main', {}, [
-					comp(Repeater, {}, [template('', ['item'], ({ item }) => [
+					comp(Repeater, {}, [snippet('', ['item'], ({ item }) => [
 						h('button', { '@click': () => this.setData('count', count + 1) }, [
 							text(`${item}:${count}`),
 						]),
@@ -201,7 +201,7 @@ describe('scoped templates — runtime join (D166)', () => {
 		expect(el.querySelector('button').textContent).toBe('row:1');
 	});
 
-	it('component state changes re-stamp templates with fresh args', async () => {
+	it('component state changes re-stamp snippets with fresh args', async () => {
 		class StatefulList extends PuzzleView {
 			created() {
 				this.setData({ rows: [{ id: 1, name: 'first' }] });
@@ -216,7 +216,7 @@ describe('scoped templates — runtime join (D166)', () => {
 		mounted.push(view);
 		const el = container();
 		await view.mount(el, {
-			children: [template('row', ['row'], ({ row }) => [text(row.name)])],
+			children: [snippet('row', ['row'], ({ row }) => [text(row.name)])],
 		});
 		expect(el.textContent).toBe('first');
 		view.setData('rows', [{ id: 1, name: 'second' }]);
@@ -228,7 +228,7 @@ describe('scoped templates — runtime join (D166)', () => {
 		class MixedRegions extends PuzzleView {
 			render() {
 				return h('div', {}, [
-					h('p', { class: 'row' }, [marker('', { row: { name: 'templated' } })]),
+					h('p', { class: 'row' }, [marker('', { row: { name: 'snippet-rendered' } })]),
 					h('footer', {}, [marker('actions', null)]),
 				]);
 			}
@@ -238,17 +238,17 @@ describe('scoped templates — runtime join (D166)', () => {
 		const el = container();
 		await view.mount(el, {
 			children: [
-				template('', ['row'], ({ row }) => [text(row.name)]),
+				snippet('', ['row'], ({ row }) => [text(row.name)]),
 				h('button', { slot: 'actions' }, [text('Save')]),
 			],
 		});
-		expect(el.querySelector('.row').textContent).toBe('templated');
+		expect(el.querySelector('.row').textContent).toBe('snippet-rendered');
 		expect(el.querySelector('footer button').textContent).toBe('Save');
 		expect(el.querySelector('button').hasAttribute('slot')).toBe(false);
 	});
 });
 
-describe('scoped templates — development diagnostics', () => {
+describe('snippets — development diagnostics', () => {
 	it('warns once per component/slot when handed and declared shapes differ', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		class ShapeMismatch extends PuzzleView {
@@ -258,7 +258,7 @@ describe('scoped templates — development diagnostics', () => {
 		const view = new ShapeMismatch();
 		mounted.push(view);
 		await view.mount(container(), {
-			children: [template('row', ['person'], () => [text('ok')])],
+			children: [snippet('row', ['person'], () => [text('ok')])],
 		});
 		view.setData('tick', 1);
 		view.flushUpdates();
@@ -266,11 +266,11 @@ describe('scoped templates — development diagnostics', () => {
 			message.includes('the shapes don\'t match')
 		);
 		expect(messages).toEqual([
-			'[puzzle] template fits "row" declares (person); slot "row" hands over (user) — the shapes don\'t match',
+			'[puzzle] snippet fits slot "row" declares (person); slot hands over (user) — the shapes don\'t match',
 		]);
 	});
 
-	it('warns for an unconsumed Template fits-name', async () => {
+	it('warns for an unconsumed Snippet fits-name', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		class NoMarkers extends PuzzleView {
 			render() { return h('div'); }
@@ -278,10 +278,10 @@ describe('scoped templates — development diagnostics', () => {
 		const view = new NoMarkers();
 		mounted.push(view);
 		await view.mount(container(), {
-			children: [template('missing', ['item'], () => [text('unused')])],
+			children: [snippet('missing', ['item'], () => [text('unused')])],
 		});
 		expect(warn).toHaveBeenCalledWith(
-			'[puzzle] template fits "missing", but no slot "missing" marker consumed it'
+			'[puzzle] snippet fits slot "missing", but no matching slot marker consumed it'
 		);
 	});
 
@@ -298,7 +298,7 @@ describe('scoped templates — development diagnostics', () => {
 		expect(warn.mock.calls.some(([message]) => message.includes('plain content cannot fill args-bearing slot "default"'))).toBe(true);
 	});
 
-	it('warns defensively when hand-built Template output still contains a marker', async () => {
+	it('warns defensively when hand-built Snippet output still contains a marker', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		class DefensiveMarkerHost extends PuzzleView {
 			render() { return h('div', {}, [marker('row', { item: 1 })]); }
@@ -306,19 +306,19 @@ describe('scoped templates — development diagnostics', () => {
 		const view = new DefensiveMarkerHost();
 		mounted.push(view);
 		await view.mount(container(), {
-			children: [template('row', ['item'], () => [
+			children: [snippet('row', ['item'], () => [
 				h('section', {}, [marker('', null)]),
 			])],
 		});
 
 		expect(warn).toHaveBeenCalledWith(
-			'[puzzle] template fits "row" returned a composition marker — markers inside <Template> bodies are compile errors and belong in the component\'s own template'
+			'[puzzle] snippet fits slot "row" returned a composition marker — markers inside <Snippet> bodies are compile errors and belong in the component\'s own template'
 		);
 	});
 });
 
-describe('scoped templates — SSG', () => {
-	it('serializes stamped templates through the shared expansion pipe', async () => {
+describe('snippets — SSG', () => {
+	it('serializes stamped snippets through the shared expansion pipe', async () => {
 		class ServerList extends PuzzleView {
 			data(params, props) { return { rows: props.rows }; }
 			render() {
@@ -330,9 +330,9 @@ describe('scoped templates — SSG', () => {
 		const html = await serialize(comp(
 			ServerList,
 			{ rows: [{ id: 1, name: 'one' }, { id: 2, name: 'two' }] },
-			[template('row', ['row'], ({ row }) => [h('strong', {}, [text(row.name)])])],
+			[snippet('row', ['row'], ({ row }) => [h('strong', {}, [text(row.name)])])],
 		));
 		expect(html).toBe('<ul><li><strong>one</strong></li><li><strong>two</strong></li></ul>');
-		expect(await serialize(template('unused', [], () => [text('never')]))).toBe('');
+		expect(await serialize(snippet('unused', [], () => [text('never')]))).toBe('');
 	});
 });

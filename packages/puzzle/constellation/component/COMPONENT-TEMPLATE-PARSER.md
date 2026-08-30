@@ -96,18 +96,20 @@ list identifiers/keys, and unique static refs.
 
 Composition grammar (D134/D141/D144/D166): `<Children>` is the default marker,
 `<Slot>` is the router outlet, `<Slot name="x">` is a named marker,
-`<Template>` declares caller-owned parameterized content, and `<Portal>` is the
+`<Snippet>` declares caller-owned parameterized content, and `<Portal>` is the
 teleport marker. These tag names are reserved before component resolution, and
 none of the reservations apply inside `{#raw}`, where every tag is literal
 sample markup. `<Children>`/`<Slot>` are
 self-closing (no fallback) or paired — the body is fallback content, parsed
 as ordinary template children, with a marker nested inside another marker's
 fallback a positioned compile error; lowercase `<children>`/`<slot>`/`<portal>`
-are positioned steering errors. `<Portal>` is paired-only (it exists to carry
+are positioned steering errors. Lowercase `<snippet>` with `fits` or bare params
+steers to `<Snippet ...>`; lowercase `<template>` is always an HTML element and
+capitalized `<Template>` is always a component invocation. `<Portal>` is paired-only (it exists to carry
 the children it teleports), takes no attributes — `to`/`name` get a
 named-outlets-not-supported message and `ref` the render-target message — and
 cannot appear inside an island or inside a marker's fallback body. A paired-only
-`<Template fits="row" item>` is legal only as a component invocation's direct
+`<Snippet fits="row" item>` is legal only as a component invocation's direct
 child; `fits` is static and every other attribute is a bare parameter. Its body
 is stamped output: component invocations are legal, but composition markers and
 `ref=` are positioned errors at every depth. Slot names stay static, non-empty,
@@ -117,7 +119,7 @@ loop remains legal because validation visits that site once. Call-site named
 fills must be direct static `slot="x"` children, while default forwarding may
 appear inside a component invocation. Components/markers are forbidden inside
 islands; refs are forbidden on components, markers, roots, loops, skeletons,
-and Template bodies.
+and Snippet bodies.
 
 `ParseError` includes file and one-based line/column. Cross-nesting and
 did-you-mean diagnostics report the actionable source position.

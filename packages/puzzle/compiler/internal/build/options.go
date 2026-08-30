@@ -99,8 +99,8 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 }
 
 // bundleDefines builds the literal define map. The __PUZZLE_HAS_* values are
-// SOURCE facts: plugin.ScanUsage reads templates for flip, Portal, and raw-block
-// usage, and app scripts for lazy() route views.
+// SOURCE facts: plugin.ScanUsage reads templates for flip, Portal, raw-block,
+// and Snippet usage, and app scripts for lazy() route views.
 // __PUZZLE_DEV__, __PUZZLE_TAKEOVER__ and __PUZZLE_CAPTURE__ are BUILD facts
 // carried by bundleFlags.
 //
@@ -125,14 +125,14 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 	f := pl.Features()
 	return map[string]string{
-		"__PUZZLE_DEV__":                  strconv.FormatBool(flags.Dev),
-		"__PUZZLE_HAS_FLIP__":             strconv.FormatBool(f.Flip),
-		"__PUZZLE_HAS_PORTAL__":           strconv.FormatBool(f.Portal),
-		"__PUZZLE_HAS_RAW_AT__":           strconv.FormatBool(f.RawAt),
-		"__PUZZLE_HAS_LAZY__":             strconv.FormatBool(f.Lazy),
-		"__PUZZLE_HAS_SCOPED_TEMPLATES__": strconv.FormatBool(f.ScopedTemplates),
-		"__PUZZLE_TAKEOVER__":             strconv.FormatBool(flags.Takeover),
-		"__PUZZLE_CAPTURE__":              strconv.FormatBool(flags.Capture),
+		"__PUZZLE_DEV__":          strconv.FormatBool(flags.Dev),
+		"__PUZZLE_HAS_FLIP__":     strconv.FormatBool(f.Flip),
+		"__PUZZLE_HAS_PORTAL__":   strconv.FormatBool(f.Portal),
+		"__PUZZLE_HAS_RAW_AT__":   strconv.FormatBool(f.RawAt),
+		"__PUZZLE_HAS_LAZY__":     strconv.FormatBool(f.Lazy),
+		"__PUZZLE_HAS_SNIPPETS__": strconv.FormatBool(f.Snippets),
+		"__PUZZLE_TAKEOVER__":     strconv.FormatBool(flags.Takeover),
+		"__PUZZLE_CAPTURE__":      strconv.FormatBool(flags.Capture),
 	}
 }
 

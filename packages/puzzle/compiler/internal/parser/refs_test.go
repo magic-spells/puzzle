@@ -163,13 +163,13 @@ func TestParseRefErrors(t *testing.T) {
 			"not allowed inside a {#for}",
 		},
 		{
-			"ref nested inside Template body",
-			`<puzzle-view><List><Template item><section><input ref="row"/></section></Template></List></puzzle-view>` + "\n<script></script>",
-			"ref is not allowed inside a <Template> body",
+			"ref nested inside Snippet body",
+			`<puzzle-view><List><Snippet item><section><input ref="row"/></section></Snippet></List></puzzle-view>` + "\n<script></script>",
+			"ref is not allowed inside a <Snippet> body",
 		},
 		{
-			"component ref inside Template body uses stamped-output error",
-			`<puzzle-view><List><Template item><Card ref="card"/></Template></List></puzzle-view>` + "\n<script></script>",
+			"component ref inside Snippet body uses stamped-output error",
+			`<puzzle-view><List><Snippet item><Card ref="card"/></Snippet></List></puzzle-view>` + "\n<script></script>",
 			"put the ref in the component's own template instead",
 		},
 		{
@@ -197,11 +197,11 @@ func TestParseRefErrors(t *testing.T) {
 	}
 }
 
-func TestParseRefInTemplateBodyIsPositionedAtRef(t *testing.T) {
-	src := `<puzzle-view><List><Template item><div><input ref="row"/></div></Template></List></puzzle-view>` + "\n<script></script>"
+func TestParseRefInSnippetBodyIsPositionedAtRef(t *testing.T) {
+	src := `<puzzle-view><List><Snippet item><div><input ref="row"/></div></Snippet></List></puzzle-view>` + "\n<script></script>"
 	_, err := Parse([]byte(src), "test.pzl")
 	if err == nil {
-		t.Fatal("expected a ref-in-Template error")
+		t.Fatal("expected a ref-in-Snippet error")
 	}
 	pe, ok := err.(*ParseError)
 	if !ok {

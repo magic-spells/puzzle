@@ -43,7 +43,7 @@ func collectA11yWarnings(nodes []parser.Node, file string, warnings *[]Warning) 
 			collectA11yWarnings(node.Children, file, warnings)
 		case *parser.Slot:
 			collectA11yWarnings(node.Children, file, warnings)
-		case *parser.Template:
+		case *parser.Snippet:
 			collectA11yWarnings(node.Body, file, warnings)
 		case *parser.Portal:
 			collectA11yWarnings(node.Children, file, warnings)

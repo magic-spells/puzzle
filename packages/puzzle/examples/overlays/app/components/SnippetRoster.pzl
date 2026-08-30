@@ -1,9 +1,9 @@
 <puzzle-view>
-  <div class="template-roster">
-    <header class="template-roster-head">
+  <div class="snippet-roster">
+    <header class="snippet-roster-head">
       <Slot name="heading" total={ members.length }>Team</Slot>
     </header>
-    <ol class="template-roster-list">
+    <ol class="snippet-roster-list">
       {#for member in members, index}
         <li key={ member.id }>
           <Children member={ member } index={ index }>{ member.name }</Children>
@@ -16,7 +16,7 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-export default class TemplatedRoster extends PuzzleView {
+export default class SnippetRoster extends PuzzleView {
   data(params, props) {
     return { members: props.members || [] };
   }
@@ -24,14 +24,14 @@ export default class TemplatedRoster extends PuzzleView {
 </script>
 
 <style>
-.template-roster {
+.snippet-roster {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
 }
 
-.template-roster-head {
+.snippet-roster-head {
   padding: 16px 20px;
   border-bottom: 1px solid var(--line);
   font-size: 13px;
@@ -39,13 +39,13 @@ export default class TemplatedRoster extends PuzzleView {
   color: var(--muted);
 }
 
-.template-roster-list {
+.snippet-roster-list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.template-roster-list li + li { border-top: 1px solid var(--line); }
+.snippet-roster-list li + li { border-top: 1px solid var(--line); }
 
 .roster-row {
   display: grid;

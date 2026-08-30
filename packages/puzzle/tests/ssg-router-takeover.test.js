@@ -14,7 +14,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { prerender } from '../client-runtime/ssg/index.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode, SLOT_TAG, TEMPLATE_TAG } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG, SNIPPET_TAG } from '../client-runtime/views/ViewNode.js';
 import LocalForm from './fixtures/binding/LocalForm.compiled.js';
 import { memoryRouter } from '../client-runtime/router/modes.js';
 
@@ -22,7 +22,7 @@ const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children)
 const text = (value) => new ViewNode('text', { value });
 const slot = () => new ViewNode(SLOT_TAG);
 const scopedMarker = (name, args) => new ViewNode(SLOT_TAG, { name, args });
-const scopedTemplate = (fits, params, fn) => new ViewNode(TEMPLATE_TAG, { fits, params, fn });
+const snippet = (fits, params, fn) => new ViewNode(SNIPPET_TAG, { fits, params, fn });
 const tick = () => new Promise((r) => setTimeout(r, 0));
 // A bind write is setData + refresh(): the re-render lands on an animation frame
 // after data() re-runs, so drain both queues a few times.
@@ -540,7 +540,7 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.querySelector('.sync-leaf').textContent).toBe('SYNC-CONTENT');
 	});
 
-	it('mounts scoped-template output once during hybrid takeover with zero dev warnings', async () => {
+	it('mounts snippet output once during hybrid takeover with zero dev warnings', async () => {
 		class ScopedList extends PuzzleView {
 			render() {
 				return h('ul', { class: 'takeover-scoped-list' }, [
@@ -552,7 +552,7 @@ describe('router SSG takeover (M2)', () => {
 			render() {
 				return h('main', {}, [
 					h(ScopedList, {}, [
-						scopedTemplate('row', ['item'], ({ item }) => [
+						snippet('row', ['item'], ({ item }) => [
 							h('strong', { class: 'takeover-stamp' }, [text(item.label)]),
 						]),
 					]),

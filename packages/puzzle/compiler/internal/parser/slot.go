@@ -9,7 +9,7 @@ import "strings"
 // Two reserved tags have three roles:
 //
 //   <Children item={ item }>…fallback…</Children> — the DEFAULT marker
-//   (call-site content), optionally handing named values to a scoped Template.
+//   (call-site content), optionally handing named values to a Snippet.
 //
 //   <Slot>…fallback…</Slot> — the same unnamed marker used as the ROUTER OUTLET
 //   (D30).
@@ -17,7 +17,7 @@ import "strings"
 //   <Slot name="x" item={ item }>…fallback…</Slot> — a NAMED slot. `name` is
 //   static, non-empty, and per-template-unique; "default" and "children" are
 //   reserved and steer to <Children/>. Other valued attrs hand data to a scoped
-//   Template. Local shape checks run in slotMarkerFromAttrs; the per-body
+//   Snippet. Local shape checks run in slotMarkerFromAttrs; the per-body
 //   uniqueness check runs in validateSlots.
 //
 //   Call site (<Card><h2 slot="header">…</h2></Card>): the parser's job is
@@ -30,7 +30,7 @@ import "strings"
 //   global attribute and passes through untouched.
 
 // childrenMarkerAttrs validates <Children>'s handed-data attributes. Every
-// attribute must carry a value; bare names declare Template parameters instead.
+// attribute must carry a value; bare names declare Snippet parameters instead.
 func childrenMarkerAttrs(attrs []Attr, file string) ([]Attr, *ParseError) {
 	var args []Attr
 	for _, a := range attrs {
@@ -41,7 +41,7 @@ func childrenMarkerAttrs(attrs []Attr, file string) ([]Attr, *ParseError) {
 			return nil, errAt(file, attrPos(a), "<Children> does not take event handlers")
 		}
 		if at, ok := a.(*StaticAttr); ok && at.Valueless {
-			return nil, errAt(file, at.Pos, "bare attributes belong on <Template> as parameters — hand values over here with %s={ … }", at.Name)
+			return nil, errAt(file, at.Pos, "bare attributes belong on <Snippet> as parameters — hand values over here with %s={ … }", at.Name)
 		}
 		args = append(args, a)
 	}
@@ -85,7 +85,7 @@ func slotMarkerFromAttrs(attrs []Attr, pos Position, file string) (name string, 
 				continue
 			}
 			if at.Valueless {
-				return "", nil, errAt(file, at.Pos, "bare attributes belong on <Template> as parameters — hand values over here with %s={ … }", at.Name)
+				return "", nil, errAt(file, at.Pos, "bare attributes belong on <Snippet> as parameters — hand values over here with %s={ … }", at.Name)
 			}
 			args = append(args, a)
 		case *DynamicAttr:
@@ -117,10 +117,10 @@ func slotMarkerFromAttrs(attrs []Attr, pos Position, file string) (name string, 
 	return name, args, nil
 }
 
-// templateMarkerAttrs validates the caller-side <Template> declaration.
+// snippetMarkerAttrs validates the caller-side <Snippet> declaration.
 // `fits` is the sole valued attribute; every other attribute is a bare
 // parameter declaration, preserved in source order for emitted metadata.
-func templateMarkerAttrs(attrs []Attr, file string) (fits string, params []string, perr *ParseError) {
+func snippetMarkerAttrs(attrs []Attr, file string) (fits string, params []string, perr *ParseError) {
 	hasFits := false
 	seen := map[string]Position{}
 	for _, a := range attrs {
@@ -129,45 +129,45 @@ func templateMarkerAttrs(attrs []Attr, file string) (fits string, params []strin
 		case *StaticAttr:
 			if name == "fits" {
 				if at.Valueless {
-					return "", nil, errAt(file, at.Pos, `"fits" routes a <Template> — write fits="row"; it cannot be a parameter`)
+					return "", nil, errAt(file, at.Pos, `"fits" routes a <Snippet> — write fits="row"; it cannot be a parameter`)
 				}
 				if hasFits {
-					return "", nil, errAt(file, at.Pos, "duplicate fits attribute on <Template>")
+					return "", nil, errAt(file, at.Pos, "duplicate fits attribute on <Snippet>")
 				}
 				if at.Value == "" {
-					return "", nil, errAt(file, at.Pos, "<Template fits> cannot be empty")
+					return "", nil, errAt(file, at.Pos, "<Snippet fits> cannot be empty")
 				}
 				hasFits = true
 				fits = at.Value
 				continue
 			}
 			if !at.Valueless {
-				return "", nil, errAt(file, at.Pos, "parameters on <Template> are bare — write %s, not %s={ … }", name, name)
+				return "", nil, errAt(file, at.Pos, "parameters on <Snippet> are bare — write %s, not %s={ … }", name, name)
 			}
 		case *DynamicAttr:
 			if name == "fits" {
-				return "", nil, errAt(file, at.Pos, "template target must be a static string, not fits={ ... }")
+				return "", nil, errAt(file, at.Pos, "snippet target must be a static string, not fits={ ... }")
 			}
-			return "", nil, errAt(file, at.Pos, "parameters on <Template> are bare — write %s, not %s={ … }", name, name)
+			return "", nil, errAt(file, at.Pos, "parameters on <Snippet> are bare — write %s, not %s={ … }", name, name)
 		case *MixedAttr:
 			if name == "fits" {
-				return "", nil, errAt(file, at.Pos, "template target must be a static string, not an interpolated value")
+				return "", nil, errAt(file, at.Pos, "snippet target must be a static string, not an interpolated value")
 			}
-			return "", nil, errAt(file, at.Pos, "parameters on <Template> are bare — write %s, not %s={ … }", name, name)
+			return "", nil, errAt(file, at.Pos, "parameters on <Snippet> are bare — write %s, not %s={ … }", name, name)
 		case *EventAttr:
-			return "", nil, errAt(file, at.Pos, "parameters on <Template> are bare — write %s, not %s={ … }", name, name)
+			return "", nil, errAt(file, at.Pos, "parameters on <Snippet> are bare — write %s, not %s={ … }", name, name)
 		}
 		if name == "fits" {
-			return "", nil, errAt(file, attrPos(a), `"fits" routes a <Template> — write fits="row"; it cannot be a parameter`)
+			return "", nil, errAt(file, attrPos(a), `"fits" routes a <Snippet> — write fits="row"; it cannot be a parameter`)
 		}
 		if !isBareIdent(name) {
-			return "", nil, errAt(file, attrPos(a), "template parameter %q must be a valid identifier", name)
+			return "", nil, errAt(file, attrPos(a), "snippet parameter %q must be a valid identifier", name)
 		}
-		if identErr := templateParamIdentError(name, attrPos(a), file); identErr != nil {
+		if identErr := snippetParamIdentError(name, attrPos(a), file); identErr != nil {
 			return "", nil, identErr
 		}
 		if prev, dup := seen[name]; dup {
-			return "", nil, errAt(file, attrPos(a), "duplicate template parameter %q — already declared at %d:%d", name, prev.Line, prev.Col)
+			return "", nil, errAt(file, attrPos(a), "duplicate snippet parameter %q — already declared at %d:%d", name, prev.Line, prev.Col)
 		}
 		seen[name] = attrPos(a)
 		params = append(params, name)
@@ -206,7 +206,7 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 			} else {
 				// The default marker (<Children/> or <Slot/>, D134) is unique per
 				// body too: distinct AST declarations share one reconciliation
-				// namespace even when they hand args to a scoped template. One marker
+				// namespace even when they hand args to a snippet. One marker
 				// declaration inside a {#for} remains legal because this walk visits
 				// that AST site once; runtime stamping supplies the N instances. Both
 				// spellings produce a Name-less *Slot and key under "default" (a
@@ -241,17 +241,17 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 			// would splice the same default bucket twice, so the per-body
 			// uniqueness check must keep counting in here.
 			for _, child := range node.Children {
-				if tmpl, ok := child.(*Template); ok {
-					// A Template body is stamped output, not another composition owner.
+				if snippet, ok := child.(*Snippet); ok {
+					// A Snippet body is stamped output, not another composition owner.
 					// Component invocations remain legal in it, but any marker anywhere
 					// below them would survive stamping unexpanded. Reject that marker at
 					// its own position, matching D141's fallback-body strictness.
-					if nested := nestedTemplateBodyMarker(tmpl.Body); nested != nil {
-						return templateBodyMarkerErr(nested, file)
+					if nested := nestedSnippetBodyMarker(snippet.Body); nested != nil {
+						return snippetBodyMarkerErr(nested, file)
 					}
 					// The body is still a separate validation scope: uniqueness does not
 					// leak into or out of the enclosing template.
-					if perr := walkSlots(tmpl.Body, file, map[string]Position{}, true); perr != nil {
+					if perr := walkSlots(snippet.Body, file, map[string]Position{}, true); perr != nil {
 						return perr
 					}
 					continue
@@ -260,8 +260,8 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 					return perr
 				}
 			}
-		case *Template:
-			return errAt(file, node.Pos, "<Template> is only allowed as a direct child of a component invocation")
+		case *Snippet:
+			return errAt(file, node.Pos, "<Snippet> is only allowed as a direct child of a component invocation")
 		case *If:
 			if perr := walkSlots(node.Then, file, seen, inCallSite); perr != nil {
 				return perr
@@ -305,8 +305,8 @@ func nestedFallbackMarker(nodes []Node) Node {
 			return node
 		case *Portal:
 			return node
-		case *Template:
-			// A scoped template body is a separate caller-owned render body. Markers
+		case *Snippet:
+			// A snippet body is a separate caller-owned render body. Markers
 			// inside it are not nested in the surrounding marker fallback.
 			continue
 		case *Element:
@@ -342,46 +342,46 @@ func nestedFallbackMarker(nodes []Node) Node {
 	return nil
 }
 
-// nestedTemplateBodyMarker returns the first composition marker anywhere in
+// nestedSnippetBodyMarker returns the first composition marker anywhere in
 // caller-owned stamped output. Unlike nestedFallbackMarker, component and
 // Portal boundaries do not create an escape hatch: their call-site children are
 // part of the same fn() output and an inner marker would still reach the runtime
 // unexpanded.
-func nestedTemplateBodyMarker(nodes []Node) Node {
+func nestedSnippetBodyMarker(nodes []Node) Node {
 	for _, n := range nodes {
 		switch node := n.(type) {
-		case *Slot, *Template:
+		case *Slot, *Snippet:
 			return node
 		case *Portal:
-			if found := nestedTemplateBodyMarker(node.Children); found != nil {
+			if found := nestedSnippetBodyMarker(node.Children); found != nil {
 				return found
 			}
 		case *Element:
-			if found := nestedTemplateBodyMarker(node.Children); found != nil {
+			if found := nestedSnippetBodyMarker(node.Children); found != nil {
 				return found
 			}
 		case *Component:
-			if found := nestedTemplateBodyMarker(node.Children); found != nil {
+			if found := nestedSnippetBodyMarker(node.Children); found != nil {
 				return found
 			}
 		case *If:
-			if found := nestedTemplateBodyMarker(node.Then); found != nil {
+			if found := nestedSnippetBodyMarker(node.Then); found != nil {
 				return found
 			}
-			if found := nestedTemplateBodyMarker(node.Else); found != nil {
+			if found := nestedSnippetBodyMarker(node.Else); found != nil {
 				return found
 			}
 		case *For:
-			if found := nestedTemplateBodyMarker(node.Body); found != nil {
+			if found := nestedSnippetBodyMarker(node.Body); found != nil {
 				return found
 			}
 		case *Case:
 			for _, clause := range node.Clauses {
-				if found := nestedTemplateBodyMarker(clause.Body); found != nil {
+				if found := nestedSnippetBodyMarker(clause.Body); found != nil {
 					return found
 				}
 			}
-			if found := nestedTemplateBodyMarker(node.Else); found != nil {
+			if found := nestedSnippetBodyMarker(node.Else); found != nil {
 				return found
 			}
 		}
@@ -389,8 +389,8 @@ func nestedTemplateBodyMarker(nodes []Node) Node {
 	return nil
 }
 
-func templateBodyMarkerErr(n Node, file string) *ParseError {
-	return errAt(file, nodePos(n), "a composition marker cannot appear inside a <Template> body — stamped output cannot declare composition positions; put the marker in the component's own template")
+func snippetBodyMarkerErr(n Node, file string) *ParseError {
+	return errAt(file, nodePos(n), "a composition marker cannot appear inside a <Snippet> body — stamped output cannot declare composition positions; put the marker in the component's own template")
 }
 
 // validateCallSiteSlots enforces the call-site slot rules on the DIRECT children
@@ -436,7 +436,7 @@ func validateCallSiteSlots(comp *Component, file string) *ParseError {
 					plain["default"] = c.Pos
 				}
 			}
-		case *Template:
+		case *Snippet:
 			// Collected in the second pass after all ordinary fills are known.
 		default:
 			if _, exists := plain["default"]; !exists {
@@ -445,25 +445,25 @@ func validateCallSiteSlots(comp *Component, file string) *ParseError {
 		}
 	}
 
-	templates := map[string]Position{}
+	snippets := map[string]Position{}
 	for _, child := range comp.Children {
-		tmpl, ok := child.(*Template)
+		snippet, ok := child.(*Snippet)
 		if !ok {
 			continue
 		}
-		name := tmpl.Fits
+		name := snippet.Fits
 		if name == "" {
 			name = "default"
 		}
-		if prev, dup := templates[name]; dup {
-			return errAt(file, tmpl.Pos, "duplicate Template for %q — already declared at %d:%d", name, prev.Line, prev.Col)
+		if prev, dup := snippets[name]; dup {
+			return errAt(file, snippet.Pos, "duplicate Snippet for %q — already declared at %d:%d", name, prev.Line, prev.Col)
 		}
-		templates[name] = tmpl.Pos
+		snippets[name] = snippet.Pos
 		if prev, conflict := plain[name]; conflict {
 			if name == "default" {
-				return errAt(file, tmpl.Pos, "a default <Template> cannot be mixed with ordinary default content in the same component invocation (content starts at %d:%d)", prev.Line, prev.Col)
+				return errAt(file, snippet.Pos, "a default <Snippet> cannot be mixed with ordinary default content in the same component invocation (content starts at %d:%d)", prev.Line, prev.Col)
 			}
-			return errAt(file, tmpl.Pos, "<Template fits=%q> conflicts with ordinary content routed to slot %q at %d:%d", name, name, prev.Line, prev.Col)
+			return errAt(file, snippet.Pos, "<Snippet fits=%q> conflicts with ordinary content routed to slot %q at %d:%d", name, name, prev.Line, prev.Col)
 		}
 	}
 	return nil
@@ -503,8 +503,8 @@ func checkStaticSlotAttr(attrs []Attr, file string) *ParseError {
 func rejectSlotInControlFlow(n Node, file string) *ParseError {
 	for _, branch := range controlFlowBranches(n) {
 		for _, child := range branch {
-			if tmpl, ok := child.(*Template); ok {
-				pe := errAt(file, tmpl.Pos, "a <Template> inside a {#if}/{#unless}/{#for}/{#case} block at a component's direct-child level is ambiguous — put the <Template> immediately inside the component tag")
+			if snippet, ok := child.(*Snippet); ok {
+				pe := errAt(file, snippet.Pos, "a <Snippet> inside a {#if}/{#unless}/{#for}/{#case} block at a component's direct-child level is ambiguous — put the <Snippet> immediately inside the component tag")
 				pe.Note = slotInControlFlowNote
 				return pe
 			}

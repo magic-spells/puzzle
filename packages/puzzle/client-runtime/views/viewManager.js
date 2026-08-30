@@ -22,7 +22,7 @@
  * substituted with the slot content captured at the call site before diffing.
  */
 
-import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG, TEMPLATE_TAG } from './ViewNode.js';
+import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG, SNIPPET_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import {
 	mountPortal,
@@ -111,8 +111,8 @@ export class ViewManager {
 		if (this.treeUnknown) return this.renderFresh(rawTree, slotsExpanded);
 		// SSG/static takeover preloads nested components by walking the expanded
 		// tree and stores that exact tree for mount. Expanding it again cannot change
-		// the output, but it loses the first pass's template-use state and emits a
-		// false unused-template warning. All ordinary renders still expand here.
+		// the output, but it loses the first pass's snippet-use state and emits a
+		// false unused-snippet warning. All ordinary renders still expand here.
 		const newTree = slotsExpanded
 			? rawTree
 			: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
@@ -295,25 +295,25 @@ export class ViewManager {
  * captured in `slotChildren`. Named slots (v1.21, D53) partition the content
  * once per render (partitionSlots) by each direct child's stripped `slot`
  * attribute; <Children/> and the bare <Slot/> take the unattributed remainder.
- * Name-free templates AND slot-attr-free call sites take the same fast path they
+ * Snippet-free AND slot-attr-free call sites take the same fast path they
  * always did — the default bucket is the original `slotChildren` array (no
  * clones) and no vnode changes unless a marker is actually present.
  */
 export function expandSlots(vnode, slotChildren, component = null) {
 	const parts = partitionSlots(slotChildren);
 	if (
-		typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
-		__PUZZLE_HAS_SCOPED_TEMPLATES__
+		typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+		__PUZZLE_HAS_SNIPPETS__
 	) {
 		parts.component = component;
 	}
 	const expanded = expandNode(vnode, parts);
 	if (
-		(typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
-			__PUZZLE_HAS_SCOPED_TEMPLATES__) &&
+		(typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+			__PUZZLE_HAS_SNIPPETS__) &&
 		(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 	) {
-		warnUnusedTemplates(parts, component);
+		warnUnusedSnippets(parts, component);
 	}
 	return expanded;
 }
@@ -328,18 +328,18 @@ export function expandSlots(vnode, slotChildren, component = null) {
  */
 function partitionSlots(slotChildren) {
 	let named = null;
-	let templates = null;
+	let snippets = null;
 	let def = null; // null until the first named child forces a fresh default list
 	for (let i = 0; i < slotChildren.length; i++) {
 		const sc = slotChildren[i];
 		if (
-			(typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
-				__PUZZLE_HAS_SCOPED_TEMPLATES__) &&
-			sc.tag === TEMPLATE_TAG
+			(typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+				__PUZZLE_HAS_SNIPPETS__) &&
+			sc.tag === SNIPPET_TAG
 		) {
-			if (!templates) templates = Object.create(null);
+			if (!snippets) snippets = Object.create(null);
 			if (def === null) def = slotChildren.slice(0, i);
-			templates[sc.attrs.fits || 'default'] = sc;
+			snippets[sc.attrs.fits || 'default'] = sc;
 			continue;
 		}
 		const name = sc.attrs && sc.attrs.slot;
@@ -355,17 +355,17 @@ function partitionSlots(slotChildren) {
 		}
 	}
 	if (
-		typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
-		__PUZZLE_HAS_SCOPED_TEMPLATES__
+		typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+		__PUZZLE_HAS_SNIPPETS__
 	) {
-		if (named === null && templates === null) {
-			return { default: slotChildren, named: null, templates: null, templateUses: null };
+		if (named === null && snippets === null) {
+			return { default: slotChildren, named: null, snippets: null, snippetUses: null };
 		}
 		return {
 			default: def ?? [],
 			named,
-			templates,
-			templateUses: templates && Object.create(null),
+			snippets,
+			snippetUses: snippets && Object.create(null),
 		};
 	}
 	if (named === null) return { default: slotChildren, named: null };
@@ -451,19 +451,19 @@ function expandChildList(kids, parts) {
 			const markerName = (k.attrs && k.attrs.name) || 'default';
 			const bucket = markerName === 'default' ? parts.default : parts.named && parts.named[markerName];
 			if (
-				typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
-				__PUZZLE_HAS_SCOPED_TEMPLATES__
+				typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+				__PUZZLE_HAS_SNIPPETS__
 			) {
 				const hasArgs = Object.prototype.hasOwnProperty.call(k.attrs, 'args');
-				const tmpl = parts.templates && parts.templates[markerName];
-				if (tmpl) {
-					parts.templateUses[markerName] = true;
+				const snippet = parts.snippets && parts.snippets[markerName];
+				if (snippet) {
+					parts.snippetUses[markerName] = true;
 					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-						warnTemplateShape(tmpl, k.attrs.args || {}, markerName, parts.component);
+						warnSnippetShape(snippet, k.attrs.args || {}, markerName, parts.component);
 					}
-					const stampedNodes = tmpl.attrs.fn(k.attrs.args || {});
+					const stampedNodes = snippet.attrs.fn(k.attrs.args || {});
 					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-						warnTemplateOutputMarker(stampedNodes, markerName, parts.component);
+						warnSnippetOutputMarker(stampedNodes, markerName, parts.component);
 					}
 					for (const stamped of stampedNodes) out.push(stamped);
 					continue;
@@ -500,80 +500,80 @@ function expandChildList(kids, parts) {
 	return out;
 }
 
-const UNKNOWN_TEMPLATE_OWNER = {};
-let scopedTemplateWarnings;
+const UNKNOWN_SNIPPET_OWNER = {};
+let snippetWarnings;
 
-function warnScopedTemplate(component, issue, message) {
+function warnSnippet(component, issue, message) {
 	const owner =
 		(component != null && (typeof component === 'object' || typeof component === 'function'))
 			? component
-			: UNKNOWN_TEMPLATE_OWNER;
-	scopedTemplateWarnings ??= new WeakMap();
-	let seen = scopedTemplateWarnings.get(owner);
+			: UNKNOWN_SNIPPET_OWNER;
+	snippetWarnings ??= new WeakMap();
+	let seen = snippetWarnings.get(owner);
 	if (!seen) {
 		seen = new Set();
-		scopedTemplateWarnings.set(owner, seen);
+		snippetWarnings.set(owner, seen);
 	}
 	if (seen.has(issue)) return;
 	seen.add(issue);
 	console.warn(`[puzzle] ${message}`);
 }
 
-function warnTemplateShape(tmpl, args, name, component) {
-	const params = tmpl.attrs.params || [];
+function warnSnippetShape(snippet, args, name, component) {
+	const params = snippet.attrs.params || [];
 	const handed = Object.keys(args);
 	const same =
 		params.length === handed.length &&
 		params.every((param) => Object.prototype.hasOwnProperty.call(args, param));
 	if (same) return;
-	warnScopedTemplate(
+	warnSnippet(
 		component,
 		`shape:${name}`,
-		`template fits "${name}" declares (${params.join(', ')}); ` +
-			`slot "${name}" hands over (${handed.join(', ')}) — the shapes don't match`
+		`snippet fits slot "${name}" declares (${params.join(', ')}); ` +
+			`slot hands over (${handed.join(', ')}) — the shapes don't match`
 	);
 }
 
 function warnPlainScopedContent(name, args, component) {
-	warnScopedTemplate(
+	warnSnippet(
 		component,
 		`plain:${name}`,
 		`plain content cannot fill args-bearing slot "${name}" handing over ` +
-			`(${Object.keys(args).join(', ')}) — provide a matching <Template>; rendering the fallback`
+			`(${Object.keys(args).join(', ')}) — provide a matching <Snippet>; rendering the fallback`
 	);
 }
 
-function warnTemplateOutputMarker(nodes, name, component) {
-	if (!templateOutputHasMarker(nodes)) return;
-	warnScopedTemplate(
+function warnSnippetOutputMarker(nodes, name, component) {
+	if (!snippetOutputHasMarker(nodes)) return;
+	warnSnippet(
 		component,
 		`output-marker:${name}`,
-		`template fits "${name}" returned a composition marker — markers inside ` +
-			`<Template> bodies are compile errors and belong in the component's own template`
+		`snippet fits slot "${name}" returned a composition marker — markers inside ` +
+			`<Snippet> bodies are compile errors and belong in the component's own template`
 	);
 }
 
-function templateOutputHasMarker(nodes) {
+function snippetOutputHasMarker(nodes) {
 	for (const node of nodes) {
 		if (node == null || typeof node === 'string') continue;
-		if (node.isSlot || node.isTemplate) return true;
+		if (node.isSlot || node.isSnippet) return true;
 		if (
 			typeof node.children !== 'string' &&
 			node.children.length > 0 &&
-			templateOutputHasMarker(node.children)
+			snippetOutputHasMarker(node.children)
 		) return true;
 	}
 	return false;
 }
 
-function warnUnusedTemplates(parts, component) {
-	if (!parts.templates) return;
-	for (const name of Object.keys(parts.templates)) {
-		if (parts.templateUses[name]) continue;
-		warnScopedTemplate(
+function warnUnusedSnippets(parts, component) {
+	if (!parts.snippets) return;
+	for (const name of Object.keys(parts.snippets)) {
+		if (parts.snippetUses[name]) continue;
+		warnSnippet(
 			component,
 			`unused:${name}`,
-			`template fits "${name}", but no slot "${name}" marker consumed it`
+			`snippet fits slot "${name}", but no matching slot marker consumed it`
 		);
 	}
 }

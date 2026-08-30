@@ -26,7 +26,7 @@ package parser
 //   8. duplicate ref name within one template body — two nodes claiming
 //      this.refs.<name> would clobber each other.
 //   9. ref on the <puzzle-view> root — the root is already this.element.
-//  10. ref anywhere inside a <Template> body — one caller ref slot cannot own
+//  10. ref anywhere inside a <Snippet> body — one caller ref slot cannot own
 //      the N independently stamped DOM nodes.
 //
 // The check runs as a post-pass over the built AST (like validateIslands /
@@ -76,9 +76,9 @@ func walkRefs(nodes []Node, file string, seen map[string]Position, inFor, inSkel
 			if perr := walkRefs(node.Children, file, seen, inFor, inSkeleton); perr != nil {
 				return perr
 			}
-		case *Template:
-			if ref := templateBodyRef(node.Body); ref != nil {
-				return errAt(file, attrPos(ref), "ref is not allowed inside a <Template> body — stamped output has no per-stamp ref semantics; put the ref in the component's own template instead")
+		case *Snippet:
+			if ref := snippetBodyRef(node.Body); ref != nil {
+				return errAt(file, attrPos(ref), "ref is not allowed inside a <Snippet> body — stamped output has no per-stamp ref semantics; put the ref in the component's own template instead")
 			}
 			if perr := walkRefs(node.Body, file, seen, inFor, inSkeleton); perr != nil {
 				return perr
@@ -114,56 +114,56 @@ func walkRefs(nodes []Node, file string, seen map[string]Position, inFor, inSkel
 	return nil
 }
 
-// templateBodyRef finds the first framework ref directive anywhere in stamped
+// snippetBodyRef finds the first framework ref directive anywhere in stamped
 // output. Literal ref attribute names inside {#raw} are authored markup and stay
 // excluded through findRefAttr, exactly as in the ordinary ref walk.
-func templateBodyRef(nodes []Node) Attr {
+func snippetBodyRef(nodes []Node) Attr {
 	for _, n := range nodes {
 		switch node := n.(type) {
 		case *Element:
 			if ref := findRefAttr(node.Attrs); ref != nil {
 				return ref
 			}
-			if ref := templateBodyRef(node.Children); ref != nil {
+			if ref := snippetBodyRef(node.Children); ref != nil {
 				return ref
 			}
 		case *Component:
 			if ref := findRefAttr(node.Props); ref != nil {
 				return ref
 			}
-			if ref := templateBodyRef(node.Children); ref != nil {
+			if ref := snippetBodyRef(node.Children); ref != nil {
 				return ref
 			}
 		case *Slot:
-			if ref := templateBodyRef(node.Children); ref != nil {
+			if ref := snippetBodyRef(node.Children); ref != nil {
 				return ref
 			}
-		case *Template:
-			if ref := templateBodyRef(node.Body); ref != nil {
+		case *Snippet:
+			if ref := snippetBodyRef(node.Body); ref != nil {
 				return ref
 			}
 		case *Portal:
-			if ref := templateBodyRef(node.Children); ref != nil {
+			if ref := snippetBodyRef(node.Children); ref != nil {
 				return ref
 			}
 		case *If:
-			if ref := templateBodyRef(node.Then); ref != nil {
+			if ref := snippetBodyRef(node.Then); ref != nil {
 				return ref
 			}
-			if ref := templateBodyRef(node.Else); ref != nil {
+			if ref := snippetBodyRef(node.Else); ref != nil {
 				return ref
 			}
 		case *For:
-			if ref := templateBodyRef(node.Body); ref != nil {
+			if ref := snippetBodyRef(node.Body); ref != nil {
 				return ref
 			}
 		case *Case:
 			for _, clause := range node.Clauses {
-				if ref := templateBodyRef(clause.Body); ref != nil {
+				if ref := snippetBodyRef(clause.Body); ref != nil {
 					return ref
 				}
 			}
-			if ref := templateBodyRef(node.Else); ref != nil {
+			if ref := snippetBodyRef(node.Else); ref != nil {
 				return ref
 			}
 		}

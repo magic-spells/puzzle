@@ -14,7 +14,7 @@ import { mountStatic } from '../client-runtime/static/index.js';
 import { adapter, serializeReadState } from '../client-runtime/datastore/adapter.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode, SLOT_TAG, TEMPLATE_TAG } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG, SNIPPET_TAG } from '../client-runtime/views/ViewNode.js';
 import LocalForm from './fixtures/binding/LocalForm.compiled.js';
 import { hashRouter } from '../client-runtime/router/modes.js';
 
@@ -22,7 +22,7 @@ const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children)
 const text = (value) => new ViewNode('text', { value });
 const slot = () => new ViewNode(SLOT_TAG);
 const scopedMarker = (name, args) => new ViewNode(SLOT_TAG, { name, args });
-const scopedTemplate = (fits, params, fn) => new ViewNode(TEMPLATE_TAG, { fits, params, fn });
+const snippet = (fits, params, fn) => new ViewNode(SNIPPET_TAG, { fits, params, fn });
 const tick = () => new Promise((r) => setTimeout(r, 0));
 function deferred() {
 	let resolve;
@@ -327,7 +327,7 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(el.querySelector('.sync-leaf').textContent).toBe('SYNC-CONTENT');
 	});
 
-	it('mounts scoped-template output once during static takeover with zero dev warnings', async () => {
+	it('mounts snippet output once during static takeover with zero dev warnings', async () => {
 		class ScopedList extends PuzzleView {
 			render() {
 				return h('ul', { class: 'takeover-scoped-list' }, [
@@ -340,7 +340,7 @@ describe('static kernel — mountStatic (D81)', () => {
 			render() {
 				return h('main', {}, [
 					h(ScopedList, {}, [
-						scopedTemplate('row', ['item'], ({ item }) => [
+						snippet('row', ['item'], ({ item }) => [
 							h('strong', { class: 'takeover-stamp' }, [text(item.label)]),
 						]),
 					]),

@@ -408,8 +408,8 @@ func reservedBindingImport(name string) (what, why string) {
 		return "ViewNode", "every compiled module builds its render tree with it"
 	case "SLOT_TAG":
 		return "SLOT_TAG", "this template contains a slot"
-	case "TEMPLATE_TAG":
-		return "TEMPLATE_TAG", "this template contains a <Template>"
+	case "SNIPPET_TAG":
+		return "SNIPPET_TAG", "this template contains a <Snippet>"
 	case "PORTAL_TAG":
 		return "PORTAL_TAG", "this template contains a <Portal>"
 	case "__s":

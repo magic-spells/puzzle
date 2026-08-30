@@ -1,7 +1,7 @@
 
 import { PuzzleView } from '@magic-spells/puzzle';
 
-export default class ScopedList extends PuzzleView {
+export default class SnippetList extends PuzzleView {
   data(params, props) {
     return { users: props.users, group: props.group };
   }
@@ -18,11 +18,11 @@ export default class ScopedList extends PuzzleView {
 
 import { ViewNode, SLOT_TAG, displayValue as __s } from '@magic-spells/puzzle';
 
-ScopedList.prototype.render = function () {
+SnippetList.prototype.render = function () {
   const __d = this.getData();
 
-  return new ViewNode('section', { class: 'scoped-list' }, [
-    new ViewNode('h2', { class: 'scoped-heading' }, [
+  return new ViewNode('section', { class: 'snippet-list' }, [
+    new ViewNode('h2', { class: 'snippet-heading' }, [
       new ViewNode(SLOT_TAG, { name: 'heading', args: { group: __d.group } }, [
         new ViewNode('text', { value: 'Fallback heading' }),
       ]),
@@ -36,7 +36,7 @@ ScopedList.prototype.render = function () {
         ])
       )
     ),
-    new ViewNode('p', { class: 'scoped-default' }, [
+    new ViewNode('p', { class: 'snippet-default' }, [
       new ViewNode(SLOT_TAG, { args: { group: __d.group } }, [
         new ViewNode('text', { value: 'Fallback default' }),
       ]),
@@ -49,4 +49,4 @@ ScopedList.prototype.render = function () {
     ]),
   ]);
 };
-ScopedList.__pzlModule = 'ScopedList.pzl';
+SnippetList.__pzlModule = 'SnippetList.pzl';

@@ -1,26 +1,26 @@
-<puzzle-view class="scoped-host">
-  <ScopedList users={ users } group={ group }>
-    <Template fits="heading" group>
+<puzzle-view class="snippets-host">
+  <SnippetList users={ users } group={ group }>
+    <Snippet fits="heading" group>
       { group.title } / { suffix }
-    </Template>
+    </Snippet>
 
-    <Template fits="row" user group>
+    <Snippet fits="row" user group>
       <button class="person" @click={ rename(user.id) }>
         { group.title }:{ user.name }:{ suffix }
       </button>
-    </Template>
+    </Snippet>
 
-    <Template group>
+    <Snippet group>
       default:{ group.title }:{ suffix }
-    </Template>
-  </ScopedList>
+    </Snippet>
+  </SnippetList>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import ScopedList from './ScopedList.compiled.js';
+import SnippetList from './SnippetList.compiled.js';
 
-export default class ScopedTemplatesHost extends PuzzleView {
+export default class SnippetsHost extends PuzzleView {
   created() {
     this.setData({
       users: [{ id: 1, name: 'Ada' }, { id: 2, name: 'Grace' }],

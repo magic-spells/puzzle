@@ -290,8 +290,8 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if hasSlot(root.Children) || (skel != nil && hasSlot(skel.Children)) {
 		imports = append(imports, "SLOT_TAG")
 	}
-	if hasTemplate(root.Children) || (skel != nil && hasTemplate(skel.Children)) {
-		imports = append(imports, "TEMPLATE_TAG")
+	if hasSnippet(root.Children) || (skel != nil && hasSnippet(skel.Children)) {
+		imports = append(imports, "SNIPPET_TAG")
 	}
 	if hasPortal(root.Children) || (skel != nil && hasPortal(skel.Children)) {
 		imports = append(imports, "PORTAL_TAG")
@@ -632,8 +632,8 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 		return c.emitElement(n.Name, n.Props, n.Children, ind, ind, true, scope)
 	case *parser.Slot:
 		return c.emitSlot(n, ind, scope)
-	case *parser.Template:
-		return c.emitTemplate(n, ind, scope)
+	case *parser.Snippet:
+		return c.emitSnippet(n, ind, scope)
 	case *parser.Portal:
 		// <Portal>…</Portal> (D144): one vnode carrying the teleported children;
 		// the runtime mounts them into the shared portal outlet and leaves a comment
@@ -698,10 +698,10 @@ func (c *compiler) emitSlot(n *parser.Slot, ind int, scope map[string]bool) (str
 	return "new ViewNode(SLOT_TAG, " + attrsExpr + ", " + children + ")", nil
 }
 
-// emitTemplate emits the pinned D166 caller-side contract. The arrow receives
+// emitSnippet emits the pinned D166 caller-side contract. The arrow receives
 // one destructured object and closes over the caller's render scope; every
 // declared parameter is added to the body scope and shadows outer bindings.
-func (c *compiler) emitTemplate(n *parser.Template, ind int, scope map[string]bool) (string, error) {
+func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope map[string]bool) (string, error) {
 	bodyScope := scope
 	for _, param := range n.Params {
 		bodyScope = scopeAdd(bodyScope, param)
@@ -724,7 +724,7 @@ func (c *compiler) emitTemplate(n *parser.Template, ind int, scope map[string]bo
 	if len(decls) > 0 {
 		destructure = "{ " + strings.Join(decls, ", ") + " }"
 	}
-	return "new ViewNode(TEMPLATE_TAG, {\n" +
+	return "new ViewNode(SNIPPET_TAG, {\n" +
 		sp(ind+2) + "fits: " + jsString(n.Fits) + ",\n" +
 		sp(ind+2) + "params: [" + strings.Join(params, ", ") + "],\n" +
 		sp(ind+2) + "fn: (" + destructure + ") => (" + body + "),\n" +
@@ -818,7 +818,7 @@ func (c *compiler) condStaticLen(items []item, scope map[string]bool) (int, bool
 			}
 		case *parser.Slot:
 			stable = false
-		case *parser.Template:
+		case *parser.Snippet:
 			stable = false
 		case *parser.If:
 			m, childStable, err := c.ifStaticLen(node, scope)
@@ -1612,7 +1612,7 @@ func hasPortal(nodes []parser.Node) bool {
 			if hasPortal(t.Children) {
 				return true
 			}
-		case *parser.Template:
+		case *parser.Snippet:
 			if hasPortal(t.Body) {
 				return true
 			}
@@ -1657,7 +1657,7 @@ func hasSlot(nodes []parser.Node) bool {
 			if hasSlot(t.Children) {
 				return true
 			}
-		case *parser.Template:
+		case *parser.Snippet:
 			if hasSlot(t.Body) {
 				return true
 			}
@@ -1691,45 +1691,45 @@ func hasSlot(nodes []parser.Node) bool {
 	return false
 }
 
-// hasTemplate reports whether any scoped-template marker appears in the tree
-// (→ TEMPLATE_TAG import). Bodies still recurse because they may contain nested
-// component invocations with their own Templates.
-func hasTemplate(nodes []parser.Node) bool {
+// hasSnippet reports whether any <Snippet> marker appears in the tree
+// (→ SNIPPET_TAG import). Every ordinary child-bearing node recurses so a
+// marker at any legal call-site depth retains the import.
+func hasSnippet(nodes []parser.Node) bool {
 	for _, n := range nodes {
 		switch t := n.(type) {
-		case *parser.Template:
+		case *parser.Snippet:
 			return true
 		case *parser.Slot:
-			if hasTemplate(t.Children) {
+			if hasSnippet(t.Children) {
 				return true
 			}
 		case *parser.Portal:
-			if hasTemplate(t.Children) {
+			if hasSnippet(t.Children) {
 				return true
 			}
 		case *parser.Element:
-			if hasTemplate(t.Children) {
+			if hasSnippet(t.Children) {
 				return true
 			}
 		case *parser.Component:
-			if hasTemplate(t.Children) {
+			if hasSnippet(t.Children) {
 				return true
 			}
 		case *parser.If:
-			if hasTemplate(t.Then) || hasTemplate(t.Else) {
+			if hasSnippet(t.Then) || hasSnippet(t.Else) {
 				return true
 			}
 		case *parser.For:
-			if hasTemplate(t.Body) {
+			if hasSnippet(t.Body) {
 				return true
 			}
 		case *parser.Case:
 			for _, cl := range t.Clauses {
-				if hasTemplate(cl.Body) {
+				if hasSnippet(cl.Body) {
 					return true
 				}
 			}
-			if hasTemplate(t.Else) {
+			if hasSnippet(t.Else) {
 				return true
 			}
 		}

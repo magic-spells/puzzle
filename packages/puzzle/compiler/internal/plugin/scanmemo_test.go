@@ -66,8 +66,8 @@ export default class V extends PuzzleView {}
 </script>
 `
 
-const scopedTemplateView = `<puzzle-view>
-  <List><Template item>{ item }</Template></List>
+const snippetView = `<puzzle-view>
+  <List><Snippet item>{ item }</Snippet></List>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -157,22 +157,22 @@ func TestUsageScannerMatchesColdScan(t *testing.T) {
 		t.Fatal("raw removed by an edit was still reported")
 	}
 
-	writePZL(t, b, scopedTemplateView)
-	u = assertSame("edit adds scoped Template")
-	if !u.HasScopedTemplates {
-		t.Fatal("scoped Template added by an edit was not seen")
+	writePZL(t, b, snippetView)
+	u = assertSame("edit adds Snippet")
+	if !u.HasSnippets {
+		t.Fatal("Snippet added by an edit was not seen")
 	}
 
 	writePZL(t, b, scopedMarkerArgsView)
-	u = assertSame("edit replaces Template with args marker")
-	if !u.HasScopedTemplates {
+	u = assertSame("edit replaces Snippet with args marker")
+	if !u.HasSnippets {
 		t.Fatal("args-bearing marker was not seen")
 	}
 
 	writePZL(t, b, plainView)
-	u = assertSame("edit removes scoped templates")
-	if u.HasScopedTemplates {
-		t.Fatal("scoped-template usage removed by an edit was still reported")
+	u = assertSame("edit removes snippets")
+	if u.HasSnippets {
+		t.Fatal("snippet usage removed by an edit was still reported")
 	}
 
 	// The memo covers SCRIPT files too, not just templates: lazy() lives in

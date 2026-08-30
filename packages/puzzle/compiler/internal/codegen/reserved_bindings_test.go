@@ -31,7 +31,7 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 </puzzle-view>`
 	const slotted = "<puzzle-view>\n  <Slot/>\n</puzzle-view>"
 	const portaled = "<puzzle-view>\n  <Portal><p>x</p></Portal>\n</puzzle-view>"
-	const templated = "<puzzle-view>\n  <List><Template item>{ item }</Template></List>\n</puzzle-view>"
+	const withSnippet = "<puzzle-view>\n  <List><Snippet item>{ item }</Snippet></List>\n</puzzle-view>"
 
 	tests := []struct {
 		name     string
@@ -78,17 +78,17 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 			wantIdent: "PORTAL_TAG",
 		},
 		{
-			name:      "declared TEMPLATE_TAG with a scoped template",
-			template:  templated,
-			script:    "const TEMPLATE_TAG = 1;",
-			wantIdent: "TEMPLATE_TAG",
+			name:      "declared SNIPPET_TAG with a snippet",
+			template:  withSnippet,
+			script:    "const SNIPPET_TAG = 1;",
+			wantIdent: "SNIPPET_TAG",
 		},
 		// Negatives: the name is only reserved when this file emits it.
 		{name: "declared __s without a coercing interpolation", template: raw, script: "const __s = 1;"},
 		{name: "declared __f", template: coercing, script: "const __f = 1;"},
 		{name: "declared SLOT_TAG without a slot", template: coercing, script: "const SLOT_TAG = 1;"},
 		{name: "declared PORTAL_TAG without a portal", template: coercing, script: "const PORTAL_TAG = 1;"},
-		{name: "declared TEMPLATE_TAG without a scoped template", template: coercing, script: "const TEMPLATE_TAG = 1;"},
+		{name: "declared SNIPPET_TAG without a snippet", template: coercing, script: "const SNIPPET_TAG = 1;"},
 		// Not module-scope bindings: a function-body declaration shadows, and a
 		// named class EXPRESSION binds inside the expression only.
 		{name: "function-scope __s", template: coercing, script: "function helper() { const __s = 1; return __s; }"},

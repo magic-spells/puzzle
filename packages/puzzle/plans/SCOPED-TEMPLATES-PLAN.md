@@ -1,10 +1,14 @@
-# Scoped templates (D166) — v0.7.0 execution plan
+# Snippets (D166) — v0.7.0 execution plan
+
+> **Marker rename (owner decision, 2026-08-30):** the caller-side marker is
+> `<Snippet>`. “Snippet” combines small + reusable + template, with precedent
+> in Shopify snippets and Svelte 5 snippets. The plan filename remains unchanged.
 
 **Status: APPROVED FOR BUILD, target 0.7.0 (Cory, 2026-08-30).**
 Syntax rationale and rejected spellings live in `SCOPED-TEMPLATES-SKETCH.md`;
 this file is the binding implementation spec. Amendments to the sketch made
 here win: **target is 0.7.0** (not 0.8), the marker name is settled
-(`<Template>`, not Snippet, not Piece — Piece collides with the pieces
+(`<Snippet>`, not Template, not Piece — Piece collides with the pieces
 library), and the cross-file "shapes don't match" check is a **dev-mode
 runtime warning**, not a compile error (the compiler is per-file and cannot
 see the component's slot declarations from the caller).
@@ -22,21 +26,21 @@ Recon anchors below cite release/0.7.0 file:line as mapped 2026-08-30.
 
 ## 0. The feature in one line
 
-Slots render a passed-in template; scoped templates render it repeatedly,
-with data. Caller declares a parameterized template; the component stamps it.
+Slots render passed-in markup once; snippets render it repeatedly, with data.
+The caller declares a parameterized snippet; the component stamps it.
 
 ```html
 <!-- caller -->
 <UserList users={ users }>
-  <Template user>
+  <Snippet user>
     <img src={ user.avatar } /> <b>{ user.name }</b>
-  </Template>
+  </Snippet>
 </UserList>
 
 <!-- named, multiple loops -->
 <GroupedList groups={ groups }>
-  <Template fits="heading" group>{ group.title }</Template>
-  <Template fits="row" user group>…</Template>
+  <Snippet fits="heading" group>{ group.title }</Snippet>
+  <Snippet fits="row" user group>…</Snippet>
 </GroupedList>
 
 <!-- component side: existing markers gain data attributes -->
@@ -54,12 +58,12 @@ This is the seam between compiler and runtime. Pin it before any code.
 
 ### Caller side
 
-A `<Template>` under a component invocation compiles to a **function-bearing
+A `<Snippet>` under a component invocation compiles to a **function-bearing
 vnode in the children array** (NOT a prop — see §2 why):
 
 ```js
-// <Template fits="row" user group> …body… </Template>  emits:
-new ViewNode(TEMPLATE_TAG, {
+// <Snippet fits="row" user group> …body… </Snippet>  emits:
+new ViewNode(SNIPPET_TAG, {
   fits: 'row',                      // '' (empty string) when no fits attr = default
   params: ['user', 'group'],        // declared order; used only by the dev shape-check
   fn: ({ user, group }) => ([       // destructured single object arg — by-name binding
@@ -68,7 +72,7 @@ new ViewNode(TEMPLATE_TAG, {
 })
 ```
 
-- `TEMPLATE_TAG = '#template'` — a new exported const in `ViewNode.js` next
+- `SNIPPET_TAG = '#snippet'` — a new exported const in `ViewNode.js` next
   to `SLOT_TAG` (ViewNode.js:42). The `#` guarantees no collision with any
   real HTML tag (a plain `<template>` element must keep working as an
   ordinary element).
@@ -100,13 +104,13 @@ marker sits inside the component's `{#for}`, so each iteration emits its own
 ### Runtime join (the whole runtime feature)
 
 In `partitionSlots` (viewManager.js:306-325): children with
-`tag === TEMPLATE_TAG` go to a third bucket `parts.templates[fitsOrDefault]`
+`tag === SNIPPET_TAG` go to a third bucket `parts.snippets[fitsOrDefault]`
 instead of default/named. In `expandChildList` (viewManager.js:397-420), the
 `isSlot` branch becomes:
 
 ```
-tmpl = parts.templates && parts.templates[name || 'default']
-if (tmpl)            → splice ...tmpl.fn(slot.attrs.args || {})   // FRESH vnodes per stamp
+snippet = parts.snippets && parts.snippets[name || 'default']
+if (snippet)         → splice ...snippet.fn(slot.attrs.args || {}) // FRESH vnodes per stamp
 else if (bucket len) → splice bucket (existing by-reference path, unchanged)
 else                 → fallback children (existing path, unchanged)
 ```
@@ -114,21 +118,21 @@ else                 → fallback children (existing path, unchanged)
 That single `fn(args)` call is what makes N stamps patch independently —
 each call builds fresh vnodes, so the by-reference aliasing constraint
 (recon #2: expandChildList pushes buckets by reference, N stamps alias one
-`el`) never applies to templates. No cloning machinery, no change detection:
+`el`) never applies to snippets. No cloning machinery, no change detection:
 component re-render → expandSlots re-runs → fn re-invoked → normal diff.
 Caller re-render → new children array (new fns) → the existing slot-only
 `applyParentUpdate` branch (PuzzleView.js:993-1010) re-renders the child.
 Both directions ride machinery that already exists.
 
-## 2. Why templates travel in children, not props
+## 2. Why snippets travel in children, not props
 
 Recon: callback props stay shallow-equal across caller renders via the
 `this.__h` cache (codegen.go:1248-1253) so a re-render doesn't re-run the
-child's `data()`. Template fns CANNOT be identity-cached (fresh `__d`
+child's `data()`. Snippet fns CANNOT be identity-cached (fresh `__d`
 closure per render), so as props they would defeat the shallow-compare and
 re-run `data()` on every caller render. The children channel is already
 rebuilt every render and flows through the slot-only update path without
-touching `data()`. Users still get the simple story ("templates are things
+touching `data()`. Users still get the simple story ("snippets are things
 you hand a component, like markup"), the props-vs-children distinction is
 an internal transport detail.
 
@@ -139,7 +143,7 @@ an internal transport detail.
 New AST node (ast.go, near Slot at :52-61):
 
 ```go
-type Template struct {
+type Snippet struct {
     Fits   string     // '' = default
     Params []string   // bare-attr names, declared order
     Body   []Node
@@ -149,60 +153,65 @@ type Template struct {
 
 In `parseElement`'s marker branch (parser.go:471-508, guarded by `!p.raw`):
 
-- `name == "Template"` → validate attrs: `fits` must be a static, non-empty,
+- `name == "Snippet"` → validate attrs: `fits` must be a static, non-empty,
   non-expression value (reuse the `checkStaticSlotAttr` shape, slot.go:276-290
   message style); every other attr must be a **bare** `StaticAttr` with
   `Valueless: true` (ast.go:178-190 — Valueless is the only reliable signal;
   explicit `x=""` is NOT a param, reject it). A valued attr other than
-  `fits` → positioned error: `parameters on <Template> are bare — write
+  `fits` → positioned error: `parameters on <Snippet> are bare — write
   user, not user={ … }`. `@`-events, dynamic/mixed attrs → same error.
-  Paired-only (like Portal, parser.go:491-493); self-closing `<Template/>`
-  is an error (an empty template is meaningless).
+  Paired-only (like Portal, parser.go:491-493); self-closing `<Snippet/>`
+  is an error (an empty snippet is meaningless).
 - Param idents: validate with `isBareIdent` (parser.go:1125-1143) and extend
   `loopBindingIdentError`'s reserved list (parser.go:1149-1157) — which must
-  also gain `TEMPLATE_TAG` alongside `ViewNode`/`SLOT_TAG`/`PORTAL_TAG`.
+  also gain `SNIPPET_TAG` alongside `ViewNode`/`SLOT_TAG`/`PORTAL_TAG`.
   Params may not duplicate each other; `fits` itself is rejected as a param
   name (positioned, steering).
 - Lowercase steering (reuse the D134 pattern at parser.go:473-486): lowercase
-  `<template>` carrying a `fits` attr → `the template marker is spelled
-  <Template fits="…">` error. A `<template>` WITHOUT `fits` stays an
-  ordinary HTML element everywhere — no new error, verified by a test.
+  `<snippet>` carrying `fits` or bare params → `the snippet marker is spelled
+  <Snippet ...>` error. Lowercase `<template>` is an ordinary HTML element in
+  every position, and capitalized `<Template>` is an ordinary component-name
+  invocation; tests pin both former spellings.
 
 Placement validation (extend `validateSlots`/`walkSlots`, slot.go:112-197):
 
-- `<Template>` legal ONLY as a direct child of a component invocation
+- `<Snippet>` legal ONLY as a direct child of a component invocation
   (same position rule as `slot=` elements, slot.go:250-307, including the
   control-flow rejection at :296-307). Anywhere else → positioned error.
-- Per invocation: at most one Template per fits-name, `default` included
-  (mirror the per-body uniqueness maps at slot.go:132-145); a Template and a
-  `slot="x"` element targeting the same name → error; a default Template
-  plus any non-Template default markup in the same invocation → error
+- Per invocation: at most one Snippet per fits-name, `default` included
+  (mirror the per-body uniqueness maps at slot.go:132-145); a Snippet and a
+  `slot="x"` element targeting the same name → error; a default Snippet
+  plus any non-Snippet default markup in the same invocation → error
   (ambiguous — one or the other).
-- A Template body is a NEW body for validation: markers inside it are
-  validated as call-site content would be (it may contain component
-  invocations with their own Templates), and `nestedFallbackMarker`
-  (slot.go:210-248) must NOT fire on Template bodies (recon constraint #6 —
-  add the carve-out with a comment saying why).
+- A Snippet body is stamped output, not a new composition owner. Any
+  `<Children>`, `<Slot>`, or `<Snippet>` anywhere inside it is a positioned
+  compile error, including through elements, control flow, Portals, and
+  component-invocation children. Component invocations themselves remain legal;
+  their markers belong in the invoked component's own template. Mirror
+  `nestedFallbackMarker`'s depth-first strictness and message style.
+- `ref=` anywhere inside a Snippet body is a positioned compile error: one
+  caller ref slot cannot represent N stamped DOM nodes. Steer the author to put
+  the ref in the component's own template until per-stamp ref semantics exist.
 
 Marker-attr extensions (slot.go):
 
 - `slotMarkerFromAttrs` (:64-106): in addition to static `name`, accept
   valued attrs (Static/Dynamic/Mixed) as args; `@`-events on markers stay
   rejected. Bare (Valueless) attrs on Slot/Children → error steering that
-  bare params belong on `<Template>`, values belong here.
+  bare params belong on `<Snippet>`, values belong here.
 - `childrenMarkerAttrs` (:33-41): same, minus `name` (keep the ref-specific
   message).
-- **Uniqueness relaxation (recon #5):** the per-body marker-uniqueness check
-  (slot.go:132-145) SKIPS markers that carry args — an args-bearing marker
-  inside `{#for}` is the intended N-stamp case; it splices fresh fn results,
-  so the DOM-corruption rationale doesn't apply. Markers WITHOUT args keep
-  the existing uniqueness rule unchanged. Args-bearing markers remain
-  rejected inside `island` subtrees (island.go:109-141 already covers all
-  markers — keep).
+- **Per-AST-site uniqueness:** every distinct marker declaration shares the
+  per-body uniqueness rule, including args-bearing markers. Two separate
+  `<Slot name="row" …>` sites would otherwise reconcile same-key variable-length
+  stamp output in one namespace and can migrate a stateful component between
+  sites. A single args-bearing marker declaration inside `{#for}` remains legal:
+  the validator visits that AST site once, and runtime stamping supplies the N
+  instances. Args-bearing markers remain rejected inside `island` subtrees.
 
 ### 3b. Codegen (`compiler/internal/codegen/`)
 
-- `emitItem` gains a `*parser.Template` arm → emit the TEMPLATE_TAG vnode
+- `emitItem` gains a `*parser.Snippet` arm → emit the SNIPPET_TAG vnode
   per the §1 contract. The body is emitted with `scopeAdd` for each param
   (the second binding introducer after `emitFor`, codegen.go:934-963;
   scope map at :187, scopeAdd at :1658) so `resolveExpr` leaves param roots
@@ -214,14 +223,14 @@ Marker-attr extensions (slot.go):
   value is an ordinary expression compiled in the component's scope
   (`resolveExpr` handles `__d.` rewriting), assembled into
   `args: { name: expr, … }` in the marker's attrs object.
-- Conditional import: `hasTemplate` walk (mirror `hasSlot`,
-  codegen.go:1558-1595, wired at :269-279) imports TEMPLATE_TAG only when
-  used; add TEMPLATE_TAG to `checkReservedScriptBindings`
+- Conditional import: `hasSnippet` walk (mirror `hasSlot`,
+  codegen.go:1558-1595, wired at :269-279) imports SNIPPET_TAG only when
+  used; add SNIPPET_TAG to `checkReservedScriptBindings`
   (codegen.go:281-296).
-- **Typo'd param safety (recon #4):** an identifier in a template body that
+- **Typo'd param safety (recon #4):** an identifier in a snippet body that
   is neither a param, a loop var, nor resolvable otherwise silently becomes
   `__d.foo` today. Acceptable for v1 of the feature (same behavior as all
-  template expressions); the dev shape-check (§5) catches the common case
+  component-template expressions); the dev shape-check (§5) catches the common case
   (param name mismatch vs slot args). Do NOT invent a new binding-error
   mechanism in this round.
 
@@ -230,11 +239,11 @@ Marker-attr extensions (slot.go):
 New `testdata/*.pzl` + `.golden.js` (regenerate:
 `go test ./compiler/internal/codegen -run TestGoldens -update`):
 
-- `scoped_template_default` — `<Template user>` under a component; asserts
+- `scoped_snippet_default` — `<Snippet user>` under a component; asserts
   fn shape, params array, destructure, scope handling.
-- `scoped_template_named` — two Templates (`fits="heading"`, `fits="row"`),
+- `scoped_snippet_named` — two Snippets (`fits="heading"`, `fits="row"`),
   multiple params, plus a coexisting plain `slot="x"` element.
-- `scoped_template_shadow` — param shadowing a caller loop var and a data
+- `scoped_snippet_shadow` — param shadowing a caller loop var and a data
   field.
 - `scoped_marker_args` — component-mode golden (name contains
   `inline_component` per golden_test.go:50-53 or add a mode hint the same
@@ -243,42 +252,51 @@ New `testdata/*.pzl` + `.golden.js` (regenerate:
 
 ## 4. Runtime work (deliberately minimal)
 
-- `ViewNode.js`: export `TEMPLATE_TAG = '#template'`; an `isTemplate` getter
+- `ViewNode.js`: export `SNIPPET_TAG = '#snippet'`; an `isSnippet` getter
   beside `isSlot` (:112-114).
+- `types/index.d.ts` mirrors both compiler-support exports: `SNIPPET_TAG` and
+  `ViewNode.isSnippet`.
 - `viewManager.js`: the §1 partition + expand changes. Both live inside the
   existing single pipe shared with SSG (ssg/serialize.js:39,311 and
   preload.js — the same expandSlots import, so prerender gets the feature
   for free; add an SSG test).
-- TEMPLATE_TAG vnodes never mount: they are consumed by partitioning. A
-  template with a fits-name no marker consumes is simply unused (dev-warn,
-  §5). A TEMPLATE_TAG that somehow survives to serialize → `''` like
+- SNIPPET_TAG vnodes never mount: they are consumed by partitioning. A
+  snippet with a fits-name no marker consumes is simply unused (dev-warn,
+  §5). A SNIPPET_TAG that somehow survives to serialize → `''` like
   SLOT_TAG (ssg/serialize.js:159-161).
 - Perf note (recon #9): patch has no identity short-circuit, so component
   re-renders re-invoke fns and re-diff. That is Puzzle's normal render
   model; do NOT add memoization in this round.
+- Takeover preloading walks the already-expanded tree so it can pin nested
+  component instances. Mount that prepared tree directly instead of calling
+  `expandSlots` a second time; the second pass has no marker to consume and
+  otherwise emits a false unused-snippet warning.
 
 ## 5. Dev-mode shape warning (the cross-file fit-check)
 
 At the `fn(args)` call site in dev: compare `Object.keys(args)` against the
-template's `params` array; on mismatch warn once per (component, slot name)
-pair: `template fits "row" declares (person); slot "row" hands over (user) —
-the shapes don't match`. Also warn for a Template whose fits-name no marker
-consumed, and for plain (non-template) content filling an args-bearing
-marker (which falls back — args-bearing markers only accept Templates).
+snippet's `params` array; on mismatch warn once per (component, slot name)
+pair: `snippet fits slot "row" declares (person); slot hands over (user) —
+the shapes don't match`. Also warn for a Snippet whose fits-name no marker
+consumed, and for plain (non-snippet) content filling an args-bearing
+marker (which falls back — args-bearing markers only accept Snippets).
+Defensively warn if `fn()` output contains a Slot/Children/Snippet marker at
+any depth; the compiler forbids this, but hand-built or stale generated vnodes
+must diagnose the broken contract instead of silently mounting a native slot.
 Gate the warning code so production DCE drops it (follow the existing dev
 diagnostics pattern; `params` metadata itself is small — ship it
 unconditionally rather than complicating the contract).
 
-## 6. Usage gate (`__PUZZLE_HAS_SCOPED_TEMPLATES__`)
+## 6. Usage gate (`__PUZZLE_HAS_SNIPPETS__`)
 
 Follow the HasRawAt/D150 precedent exactly (recon §4): new `Usage` +
 `Features` fields + `Usage.Features()` (scan.go:43-68), a `collectUsage` arm
-(scan.go:121-183) that sets the bit on any `parser.Template` node OR any
+(scan.go:121-183) that sets the bit on any `parser.Snippet` node OR any
 args-bearing marker, `fileUsage` + merge in scanmemo.go:39-44, and
-`bundleDefines` (options.go:118-129). Template usage is `.pzl`-only, so no
+`bundleDefines` (options.go:118-129). Snippet usage is `.pzl`-only, so no
 script-scan involvement — but the bit still rides the post-#87
 `Features()`-equality staleness paths for free. Probes stay INLINE
-`typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' || …` — never
+`typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' || …` — never
 hoisted to a module const (ViewNode.js:92-96, PuzzleView.js:850-853;
 build_test.go asserts this). Gate the partition branch + fn-call splice +
 dev warning. Add cases to the DCE build test
@@ -289,22 +307,25 @@ small for users.
 
 ## 7. Tests
 
-- Parser: every error in §3a (positioned), `<template>`-without-fits stays
-  an element, param validation, placement rules, uniqueness relaxation
-  (args-bearing marker in `{#for}` compiles; no-args marker duplicate still
-  errors). Home: parser_test.go beside the D134/D141 blocks (:1312-1390).
-- Vitest `tests/scoped-templates.test.js` (hand-built trees, the
-  named-slots.test.js style): default + named templates, args flow, N
+- Parser: every error in §3a (positioned), lowercase `<snippet>` steering,
+  former `<template>`/`<Template>` spellings stay ordinary, param validation,
+  placement rules, Snippet-body marker/ref
+  rejection at every depth, and per-AST-site uniqueness (one args-bearing
+  marker in `{#for}` compiles; two distinct declarations still error).
+- Vitest `tests/snippets.test.js` (hand-built trees, the
+  named-slots.test.js style): default + named snippets, args flow, N
   stamps patch independently (mutate one row's record → only that stamp's
-  DOM changes; keyed li's), fallback when no template, caller-state change
-  re-renders stamps (event handler in a template body fires with caller
-  scope), component-state change re-stamps, template + slot= coexistence,
-  dev warnings, SSG serialize path.
-- `tests/scoped-templates-compiled.test.js` against REAL compiler output via
+  DOM changes; keyed li's), fallback when no snippet, caller-state change
+  re-renders stamps (event handler in a snippet body fires with caller
+  scope), component-state change re-stamps, snippet + slot= coexistence,
+  stateful variable-length output under the legal one-site-in-loop shape, dev
+  warnings (including defensive marker output), SSG serialize path, and hybrid
+  plus static takeover with zero false warnings.
+- `tests/snippets-compiled.test.js` against REAL compiler output via
   the pretest fixture pattern (package.json:73,79 — add fixtures under
-  tests/fixtures/scoped-templates/, wired like build:slot-forwarding).
+  tests/fixtures/snippets/, wired as `build:snippets`).
 - Example: extend `examples/overlays` (already the composition showcase)
-  with a templated list block; examples/blog + grimoire stay pretest gates.
+  with a snippet-driven list block; examples/blog + grimoire stay pretest gates.
 
 ## 8. Docs, cards, release train
 
@@ -313,17 +334,17 @@ small for users.
   take no data" statements.
 - Decision card **D166** (via constellation MCP): the sketch's content —
   framing sentence first, rejected spellings (let:/v-slot, block form,
-  data={} bundle, name= routing, Snippet, Piece), the props-vs-children
+  data={} bundle, name= routing, Template, Piece), the props-vs-children
   transport decision, uniqueness relaxation rationale. Update D141 (fallback
-  interaction), D134 (steering list gains Template), D89 (new bit), COMPONENT
+  interaction), D134 (steering list gains Snippet), D89 (new bit), COMPONENT
   cards for parser/codegen/view-manager, DOC-RELEASE-SURFACE, CHANGELOG
   (0.7.0 Added), plan.md next-free → D167.
 - `skills/puzzle/SKILL.md:130-137` ("Two marker tags, three meanings") →
   rewrite for the third marker; check :33 and :241.
 - eslint/prettier plugins: **no changes needed** (verified — they port
-  section splitter/lexer only; template grammar is opaque to both). Note in
+  section splitter/lexer only; snippet grammar is opaque to both). Note in
   the PR so nobody sweeps them needlessly.
-- Editor grammars (vscode/sublime/zed, separate repos): add `Template` to
+- Editor grammars (vscode/sublime/zed, separate repos): add `Snippet` to
   the capitalized-marker highlighting — release-checklist item, not part of
   this branch.
 - README size banner: regenerated at release close-out as always.
@@ -332,7 +353,7 @@ small for users.
 
 Separate effort in `../puzzle-pieces` (version-locked 0.7.0):
 
-1. `data-table`: cell + header-cell templates (`<Template fits="cell" cell row>`)
+1. `data-table`: cell + header-cell snippets (`<Snippet fits="cell" cell row>`)
    with today's `{ cell.value }` as the fallback — zero breaking change.
 2. **NEW `virtual-list` piece** — the feature's flagship customer: windowed
    rendering (scroll math, overscan, fixed row height v1), one

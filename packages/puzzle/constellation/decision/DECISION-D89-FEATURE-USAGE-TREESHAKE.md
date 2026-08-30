@@ -40,7 +40,7 @@ name: 'D89 — pay-for-what-you-use runtime: feature-usage scan drives DCE defin
 Runtime features an app can prove it does not use disappear from its bundle, via
 one build-time usage scan and literal esbuild defines. The active gates are
 `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__`,
-`__PUZZLE_HAS_SCOPED_TEMPLATES__`, and `__PUZZLE_HAS_LAZY__`; the former
+`__PUZZLE_HAS_SNIPPETS__`, and `__PUZZLE_HAS_LAZY__`; the former
 managed-head gate was retired by D111. Four are template facts; lazy is a
 script fact, which is why the scan
 reads the app's `.js`/`.ts` modules as well as its `.pzl` files.
@@ -92,8 +92,8 @@ have re-pinned `lazy.js` and defeated the gate.
 - **Portal — exact.** Any `*parser.Portal` node sets `HasPortal`; its children
   still recurse for the other usage facts. Raw-block sample markup named
   `<Portal>` parses as an ordinary element and does not set the bit.
-- **scoped Templates — exact.** Any `*parser.Template` node or args-bearing
-  Slot/Children marker sets `HasScopedTemplates`; the gate covers template
+- **snippets — exact.** Any `*parser.Snippet` node or args-bearing
+  Slot/Children marker sets `HasSnippets`; the gate covers snippet
   partition/stamping plus its development diagnostics.
 - **raw `@` attributes — deliberately over-inclusive.** Any parsed `{#raw}`
   block in the template or skeleton sets `HasRawAt`, even when its body has no
@@ -114,7 +114,7 @@ have re-pinned `lazy.js` and defeated the gate.
   cost asymmetry is the scan's usual one.
 - **head tags — RETIRED, see [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]].** This half of the scan no longer exists. It was a raw substring scan of `.js`/`.ts`/`.pzl` for `description`/`canonical`/`socialImage`, and it was wrong in both directions: it never probed `title`, so a title-only hybrid app stranded the SSG's `og:title` un-updatable (a real shipped bug), while `description` as an ordinary English word turned the bit on for apps emitting no managed tags at all. D111 deleted the runtime `syncTags` outright rather than keep guessing when to ship it. With no browser importer left, ordinary tree-shaking handles it and no define is needed. Note that reading `.js`/`.ts` at all is back — for lazy, above — but on a different footing: a lazy false positive costs one small module, whereas the head-tag scan's false positives shipped a whole DOM-mutating table on the strength of an English word.
 
-Defines are recomputed for one-shot, watch/dev, prerender, and per-page static bundles. Dev builds do NOT force any bit on — they take the scan's answer like every other pass. esbuild **freezes `Define` when a context is created**, so each long-lived builder compares the complete `Features` value and replaces its context when any bit flips — otherwise a mid-session edit adding or removing flip, Portal, raw, or lazy usage would build against stale defines while the incremental graph stayed warm. The dev scanner's per-file memo (path + mtime + size) covers the script files too, so reading them adds no per-rebuild parse cost.
+Defines are recomputed for one-shot, watch/dev, prerender, and per-page static bundles. Dev builds do NOT force any bit on — they take the scan's answer like every other pass. esbuild **freezes `Define` when a context is created**, so each long-lived builder compares the complete `Features` value and replaces its context when any bit flips — otherwise a mid-session edit adding or removing flip, Portal, raw, snippets, or lazy usage would build against stale defines while the incremental graph stayed warm. The dev scanner's per-file memo (path + mtime + size) covers the script files too, so reading them adds no per-rebuild parse cost.
 
 **What kind of file can move a bit is a THIRD place that must agree, and it is
 the one that has already been wrong.** The static dev builder re-scans on every
@@ -164,7 +164,7 @@ Three costs are accepted and should be re-examined if they bite:
    This is the safe direction: over-inclusion costs bytes, while under-inclusion
    can throw at runtime.
 2. **The compiler now encodes runtime module boundaries.** Refactors of flip,
-   Portal, the raw-attribute shim, or the lazy resolver must keep `ScanUsage` and every import-holding
+   Portal, the raw-attribute shim, snippets, or the lazy resolver must keep `ScanUsage` and every import-holding
    probe in sync or a feature silently vanishes. Mitigations: every probe
    defaults to feature-ON when its define is absent, and coverage exists at both
    scan and production-bundle levels.

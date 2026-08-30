@@ -429,7 +429,7 @@ type definesFixture struct {
 	flipAttr string
 	portal   bool
 	raw      bool
-	scoped   bool
+	snippets bool
 	// lazy adds a second route whose view is a D163 lazy() marker, declared in
 	// the routes module named by lazyRoutesExt (".js" when empty) so the same
 	// fixture can prove the usage scan reads TypeScript route tables too.
@@ -491,10 +491,10 @@ export default app;
 	if fx.raw {
 		featureMarkup += "  {#raw}<span @x=\"y\">literal</span>{/raw}\n"
 	}
-	if fx.scoped {
+	if fx.snippets {
 		featureMarkup += `  <ScopedList items={ items }>
-    <Template item><strong>{ item.label }</strong></Template>
-  </ScopedList>
+	    <Snippet item><strong>{ item.label }</strong></Snippet>
+	  </ScopedList>
 `
 		componentImport = "import ScopedList from '../components/ScopedList.pzl';\n"
 	}
@@ -522,7 +522,7 @@ export default class Home extends PuzzleView {
 		"app/views/Home.pzl":    view,
 		"app/public/index.html": index,
 	}
-	if fx.scoped {
+	if fx.snippets {
 		files["app/components/ScopedList.pzl"] = `<puzzle-view>
   <ul>
     {#for item in items}
@@ -580,10 +580,10 @@ const portalMarker = "data-puzzle-portal"
 
 const rawAtEscape = "@@"
 
-// templateUses is a property used only by viewManager's scoped-template
+// snippetUses is a property used only by ViewManager's snippet
 // partition/join path. Property names survive minification, so its absence is
 // evidence the false usage define folded the whole branch away.
-const scopedTemplatesMarker = "templateUses"
+const snippetsMarker = "snippetUses"
 
 // lazyResolverMarker is a throw message unique to router/lazy.js's RESOLVER half
 // — the part __PUZZLE_HAS_LAZY__ removes. Like flipEasing it is a string
@@ -614,7 +614,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker, scopedTemplatesMarker} {
+	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker, snippetsMarker} {
 		if strings.Contains(string(withoutJS), marker) {
 			t.Errorf("bundle without feature usage retained %q", marker)
 		}
@@ -655,13 +655,13 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 		t.Errorf("bundle with {#raw} should retain the %q literal-attribute shim", rawAtEscape)
 	}
 
-	withScoped := writeDefinesFixture(t, definesFixture{scoped: true})
-	if err := Build(withScoped, Options{Development: false}); err != nil {
-		t.Fatalf("Build with scoped-template usage failed: %v", err)
+	withSnippets := writeDefinesFixture(t, definesFixture{snippets: true})
+	if err := Build(withSnippets, Options{Development: false}); err != nil {
+		t.Fatalf("Build with snippet usage failed: %v", err)
 	}
-	scopedJS := readFile(t, filepath.Join(withScoped, "dist", "app.js"))
-	if !strings.Contains(scopedJS, scopedTemplatesMarker) {
-		t.Errorf("bundle with <Template> should retain the %q runtime join", scopedTemplatesMarker)
+	snippetJS := readFile(t, filepath.Join(withSnippets, "dist", "app.js"))
+	if !strings.Contains(snippetJS, snippetsMarker) {
+		t.Errorf("bundle with <Snippet> should retain the %q runtime join", snippetsMarker)
 	}
 }
 

@@ -1,6 +1,6 @@
 <puzzle-view>
-<section class="scoped-list">
-  <h2 class="scoped-heading">
+<section class="snippet-list">
+  <h2 class="snippet-heading">
     <Slot name="heading" group={ group }>Fallback heading</Slot>
   </h2>
 
@@ -12,7 +12,7 @@
     {/for}
   </ul>
 
-  <p class="scoped-default">
+  <p class="snippet-default">
     <Children group={ group }>Fallback default</Children>
   </p>
 
@@ -23,7 +23,7 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-export default class ScopedList extends PuzzleView {
+export default class SnippetList extends PuzzleView {
   data(params, props) {
     return { users: props.users, group: props.group };
   }

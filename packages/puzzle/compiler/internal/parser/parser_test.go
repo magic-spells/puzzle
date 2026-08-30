@@ -353,7 +353,7 @@ func TestParseForReservedIdentifiers(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected a reserved loop identifier error")
 			}
-			want := `loop variable "` + tc.ident + `" uses a reserved name (identifiers starting with "__" and the names "ViewNode", "SLOT_TAG", "TEMPLATE_TAG" and "PORTAL_TAG" are reserved by the compiler)`
+			want := `loop variable "` + tc.ident + `" uses a reserved name (identifiers starting with "__" and the names "ViewNode", "SLOT_TAG", "SNIPPET_TAG" and "PORTAL_TAG" are reserved by the compiler)`
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error %q should contain %q", err, want)
 			}

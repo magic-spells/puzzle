@@ -446,7 +446,7 @@ func (p *parser) unclosedErr(ctx openCtx) *ParseError {
 }
 
 // parseElement parses an element, component, or composition marker
-// (<Children>, <Slot>, <Slot name="x">, or <Template>) starting at the
+// (<Children>, <Slot>, <Slot name="x">, or <Snippet>) starting at the
 // current TokTagOpen.
 func (p *parser) parseElement() (Node, *ParseError) {
 	open := p.cur
@@ -470,8 +470,8 @@ func (p *parser) parseElement() (Node, *ParseError) {
 	// literal element built at the bottom of this function.
 	var slotName string
 	var slotArgs []Attr
-	var templateFits string
-	var templateParams []string
+	var snippetFits string
+	var snippetParams []string
 	if !p.raw {
 		if name == "children" {
 			return nil, errAt(p.file, pos, "the default marker is spelled <Children/> since v1.64 (D134)")
@@ -487,21 +487,22 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		if name == "portal" {
 			return nil, errAt(p.file, pos, "the portal marker is spelled <Portal>…</Portal> (D134/D144)")
 		}
-		if name == "template" {
+		if name == "snippet" {
 			for _, a := range attrs {
-				if attrNameOf(a) == "fits" {
-					return nil, errAt(p.file, pos, `the template marker is spelled <Template fits="…">`)
+				at, bare := a.(*StaticAttr)
+				if attrNameOf(a) == "fits" || (bare && at.Valueless) {
+					return nil, errAt(p.file, pos, `the snippet marker is spelled <Snippet ...>`)
 				}
 			}
 		}
-		if name == "Template" {
+		if name == "Snippet" {
 			var markerErr *ParseError
-			templateFits, templateParams, markerErr = templateMarkerAttrs(attrs, p.file)
+			snippetFits, snippetParams, markerErr = snippetMarkerAttrs(attrs, p.file)
 			if markerErr != nil {
 				return nil, markerErr
 			}
 			if selfClose {
-				return nil, errAt(p.file, pos, "<Template/> is paired-only — a template needs a body to render")
+				return nil, errAt(p.file, pos, "<Snippet/> is paired-only — a snippet needs a body to render")
 			}
 		}
 		if name == "Portal" {
@@ -548,8 +549,8 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		if name == "Slot" {
 			return &Slot{Name: slotName, Args: slotArgs, Children: children, Pos: pos}, nil
 		}
-		if name == "Template" {
-			return &Template{Fits: templateFits, Params: templateParams, Body: children, Pos: pos}, nil
+		if name == "Snippet" {
+			return &Snippet{Fits: snippetFits, Params: snippetParams, Body: children, Pos: pos}, nil
 		}
 		if name == "Portal" {
 			return &Portal{Children: children, Pos: pos}, nil
@@ -1064,7 +1065,7 @@ func nodePos(n Node) Position {
 		return t.Pos
 	case *Slot:
 		return t.Pos
-	case *Template:
+	case *Snippet:
 		return t.Pos
 	case *Portal:
 		return t.Pos
@@ -1175,13 +1176,13 @@ func loopBindingIdentError(name string, pos Position, file string) *ParseError {
 	return generatedBindingIdentError(name, pos, file, "loop variable")
 }
 
-func templateParamIdentError(name string, pos Position, file string) *ParseError {
-	return generatedBindingIdentError(name, pos, file, "template parameter")
+func snippetParamIdentError(name string, pos Position, file string) *ParseError {
+	return generatedBindingIdentError(name, pos, file, "snippet parameter")
 }
 
 func generatedBindingIdentError(name string, pos Position, file, kind string) *ParseError {
-	if name == "ViewNode" || name == "SLOT_TAG" || name == "TEMPLATE_TAG" || name == "PORTAL_TAG" || strings.HasPrefix(name, "__") {
-		return errAt(file, pos, "%s %q uses a reserved name (identifiers starting with %q and the names %q, %q, %q and %q are reserved by the compiler)", kind, name, "__", "ViewNode", "SLOT_TAG", "TEMPLATE_TAG", "PORTAL_TAG")
+	if name == "ViewNode" || name == "SLOT_TAG" || name == "SNIPPET_TAG" || name == "PORTAL_TAG" || strings.HasPrefix(name, "__") {
+		return errAt(file, pos, "%s %q uses a reserved name (identifiers starting with %q and the names %q, %q, %q and %q are reserved by the compiler)", kind, name, "__", "ViewNode", "SLOT_TAG", "SNIPPET_TAG", "PORTAL_TAG")
 	}
 	if jsident.IsReservedBindingIdentifier(name) {
 		return errAt(file, pos, "%s %q is not a legal binding identifier in strict-mode JavaScript", kind, name)

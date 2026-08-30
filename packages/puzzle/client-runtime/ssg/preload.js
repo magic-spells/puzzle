@@ -29,7 +29,7 @@ async function preloadNode(vnode, ctx, instances) {
 		typeof vnode === 'string' ||
 		vnode.isText ||
 		vnode.isSlot ||
-		vnode.isTemplate
+		vnode.isSnippet
 	) return;
 
 	if (!vnode.isComponent) {

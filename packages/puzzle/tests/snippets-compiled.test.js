@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 //
 // End-to-end compiler/runtime proof for D166. Both modules are generated from
-// the neighboring .pzl sources by the build:scoped-templates pretest script.
+// the neighboring .pzl sources by the build:snippets pretest script.
 import { afterEach, describe, expect, it } from 'vitest';
-import ScopedTemplatesHost from './fixtures/scoped-templates/ScopedTemplatesHost.compiled.js';
+import SnippetsHost from './fixtures/snippets/SnippetsHost.compiled.js';
 
 let mounted = null;
 
@@ -13,21 +13,21 @@ afterEach(() => {
 	document.body.replaceChildren();
 });
 
-describe('scoped templates — real compiler output (D166)', () => {
-	it('routes named/default templates, binds args, and re-stamps from either owner', async () => {
+describe('snippets — real compiler output (D166)', () => {
+	it('routes named/default snippets, binds args, and re-stamps from either owner', async () => {
 		const el = document.createElement('div');
 		document.body.appendChild(el);
-		mounted = new ScopedTemplatesHost();
+		mounted = new SnippetsHost();
 		await mounted.mount(el);
 
-		expect(el.querySelector('.scoped-heading').textContent.trim()).toBe('Core / v1');
+		expect(el.querySelector('.snippet-heading').textContent.trim()).toBe('Core / v1');
 		expect([...el.querySelectorAll('.person')].map((node) => node.textContent.trim())).toEqual([
 			'Core:Ada:v1',
 			'Core:Grace:v1',
 		]);
-		expect(el.querySelector('.scoped-default').textContent.trim()).toBe('default:Core:v1');
+		expect(el.querySelector('.snippet-default').textContent.trim()).toBe('default:Core:v1');
 		expect(el.querySelector('slot')).toBeNull();
-		expect(el.querySelector('#template')).toBeNull();
+		expect(el.querySelector('#snippet')).toBeNull();
 
 		const rows = [...el.querySelectorAll('li')];
 		el.querySelectorAll('.person')[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));

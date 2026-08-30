@@ -2352,7 +2352,7 @@ export class PuzzleView {
 				devperfRenderStart(this);
 			}
 			// A takeover-prepared tree was already slot-expanded while nested
-			// components were preloaded. Preserve that exact tree and its template-use
+			// components were preloaded. Preserve that exact tree and its snippet-use
 			// accounting instead of expanding it a second time in ViewManager.
 			this.#vm.render(tree, preparedTree !== undefined);
 		} else if (this.#vm.currentTree) {

@@ -99,10 +99,10 @@
     </p>
   </NativeModal>
 
-  <!-- 4 ─────────────────────────────── repeated caller-owned templates -->
+  <!-- 4 ─────────────────────────────── repeated caller-owned snippets -->
   <section class="case">
     <header class="case-head">
-      <div class="eyebrow">case 4 · { templateTag }</div>
+      <div class="eyebrow">case 4 · { snippetTag }</div>
       <h2 class="case-title">Caller-owned list rows</h2>
       <p class="case-sub">
         The roster owns iteration and hands each row's data to markup supplied
@@ -111,18 +111,18 @@
       </p>
     </header>
 
-    <TemplatedRoster members={ team }>
-      <Template fits="heading" total>
-        { total } people · rendered by { templateTag }
-      </Template>
-      <Template member index>
+    <SnippetRoster members={ team }>
+      <Snippet fits="heading" total>
+        { total } people · rendered by { snippetTag }
+      </Snippet>
+      <Snippet member index>
         <div class="roster-row">
           <span class="roster-index">{ index + 1 }</span>
           <span class="roster-name">{ member.name }</span>
           <span class="roster-role">{ member.role }</span>
         </div>
-      </Template>
-    </TemplatedRoster>
+      </Snippet>
+    </SnippetRoster>
   </section>
 </puzzle-view>
 
@@ -131,7 +131,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import ClippedCard from '../components/ClippedCard.pzl';
 import SlideOver from '../components/SlideOver.pzl';
 import NativeModal from '../components/NativeModal.pzl';
-import TemplatedRoster from '../components/TemplatedRoster.pzl';
+import SnippetRoster from '../components/SnippetRoster.pzl';
 
 const MESSAGES = {
   success: ['Deploy finished in 41s.', 'Settings saved.', 'Invite sent to dana@example.com.'],
@@ -159,7 +159,7 @@ export default class Home extends PuzzleView {
       // would render literally; an interpolation becomes a text node instead.
       portalTag: '<Portal>',
       dialogTag: '<dialog>',
-      templateTag: '<Template>',
+      snippetTag: '<Snippet>',
       team: [
         { id: 1, name: 'Ada Lovelace', role: 'Compiler' },
         { id: 2, name: 'Grace Hopper', role: 'Runtime' },
