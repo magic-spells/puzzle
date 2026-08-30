@@ -446,8 +446,8 @@ func (p *parser) unclosedErr(ctx openCtx) *ParseError {
 }
 
 // parseElement parses an element, component, or composition marker
-// (<Children>, <Slot>, or <Slot name="x">) starting at the current
-// TokTagOpen.
+// (<Children>, <Slot>, <Slot name="x">, or <Template>) starting at the
+// current TokTagOpen.
 func (p *parser) parseElement() (Node, *ParseError) {
 	open := p.cur
 	name := open.Value
@@ -469,6 +469,9 @@ func (p *parser) parseElement() (Node, *ParseError) {
 	// markup, so every tag there — <slot>, <Children/>, <Portal>, <Card/> — is a
 	// literal element built at the bottom of this function.
 	var slotName string
+	var slotArgs []Attr
+	var templateFits string
+	var templateParams []string
 	if !p.raw {
 		if name == "children" {
 			return nil, errAt(p.file, pos, "the default marker is spelled <Children/> since v1.64 (D134)")
@@ -484,6 +487,23 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		if name == "portal" {
 			return nil, errAt(p.file, pos, "the portal marker is spelled <Portal>…</Portal> (D134/D144)")
 		}
+		if name == "template" {
+			for _, a := range attrs {
+				if attrNameOf(a) == "fits" {
+					return nil, errAt(p.file, pos, `the template marker is spelled <Template fits="…">`)
+				}
+			}
+		}
+		if name == "Template" {
+			var markerErr *ParseError
+			templateFits, templateParams, markerErr = templateMarkerAttrs(attrs, p.file)
+			if markerErr != nil {
+				return nil, markerErr
+			}
+			if selfClose {
+				return nil, errAt(p.file, pos, "<Template/> is paired-only — a template needs a body to render")
+			}
+		}
 		if name == "Portal" {
 			if perr := portalMarkerAttrs(attrs, pos, p.file); perr != nil {
 				return nil, perr
@@ -494,12 +514,14 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		}
 		if name == "Children" || name == "Slot" {
 			if name == "Children" {
-				if perr := childrenMarkerAttrs(attrs, p.file); perr != nil {
-					return nil, perr
+				var markerErr *ParseError
+				slotArgs, markerErr = childrenMarkerAttrs(attrs, p.file)
+				if markerErr != nil {
+					return nil, markerErr
 				}
 			} else {
 				var markerErr *ParseError
-				slotName, markerErr = slotMarkerFromAttrs(attrs, pos, p.file)
+				slotName, slotArgs, markerErr = slotMarkerFromAttrs(attrs, pos, p.file)
 				if markerErr != nil {
 					return nil, markerErr
 				}
@@ -521,10 +543,13 @@ func (p *parser) parseElement() (Node, *ParseError) {
 
 	if !p.raw {
 		if name == "Children" {
-			return &Slot{Children: children, Pos: pos}, nil
+			return &Slot{Args: slotArgs, Children: children, Pos: pos}, nil
 		}
 		if name == "Slot" {
-			return &Slot{Name: slotName, Children: children, Pos: pos}, nil
+			return &Slot{Name: slotName, Args: slotArgs, Children: children, Pos: pos}, nil
+		}
+		if name == "Template" {
+			return &Template{Fits: templateFits, Params: templateParams, Body: children, Pos: pos}, nil
 		}
 		if name == "Portal" {
 			return &Portal{Children: children, Pos: pos}, nil
@@ -1039,6 +1064,8 @@ func nodePos(n Node) Position {
 		return t.Pos
 	case *Slot:
 		return t.Pos
+	case *Template:
+		return t.Pos
 	case *Portal:
 		return t.Pos
 	case *Text:
@@ -1142,16 +1169,22 @@ func isBareIdent(s string) bool {
 	return true
 }
 
-// SLOT_TAG joins ViewNode as a compiler-emitted binding: codegen imports it
-// whenever the template contains a slot, and a loop variable of that name would
-// shadow the outlet marker inside the loop body (the row object silently becomes
-// the tag).
+// Compiler-emitted runtime imports cannot be shadowed by a binding introduced
+// in generated render code.
 func loopBindingIdentError(name string, pos Position, file string) *ParseError {
-	if name == "ViewNode" || name == "SLOT_TAG" || name == "PORTAL_TAG" || strings.HasPrefix(name, "__") {
-		return errAt(file, pos, "loop variable %q uses a reserved name (identifiers starting with %q and the names %q, %q and %q are reserved by the compiler)", name, "__", "ViewNode", "SLOT_TAG", "PORTAL_TAG")
+	return generatedBindingIdentError(name, pos, file, "loop variable")
+}
+
+func templateParamIdentError(name string, pos Position, file string) *ParseError {
+	return generatedBindingIdentError(name, pos, file, "template parameter")
+}
+
+func generatedBindingIdentError(name string, pos Position, file, kind string) *ParseError {
+	if name == "ViewNode" || name == "SLOT_TAG" || name == "TEMPLATE_TAG" || name == "PORTAL_TAG" || strings.HasPrefix(name, "__") {
+		return errAt(file, pos, "%s %q uses a reserved name (identifiers starting with %q and the names %q, %q, %q and %q are reserved by the compiler)", kind, name, "__", "ViewNode", "SLOT_TAG", "TEMPLATE_TAG", "PORTAL_TAG")
 	}
 	if jsident.IsReservedBindingIdentifier(name) {
-		return errAt(file, pos, "loop variable %q is not a legal binding identifier in strict-mode JavaScript", name)
+		return errAt(file, pos, "%s %q is not a legal binding identifier in strict-mode JavaScript", kind, name)
 	}
 	return nil
 }

@@ -41,6 +41,9 @@ import { PuzzleModel } from '../model.js';
 /** Reserved tag marking a composition-marker (`<Children/>`/`<Slot/>`/`<Slot name="…"/>`) substitution point. */
 export const SLOT_TAG = 'slot';
 
+/** Reserved tag marking caller-provided scoped-template content (D166). */
+export const TEMPLATE_TAG = '#template';
+
 // Reserved tag marking a placeholder vnode — an empty, never-keyed comment node.
 // Codegen pads the branches of a `{#if}`/`{#case}` so every branch contributes
 // the SAME static vnode count: without it a variable-length branch shifts every
@@ -111,6 +114,10 @@ export class ViewNode {
 
 	get isSlot() {
 		return this.tag === SLOT_TAG;
+	}
+
+	get isTemplate() {
+		return this.tag === TEMPLATE_TAG;
 	}
 
 	/** A portal marker — children mount into the shared portal outlet. */

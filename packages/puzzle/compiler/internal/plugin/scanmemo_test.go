@@ -66,6 +66,25 @@ export default class V extends PuzzleView {}
 </script>
 `
 
+const scopedTemplateView = `<puzzle-view>
+  <List><Template item>{ item }</Template></List>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import List from '../components/List.pzl';
+export default class V extends PuzzleView {}
+</script>
+`
+
+const scopedMarkerArgsView = `<puzzle-view>
+  <Children item={ item }/>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class V extends PuzzleView {}
+</script>
+`
+
 // TestUsageScannerMatchesColdScan is the equivalence statement: whatever the
 // tree looks like, an incremental Scan must answer exactly what a cold
 // ScanUsage answers — through edits, additions, and deletions.
@@ -136,6 +155,24 @@ func TestUsageScannerMatchesColdScan(t *testing.T) {
 	u = assertSame("edit removes raw")
 	if u.HasRawAt {
 		t.Fatal("raw removed by an edit was still reported")
+	}
+
+	writePZL(t, b, scopedTemplateView)
+	u = assertSame("edit adds scoped Template")
+	if !u.HasScopedTemplates {
+		t.Fatal("scoped Template added by an edit was not seen")
+	}
+
+	writePZL(t, b, scopedMarkerArgsView)
+	u = assertSame("edit replaces Template with args marker")
+	if !u.HasScopedTemplates {
+		t.Fatal("args-bearing marker was not seen")
+	}
+
+	writePZL(t, b, plainView)
+	u = assertSame("edit removes scoped templates")
+	if u.HasScopedTemplates {
+		t.Fatal("scoped-template usage removed by an edit was still reported")
 	}
 
 	// The memo covers SCRIPT files too, not just templates: lazy() lives in

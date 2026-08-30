@@ -22,7 +22,7 @@
  * substituted with the slot content captured at the call site before diffing.
  */
 
-import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG } from './ViewNode.js';
+import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG, TEMPLATE_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import {
 	mountPortal,
@@ -109,7 +109,7 @@ export class ViewManager {
 		// Route the next ordinary render through a fresh mount so it never diffs
 		// against vnodes whose DOM links may be detached.
 		if (this.treeUnknown) return this.renderFresh(rawTree);
-		const newTree = expandSlots(rawTree, this.slotChildren);
+		const newTree = expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
 		if (!this.currentTree) {
 			// A FIRST mount throws too (a component's class-field initializer, a
 			// `String(symbol)` in a text node), and it needs the same D145 machinery —
@@ -190,7 +190,7 @@ export class ViewManager {
 	 * is reachable again once currentTree becomes the error face.
 	 */
 	renderFresh(rawTree) {
-		const newTree = expandSlots(rawTree, this.slotChildren);
+		const newTree = expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
 		releaseAborted(this.unknownTrees);
 		this.unknownTrees = null;
 		const range = this.unknownRange;
@@ -291,8 +291,23 @@ export class ViewManager {
  * always did — the default bucket is the original `slotChildren` array (no
  * clones) and no vnode changes unless a marker is actually present.
  */
-export function expandSlots(vnode, slotChildren) {
-	return expandNode(vnode, partitionSlots(slotChildren));
+export function expandSlots(vnode, slotChildren, component = null) {
+	const parts = partitionSlots(slotChildren);
+	if (
+		typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
+		__PUZZLE_HAS_SCOPED_TEMPLATES__
+	) {
+		parts.component = component;
+	}
+	const expanded = expandNode(vnode, parts);
+	if (
+		(typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
+			__PUZZLE_HAS_SCOPED_TEMPLATES__) &&
+		(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+	) {
+		warnUnusedTemplates(parts, component);
+	}
+	return expanded;
 }
 
 /**
@@ -305,9 +320,20 @@ export function expandSlots(vnode, slotChildren) {
  */
 function partitionSlots(slotChildren) {
 	let named = null;
+	let templates = null;
 	let def = null; // null until the first named child forces a fresh default list
 	for (let i = 0; i < slotChildren.length; i++) {
 		const sc = slotChildren[i];
+		if (
+			(typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
+				__PUZZLE_HAS_SCOPED_TEMPLATES__) &&
+			sc.tag === TEMPLATE_TAG
+		) {
+			if (!templates) templates = Object.create(null);
+			if (def === null) def = slotChildren.slice(0, i);
+			templates[sc.attrs.fits || 'default'] = sc;
+			continue;
+		}
 		const name = sc.attrs && sc.attrs.slot;
 		if (name != null && name !== '') {
 			// Null-proto: a slot named "__proto__"/"constructor"/"toString" must key a
@@ -319,6 +345,20 @@ function partitionSlots(slotChildren) {
 		} else if (def !== null) {
 			def.push(sc);
 		}
+	}
+	if (
+		typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
+		__PUZZLE_HAS_SCOPED_TEMPLATES__
+	) {
+		if (named === null && templates === null) {
+			return { default: slotChildren, named: null, templates: null, templateUses: null };
+		}
+		return {
+			default: def ?? [],
+			named,
+			templates,
+			templateUses: templates && Object.create(null),
+		};
 	}
 	if (named === null) return { default: slotChildren, named: null };
 	return { default: def ?? [], named };
@@ -400,8 +440,37 @@ function expandChildList(kids, parts) {
 		const k = kids[i];
 		if (k.isSlot) {
 			if (!out) out = kids.slice(0, i);
-			const name = k.attrs && k.attrs.name;
-			const bucket = name ? parts.named && parts.named[name] : parts.default;
+			const markerName = (k.attrs && k.attrs.name) || 'default';
+			const bucket = markerName === 'default' ? parts.default : parts.named && parts.named[markerName];
+			if (
+				typeof __PUZZLE_HAS_SCOPED_TEMPLATES__ === 'undefined' ||
+				__PUZZLE_HAS_SCOPED_TEMPLATES__
+			) {
+				const hasArgs = Object.prototype.hasOwnProperty.call(k.attrs, 'args');
+				const tmpl = parts.templates && parts.templates[markerName];
+				if (tmpl) {
+					parts.templateUses[markerName] = true;
+					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+						warnTemplateShape(tmpl, k.attrs.args || {}, markerName, parts.component);
+					}
+					for (const stamped of tmpl.attrs.fn(k.attrs.args || {})) out.push(stamped);
+					continue;
+				}
+				if (
+					hasArgs &&
+					bucket &&
+					bucket.length &&
+					(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				) {
+					warnPlainScopedContent(markerName, k.attrs.args || {}, parts.component);
+				}
+				if (bucket && bucket.length && !hasArgs) {
+					for (const sc of bucket) out.push(sc);
+				} else {
+					for (const fb of k.children) out.push(expandNode(fb, parts));
+				}
+				continue;
+			}
 			if (bucket && bucket.length) {
 				for (const sc of bucket) out.push(sc);
 			} else {
@@ -417,6 +486,61 @@ function expandChildList(kids, parts) {
 		}
 	}
 	return out;
+}
+
+const UNKNOWN_TEMPLATE_OWNER = {};
+let scopedTemplateWarnings;
+
+function warnScopedTemplate(component, issue, message) {
+	const owner =
+		(component != null && (typeof component === 'object' || typeof component === 'function'))
+			? component
+			: UNKNOWN_TEMPLATE_OWNER;
+	scopedTemplateWarnings ??= new WeakMap();
+	let seen = scopedTemplateWarnings.get(owner);
+	if (!seen) {
+		seen = new Set();
+		scopedTemplateWarnings.set(owner, seen);
+	}
+	if (seen.has(issue)) return;
+	seen.add(issue);
+	console.warn(`[puzzle] ${message}`);
+}
+
+function warnTemplateShape(tmpl, args, name, component) {
+	const params = tmpl.attrs.params || [];
+	const handed = Object.keys(args);
+	const same =
+		params.length === handed.length &&
+		params.every((param) => Object.prototype.hasOwnProperty.call(args, param));
+	if (same) return;
+	warnScopedTemplate(
+		component,
+		`shape:${name}`,
+		`template fits "${name}" declares (${params.join(', ')}); ` +
+			`slot "${name}" hands over (${handed.join(', ')}) — the shapes don't match`
+	);
+}
+
+function warnPlainScopedContent(name, args, component) {
+	warnScopedTemplate(
+		component,
+		`plain:${name}`,
+		`plain content cannot fill args-bearing slot "${name}" handing over ` +
+			`(${Object.keys(args).join(', ')}) — provide a matching <Template>; rendering the fallback`
+	);
+}
+
+function warnUnusedTemplates(parts, component) {
+	if (!parts.templates) return;
+	for (const name of Object.keys(parts.templates)) {
+		if (parts.templateUses[name]) continue;
+		warnScopedTemplate(
+			component,
+			`unused:${name}`,
+			`template fits "${name}", but no slot "${name}" marker consumed it`
+		);
+	}
 }
 
 // ---- mount ------------------------------------------------------------------

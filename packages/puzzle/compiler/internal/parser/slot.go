@@ -1,5 +1,7 @@
 package parser
 
+import "strings"
+
 // slot.go — compile-time validation for the composition markers (named slots
 // v1.21/D53; capitalized grammar v1.64/D134; fallback bodies D141). See
 // [[DOC-SPEC]] §24 and [[DECISION-D141-MARKER-FALLBACK-BODIES]].
@@ -26,18 +28,23 @@ package parser
 //   default-routing would misroute). Anywhere else `slot` is the ordinary HTML
 //   global attribute and passes through untouched.
 
-// childrenMarkerAttrs validates a <Children>'s attributes: the default
-// marker takes NO attributes. A `ref` gets the D72-style render-target message;
-// any other attribute is the generic no-attributes error. Fallback children are
-// handled by parseElement.
-func childrenMarkerAttrs(attrs []Attr, file string) *ParseError {
+// childrenMarkerAttrs validates <Children>'s handed-data attributes. Every
+// attribute must carry a value; bare names declare Template parameters instead.
+func childrenMarkerAttrs(attrs []Attr, file string) ([]Attr, *ParseError) {
+	var args []Attr
 	for _, a := range attrs {
 		if attrNameOf(a) == "ref" {
-			return errAt(file, attrPos(a), "ref cannot be placed on a <Children> — a children marker is a render target, not a real element")
+			return nil, errAt(file, attrPos(a), "ref cannot be placed on a <Children> — a children marker is a render target, not a real element")
 		}
-		return errAt(file, attrPos(a), "<Children> takes no attributes — call-site content needs no configuration")
+		if _, ok := a.(*EventAttr); ok {
+			return nil, errAt(file, attrPos(a), "<Children> does not take event handlers")
+		}
+		if at, ok := a.(*StaticAttr); ok && at.Valueless {
+			return nil, errAt(file, at.Pos, "bare attributes belong on <Template> as parameters — hand values over here with %s={ … }", at.Name)
+		}
+		args = append(args, a)
 	}
-	return nil
+	return args, nil
 }
 
 // portalMarkerAttrs validates a <Portal>'s attributes: v1 takes NONE. `to`/
@@ -61,48 +68,110 @@ func portalMarkerAttrs(attrs []Attr, pos Position, file string) *ParseError {
 // slotMarkerFromAttrs resolves <Slot/>'s role by attributes. No attrs means the
 // unnamed router outlet/default marker; one static name declares a named slot.
 // Every other shape is a positioned compile error.
-func slotMarkerFromAttrs(attrs []Attr, pos Position, file string) (name string, perr *ParseError) {
+func slotMarkerFromAttrs(attrs []Attr, pos Position, file string) (name string, args []Attr, perr *ParseError) {
 	hasName := false
 	for _, a := range attrs {
 		if attrNameOf(a) == "ref" {
 			// ref on a <Slot> (v1.39, D72): a slot is a render target, not a real
 			// element — reject with a ref-specific message before the generic one.
-			return "", errAt(file, attrPos(a), "ref cannot be placed on a <Slot> — a slot is a render target, not a real element")
+			return "", nil, errAt(file, attrPos(a), "ref cannot be placed on a <Slot> — a slot is a render target, not a real element")
 		}
 		switch at := a.(type) {
 		case *StaticAttr:
-			if at.Name != "name" {
-				return "", errAt(file, at.Pos, "<Slot> only takes a static name attribute")
+			if at.Name == "name" {
+				hasName = true
+				name = at.Value
+				continue
 			}
-			hasName = true
-			name = at.Value
+			if at.Valueless {
+				return "", nil, errAt(file, at.Pos, "bare attributes belong on <Template> as parameters — hand values over here with %s={ … }", at.Name)
+			}
+			args = append(args, a)
 		case *DynamicAttr:
 			if at.Name == "name" {
-				return "", errAt(file, at.Pos, "<Slot> name must be a static string, not name={ ... }")
+				return "", nil, errAt(file, at.Pos, "<Slot> name must be a static string, not name={ ... }")
 			}
-			return "", errAt(file, at.Pos, "<Slot> only takes a static name attribute")
+			args = append(args, a)
 		case *MixedAttr:
 			if at.Name == "name" {
-				return "", errAt(file, at.Pos, "<Slot> name must be a static string, not an interpolated value")
+				return "", nil, errAt(file, at.Pos, "<Slot> name must be a static string, not an interpolated value")
 			}
-			return "", errAt(file, at.Pos, "<Slot> only takes a static name attribute")
+			args = append(args, a)
 		case *EventAttr:
-			return "", errAt(file, at.Pos, "<Slot> does not take event handlers")
+			return "", nil, errAt(file, at.Pos, "<Slot> does not take event handlers")
 		}
 	}
 	if !hasName {
-		return "", nil
+		return "", args, nil
 	}
 	if name == "" {
-		return "", errAt(file, pos, "<Slot name> cannot be empty")
+		return "", nil, errAt(file, pos, "<Slot name> cannot be empty")
 	}
 	if name == "default" {
-		return "", errAt(file, pos, `<Slot name="default"> is reserved — use <Children/>`)
+		return "", nil, errAt(file, pos, `<Slot name="default"> is reserved — use <Children/>`)
 	}
 	if name == "children" {
-		return "", errAt(file, pos, `<Slot name="children"> is reserved — use <Children/>`)
+		return "", nil, errAt(file, pos, `<Slot name="children"> is reserved — use <Children/>`)
 	}
-	return name, nil
+	return name, args, nil
+}
+
+// templateMarkerAttrs validates the caller-side <Template> declaration.
+// `fits` is the sole valued attribute; every other attribute is a bare
+// parameter declaration, preserved in source order for emitted metadata.
+func templateMarkerAttrs(attrs []Attr, file string) (fits string, params []string, perr *ParseError) {
+	hasFits := false
+	seen := map[string]Position{}
+	for _, a := range attrs {
+		name := attrNameOf(a)
+		switch at := a.(type) {
+		case *StaticAttr:
+			if name == "fits" {
+				if at.Valueless {
+					return "", nil, errAt(file, at.Pos, `"fits" routes a <Template> — write fits="row"; it cannot be a parameter`)
+				}
+				if hasFits {
+					return "", nil, errAt(file, at.Pos, "duplicate fits attribute on <Template>")
+				}
+				if at.Value == "" {
+					return "", nil, errAt(file, at.Pos, "<Template fits> cannot be empty")
+				}
+				hasFits = true
+				fits = at.Value
+				continue
+			}
+			if !at.Valueless {
+				return "", nil, errAt(file, at.Pos, "parameters on <Template> are bare — write %s, not %s={ … }", name, name)
+			}
+		case *DynamicAttr:
+			if name == "fits" {
+				return "", nil, errAt(file, at.Pos, "template target must be a static string, not fits={ ... }")
+			}
+			return "", nil, errAt(file, at.Pos, "parameters on <Template> are bare — write %s, not %s={ … }", name, name)
+		case *MixedAttr:
+			if name == "fits" {
+				return "", nil, errAt(file, at.Pos, "template target must be a static string, not an interpolated value")
+			}
+			return "", nil, errAt(file, at.Pos, "parameters on <Template> are bare — write %s, not %s={ … }", name, name)
+		case *EventAttr:
+			return "", nil, errAt(file, at.Pos, "parameters on <Template> are bare — write %s, not %s={ … }", name, name)
+		}
+		if name == "fits" {
+			return "", nil, errAt(file, attrPos(a), `"fits" routes a <Template> — write fits="row"; it cannot be a parameter`)
+		}
+		if !isBareIdent(name) {
+			return "", nil, errAt(file, attrPos(a), "template parameter %q must be a valid identifier", name)
+		}
+		if identErr := templateParamIdentError(name, attrPos(a), file); identErr != nil {
+			return "", nil, identErr
+		}
+		if prev, dup := seen[name]; dup {
+			return "", nil, errAt(file, attrPos(a), "duplicate template parameter %q — already declared at %d:%d", name, prev.Line, prev.Col)
+		}
+		seen[name] = attrPos(a)
+		params = append(params, name)
+	}
+	return fits, params, nil
 }
 
 // validateSlots runs the per-body named-slot post-pass over a parsed template or
@@ -129,20 +198,24 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 				if inCallSite {
 					return errAt(file, node.Pos, "<Slot name=%q> inside a component invocation is not supported — only the bare default <Children/> or <Slot/> forwards through a component", node.Name)
 				}
-				if prev, dup := seen[node.Name]; dup {
-					return errAt(file, node.Pos, "duplicate slot name %q — already declared at %d:%d", node.Name, prev.Line, prev.Col)
+				if len(node.Args) == 0 {
+					if prev, dup := seen[node.Name]; dup {
+						return errAt(file, node.Pos, "duplicate slot name %q — already declared at %d:%d", node.Name, prev.Line, prev.Col)
+					}
+					seen[node.Name] = node.Pos
 				}
-				seen[node.Name] = node.Pos
 			} else {
 				// The default marker (<Children/> or <Slot/>, D134) is unique per
 				// body too: two of them would splice the SAME slotChildren vnodes
 				// into both markers at runtime, corrupting the DOM. Both spellings
 				// produce a Name-less *Slot and key under "default" (a reserved,
 				// unreachable name — slotMarkerFromAttrs rejects name="default").
-				if prev, dup := seen["default"]; dup {
-					return errAt(file, node.Pos, "duplicate default marker (<Children/>/<Slot/>) — already declared at %d:%d", prev.Line, prev.Col)
+				if len(node.Args) == 0 {
+					if prev, dup := seen["default"]; dup {
+						return errAt(file, node.Pos, "duplicate default marker (<Children/>/<Slot/>) — already declared at %d:%d", prev.Line, prev.Col)
+					}
+					seen["default"] = node.Pos
 				}
-				seen["default"] = node.Pos
 			}
 			if nested := nestedFallbackMarker(node.Children); nested != nil {
 				return fallbackMarkerErr(nested, file)
@@ -168,9 +241,22 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 			// flows through: a default marker inside AND outside the invocation
 			// would splice the same default bucket twice, so the per-body
 			// uniqueness check must keep counting in here.
-			if perr := walkSlots(node.Children, file, seen, true); perr != nil {
-				return perr
+			for _, child := range node.Children {
+				if tmpl, ok := child.(*Template); ok {
+					// A template body is a separate call-site body: markers and nested
+					// component invocations validate normally, but uniqueness does not
+					// leak into or out of the enclosing template.
+					if perr := walkSlots(tmpl.Body, file, map[string]Position{}, true); perr != nil {
+						return perr
+					}
+					continue
+				}
+				if perr := walkSlots([]Node{child}, file, seen, true); perr != nil {
+					return perr
+				}
 			}
+		case *Template:
+			return errAt(file, node.Pos, "<Template> is only allowed as a direct child of a component invocation")
 		case *If:
 			if perr := walkSlots(node.Then, file, seen, inCallSite); perr != nil {
 				return perr
@@ -214,6 +300,10 @@ func nestedFallbackMarker(nodes []Node) Node {
 			return node
 		case *Portal:
 			return node
+		case *Template:
+			// A scoped template body is a separate caller-owned render body. Markers
+			// inside it are not nested in the surrounding marker fallback.
+			continue
 		case *Element:
 			if found := nestedFallbackMarker(node.Children); found != nil {
 				return found
@@ -252,23 +342,84 @@ func nestedFallbackMarker(nodes []Node) Node {
 // control-flow block carrying top-level slot-attributed nodes is rejected. A
 // static `slot` on a direct child is legal and rides through untouched.
 func validateCallSiteSlots(comp *Component, file string) *ParseError {
+	plain := map[string]Position{}
 	for _, child := range comp.Children {
 		switch c := child.(type) {
 		case *Element:
 			if perr := checkStaticSlotAttr(c.Attrs, file); perr != nil {
 				return perr
 			}
+			name, has := staticSlotTarget(c.Attrs)
+			if !has || name == "" {
+				name = "default"
+			}
+			if _, exists := plain[name]; !exists {
+				plain[name] = c.Pos
+			}
 		case *Component:
 			if perr := checkStaticSlotAttr(c.Props, file); perr != nil {
 				return perr
+			}
+			name, has := staticSlotTarget(c.Props)
+			if !has || name == "" {
+				name = "default"
+			}
+			if _, exists := plain[name]; !exists {
+				plain[name] = c.Pos
 			}
 		case *If, *For, *Case:
 			if perr := rejectSlotInControlFlow(c, file); perr != nil {
 				return perr
 			}
+			if _, exists := plain["default"]; !exists {
+				plain["default"] = nodePos(c)
+			}
+		case *Text:
+			if strings.TrimSpace(c.Value) != "" {
+				if _, exists := plain["default"]; !exists {
+					plain["default"] = c.Pos
+				}
+			}
+		case *Template:
+			// Collected in the second pass after all ordinary fills are known.
+		default:
+			if _, exists := plain["default"]; !exists {
+				plain["default"] = nodePos(c)
+			}
+		}
+	}
+
+	templates := map[string]Position{}
+	for _, child := range comp.Children {
+		tmpl, ok := child.(*Template)
+		if !ok {
+			continue
+		}
+		name := tmpl.Fits
+		if name == "" {
+			name = "default"
+		}
+		if prev, dup := templates[name]; dup {
+			return errAt(file, tmpl.Pos, "duplicate Template for %q — already declared at %d:%d", name, prev.Line, prev.Col)
+		}
+		templates[name] = tmpl.Pos
+		if prev, conflict := plain[name]; conflict {
+			if name == "default" {
+				return errAt(file, tmpl.Pos, "a default <Template> cannot be mixed with ordinary default content in the same component invocation (content starts at %d:%d)", prev.Line, prev.Col)
+			}
+			return errAt(file, tmpl.Pos, "<Template fits=%q> conflicts with ordinary content routed to slot %q at %d:%d", name, name, prev.Line, prev.Col)
 		}
 	}
 	return nil
+}
+
+func staticSlotTarget(attrs []Attr) (string, bool) {
+	for _, a := range attrs {
+		if at, ok := a.(*StaticAttr); ok && at.Name == "slot" {
+			return at.Value, true
+		}
+	}
+	return "", false
 }
 
 // checkStaticSlotAttr rejects a non-static `slot` target (slot={expr} or an
@@ -296,6 +447,11 @@ func checkStaticSlotAttr(attrs []Attr, file string) *ParseError {
 func rejectSlotInControlFlow(n Node, file string) *ParseError {
 	for _, branch := range controlFlowBranches(n) {
 		for _, child := range branch {
+			if tmpl, ok := child.(*Template); ok {
+				pe := errAt(file, tmpl.Pos, "a <Template> inside a {#if}/{#unless}/{#for}/{#case} block at a component's direct-child level is ambiguous — put the <Template> immediately inside the component tag")
+				pe.Note = slotInControlFlowNote
+				return pe
+			}
 			if pos, has := topLevelSlotAttr(child); has {
 				pe := errAt(file, pos, "a slot target inside a {#if}/{#unless}/{#for}/{#case} block at a component's direct-child level is ambiguous — move the control-flow block inside the slotted element instead")
 				pe.Note = slotInControlFlowNote

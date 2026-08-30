@@ -1,0 +1,18 @@
+<puzzle-view>
+  {#for user in users}
+    <UserList key={ user.id }>
+      <Template user>
+        <p>{ user.name } — { title }</p>
+      </Template>
+    </UserList>
+  {/for}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import UserList from '../components/UserList.pzl';
+
+export default class ScopedTemplateShadow extends PuzzleView {
+  data() { return { users: [], user: { name: 'data user' }, title: 'People' }; }
+}
+</script>

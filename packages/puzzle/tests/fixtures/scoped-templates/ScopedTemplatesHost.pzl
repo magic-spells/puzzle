@@ -1,0 +1,41 @@
+<puzzle-view class="scoped-host">
+  <ScopedList users={ users } group={ group }>
+    <Template fits="heading" group>
+      { group.title } / { suffix }
+    </Template>
+
+    <Template fits="row" user group>
+      <button class="person" @click={ rename(user.id) }>
+        { group.title }:{ user.name }:{ suffix }
+      </button>
+    </Template>
+
+    <Template group>
+      default:{ group.title }:{ suffix }
+    </Template>
+  </ScopedList>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ScopedList from './ScopedList.compiled.js';
+
+export default class ScopedTemplatesHost extends PuzzleView {
+  created() {
+    this.setData({
+      users: [{ id: 1, name: 'Ada' }, { id: 2, name: 'Grace' }],
+      group: { title: 'Core' },
+      suffix: 'v1',
+    });
+  }
+
+  events = {
+    rename: (id) => {
+      const users = this.getData().users.map((user) => (
+        user.id === id ? { ...user, name: `${user.name}?` } : user
+      ));
+      this.setData({ users, suffix: 'v2' });
+    },
+  };
+}
+</script>

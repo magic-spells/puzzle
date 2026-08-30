@@ -1,0 +1,65 @@
+<puzzle-view>
+  <div class="template-roster">
+    <header class="template-roster-head">
+      <Slot name="heading" total={ members.length }>Team</Slot>
+    </header>
+    <ol class="template-roster-list">
+      {#for member in members, index}
+        <li key={ member.id }>
+          <Children member={ member } index={ index }>{ member.name }</Children>
+        </li>
+      {/for}
+    </ol>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class TemplatedRoster extends PuzzleView {
+  data(params, props) {
+    return { members: props.members || [] };
+  }
+}
+</script>
+
+<style>
+.template-roster {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.template-roster-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.template-roster-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.template-roster-list li + li { border-top: 1px solid var(--line); }
+
+.roster-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+}
+
+.roster-index {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.roster-name { font-weight: 600; }
+.roster-role { color: var(--muted); font-size: 13px; }
+</style>

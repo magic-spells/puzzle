@@ -125,13 +125,14 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 	f := pl.Features()
 	return map[string]string{
-		"__PUZZLE_DEV__":        strconv.FormatBool(flags.Dev),
-		"__PUZZLE_HAS_FLIP__":   strconv.FormatBool(f.Flip),
-		"__PUZZLE_HAS_PORTAL__": strconv.FormatBool(f.Portal),
-		"__PUZZLE_HAS_RAW_AT__": strconv.FormatBool(f.RawAt),
-		"__PUZZLE_HAS_LAZY__":   strconv.FormatBool(f.Lazy),
-		"__PUZZLE_TAKEOVER__":   strconv.FormatBool(flags.Takeover),
-		"__PUZZLE_CAPTURE__":    strconv.FormatBool(flags.Capture),
+		"__PUZZLE_DEV__":                  strconv.FormatBool(flags.Dev),
+		"__PUZZLE_HAS_FLIP__":             strconv.FormatBool(f.Flip),
+		"__PUZZLE_HAS_PORTAL__":           strconv.FormatBool(f.Portal),
+		"__PUZZLE_HAS_RAW_AT__":           strconv.FormatBool(f.RawAt),
+		"__PUZZLE_HAS_LAZY__":             strconv.FormatBool(f.Lazy),
+		"__PUZZLE_HAS_SCOPED_TEMPLATES__": strconv.FormatBool(f.ScopedTemplates),
+		"__PUZZLE_TAKEOVER__":             strconv.FormatBool(flags.Takeover),
+		"__PUZZLE_CAPTURE__":              strconv.FormatBool(flags.Capture),
 	}
 }
 

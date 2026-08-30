@@ -98,6 +98,32 @@
       back through a normal <code>@close</code> DOM binding.
     </p>
   </NativeModal>
+
+  <!-- 4 ─────────────────────────────── repeated caller-owned templates -->
+  <section class="case">
+    <header class="case-head">
+      <div class="eyebrow">case 4 · { templateTag }</div>
+      <h2 class="case-title">Caller-owned list rows</h2>
+      <p class="case-sub">
+        The roster owns iteration and hands each row's data to markup supplied
+        here. The same component can stamp a completely different row design
+        without taking a callback prop or cloning virtual nodes.
+      </p>
+    </header>
+
+    <TemplatedRoster members={ team }>
+      <Template fits="heading" total>
+        { total } people · rendered by { templateTag }
+      </Template>
+      <Template member index>
+        <div class="roster-row">
+          <span class="roster-index">{ index + 1 }</span>
+          <span class="roster-name">{ member.name }</span>
+          <span class="roster-role">{ member.role }</span>
+        </div>
+      </Template>
+    </TemplatedRoster>
+  </section>
 </puzzle-view>
 
 <script>
@@ -105,6 +131,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import ClippedCard from '../components/ClippedCard.pzl';
 import SlideOver from '../components/SlideOver.pzl';
 import NativeModal from '../components/NativeModal.pzl';
+import TemplatedRoster from '../components/TemplatedRoster.pzl';
 
 const MESSAGES = {
   success: ['Deploy finished in 41s.', 'Settings saved.', 'Invite sent to dana@example.com.'],
@@ -132,6 +159,12 @@ export default class Home extends PuzzleView {
       // would render literally; an interpolation becomes a text node instead.
       portalTag: '<Portal>',
       dialogTag: '<dialog>',
+      templateTag: '<Template>',
+      team: [
+        { id: 1, name: 'Ada Lovelace', role: 'Compiler' },
+        { id: 2, name: 'Grace Hopper', role: 'Runtime' },
+        { id: 3, name: 'Margaret Hamilton', role: 'Systems' },
+      ],
     };
   }
 

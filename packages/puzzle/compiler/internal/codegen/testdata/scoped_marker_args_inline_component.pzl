@@ -1,0 +1,20 @@
+<puzzle-view>
+  <div class="list">
+    <Children user={ lead }>No lead</Children>
+    {#for user in users}
+      <div class="row">
+        <Slot name="row" user={ user } group={ group }>
+          <span>{ user.name }</span>
+        </Slot>
+      </div>
+    {/for}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ScopedMarkerArgs extends PuzzleView {
+  data() { return { lead: null, users: [], group: null }; }
+}
+</script>

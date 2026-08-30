@@ -1,0 +1,20 @@
+<puzzle-view>
+  <GroupedList groups={ groups }>
+    <Template fits="heading" group>
+      <h2>{ group.title }</h2>
+    </Template>
+    <Template fits="row" user group>
+      <p>{ group.title }: { user.name }</p>
+    </Template>
+    <button slot="actions">Done</button>
+  </GroupedList>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import GroupedList from '../components/GroupedList.pzl';
+
+export default class ScopedTemplateNamed extends PuzzleView {
+  data() { return { groups: [] }; }
+}
+</script>

@@ -74,6 +74,10 @@ func walkRefs(nodes []Node, file string, seen map[string]Position, inFor, inSkel
 			if perr := walkRefs(node.Children, file, seen, inFor, inSkeleton); perr != nil {
 				return perr
 			}
+		case *Template:
+			if perr := walkRefs(node.Body, file, seen, inFor, inSkeleton); perr != nil {
+				return perr
+			}
 		case *Portal:
 			// Portaled content is ordinary template content owned by this view —
 			// only its DOM position differs — so refs inside it validate normally.

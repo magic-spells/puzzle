@@ -45,10 +45,11 @@ func builtinAllowlist() (map[string]bool, error) {
 
 // Usage is the build-wide feature set discovered by ScanUsage.
 type Usage struct {
-	Formatters map[string]bool
-	HasFlip    bool
-	HasPortal  bool
-	HasRawAt   bool
+	Formatters         map[string]bool
+	HasFlip            bool
+	HasPortal          bool
+	HasRawAt           bool
+	HasScopedTemplates bool
 	// HasLazy is the one bit that does NOT come from a template: lazy() route
 	// views (D163) are declared in the app's JavaScript/TypeScript, so the walk
 	// reads those files too (see scanScriptUsage).
@@ -60,10 +61,11 @@ type Usage struct {
 // WatchBuilder can decide with one == whether the Define set frozen into its
 // esbuild context went stale.
 type Features struct {
-	Flip   bool
-	Portal bool
-	RawAt  bool
-	Lazy   bool
+	Flip            bool
+	Portal          bool
+	RawAt           bool
+	Lazy            bool
+	ScopedTemplates bool
 }
 
 // Features projects the scan result onto the define bits. It is exported for
@@ -71,10 +73,11 @@ type Features struct {
 // whether the Defines frozen into an esbuild context went stale.
 func (u Usage) Features() Features {
 	return Features{
-		Flip:   u.HasFlip,
-		Portal: u.HasPortal,
-		RawAt:  u.HasRawAt,
-		Lazy:   u.HasLazy,
+		Flip:            u.HasFlip,
+		Portal:          u.HasPortal,
+		RawAt:           u.HasRawAt,
+		Lazy:            u.HasLazy,
+		ScopedTemplates: u.HasScopedTemplates,
 	}
 }
 
@@ -235,9 +238,18 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Slot:
+		if len(node.Args) > 0 {
+			usage.HasScopedTemplates = true
+			collectAttrFormatters(node.Args, usage.Formatters, allow)
+		}
 		// Fallback bodies compile through the ordinary child-emission path, so
 		// build-wide formatter/feature discovery must descend into them too.
 		for _, child := range node.Children {
+			collectUsage(child, usage, allow)
+		}
+	case *parser.Template:
+		usage.HasScopedTemplates = true
+		for _, child := range node.Body {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Portal:
