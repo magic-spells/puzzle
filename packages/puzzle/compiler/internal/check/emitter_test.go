@@ -72,7 +72,7 @@ func TestGenerateWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root)
+	result, err := Generate(root, 7)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,27 +126,52 @@ func TestGenerateWorkspace(t *testing.T) {
 	}
 }
 
-func TestTsconfigForgivingDefaults(t *testing.T) {
-	data, err := tsconfig(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
+func TestTsconfigVersionedDefaults(t *testing.T) {
+	cases := []struct {
+		name             string
+		major            int
+		baseURL          any
+		moduleResolution any
+		aliasTarget      string
+	}{
+		{"typescript-4", 4, "../..", "node", "app/*"},
+		{"typescript-7", 7, nil, nil, "../../app/*"},
 	}
-	var config map[string]any
-	if err := json.Unmarshal(data, &config); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := config["extends"]; ok {
-		t.Fatal("config without app tsconfig must not extend one")
-	}
-	opts := config["compilerOptions"].(map[string]any)
-	if got := opts["noImplicitAny"]; got != false {
-		t.Errorf("noImplicitAny = %v, want false", got)
-	}
-	if got := opts["allowJs"]; got != true {
-		t.Errorf("allowJs = %v, want true", got)
-	}
-	if got := opts["checkJs"]; got != false {
-		t.Errorf("checkJs = %v, want false", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := tsconfig(t.TempDir(), tc.major)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var config map[string]any
+			if err := json.Unmarshal(data, &config); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := config["extends"]; ok {
+				t.Fatal("config without app tsconfig must not extend one")
+			}
+			opts := config["compilerOptions"].(map[string]any)
+			if got := opts["noImplicitAny"]; got != false {
+				t.Errorf("noImplicitAny = %v, want false", got)
+			}
+			if got := opts["allowJs"]; got != true {
+				t.Errorf("allowJs = %v, want true", got)
+			}
+			if got := opts["checkJs"]; got != false {
+				t.Errorf("checkJs = %v, want false", got)
+			}
+			if got, ok := opts["baseUrl"]; !ok || got != tc.baseURL {
+				t.Errorf("baseUrl = %v (present %v), want %v", got, ok, tc.baseURL)
+			}
+			if got, ok := opts["moduleResolution"]; !ok || got != tc.moduleResolution {
+				t.Errorf("moduleResolution = %v (present %v), want %v", got, ok, tc.moduleResolution)
+			}
+			paths := opts["paths"].(map[string]any)
+			alias := paths["@/*"].([]any)
+			if len(alias) != 1 || alias[0] != tc.aliasTarget {
+				t.Errorf("@/* paths = %v, want [%s]", alias, tc.aliasTarget)
+			}
+		})
 	}
 }
 
@@ -239,7 +264,7 @@ export default class Home extends PuzzleView {}
 	if err := os.WriteFile(filepath.Join(views, "Broken.pzl"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root)
+	result, err := Generate(root, 7)
 	if err != nil {
 		t.Fatal(err)
 	}

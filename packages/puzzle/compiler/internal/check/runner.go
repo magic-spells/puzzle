@@ -35,19 +35,17 @@ func Run(appRoot string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	result, err := Generate(root)
+	typescriptMajor, err := readTypeScriptMajor(tsc)
+	if err != nil {
+		return 0, err
+	}
+	result, err := Generate(root, typescriptMajor)
 	if err != nil {
 		return 0, err
 	}
 
 	args := []string{"--noEmit", "--pretty", "false", "-p", filepath.Join(".puzzle", "check")}
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmdArgs := append([]string{"/d", "/s", "/c", tsc}, args...)
-		cmd = exec.Command("cmd.exe", cmdArgs...)
-	} else {
-		cmd = exec.Command(tsc, args...)
-	}
+	cmd := tscCommand(tsc, args...)
 	cmd.Dir = root
 	output, runErr := cmd.CombinedOutput()
 	if runErr == nil {
@@ -73,6 +71,26 @@ func Run(appRoot string) (int, error) {
 		return result.Files, fmt.Errorf("TypeScript exited with status %d", exitErr.ExitCode())
 	}
 	return result.Files, errors.New(formatted)
+}
+
+func readTypeScriptMajor(tsc string) (int, error) {
+	output, err := tscCommand(tsc, "--version").CombinedOutput()
+	if err != nil {
+		return 0, fmt.Errorf("read TypeScript version: %w", err)
+	}
+	var major int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "Version %d.", &major); err != nil || major < 1 {
+		return 0, fmt.Errorf("read TypeScript version: unexpected output %q", strings.TrimSpace(string(output)))
+	}
+	return major, nil
+}
+
+func tscCommand(tsc string, args ...string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		cmdArgs := append([]string{"/d", "/s", "/c", tsc}, args...)
+		return exec.Command("cmd.exe", cmdArgs...)
+	}
+	return exec.Command(tsc, args...)
 }
 
 func emitDiagnosticsError(result *Result) error {

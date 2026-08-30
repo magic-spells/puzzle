@@ -275,6 +275,9 @@ func TestAppTsconfigVariantsDoNotBreakTheCheck(t *testing.T) {
 		// A sparse config leaves target/moduleResolution at their ancient
 		// defaults, which reports errors inside the framework's own .d.ts files.
 		{"sparse", `{"compilerOptions":{"strict":true}}`},
+		// TypeScript 7 rejects all three legacy settings. The generated config
+		// must replace inherited paths as well as clearing baseUrl and node10.
+		{"legacy-resolution", `{"compilerOptions":{"baseUrl":".","module":"CommonJS","moduleResolution":"node","paths":{"@/*":["app/*"],"legacy/*":["app/*"]},"strict":true}}`},
 	}
 	clean := `<puzzle-view><p>{ value }</p></puzzle-view>
 <script lang="ts">
@@ -288,6 +291,13 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { items = [1, 2]; }
 </script>
 `
+	aliasImport := `<puzzle-view><p>{ value }</p></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+import { value } from '@/models/value';
+export default class Home extends PuzzleView { value = value; }
+</script>
+`
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -295,6 +305,15 @@ export default class Home extends PuzzleView { items = [1, 2]; }
 			view := clean
 			if tc.name == "noUnused" {
 				view = unusedLoopBinding
+			} else if tc.name == "legacy-resolution" {
+				view = aliasImport
+				models := filepath.Join(root, "app", "models")
+				if err := os.MkdirAll(models, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(models, "value.ts"), []byte("export const value = 1;\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
 			writeLiveView(t, root, view)
 			if tc.name == "files" {

@@ -89,7 +89,7 @@ func sourceDir(root string) (string, error) {
 }
 
 // Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/.
-func Generate(appRoot string) (*Result, error) {
+func Generate(appRoot string, typescriptMajor int) (*Result, error) {
 	root, err := filepath.Abs(appRoot)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func Generate(appRoot string) (*Result, error) {
 	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shim), 0o644); err != nil {
 		return nil, err
 	}
-	config, err := tsconfig(root)
+	config, err := tsconfig(root, typescriptMajor)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func Generate(appRoot string) (*Result, error) {
 	return result, nil
 }
 
-func tsconfig(appRoot string) ([]byte, error) {
+func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 	_, err := os.Stat(filepath.Join(appRoot, "tsconfig.json"))
 	hasAppConfig := err == nil
 	if err != nil && !os.IsNotExist(err) {
@@ -216,16 +216,29 @@ func tsconfig(appRoot string) ([]byte, error) {
 		// workspace and tsc would fail with "No inputs were found".
 		"exclude": []string{},
 	}
+	opts := config["compilerOptions"].(map[string]any)
+	if typescriptMajor >= 7 {
+		// JSON null deliberately clears either setting inherited from the app.
+		// TypeScript 7 removed baseUrl and node10/node module resolution. Paths is
+		// replaced too because targets inherited from a baseUrl config may be
+		// non-relative, which is illegal once baseUrl is cleared.
+		opts["baseUrl"] = nil
+		opts["moduleResolution"] = nil
+		opts["paths"] = map[string]any{"@/*": []string{"../../app/*"}}
+	} else {
+		// Before TypeScript 7, module: ESNext defaults to classic resolution. Keep
+		// the proven node/baseUrl pair so package imports and the @ alias resolve
+		// under the oldest supported compiler (4.9).
+		opts["baseUrl"] = "../.."
+		opts["moduleResolution"] = "node"
+		opts["paths"] = map[string]any{"@/*": []string{"app/*"}}
+	}
 	if hasAppConfig {
 		config["extends"] = "../../tsconfig.json"
 	} else {
-		opts := config["compilerOptions"].(map[string]any)
 		opts["target"] = "ES2020"
 		opts["module"] = "ESNext"
-		opts["moduleResolution"] = "node"
-		opts["baseUrl"] = "../.."
 		opts["noImplicitAny"] = false
-		opts["paths"] = map[string]any{"@/*": []string{"app/*"}}
 	}
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
