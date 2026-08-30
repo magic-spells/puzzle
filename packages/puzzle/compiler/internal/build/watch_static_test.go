@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -484,6 +485,12 @@ func TestStaticWatchRecomposeStylesRendersNoRoutes(t *testing.T) {
 // the NEXT save's routes and hard-link this save's stale pages back in as
 // "last-good", serving them for the rest of the session.
 func TestStaticWatchFailedSwapKeepsChangesPending(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a read-only directory mode does not block the swap's renames on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: directory permissions don't prevent the swap")
+	}
 	requireStaticRuntime(t)
 	root := writeSSGFixture(t, staticEquivalenceFixture())
 	dist := filepath.Join(root, "dist")

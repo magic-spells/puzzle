@@ -1,5 +1,9 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Auto detect text files, normalize to LF in the repo, and check them out as LF
+# on EVERY platform. `text=auto` alone only fixes the stored bytes; the working
+# tree follows core.eol, which is `native` — so a Windows checkout got CRLF and
+# the compiler's golden fixtures stopped matching the LF codegen emits. The
+# .pzl and vitest fixtures are compared byte-for-byte the same way.
+* text=auto eol=lf
 
 # Highlight .pzl as HTML on github.com (blobs + PR diffs) — repo-wide, the
 # pieces registry and demos are .pzl too. Real first-class highlighting needs

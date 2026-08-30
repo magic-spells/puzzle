@@ -169,6 +169,25 @@ func TestStaticEntrySourceFull(t *testing.T) {
 	}
 }
 
+// absFixtureRoot spells the app root as a path that is genuinely absolute on the
+// HOST. absModuleImport branches on filepath.IsAbs, and on Windows a leading
+// separator is only "rooted" — absolute means it carries a volume — so a POSIX
+// literal takes the relative branch there and gets joined onto the root a second
+// time. The tests below reach that branch (the capture tier re-imports an
+// already-absolute app.js path); every other test in this file only joins
+// relative module stamps, which is platform-independent, and keeps the literal.
+func absFixtureRoot(t *testing.T) string {
+	t.Helper()
+	abs, err := filepath.Abs(filepath.FromSlash("/abs/app-root"))
+	if err != nil {
+		t.Fatalf("resolving the fixture app root: %v", err)
+	}
+	if !filepath.IsAbs(abs) {
+		t.Fatalf("fixture app root %q is not absolute on this platform", abs)
+	}
+	return filepath.ToSlash(abs)
+}
+
 // TestStaticEntrySourceAdapterTiers pins the three ways a page entry can reach
 // the SAME capability value the prerender installed. The failure this guards is
 // silent: an entry that binds a different adapter than the render used produces
@@ -176,9 +195,10 @@ func TestStaticEntrySourceFull(t *testing.T) {
 // markup shipped with them.
 func TestStaticEntrySourceAdapterTiers(t *testing.T) {
 	yes, no := true, false
+	root := absFixtureRoot(t)
 	bare := `import { adapter } from '@magic-spells/puzzle/adapter';`
-	conventional := `import adapter from "/abs/app-root/app/adapter.js";`
-	capture := `import __pzlApp from "/abs/app-root/app/app.js";`
+	conventional := `import adapter from "` + root + `/app/adapter.js";`
+	capture := `import __pzlApp from "` + root + `/app/app.js";`
 
 	tests := []struct {
 		name       string
@@ -237,7 +257,7 @@ func TestStaticEntrySourceAdapterTiers(t *testing.T) {
 			s := cannedSummary()
 			s.AdapterConfigured = tt.configured
 			s.AdapterModuleMatches = tt.matches
-			src, err := staticEntrySource("/abs/app-root", s.Written[0], s, "", "", tt.module)
+			src, err := staticEntrySource(root, s.Written[0], s, "", "", tt.module)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -412,13 +432,19 @@ func TestStaticEntrySourceMountFailureSurvivesConsoleStripping(t *testing.T) {
 // arrives here as the module stamp. Joining it onto absRoot would emit an import
 // of <absRoot>/Users/… and fail the per-page bundle with "Could not resolve".
 func TestAbsModuleImportKeepsAbsolutePaths(t *testing.T) {
-	root := filepath.FromSlash("/abs/app-root")
-	abs := filepath.ToSlash(filepath.Join(string(filepath.Separator), "elsewhere", "pkg", "Docs.pzl"))
+	root := absFixtureRoot(t)
+	// A real absolute path for the host, for the same reason absFixtureRoot
+	// exists: on Windows "\elsewhere\…" is rooted but not absolute.
+	elsewhere, err := filepath.Abs(filepath.FromSlash("/elsewhere/pkg/Docs.pzl"))
+	if err != nil {
+		t.Fatalf("resolving the out-of-root module path: %v", err)
+	}
+	abs := filepath.ToSlash(elsewhere)
 	if got := absModuleImport(root, abs); got != abs {
 		t.Errorf("absModuleImport(%q, %q) = %q, want the path unchanged", root, abs, got)
 	}
 	// Relative stamps still join onto the app root.
-	if got, want := absModuleImport(root, "app/views/Home.pzl"), "/abs/app-root/app/views/Home.pzl"; got != want {
+	if got, want := absModuleImport(root, "app/views/Home.pzl"), root+"/app/views/Home.pzl"; got != want {
 		t.Errorf("absModuleImport(%q, %q) = %q, want %q", root, "app/views/Home.pzl", got, want)
 	}
 }

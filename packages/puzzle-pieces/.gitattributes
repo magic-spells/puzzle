@@ -1,2 +1,4 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Auto detect text files, normalize to LF in the repo, and check them out as LF
+# on every platform. A bare `* text=auto` here would shadow the root rule for
+# this subtree and hand a Windows checkout CRLF again.
+* text=auto eol=lf
