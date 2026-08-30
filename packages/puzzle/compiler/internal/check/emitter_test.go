@@ -1,0 +1,187 @@
+package check
+
+import (
+	"bytes"
+	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+var update = flag.Bool("update", false, "regenerate golden files")
+
+func TestGoldens(t *testing.T) {
+	inputs, err := filepath.Glob("testdata/*.pzl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inputs) == 0 {
+		t.Fatal("no testdata/*.pzl golden inputs found")
+	}
+	for _, input := range inputs {
+		input := input
+		name := strings.TrimSuffix(filepath.Base(input), ".pzl")
+		t.Run(name, func(t *testing.T) {
+			source, err := os.ReadFile(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sourcePath := "app/views/" + name + ".pzl"
+			if strings.HasPrefix(name, "component_") {
+				sourcePath = "app/components/" + strings.TrimPrefix(name, "component_") + ".pzl"
+			}
+			files, err := emitFiles(source, sourcePath, ".puzzle/check/src/"+name+".pzl", "testdata/assets")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, file := range files {
+				ext := filepath.Ext(file.GeneratedPath)
+				golden := "testdata/" + name + ".golden" + ext
+				if *update {
+					if err := os.WriteFile(golden, file.Contents, 0o644); err != nil {
+						t.Fatal(err)
+					}
+					continue
+				}
+				want, err := os.ReadFile(golden)
+				if err != nil {
+					t.Fatalf("read golden (run -update?): %v", err)
+				}
+				if string(file.Contents) != string(want) {
+					t.Fatalf("golden mismatch for %s%s\nwant:\n%s\ngot:\n%s", name, ext, want, file.Contents)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateWorkspace(t *testing.T) {
+	root := t.TempDir()
+	view := filepath.Join(root, "app", "nested", "Home.pzl")
+	if err := os.MkdirAll(filepath.Dir(view), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := `<puzzle-view><div>{ title }</div></puzzle-view>
+<script>export default class Home extends Object {}</script>
+`
+	if err := os.WriteFile(view, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Generate(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Tables) != 2 {
+		t.Fatalf("plain-JS component generated %d segment tables, want 2", len(result.Tables))
+	}
+	for _, path := range []string{
+		filepath.Join(result.Dir, "src", "nested", "Home.pzl.script.js"),
+		filepath.Join(result.Dir, "src", "nested", "Home.pzl.script.js.segments.json"),
+		filepath.Join(result.Dir, "src", "nested", "Home.pzl.ts"),
+		filepath.Join(result.Dir, "src", "nested", "Home.pzl.ts.segments.json"),
+		filepath.Join(result.Dir, "puzzle-check.d.ts"),
+		filepath.Join(result.Dir, "tsconfig.json"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("missing generated file %s: %v", path, err)
+		}
+	}
+	configBytes, err := os.ReadFile(filepath.Join(result.Dir, "tsconfig.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(configBytes, &config); err != nil {
+		t.Fatal(err)
+	}
+	if got := config["extends"]; got != "../../tsconfig.json" {
+		t.Errorf("extends = %v, want ../../tsconfig.json", got)
+	}
+	if got := config["include"].([]any)[0]; got != "src/**/*" {
+		t.Errorf("first include = %v, want src/**/* so both .js and .ts virtual files are included", got)
+	}
+	shimBytes, err := os.ReadFile(filepath.Join(result.Dir, "puzzle-check.d.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"puzzle-env", "const Children", "const Slot", "const Portal"} {
+		if !strings.Contains(string(shimBytes), want) {
+			t.Errorf("shim missing %q", want)
+		}
+	}
+}
+
+func TestTsconfigForgivingDefaults(t *testing.T) {
+	data, err := tsconfig(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := config["extends"]; ok {
+		t.Fatal("config without app tsconfig must not extend one")
+	}
+	opts := config["compilerOptions"].(map[string]any)
+	if got := opts["noImplicitAny"]; got != false {
+		t.Errorf("noImplicitAny = %v, want false", got)
+	}
+	if got := opts["allowJs"]; got != true {
+		t.Errorf("allowJs = %v, want true", got)
+	}
+	if got := opts["checkJs"]; got != false {
+		t.Errorf("checkJs = %v, want false", got)
+	}
+}
+
+func TestEmitJSMirrorPreservesScriptBytes(t *testing.T) {
+	script := "\r\nimport { PuzzleView } from '@magic-spells/puzzle';\r\nexport default class CRLF extends PuzzleView {}\r\n"
+	source := []byte("<puzzle-view><div>{ title }</div></puzzle-view>\r\n<script>" + script + "</script>\r\n")
+	files, err := emitFiles(source, "app/components/CRLF.pzl", ".puzzle/check/src/components/CRLF.pzl", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mirror := virtualFileWithExtension(t, files, ".js")
+	if !bytes.Equal(mirror.Contents, []byte(script)) {
+		t.Fatalf("JS mirror is not the byte-identical script body\nwant: %q\ngot:  %q", script, mirror.Contents)
+	}
+	wrapper := virtualFileWithExtension(t, files, ".ts")
+	if bytes.Contains(wrapper.Contents, []byte("export default class CRLF")) {
+		t.Fatal("checked template wrapper must not contain the JavaScript script body")
+	}
+	if !bytes.HasPrefix(wrapper.Contents, []byte("import __PuzzleCheckViewClass from \"./CRLF.pzl.script.js\";\n")) {
+		t.Fatalf("wrapper import does not point to its JS mirror: %q", wrapper.Contents)
+	}
+}
+
+func TestEmitPreservesTypeScriptBytes(t *testing.T) {
+	script := "\r\nimport { PuzzleView } from '@magic-spells/puzzle';\r\nexport default class CRLF extends PuzzleView {}\r\n"
+	source := []byte("<puzzle-view><div>{ title }</div></puzzle-view>\r\n<script lang=\"ts\">" + script + "</script>\r\n")
+	files, err := emitFiles(source, "app/components/CRLF.pzl", ".puzzle/check/src/components/CRLF.pzl", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("TypeScript component emitted %d files, want 1", len(files))
+	}
+	if !bytes.HasPrefix(files[0].Contents, []byte(script)) {
+		t.Fatalf("virtual file does not begin with the byte-identical script body\nwant prefix: %q\ngot: %q", script, files[0].Contents[:len(script)])
+	}
+}
+
+func virtualFileWithExtension(t *testing.T, files []virtualFile, ext string) virtualFile {
+	t.Helper()
+	for _, file := range files {
+		if filepath.Ext(file.GeneratedPath) == ext {
+			return file
+		}
+	}
+	t.Fatalf("virtual file with extension %s not found", ext)
+	return virtualFile{}
+}

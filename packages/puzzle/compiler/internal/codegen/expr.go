@@ -132,6 +132,21 @@ func resolveExpr(expr string, scope map[string]bool) string {
 	return out
 }
 
+// ResolveCheckExpr exposes the render compiler's expression scoping to the
+// puzzle-check emitter. Keeping this as a narrow internal-package seam avoids a
+// second JavaScript scanner drifting from the one that drives runtime codegen.
+func ResolveCheckExpr(expr string, scope map[string]bool) string {
+	return resolveExpr(expr, scope)
+}
+
+// ResolveCheckEvent exposes the event-value compiler to puzzle check for the
+// same reason as ResolveCheckExpr. The returned expression is never executed;
+// TypeScript only uses it to validate the referenced handler and arguments.
+func ResolveCheckEvent(expr string, scope map[string]bool) (string, error) {
+	out, _, err := compileEventValue(expr, scope)
+	return out, err
+}
+
 // resolveExprTrackingScope resolves expr exactly like resolveExpr and also
 // reports whether it references an identifier from trackedScope. Keeping the
 // reference check inside the resolver makes it follow the same lexical rules:
