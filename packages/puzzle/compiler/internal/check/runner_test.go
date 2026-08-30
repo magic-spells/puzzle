@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -36,7 +37,7 @@ export default class Home extends PuzzleView {
 	tables := map[string]*SegmentTable{
 		filepath.Join(root, filepath.FromSlash(generatedPath)): virtual.Table,
 	}
-	input := filepath.ToSlash(generatedPath) + "(" + itoa(line) + "," + itoa(column) + "): error TS2339: Property 'toUpperCase' does not exist on type 'number'.\n" +
+	input := filepath.ToSlash(generatedPath) + "(" + strconv.Itoa(line) + "," + strconv.Itoa(column) + "): error TS2339: Property 'toUpperCase' does not exist on type 'number'.\n" +
 		"app/models/user.ts(4,2): error TS2322: Type 'number' is not assignable to type 'string'.\n"
 	got := remapTSCOutput(root, input, tables)
 	want := "app/views/Home.pzl:2:20: Property 'toUpperCase' does not exist on type 'number'.\n" +
@@ -71,7 +72,7 @@ export default class Home extends Object {
 	tables := map[string]*SegmentTable{
 		filepath.Join(root, filepath.FromSlash(mirror.GeneratedPath)): mirror.Table,
 	}
-	input := mirror.GeneratedPath + "(" + itoa(line) + "," + itoa(column) + "): error TS2339: fabricated JS diagnostic\n"
+	input := mirror.GeneratedPath + "(" + strconv.Itoa(line) + "," + strconv.Itoa(column) + "): error TS2339: fabricated JS diagnostic\n"
 	got := remapTSCOutput(root, input, tables)
 	want := "app/views/Home.pzl:6:18: fabricated JS diagnostic\n"
 	if got != want {
@@ -80,12 +81,23 @@ export default class Home extends Object {
 }
 
 func TestMissingTSCMessage(t *testing.T) {
-	err := Run(t.TempDir())
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected missing TypeScript error")
 	}
 	if got := err.Error(); got != missingTypeScriptMessage {
 		t.Fatalf("error = %q, want %q", got, missingTypeScriptMessage)
+	}
+}
+
+func TestOutsideProjectMessage(t *testing.T) {
+	_, err := Run(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "no app/ directory") {
+		t.Fatalf("error = %v, want the not-a-Puzzle-project message", err)
 	}
 }
 
@@ -105,7 +117,7 @@ export default class Home extends PuzzleView { value = 123; }
 		t.Fatal(err)
 	}
 
-	err := Run(root)
+	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected template type error")
 	}
@@ -119,7 +131,7 @@ func TestPlainJSScriptUncheckedByDefault(t *testing.T) {
 	root := liveTSCApp(t)
 	writeLiveView(t, root, plainJSComponent("value.toFixed(0)"))
 
-	if err := Run(root); err != nil {
+	if _, err := Run(root); err != nil {
 		t.Fatalf("type-suspicious legal JavaScript must remain unchecked by default: %v", err)
 	}
 }
@@ -128,7 +140,7 @@ func TestPlainJSTemplateErrorsAreReported(t *testing.T) {
 	root := liveTSCApp(t)
 	writeLiveView(t, root, plainJSComponent("value.toUpperCase()"))
 
-	err := Run(root)
+	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected checked template expression to fail")
 	}
@@ -197,16 +209,105 @@ export default class Home extends PuzzleView {
 `
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
+// tsc prints an absolute path whenever the file is not under the cwd it was
+// invoked with; the remapper must recognize it the same as the relative form.
+func TestRemapTSCOutputAbsolutePath(t *testing.T) {
+	root := t.TempDir()
+	source := []byte("<puzzle-view><p>{ a }</p></puzzle-view>\n<script lang=\"ts\">\n" +
+		"import { PuzzleView } from '@magic-spells/puzzle';\n" +
+		"export default class Home extends PuzzleView {}\n" +
+		"const x = broken;\n</script>\n")
+	generatedBase := ".puzzle/check/src/views/Home.pzl"
+	files, err := emitFiles(source, "app/views/Home.pzl", generatedBase, "")
+	if err != nil {
+		t.Fatal(err)
 	}
-	var digits [20]byte
-	i := len(digits)
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
+	v := files[0]
+	v.Table.generatedBytes = v.Contents
+	v.Table.sourceBytes = source
+	abs := filepath.Join(root, filepath.FromSlash(generatedBase+".ts"))
+	tables := map[string]*SegmentTable{filepath.Clean(abs): v.Table}
+
+	line, column := utf16LineColumn(v.Contents, strings.Index(string(v.Contents), "broken"))
+	in := abs + "(" + strconv.Itoa(line) + "," + strconv.Itoa(column) + "): error TS2304: Cannot find name 'broken'.\n"
+	got := remapTSCOutput(root, in, tables)
+	want := "app/views/Home.pzl:5:11: Cannot find name 'broken'.\n"
+	if got != want {
+		t.Fatalf("absolute-path diagnostic not remapped\nwant: %q\ngot:  %q", want, got)
 	}
-	return string(digits[i:])
+}
+
+// A Windows path carries a drive-letter colon inside the file field; the
+// diagnostic pattern must still split it correctly (WS1 runs this suite there).
+func TestWindowsDriveLetterDiagnosticParses(t *testing.T) {
+	line := `C:\proj\.puzzle\check\src\views\Home.pzl.ts(3,11): error TS2304: Cannot find name 'broken'.`
+	m := tscDiagnosticRE.FindStringSubmatch(line)
+	if m == nil {
+		t.Fatal("Windows drive-letter diagnostic did not parse")
+	}
+	if m[1] != `C:\proj\.puzzle\check\src\views\Home.pzl.ts` || m[2] != "3" || m[3] != "11" {
+		t.Fatalf("path/line/col = %q %q %q", m[1], m[2], m[3])
+	}
+	if m[4] != "Cannot find name 'broken'." {
+		t.Fatalf("message = %q", m[4])
+	}
+}
+
+// The generated tsconfig extends the app's, so any option the app sets reaches
+// the check. Each case here made a clean app report failures before the
+// generated config started pinning the option down.
+func TestAppTsconfigVariantsDoNotBreakTheCheck(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  string
+	}{
+		// ".puzzle" in the app's exclude list is rewritten relative to the
+		// generated config and would exclude the whole virtual workspace.
+		{"exclude-puzzle", `{"compilerOptions":{"strict":true},"exclude":[".puzzle","node_modules"]}`},
+		{"composite", `{"compilerOptions":{"composite":true,"strict":true}}`},
+		// An app rootDir puts every emitted file outside it (TS6059).
+		{"rootDir", `{"compilerOptions":{"rootDir":"app","strict":true}}`},
+		{"files", `{"files":["app/other.ts"],"compilerOptions":{"strict":true}}`},
+		// Synthetic loop bindings are not authored code.
+		{"noUnused", `{"compilerOptions":{"noUnusedLocals":true,"noUnusedParameters":true,"strict":true}}`},
+		{"include-only-app", `{"include":["app"],"compilerOptions":{"strict":true}}`},
+		{"outDir-dist", `{"compilerOptions":{"outDir":"dist","noEmit":false,"strict":true}}`},
+		// A sparse config leaves target/moduleResolution at their ancient
+		// defaults, which reports errors inside the framework's own .d.ts files.
+		{"sparse", `{"compilerOptions":{"strict":true}}`},
+	}
+	clean := `<puzzle-view><p>{ value }</p></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView { value = 1; }
+</script>
+`
+	unusedLoopBinding := `<puzzle-view>{#for item in items}<p>ok</p>{/for}</puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView { items = [1, 2]; }
+</script>
+`
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			root := liveTSCApp(t)
+			view := clean
+			if tc.name == "noUnused" {
+				view = unusedLoopBinding
+			}
+			writeLiveView(t, root, view)
+			if tc.name == "files" {
+				if err := os.WriteFile(filepath.Join(root, "app", "other.ts"), []byte("export const other = 1;\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(tc.cfg), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Run(root); err != nil {
+				t.Errorf("a clean app failed under the %s tsconfig:\n%v", tc.name, err)
+			}
+		})
+	}
 }

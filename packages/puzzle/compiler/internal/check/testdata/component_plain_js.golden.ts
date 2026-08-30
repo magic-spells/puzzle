@@ -12,6 +12,8 @@ void function (this: InstanceType<typeof __PuzzleCheckViewClass> & Record<string
   void (__d.draft);
   const __puzzle_check_event_0: ((event: any) => any) | null = (event) => this.events.update(event);
   void __puzzle_check_event_0;
+  const __puzzle_check_event_1: ((event: any) => any) | null = this.events.reset;
+  void __puzzle_check_event_1;
 
   // <puzzle-skeleton>
   void __d.loadingLabel;

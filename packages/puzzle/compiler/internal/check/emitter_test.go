@@ -102,8 +102,18 @@ func TestGenerateWorkspace(t *testing.T) {
 	if got := config["extends"]; got != "../../tsconfig.json" {
 		t.Errorf("extends = %v, want ../../tsconfig.json", got)
 	}
-	if got := config["include"].([]any)[0]; got != "src/**/*" {
-		t.Errorf("first include = %v, want src/**/* so both .js and .ts virtual files are included", got)
+	include := config["include"].([]any)
+	for _, want := range []string{"src/**/*.ts", "src/**/*.js"} {
+		found := false
+		for _, got := range include {
+			found = found || got == want
+		}
+		if !found {
+			t.Errorf("include %v is missing %s — both virtual file kinds must reach the program", include, want)
+		}
+	}
+	if config["exclude"] == nil {
+		t.Error("exclude must be set to [] so the app's own exclude list cannot drop the virtual workspace")
 	}
 	shimBytes, err := os.ReadFile(filepath.Join(result.Dir, "puzzle-check.d.ts"))
 	if err != nil {
@@ -184,4 +194,62 @@ func virtualFileWithExtension(t *testing.T, files []virtualFile, ext string) vir
 	}
 	t.Fatalf("virtual file with extension %s not found", ext)
 	return virtualFile{}
+}
+
+// The <puzzle-view> tag's own attributes are bindings like any other element's;
+// they were silently skipped while only root.Children was walked.
+func TestRootAttributeExpressionsAreChecked(t *testing.T) {
+	source := []byte(`<puzzle-view class={ rootClass } title="Hi { rootName | upper }">
+  <p>{ body }</p>
+</puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`)
+	files, err := emitFiles(source, "app/views/Home.pzl", ".puzzle/check/src/views/Home.pzl", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(files[0].Contents)
+	for _, want := range []string{"__d.rootClass", "__d.rootName", "__d.body"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("generated wrapper is missing %s:\n%s", want, got)
+		}
+	}
+}
+
+// One .pzl the compiler cannot parse must not hide every type error in the rest
+// of the app: it is reported as a positioned diagnostic and the walk continues.
+func TestUnparsableFileIsReportedAndTheRestStillEmit(t *testing.T) {
+	root := t.TempDir()
+	views := filepath.Join(root, "app", "views")
+	if err := os.MkdirAll(views, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	good := `<puzzle-view><p>{ title }</p></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`
+	if err := os.WriteFile(filepath.Join(views, "Home.pzl"), []byte(good), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(views, "Broken.pzl"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Generate(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Diagnostics) != 1 || !strings.Contains(result.Diagnostics[0], "Broken.pzl") {
+		t.Fatalf("diagnostics = %v, want one positioned error for Broken.pzl", result.Diagnostics)
+	}
+	if result.Files != 2 {
+		t.Errorf("Files = %d, want 2", result.Files)
+	}
+	if _, err := os.Stat(filepath.Join(result.Dir, "src", "views", "Home.pzl.ts")); err != nil {
+		t.Errorf("the parsable view was not emitted: %v", err)
+	}
 }

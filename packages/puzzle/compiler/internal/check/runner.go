@@ -17,20 +17,27 @@ const missingTypeScriptMessage = "puzzle check needs TypeScript: npm install -D 
 var tscDiagnosticRE = regexp.MustCompile(`^(.+)\(([0-9]+),([0-9]+)\): error TS[0-9]+: (.*)$`)
 
 // Run regenerates the virtual workspace and invokes the app-local TypeScript
-// compiler. A TypeScript diagnostic failure is returned as already-formatted
-// text so the CLI's ordinary error path prints it once and exits non-zero.
-func Run(appRoot string) error {
+// compiler, returning the number of .pzl files checked. A TypeScript diagnostic
+// failure is returned as already-formatted text so the CLI's ordinary error path
+// prints it once and exits non-zero.
+func Run(appRoot string) (int, error) {
 	root, err := filepath.Abs(appRoot)
 	if err != nil {
-		return err
+		return 0, err
+	}
+	// "You are not in a Puzzle project" is checked before "TypeScript is not
+	// installed": a wrong working directory would otherwise be reported as a
+	// missing dependency.
+	if _, err := sourceDir(root); err != nil {
+		return 0, err
 	}
 	tsc, err := resolveTSC(root)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	result, err := Generate(root)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	args := []string{"--noEmit", "--pretty", "false", "-p", filepath.Join(".puzzle", "check")}
@@ -44,22 +51,35 @@ func Run(appRoot string) error {
 	cmd.Dir = root
 	output, runErr := cmd.CombinedOutput()
 	if runErr == nil {
-		return nil
+		return result.Files, emitDiagnosticsError(result)
 	}
 	var exitErr *exec.ExitError
 	if !errors.As(runErr, &exitErr) {
-		return fmt.Errorf("run TypeScript: %w", runErr)
+		return result.Files, fmt.Errorf("run TypeScript: %w", runErr)
 	}
 
 	tables, err := LoadSegmentTables(root, result.Dir)
 	if err != nil {
-		return err
+		return result.Files, err
 	}
-	formatted := remapTSCOutput(root, string(output), tables)
+	formatted := strings.TrimSuffix(remapTSCOutput(root, string(output), tables), "\n")
+	// A .pzl that failed to compile is reported alongside the type errors: it is
+	// a real failure of this run, and it is the reason the file is absent from
+	// everything tsc just checked.
+	if len(result.Diagnostics) > 0 {
+		formatted = strings.TrimSuffix(strings.Join(result.Diagnostics, "\n")+"\n"+formatted, "\n")
+	}
 	if strings.TrimSpace(formatted) == "" {
-		return fmt.Errorf("TypeScript exited with status %d", exitErr.ExitCode())
+		return result.Files, fmt.Errorf("TypeScript exited with status %d", exitErr.ExitCode())
 	}
-	return errors.New(strings.TrimSuffix(formatted, "\n"))
+	return result.Files, errors.New(formatted)
+}
+
+func emitDiagnosticsError(result *Result) error {
+	if len(result.Diagnostics) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(result.Diagnostics, "\n"))
 }
 
 func resolveTSC(appRoot string) (string, error) {

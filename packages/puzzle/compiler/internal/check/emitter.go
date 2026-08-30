@@ -26,9 +26,17 @@ declare global {
   const Slot: unique symbol;
   const Portal: unique symbol;
 
-  function __puzzle_check_each<T>(
-    values: readonly T[],
-    visit: (value: T, index: number) => void,
+  // The collection type is captured whole and destructured with a conditional
+  // so that an untyped collection yields an ANY item, not an UNKNOWN one:
+  // inferring T from a plain <T>(values: readonly T[]) parameter given an any
+  // collection produces unknown, which would turn every read of a loop variable
+  // over a data() value into a false positive until M2 types the data() merge.
+  function __puzzle_check_each<C>(
+    values: C,
+    visit: (
+      value: C extends readonly (infer T)[] ? T : any,
+      index: number,
+    ) => void,
   ): void;
 
   function __puzzle_check_range(
@@ -53,6 +61,14 @@ export {};
 type Result struct {
 	Dir    string
 	Tables []*SegmentTable
+	// Diagnostics are the already-positioned compile errors of .pzl files that
+	// could not be emitted at all. They are collected rather than returned so one
+	// unparsable file does not hide every type error in the rest of the app —
+	// nothing links the virtual files to each other, so the remaining ones still
+	// check correctly on their own.
+	Diagnostics []string
+	// Files is how many .pzl files the walk found, emitted or not.
+	Files int
 }
 
 type virtualFile struct {
@@ -61,13 +77,27 @@ type virtualFile struct {
 	Table         *SegmentTable
 }
 
+// sourceDir returns the app/ directory to walk, with the error a user gets for
+// running the command outside a Puzzle project rather than a bare stat failure.
+func sourceDir(root string) (string, error) {
+	dir := filepath.Join(root, "app")
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("no app/ directory in %s — run puzzle check from a Puzzle project root", root)
+	}
+	return dir, nil
+}
+
 // Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/.
 func Generate(appRoot string) (*Result, error) {
 	root, err := filepath.Abs(appRoot)
 	if err != nil {
 		return nil, err
 	}
-	appDir := filepath.Join(root, "app")
+	appDir, err := sourceDir(root)
+	if err != nil {
+		return nil, err
+	}
 	checkDir := filepath.Join(root, ".puzzle", "check")
 	if err := os.RemoveAll(checkDir); err != nil {
 		return nil, fmt.Errorf("clear %s: %w", checkDir, err)
@@ -91,7 +121,7 @@ func Generate(appRoot string) (*Result, error) {
 	}
 	sort.Strings(files)
 
-	result := &Result{Dir: checkDir}
+	result := &Result{Dir: checkDir, Files: len(files)}
 	for _, sourceFile := range files {
 		rel, err := filepath.Rel(appDir, sourceFile)
 		if err != nil {
@@ -106,7 +136,8 @@ func Generate(appRoot string) (*Result, error) {
 		}
 		virtualFiles, err := emitFiles(source, sourcePath, generatedBase, filepath.Join(appDir, "assets"))
 		if err != nil {
-			return nil, err
+			result.Diagnostics = append(result.Diagnostics, err.Error())
+			continue
 		}
 		for _, virtual := range virtualFiles {
 			virtualPath := filepath.Join(root, filepath.FromSlash(virtual.GeneratedPath))
@@ -149,13 +180,41 @@ func tsconfig(appRoot string) ([]byte, error) {
 			"checkJs":  false,
 			"noEmit":   true,
 			"rootDirs": []string{"../../app", "./src"},
+			// Everything below neutralizes an app tsconfig setting that would
+			// otherwise turn `extends` into garbage diagnostics. Each one is a real
+			// failure observed against tsc, not a precaution:
+			//   rootDir      — an app rootDir of "app" makes every emitted file
+			//                  "not under rootDir" (TS6059) and nothing is checked.
+			//   composite    — a composite project may not disable emit.
+			//   skipLibCheck — the shim pulls in the framework's .d.ts files; an app
+			//                  config without a modern target/moduleResolution
+			//                  reports errors inside them that the user cannot act
+			//                  on and that carry no .pzl position.
+			//   noUnused*    — the wrapper's synthetic bindings (a loop variable an
+			//                  unused body never reads, __d in a template with no
+			//                  expressions) are not authored code; flagging them
+			//                  produces diagnostics with nothing to point at.
+			"rootDir":            "../..",
+			"composite":          false,
+			"skipLibCheck":       true,
+			"noUnusedLocals":     false,
+			"noUnusedParameters": false,
 		},
+		// Extensions are spelled out rather than using src/**/*: an app that turns
+		// on resolveJsonModule would otherwise pull every .segments.json sidecar
+		// into the program as an input file.
 		"include": []string{
-			"src/**/*",
+			"src/**/*.ts",
+			"src/**/*.js",
 			"puzzle-check.d.ts",
 			"../../app/**/*.ts",
 			"../../app/**/*.js",
 		},
+		// `exclude` is inherited through `extends` with its paths rewritten
+		// relative to THIS config, so an app that excludes its own build scratch
+		// dirs (".puzzle" among them) would exclude the entire generated
+		// workspace and tsc would fail with "No inputs were found".
+		"exclude": []string{},
 	}
 	if hasAppConfig {
 		config["extends"] = "../../tsconfig.json"
@@ -166,7 +225,6 @@ func tsconfig(appRoot string) ([]byte, error) {
 		opts["moduleResolution"] = "node"
 		opts["baseUrl"] = "../.."
 		opts["noImplicitAny"] = false
-		opts["skipLibCheck"] = true
 		opts["paths"] = map[string]any{"@/*": []string{"app/*"}}
 	}
 	data, err := json.MarshalIndent(config, "", "  ")
@@ -279,6 +337,11 @@ func emitCheckedFile(
 	b.WriteString("  const __d = this;\n")
 
 	e := &emitter{b: b, source: string(source)}
+	// The <puzzle-view> tag's own attributes are real bindings (they become the
+	// root ViewNode's attributes), so they are checked like any other element's.
+	if err := e.emitAttrs(root.Attrs, map[string]bool{}, 2); err != nil {
+		return virtualFile{}, fmt.Errorf("%s: %w", sourcePath, err)
+	}
 	if err := e.emitNodes(root.Children, map[string]bool{}, 2); err != nil {
 		return virtualFile{}, fmt.Errorf("%s: %w", sourcePath, err)
 	}
@@ -680,6 +743,13 @@ func (e *emitter) forExprs(n *parser.For) ([]sourceExpr, error) {
 	inner, start, _, err := braceInner(e.source, n.Pos.Offset)
 	if err != nil {
 		return nil, err
+	}
+	// Search past the `#for` keyword: a one-letter loop variable or range bound
+	// would otherwise match a letter of the keyword itself and map the expression
+	// to the wrong column.
+	if lead := strings.Index(inner, "#for"); lead >= 0 {
+		skip := lead + len("#for")
+		inner, start = inner[skip:], start+skip
 	}
 	if n.IsRange {
 		return locateSequential(inner, start, []string{n.RangeFrom, n.RangeTo})

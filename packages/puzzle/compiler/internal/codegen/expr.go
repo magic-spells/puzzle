@@ -142,8 +142,18 @@ func ResolveCheckExpr(expr string, scope map[string]bool) string {
 // ResolveCheckEvent exposes the event-value compiler to puzzle check for the
 // same reason as ResolveCheckExpr. The returned expression is never executed;
 // TypeScript only uses it to validate the referenced handler and arguments.
+//
+// The one difference from the runtime form: a BARE handler name compiles to a
+// plain `this.events.name` reference instead of the runtime's
+// `(event) => this.events.name(event)` wrapper. The runtime always passes the
+// DOM event, but a handler is free to declare no parameters — legal JavaScript
+// that a synthesized one-argument call would report as an arity error, at a
+// generated position with no authored bytes to point at. As a reference it is
+// checked for existence and signature compatibility instead, which is what the
+// bare form actually promises. Call forms keep their authored arguments and are
+// still checked as calls.
 func ResolveCheckEvent(expr string, scope map[string]bool) (string, error) {
-	out, _, err := compileEventValue(expr, scope)
+	out, _, err := compileEventValueMode(expr, scope, true)
 	return out, err
 }
 
@@ -531,6 +541,14 @@ func splitEventConditional(expr string) (condition, truthy, falsy string, ok boo
 // handler forms plus the D86 handler-valued conditional whose branches are each
 // a handler form or null. A literal null emits no handler.
 func compileEventValue(expr string, scope map[string]bool) (string, bool, error) {
+	return compileEventValueMode(expr, scope, false)
+}
+
+// compileEventValueMode is compileEventValue with the puzzle-check switch:
+// bareAsReference emits a bare handler name as `this.events.name` rather than
+// wrapping it in a call (see ResolveCheckEvent). Every runtime caller passes
+// false, so the emitted render code is unchanged.
+func compileEventValueMode(expr string, scope map[string]bool, bareAsReference bool) (string, bool, error) {
 	expr = strings.TrimSpace(expr)
 	eventParam := "event"
 	if scope["event"] {
@@ -545,11 +563,11 @@ func compileEventValue(expr string, scope map[string]bool) (string, bool, error)
 		if condition == "" || truthy == "" || falsy == "" {
 			return "", false, fmt.Errorf("event handler must be a bare method name or a single call expression (got %q)", expr)
 		}
-		truthyJS, err := compileEventBranch(truthy, scope, eventParam)
+		truthyJS, err := compileEventBranch(truthy, scope, eventParam, bareAsReference)
 		if err != nil {
 			return "", false, err
 		}
-		falsyJS, err := compileEventBranch(falsy, scope, eventParam)
+		falsyJS, err := compileEventBranch(falsy, scope, eventParam, bareAsReference)
 		if err != nil {
 			return "", false, err
 		}
@@ -557,14 +575,14 @@ func compileEventValue(expr string, scope map[string]bool) (string, bool, error)
 		// null, so the conditional value itself must never be cached.
 		return "(" + resolveExpr(condition, scope) + ") ? " + truthyJS + " : " + falsyJS, false, nil
 	}
-	return compileEventHandler(expr, scope, eventParam)
+	return compileEventHandler(expr, scope, eventParam, bareAsReference)
 }
 
-func compileEventBranch(expr string, scope map[string]bool, eventParam string) (string, error) {
+func compileEventBranch(expr string, scope map[string]bool, eventParam string, bareAsReference bool) (string, error) {
 	if expr == "null" {
 		return "null", nil
 	}
-	out, _, err := compileEventHandler(expr, scope, eventParam)
+	out, _, err := compileEventHandler(expr, scope, eventParam, bareAsReference)
 	return out, err
 }
 
@@ -573,8 +591,11 @@ func compileEventBranch(expr string, scope map[string]bool, eventParam string) (
 // the DOM event in scope unless a loop binding named event already owns that
 // name. Call forms are cacheable only when their arguments directly reference no
 // loop-scope binding and contain no resolved render-data read.
-func compileEventHandler(expr string, scope map[string]bool, eventParam string) (string, bool, error) {
+func compileEventHandler(expr string, scope map[string]bool, eventParam string, bareAsReference bool) (string, bool, error) {
 	if isJSIdentifier(expr) {
+		if bareAsReference {
+			return "this.events." + expr, true, nil
+		}
 		return "(" + eventParam + ") => this.events." + expr + "(" + eventParam + ")", true, nil
 	}
 	op := strings.IndexByte(expr, '(')

@@ -1,6 +1,7 @@
 package check
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -235,11 +236,32 @@ func (t *SegmentTable) Remap(line, column int) (Position, bool) {
 		return Position{}, false
 	}
 	seg := t.Segments[i]
-	if offset < seg.GeneratedStart.Offset || offset >= seg.GeneratedEnd.Offset {
-		return Position{}, false
+	if offset >= seg.GeneratedStart.Offset {
+		sourceOffset := seg.SourceStart.Offset + offset - seg.GeneratedStart.Offset
+		return positionAt(t.sourceBytes, sourceOffset), true
 	}
-	sourceOffset := seg.SourceStart.Offset + offset - seg.GeneratedStart.Offset
-	return positionAt(t.sourceBytes, sourceOffset), true
+	// The position landed on generated scaffolding — `void (`, an inserted `__d.`
+	// prefix, the `this.events.` qualifier — which is where TypeScript anchors an
+	// error about a whole expression rather than one identifier. The emitter puts
+	// each template expression on its own line, so the first mapped run on that
+	// same generated line is the authored expression the diagnostic is about.
+	// Without this, exactly those diagnostics would print a .puzzle/check path.
+	genLine := lineOfOffset(t.generatedBytes, offset)
+	if seg.GeneratedStart.Line == genLine {
+		return positionAt(t.sourceBytes, seg.SourceStart.Offset), true
+	}
+	if i > 0 && t.Segments[i-1].GeneratedEnd.Line == genLine {
+		return positionAt(t.sourceBytes, t.Segments[i-1].SourceStart.Offset), true
+	}
+	return Position{}, false
+}
+
+func lineOfOffset(data []byte, offset int) int {
+	if offset > len(data) {
+		offset = len(data)
+	}
+	line, _ := advanceLineCol(1, 1, data[:offset])
+	return line
 }
 
 func offsetAtUTF16Column(data []byte, line, column int) (int, bool) {
@@ -248,7 +270,7 @@ func offsetAtUTF16Column(data []byte, line, column int) (int, bool) {
 	}
 	start := 0
 	for current := 1; current < line; current++ {
-		i := strings.IndexByte(string(data[start:]), '\n')
+		i := bytes.IndexByte(data[start:], '\n')
 		if i < 0 {
 			return 0, false
 		}

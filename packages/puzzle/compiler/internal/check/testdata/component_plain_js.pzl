@@ -2,6 +2,10 @@
   <article class="card {#if active}active{:else}{ tone }{/if}">
     <h2>{ title }</h2>
     <input value={ draft } @input={ update(event) } />
+    <button @click={ reset }>Reset</button>
+    {#raw}
+      <code class="sample">{ notAnExpression | notAFormatter }</code>
+    {/raw}
   </article>
 </puzzle-view>
 
@@ -15,6 +19,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class PlainCard extends PuzzleView {
   events = {
     update: (event) => event.currentTarget.value,
+    reset: () => {},
   };
 }
 </script>
