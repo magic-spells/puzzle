@@ -66,6 +66,25 @@ export default class V extends PuzzleView {}
 </script>
 `
 
+const snippetView = `<puzzle-view>
+  <List><Snippet item>{ item }</Snippet></List>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import List from '../components/List.pzl';
+export default class V extends PuzzleView {}
+</script>
+`
+
+const scopedMarkerArgsView = `<puzzle-view>
+  <Children item={ item }/>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class V extends PuzzleView {}
+</script>
+`
+
 // TestUsageScannerMatchesColdScan is the equivalence statement: whatever the
 // tree looks like, an incremental Scan must answer exactly what a cold
 // ScanUsage answers — through edits, additions, and deletions.
@@ -136,6 +155,24 @@ func TestUsageScannerMatchesColdScan(t *testing.T) {
 	u = assertSame("edit removes raw")
 	if u.HasRawAt {
 		t.Fatal("raw removed by an edit was still reported")
+	}
+
+	writePZL(t, b, snippetView)
+	u = assertSame("edit adds Snippet")
+	if !u.HasSnippets {
+		t.Fatal("Snippet added by an edit was not seen")
+	}
+
+	writePZL(t, b, scopedMarkerArgsView)
+	u = assertSame("edit replaces Snippet with args marker")
+	if !u.HasSnippets {
+		t.Fatal("args-bearing marker was not seen")
+	}
+
+	writePZL(t, b, plainView)
+	u = assertSame("edit removes snippets")
+	if u.HasSnippets {
+		t.Fatal("snippet usage removed by an edit was still reported")
 	}
 
 	// The memo covers SCRIPT files too, not just templates: lazy() lives in

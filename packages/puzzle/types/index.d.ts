@@ -771,12 +771,16 @@ export declare class ViewNode {
 	readonly isText: boolean;
 	readonly isComponent: boolean;
 	readonly isSlot: boolean;
+	readonly isSnippet: boolean;
 	readonly isPortal: boolean;
 	readonly props: Record<string, any>;
 }
 
-/** Reserved tag marking a composition-marker (`<children/>`/`<Slot/>`/`<slot name>`) substitution point. */
+/** Reserved tag marking a composition-marker (`<Children/>`/`<Slot/>`/`<Slot name>`) substitution point. */
 export declare const SLOT_TAG: string;
+
+/** Reserved tag carrying a caller-owned `<Snippet>…</Snippet>` declaration (D166). */
+export declare const SNIPPET_TAG: string;
 
 /** Reserved tag marking a `<Portal>…</Portal>` teleport (D144). */
 export declare const PORTAL_TAG: string;

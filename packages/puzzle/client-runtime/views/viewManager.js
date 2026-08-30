@@ -22,7 +22,7 @@
  * substituted with the slot content captured at the call site before diffing.
  */
 
-import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG } from './ViewNode.js';
+import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG, SNIPPET_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import {
 	mountPortal,
@@ -104,12 +104,18 @@ export class ViewManager {
 	 * Render a new tree: first call mounts, subsequent calls diff + patch.
 	 * Slot markers are expanded against `slotChildren` before diffing.
 	 */
-	render(rawTree) {
+	render(rawTree, slotsExpanded = false) {
 		// D145's "never patched over an unknown tree" is an invariant of the manager.
 		// Route the next ordinary render through a fresh mount so it never diffs
 		// against vnodes whose DOM links may be detached.
-		if (this.treeUnknown) return this.renderFresh(rawTree);
-		const newTree = expandSlots(rawTree, this.slotChildren);
+		if (this.treeUnknown) return this.renderFresh(rawTree, slotsExpanded);
+		// SSG/static takeover preloads nested components by walking the expanded
+		// tree and stores that exact tree for mount. Expanding it again cannot change
+		// the output, but it loses the first pass's snippet-use state and emits a
+		// false unused-snippet warning. All ordinary renders still expand here.
+		const newTree = slotsExpanded
+			? rawTree
+			: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
 		if (!this.currentTree) {
 			// A FIRST mount throws too (a component's class-field initializer, a
 			// `String(symbol)` in a text node), and it needs the same D145 machinery —
@@ -189,8 +195,10 @@ export class ViewManager {
 	 * document, and portaled content sits outside the range entirely — none of it
 	 * is reachable again once currentTree becomes the error face.
 	 */
-	renderFresh(rawTree) {
-		const newTree = expandSlots(rawTree, this.slotChildren);
+	renderFresh(rawTree, slotsExpanded = false) {
+		const newTree = slotsExpanded
+			? rawTree
+			: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
 		releaseAborted(this.unknownTrees);
 		this.unknownTrees = null;
 		const range = this.unknownRange;
@@ -287,12 +295,27 @@ export class ViewManager {
  * captured in `slotChildren`. Named slots (v1.21, D53) partition the content
  * once per render (partitionSlots) by each direct child's stripped `slot`
  * attribute; <Children/> and the bare <Slot/> take the unattributed remainder.
- * Name-free templates AND slot-attr-free call sites take the same fast path they
+ * Snippet-free AND slot-attr-free call sites take the same fast path they
  * always did — the default bucket is the original `slotChildren` array (no
  * clones) and no vnode changes unless a marker is actually present.
  */
-export function expandSlots(vnode, slotChildren) {
-	return expandNode(vnode, partitionSlots(slotChildren));
+export function expandSlots(vnode, slotChildren, component = null) {
+	const parts = partitionSlots(slotChildren);
+	if (
+		typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+		__PUZZLE_HAS_SNIPPETS__
+	) {
+		parts.component = component;
+	}
+	const expanded = expandNode(vnode, parts);
+	if (
+		(typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+			__PUZZLE_HAS_SNIPPETS__) &&
+		(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+	) {
+		warnUnusedSnippets(parts, component);
+	}
+	return expanded;
 }
 
 /**
@@ -305,9 +328,20 @@ export function expandSlots(vnode, slotChildren) {
  */
 function partitionSlots(slotChildren) {
 	let named = null;
+	let snippets = null;
 	let def = null; // null until the first named child forces a fresh default list
 	for (let i = 0; i < slotChildren.length; i++) {
 		const sc = slotChildren[i];
+		if (
+			(typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+				__PUZZLE_HAS_SNIPPETS__) &&
+			sc.tag === SNIPPET_TAG
+		) {
+			if (!snippets) snippets = Object.create(null);
+			if (def === null) def = slotChildren.slice(0, i);
+			snippets[sc.attrs.fits || 'default'] = sc;
+			continue;
+		}
 		const name = sc.attrs && sc.attrs.slot;
 		if (name != null && name !== '') {
 			// Null-proto: a slot named "__proto__"/"constructor"/"toString" must key a
@@ -319,6 +353,20 @@ function partitionSlots(slotChildren) {
 		} else if (def !== null) {
 			def.push(sc);
 		}
+	}
+	if (
+		typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+		__PUZZLE_HAS_SNIPPETS__
+	) {
+		if (named === null && snippets === null) {
+			return { default: slotChildren, named: null, snippets: null, snippetUses: null };
+		}
+		return {
+			default: def ?? [],
+			named,
+			snippets,
+			snippetUses: snippets && Object.create(null),
+		};
 	}
 	if (named === null) return { default: slotChildren, named: null };
 	return { default: def ?? [], named };
@@ -400,8 +448,41 @@ function expandChildList(kids, parts) {
 		const k = kids[i];
 		if (k.isSlot) {
 			if (!out) out = kids.slice(0, i);
-			const name = k.attrs && k.attrs.name;
-			const bucket = name ? parts.named && parts.named[name] : parts.default;
+			const markerName = (k.attrs && k.attrs.name) || 'default';
+			const bucket = markerName === 'default' ? parts.default : parts.named && parts.named[markerName];
+			if (
+				typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+				__PUZZLE_HAS_SNIPPETS__
+			) {
+				const hasArgs = Object.prototype.hasOwnProperty.call(k.attrs, 'args');
+				const snippet = parts.snippets && parts.snippets[markerName];
+				if (snippet) {
+					parts.snippetUses[markerName] = true;
+					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+						warnSnippetShape(snippet, k.attrs.args || {}, markerName, parts.component);
+					}
+					const stampedNodes = snippet.attrs.fn(k.attrs.args || {});
+					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+						warnSnippetOutputMarker(stampedNodes, markerName, parts.component);
+					}
+					for (const stamped of stampedNodes) out.push(stamped);
+					continue;
+				}
+				if (
+					hasArgs &&
+					bucket &&
+					bucket.length &&
+					(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				) {
+					warnPlainScopedContent(markerName, k.attrs.args || {}, parts.component);
+				}
+				if (bucket && bucket.length && !hasArgs) {
+					for (const sc of bucket) out.push(sc);
+				} else {
+					for (const fb of k.children) out.push(expandNode(fb, parts));
+				}
+				continue;
+			}
 			if (bucket && bucket.length) {
 				for (const sc of bucket) out.push(sc);
 			} else {
@@ -417,6 +498,84 @@ function expandChildList(kids, parts) {
 		}
 	}
 	return out;
+}
+
+const UNKNOWN_SNIPPET_OWNER = {};
+let snippetWarnings;
+
+function warnSnippet(component, issue, message) {
+	const owner =
+		(component != null && (typeof component === 'object' || typeof component === 'function'))
+			? component
+			: UNKNOWN_SNIPPET_OWNER;
+	snippetWarnings ??= new WeakMap();
+	let seen = snippetWarnings.get(owner);
+	if (!seen) {
+		seen = new Set();
+		snippetWarnings.set(owner, seen);
+	}
+	if (seen.has(issue)) return;
+	seen.add(issue);
+	console.warn(`[puzzle] ${message}`);
+}
+
+function warnSnippetShape(snippet, args, name, component) {
+	const params = snippet.attrs.params || [];
+	const handed = Object.keys(args);
+	const same =
+		params.length === handed.length &&
+		params.every((param) => Object.prototype.hasOwnProperty.call(args, param));
+	if (same) return;
+	warnSnippet(
+		component,
+		`shape:${name}`,
+		`snippet fits slot "${name}" declares (${params.join(', ')}); ` +
+			`slot hands over (${handed.join(', ')}) — the shapes don't match`
+	);
+}
+
+function warnPlainScopedContent(name, args, component) {
+	warnSnippet(
+		component,
+		`plain:${name}`,
+		`plain content cannot fill args-bearing slot "${name}" handing over ` +
+			`(${Object.keys(args).join(', ')}) — provide a matching <Snippet>; rendering the fallback`
+	);
+}
+
+function warnSnippetOutputMarker(nodes, name, component) {
+	if (!snippetOutputHasMarker(nodes)) return;
+	warnSnippet(
+		component,
+		`output-marker:${name}`,
+		`snippet fits slot "${name}" returned a composition marker — markers inside ` +
+			`<Snippet> bodies are compile errors and belong in the component's own template`
+	);
+}
+
+function snippetOutputHasMarker(nodes) {
+	for (const node of nodes) {
+		if (node == null || typeof node === 'string') continue;
+		if (node.isSlot || node.isSnippet) return true;
+		if (
+			typeof node.children !== 'string' &&
+			node.children.length > 0 &&
+			snippetOutputHasMarker(node.children)
+		) return true;
+	}
+	return false;
+}
+
+function warnUnusedSnippets(parts, component) {
+	if (!parts.snippets) return;
+	for (const name of Object.keys(parts.snippets)) {
+		if (parts.snippetUses[name]) continue;
+		warnSnippet(
+			component,
+			`unused:${name}`,
+			`snippet fits slot "${name}", but no matching slot marker consumed it`
+		);
+	}
 }
 
 // ---- mount ------------------------------------------------------------------

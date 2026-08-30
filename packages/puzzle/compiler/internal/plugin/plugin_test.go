@@ -540,6 +540,54 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+func TestScanUsageSnippets(t *testing.T) {
+	const script = `<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import List from '../components/List.pzl';
+export default class Home extends PuzzleView {}
+</script>
+`
+	for _, tt := range []struct {
+		name     string
+		template string
+		want     bool
+	}{
+		{name: "absent", template: `<puzzle-view><p>plain</p></puzzle-view>`},
+		{
+			name:     "caller Snippet marker",
+			template: `<puzzle-view><List><Snippet item>{ item }</Snippet></List></puzzle-view>`,
+			want:     true,
+		},
+		{
+			name:     "args-bearing Children marker",
+			template: `<puzzle-view><Children item={ item }/></puzzle-view>`,
+			want:     true,
+		},
+		{
+			name:     "args-bearing named Slot marker",
+			template: `<puzzle-view><Slot name="row" item={ item }/></puzzle-view>`,
+			want:     true,
+		},
+		{
+			name:     "ordinary lowercase template element",
+			template: `<puzzle-view><template><p>native</p></template></puzzle-view>`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeApp(t, map[string]string{
+				"app/views/Home.pzl": tt.template + "\n" + script,
+			})
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if usage.HasSnippets != tt.want {
+				t.Errorf("HasSnippets = %v, want %v", usage.HasSnippets, tt.want)
+			}
+		})
+	}
+}
+
 // D163 lazy() route views are declared in app SCRIPTS, not templates, so the
 // walk reads .js/.ts-family files too. The bias is the scan's usual one: a false
 // positive leaves the resolver in a bundle that does not need it, a false
@@ -714,13 +762,14 @@ func TestPluginFeaturesCarryEveryUsageBit(t *testing.T) {
 		t.Errorf("fresh plugin Features() = %+v, want all false", got)
 	}
 	pl.SetUsage(Usage{
-		Formatters: map[string]bool{"upcase": true},
-		HasFlip:    true,
-		HasPortal:  true,
-		HasRawAt:   true,
-		HasLazy:    true,
+		Formatters:  map[string]bool{"upcase": true},
+		HasFlip:     true,
+		HasPortal:   true,
+		HasRawAt:    true,
+		HasLazy:     true,
+		HasSnippets: true,
 	})
-	want := Features{Flip: true, Portal: true, RawAt: true, Lazy: true}
+	want := Features{Flip: true, Portal: true, RawAt: true, Lazy: true, Snippets: true}
 	if got := pl.Features(); got != want {
 		t.Errorf("Features() = %+v, want %+v", got, want)
 	}

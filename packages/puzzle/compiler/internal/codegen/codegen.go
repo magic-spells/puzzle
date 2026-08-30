@@ -290,6 +290,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if hasSlot(root.Children) || (skel != nil && hasSlot(skel.Children)) {
 		imports = append(imports, "SLOT_TAG")
 	}
+	if hasSnippet(root.Children) || (skel != nil && hasSnippet(skel.Children)) {
+		imports = append(imports, "SNIPPET_TAG")
+	}
 	if hasPortal(root.Children) || (skel != nil && hasPortal(skel.Children)) {
 		imports = append(imports, "PORTAL_TAG")
 	}
@@ -628,22 +631,9 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 	case *parser.Component:
 		return c.emitElement(n.Name, n.Props, n.Children, ind, ind, true, scope)
 	case *parser.Slot:
-		// Empty default markers keep the minimal one-argument emission.
-		if n.Name == "" && len(n.Children) == 0 {
-			return "new ViewNode(SLOT_TAG)", nil
-		}
-		// A default marker with fallback emits `new ViewNode(SLOT_TAG, {},
-		// [fallback])` through the ordinary child-emission path (D141).
-		if n.Name == "" {
-			return c.emitElement("SLOT_TAG", nil, n.Children, ind, ind, false, scope)
-		}
-		// Named markers use the same path so their third argument carries fallback
-		// children. An empty paired body stays byte-equivalent to self-closing.
-		if len(n.Children) == 0 {
-			return "new ViewNode(SLOT_TAG, { name: " + jsString(n.Name) + " })", nil
-		}
-		nameAttr := []parser.Attr{&parser.StaticAttr{Name: "name", Value: n.Name}}
-		return c.emitElement("SLOT_TAG", nameAttr, n.Children, ind, ind, false, scope)
+		return c.emitSlot(n, ind, scope)
+	case *parser.Snippet:
+		return c.emitSnippet(n, ind, scope)
 	case *parser.Portal:
 		// <Portal>…</Portal> (D144): one vnode carrying the teleported children;
 		// the runtime mounts them into the shared portal outlet and leaves a comment
@@ -666,6 +656,79 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 	default:
 		return "", c.cgErr(parser.Position{Line: 1, Col: 1}, "unsupported node in template")
 	}
+}
+
+// emitSlot extends the existing marker shapes with a fresh args object while
+// keeping every no-args spelling byte-identical to its pre-D166 output.
+func (c *compiler) emitSlot(n *parser.Slot, ind int, scope map[string]bool) (string, error) {
+	if n.Name == "" && len(n.Args) == 0 && len(n.Children) == 0 {
+		return "new ViewNode(SLOT_TAG)", nil
+	}
+
+	var attrs []string
+	if n.Name != "" {
+		attrs = append(attrs, "name: "+jsString(n.Name))
+	}
+	if len(n.Args) > 0 {
+		kvs := make([]string, 0, len(n.Args))
+		for _, arg := range n.Args {
+			kv, err := c.attrKV(arg, scope, false, true)
+			if err != nil {
+				return "", err
+			}
+			kvs = append(kvs, kv)
+		}
+		attrs = append(attrs, "args: { "+strings.Join(kvs, ", ")+" }")
+	}
+	attrsExpr := "{}"
+	if len(attrs) > 0 {
+		attrsExpr = "{ " + strings.Join(attrs, ", ") + " }"
+	}
+	if len(n.Children) == 0 {
+		return "new ViewNode(SLOT_TAG, " + attrsExpr + ")", nil
+	}
+	items, err := c.processChildren(n.Children, scope)
+	if err != nil {
+		return "", err
+	}
+	children, err := c.emitArray(items, ind+2, scope)
+	if err != nil {
+		return "", err
+	}
+	return "new ViewNode(SLOT_TAG, " + attrsExpr + ", " + children + ")", nil
+}
+
+// emitSnippet emits the pinned D166 caller-side contract. The arrow receives
+// one destructured object and closes over the caller's render scope; every
+// declared parameter is added to the body scope and shadows outer bindings.
+func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope map[string]bool) (string, error) {
+	bodyScope := scope
+	for _, param := range n.Params {
+		bodyScope = scopeAdd(bodyScope, param)
+	}
+	items, err := c.processChildren(n.Body, bodyScope)
+	if err != nil {
+		return "", err
+	}
+	body, err := c.emitArray(items, ind+6, bodyScope)
+	if err != nil {
+		return "", err
+	}
+	params := make([]string, len(n.Params))
+	decls := make([]string, len(n.Params))
+	for i, param := range n.Params {
+		params[i] = jsString(param)
+		decls[i] = param
+	}
+	destructure := "{}"
+	if len(decls) > 0 {
+		destructure = "{ " + strings.Join(decls, ", ") + " }"
+	}
+	return "new ViewNode(SNIPPET_TAG, {\n" +
+		sp(ind+2) + "fits: " + jsString(n.Fits) + ",\n" +
+		sp(ind+2) + "params: [" + strings.Join(params, ", ") + "],\n" +
+		sp(ind+2) + "fn: (" + destructure + ") => (" + body + "),\n" +
+		sp(ind) + "})", nil
 }
 
 // emitIf compiles `{#if}/{:else}` spanning siblings to a spread ternary
@@ -754,6 +817,8 @@ func (c *compiler) condStaticLen(items []item, scope map[string]bool) (int, bool
 				stable = false
 			}
 		case *parser.Slot:
+			stable = false
+		case *parser.Snippet:
 			stable = false
 		case *parser.If:
 			m, childStable, err := c.ifStaticLen(node, scope)
@@ -1547,6 +1612,10 @@ func hasPortal(nodes []parser.Node) bool {
 			if hasPortal(t.Children) {
 				return true
 			}
+		case *parser.Snippet:
+			if hasPortal(t.Body) {
+				return true
+			}
 		case *parser.Element:
 			if hasPortal(t.Children) {
 				return true
@@ -1588,6 +1657,10 @@ func hasSlot(nodes []parser.Node) bool {
 			if hasSlot(t.Children) {
 				return true
 			}
+		case *parser.Snippet:
+			if hasSlot(t.Body) {
+				return true
+			}
 		case *parser.Element:
 			if hasSlot(t.Children) {
 				return true
@@ -1611,6 +1684,52 @@ func hasSlot(nodes []parser.Node) bool {
 			}
 		case *parser.For:
 			if hasSlot(t.Body) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasSnippet reports whether any <Snippet> marker appears in the tree
+// (→ SNIPPET_TAG import). Every ordinary child-bearing node recurses so a
+// marker at any legal call-site depth retains the import.
+func hasSnippet(nodes []parser.Node) bool {
+	for _, n := range nodes {
+		switch t := n.(type) {
+		case *parser.Snippet:
+			return true
+		case *parser.Slot:
+			if hasSnippet(t.Children) {
+				return true
+			}
+		case *parser.Portal:
+			if hasSnippet(t.Children) {
+				return true
+			}
+		case *parser.Element:
+			if hasSnippet(t.Children) {
+				return true
+			}
+		case *parser.Component:
+			if hasSnippet(t.Children) {
+				return true
+			}
+		case *parser.If:
+			if hasSnippet(t.Then) || hasSnippet(t.Else) {
+				return true
+			}
+		case *parser.For:
+			if hasSnippet(t.Body) {
+				return true
+			}
+		case *parser.Case:
+			for _, cl := range t.Clauses {
+				if hasSnippet(cl.Body) {
+					return true
+				}
+			}
+			if hasSnippet(t.Else) {
 				return true
 			}
 		}

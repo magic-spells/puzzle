@@ -1,0 +1,20 @@
+<puzzle-view>
+  <GroupedList groups={ groups }>
+    <Snippet fits="heading" group>
+      <h2>{ group.title }</h2>
+    </Snippet>
+    <Snippet fits="row" user group>
+      <p>{ group.title }: { user.name }</p>
+    </Snippet>
+    <button slot="actions">Done</button>
+  </GroupedList>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import GroupedList from '../components/GroupedList.pzl';
+
+export default class ScopedSnippetNamed extends PuzzleView {
+  data() { return { groups: [] }; }
+}
+</script>

@@ -73,6 +73,10 @@ func walkIslands(nodes []Node, file string) *ParseError {
 			if perr := walkIslands(node.Children, file); perr != nil {
 				return perr
 			}
+		case *Snippet:
+			if perr := walkIslands(node.Body, file); perr != nil {
+				return perr
+			}
 		case *Portal:
 			if perr := walkIslands(node.Children, file); perr != nil {
 				return perr
@@ -113,6 +117,8 @@ func rejectComponentsAndSlots(nodes []Node, islandPos Position, file string) *Pa
 			return errAt(file, node.Pos, "<%s> cannot appear inside an island element opened at %d:%d — a component in browser-owned DOM would be orphaned; move it outside the island", node.Name, islandPos.Line, islandPos.Col)
 		case *Slot:
 			return errAt(file, node.Pos, `a composition marker (<Children/>/<Slot/>/<Slot name="…"/>) cannot appear inside an island element opened at %d:%d — it would splice parent-owned nodes into an unreconciled subtree`, islandPos.Line, islandPos.Col)
+		case *Snippet:
+			return errAt(file, node.Pos, "<Snippet> cannot appear inside an island element opened at %d:%d — it is caller-owned composition content", islandPos.Line, islandPos.Col)
 		case *Portal:
 			return errAt(file, node.Pos, "<Portal> cannot appear inside an island element opened at %d:%d — the island subtree is never reconciled, so the portal would never mount or tear down", islandPos.Line, islandPos.Col)
 		case *Element:

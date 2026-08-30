@@ -423,12 +423,13 @@ func TestBuildTakeoverDefineDCE(t *testing.T) {
 }
 
 // definesFixture parameterizes the throwaway one-route app the runtime-probe DCE
-// tests build. The three feature fields add exact template usage; routeMeta is
+// tests build. The feature fields add exact template usage; routeMeta is
 // appended to the route object literal; extraFiles adds sibling modules.
 type definesFixture struct {
 	flipAttr string
 	portal   bool
 	raw      bool
+	snippets bool
 	// lazy adds a second route whose view is a D163 lazy() marker, declared in
 	// the routes module named by lazyRoutesExt (".js" when empty) so the same
 	// fixture can prove the usage scan reads TypeScript route tables too.
@@ -483,11 +484,19 @@ app.mount();
 export default app;
 `
 	featureMarkup := ""
+	componentImport := ""
 	if fx.portal {
 		featureMarkup += "  <Portal><div>remote</div></Portal>\n"
 	}
 	if fx.raw {
 		featureMarkup += "  {#raw}<span @x=\"y\">literal</span>{/raw}\n"
+	}
+	if fx.snippets {
+		featureMarkup += `  <ScopedList items={ items }>
+	    <Snippet item><strong>{ item.label }</strong></Snippet>
+	  </ScopedList>
+`
+		componentImport = "import ScopedList from '../components/ScopedList.pzl';\n"
 	}
 	view := `<puzzle-view>
   <ul>
@@ -499,6 +508,7 @@ export default app;
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+` + componentImport + `
 export default class Home extends PuzzleView {
   data() { return { items: [{ id: 1, label: 'one' }] }; }
 }
@@ -511,6 +521,22 @@ export default class Home extends PuzzleView {
 		"app/app.js":            appJS,
 		"app/views/Home.pzl":    view,
 		"app/public/index.html": index,
+	}
+	if fx.snippets {
+		files["app/components/ScopedList.pzl"] = `<puzzle-view>
+  <ul>
+    {#for item in items}
+      <li key={ item.id }><Children item={ item }>{ item.label }</Children></li>
+    {/for}
+  </ul>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class ScopedList extends PuzzleView {
+  data(params, props) { return { items: props.items }; }
+}
+</script>
+`
 	}
 	if fx.lazy {
 		marker := "lazy"
@@ -554,6 +580,11 @@ const portalMarker = "data-puzzle-portal"
 
 const rawAtEscape = "@@"
 
+// snippetUses is a property used only by ViewManager's snippet
+// partition/join path. Property names survive minification, so its absence is
+// evidence the false usage define folded the whole branch away.
+const snippetsMarker = "snippetUses"
+
 // lazyResolverMarker is a throw message unique to router/lazy.js's RESOLVER half
 // — the part __PUZZLE_HAS_LAZY__ removes. Like flipEasing it is a string
 // literal, so it survives minification and its absence is real evidence the
@@ -583,7 +614,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker} {
+	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker, snippetsMarker} {
 		if strings.Contains(string(withoutJS), marker) {
 			t.Errorf("bundle without feature usage retained %q", marker)
 		}
@@ -622,6 +653,15 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	rawJS := readFile(t, filepath.Join(withRaw, "dist", "app.js"))
 	if !strings.Contains(rawJS, rawAtEscape) {
 		t.Errorf("bundle with {#raw} should retain the %q literal-attribute shim", rawAtEscape)
+	}
+
+	withSnippets := writeDefinesFixture(t, definesFixture{snippets: true})
+	if err := Build(withSnippets, Options{Development: false}); err != nil {
+		t.Fatalf("Build with snippet usage failed: %v", err)
+	}
+	snippetJS := readFile(t, filepath.Join(withSnippets, "dist", "app.js"))
+	if !strings.Contains(snippetJS, snippetsMarker) {
+		t.Errorf("bundle with <Snippet> should retain the %q runtime join", snippetsMarker)
 	}
 }
 

@@ -56,8 +56,20 @@ type Component struct {
 // empty paired forms have no fallback.
 type Slot struct {
 	Name     string
+	Args     []Attr
 	Children []Node
 	Pos      Position
+}
+
+// Snippet is caller-provided parameterized composition content (D166). Fits
+// routes it to a named marker (empty means the default <Children> marker),
+// Params are the bare attribute declarations in source order, and Body is
+// compiled into a fresh vnode-producing function at the call site.
+type Snippet struct {
+	Fits   string
+	Params []string
+	Body   []Node
+	Pos    Position
 }
 
 // Portal is a <Portal>…</Portal> teleport marker (D144). It takes no
@@ -149,6 +161,7 @@ type InlineSVG struct {
 func (*Element) isNode()       {}
 func (*Component) isNode()     {}
 func (*Slot) isNode()          {}
+func (*Snippet) isNode()       {}
 func (*Portal) isNode()        {}
 func (*Text) isNode()          {}
 func (*Interpolation) isNode() {}
@@ -172,7 +185,7 @@ type Attr interface{ isAttr() }
 // attribute (autofocus → Value "", Valueless true). Valueless is what
 // distinguishes the bare form from an EXPLICIT empty value (value="" → Value "",
 // Valueless false): both leave Value empty, but codegen emits `true` for the
-// bare form and `''` for the explicit one, and the island directive (D44)
+// bare form and `”` for the explicit one, and the island directive (D44)
 // accepts only the bare form. Valueless is the ONE way to ask "was this attr
 // written without an =value?" — do not infer it from Value == "".
 type StaticAttr struct {

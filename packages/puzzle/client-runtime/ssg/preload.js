@@ -24,7 +24,13 @@ export async function preloadTakeoverComponents(vnode, ctx) {
 }
 
 async function preloadNode(vnode, ctx, instances) {
-	if (vnode == null || typeof vnode === 'string' || vnode.isText || vnode.isSlot) return;
+	if (
+		vnode == null ||
+		typeof vnode === 'string' ||
+		vnode.isText ||
+		vnode.isSlot ||
+		vnode.isSnippet
+	) return;
 
 	if (!vnode.isComponent) {
 		if (typeof vnode.children === 'string') return;
@@ -73,7 +79,7 @@ async function preloadNode(vnode, ctx, instances) {
 		instances.push(instance);
 	}
 
-	const expanded = tree == null ? tree : expandSlots(tree, vnode.children);
+	const expanded = tree == null ? tree : expandSlots(tree, vnode.children, vnode.tag);
 	instance.__takeoverTree = expanded;
 	await preloadNode(expanded, ctx, instances);
 }

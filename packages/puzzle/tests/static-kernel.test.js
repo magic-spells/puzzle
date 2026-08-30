@@ -14,13 +14,15 @@ import { mountStatic } from '../client-runtime/static/index.js';
 import { adapter, serializeReadState } from '../client-runtime/datastore/adapter.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG, SNIPPET_TAG } from '../client-runtime/views/ViewNode.js';
 import LocalForm from './fixtures/binding/LocalForm.compiled.js';
 import { hashRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const slot = () => new ViewNode(SLOT_TAG);
+const scopedMarker = (name, args) => new ViewNode(SLOT_TAG, { name, args });
+const snippet = (fits, params, fn) => new ViewNode(SNIPPET_TAG, { fits, params, fn });
 const tick = () => new Promise((r) => setTimeout(r, 0));
 function deferred() {
 	let resolve;
@@ -112,6 +114,7 @@ let nestedWillShow = 0;
 afterEach(() => {
 	nestedWillShow = 0;
 	document.body.innerHTML = '';
+	vi.restoreAllMocks();
 });
 
 describe('static kernel — mountStatic (D81)', () => {
@@ -322,6 +325,44 @@ describe('static kernel — mountStatic (D81)', () => {
 
 		expect(el.innerHTML).toBe(prerendered);
 		expect(el.querySelector('.sync-leaf').textContent).toBe('SYNC-CONTENT');
+	});
+
+	it('mounts snippet output once during static takeover with zero dev warnings', async () => {
+		class ScopedList extends PuzzleView {
+			render() {
+				return h('ul', { class: 'takeover-scoped-list' }, [
+					h('li', {}, [scopedMarker('row', { item: { label: 'static' } })]),
+				]);
+			}
+		}
+		stamp(ScopedList, 'app/components/ScopedList.pzl');
+		class ScopedPage extends PuzzleView {
+			render() {
+				return h('main', {}, [
+					h(ScopedList, {}, [
+						snippet('row', ['item'], ({ item }) => [
+							h('strong', { class: 'takeover-stamp' }, [text(item.label)]),
+						]),
+					]),
+				]);
+			}
+		}
+		stamp(ScopedPage, 'app/views/ScopedPage.pzl');
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'scoped', view: ScopedPage }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		const el = seedDocument({ content: page.html, data: page.data });
+		const prerendered = el.innerHTML;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		await mountStatic({ target: '#app', views: [ScopedPage], route: page.route });
+
+		expect(el.innerHTML).toBe(prerendered);
+		expect(el.querySelector('.takeover-stamp').textContent).toBe('static');
+		expect(warn).not.toHaveBeenCalled();
 	});
 
 	it('mounts the static page when a nested component preload rejects', async () => {

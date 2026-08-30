@@ -353,7 +353,7 @@ func TestParseForReservedIdentifiers(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected a reserved loop identifier error")
 			}
-			want := `loop variable "` + tc.ident + `" uses a reserved name (identifiers starting with "__" and the names "ViewNode", "SLOT_TAG" and "PORTAL_TAG" are reserved by the compiler)`
+			want := `loop variable "` + tc.ident + `" uses a reserved name (identifiers starting with "__" and the names "ViewNode", "SLOT_TAG", "SNIPPET_TAG" and "PORTAL_TAG" are reserved by the compiler)`
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error %q should contain %q", err, want)
 			}
@@ -1388,11 +1388,6 @@ func TestParseCompositionMarkersD141(t *testing.T) {
 			wantMessage: `named slots are spelled <Slot name="…"/> since v1.64 (D134)`,
 		},
 		{
-			name:        "class attribute on Children marker",
-			src:         `<puzzle-view><Children class="x"/></puzzle-view>` + "\n<script></script>",
-			wantMessage: "<Children> takes no attributes — call-site content needs no configuration",
-		},
-		{
 			name:        "ref on Children marker",
 			src:         `<puzzle-view><Children ref="x"/></puzzle-view>` + "\n<script></script>",
 			wantMessage: "ref cannot be placed on a <Children> — a children marker is a render target, not a real element",
@@ -1426,11 +1421,6 @@ func TestParseCompositionMarkersD141(t *testing.T) {
 			name:        "reserved Slot name children",
 			src:         `<puzzle-view><Slot name="children"/></puzzle-view>` + "\n<script></script>",
 			wantMessage: `<Slot name="children"> is reserved — use <Children/>`,
-		},
-		{
-			name:        "non-name Slot attribute",
-			src:         `<puzzle-view><Slot class="x"/></puzzle-view>` + "\n<script></script>",
-			wantMessage: "<Slot> only takes a static name attribute",
 		},
 		{
 			name:        "Slot event handler",
@@ -1514,11 +1504,6 @@ func TestParseNamedSlotErrors(t *testing.T) {
 			name:       "reserved default name",
 			src:        `<puzzle-view><Slot name="default"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: `reserved`,
-		},
-		{
-			name:       "foreign attribute on slot",
-			src:        `<puzzle-view><Slot class="x"/></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "only takes a static name attribute",
 		},
 		{
 			name:       "duplicate slot name in one template",

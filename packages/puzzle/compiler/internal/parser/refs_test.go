@@ -163,6 +163,16 @@ func TestParseRefErrors(t *testing.T) {
 			"not allowed inside a {#for}",
 		},
 		{
+			"ref nested inside Snippet body",
+			`<puzzle-view><List><Snippet item><section><input ref="row"/></section></Snippet></List></puzzle-view>` + "\n<script></script>",
+			"ref is not allowed inside a <Snippet> body",
+		},
+		{
+			"component ref inside Snippet body uses stamped-output error",
+			`<puzzle-view><List><Snippet item><Card ref="card"/></Snippet></List></puzzle-view>` + "\n<script></script>",
+			"put the ref in the component's own template instead",
+		},
+		{
 			"duplicate ref name",
 			`<puzzle-view><div ref="a"></div><span ref="a"></span></puzzle-view>` + "\n<script></script>",
 			`duplicate ref name "a"`,
@@ -184,6 +194,22 @@ func TestParseRefErrors(t *testing.T) {
 				t.Fatalf("error %q does not contain %q", err.Error(), tc.wantSubstr)
 			}
 		})
+	}
+}
+
+func TestParseRefInSnippetBodyIsPositionedAtRef(t *testing.T) {
+	src := `<puzzle-view><List><Snippet item><div><input ref="row"/></div></Snippet></List></puzzle-view>` + "\n<script></script>"
+	_, err := Parse([]byte(src), "test.pzl")
+	if err == nil {
+		t.Fatal("expected a ref-in-Snippet error")
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("expected positioned *ParseError, got %T (%v)", err, err)
+	}
+	wantCol := strings.Index(src, `ref="row"`) + 1
+	if pe.Line != 1 || pe.Col != wantCol {
+		t.Fatalf("position = %d:%d, want 1:%d at ref", pe.Line, pe.Col, wantCol)
 	}
 }
 

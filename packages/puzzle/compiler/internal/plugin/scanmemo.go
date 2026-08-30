@@ -38,11 +38,12 @@ import (
 
 // fileUsage is one file's contribution to the project-wide Usage.
 type fileUsage struct {
-	formatters []string
-	hasFlip    bool
-	hasPortal  bool
-	hasRawAt   bool
-	hasLazy    bool
+	formatters  []string
+	hasFlip     bool
+	hasPortal   bool
+	hasRawAt    bool
+	hasLazy     bool
+	hasSnippets bool
 }
 
 // scanStamp identifies a file version cheaply enough to check without reading.
@@ -142,6 +143,9 @@ func mergeFileUsage(usage *Usage, fu fileUsage) {
 	if fu.hasLazy {
 		usage.HasLazy = true
 	}
+	if fu.hasSnippets {
+		usage.HasSnippets = true
+	}
 }
 
 // scanFileUsage reads and parses one .pzl and returns its contribution. It is
@@ -198,6 +202,7 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 	one.hasFlip = tpl.HasFlip
 	one.hasPortal = tpl.HasPortal
 	one.hasRawAt = tpl.HasRawAt
+	one.hasSnippets = tpl.HasSnippets
 	for formatter := range tpl.Formatters {
 		one.formatters = append(one.formatters, formatter)
 	}

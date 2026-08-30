@@ -14,13 +14,15 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { prerender } from '../client-runtime/ssg/index.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG, SNIPPET_TAG } from '../client-runtime/views/ViewNode.js';
 import LocalForm from './fixtures/binding/LocalForm.compiled.js';
 import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const slot = () => new ViewNode(SLOT_TAG);
+const scopedMarker = (name, args) => new ViewNode(SLOT_TAG, { name, args });
+const snippet = (fits, params, fn) => new ViewNode(SNIPPET_TAG, { fits, params, fn });
 const tick = () => new Promise((r) => setTimeout(r, 0));
 // A bind write is setData + refresh(): the re-render lands on an animation frame
 // after data() re-runs, so drain both queues a few times.
@@ -106,6 +108,7 @@ afterEach(() => {
 	skeletonRenders = 0;
 	while (apps.length) apps.pop().unmount();
 	document.body.innerHTML = '';
+	vi.restoreAllMocks();
 });
 
 describe('router SSG takeover (M2)', () => {
@@ -535,6 +538,39 @@ describe('router SSG takeover (M2)', () => {
 
 		expect(el.innerHTML).toBe(prerendered);
 		expect(el.querySelector('.sync-leaf').textContent).toBe('SYNC-CONTENT');
+	});
+
+	it('mounts snippet output once during hybrid takeover with zero dev warnings', async () => {
+		class ScopedList extends PuzzleView {
+			render() {
+				return h('ul', { class: 'takeover-scoped-list' }, [
+					h('li', {}, [scopedMarker('row', { item: { label: 'hybrid' } })]),
+				]);
+			}
+		}
+		class ScopedPage extends PuzzleView {
+			render() {
+				return h('main', {}, [
+					h(ScopedList, {}, [
+						snippet('row', ['item'], ({ item }) => [
+							h('strong', { class: 'takeover-stamp' }, [text(item.label)]),
+						]),
+					]),
+				]);
+			}
+		}
+		const routes = [{ path: '/', name: 'scoped', view: ScopedPage }];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+		const el = ssgContainer(pages[0].html);
+		const prerendered = el.innerHTML;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter() });
+
+		await app.mount();
+
+		expect(el.innerHTML).toBe(prerendered);
+		expect(el.querySelector('.takeover-stamp').textContent).toBe('hybrid');
+		expect(warn).not.toHaveBeenCalled();
 	});
 
 	it('suppresses the NESTED components enter during hybrid takeover', async () => {

@@ -1,0 +1,41 @@
+<puzzle-view class="snippets-host">
+  <SnippetList users={ users } group={ group }>
+    <Snippet fits="heading" group>
+      { group.title } / { suffix }
+    </Snippet>
+
+    <Snippet fits="row" user group>
+      <button class="person" @click={ rename(user.id) }>
+        { group.title }:{ user.name }:{ suffix }
+      </button>
+    </Snippet>
+
+    <Snippet group>
+      default:{ group.title }:{ suffix }
+    </Snippet>
+  </SnippetList>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import SnippetList from './SnippetList.compiled.js';
+
+export default class SnippetsHost extends PuzzleView {
+  created() {
+    this.setData({
+      users: [{ id: 1, name: 'Ada' }, { id: 2, name: 'Grace' }],
+      group: { title: 'Core' },
+      suffix: 'v1',
+    });
+  }
+
+  events = {
+    rename: (id) => {
+      const users = this.getData().users.map((user) => (
+        user.id === id ? { ...user, name: `${user.name}?` } : user
+      ));
+      this.setData({ users, suffix: 'v2' });
+    },
+  };
+}
+</script>
