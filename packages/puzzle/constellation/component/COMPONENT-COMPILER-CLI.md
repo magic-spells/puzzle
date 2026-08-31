@@ -29,6 +29,7 @@ notes:
 
 # Compiler CLI
 
+
 Cobra command surface shipped by the platform binary:
 
 - `puzzle build [dir] [--mode] [--static|--hybrid]` runs the production/
@@ -63,6 +64,26 @@ Cobra command surface shipped by the platform binary:
   hard error naming `puzzle build`; a flag-only build's mode is read back from
   the artifact's `data-puzzle-static`/`data-puzzle-ssg` marker when the config
   is silent, and config/artifact disagreements warn.
+- `puzzle check [dir]` ([[DECISION-D165-PUZZLE-CHECK]]) type-checks the app's
+  `.pzl` files with the TypeScript the app itself installs. `internal/check`
+  rebuilds `.puzzle/check/` per run: each `.pzl` under `app/` becomes a virtual
+  file — a `lang="ts"` script verbatim plus a generated, never-executed wrapper
+  restating every template expression as typed statements, or, for a JavaScript
+  component, an unchecked `.pzl.script.js` mirror alongside that wrapper (the
+  `.script` infix stops TypeScript's extension substitution resolving the
+  wrapper's import back to itself). It then runs `node_modules/.bin/tsc
+  --noEmit --pretty false -p .puzzle/check` as a subprocess and rewrites each
+  diagnostic to its authored `.pzl` line/column through the `.segments.json`
+  sidecars, passing anything unmappable through untouched. The generated
+  tsconfig extends the app's when present, overrides the options that would
+  break the workspace (`rootDir`, `composite`, `skipLibCheck`, the `noUnused*`
+  pair, an inherited `exclude`), and switches shape for TypeScript 7 after
+  probing `tsc --version` once. Nothing here links against a TypeScript API.
+  A missing tsc is the message `puzzle check needs TypeScript: npm install -D
+  typescript`, checked AFTER the "not a Puzzle project" test; a `.pzl` that
+  fails to compile is reported as its own positioned diagnostic and skipped
+  rather than aborting the run. `--js` is registered and deliberately errors as
+  not implemented.
 - `--fixtures` on both `build` and `dev` (D98) wires `app/fixtures.js` through
   a generated two-module wrapper entry under `.puzzle/` so the `/fixtures`
   module installs before the app entry runs; requires the file, is rejected
@@ -70,7 +91,8 @@ Cobra command surface shipped by the platform binary:
   remove the generated `.puzzle/fixtures/` afterward while dev keeps it for the
   process lifetime. `.puzzle/` itself survives every build: it is the
   compiler's scratch root, holding `tmp/` (staging + previous-dist holding dirs,
-  plus static dev's warm output tree) and a `.gitignore` of `*` that makes the
+  plus static dev's warm output tree), `check/` (the D165 workspace), and a
+  `.gitignore` of `*` that makes the
   whole directory self-ignoring ([[DECISION-D153-PUZZLE-SCRATCH-DIR]]).
 - `puzzle init <name>` embeds `default` and `todos` app trees, with optional
   TypeScript editor config. On a TTY it prompts for whatever was not given —
@@ -142,7 +164,9 @@ Cobra command surface shipped by the platform binary:
   `PUZZLE_NO_UPDATE_CHECK`, registry overridable via `PUZZLE_REGISTRY`).
 
 The D3 boundary holds: add/generate never parse or rewrite user JavaScript and
-never install npm dependencies. Piece registries are untrusted: target/file/lib/
+never install npm dependencies — `puzzle check` extends that rule to the
+toolchain, resolving the app's own `tsc` and never installing one. Piece
+registries are untrusted: target/file/lib/
 theme paths reject absolute or parent traversal, resolved destinations cannot
 escape the app through symlinks, and local fetches cannot escape the registry
 root through symlinks.

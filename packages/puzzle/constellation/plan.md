@@ -25,6 +25,7 @@ decision cards explain why the contract has its current shape.
 
 ## Current state
 
+
 - **Published:** `0.1.0` (2026-07-21), `0.1.1` (interactive `puzzle init`
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
   skills` installer, D78/v1.45) are live on npm — MIT, five packages, manual
@@ -120,13 +121,33 @@ decision cards explain why the contract has its current shape.
   never does; a failed load is an ordinary failed push through the
   `navigation` error phase; both prerender modes await the same markers.
   `examples/blog` splits its `/settings` section behind `build.splitting`.
+  The resolver rides the D89 gate (`__PUZZLE_HAS_LAZY__`), which is why the
+  usage scan now reads the app's `.js`/`.ts` modules as well as its templates.
+- **Current 0.7 tooling work (v1.78):** [[DECISION-D165-PUZZLE-CHECK]] adds
+  `puzzle check` — the first type checking Puzzle has ever had for `.pzl`
+  script bodies and template expressions. It emits virtual files under
+  `.puzzle/check/`, runs the app's OWN `tsc` as a subprocess, and remaps
+  diagnostics to exact `.pzl` positions through byte-exact segment tables.
+  Hard constraint honored by design: nothing is built on TypeScript 6-era
+  compiler APIs (no Volar, no language service), so the CLI protocol is the
+  whole interface — verified against tsc 4.9, 5.7, and 7.0.
+- **Current 0.7 composition work (v1.79):** [[DECISION-D166-SNIPPETS]] ships
+  snippets, the last item on the SPEC's deferred composition list. A caller
+  declares `<Snippet fits="row" user group>…</Snippet>` inside a component
+  invocation (bare attributes are parameter declarations) and the component
+  stamps it per item by handing values out through data attributes on its own
+  markers. The function travels in the children channel, not props; each stamp
+  gets fresh vnodes; `__PUZZLE_HAS_SNIPPETS__` keeps non-users at zero bytes.
+  Known limitation at ship: a snippet does not yet forward through a wrapper
+  component's `<Children/>` into a nested component (D71 carries plain content
+  only).
 - **Monorepo (0.7.0):** [[DECISION-D162-MONOREPO-PACKAGES]] — the repo root is
   a private shell; the framework lives at `packages/puzzle` beside
   puzzle-pieces, puzzle-devtools, puzzle-eslint, and puzzle-prettier, all
   carrying the framework version; grammars stay in their own repos; absorbed
   repos are archived, never deleted.
 - **Playground compiler Phase 1:** [[FEATURE-PLAYGROUND-WASM-COMPILER]] / [[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]] adds the esbuild-free parser+codegen WASM module, its synchronous JS globals, the pinned worker envelope, filesystem-free asset diagnostics, and size/dependency/smoke gates. The worker and UI remain later phases.
-- The next free decision number is D165.
+- The next free decision number is D167.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
@@ -157,7 +178,8 @@ decision cards explain why the contract has its current shape.
 - Element actions were reviewed and deferred (the SPEC deferred list carries
   the rationale). Lazy routes left that list in 0.7.0
   ([[DECISION-D163-LAZY-ROUTE-VIEWS]], v1.77); link preloading is the half
-  still deferred. `<Portal>` shipped its scoped v1 in 0.5.0
+  still deferred. Scoped slots left it too, as snippets
+  ([[DECISION-D166-SNIPPETS]], v1.79). `<Portal>` shipped its scoped v1 in 0.5.0
   ([[DECISION-D144-PORTAL]], v1.66) — named outlets remain the deferred half. Pieces migration to
   `@event:outside` is queued for AFTER 0.2.0 ships — older compilers reject
   unknown modifiers.
@@ -167,10 +189,10 @@ decision cards explain why the contract has its current shape.
 - Runtime, compiler, CLI, static generation (hybrid + static modes),
   state-preserving dev reload,
   TypeScript transpilation, model validation/relationships/write sync, nested
-  routing, slots, refs, scoped styles, animations, and optional morphs are all
-  implemented.
+  routing, slots, snippets, refs, scoped styles, animations, and optional
+  morphs are all implemented.
 - The npm package includes the JavaScript runtime/types, the `puzzle` shim, and
-  optional macOS/Linux binaries for arm64/x64.
+  optional macOS/Linux binaries for arm64/x64 plus a Windows x64 binary.
 - `examples/todos` is the canonical integration app. The rest of `examples/`
   are focused acceptance/showcase apps.
 - The 0.1.x backlog is done and published, `0.2.0` shipped 2026-07-24, and the
@@ -199,6 +221,7 @@ Explicitly future or unshipped, not release blockers:
   not bugs.
 
 ## Framework-gap review (2026-07-24)
+
 
 A survey against React, Vue, Svelte, Ember, Angular, and Astro found the core
 runtime broadly at parity — the remaining gaps sit in the layer *around* it
@@ -272,12 +295,16 @@ two-way form binding, inferred with no sugar syntax — is in 0.5.0 as
 [[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]/v1.68; the forms helper itself
 stays unscheduled); `<svelte:window>`-style global event bindings;
 per-subtree provide/inject;
-`puzzle check` / an LSP over the compiler's existing positioned diagnostics;
+an LSP over the compiler's existing positioned diagnostics;
 i18n; `build --analyze`; deploy presets; Astro-style content
 collections; and the remaining WASM playground worker/UI phases — Phase 1's
 parser+codegen module is now [[FEATURE-PLAYGROUND-WASM-COMPILER]]. (`puzzle
 preview` left this list in 0.5.0 —
-[[DECISION-D148-PREVIEW-AND-STATIC-DEV]]/v1.69. Dynamic components were
+[[DECISION-D148-PREVIEW-AND-STATIC-DEV]]/v1.69, and `puzzle check` left it in
+0.7.0 — [[DECISION-D165-PUZZLE-CHECK]]/v1.78, which is the command half only:
+editor-level checking waits on the official TypeScript 7 tooling API, since
+this project will not build on the TypeScript 6 compiler APIs every existing
+LSP uses. Dynamic components were
 re-reviewed 2026-07-28 and stay cut: `{#if}`/`{#case}` over imported
 components covers the enumerable case, and compile-time import resolution
 makes an open-ended `is={}` real design work, not sugar.)
