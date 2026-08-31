@@ -32,6 +32,23 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: decision
+    text: >-
+      Compiled component packages are NOT a supported input for the usage gate (2026-08-30). The
+      scan reads first-party .pzl source and prunes node_modules, so a PRE-COMPILED component
+      package emitting `new ViewNode('#snippet', …)` can hand a snippet vnode to an app whose
+      `__PUZZLE_HAS_SNIPPETS__` is false — nothing partitions it out, a `<Children>`/`<Slot>`
+      substitution forwards it into the live tree, and generic mounting called
+      `document.createElement('#snippet')` → DOM InvalidCharacterError (blank position / errorView),
+      while the SSG serializer swallowed it as ''. The boundary is deliberate and the same one
+      flip/Portal/raw have always had: pieces ship as copied SOURCE that the app's own build
+      compiles, so the scan sees them. We do NOT scan node_modules and do NOT stop tree-shaking.
+      What changed is the failure mode: `metadataTagError(tag)` in views/ViewNode.js is thrown by
+      both the browser element-creation path and ssg/serialize.js for any vnode tag starting with
+      '#' (the arity placeholder '#' returns earlier on both paths), naming the metadata tag, the
+      false define, and the compiled-package boundary. The check is a bare `startsWith('#')` on a
+      string already in hand and sits OUTSIDE every gate, so it holds in every build; only the
+      message is built, on the throw path. Regression: tests/snippet-tag-escape.test.js.
 name: 'D89 — pay-for-what-you-use runtime: feature-usage scan drives DCE defines'
 ---
 

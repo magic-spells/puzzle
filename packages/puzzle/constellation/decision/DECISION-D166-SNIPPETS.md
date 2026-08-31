@@ -92,6 +92,7 @@ component already covers plain lists.
 
 ## Mechanics
 
+
 **A snippet compiles to a function that travels in the CHILDREN channel, not
 props.** `<Snippet fits="row" user group>` emits
 `new ViewNode(SNIPPET_TAG, { fits: 'row', params: ['user','group'], fn: ({ user, group }) => [ …vnodes… ] })`
@@ -122,18 +123,26 @@ a caller re-render produces a new children array and rides the existing
 slot-only update. Both directions were already built.
 
 **Prerender shares the pipe.** SSG and the static kernel import the same
-expansion, so both prerender modes stamp snippets with no new code; a
-`SNIPPET_TAG` vnode that somehow reached the serializer emits `''` like a slot
-marker. A prepared takeover tree expands exactly once — re-expanding a prepared
-tree would lose the first pass's snippet-use state and emit a false
-unused-snippet warning.
+expansion, so both prerender modes stamp snippets with no new code. A
+`SNIPPET_TAG` vnode that reaches the serializer — or the browser's element
+mount — throws the shared metadata-tag diagnostic instead of emitting nothing:
+expansion consumes every snippet vnode, so one that survives came from a build
+the D89 usage scan could not see through (see that card's
+compiled-component-package boundary). A prepared takeover tree expands exactly
+once — re-expanding it repeats work that cannot change the output — and only a
+view's FIRST mount can carry one, which is why `ViewManager.renderFresh()`
+(recovery only) always expands and takes no already-expanded flag.
 
 **Development warns about shapes, and only in development.** At the call site
 the declared `params` are compared against `Object.keys(args)` and a mismatch
 warns once per (component, position): *snippet fits slot "row" declares
-(person); slot "row" hands over (user)*. Two more dev warnings cover a snippet
-no marker consumed, and an args-bearing marker that received plain content
-instead of a snippet (which falls back).
+(person); slot "row" hands over (user)*. Two more dev warnings cover an
+args-bearing marker that received plain content instead of a snippet (which
+falls back), and a snippet function that returned a composition marker. There is
+deliberately **no unused-snippet warning**: a marker inside a currently-false
+`{#if}` or an empty `{#for}` is not visited either, so "no marker consumed this"
+cannot distinguish an authoring mistake from ordinary conditional markup, and
+the observation reported both as one.
 
 **Gated behind `__PUZZLE_HAS_SNIPPETS__`** in the D89 pattern — an inline
 `typeof … === 'undefined' || …` probe at each site, never hoisted to a module
@@ -142,6 +151,7 @@ exactly the fast path it took before. Non-users pay **0 bytes**; users pay
 **48–60 B gzip**.
 
 ## Forwarding through wrappers
+
 
 A snippet handed to a wrapper reaches the component the wrapper wraps by the
 same implicit rule D71 already applies to plain content: **a bare
@@ -152,8 +162,8 @@ arrives at `Calendar`'s `day` marker with `fits`, `params`, and `fn` intact and
 never invoked on the way — the nested component's own partitioning consumes it.
 The rule is transitive through wrapper chains. An args-bearing marker still
 stamps locally and never forwards; a wrapper may both stamp and forward the same
-snippet. A forwarded snippet counts as used at the wrapper, and the innermost
-recipient owns the single unused-snippet warning.
+snippet. A snippet nothing in the chain stamps is simply never invoked and never
+reaches the DOM — silently, since there is no unused-snippet warning to own.
 
 This is runtime-only (the partition keeps the ordered snippet vnodes as
 forwarding metadata and the D71 call-site descent re-inserts them at the

@@ -60,6 +60,26 @@ export const PLACEHOLDER_TAG = '#';
 // `children` are the teleported subtree.
 export const PORTAL_TAG = 'portal';
 
+/**
+ * The one diagnostic for a reserved '#'-prefixed metadata tag that reached a
+ * rendering path (D89 boundary). Every such tag is consumed by expansion before
+ * mount/serialize; one that survives means the vnode came from somewhere the
+ * feature-usage scan never read — in practice a COMPILED component package,
+ * which is not a supported input for the gate (pieces ship as source, compiled
+ * by the app's own build). The browser used to answer that with a DOM
+ * InvalidCharacterError and the SSG serializer with silent empty output, neither
+ * of which names the cause. Built only on the throw path, so the check at each
+ * call site stays a bare `startsWith('#')` on a string already in hand.
+ */
+export function metadataTagError(tag) {
+	return new Error(
+		`[puzzle] vnode tag "${tag}" reached the DOM — it is framework metadata; ` +
+			'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ' +
+			'Compiled component packages are not scanned for feature usage; use source pieces ' +
+			'or force the feature on.'
+	);
+}
+
 // A row whose key resolves to null/undefined drops the whole list to positional
 // diffing (silently, pre-v1.26). Warn at most once per session — a bounded
 // global, like viewManager's warnDuplicateKey and animate.js's malformed-spec

@@ -35,7 +35,12 @@
  * `disabled=""`; they are equivalent HTML.
  */
 
-import { SLOT_TAG, SNIPPET_TAG, PLACEHOLDER_TAG, PORTAL_TAG } from '../views/ViewNode.js';
+import {
+	SLOT_TAG,
+	PLACEHOLDER_TAG,
+	PORTAL_TAG,
+	metadataTagError,
+} from '../views/ViewNode.js';
 import { expandSlots } from '../views/viewManager.js';
 import { displayValue as stringify } from '../display.js';
 
@@ -160,10 +165,6 @@ async function serializeNode(vnode, ctx, selectState) {
 	// never reaches here; guard defensively rather than emit a bogus <slot> tag.
 	if (vnode.tag === SLOT_TAG) return '';
 
-	// Snippet vnodes are call-site metadata consumed by expandSlots().
-	// An unmatched one contributes no prerendered markup.
-	if (vnode.tag === SNIPPET_TAG) return '';
-
 	// Portals emit NOTHING in prerendered HTML (D144): their content belongs to a
 	// framework-created outlet that only exists once the browser runtime mounts, so
 	// portaled markup appears at takeover, never in the static output.
@@ -172,6 +173,11 @@ async function serializeNode(vnode, ctx, selectState) {
 	if (vnode.isComponent) return serializeComponent(vnode, ctx, selectState);
 
 	const tag = vnode.tag;
+	// The prerender half of the browser's metadata-tag guard (D89 boundary): a
+	// reserved '#'-prefixed tag that no expansion pass consumed is a build the scan
+	// could not see through, not markup. The placeholder returned above; anything
+	// else here used to serialize to '' and take the failure to the browser instead.
+	if (tag.startsWith('#')) throw metadataTagError(tag);
 	let childSelectState = selectState;
 	if (tag === 'select' && 'value' in vnode.attrs) {
 		// Single-select semantics: the first matching option wins. multiple-select

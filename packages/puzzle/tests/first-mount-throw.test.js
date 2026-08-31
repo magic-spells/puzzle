@@ -9,7 +9,7 @@
 // portaled children mount) survived forever.
 import { afterEach, describe, expect, it } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { PORTAL_TAG, ViewNode } from '../client-runtime/views/ViewNode.js';
+import { PORTAL_TAG, SLOT_TAG, ViewNode } from '../client-runtime/views/ViewNode.js';
 import { ViewManager } from '../client-runtime/views/viewManager.js';
 import { teardownPortals } from '../client-runtime/views/portal.js';
 import { Store } from '../client-runtime/datastore/store.js';
@@ -273,5 +273,37 @@ describe('first mount that throws (D145)', () => {
 		expect(host.querySelector('hr')).not.toBe(null);
 		expect(host.querySelector('.ok').textContent).toBe('fine');
 		expect(outlet()).toBe(null);
+	});
+});
+
+// renderFresh() is RECOVERY machinery: it runs after a render threw, and every
+// path that reaches it (an ordinary render over an unknown tree, the failure
+// placeholder) builds its tree the ordinary way. Only the SSG/static takeover
+// hands ViewManager an already-expanded tree, and only for a view's very first
+// mount — __takeoverTree is read and DELETED there, so a recovery render can
+// never carry one. That is why renderFresh() takes no `slotsExpanded` flag; this
+// pins the behavior it must keep.
+describe('recovery renders always expand their own slots', () => {
+	it('substitutes markers in the tree that follows a failed render', () => {
+		const host = container();
+		const vm = new ViewManager(host, {});
+		vm.slotChildren = [h('span', { class: 'filled' }, [text('content')])];
+
+		class Exploding extends PuzzleView {
+			boom = (() => {
+				throw new Error('recovery boom');
+			})();
+			render() {
+				return h('span');
+			}
+		}
+
+		expect(() => vm.render(h('div', {}, [comp(Exploding)]))).toThrow('recovery boom');
+		expect(vm.treeUnknown).toBe(true);
+
+		vm.render(h('div', { class: 'recovered' }, [new ViewNode(SLOT_TAG)]));
+
+		expect(vm.treeUnknown).toBe(false);
+		expect(host.querySelector('.recovered .filled').textContent).toBe('content');
 	});
 });

@@ -37,6 +37,17 @@ notes:
       matched the runtime, and the card was rewritten to state what the code actually does. Verified
       at this sha with the framework suite green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      Per-store adapter gate (2026-08-30). `installAdapter()` copies the adapter methods onto
+      Store/PuzzleModel/PuzzleView prototypes ONCE PER REALM and never removes them (concurrent apps
+      depend on that), so method presence cannot say whether THIS app opted in. The store's own
+      capability does: `this._a = options.adapter`, set from what PuzzleApp.mount() passed.
+      `withTracking()` now installs the D161 request map as `this._requests = this._a ? requests :
+      null` — one check per evaluation, not per query — so `findOne`/`findMany` cannot fault on a
+      store built without the capability even though the prototypes carry `_faultOne`/`_faultMany`.
+      Tests that want the settle/fault path must pass `adapter` in the Store options the way the app
+      does. Regression: tests/adapter-realm-isolation.test.js.
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

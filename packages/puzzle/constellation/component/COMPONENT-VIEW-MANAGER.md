@@ -134,13 +134,21 @@ children — supplied content wins completely — and contributes no nodes when 
 has none (D141).
 `SNIPPET_TAG` children form a third bucket keyed by `fits`; an args-bearing
 marker calls the matching Snippet function for fresh vnodes on every stamp.
-Development diagnoses shape mismatches, unused snippets, plain fills for
-args-bearing markers, and defensive marker vnodes in function output. Hybrid
-and static takeover preload against an expanded tree and mount that exact tree
-without expanding it again, preserving both pinned component instances and the
-first pass's snippet-use accounting.
+Development diagnoses shape mismatches, plain fills for args-bearing markers,
+and defensive marker vnodes in function output — there is no unused-snippet
+warning, because a marker inside a false `{#if}` or an empty `{#for}` is not
+visited either and the observation reported both as one. Hybrid and static
+takeover preload against an expanded tree and mount that exact tree without
+expanding it again, preserving pinned component instances; that `slotsExpanded`
+branch of `render()` sits behind the inline `__PUZZLE_TAKEOVER__` probe, and
+`renderFresh()` — recovery only, never handed a prepared tree — always expands.
 Buckets are null-prototype objects and forwarding descends through component
-call-site children while preserving pinned routed instances.
+call-site children while preserving pinned routed instances. Any reserved
+`#`-prefixed metadata tag that survives expansion and reaches element creation
+(or the SSG serializer) throws the shared `metadataTagError` diagnostic, ungated
+in every build: the only way one gets there is a vnode from a build the D89
+usage scan could not read (see [[DECISION-D89-FEATURE-USAGE-TREESHAKE]]), and a
+DOM `InvalidCharacterError` named none of that.
 
 Host behavior includes SVG namespaces/`foreignObject`, per-node listener
 installation and removal, event modifiers with once-spend persistence (the

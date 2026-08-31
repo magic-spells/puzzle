@@ -268,6 +268,7 @@ breakout.
 
 ## 64. Snippets: `<Snippet>` + marker data attributes (v1.79)
 
+
 Slots render a passed-in template; **snippets render it repeatedly, with data**.
 A `<Snippet>` is a caller-declared body with parameters; the component stamps it
 once per item by handing values to its own marker. Shipped in v1.79
@@ -355,14 +356,15 @@ hands a caller's `<Snippet fits="day" …>` to Calendar's `day` marker with `fit
 parameters, and function intact and never invoked on the way. The rule is
 transitive through wrapper chains; an argument-bearing marker still stamps
 locally and never forwards; a wrapper may both stamp and forward the same
-snippet. A forwarded snippet counts as used at the wrapper, and the innermost
-recipient owns the single unused-snippet warning. Runtime-only, behind the same
-gate.
+snippet. A snippet nothing in the chain stamps is never invoked and never
+reaches the DOM. Runtime-only, behind the same gate.
 
-**Development diagnostics** (absent from production builds): a parameter/argument
-shape mismatch, a snippet no marker consumed, an argument-bearing marker filled
-with plain content, and a snippet whose output contains a composition marker.
-Each warns once per component and position.
+**Development diagnostics** (absent from production builds): a
+parameter/argument shape mismatch, an argument-bearing marker filled with plain
+content, and a snippet whose output contains a composition marker. Each warns
+once per component and position. There is deliberately no "unused snippet"
+diagnostic — a marker inside a false `{#if}` or an empty `{#for}` is not visited
+either, so nothing consuming a snippet is not evidence of a mistake.
 
 **Cost.** The feature is gated behind `__PUZZLE_HAS_SNIPPETS__` (D89): an app
 using no snippet and no marker argument pays **zero bytes** and takes the same

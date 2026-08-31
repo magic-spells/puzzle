@@ -476,7 +476,14 @@ export class Store {
 		// Same save/restore stack discipline as _tracking, for the same reason: a
 		// nested synchronous eval must not leave its request map installed under the
 		// suspended scope that resumes after it (D161).
-		this._requests = requests;
+		//
+		// The capability check is the STORE half of the D157 boundary. install()
+		// copies the fault methods onto Store.prototype once per realm and never
+		// removes them, so a store built without the capability still CARRIES
+		// _faultOne/_faultMany; refusing the request map here is what makes them
+		// unreachable, whatever hands this eval one. One check per evaluation, not
+		// per query — findOne/findMany stay exactly as cheap as they were.
+		this._requests = this._a ? requests : null;
 
 		// How many UNCOMMITTED prepared evals currently hold this key for this
 		// subscriber (D146). Refcounted, so two overlapping prepares that query the

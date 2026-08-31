@@ -22,7 +22,13 @@
  * substituted with the slot content captured at the call site before diffing.
  */
 
-import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG, SNIPPET_TAG } from './ViewNode.js';
+import {
+	ViewNode,
+	PLACEHOLDER_TAG,
+	PORTAL_TAG,
+	SNIPPET_TAG,
+	metadataTagError,
+} from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import {
 	mountPortal,
@@ -107,15 +113,20 @@ export class ViewManager {
 	render(rawTree, slotsExpanded = false) {
 		// D145's "never patched over an unknown tree" is an invariant of the manager.
 		// Route the next ordinary render through a fresh mount so it never diffs
-		// against vnodes whose DOM links may be detached.
-		if (this.treeUnknown) return this.renderFresh(rawTree, slotsExpanded);
-		// SSG/static takeover preloads nested components by walking the expanded
-		// tree and stores that exact tree for mount. Expanding it again cannot change
-		// the output, but it loses the first pass's snippet-use state and emits a
-		// false unused-snippet warning. All ordinary renders still expand here.
-		const newTree = slotsExpanded
-			? rawTree
-			: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
+		// against vnodes whose DOM links may be detached. A recovery render is always
+		// an ORDINARY one — the takeover's prepared tree exists only for a view's
+		// first mount — so renderFresh() expands unconditionally.
+		if (this.treeUnknown) return this.renderFresh(rawTree);
+		// SSG/static takeover preloads nested components by walking the expanded tree
+		// and stores that exact tree for mount; re-expanding it would repeat that work
+		// for no change in output. Only a takeover build can ever pass the flag, so
+		// the branch is probed INLINE against the define (hoisting it into a module
+		// const stops esbuild propagating it — see build_test.go) and folds away in a
+		// plain SPA build. All ordinary renders expand here.
+		const newTree =
+			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && slotsExpanded
+				? rawTree
+				: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
 		if (!this.currentTree) {
 			// A FIRST mount throws too (a component's class-field initializer, a
 			// `String(symbol)` in a text node), and it needs the same D145 machinery —
@@ -195,10 +206,8 @@ export class ViewManager {
 	 * document, and portaled content sits outside the range entirely — none of it
 	 * is reachable again once currentTree becomes the error face.
 	 */
-	renderFresh(rawTree, slotsExpanded = false) {
-		const newTree = slotsExpanded
-			? rawTree
-			: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
+	renderFresh(rawTree) {
+		const newTree = expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
 		releaseAborted(this.unknownTrees);
 		this.unknownTrees = null;
 		const range = this.unknownRange;
@@ -300,7 +309,7 @@ export class ViewManager {
  * clones) and no vnode changes unless a marker is actually present. A bare
  * default marker inside a nested component invocation forwards the caller's
  * snippet metadata with that bucket; the nested component owns the eventual
- * stamp (or unused-snippet warning).
+ * stamp.
  */
 export function expandSlots(vnode, slotChildren, component = null) {
 	const parts = partitionSlots(slotChildren);
@@ -310,15 +319,7 @@ export function expandSlots(vnode, slotChildren, component = null) {
 	) {
 		parts.component = component;
 	}
-	const expanded = expandNode(vnode, parts);
-	if (
-		(typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
-			__PUZZLE_HAS_SNIPPETS__) &&
-		(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
-	) {
-		warnUnusedSnippets(parts, component);
-	}
-	return expanded;
+	return expandNode(vnode, parts);
 }
 
 /**
@@ -366,14 +367,13 @@ function partitionSlots(slotChildren) {
 		__PUZZLE_HAS_SNIPPETS__
 	) {
 		if (named === null && snippets === null) {
-			return { default: slotChildren, named: null, snippets: null, snippetUses: null };
+			return { default: slotChildren, named: null, snippets: null };
 		}
 		return {
 			default: def ?? [],
 			named,
 			snippets,
 			snippetVnodes,
-			snippetUses: snippets && Object.create(null),
 			callSite: null,
 		};
 	}
@@ -509,12 +509,6 @@ function expandChildList(kids, parts) {
 						for (const fb of k.children) out.push(expandNode(fb, parts));
 					}
 					parts.callSite.forwarded = true;
-					for (const forwarded of parts.snippetVnodes) {
-						// Forwarding transfers warning ownership too: the wrapper used this
-						// declaration by handing it on; the innermost recipient still warns if
-						// none of its own markers consumes it.
-						parts.snippetUses[forwarded.attrs.fits || 'default'] = true;
-					}
 					// Forward every snippet even if a different marker in this wrapper already
 					// consumed it — snippet functions are reusable, and two consumers may stamp
 					// the same declaration. The original vnodes remain unmodified and uninvoked.
@@ -522,7 +516,6 @@ function expandChildList(kids, parts) {
 				}
 				const snippet = parts.snippets && parts.snippets[markerName];
 				if (snippet) {
-					parts.snippetUses[markerName] = true;
 					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 						warnSnippetShape(snippet, k.attrs.args || {}, markerName, parts.component);
 					}
@@ -631,18 +624,6 @@ function snippetOutputHasMarker(nodes) {
 	return false;
 }
 
-function warnUnusedSnippets(parts, component) {
-	if (!parts.snippets) return;
-	for (const name of Object.keys(parts.snippets)) {
-		if (parts.snippetUses[name]) continue;
-		warnSnippet(
-			component,
-			`unused:${name}`,
-			`snippet fits slot "${name}", but no matching slot marker consumed it`
-		);
-	}
-}
-
 // ---- mount ------------------------------------------------------------------
 
 /** Create the DOM for vnode and insert it into parent (before ref, or append). */
@@ -680,6 +661,12 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 		el = document.createTextNode(stringify(vnode.attrs.value));
 		vnode.el = el;
 	} else {
+		// Reserved framework tags all start with '#' and are consumed by expansion
+		// long before this point; the placeholder, the only one this path handles,
+		// returned above. One that arrives here is metadata that no expansion pass
+		// claimed — say so instead of letting createElement raise an opaque DOM
+		// InvalidCharacterError (D89 boundary; see metadataTagError).
+		if (vnode.tag.startsWith('#')) throw metadataTagError(vnode.tag);
 		el = inSvgNamespace(vnode.tag, parent)
 			? document.createElementNS(SVG_NS, vnode.tag)
 			: document.createElement(vnode.tag);
