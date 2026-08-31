@@ -60,6 +60,14 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: gotcha
+    text: >-
+      Both generated prerender entries force-exit in the summary write's callback
+      (`process.stdout.write(…, () => process.exit(0))`) instead of letting Node's loop drain: SSG
+      runs `created()` but never `destroyed()` (SPEC §36), so a timer or socket opened in
+      `created()` pins the subprocess until the 120s timeout kills it and fails the build blaming
+      `data()`. The callback is load-bearing — a bare `process.exit()` after a pipe write truncates
+      the payload and turns the hang into a "missing sentinel" failure.
 ---
 
 # Static generation runtime

@@ -494,6 +494,16 @@ one is *not* a compile error; it silently builds a different product.
   and split mode is the one path that makes such fetches routine. Outputs now go
   through the same write-and-rename every other live-`dist/` writer uses.
 
+- **A live handle in `created()` no longer hangs a prerendered build.** Both
+  generated prerender entries wrote their summary and let Node exit on its own,
+  so a `setInterval` (or any other handle) started in a view's `created()` kept
+  the subprocess alive until the 120-second timeout killed it and failed the
+  build blaming `data()`. SSG runs `created()` but never `destroyed()` (SPEC
+  §36), so a handle started there has no partner to close it; the entry now
+  exits as soon as the summary is flushed to the pipe. The timeout message says
+  "a `data()` that never resolves", which is now the only thing that can cause
+  it.
+
 ### Changed
 
 - **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing
