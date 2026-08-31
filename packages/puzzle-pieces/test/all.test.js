@@ -1,6 +1,7 @@
 import './sheet-parity.test.js';
 import './sidebar-parity.test.js';
 import './sheet-wrapper.test.js';
+import './calendar-snippet.test.js';
 import './input-otp-component.test.js';
 import './rich-text-doc.test.js';
 import './rich-text-parity.test.js';

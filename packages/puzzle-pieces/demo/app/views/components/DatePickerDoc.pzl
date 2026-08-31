@@ -82,6 +82,27 @@
           </div>
         </ExampleBox>
 
+        <ExampleBox id="day-snippet" title="Day snippet" code={ codeSnippet }>
+          <div class="w-full max-w-xs">
+            <DatePicker label="Session date" value={ eventDate } @change={ setEventDate }>
+              <Snippet fits="day" date day selected>
+                <span class="flex size-full flex-col items-center justify-center leading-none">
+                  <span>{ day }</span>
+                  {#if eventDates.has(date)}
+                    <span
+                      class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
+                      aria-hidden="true"></span>
+                  {/if}
+                </span>
+              </Snippet>
+            </DatePicker>
+            <p class="mt-3 text-sm text-muted">
+              DatePicker declares no day marker of its own — it forwards the snippet straight into the
+              Calendar it composes. Keep the content decorative: it is stamped inside the day button.
+            </p>
+          </div>
+        </ExampleBox>
+
         <ExampleBox id="formats" title="Formats" code={ codeFormats }>
           <div class="grid w-full max-w-lg gap-4 sm:grid-cols-2">
             <DatePicker label="short" format="short" value={ fmtDate } @change={ setFmtDate } />
@@ -147,6 +168,25 @@ const codeBounds = `<DatePicker
   value={ date }
   @change={ setDate } />`;
 
+// Mirror of the live day-snippet example above — keep the two in sync.
+const codeSnippet = `const eventDates = new Set(['2026-07-14', '2026-07-21', '2026-07-28']);
+
+<DatePicker label="Session date" value={ date } @change={ setDate }>
+  <Snippet fits="day" date day selected>
+    <span class="flex size-full flex-col items-center justify-center leading-none">
+      <span>{ day }</span>
+      {#if eventDates.has(date)}
+        <span
+          class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
+          aria-hidden="true"></span>
+      {/if}
+    </span>
+  </Snippet>
+</DatePicker>`;
+
+// Stable module reference — the day snippet closes over the caller's render data.
+const eventDates = new Set(['2026-07-14', '2026-07-21', '2026-07-28']);
+
 const codeFormats = `<!-- format: short | medium (default) | long | full -->
 <DatePicker label="Meeting" format="short" value={ date } @change={ setDate } />
 <DatePicker label="Meeting" format="long" value={ date } @change={ setDate } />`;
@@ -158,6 +198,7 @@ export default class DatePickerDoc extends PuzzleView {
       errorDate: '',
       morphDate: '2026-08-01',
       boundedDate: '2026-07-16',
+      eventDate: '2026-07-21',
       fmtDate: '2026-07-16',
     });
   }
@@ -169,10 +210,12 @@ export default class DatePickerDoc extends PuzzleView {
       usageImport,
       usageMarkup,
       morphInstall,
+      eventDates,
       codeHero,
       codeError,
       codeMorph,
       codeBounds,
+      codeSnippet,
       codeFormats,
       toc: [
         { label: 'Installation', href: '#installation' },
@@ -180,6 +223,7 @@ export default class DatePickerDoc extends PuzzleView {
         { label: 'Error state', href: '#error' },
         { label: 'Morph', href: '#morph' },
         { label: 'Bounds', href: '#bounds' },
+        { label: 'Day snippet', href: '#day-snippet' },
         { label: 'Formats', href: '#formats' },
       ],
     };
@@ -190,6 +234,7 @@ export default class DatePickerDoc extends PuzzleView {
     setErrorDate: (iso) => this.setData('errorDate', iso),
     setMorphDate: (iso) => this.setData('morphDate', iso),
     setBoundedDate: (iso) => this.setData('boundedDate', iso),
+    setEventDate: (iso) => this.setData('eventDate', iso),
     setFmtDate: (iso) => this.setData('fmtDate', iso),
   };
 }

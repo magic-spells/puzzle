@@ -5,19 +5,16 @@ connections:
   - DOC-REGISTRY
   - DECISION-WRAP-WEB-COMPONENTS
 notes:
-  - kind: decision
+  - kind: gotcha
     text: >-
-      Calendar family day-cell snippet (0.7.0, framework D166): Calendar declares <Slot name="day"
-      date day selected today outside disabled inRange rangeStart rangeEnd> once inside its day loop
-      — date is the ISO YYYY-MM-DD string, day the numeric day, the rest booleans describing cell
-      state; the day number stays the fallback so existing callers see no change. The snippet
-      replaces only the day button's inner content: the button, its ARIA
-      (selected/current/disabled), grid roles, keyboard navigation, and range-highlight classes
-      remain piece-owned. DatePicker and DateRangePicker do NOT redeclare the slot — they forward
-      the caller's <Snippet fits="day"> through a bare <Children/> into the inner Calendar (D166
-      forwarding), so one marker declaration serves every rendered grid; range flags are always
-      false in DatePicker. Verified: 42 inner day buttons received forwarded snippet markup (jsdom),
-      selected-state propagated.
+      Calendar day-slot parameters and forwarding: date is the ISO YYYY-MM-DD string, day the
+      numeric day-of-month, and selected/today/outside/disabled/inRange/rangeStart/rangeEnd are
+      booleans. DatePicker and DateRangePicker declare NO day marker of their own — they forward the
+      caller's <Snippet fits="day"> through a bare <Children/> into the inner Calendar, so
+      self-closing <Calendar .../> silently drops caller snippets (the fallback day number still
+      renders and looks correct); DatePicker passes no range, so its range flags are always false.
+      Snippet content is stamped INSIDE the day <button>: it must be non-interactive (no nested
+      button/link/input) or it is invalid HTML and breaks the roving-tabindex/gridcell model.
 ---
 
 # Config-first APIs over compound components

@@ -76,7 +76,7 @@
                     disabled={ d.disabled }
                     inRange={ d.inRange }
                     rangeStart={ d.rangeStart }
-                    rangeEnd={ d.rangeEnd }>{ d.dayNum }</Slot>
+                    rangeEnd={ d.rangeEnd }>{ d.day }</Slot>
                 </button>
               </div>
             {/for}
@@ -225,6 +225,11 @@ import {
 //     content — Calendar retains the button, ARIA, grid roles, keyboard behavior, and
 //     range classes. Normal markup, components, and control flow are allowed; nested
 //     <Children>/<Slot>/<Snippet> markers and `ref=` are compile errors.
+//     The content is stamped INSIDE the day <button>, so it must be NON-INTERACTIVE:
+//     no nested <button>, <a href>, <input>, or any other focusable control. Nesting
+//     one is invalid HTML and it breaks the grid's roving-tabindex/gridcell model
+//     (one Tab stop per grid, arrows move the focus). Decorative markup and text only —
+//     spans, icons, dots, badges.
 //
 // CALLBACKS
 //   @change(isoValue, date)      fires on day selection (single date). `date` is a
@@ -522,8 +527,12 @@ export default class Calendar extends PuzzleView {
     } else if (rangeEnd && previewDate) {
       [bandLo, bandHi] = compareDates(rangeEnd, previewDate) <= 0 ? [rangeEnd, previewDate] : [previewDate, rangeEnd];
     }
-    const isRangeEndpoint = (parts) =>
-      (!!rangeStart && isSameDay(parts, rangeStart)) || (!!rangeEnd && isSameDay(parts, rangeEnd));
+    // One definition per endpoint. The band math and the per-day rangeStart/rangeEnd
+    // snippet flags both call these, so the two can never disagree about what an
+    // endpoint is.
+    const isRangeStartDay = (parts) => !!rangeStart && isSameDay(parts, rangeStart);
+    const isRangeEndDay = (parts) => !!rangeEnd && isSameDay(parts, rangeEnd);
+    const isRangeEndpoint = (parts) => isRangeStartDay(parts) || isRangeEndDay(parts);
     // Interior = inside the band interval (exclusive of a single-day interval) and not a
     // committed-endpoint disc. The hovered preview day, not yet committed, counts as interior.
     const isBandInterior = (parts) =>
@@ -538,8 +547,8 @@ export default class Calendar extends PuzzleView {
         const iso = formatISODate(cell);
         const disabled = this._isDayDisabled(cell, props);
         const outside = !cell.isCurrentMonth;
-        const rangeStartDay = !!rangeStart && isSameDay(cell, rangeStart);
-        const rangeEndDay = !!rangeEnd && isSameDay(cell, rangeEnd);
+        const rangeStartDay = isRangeStartDay(cell);
+        const rangeEndDay = isRangeEndDay(cell);
         // Endpoints reuse the selected disc; with no range this collapses to the old `selected`.
         const selected = isSameDay(cell, committed) || rangeStartDay || rangeEndDay;
         const isToday = isSameDay(cell, today);
@@ -550,7 +559,6 @@ export default class Calendar extends PuzzleView {
           key: iso,
           iso,
           day: cell.day,
-          dayNum: String(cell.day),
           selected,
           today: isToday,
           outside,

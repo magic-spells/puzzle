@@ -56,6 +56,27 @@
           <Calendar value={ mondayDate } firstDayOfWeek={ 1 } @change={ setMondayDate } />
         </ExampleBox>
 
+        <ExampleBox id="day-snippet" title="Day snippet" code={ codeSnippet }>
+          <div class="flex flex-col items-center gap-4">
+            <Calendar value={ eventDate } @change={ setEventDate }>
+              <Snippet fits="day" date day selected>
+                <span class="flex size-full flex-col items-center justify-center leading-none">
+                  <span>{ day }</span>
+                  {#if eventDates.has(date)}
+                    <span
+                      class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
+                      aria-hidden="true"></span>
+                  {/if}
+                </span>
+              </Snippet>
+            </Calendar>
+            <p class="text-sm text-muted">
+              Dots mark days that have events. The snippet is stamped inside each day button, so it
+              must stay decorative — Calendar keeps the button, its ARIA, and the keyboard grid.
+            </p>
+          </div>
+        </ExampleBox>
+
         <section id="keyboard" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
           <p class="mb-4 text-sm text-body">
@@ -130,6 +151,9 @@ const weekends = (iso, date) => {
   return day === 0 || day === 6;
 };
 
+// Stable module reference — the day snippet closes over the caller's render data.
+const eventDates = new Set(['2026-07-14', '2026-07-21', '2026-07-28']);
+
 const KEY_CLASS =
   'inline-flex min-w-[1.75rem] items-center justify-center rounded border border-border ' +
   'bg-surface-sunken px-1.5 py-0.5 font-mono text-xs text-ink';
@@ -154,6 +178,22 @@ const weekends = (iso, date) => date.getDay() === 0 || date.getDay() === 6;
 const codeFirstDay = `<!-- firstDayOfWeek: 0 = Sunday (default) … 6 = Saturday -->
 <Calendar value={ date } firstDayOfWeek={ 1 } @change={ setDate } />`;
 
+// Mirror of the live day-snippet example above — keep the two in sync.
+const codeSnippet = `const eventDates = new Set(['2026-07-14', '2026-07-21', '2026-07-28']);
+
+<Calendar value={ date } @change={ setDate }>
+  <Snippet fits="day" date day selected>
+    <span class="flex size-full flex-col items-center justify-center leading-none">
+      <span>{ day }</span>
+      {#if eventDates.has(date)}
+        <span
+          class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
+          aria-hidden="true"></span>
+      {/if}
+    </span>
+  </Snippet>
+</Calendar>`;
+
 const codeMorph = `// Calendar is inline-only; DatePicker composes it behind a trigger.
 // morph animates the trigger into the panel (npm install @magic-spells/morph-engine).
 <DatePicker label="Event date" value={ date } morph={ true } @change={ setDate } />`;
@@ -164,6 +204,7 @@ export default class CalendarDoc extends PuzzleView {
       date: '2026-07-16',
       boundedDate: '2026-07-16',
       mondayDate: '2026-07-16',
+      eventDate: '2026-07-21',
       morphDate: '2026-08-01',
     });
   }
@@ -175,16 +216,19 @@ export default class CalendarDoc extends PuzzleView {
       usageImport,
       usageMarkup,
       weekends,
+      eventDates,
       keyClass: KEY_CLASS,
       codeHero,
       codeBounds,
       codeFirstDay,
+      codeSnippet,
       codeMorph,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Bounds and disabled dates', href: '#bounds' },
         { label: 'First day of week', href: '#first-day' },
+        { label: 'Day snippet', href: '#day-snippet' },
         { label: 'Keyboard', href: '#keyboard' },
         { label: 'From a trigger, with morph', href: '#from-trigger' },
       ],
@@ -195,6 +239,7 @@ export default class CalendarDoc extends PuzzleView {
     setDate: (iso) => this.setData('date', iso),
     setBoundedDate: (iso) => this.setData('boundedDate', iso),
     setMondayDate: (iso) => this.setData('mondayDate', iso),
+    setEventDate: (iso) => this.setData('eventDate', iso),
     setMorphDate: (iso) => this.setData('morphDate', iso),
   };
 }

@@ -91,6 +91,31 @@
           </div>
         </ExampleBox>
 
+        <ExampleBox id="day-snippet" title="Day snippet" code={ codeSnippet }>
+          <div class="w-full max-w-md">
+            <DateRangePicker
+              label="Conference dates"
+              months={ 2 }
+              value={ eventRange }
+              @change={ setEventRange }>
+              <Snippet fits="day" date day selected inRange>
+                <span class="flex size-full flex-col items-center justify-center leading-none">
+                  <span>{ day }</span>
+                  {#if eventDates.has(date)}
+                    <span
+                      class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
+                      aria-hidden="true"></span>
+                  {/if}
+                </span>
+              </Snippet>
+            </DateRangePicker>
+            <p class="mt-3 text-sm text-muted">
+              One snippet, forwarded into both month grids — DateRangePicker declares no day marker of
+              its own. Keep the content decorative: it is stamped inside the day button.
+            </p>
+          </div>
+        </ExampleBox>
+
         <ExampleBox id="error" title="Error state" code={ codeError }>
           <div class="w-full max-w-xs">
             <DateRangePicker
@@ -179,11 +204,31 @@ events = {
   onHide: () => this.setData('open', false),
 };`;
 
+// Mirror of the live day-snippet example above — keep the two in sync.
+const codeSnippet = `const eventDates = new Set(['2026-07-14', '2026-07-21', '2026-08-04']);
+
+<!-- one snippet fills the day marker in BOTH grids -->
+<DateRangePicker label="Conference dates" months={ 2 } value={ range } @change={ setRange }>
+  <Snippet fits="day" date day selected inRange>
+    <span class="flex size-full flex-col items-center justify-center leading-none">
+      <span>{ day }</span>
+      {#if eventDates.has(date)}
+        <span
+          class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
+          aria-hidden="true"></span>
+      {/if}
+    </span>
+  </Snippet>
+</DateRangePicker>`;
+
 const codeError = `<DateRangePicker
   label="Contract term"
   error="Please choose a start and end date."
   value={ range }
   @change={ setRange } />`;
+
+// Stable module reference — the day snippet closes over the caller's render data.
+const eventDates = new Set(['2026-07-14', '2026-07-21', '2026-08-04']);
 
 const presets = [
   { label: 'This week', start: '2026-07-13', end: '2026-07-19' },
@@ -201,6 +246,7 @@ export default class DateRangePickerDoc extends PuzzleView {
       boundedRange: { start: '2026-07-08', end: '2026-07-16' },
       controlledRange: { start: '', end: '' },
       controlledOpen: false,
+      eventRange: { start: '2026-07-14', end: '2026-07-21' },
       errorRange: { start: '', end: '' },
     });
   }
@@ -210,6 +256,7 @@ export default class DateRangePickerDoc extends PuzzleView {
     return {
       ...d,
       presets,
+      eventDates,
       openLabel: d.controlledOpen ? 'Close picker' : 'Open picker',
       installCmd,
       usageImport,
@@ -219,6 +266,7 @@ export default class DateRangePickerDoc extends PuzzleView {
       codePresets,
       codeBounds,
       codeControlled,
+      codeSnippet,
       codeError,
       toc: [
         { label: 'Installation', href: '#installation' },
@@ -227,6 +275,7 @@ export default class DateRangePickerDoc extends PuzzleView {
         { label: 'Presets', href: '#presets' },
         { label: 'Bounds', href: '#bounds' },
         { label: 'Controlled open', href: '#controlled-open' },
+        { label: 'Day snippet', href: '#day-snippet' },
         { label: 'Error state', href: '#error' },
       ],
     };
@@ -237,6 +286,7 @@ export default class DateRangePickerDoc extends PuzzleView {
     setTwoRange: (range) => this.setData('twoRange', range),
     setPresetRange: (range) => this.setData('presetRange', range),
     setBoundedRange: (range) => this.setData('boundedRange', range),
+    setEventRange: (range) => this.setData('eventRange', range),
     setErrorRange: (range) => this.setData('errorRange', range),
     setControlledRange: (range) => this.setData('controlledRange', range),
     toggleOpen: () => {
