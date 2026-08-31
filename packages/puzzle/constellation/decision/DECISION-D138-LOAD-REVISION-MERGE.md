@@ -41,6 +41,7 @@ save responses do".
 
 ## Decision
 
+
 Exact D125 parity — the protected window is the request's OWN flight, per
 field, not open-ended dirtiness:
 
@@ -60,6 +61,20 @@ field, not open-ended dirtiness:
 - Public `upsert()` and `request()` response merges are UNCHANGED: those are
   explicit imperative calls whose callers intend the payload to land.
 - `_synced = true` still flips on every load merge (provenance, D50).
+
+Reads also carry ORDER, not just an edit boundary. The revision snapshot says
+nothing about two loads of the same identity racing each other, so before this
+the last response to arrive won and a slow request could roll a newer one back
+— including an explicit `loadOne` racing the D161 automatic fault, which routes
+through the same loader. Every `_loadOne`/`_loadMany` call now takes a
+monotonic dispatch generation from the store's read state and hands it to
+`_upsert`; a module-level `WeakMap` records the highest generation that has
+landed on each record, and a response whose generation is lower is dropped for
+that record — no merge, no `_notify`, `_synced` untouched. `clearAbsent` and
+the collection-complete mark still run, because a stale response still proves
+the identity or collection exists. Save reconciliation and the public
+`upsert()` pass no generation and are deliberately outside this ordering:
+their precedence against reads is unchanged and undefined.
 
 Amends the §8 read path (D21/D137) with the §22/D125 merge gate. The
 [[DECISION-D161-AUTO-FETCHING-FINDS]] implicit fault path runs these same
