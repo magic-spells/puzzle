@@ -148,6 +148,11 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 //     and Calendar retains its button, ARIA, grid roles, keyboard behavior, and classes.
 //     Normal markup, components, and control flow are allowed; nested
 //     <Children>/<Slot>/<Snippet> markers and `ref=` are compile errors.
+//     The content is stamped INSIDE the day <button>, so it must be NON-INTERACTIVE:
+//     no nested <button>, <a href>, <input>, or any other focusable control. Nesting
+//     one is invalid HTML and it breaks the grid's roving-tabindex/gridcell model
+//     (one Tab stop per grid, arrows move the focus). Decorative markup and text only —
+//     spans, icons, dots, badges.
 //
 // CALLBACKS
 //   @change(isoValue, date)  re-emitted from Calendar on day selection; DatePicker
