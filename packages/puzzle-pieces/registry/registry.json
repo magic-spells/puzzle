@@ -479,7 +479,7 @@
     },
     {
       "name": "kanban",
-      "description": "Config-first controlled Kanban board — horizontal columns of draggable cards with pointer drag-and-drop, an insertion-placeholder indicator, full keyboard move (pick up, arrow-move between/within columns, drop), aria-live announcements, and a value-first @move intent the parent applies",
+      "description": "Config-first controlled Kanban board — pointer and keyboard card movement, insertion placeholders, aria-live announcements, a value-first @move intent, and caller-owned card and column-header snippets that preserve piece-owned drag mechanics",
       "files": [
         "Kanban.pzl",
         "KanbanCard.pzl"
@@ -1054,7 +1054,7 @@
     },
     {
       "name": "tree",
-      "description": "Config-first WAI-ARIA tree view — nested nodes with expand/collapse, roving-tabindex keyboard nav, and a selection callback",
+      "description": "Config-first WAI-ARIA tree view — nested nodes with expand/collapse, roving-tabindex keyboard nav, controlled selection, and a node snippet for caller-owned label rendering",
       "files": [
         "Tree.pzl"
       ],

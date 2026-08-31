@@ -23,5 +23,5 @@ Every piece uses a **config-first API**: data in as props, structure described b
 
 ## Consequences
 
-- A honest limitation surfaces where slots would need to be dynamic/looped (e.g. ToggleGroup per-item icons, rich-content Accordion): Puzzle named slots are static, so those pieces document a compose-directly recipe instead. Recorded per piece in file headers, not duplicated across cards.
+- Static named slots remain the presentational tool for fixed regions. Repeated caller-owned item content uses Puzzle's args-bearing Snippet contract: the component keeps iteration, state, accessibility, and interaction, while one marker site hands each item's values to caller markup. Tree and Kanban are the registry exemplars; this is still config-first composition, not cross-component context or coordinating subcomponents.
 - The standard prop/callback vocabulary (`variant`, `size`, `disabled`, `value`; `@change`, `@press`, `@show`, `@hide`, `@ready`) is the contract every piece inherits (full list in CLAUDE.md). A wrapper's props map one-to-one onto the custom element's attributes.

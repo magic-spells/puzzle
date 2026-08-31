@@ -45,4 +45,4 @@ Every piece styles itself exclusively through the semantic utilities these `@the
 
 `registry/lib/` holds shared plain-JS helpers copied to the consumer's `app/lib/`: `date-math.js` (local-time date math for Calendar/DatePicker), `panel-stack.js` (pure panel-state class helpers), `highlight.js` (Code piece). They are pulled in only via a piece's `registryDependencies` — no piece imports another piece's `.pzl`, only its lib.
 
-Per-piece specifics are NOT catalogued here — one card per piece would drift against 41 `piece.json` descriptions + file header comments. See [[DECISION-WRAP-WEB-COMPONENTS]] and [[DECISION-CONFIG-FIRST-API]] for the conventions all pieces share.
+Per-piece specifics stay in each manifest and file header by default; broad catalog cards would drift. A behavior-bearing composition contract may earn a focused COMPONENT card when its cross-file ownership or constraints are not obvious from one source file. [[COMPONENT-TREE]] and [[COMPONENT-KANBAN]] are the current examples. See [[DECISION-WRAP-WEB-COMPONENTS]] and [[DECISION-CONFIG-FIRST-API]] for the conventions all pieces share.
