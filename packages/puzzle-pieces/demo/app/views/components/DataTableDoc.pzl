@@ -8,7 +8,8 @@
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Table</code>:
           column sorting, row selection with select-all, and built-in pagination via the
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Pagination</code>
-          piece. Sorting, selection, and page are each optional-controlled — own them in the parent, or let the table.
+          piece. Caller-owned snippets can customize every header label or body cell without
+          giving up those behaviors. Sorting, selection, and page are each optional-controlled — own them in the parent, or let the table.
         </p>
       </header>
 
@@ -43,6 +44,23 @@
           </div>
         </ExampleBox>
 
+        <ExampleBox id="cell-snippets" title="Header and body cell snippets" code={ codeSnippets }>
+          <div class="w-full">
+            <DataTable columns={ invoiceColumns } rows={ shortRows } rowKey="invoice">
+              <Snippet fits="header-cell" col>
+                {#if col.dataKey === 'status'}Payment status{:else}{ col.label }{/if}
+              </Snippet>
+              <Snippet fits="cell" cell row>
+                {#if cell.dataKey === 'status'}
+                  <Badge variant={ cell.value === 'Paid' ? 'brand' : cell.value === 'Overdue' ? 'danger' : 'outline' }>{ cell.value }</Badge>
+                {:else}
+                  { cell.value }
+                {/if}
+              </Snippet>
+            </DataTable>
+          </div>
+        </ExampleBox>
+
         <ExampleBox id="selection" title="Selection" code={ codeSelection }>
           <div class="flex w-full flex-col items-stretch gap-3">
             <DataTable columns={ invoiceColumns } rows={ shortRows } rowKey="invoice" selectable selected={ selectedKeys } @select={ setSelected } />
@@ -69,9 +87,9 @@
             <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<th>' }</code>; the attribute is omitted (not set to "none") while unsorted.
           </li>
           <li>
-            Each sortable label is a real
+            Each sortable header has a real
             <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<button>' }</code>,
-            so headers are reachable with Tab and cycle asc → desc → off on Enter or Space. Non-sortable headers stay plain text.
+            over its full label and chevron area, so headers are reachable with Tab and cycle asc → desc → off on Enter or Space. Non-sortable headers stay plain text.
           </li>
           <li>
             Selection uses native <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<input type="checkbox">' }</code>: keyboard-toggleable, each row checkbox carries an
@@ -91,6 +109,7 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import DataTable from '@/components/ui/DataTable.pzl';
+import Badge from '@/components/ui/Badge.pzl';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
@@ -120,6 +139,24 @@ const codeSorting = `// Sort is optional-controlled: the parent owns the descrip
 events = {
   setSort: (next) => this.setData({ sort: next }),   // { key, dir } | null
 };`;
+
+const codeSnippets = `// Snippets are stamped at every matching marker. Branch on the column
+// key and repeat the ordinary value/label in the other arm. Omit either
+// snippet and DataTable keeps its existing text fallback unchanged.
+<DataTable columns={ columns } rows={ rows } rowKey="invoice">
+  <Snippet fits="header-cell" col>
+    {#if col.dataKey === 'status'}Payment status{:else}{ col.label }{/if}
+  </Snippet>
+  <Snippet fits="cell" cell row>
+    {#if cell.dataKey === 'status'}
+      <Badge variant={ cell.value === 'Paid' ? 'brand' : 'outline' }>
+        { cell.value }
+      </Badge>
+    {:else}
+      { cell.value }
+    {/if}
+  </Snippet>
+</DataTable>`;
 
 const codeSelection = `// selected is an array of rowKey values; @select fires the next array.
 // Keys are row ids, so a selection survives sorting and paging. The header
@@ -180,6 +217,7 @@ export default class DataTableDoc extends PuzzleView {
       usageMarkup,
       codeHero,
       codeSorting,
+      codeSnippets,
       codeSelection,
       codePagination,
       invoiceColumns: INVOICE_COLUMNS,
@@ -191,6 +229,7 @@ export default class DataTableDoc extends PuzzleView {
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Sorting', href: '#sorting' },
+        { label: 'Cell snippets', href: '#cell-snippets' },
         { label: 'Selection', href: '#selection' },
         { label: 'Pagination', href: '#pagination' },
         { label: 'Accessibility', href: '#accessibility' },
