@@ -34,6 +34,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 const (
@@ -79,6 +81,11 @@ func workTmp(absRoot string) string {
 // touched: it may be the user's, and the compiler does not get to rewrite files
 // it did not author.
 func ensureWorkTmp(absRoot string) (string, error) {
+	// The leaf guard in sweepDir does not cover the ancestor: a symlinked
+	// .puzzle would put every scratch tree outside the app root.
+	if err := fsutil.RejectSymlink(filepath.Join(absRoot, puzzleWorkDir)); err != nil {
+		return "", err
+	}
 	dir := workTmp(absRoot)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
@@ -99,8 +106,9 @@ func ensureWorkTmp(absRoot string) (string, error) {
 // Everything about it is deliberately conservative, because it deletes trees:
 //   - only two locations are considered, <root>/.puzzle/tmp and the app root;
 //   - only exact known name prefixes are matched, never a general pattern;
-//   - only real directories are removed — a symlink is skipped outright, so the
-//     sweep can never follow a link out of the app root;
+//   - only real directories are removed — a symlinked entry is skipped, and a
+//     symlinked .puzzle disables the scratch sweep entirely, so the sweep can
+//     never follow a link out of the app root;
 //   - only entries untouched for staleWorkAge are removed, so a concurrently
 //     running build's staging tree survives.
 //
@@ -112,7 +120,11 @@ func SweepWorkDirs(root string) {
 	if err != nil {
 		return
 	}
-	sweepDir(workTmp(absRoot), stagingPrefix, oldDistPrefix)
+	// A symlinked .puzzle skips the scratch sweep silently; ensureWorkTmp is
+	// what surfaces the diagnostic. The legacy root sweep still runs.
+	if fsutil.RejectSymlink(filepath.Join(absRoot, puzzleWorkDir)) == nil {
+		sweepDir(workTmp(absRoot), stagingPrefix, oldDistPrefix)
+	}
 	// Legacy siblings of dist/, from before the .puzzle/tmp layout. New builds
 	// never create these; sweeping them makes an existing project self-heal.
 	sweepDir(absRoot, legacyStagingPrefix, legacyOldDistPrefix)

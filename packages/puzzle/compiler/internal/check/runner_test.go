@@ -330,3 +330,100 @@ export default class Home extends PuzzleView { value = value; }
 		})
 	}
 }
+
+// generateCheckApp writes a one-view app with a known template expression and
+// runs Generate over it, returning the app root and the run's result.
+func generateCheckApp(t *testing.T) (string, *Result) {
+	t.Helper()
+	root := t.TempDir()
+	viewDir := filepath.Join(root, "app", "views")
+	if err := os.MkdirAll(viewDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := `<puzzle-view>
+  <p>{ person.name.toUpperCase() }</p>
+</puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  person = { name: 123 };
+}
+</script>
+`
+	if err := os.WriteFile(filepath.Join(viewDir, "Home.pzl"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Generate(root, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root, result
+}
+
+// tsTableFor returns the .ts virtual file's table for app/views/Home.pzl out of
+// the run's index, plus the generated line/column of the toUpperCase call.
+func tsTableFor(t *testing.T, root string, result *Result) (*SegmentTable, int, int) {
+	t.Helper()
+	generated := filepath.Join(root, ".puzzle", "check", "src", "views", "Home.pzl.ts")
+	table := result.tableIndex(root)[filepath.Clean(generated)]
+	if table == nil {
+		t.Fatalf("tableIndex has no entry for %s", generated)
+	}
+	offset := strings.LastIndex(string(table.generatedBytes), "toUpperCase")
+	if offset < 0 {
+		t.Fatal("generated output missing toUpperCase")
+	}
+	line, column := utf16LineColumn(table.generatedBytes, offset)
+	return table, line, column
+}
+
+// The bytes a diagnostic is remapped against are this run's, held in memory. A
+// save — or a delete — while tsc runs used to shift or destroy every position.
+func TestTableIndexSurvivesSourceEditAfterGenerate(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		disturb func(t *testing.T, root string)
+	}{
+		{"source overwritten while tsc runs", func(t *testing.T, root string) {
+			if err := os.WriteFile(filepath.Join(root, "app", "views", "Home.pzl"), []byte("<puzzle-view><p>x</p></puzzle-view>\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"source and workspace deleted while tsc runs", func(t *testing.T, root string) {
+			if err := os.Remove(filepath.Join(root, "app", "views", "Home.pzl")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.RemoveAll(filepath.Join(root, ".puzzle")); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, result := generateCheckApp(t)
+			_, line, column := tsTableFor(t, root, result)
+			tc.disturb(t, root)
+			table, _, _ := tsTableFor(t, root, result)
+			pos, ok := table.Remap(line, column)
+			if !ok {
+				t.Fatal("Remap failed after the authored file changed on disk")
+			}
+			// toUpperCase in the original source sits on line 2, byte column 20.
+			if pos.Line != 2 || pos.Column != 20 {
+				t.Fatalf("remapped position = %d:%d, want 2:20 (the authored source, not what is on disk)", pos.Line, pos.Column)
+			}
+		})
+	}
+}
+
+// The index has to be keyed exactly the way remapTSCOutput resolves a tsc path,
+// which is the contract LoadSegmentTables used to own.
+func TestTableIndexKeysMatchRemapLookup(t *testing.T) {
+	root, result := generateCheckApp(t)
+	_, line, column := tsTableFor(t, root, result)
+	input := ".puzzle/check/src/views/Home.pzl.ts(" + strconv.Itoa(line) + "," + strconv.Itoa(column) + "): error TS2339: fabricated\n"
+	got := remapTSCOutput(root, input, result.tableIndex(root))
+	want := "app/views/Home.pzl:2:20: fabricated\n"
+	if got != want {
+		t.Fatalf("remapped output mismatch\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}

@@ -93,9 +93,11 @@ carry no segment and therefore can never be mistaken for authored code. The
 expression writer walks the codegen-resolved string against the authored one and
 maps only the bytes they share — `ResolveCheckExpr` is insertion-only by
 contract, and an unexpected byte is left unmapped rather than given a
-manufactured position. Tables are written as `.segments.json` sidecars beside
-each virtual file; the runner reloads them and rewrites matching diagnostic
-lines, passing anything it cannot map through untouched.
+manufactured position. The runner rewrites matching diagnostic lines from the
+run's own in-memory tables and the bytes it emitted, passing anything it cannot
+map through untouched — never a re-read, so a save while tsc is running cannot
+shift a reported position. Tables are also written as `.segments.json` sidecars
+beside each virtual file, for inspection.
 
 **The tsconfig is generated, version-aware, and defensive.** The app's own
 `tsconfig.json` is `extends`-ed when present so the app's `strict`, `lib`, and

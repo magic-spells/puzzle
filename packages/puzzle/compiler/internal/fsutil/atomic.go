@@ -2,6 +2,7 @@
 package fsutil
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -10,6 +11,27 @@ import (
 func FileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+// RejectSymlink returns an error when path exists and is a symbolic link or a
+// non-directory. A missing path is fine — the caller creates it. Tool-owned
+// scratch directories are created, swept, and removed wholesale, so a symlinked
+// ancestor would put those deletions somewhere the app root does not contain.
+func RejectSymlink(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%s is a symbolic link — the .puzzle scratch directory must be a real directory", path)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory — the .puzzle scratch directory must be a real directory", path)
+	}
+	return nil
 }
 
 // WriteFileAtomic writes data to a temporary file in the same directory as path

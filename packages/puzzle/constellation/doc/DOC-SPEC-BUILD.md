@@ -370,8 +370,11 @@ app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
 - **Positions are byte-exact.** Each virtual file carries a `.segments.json`
   sidecar pairing emitted ranges with the source ranges they were copied from;
   generated scaffolding and inserted data prefixes carry no segment, so they
-  can never be mistaken for authored code. Diagnostics whose position cannot be
-  mapped are passed through unrewritten rather than relocated.
+  can never be mistaken for authored code. Remapping uses the run's own
+  in-memory tables and the bytes it emitted, never a re-read of the sidecars or
+  the `.pzl` — a save while TypeScript is running cannot shift a reported
+  position. The sidecars are written for inspection. Diagnostics whose position
+  cannot be mapped are passed through unrewritten rather than relocated.
 - **The generated tsconfig extends the app's** when one exists, so the app's
   `strict`/`lib`/`paths` settings are what get enforced — with the options that
   would break the generated workspace overridden (`rootDir`, `composite`,

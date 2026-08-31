@@ -35,6 +35,22 @@ func TestOverNestingDepthCountsElementsAndBlocks(t *testing.T) {
 		// level made a flat row of icons look like ever-deepening nesting.
 		{"flat {#svg} siblings never nest", strings.Repeat("{#svg 'icons/heart.svg'}", 250), 200, false},
 		{"a {#svg} inside real nesting still sits at its parent's depth", "<div><span>{#svg 'icons/heart.svg'}</span></div>", 2, false},
+		// Each {:else if} desugars into a nested If, so N clauses are N codegen
+		// levels even though the source reads as one flat chain.
+		{"{:else if} clauses each add a level",
+			"{#if a}x" + strings.Repeat("{:else if b}x", 200) + "{/if}", 200, true},
+		{"a chain exactly at the limit passes",
+			"{#if a}x" + strings.Repeat("{:else if b}x", 199) + "{/if}", 200, false},
+		// The regression a naive per-clause increment fails: one {/if} has to pop
+		// the whole synthetic chain, not a single level.
+		{"{/if} pops the whole chain",
+			strings.Repeat("{#if a}x{:else if b}y{:else if c}z{/if}", 100), 3, false},
+		{"an {:else if} body nests inside its clause",
+			"<div>{#if a}x{:else if b}<span>y</span>{/if}</div>", 3, true},
+		{"an {:else if} body one level shallower fits",
+			"<div>{#if a}x{:else if b}<span>y</span>{/if}</div>", 4, false},
+		{"{:else} adds no level", "{#if a}x{:else}y{/if}", 1, false},
+		{"{:else} adds no level in {#unless}", "{#unless a}x{:else}y{/unless}", 1, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -292,7 +292,9 @@ func staticPrerenderStdin(absRoot, adapterModule string) (string, error) {
 			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
 			"const only = process.argv[4] ? JSON.parse(process.argv[4]) : undefined;\n"+
 			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static', only%s });\n"+
-			"process.stdout.write('\\n%s' + JSON.stringify(summary));\n",
+			// Same forced exit as the hybrid entry: created() may leave a live
+			// handle, and the write callback keeps the payload from truncating.
+			"process.stdout.write('\\n%s' + JSON.stringify(summary), () => process.exit(0));\n",
 		string(entry), adapterImport, adapterOption, prerenderSentinel,
 	), nil
 }

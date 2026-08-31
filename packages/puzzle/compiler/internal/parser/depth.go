@@ -20,7 +20,8 @@ package parser
 // message.
 //
 // For a well-formed template the count is exact: every AST container is one
-// non-self-closing tag or one block opener. For a malformed one it is an upper
+// non-self-closing tag, one block opener, or one {:else if} clause (which
+// desugars into a nested If). For a malformed one it is an upper
 // bound, which is the safe direction — the source is already an error either
 // way.
 func OverNestingDepth(sec *Sections, filename string, limit int) (Position, bool) {
@@ -47,6 +48,9 @@ func scanNesting(lx *lexer, file string, limit, depth, budget int) (Position, bo
 	// opaque text, and markup quoted in a string is not template nesting.
 	var openTags []string
 	var pendingOpen Token
+	// blockElse holds, per open block, the levels its {:else if} clauses added,
+	// so the single closer pops the whole synthetic chain.
+	var blockElse []int
 	for {
 		t, err := lx.Next()
 		if err != nil {
@@ -78,13 +82,34 @@ func scanNesting(lx *lexer, file string, limit, depth, budget int) (Position, bo
 			if firstWord(t.Value) == "svg" {
 				continue
 			}
+			blockElse = append(blockElse, 0)
+			depth++
+			if depth > limit {
+				return tokPos(t), true
+			}
+		case TokElseIf:
+			// Each {:else if} desugars right-to-left into an If nested in the
+			// previous clause's Else (parser.go), so codegen recurses one level per
+			// clause even though the source shows a flat chain. {:else} is a sibling
+			// branch and adds nothing.
+			if n := len(blockElse); n > 0 {
+				blockElse[n-1]++
+			}
 			depth++
 			if depth > limit {
 				return tokPos(t), true
 			}
 		case TokBlockClose:
+			if n := len(blockElse); n > 0 {
+				depth -= blockElse[n-1]
+				blockElse = blockElse[:n-1]
+			}
 			if depth > 0 {
 				depth--
+			}
+			if depth < 0 {
+				// A malformed stream; the real parse reports it with its own position.
+				depth = 0
 			}
 		case TokRaw:
 			if budget <= 0 {

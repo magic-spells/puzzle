@@ -461,6 +461,48 @@ one is *not* a compile error; it silently builds a different product.
   still in flight, or none — exactly as `prepareRefresh` derives its own unwind
   target, and nested fences restore it only when the outermost one exits.
 
+- **The playground's nesting guard counts `{:else if}` clauses (D164).** Each
+  clause desugars into a nested `If`, so codegen recurses once per clause while
+  the token scan saw a single level — a flat 2,000-clause chain passed the guard
+  and then produced 96 MB of JavaScript in a WASM instance that cannot survive
+  running out of memory. The scan now keeps a per-block clause count, so a chain
+  is measured at its true codegen depth and the single `{/if}` still pops the
+  whole synthetic chain.
+
+- **`puzzle check` remaps diagnostics against the bytes it emitted (D165).**
+  Positions were resolved by re-reading the `.segments.json` sidecars, the
+  generated files, and the authored `.pzl` from disk *after* TypeScript exited —
+  so saving a file while the check ran silently shifted every remapped position,
+  and deleting one replaced the type errors with `open …: no such file`. The run
+  now indexes its own in-memory segment tables, which is what the byte-exact
+  promise always meant. The sidecars are still written, as the inspectable
+  artifact they were always documented to be.
+
+- **A symlinked `.puzzle` no longer sends the scratch sweep out of the app root
+  (D153).** `SweepWorkDirs` skipped a swept *entry* that was a symlink, but
+  nothing looked at the `.puzzle` ancestor itself — so with `.puzzle` pointing
+  elsewhere, the sweep read and removed stale `staging-*`/`dist-old-*`
+  directories at the link target, and `puzzle check` cleared `check/` there.
+  The sweep now leaves a symlinked scratch root alone (the legacy app-root
+  sweep still runs), while `puzzle build` and `puzzle check` refuse it with a
+  diagnostic naming the path.
+
+- **Split-mode `puzzle dev` writes its chunks atomically (D160).** The rebuild
+  wrote each output straight into the live `dist/` with `os.WriteFile`, whose
+  truncate-then-write window a lazy `import()` landing mid-rebuild can observe —
+  and split mode is the one path that makes such fetches routine. Outputs now go
+  through the same write-and-rename every other live-`dist/` writer uses.
+
+- **A live handle in `created()` no longer hangs a prerendered build.** Both
+  generated prerender entries wrote their summary and let Node exit on its own,
+  so a `setInterval` (or any other handle) started in a view's `created()` kept
+  the subprocess alive until the 120-second timeout killed it and failed the
+  build blaming `data()`. SSG runs `created()` but never `destroyed()` (SPEC
+  §36), so a handle started there has no partner to close it; the entry now
+  exits as soon as the summary is flushed to the pipe. The timeout message says
+  "a `data()` that never resolves", which is now the only thing that can cause
+  it.
+
 ### Changed
 
 - **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing

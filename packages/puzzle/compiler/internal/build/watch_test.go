@@ -958,6 +958,21 @@ func TestDevRebuildPrunesStaleChunks(t *testing.T) {
 			t.Errorf("pruning removed dist/%s: %v", name, err)
 		}
 	}
+
+	// Split outputs go through fsutil.WriteFileAtomic, so a lazy import() landing
+	// mid-rebuild never sees a half-written chunk — and no temp file is left in
+	// the served tree.
+	for _, dir := range []string{filepath.Join(root, "dist"), filepath.Join(root, "dist", chunksDirName)} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if strings.Contains(e.Name(), ".tmp-") {
+				t.Errorf("%s left in the served tree: split outputs must be written atomically", filepath.Join(dir, e.Name()))
+			}
+		}
+	}
 }
 
 // TestDevRebuildKeepsChunksWithoutEdit is the other half: a rebuild that changes

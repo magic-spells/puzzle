@@ -18,6 +18,21 @@ notes:
       nesting exceeds 200" with zero real nesting. `scanNesting` now treats a `svg` block header as
       self-contained. Any future void directive must be added there too — the guard has no other way
       to know a block never closes.
+  - kind: gotcha
+    text: >-
+      `{:else if}` is the second way the token scan under-counts: the parser desugars each clause
+      right-to-left into a nested `If`, so N clauses are N codegen levels while the stream shows one
+      block. `scanNesting` keeps a per-open-block clause count so `{:else if}` adds a level and the
+      single `{/if}` pops the whole synthetic chain — a flat row of `{#if}…{:else if}…{/if}` must
+      still measure as one level.
+  - kind: gotcha
+    text: >-
+      `maxSourceBytes` can only be checked AFTER `args[0].String()`. A pre-copy check on
+      `args[0].Get("length")` looks like the obvious optimization and is a hard bug:
+      `syscall/js.Value.Get` requires `isObject()`, so on a string primitive it panics `call of
+      Value.Get on string` — swallowed by compile's `recover()`, turning every single call into
+      "playground compiler error". `node scripts/smoke-wasm.mjs` catches it on the first compile;
+      run it after touching this entry.
 ---
 
 # D164 — Playground compilation is parser+codegen-only WASM behind a worker protocol

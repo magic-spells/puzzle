@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/parser"
 )
 
@@ -81,6 +82,18 @@ type Result struct {
 	Files int
 }
 
+// tableIndex keys this run's segment tables by absolute generated path, the way
+// remapTSCOutput looks them up. Remapping reads the bytes this run emitted, in
+// memory: re-reading them after tsc exits would remap against whatever the
+// developer saved while it ran.
+func (r *Result) tableIndex(root string) map[string]*SegmentTable {
+	tables := make(map[string]*SegmentTable, len(r.Tables))
+	for _, t := range r.Tables {
+		tables[filepath.Clean(filepath.Join(root, filepath.FromSlash(t.Generated)))] = t
+	}
+	return tables
+}
+
 type virtualFile struct {
 	GeneratedPath string
 	Contents      []byte
@@ -106,6 +119,10 @@ func Generate(appRoot string, typescriptMajor int) (*Result, error) {
 	}
 	appDir, err := sourceDir(root)
 	if err != nil {
+		return nil, err
+	}
+	// The RemoveAll below must not reach through a symlinked .puzzle.
+	if err := fsutil.RejectSymlink(filepath.Join(root, ".puzzle")); err != nil {
 		return nil, err
 	}
 	checkDir := filepath.Join(root, ".puzzle", "check")

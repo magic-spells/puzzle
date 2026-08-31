@@ -23,6 +23,12 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      `WatchBuilder.writeSplitOutputs` writes through `fsutil.WriteFileAtomic`, like every other
+      writer into a live served `dist/`; split mode is the path most likely to observe
+      `os.WriteFile`'s truncate-then-write window, because its lazy `import()` fetches can land
+      mid-rebuild.
 ---
 
 A dynamic `import()` in the SPA bundle emits a lazy chunk instead of being

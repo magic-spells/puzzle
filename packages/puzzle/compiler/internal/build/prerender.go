@@ -125,7 +125,10 @@ func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool, pc *p
 		"import app from %s;\n"+
 			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
 			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'hybrid' });\n"+
-			"process.stdout.write('\\n%s' + JSON.stringify(summary));\n",
+			// created() may leave a live handle (SSG never runs destroyed(), SPEC
+			// §36), so exit rather than wait for the loop to drain — in the write
+			// callback, because exiting before the pipe flushes truncates the JSON.
+			"process.stdout.write('\\n%s' + JSON.stringify(summary), () => process.exit(0));\n",
 		string(entry), prerenderSentinel,
 	)
 
@@ -300,7 +303,7 @@ func runPrerender(entryFile, staging, label string, extra ...string) (string, er
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return "", fmt.Errorf(
-				"puzzle build %s: prerendering timed out after %s — check for a hanging data() in a route",
+				"puzzle build %s: prerendering timed out after %s — check for a data() that never resolves in a route",
 				label, prerenderTimeout,
 			)
 		}

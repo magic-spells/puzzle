@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // requireSSGRuntime skips the calling test unless the JS SSG module the prerender
@@ -352,6 +353,55 @@ func TestBuildInvalidOutputConfigFailsBuild(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "output") || !strings.Contains(err.Error(), "static") {
 		t.Errorf("error should name output and the allowed value 'static', got: %v", err)
+	}
+}
+
+// liveTimerSSGFixture is baseSSGFixture with a live handle started in the home
+// view's created(). SSG runs created() but never destroyed() (SPEC §36), so the
+// timer keeps Node's loop alive after the summary is written.
+func liveTimerSSGFixture() ssgFixtureFiles {
+	files := baseSSGFixture()
+	files["app/views/Home.pzl"] = `<puzzle-view>
+  <h1>Home</h1>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  created() { setInterval(() => {}, 1000); }
+  data() { return { greeting: 'hello' }; }
+}
+</script>
+`
+	return files
+}
+
+// A view that leaves a live handle used to pin the prerender subprocess until
+// the 120s timeout killed it and the build failed blaming data(). The entry now
+// exits once the summary is flushed.
+func TestPrerenderExitsWithLiveTimer(t *testing.T) {
+	for _, tc := range []struct {
+		mode    string
+		require func(*testing.T)
+		page    string
+	}{
+		{"hybrid", requireSSGRuntime, "index.html"},
+		{"static", requireStaticRuntime, "index.html"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			tc.require(t)
+			root := writeSSGFixture(t, liveTimerSSGFixture())
+
+			start := time.Now()
+			if err := Build(root, Options{Development: true, Output: tc.mode}); err != nil {
+				t.Fatalf("%s Build failed: %v", tc.mode, err)
+			}
+			if elapsed := time.Since(start); elapsed >= 30*time.Second {
+				t.Fatalf("%s build took %s — the prerender subprocess is being kept alive by the view's timer", tc.mode, elapsed)
+			}
+			if _, err := os.Stat(filepath.Join(root, "dist", tc.page)); err != nil {
+				t.Fatalf("dist/%s missing after the %s build: %v", tc.page, tc.mode, err)
+			}
+		})
 	}
 }
 
