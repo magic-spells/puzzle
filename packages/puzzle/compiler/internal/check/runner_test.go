@@ -427,3 +427,40 @@ func TestTableIndexKeysMatchRemapLookup(t *testing.T) {
 		t.Fatalf("remapped output mismatch\nwant:\n%s\ngot:\n%s", want, got)
 	}
 }
+
+// TestDottedComponentTagChecksProps is the D167 evidence for the check bridge:
+// a member-expression component tag (<Frame.Wrapper>) is inert — the emitter
+// never names a component tag, so the dotted form needs no special handling —
+// while the props on it are re-emitted and type-checked like any other
+// expression. The negative half runs first so a silently-skipped emission
+// cannot pass this test.
+func TestDottedComponentTagChecksProps(t *testing.T) {
+	bad := `<puzzle-view><Frame.Wrapper label={ value.toUpperCase() }><Frame.Content/></Frame.Wrapper></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView { value = 123; }
+</script>
+`
+	root := liveTSCApp(t)
+	writeLiveView(t, root, bad)
+	_, err := Run(root)
+	if err == nil {
+		t.Fatal("expected the prop expression on a dotted component tag to be checked")
+	}
+	want := "app/views/Home.pzl:1:43: Property 'toUpperCase' does not exist on type 'number'."
+	if got := err.Error(); got != want {
+		t.Fatalf("dotted-tag diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
+	}
+
+	good := `<puzzle-view><Frame.Wrapper label={ value.toUpperCase() }><Frame.Content/></Frame.Wrapper></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView { value = 'ok'; }
+</script>
+`
+	clean := liveTSCApp(t)
+	writeLiveView(t, clean, good)
+	if _, err := Run(clean); err != nil {
+		t.Fatalf("a dotted component tag must not be a type error by itself: %v", err)
+	}
+}
