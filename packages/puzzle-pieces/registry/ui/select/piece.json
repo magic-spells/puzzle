@@ -1,6 +1,6 @@
 {
   "name": "select",
-  "description": "Listbox-pattern select with typeahead, keyboard nav, group labels, dividers, and optional trigger↔panel morph",
+  "description": "Listbox-pattern select with typeahead, keyboard nav, group labels, dividers, optional trigger↔panel morph, and snippet-customizable option content",
   "files": ["Select.pzl"],
   "registryDependencies": [],
   "dependencies": ["@magic-spells/morph-engine"],

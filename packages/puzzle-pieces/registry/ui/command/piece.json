@@ -1,6 +1,6 @@
 {
   "name": "command",
-  "description": "Command palette — filtered, grouped, keyboard-driven quick actions in a modal",
+  "description": "Command palette with filtered, grouped, keyboard-driven quick actions and snippet-customizable option content",
   "files": ["Command.pzl"],
   "registryDependencies": [],
   "dependencies": [],

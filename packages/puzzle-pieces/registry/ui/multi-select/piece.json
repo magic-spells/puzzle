@@ -1,6 +1,6 @@
 {
   "name": "multi-select",
-  "description": "A filterable tag / multi-value combobox: picks show as removable chips, typing filters the rest.",
+  "description": "Filterable tag / multi-value combobox with removable chips, ranked filtering, and snippet-customizable option content",
   "files": ["MultiSelect.pzl"],
   "registryDependencies": [],
   "dependencies": [],
