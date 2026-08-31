@@ -571,6 +571,23 @@ describe('D161 — static / HMR read-state seam', () => {
 		expect(requests.size).toBe(0);
 	});
 
+	it('the codecs accept a per-view handle, not just the raw store', async () => {
+		fetchMock.mockImplementation(async () => json({}, 404));
+		const store = makeStore();
+		const subscriber = {};
+		const handle = store._handleFor(subscriber);
+		await settle(store, (store) => store.findOne('user', 'ghost'), subscriber);
+
+		// Read state is keyed by the RAW Store, and `this.ctx.store` is a handle —
+		// a caller holding one must not get a silently empty envelope back.
+		expect(serializeReadState(handle)).toEqual(serializeReadState(store));
+		expect(serializeReadState(handle).absent).toEqual(['user ghost']);
+
+		const browser = makeStore();
+		hydrateReadState(browser._handleFor({}), { v: 1, complete: ['post'], absent: [] });
+		expect(serializeReadState(browser).complete).toEqual(['post']);
+	});
+
 	it('drops a transferred absence whose record is present', () => {
 		const browser = makeStore();
 		browser.upsert('user', { id: 'u1', name: 'Ada' });

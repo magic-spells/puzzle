@@ -44,25 +44,28 @@ Plain base class for every component, view, and layout. It owns state,
 lifecycle, tracked `data()` evaluation, refresh tokens, animations, refs, and
 update scheduling; [[COMPONENT-VIEW-MANAGER]] owns DOM operations.
 
-The constructor is where a view acquires its store handle. When the passed
-ctx's store carries the adapter capability, `ctx.store._handleFor(this)`
-returns a per-view Proxy on the app's store and the view's own `ctx` is
-`Object.create`d off the app's with `store` overridden by it, so `router`,
-`formatters` and any other ctx field stay LIVE rather than snapshotted. That
-handle is the only channel through which a read may fault (D161): reads through
-it, by this view, during this view's evaluation, join that evaluation's request
-map; every other read in the realm is a local snapshot. The derived ctx always
-chains off the BASE ctx — a nested component is built with its parent's derived
-ctx, and re-deriving from that would add a prototype link per level of nesting.
-Two consequences a change here must preserve: the handle binds every forwarded
+The constructor is where a view acquires its store handle, in one line:
+`this.ctx = ctx.store?._deriveCtx?.(ctx, this) ?? ctx`. `_deriveCtx` lives in
+[[COMPONENT-ADAPTER]] beside the handle it wraps, so core carries only that
+optional call. On a store with the capability it returns a ctx whose `store` is
+a per-view Proxy and whose prototype is the app's ctx, keeping `router`,
+`formatters` and every other field LIVE rather than snapshotted; without the
+capability it returns undefined and the view keeps the app ctx itself —
+`this.ctx === ctx`, `ctx.store === app.store`, identity and all
+([[DECISION-D157-ADAPTER-SUBPATH]]).
+
+That handle is the only channel through which a read may fault (D161): reads
+through it, by this view, during this view's evaluation, join that evaluation's
+request map; every other read in the realm is a local snapshot. The derived ctx
+always chains off the BASE ctx — a nested component is constructed with its
+parent's derived ctx, and re-deriving from that would add a prototype link per
+level of nesting — so the chain is exactly two deep at any depth. Two
+consequences a change here must preserve: the handle binds every forwarded
 method to the RAW store (see [[COMPONENT-STORE]]), and any WeakMap keyed by ctx
 identity must resolve through the prototype chain, which is why `errors.js`
-looks the app's error config up that way. Without the capability the
-constructor is `this.ctx = ctx` exactly as before —
-`ctx.store === app.store`, identity and all — and `_handleFor` is not even in
-the bundle ([[DECISION-D157-ADAPTER-SUBPATH]]). The five construction sites
-(router views, layouts, components, error views, prerender, static mount) all
-reach this one constructor and need no code of their own.
+looks the app's error config up that way. Every construction site — routed
+views and layouts, components, error views, prerender, the static kernel —
+reaches this one constructor and needs no code of its own.
 
 State has two layers. A successful `data(params, props)` result replaces the
 model layer, so omitted model keys disappear. `setData()` mutates a persistent
@@ -99,8 +102,11 @@ view and the round's request keys. Store notifications arriving mid-settle
 coalesce into `_settleDirty` — one more pass, never a competing refresh —
 while prepared (D146) runs keep their live-update behavior. A destroyed,
 leaving, or superseded view stops the loop after its current await without
-aborting shared requests, and `unsubscribe()` disarms its handle so the
-suspended evaluation cannot fault on the way out either. `refresh()`,
+aborting shared requests, and its handle stops faulting the moment
+`unsubscribe()` clears the request slot. That clearing is not a latch: playOut()
+unsubscribes a LIVE view, and `_restoreFromLeaving()` puts it back on screen and
+refreshes it, so the restored view faults exactly as before — withTracking's
+restore consults `isDestroyed`, not a flag. `refresh()`,
 `preload()`, and
 `prepareRefresh().ready` therefore resolve only after settlement, and a
 previously-sync `data()` may return a promise when it misses.

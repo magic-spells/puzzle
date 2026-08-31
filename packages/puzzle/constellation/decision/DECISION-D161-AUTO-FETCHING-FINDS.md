@@ -29,10 +29,22 @@ notes:
       installAdapter() (AdapterViewMethods), and static/index.js reaches the read-state codecs
       through a capabilities.js relay — never import datastore/adapter.js from core or from the
       static kernel. The core seam costs a no-adapter app +177 B gzip for the fault hooks and
-      _settleData call sites, plus ~+144 B for the identity-attribution seam (the HANDLE_CTX slot in
-      withTracking/unsubscribe, the tracked read pair, the constructor's handle mint, and the
-      prototype-chain lookup in errors.js). The loop itself is provably absent (grep the built
-      bundle for MAX_SETTLE / "settle rounds" — both 0).
+      _settleData call sites, plus +50 B for the identity-attribution seam — that second figure is
+      small only because the tracked read pair, the handle Proxy and _deriveCtx all live
+      adapter-side; core keeps just the HANDLE_CTX slot in withTracking/unsubscribe, one optional
+      _deriveCtx call in the constructor, and the prototype-chain lookup in errors.js. Verify both
+      directions by grepping the built bundles: a no-adapter app has no MAX_SETTLE / "settle rounds"
+      / _findOneTracked / _handleFor and only the _deriveCtx call site; an adapter app has all of
+      them.
+  - kind: gotcha
+    text: >-
+      unsubscribe() is NOT only a teardown signal — playOut() calls it on a LIVE view that
+      _restoreFromLeaving() can put back on screen and refresh. So nothing that unsubscribe() does
+      to the handle may be a sticky latch: it clears hctx.requests, and withTracking's restore
+      consults the subscriber's live isDestroyed instead. A `dead` flag set there looked right and
+      shipped briefly; it stranded a restored view's request map on the next nested evaluation's
+      exit, so the view silently stopped fetching. Regression:
+      tests/tracked-read-attribution.test.js 'a view that left and came back is fully re-armed'.
   - kind: verified
     text: >-
       Post-merge claim-level verification: every Decision claim traced to code and tests (both
@@ -109,7 +121,6 @@ views, no `{#await}` templates, no separate `load()` hook.
 
 ## Decision
 
-
 **The settle loop** (owned by PuzzleView, wrapped around every tracked
 `data()` evaluation — refresh, routed preload, D146 prepareRefresh, component
 mount, prerender):
@@ -128,21 +139,28 @@ mount, prerender):
    make `null` ambiguous again.
 
 **"Tracked" means read through the view's own store handle.** Faulting is
-attributed by OBJECT IDENTITY, not by ambient state. On an app carrying the
-adapter capability, each PuzzleView mints a per-view handle on the app's store
-in its constructor — a `Proxy` whose `findOne`/`findMany` pass that
-subscriber's currently-open request map to the tracked read, and which forwards
-everything else to the raw Store with `this` bound to the raw Store (every
-WeakMap key, `_a`, `_asyncTrackingChain` and Map in the module depends on that
-identity). The handle is exposed as `this.ctx.store`: the view's `ctx` is
-`Object.create`d off the app's, so `router`/`formatters` stay live, and it is
-always chained off the BASE ctx so nesting adds no links. `withTracking`
-installs the evaluation's request map on the subscriber's handle context —
-never on the Store, which has no ambient request slot at all — with the same
-save/restore stack discipline `_tracking` uses, plus a `dead` flag that
-`unsubscribe()` sets so a destroyed view's still-open evaluation cannot be
-re-armed on the way out. An adapter-free app mints nothing: `ctx.store` is the
-raw store, identity and all.
+attributed by OBJECT IDENTITY, not by ambient state. The raw Store's
+`findOne`/`findMany` are plain local reads with no fault branch at all; the
+tracked pair `_findOneTracked`/`_findManyTracked` takes the open evaluation's
+request map as a PARAMETER and is grafted on by the adapter module beside the
+fault helpers, so a no-adapter bundle carries neither. The only caller is a
+per-view HANDLE: a `Proxy` over the raw Store, minted in the PuzzleView
+constructor, forwarding everything else to the raw Store with `this` bound to
+it (every WeakMap key, `_a`, `_asyncTrackingChain` and Map in the module
+depends on that identity). `_deriveCtx` — also adapter-side — wraps the handle
+in the view's own `ctx`, `Object.create`d off the app's so `router`/
+`formatters` stay live and always chained off the BASE ctx, keeping the chain
+exactly two deep however deep the component nesting goes. Core's whole share is
+one optional call in the constructor.
+
+`withTracking` installs the evaluation's request map on the subscriber's handle
+context — never on the Store, which has no ambient request slot at all — with
+the same save/restore stack discipline `_tracking` uses. On the way out it
+restores the enclosing map unless the subscriber is DESTROYED, which is read
+live from `isDestroyed` rather than latched by `unsubscribe()`: `playOut()`
+unsubscribes a view that `_restoreFromLeaving()` can put back on screen and
+refresh, and that view owes every fault its `data()` still makes. An
+adapter-free app mints nothing: `ctx.store` is the raw store, identity and all.
 
 The consequence is the SPEC's sentence made literally true. Reads through the
 raw `app.store`, through another view's handle, from a module capture, from a

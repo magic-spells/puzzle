@@ -43,14 +43,15 @@ notes:
       Store/PuzzleModel/PuzzleView prototypes ONCE PER REALM and never removes them (concurrent apps
       depend on that), so method presence cannot say whether THIS app opted in. The store's own
       capability does: `this._a = options.adapter`, set from what PuzzleApp.mount() passed. It gates
-      BOTH halves of the D161 seam: `withTracking()` installs the request map onto the subscriber's
-      handle context only when `this._a` is truthy — one check per evaluation, not per query — and
-      `_handleFor()` returns null without it, so an adapter-free app mints no handle and its views
-      keep `ctx.store === app.store`. `findOne`/`findMany` therefore cannot fault on a store built
-      without the capability even though the prototypes carry `_faultOne`/`_faultMany`. Tests that
-      want the settle/fault path must pass `adapter` in the Store options the way the app does, AND
-      read through `store._handleFor(subscriber)` — a raw `store.findOne` is always local now.
-      Regression: tests/adapter-realm-isolation.test.js, tests/tracked-read-attribution.test.js.
+      every half of the D161 seam: `withTracking()` looks up the subscriber's handle context only
+      when `this._a` is truthy — one check per evaluation, not per query — and
+      `_handleFor()`/`_deriveCtx()` return null/undefined without it, so an adapter-free app mints
+      no handle and its views keep `ctx.store === app.store`. `findOne`/`findMany` cannot fault on
+      such a store in any case: the raw finds are plain local reads and the tracked pair is
+      adapter-installed. Tests that want the settle/fault path must pass `adapter` in the Store
+      options the way the app does, AND read through `store._handleFor(subscriber)` — a raw
+      `store.findOne` is always local. Regression: tests/adapter-realm-isolation.test.js,
+      tests/tracked-read-attribution.test.js.
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -60,17 +61,19 @@ verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 Reactive record registry for the configured model classes. `createRecord`
 applies defaults, generates/honors the model primary key, validates, rejects
 duplicates, indexes the instance, and schedules notifications. `findOne` and
-`findMany` support identity lookup and collection filtering. On the raw Store
-they are always PURE LOCAL; the fault-in half lives on the internal
-`_findOneTracked`/`_findManyTracked` pair, which takes the open evaluation's
-request map as a parameter. A miss with a map returns its local value
-synchronously and adds a deduped fetch promise to that pending set
-([[DECISION-D161-AUTO-FETCHING-FINDS]]) — and only a read through the reading
-view's own store handle, during that view's own `data()` run, ever carries one.
-Nullish/unkeyable ids, collection-complete types, known-absent identities, and
-models that declare no `adapter` endpoint or read function of their own stay
-pure-local regardless — an app-wide `adapter.defaults()` dialect never turns a
-local-only model into a fetching one. Record `update()`/`destroy()` call back
+`findMany` support identity lookup and collection filtering, and on the core
+Store they are exactly that — plain local reads with no fault branch in them at
+all. The fault-in half is `_findOneTracked`/`_findManyTracked`, grafted on by
+the adapter module beside `_faultOne`/`_faultMany`; each takes the open
+evaluation's request map as a PARAMETER, and a miss with a map returns its
+local value synchronously while adding a deduped fetch promise to that pending
+set ([[DECISION-D161-AUTO-FETCHING-FINDS]]). Only a store handle calls them,
+and only a read through the reading view's own handle, during that view's own
+`data()` run, ever carries a map. Nullish/unkeyable ids, collection-complete
+types, known-absent identities, and models that declare no `adapter` endpoint
+or read function of their own stay pure-local regardless — an app-wide
+`adapter.defaults()` dialect never turns a local-only model into a fetching
+one. Record `update()`/`destroy()` call back
 into the Store. Record identity is
 number/string-insensitive ([[DECISION-D112-STORE-ID-KEY-NORMALIZATION]]):
 every id-keyed access to the record index — and both sides of `hasMany`'s FK
@@ -90,15 +93,18 @@ run's keys replace the last-good set or are unwound, while `_heldKeys` fences
 those keys from any other eval's garbage collection until that decision lands
 ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). The `requests` channel is
 the D161 pending set. It is installed on the SUBSCRIBER'S handle context
-(`subscriber[HANDLE_CTX]`), never on the Store — the Store has no ambient
+(`subscriber[HANDLE_CTX]`, looked up only when this store carries the
+capability), never on the Store — the Store has no ambient
 request slot at all — with the same save/restore stack discipline as the
 tracking scope itself, so the map is reachable only by that subscriber's own
 handle and only for the extent of that evaluation. A subscriber with no handle
 context (a bare object, an adapter-free app) installs no map anywhere and its
-reads are local. `unsubscribe()` marks the context `dead` as well as clearing
-it, and `finalize` refuses to restore an enclosing map onto a dead context, so
-a destroyed view's still-suspended evaluation cannot be re-armed on the way
-out. Scope restore is never deferred, and a failing run reconciles
+reads are local. `unsubscribe()` clears the context's map so a torn-down view's
+suspended evaluation stops faulting, and the restore on the way out is skipped
+only when the subscriber is DESTROYED — read live from `isDestroyed`, never
+latched by `unsubscribe()` itself, because `playOut()` unsubscribes a LIVE view
+that `_restoreFromLeaving()` can bring back and refresh. Scope restore is never
+deferred, and a failing run reconciles
 immediately. `flush()` snapshots affected subscribers, notifies each
 once in isolation, observes thenable failures, and continues after a throwing
 subscriber. Scheduling uses rAF when visible plus a 220ms fallback, and timers
@@ -122,21 +128,26 @@ that must stay fail-soft.
 
 The core Store owns no server verbs. Passing the `adapter` capability from
 `@magic-spells/puzzle/adapter` to `PuzzleApp` installs `loadMany`, `loadOne`,
-`adapter`, `upsert`, `saveRecord`, `deleteRecord`, `request`, `_handleFor`, and
+`adapter`, `upsert`, `saveRecord`, `deleteRecord`, `request`, the tracked read
+pair, `_handleFor`, `_deriveCtx`, and
 their private helpers on its prototype ([[DECISION-D157-ADAPTER-SUBPATH]]);
 `loadAll` — the pre-0.7.0 spelling — is a throwing trap naming `loadMany`.
 `_handleFor(subscriber)` is the D161 attribution channel: a memoized `Proxy`
-over the raw Store whose `findOne`/`findMany` pass the subscriber's open
-request map to the tracked reads and which binds every other forwarded method
+over the raw Store whose `findOne`/`findMany` route to the tracked pair with
+the subscriber's open request map, and which binds every other forwarded method
 back to the RAW store, because `this === the raw Store` is what keys
 `readStateFor`'s WeakMap and reaches `_a`, `_asyncTrackingChain`, `_typeMap`
-and the subscription Maps. It returns null without the capability, which is how
+and the subscription Maps. It is memoized in one `WeakMap` keyed by subscriber,
+matching the single `HANDLE_CTX` slot a subscriber carries: a subscriber
+belongs to exactly one store, which is what a PuzzleView is. `_deriveCtx`
+wraps the handle in the per-view ctx [[COMPONENT-PUZZLE-VIEW]] reads through.
+Both return null/undefined without the capability, which is how
 an adapter-free app keeps `ctx.store === app.store`. Core's own share of
 D161 is deliberately tiny: the `HANDLE_CTX` symbol and its install/restore in
-`withTracking`/`unsubscribe`, the tracked-read pair, and the
+`withTracking`/`unsubscribe`, and the
 `_findOneLocal`/`_findManyLocal` split — every decision (verb
 resolution, in-flight dedup, the negative LRU, collection completeness, the
-handle itself) lives in the adapter module's WeakMap state. Under
+tracked reads, the handle, the derived ctx) lives in the adapter module. Under
 [[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]], a model's adapter is per-verb fetch
 functions. Dispatch resolves the model's own function first, the app
 capability's `adapter.defaults()` function second, and endpoint-generated REST

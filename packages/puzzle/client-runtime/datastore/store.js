@@ -331,39 +331,23 @@ export class Store {
 
 	/**
 	 * Query one record by primary key. On the RAW Store this is, and always is, a
-	 * pure local snapshot — the public method faults nothing (D161).
+	 * pure local snapshot — the public method faults nothing (D161), which is why
+	 * core needs no fault branch here at all.
 	 *
-	 * Fetching belongs to the tracked form below, reached only through a view's
-	 * own store handle (`this.ctx.store`) during that view's own data()
-	 * evaluation: the settle loop awaits whatever that read queued and re-runs
-	 * data(), so the model it commits is settled and a committed null means "does
-	 * not exist". Event handlers, model methods, timers and adapter-free apps get
-	 * the local snapshot this has always been.
+	 * Fetching belongs to `_findOneTracked`/`_findManyTracked`, which the adapter
+	 * module grafts on beside the fault helpers and which only a view's own store
+	 * handle (`this.ctx.store`) calls, during that view's own data() evaluation:
+	 * the settle loop awaits whatever that read queued and re-runs data(), so the
+	 * model it commits is settled and a committed null means "does not exist".
+	 * Event handlers, model methods, timers and adapter-free apps get the local
+	 * snapshot this has always been.
 	 */
 	findOne(type, id) {
-		return this._findOneTracked(type, id, null);
+		return this._findOneLocal(type, id);
 	}
 
 	/** @param {object} [options] { filter: (record) => boolean } */
 	findMany(type, options = {}) {
-		return this._findManyTracked(type, options, null);
-	}
-
-	/**
-	 * The tracked halves. `requests` is the open evaluation's request map, handed
-	 * in by the caller's handle — never read off ambient state, which is the whole
-	 * point: a null map is a local read, whoever is mid-evaluation elsewhere.
-	 */
-	_findOneTracked(type, id, requests) {
-		const record = this._findOneLocal(type, id);
-		if (!record && requests) this._faultOne(type, id, requests);
-		return record;
-	}
-
-	_findManyTracked(type, options, requests) {
-		// The collection, not the filter, is what can be missing: a filter is always
-		// applied locally and is never serialized into a request.
-		if (requests) this._faultMany(type, requests);
 		return this._findManyLocal(type, options);
 	}
 
@@ -519,9 +503,9 @@ export class Store {
 		// _faultOne/_faultMany; refusing the request map here is what makes them
 		// unreachable, whatever hands this eval one. One check per evaluation, not
 		// per query — findOne/findMany stay exactly as cheap as they were.
-		const hctx = subscriber?.[HANDLE_CTX];
+		const hctx = this._a ? subscriber?.[HANDLE_CTX] : null;
 		const prevRequests = hctx ? hctx.requests : null;
-		if (hctx) hctx.requests = this._a ? requests : null;
+		if (hctx) hctx.requests = requests;
 
 		// How many UNCOMMITTED prepared evals currently hold this key for this
 		// subscriber (D146). Refcounted, so two overlapping prepares that query the
@@ -592,10 +576,13 @@ export class Store {
 			} else reconcile(ok);
 			this._tracking = prevTracking;
 			this._trackingAdded = prevAdded;
-			// A subscriber destroyed while this eval was open is DEAD: restoring the
-			// enclosing eval's map would re-arm a torn-down view's suspended
-			// continuation, which is precisely what unsubscribe() just disarmed.
-			if (hctx) hctx.requests = hctx.dead ? null : prevRequests;
+			// Restoring the enclosing eval's map would re-arm a torn-down view's
+			// suspended continuation, which is precisely what unsubscribe() disarmed —
+			// so a subscriber DESTROYED while this eval was open restores nothing. The
+			// test is the live `isDestroyed` state, never a latch set by unsubscribe():
+			// playOut() unsubscribes a view that _restoreFromLeaving() can put back on
+			// screen, and that view owes every fault its data() still makes.
+			if (hctx) hctx.requests = subscriber?.isDestroyed ? null : prevRequests;
 		};
 
 		let result;
@@ -669,15 +656,13 @@ export class Store {
 			this._tracking = null;
 			this._trackingAdded = null;
 		}
-		// D161: disarm this subscriber's handle unconditionally — its identity, not
-		// the ambient tracking target, is what decides whether its reads fault, and
-		// `dead` also stops any still-open eval of its own from restoring a map on
-		// the way out. A destroyed view's resumed data() must not fetch.
+		// D161: disarm this subscriber's handle — its identity, not the ambient
+		// tracking target, is what decides whether its reads fault, so a resumed
+		// data() must not fetch off a map installed before the teardown. Clearing
+		// only; a LIVE view can be unsubscribed (playOut) and restored, and
+		// withTracking's own restore consults `isDestroyed` rather than a latch.
 		const hctx = subscriber?.[HANDLE_CTX];
-		if (hctx) {
-			hctx.dead = true;
-			hctx.requests = null;
-		}
+		if (hctx) hctx.requests = null;
 		// D146: a destroyed subscriber holds nothing. Any prepared eval still pointing
 		// at it resolves to a reconcile over an already-empty key set (a no-op).
 		this._heldKeys.delete(subscriber);

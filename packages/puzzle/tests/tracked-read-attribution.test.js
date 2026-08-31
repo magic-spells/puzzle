@@ -272,6 +272,54 @@ describe('D161 attribution — a foreign read during a suspension', () => {
 		expect(hits(calls, '/api/posts/p9')).toHaveLength(0);
 	});
 
+	it('regression 9 — a view that left and came back is fully re-armed', async () => {
+		const { calls } = serveFrom({ posts: { p1: { id: 'p1', title: 'One' } } });
+		const store = makeStore();
+		const gate = deferred();
+		let armed = false;
+
+		class LeaverView extends PuzzleView {
+			async data() {
+				const s = this.ctx.store;
+				if (!armed) return { title: 'initial' };
+				await gate.promise;
+				return { title: s.findOne('post', 'p1')?.title ?? 'missing' };
+			}
+			render() {
+				return h('div', {}, [text(this.getData().title ?? '')]);
+			}
+		}
+
+		const el = container();
+		const view = new LeaverView(ctxWith(store));
+		await view.mount(el);
+		expect(el.textContent).toBe('initial');
+
+		// The router's stalled-outgoing-view path: playOut() unsubscribes a LIVE
+		// view, and _restoreFromLeaving() puts it back on screen and refreshes it.
+		// Whatever unsubscribe() does to the handle must therefore be reversible —
+		// this view is not destroyed and owes exactly the faults its data() makes.
+		armed = true;
+		const leaving = view.playOut();
+		view._restoreFromLeaving();
+		await tick();
+
+		// A nested evaluation of the SAME subscriber while the restored refresh is
+		// suspended. Its exit restores the enclosing evaluation's request map; a
+		// sticky "this subscriber is gone" latch would null it instead and silently
+		// strand every read the continuation still owes.
+		store.withTracking(view, () => store.findMany('post'));
+
+		gate.resolve();
+		await tick();
+		await tick();
+
+		expect(hits(calls, '/api/posts/p1')).toHaveLength(1);
+		expect(el.textContent).toBe('One');
+		view.destroy();
+		await leaving.catch(() => {});
+	});
+
 	it('regression 6b — the destroyed view’s OWN nested evaluation cannot re-arm it', async () => {
 		const { calls } = serveFrom({ posts: { p9: { id: 'p9', title: 'Nine' } } });
 		const store = makeStore();
@@ -382,6 +430,34 @@ describe('D161 attribution — what must keep working', () => {
 		await view.mount(container());
 		expect(view.ctx.store).toBe(store);
 		view.destroy();
+	});
+
+	it('a nested view’s ctx chains off the app ctx, never off its parent’s', async () => {
+		serveFrom();
+		const store = makeStore();
+		const ctx = ctxWith(store);
+
+		class View extends PuzzleView {
+			data() {
+				return {};
+			}
+			render() {
+				return h('div', {}, []);
+			}
+		}
+		// Components are constructed with their OWNER's ctx, which is already
+		// derived. Re-deriving from that would add a prototype link per level of
+		// nesting; the chain must stay exactly two deep at any depth.
+		const parent = new View(ctx);
+		const child = new View(parent.ctx);
+		const grandchild = new View(child.ctx);
+
+		for (const view of [parent, child, grandchild]) {
+			expect(view.ctx).not.toBe(ctx);
+			expect(Object.getPrototypeOf(view.ctx)).toBe(ctx);
+			expect(view.ctx.router).toBe(ctx.router); // inherited, still live
+		}
+		expect(child.ctx.store).not.toBe(parent.ctx.store); // one handle per view
 	});
 
 	it('regression 8 — two views share one in-flight request, with separate batches', async () => {
