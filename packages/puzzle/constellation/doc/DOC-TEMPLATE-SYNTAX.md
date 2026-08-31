@@ -362,6 +362,7 @@ Handlers live in the `events` class field of the component (arrow functions only
 
 ## Component tags with props
 
+
 Capitalized tags render child components. The component must be imported inside the `<script>` block; props are passed as attributes, with braces for dynamic values:
 
 ```html
@@ -384,6 +385,37 @@ export default class UserPage extends PuzzleView {
 ```
 
 Props are fully reactive: when the parent's model changes a prop value, the child's `data(params, props)` re-runs with the new props. Inside a `{#for}` block you can pass the loop variable as a prop: `<TodoItem todo={todo} />`.
+
+**Component families and dot notation (v1.80, D167).** A capitalized tag name may be a dotted member path — `<Frame.Wrapper>` renders the `Wrapper` property of whatever `Frame` the `<script>` imported. The compiler validates every component tag as `Ident('.'Ident)*` (a dash, colon, or empty segment is a positioned compile error) and emits the path verbatim as a member expression; resolution is purely lexical, exactly like a plain `<Frame>`. `.pzl` files stay one class per file — a family is a directory grouped by a plain JS barrel:
+
+```js
+// app/components/Frame/index.js
+import Frame from './Frame.pzl';
+import Wrapper from './Wrapper.pzl';
+import Content from './Content.pzl';
+
+export { Frame, Wrapper, Content };
+export default Object.assign(Frame, { Wrapper, Content });
+```
+
+```html
+<puzzle-view class="page">
+  <Frame>
+    <Frame.Wrapper>
+      <Frame.Content><p>One import, three components.</p></Frame.Content>
+    </Frame.Wrapper>
+  </Frame>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Frame from '../components/Frame';
+
+export default class Page extends PuzzleView {}
+</script>
+```
+
+`puzzle generate component Frame --family Wrapper,Content` scaffolds the directory and barrel. A dotted name rooted at a marker name (`<Slot.Foo>`) is a compile error — `Children`, `Slot`, `Snippet`, and `Portal` stay reserved.
 
 ## `<Slot/>` in layouts
 

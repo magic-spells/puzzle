@@ -23,6 +23,7 @@ Puzzle components bundle template, logic, and optional styles inside a single `.
 
 ## File Anatomy
 
+
 Each `.pzl` file can contain up to four top-level blocks:
 
 ```html
@@ -46,7 +47,7 @@ export default class ComponentName extends PuzzleView {
 
 - `<puzzle-view>`: The web component root with any HTML attributes (class, id, data-*, etc.) and Puzzle directives (`{}` interpolations, `#if`, `#for`, etc.).
 - `<puzzle-skeleton>`: Optional loading template (v1.8, D39) shown while the first `data()` is pending, then swapped for the real template (see [Skeleton Loading States](#skeleton-loading-states)).
-- `<script>`: Class extending PuzzleView with component logic and lifecycle. Imports — including other `.pzl` components — live inside this block, where esbuild resolves them.
+- `<script>`: Class extending PuzzleView with component logic and lifecycle. Imports — including other `.pzl` components — live inside this block, where esbuild resolves them. Related components can be grouped as a **component family** (v1.80, D167): a directory of one-class-per-file `.pzl` members with a plain JS `index.js` barrel (`export default Object.assign(Frame, { Wrapper, Content })` plus named exports), imported once and invoked with dotted tags — `<Frame.Wrapper>`. Scaffold one with `puzzle generate component Frame --family Wrapper,Content`.
 - `<style>`: Optional CSS, emitted as global CSS. A bare `scoped` attribute confines the block to the component (v1.27, D59 — see [Styles Block](#styles-block)).
 
 Only the `<puzzle-view>` block is required.
