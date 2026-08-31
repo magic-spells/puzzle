@@ -147,7 +147,6 @@ The Shopify-snippet ergonomic for icons: one SVG file on disk, referenced by nam
 
 ## 24. Composition markers: `<Children>`, `<Slot>`, `<Slot name>` (v1.21, amended v1.41, v1.64, v1.65)
 
-
 Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retired the bare lowercase `<slot/>`; v1.64 (D134) capitalized the markers; v1.65 (D141) added fallback bodies; v1.79 (D166) gave the markers data attributes and added the caller-side `<Snippet>` — see §64. Two tags, three roles: **`<Children>` is the default marker** (call-site content), **`<Slot>` is the router outlet** (D30), and **`<Slot name="x">` is a named slot**. Each marker is written **self-closing** (no fallback) or **paired**, where the body is fallback content: rendered only when nothing fills that position, replaced entirely by supplied content, and an empty paired body is equivalent to self-closing. A fallback body is **ordinary template content** — interpolations and formatter pipes, `{#if}`/`{#for}`/`{#case}`, components, event bindings, refs, `{#svg}` — compiled through the same paths as any element body; the one restriction is that a composition marker may not appear inside another marker's fallback body (positioned compile error). The lowercase `<children>`/`<slot>` spellings are positioned steering errors. Capitalization uniformly means "the framework resolves this tag": components from your imports, markers from the grammar (`Children`, `Slot`, and `Snippet` are reserved tag names — parseElement matches them before component resolution). All markers compile to the same marker vnode, carrying their fallback as its children.
 
 ```html
@@ -173,7 +172,7 @@ Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retire
 - **Call-site side (unchanged, D53):** a **static** `slot="x"` attribute on a **direct child** (element or component tag) of a component invocation routes it to that region; the attribute is stripped from the rendered output. Direct children without one form the default content.
 - **Compile errors (unchanged, D53):** dynamic `slot={expr}` on a direct component child; a control-flow block at direct-child level containing top-level `slot`-attributed elements (put the condition inside the slotted element instead). Elsewhere, `slot` is the ordinary HTML global attribute and passes through.
 - **Views/layouts (unchanged):** one marker type, one expansion pass — but the router only ever fills the DEFAULT bucket; a named slot in a routed view's template renders its fallback (or nothing when self-closing), never routed content.
-- **Forwarding through a component (v1.38, D71 — respelled by v1.64):** a default marker placed INSIDE a component invocation forwards the enclosing template's default content through that component — `<Card><Children/></Card>` in a layout hands the routed page to Card's default slot (`<Slot/>` works identically in that position — same node). The expansion walk substitutes the enclosing template's markers in call-site children before the inner component expands its own; a routed vnode's pinned instance rides along and mounts as usual. Only the default marker forwards: `<Slot name="x"/>` inside a component invocation is a positioned compile error (no defined fill source — the router fills the default slot only), enforced through nested elements, control flow, and deeper invocations. Forwarding substitutes **plain content only**: a snippet handed to the wrapper does not currently reach the component it wraps (§64).
+- **Forwarding through a component (v1.38, D71 — respelled by v1.64, extended by v1.79):** a default marker placed INSIDE a component invocation forwards the enclosing template's default content through that component — `<Card><Children/></Card>` in a layout hands the routed page to Card's default slot (`<Slot/>` works identically in that position — same node). The expansion walk substitutes the enclosing template's markers in call-site children before the inner component expands its own; a routed vnode's pinned instance rides along and mounts as usual. Only the default marker forwards: `<Slot name="x"/>` inside a component invocation is a positioned compile error (no defined fill source — the router fills the default slot only), enforced through nested elements, control flow, and deeper invocations. Forwarding carries **snippets too** (v1.79, D166): the caller's `<Snippet>`s ride through that bare `<Children/>` into the inner invocation alongside the default content, unmodified and uninvoked, transitively through wrapper chains — so a wrapper exposes its inner component's snippet points by doing nothing more than forwarding (§64).
 - Scoped slots shipped in v1.79 as **snippets** — see §64.
 
 ## 28. List keying (v1.26)
@@ -349,6 +348,17 @@ re-invokes; a caller re-render rides the existing slot-only update path. Both
 prerender modes (§36) share the same expansion and stamp snippets with no
 special case, and a prepared takeover tree expands exactly once.
 
+**Forwarding through wrappers.** A bare `<Children/>` placed inside a nested
+component invocation forwards the caller's snippets alongside the default
+content (§24, D71): `DatePicker` rendering `<Calendar …><Children/></Calendar>`
+hands a caller's `<Snippet fits="day" …>` to Calendar's `day` marker with `fits`,
+parameters, and function intact and never invoked on the way. The rule is
+transitive through wrapper chains; an argument-bearing marker still stamps
+locally and never forwards; a wrapper may both stamp and forward the same
+snippet. A forwarded snippet counts as used at the wrapper, and the innermost
+recipient owns the single unused-snippet warning. Runtime-only, behind the same
+gate.
+
 **Development diagnostics** (absent from production builds): a parameter/argument
 shape mismatch, a snippet no marker consumed, an argument-bearing marker filled
 with plain content, and a snippet whose output contains a composition marker.
@@ -357,7 +367,3 @@ Each warns once per component and position.
 **Cost.** The feature is gated behind `__PUZZLE_HAS_SNIPPETS__` (D89): an app
 using no snippet and no marker argument pays **zero bytes** and takes the same
 expansion fast path it took before; an app that uses them pays about 50 B gzip.
-
-**Known limitation.** §24 forwarding (D71) substitutes plain content only, so a
-snippet handed to a wrapper component does not currently reach the component
-that wrapper wraps.

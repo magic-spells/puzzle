@@ -141,6 +141,26 @@ const, so esbuild folds it away. A snippet-free, marker-arg-free call site takes
 exactly the fast path it took before. Non-users pay **0 bytes**; users pay
 **48–60 B gzip**.
 
+## Forwarding through wrappers
+
+A snippet handed to a wrapper reaches the component the wrapper wraps by the
+same implicit rule D71 already applies to plain content: **a bare
+`<Children/>` placed inside a nested component invocation forwards the caller's
+snippets alongside the default content.** `DatePicker` renders
+`<Calendar …><Children/></Calendar>`, so a caller's `<Snippet fits="day" …>`
+arrives at `Calendar`'s `day` marker with `fits`, `params`, and `fn` intact and
+never invoked on the way — the nested component's own partitioning consumes it.
+The rule is transitive through wrapper chains. An args-bearing marker still
+stamps locally and never forwards; a wrapper may both stamp and forward the same
+snippet. A forwarded snippet counts as used at the wrapper, and the innermost
+recipient owns the single unused-snippet warning.
+
+This is runtime-only (the partition keeps the ordered snippet vnodes as
+forwarding metadata and the D71 call-site descent re-inserts them at the
+forwarding `<Children/>`); no grammar changed, and every new path sits behind
+the same inline `__PUZZLE_HAS_SNIPPETS__` probe — a snippet-free bundle contains
+none of it.
+
 ## Guardrails (from the adversarial review)
 
 - **A composition marker inside a `<Snippet>` body is a positioned compile
@@ -197,10 +217,6 @@ before release.
 - **Memoizing stamps.** Patch has no identity short-circuit; component
   re-renders re-invoke and re-diff, which is Puzzle's normal render model. No
   special case was added.
-
-## Known limitation at ship
-
-A snippet does **not** yet forward through a wrapper component's bare
-`<Children/>` into a nested component: D71 forwarding substitutes plain content
-only, so a snippet handed to `<Card>` cannot reach the component `<Card>` wraps.
-A fix is in flight as an amendment to this card.
+- **Explicit snippet-forwarding syntax.** Rejected for the same reason D71
+  rejected it for content: a wrapper already says what it means by placing a
+  bare `<Children/>` where the inner component's content goes.
