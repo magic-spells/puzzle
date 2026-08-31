@@ -147,7 +147,8 @@ The Shopify-snippet ergonomic for icons: one SVG file on disk, referenced by nam
 
 ## 24. Composition markers: `<Children>`, `<Slot>`, `<Slot name>` (v1.21, amended v1.41, v1.64, v1.65)
 
-Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retired the bare lowercase `<slot/>`; v1.64 (D134) capitalized the markers; v1.65 (D141) added fallback bodies. Two tags, three roles: **`<Children>` is the default marker** (call-site content), **`<Slot>` is the router outlet** (D30), and **`<Slot name="x">` is a named slot**. Each marker is written **self-closing** (no fallback) or **paired**, where the body is fallback content: rendered only when nothing fills that position, replaced entirely by supplied content, and an empty paired body is equivalent to self-closing. A fallback body is **ordinary template content** — interpolations and formatter pipes, `{#if}`/`{#for}`/`{#case}`, components, event bindings, refs, `{#svg}` — compiled through the same paths as any element body; the one restriction is that a composition marker may not appear inside another marker's fallback body (positioned compile error). The lowercase `<children>`/`<slot>` spellings are positioned steering errors. Capitalization uniformly means "the framework resolves this tag": components from your imports, markers from the grammar (`Children` and `Slot` are reserved tag names — parseElement matches them before component resolution). All markers compile to the same marker vnode, carrying their fallback as its children.
+
+Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retired the bare lowercase `<slot/>`; v1.64 (D134) capitalized the markers; v1.65 (D141) added fallback bodies; v1.79 (D166) gave the markers data attributes and added the caller-side `<Snippet>` — see §64. Two tags, three roles: **`<Children>` is the default marker** (call-site content), **`<Slot>` is the router outlet** (D30), and **`<Slot name="x">` is a named slot**. Each marker is written **self-closing** (no fallback) or **paired**, where the body is fallback content: rendered only when nothing fills that position, replaced entirely by supplied content, and an empty paired body is equivalent to self-closing. A fallback body is **ordinary template content** — interpolations and formatter pipes, `{#if}`/`{#for}`/`{#case}`, components, event bindings, refs, `{#svg}` — compiled through the same paths as any element body; the one restriction is that a composition marker may not appear inside another marker's fallback body (positioned compile error). The lowercase `<children>`/`<slot>` spellings are positioned steering errors. Capitalization uniformly means "the framework resolves this tag": components from your imports, markers from the grammar (`Children`, `Slot`, and `Snippet` are reserved tag names — parseElement matches them before component resolution). All markers compile to the same marker vnode, carrying their fallback as its children.
 
 ```html
 <!-- Card.pzl -->
@@ -165,15 +166,15 @@ Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retire
 </Card>
 ```
 
-- **`<Children>` — the default marker.** Renders the invocation's untagged direct children (or, in a routed view/layout, whatever fills the default bucket). Takes **no attributes** (any attribute is a positioned compile error; `ref` gets the render-target message, D72). Unfilled, it renders its fallback body — or nothing when self-closing (there is no is-slot-filled probe; the fallback body is the default-content mechanism, D141). One default marker per body, counting `<Slot>` too.
+- **`<Children>` — the default marker.** Renders the invocation's untagged direct children (or, in a routed view/layout, whatever fills the default bucket). Its only attributes are **snippet arguments** (§64) — `<Children user={ user }>` hands `user` to the snippet filling this position; every other attribute is a positioned compile error (`ref` gets the render-target message, D72; a bare attribute steers to `<Snippet>`, where bare names declare parameters). Unfilled, it renders its fallback body — or nothing when self-closing (there is no is-slot-filled probe; the fallback body is the default-content mechanism, D141). One default marker per body, counting `<Slot>` too — except that markers carrying arguments are exempt from that uniqueness rule, because one such marker inside `{#for}` is the intended N-stamp case (§64).
 - **`<Slot>` — the router outlet.** Bare: the canonical spelling in routed shells/layouts (D30 fills it). A fallback body renders when no child route occupies the outlet — a parent route rendering as the leaf. The compiler cannot tell a view from a component (same `.pzl` format), so `<Slot>`-in-views vs `<Children>`-in-components is a documented convention over one mechanism, not an enforced split.
-- **`<Slot name="x">` — a named slot.** `name` is static, non-empty, unique per template body; `name="default"` and `name="children"` are reserved (both steer to `<Children/>`). Renders the call-site children tagged `slot="x"`; unfilled, its fallback body — or nothing when self-closing.
-- **Retired spellings (v1.64, D134):** any `<children…>` or `<slot…>` tag is a positioned compile error steering to the capitalized form — `<Children/>` for the default marker, `<Slot name="x"/>` for a named slot, with the bare-`<slot>` error naming both replacements.
+- **`<Slot name="x">` — a named slot.** `name` is static, non-empty, unique per template body; `name="default"` and `name="children"` are reserved (both steer to `<Children/>`). Renders the call-site children tagged `slot="x"`; unfilled, its fallback body — or nothing when self-closing. Every valued attribute besides `name` is a snippet argument (§64).
+- **Retired spellings (v1.64, D134):** any `<children…>` or `<slot…>` tag is a positioned compile error steering to the capitalized form — `<Children/>` for the default marker, `<Slot name="x"/>` for a named slot, with the bare-`<slot>` error naming both replacements. A lowercase `<snippet …fits>` steers the same way (§64); a plain `<template>` element is ordinary HTML and means nothing to the framework.
 - **Call-site side (unchanged, D53):** a **static** `slot="x"` attribute on a **direct child** (element or component tag) of a component invocation routes it to that region; the attribute is stripped from the rendered output. Direct children without one form the default content.
 - **Compile errors (unchanged, D53):** dynamic `slot={expr}` on a direct component child; a control-flow block at direct-child level containing top-level `slot`-attributed elements (put the condition inside the slotted element instead). Elsewhere, `slot` is the ordinary HTML global attribute and passes through.
 - **Views/layouts (unchanged):** one marker type, one expansion pass — but the router only ever fills the DEFAULT bucket; a named slot in a routed view's template renders its fallback (or nothing when self-closing), never routed content.
-- **Forwarding through a component (v1.38, D71 — respelled by v1.64):** a default marker placed INSIDE a component invocation forwards the enclosing template's default content through that component — `<Card><Children/></Card>` in a layout hands the routed page to Card's default slot (`<Slot/>` works identically in that position — same node). The expansion walk substitutes the enclosing template's markers in call-site children before the inner component expands its own; a routed vnode's pinned instance rides along and mounts as usual. Only the default marker forwards: `<Slot name="x"/>` inside a component invocation is a positioned compile error (no defined fill source — the router fills the default slot only), enforced through nested elements, control flow, and deeper invocations.
-- Scoped slots (child data flowing back into parent-provided content) remain deferred.
+- **Forwarding through a component (v1.38, D71 — respelled by v1.64):** a default marker placed INSIDE a component invocation forwards the enclosing template's default content through that component — `<Card><Children/></Card>` in a layout hands the routed page to Card's default slot (`<Slot/>` works identically in that position — same node). The expansion walk substitutes the enclosing template's markers in call-site children before the inner component expands its own; a routed vnode's pinned instance rides along and mounts as usual. Only the default marker forwards: `<Slot name="x"/>` inside a component invocation is a positioned compile error (no defined fill source — the router fills the default slot only), enforced through nested elements, control flow, and deeper invocations. Forwarding substitutes **plain content only**: a snippet handed to the wrapper does not currently reach the component it wraps (§64).
+- Scoped slots shipped in v1.79 as **snippets** — see §64.
 
 ## 28. List keying (v1.26)
 
@@ -221,6 +222,7 @@ The compiler emits **positioned, non-fatal warnings** (never errors) for five te
 
 ## 57. Raw template blocks: `{#raw}…{/raw}` (v1.70)
 
+
 `{#raw}` disables Puzzle's brace lexer for its body. It is the static-source
 escape for JSON, JavaScript, CSS, and examples that need literal template-like
 syntax:
@@ -261,5 +263,101 @@ syntax:
 Client rendering creates literal text nodes. Prerendering is parent-aware:
 ordinary element text is entity-escaped in the HTML string and decoded back by
 the HTML parser, while `<script>`/`<style>` use §36's D113 RAWTEXT policy. A
-JSON-typed script still rewrites `<` to JSON-transparent `\u003c`, preserving
-`JSON.parse(element.textContent)` while preventing a closing-tag breakout.
+JSON-typed script still rewrites `<` to its JSON-transparent unicode escape,
+preserving `JSON.parse(element.textContent)` while preventing a closing-tag
+breakout.
+
+## 64. Snippets: `<Snippet>` + marker data attributes (v1.79)
+
+Slots render a passed-in template; **snippets render it repeatedly, with data**.
+A `<Snippet>` is a caller-declared body with parameters; the component stamps it
+once per item by handing values to its own marker. Shipped in v1.79
+([[DECISION-D166-SNIPPETS]]); it extends §24 and changes nothing about a
+template that does not use it.
+
+```html
+<!-- caller -->
+<UserList users={ users }>
+  <Snippet user><img src={ user.avatar } /> <b>{ user.name }</b></Snippet>
+</UserList>
+
+<GroupedList groups={ groups }>
+  <Snippet fits="heading" group>{ group.title }</Snippet>
+  <Snippet fits="row" user group>…</Snippet>
+</GroupedList>
+
+<!-- component -->
+{#for user in users}
+  <li key={ user.id }><Children user={ user }>{ user.name }</Children></li>
+{/for}
+<Slot name="row" user={ user } group={ group }>fallback…</Slot>
+```
+
+**Grammar.** `<Snippet>` is a third reserved marker tag, matched before
+component resolution like `Children` and `Slot`. It is **paired-only** (a
+self-closing `<Snippet/>` is a positioned compile error) and legal **only as a
+direct child of a component invocation** — the same position rule the `slot="x"`
+attribute has, including the rejection of control-flow blocks at that level.
+`fits="x"` is a static, non-empty string routing the snippet to
+`<Slot name="x">`; omitted, it fills the default `<Children>` position. **Every
+other attribute is bare and declares a parameter**: `fits` is the only attribute
+on `<Snippet>` that takes a value, and a valued parameter (`user={ … }`), an
+`@event`, or a dynamic/mixed attribute is a positioned error steering to the
+bare form. Parameter names must be valid identifiers, must not repeat, and must
+not be `fits`. A lowercase `<snippet>` carrying `fits` steers to `<Snippet>`;
+`<template>` remains an ordinary HTML element with no framework meaning.
+
+**Marker side.** On `<Children>` and `<Slot name="x">`, every valued attribute
+other than `name` becomes a per-stamp **argument**, evaluated in the component's
+scope and rebuilt on every render. A bare attribute on a marker is a positioned
+error steering to `<Snippet>`. `@event` attributes on markers stay rejected.
+
+**Binding is by name.** The marker's argument names feed the snippet's declared
+parameter names — the two files compile separately, so neither can know the
+other's ordering. Declaring a subset of what the marker hands over is legal.
+Parameters shadow both caller data fields and enclosing `{#for}` variables, the
+same way a loop binding does; the rest of the caller's scope stays visible
+inside the body.
+
+**Fallbacks are unchanged (D141).** A paired marker body still renders when
+nothing fills the position, so adding an argument-bearing marker to an existing
+component breaks no existing caller. Plain (non-snippet) content filling an
+argument-bearing marker renders the fallback and warns in development.
+
+**Uniqueness and placement.** At most one snippet per `fits` name per
+invocation, `default` included; a snippet and a `slot="x"` element may not
+target the same name, and a default snippet may not coexist with plain default
+content. The §24 per-body marker-uniqueness rule **skips markers that carry
+arguments** — one such marker inside `{#for}` is precisely the intended N-stamp
+case — while markers without arguments keep the old rule. Argument-bearing
+markers remain rejected inside `island` subtrees (§17).
+
+**Snippet bodies are stamped output, not composition owners.** A composition
+marker anywhere inside a `<Snippet>` body is a positioned compile error (put it
+in the component's own template), and so is `ref=` (§38: a ref names one element
+on one instance, and a snippet body is stamped N times). A snippet body *may*
+contain component invocations with their own snippets, and §24's
+nested-fallback restriction does not apply to it.
+
+**Semantics.** A snippet compiles to a function carried in the invocation's
+**children**, not its props: it closes over the caller's render data, so it
+cannot be identity-cached, and as a prop it would defeat the §31 shallow compare
+and re-run the child's `data()` on every caller render. Each stamp calls that
+function with its own arguments and gets **fresh vnodes**, so N stamps patch
+independently through ordinary keyed reconciliation (§28). A component re-render
+re-invokes; a caller re-render rides the existing slot-only update path. Both
+prerender modes (§36) share the same expansion and stamp snippets with no
+special case, and a prepared takeover tree expands exactly once.
+
+**Development diagnostics** (absent from production builds): a parameter/argument
+shape mismatch, a snippet no marker consumed, an argument-bearing marker filled
+with plain content, and a snippet whose output contains a composition marker.
+Each warns once per component and position.
+
+**Cost.** The feature is gated behind `__PUZZLE_HAS_SNIPPETS__` (D89): an app
+using no snippet and no marker argument pays **zero bytes** and takes the same
+expansion fast path it took before; an app that uses them pays about 50 B gzip.
+
+**Known limitation.** §24 forwarding (D71) substitutes plain content only, so a
+snippet handed to a wrapper component does not currently reach the component
+that wrapper wraps.

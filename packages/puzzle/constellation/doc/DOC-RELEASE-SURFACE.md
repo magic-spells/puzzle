@@ -42,7 +42,7 @@ notes:
 # Puzzle release surface
 
 Compact inventory of what ships in `@magic-spells/puzzle` — kept current with
-the released surface (0.6.0 as of this writing), not pinned to one version. [[DOC-SPEC]] remains the binding contract; this card is the map, not a
+the released surface (0.7.0 as of this writing), not pinned to one version. [[DOC-SPEC]] remains the binding contract; this card is the map, not a
 second specification. Decision cards hold rationale and git holds chronology.
 
 ## Package and application
@@ -50,7 +50,9 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `lazy` (the D163 route-view loader marker), and
-  compiler support exports.
+  compiler support exports (`ViewNode`, `SLOT_TAG`, `PORTAL_TAG`, and
+  `SNIPPET_TAG` — the D166 snippet marker tag, with `isSnippet` on the ViewNode
+  type surface).
 - Subpaths: `@magic-spells/puzzle/adapter`, `/morph`, `/router-modes`, `/ssg`,
   `/static`, `/testing`, `/fixtures`, and `/puzzle-env`. (`/router-modes` exports
   `hashRouter()` and `memoryRouter({ initialPath })`, the opt-in router modes —
@@ -85,10 +87,12 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - One `<puzzle-view>` template; optional `<script>` and `<style>`; optional
   `<puzzle-skeleton min-duration="…">`.
-- `<script>` is real JS. `lang="ts"` enables esbuild transpilation only; neither
-  the Puzzle build, scaffolded `tsc --noEmit`, nor editors type-check `.pzl`
-  `<script>` bodies. The scaffolded TypeScript config checks standalone
-  `.ts`/`.js` files and declarations.
+- `<script>` is real JS. `lang="ts"` enables esbuild transpilation only — the
+  build itself never type-checks. Type checking is the separate opt-in
+  `puzzle check` command (D165), which runs the app's own `tsc` over emitted
+  virtual files and reports diagnostics at real `.pzl` positions; editors still
+  do not check `.pzl` script bodies, and the scaffolded TypeScript config
+  covers standalone `.ts`/`.js` files and declarations.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
@@ -109,8 +113,16 @@ second specification. Decision cards hold rationale and git holds chronology.
   (document-capture outside-dismiss, D86), and keyboard filters. Component
   event attributes compile to callback props.
 - Composition: `<Children/>` default content, named `<Slot name="…"/>`,
-  `<Slot/>` router outlets, unfilled-marker omission, and default-slot forwarding
-  through component invocations. `<Portal>…</Portal>` (D144) teleports children
+  `<Slot/>` router outlets, unfilled-marker fallback bodies, and default-slot
+  forwarding through component invocations. **Snippets (D166):** a caller-side
+  `<Snippet fits="row" user group>…</Snippet>` declares a parameterized body
+  (bare attributes are parameter declarations; `fits` routes it to a named
+  slot, omitted fills the default position), and the component stamps it by
+  handing values out through data attributes on its own markers
+  (`<Slot name="row" user={ user }>`, `<Children user={ user }>`). Binding is by
+  name, each stamp gets fresh vnodes, paired marker bodies remain fallbacks, and
+  composition markers or `ref=` inside a snippet body are compile errors.
+  `<Portal>…</Portal>` (D144) teleports children
   into a framework-created outlet at the app root — paired-only, attribute-free,
   empty in prerendered HTML, with portal-aware `@event:outside` containment.
 - `key` overrides list auto-keying; `ref="name"` binds `this.refs`; `island`
@@ -138,7 +150,8 @@ second specification. Decision cards hold rationale and git holds chronology.
   same-location Router replace or the component parent's refresh. With no error
   view, the invisible marker remains for ordinary owner recovery.
   Error-view failures report once as `phase: 'error-view'` and never recurse.
-- The vnode manager handles inline components, slots, SVG namespaces, controlled
+- The vnode manager handles inline components, slots, snippets, SVG namespaces,
+  controlled
   form properties, events/modifiers, keyed moves, islands, refs, and teardown.
   Keyed identity is the `(tag, key)` pair by SameValueZero, so type-distinct
   keys never collide; a first-mount failure is torn down and re-mounted fresh.
@@ -156,12 +169,16 @@ second specification. Decision cards hold rationale and git holds chronology.
   `.primary().required()` field; hydration/upsert stay fail-soft).
 - Store queries auto-subscribe inside `data()`. Collection and record keys are
   batched, hidden-tab safe, isolated per subscriber, and torn down with views.
+  A tracked `findOne`/`findMany` that misses faults the read in through the
+  adapter and re-runs `data()` until every read settles (D161); a committed
+  `null` means the record does not exist.
 - Server sync is opt-in: models keep a bare `static adapter` object of per-verb
   fetch functions; `endpoint` generates missing REST defaults, and endpoint is
   optional for a fully custom adapter (D158). Verb dispatch is model function →
   app-wide default (`adapter.defaults({ verb })`, passed as the capability) →
   endpoint-generated REST, with `{ type, endpoint }` context as the trailing
-  argument. The app imports the D157 capability from
+  argument. The collection verb is `loadMany`. The app imports the D157
+  capability from
   `@magic-spells/puzzle/adapter` and passes it once to `PuzzleApp`; apps that never pass it ship none of the Store/record
   verbs. Reads preserve identity and accept pagination options. Writes retain
   sync provenance, revision/collision/destroy guards, and typed adapter errors.
@@ -248,11 +265,12 @@ second specification. Decision cards hold rationale and git holds chronology.
   render functions attach to the user class prototype.
 - Production: ES2022, minified, console calls stripped by default, tree-shaken
   formatter manifest, collected component CSS. The D89 usage scan also gates
-  whole modules behind literal defines — `views/flip.js`
+  whole modules and code paths behind literal defines — `views/flip.js`
   (`__PUZZLE_HAS_FLIP__`), `views/portal.js` (`__PUZZLE_HAS_PORTAL__`), the
-  D150 literal-`@` shim (`__PUZZLE_HAS_RAW_AT__`), and `router/lazy.js`
-  (`__PUZZLE_HAS_LAZY__`) — so an app pays only for what it uses. The first
-  three are template facts; lazy is a script fact, so the scan reads the app's
+  D150 literal-`@` shim (`__PUZZLE_HAS_RAW_AT__`), `router/lazy.js`
+  (`__PUZZLE_HAS_LAZY__`), and the D166 snippet expansion
+  (`__PUZZLE_HAS_SNIPPETS__`) — so an app pays only for what it uses. Most are
+  template facts; lazy is a script fact, so the scan reads the app's
   `.js`/`.ts` modules as well as its `.pzl` files (D111 retired the
   managed-head define, which was the scan's earlier and much looser reason to
   open a script). The fixture
@@ -301,15 +319,33 @@ second specification. Decision cards hold rationale and git holds chronology.
   `app.js`, stamping the target `data-puzzle-static` and emitting one per-page
   `dist/_puzzle/<slug>.js` (mountStatic + that page's classes) with shared
   runtime split into `dist/_puzzle/chunks/` and build-time data inlined as a
-  `data-puzzle-static-data` island. Hybrid requires path routing (a
+  `data-puzzle-static-data` island — plus, since D161, a second island carrying
+  the build's settled read state so the page does not refetch what the build
+  already resolved. Hybrid requires path routing (a
   hash/memory router would render home over every prerendered page — the build
   rejects it); static ignores `storage` with a warning (no persistence layer),
   and base-prefixes each page's module href under `routerBase` (D81).
+- **Tooling, not app surface:** a `js/wasm` build of the parser and codegen
+  (D164) exposes template diagnostics, generated JavaScript, scoped CSS, and
+  warnings to the documentation-site playground behind a bounded worker
+  protocol. It deliberately omits bundling, asset resolution, and TypeScript
+  transformation, ships in no npm package, and adds nothing to an app's runtime
+  or build.
 
 ## CLI
 
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
+- `puzzle check [dir]` (D165): type-checks the app's `.pzl` script bodies and
+  template expressions by emitting virtual files under `.puzzle/check/` and
+  running the app's own `node_modules/.bin/tsc --noEmit` over them, remapping
+  every diagnostic to its authored `.pzl` line and column. TypeScript scripts
+  are checked as written; JavaScript components get an unchecked script mirror
+  plus a checked template wrapper. The generated tsconfig extends the app's,
+  neutralizes the settings that would break the workspace, and switches shape
+  for TypeScript 7 after probing `tsc --version`. A missing TypeScript install
+  is an error naming `npm install -D typescript` — Puzzle never installs one.
+  `--js` is reserved and not yet implemented.
 - `--profile-build` on `build` and `dev` (or `PUZZLE_PROFILE_BUILD=1`, D156):
   opt-in per-phase timing tables on stderr; never changes artifacts or stdout.
 - `puzzle preview [--port] [--strict-port]` (D148): serves an existing `dist/`
@@ -362,13 +398,16 @@ Event handlers and formatters surface uncaught.
 ## Deliberately not shipped
 
 
-No SSR server, hydration, named-route navigation, scoped slots, array refs,
-built-in virtual list, per-module hot swap, Sass pipeline, event bus, global
-keyboard API, app-level computed/settings/methods, or app-config devtools hook
-(the D100 bridge is extension-injected, not config). Two entries left this list
-in 0.7.0: query fault-in with D161 (tracked `findOne`/`findMany` now fault in
-automatically through the adapter capability) and lazy route loading with D163
+No SSR server, hydration, named-route navigation, array refs, built-in virtual
+list, per-module hot swap, Sass pipeline, event bus, global keyboard API,
+app-level computed/settings/methods, or app-config devtools hook
+(the D100 bridge is extension-injected, not config). Three entries left this
+list in 0.7.0: query fault-in with D161 (tracked `findOne`/`findMany` now fault
+in automatically through the adapter capability), lazy route loading with D163
 (`lazy()` marks a route `view`/`layout` as on-demand; `build.splitting`, D160,
-remains the separate opt-in that makes each one a chunk). Route-level *link
+remains the separate opt-in that makes each one a chunk), and scoped slots with
+D166 (shipped as snippets — a caller-declared parameterized body the component
+stamps per item). Route-level *link
 preloading* — prefetching a route's chunk on hover or viewport entry — is still
-not shipped.
+not shipped, and neither is editor-level `.pzl` type checking: `puzzle check`
+(D165) is a command, not a language service.
