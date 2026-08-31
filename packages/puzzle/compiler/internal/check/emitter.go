@@ -81,6 +81,18 @@ type Result struct {
 	Files int
 }
 
+// tableIndex keys this run's segment tables by absolute generated path, the way
+// remapTSCOutput looks them up. Remapping reads the bytes this run emitted, in
+// memory: re-reading them after tsc exits would remap against whatever the
+// developer saved while it ran.
+func (r *Result) tableIndex(root string) map[string]*SegmentTable {
+	tables := make(map[string]*SegmentTable, len(r.Tables))
+	for _, t := range r.Tables {
+		tables[filepath.Clean(filepath.Join(root, filepath.FromSlash(t.Generated)))] = t
+	}
+	return tables
+}
+
 type virtualFile struct {
 	GeneratedPath string
 	Contents      []byte

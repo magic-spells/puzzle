@@ -22,6 +22,14 @@ notes:
       nothing about the expression the author wrote. `emitVoid` always parenthesized;
       `emitInterpolation` did not, and every interpolation carrying an operator was that false
       positive until it was fixed pre-0.7.0.
+  - kind: state
+    text: >-
+      Remapping uses the run's own in-memory segment tables (`Result.tableIndex`), not a reload —
+      this supersedes the body's "the runner reloads them". `LoadSegmentTables` re-read the
+      sidecars, the generated files, AND the authored `.pzl` after tsc exited, so a save during the
+      run shifted every position and a delete replaced the type errors with `open …: no such file`.
+      The `.segments.json` sidecars are still written, purely as the inspectable artifact
+      `DOC-SPEC-BUILD.md` documents.
 ---
 
 `puzzle check` type-checks an app's `.pzl` files — script bodies *and* template

@@ -56,11 +56,7 @@ func Run(appRoot string) (int, error) {
 		return result.Files, fmt.Errorf("run TypeScript: %w", runErr)
 	}
 
-	tables, err := LoadSegmentTables(root, result.Dir)
-	if err != nil {
-		return result.Files, err
-	}
-	formatted := strings.TrimSuffix(remapTSCOutput(root, string(output), tables), "\n")
+	formatted := strings.TrimSuffix(remapTSCOutput(root, string(output), result.tableIndex(root)), "\n")
 	// A .pzl that failed to compile is reported alongside the type errors: it is
 	// a real failure of this run, and it is the reason the file is absent from
 	// everything tsc just checked.

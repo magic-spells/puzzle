@@ -3,9 +3,7 @@ package check
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -179,47 +177,6 @@ func writeSegmentTable(path string, table *SegmentTable) error {
 	}
 	data = append(data, '\n')
 	return os.WriteFile(path, data, 0o644)
-}
-
-// LoadSegmentTables reads all generated sidecars and attaches the source and
-// virtual file bytes needed for line/column remapping.
-func LoadSegmentTables(appRoot, checkDir string) (map[string]*SegmentTable, error) {
-	var sidecars []string
-	err := filepath.WalkDir(filepath.Join(checkDir, "src"), func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() && strings.HasSuffix(path, ".segments.json") {
-			sidecars = append(sidecars, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(sidecars)
-	tables := make(map[string]*SegmentTable, len(sidecars))
-	for _, path := range sidecars {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		var table SegmentTable
-		if err := json.Unmarshal(data, &table); err != nil {
-			return nil, fmt.Errorf("read segment table %s: %w", path, err)
-		}
-		generatedPath := filepath.Join(appRoot, filepath.FromSlash(table.Generated))
-		table.generatedBytes, err = os.ReadFile(generatedPath)
-		if err != nil {
-			return nil, err
-		}
-		table.sourceBytes, err = os.ReadFile(filepath.Join(appRoot, filepath.FromSlash(table.Source)))
-		if err != nil {
-			return nil, err
-		}
-		tables[filepath.Clean(generatedPath)] = &table
-	}
-	return tables, nil
 }
 
 // Remap maps a one-based TypeScript line/column to the authored .pzl position.

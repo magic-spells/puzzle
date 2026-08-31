@@ -470,6 +470,15 @@ one is *not* a compile error; it silently builds a different product.
   whole synthetic chain. The WASM entry also rejects an oversized source by its
   JavaScript-side length before copying it into Go memory.
 
+- **`puzzle check` remaps diagnostics against the bytes it emitted (D165).**
+  Positions were resolved by re-reading the `.segments.json` sidecars, the
+  generated files, and the authored `.pzl` from disk *after* TypeScript exited —
+  so saving a file while the check ran silently shifted every remapped position,
+  and deleting one replaced the type errors with `open …: no such file`. The run
+  now indexes its own in-memory segment tables, which is what the byte-exact
+  promise always meant. The sidecars are still written, as the inspectable
+  artifact they were always documented to be.
+
 ### Changed
 
 - **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing
