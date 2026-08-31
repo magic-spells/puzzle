@@ -135,6 +135,37 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Added
 
+- **`puzzle check` type-checks `.pzl` files with the app's own TypeScript
+  installation (D165).** The command emits virtual files under
+  `.puzzle/check/src/`, runs `node_modules/.bin/tsc --noEmit`, and maps
+  diagnostics back to authored `.pzl` bytes. TypeScript scripts are checked
+  byte-for-byte; JavaScript components use an unchecked script mirror plus a
+  checked template wrapper so ordinary JS is not silently promoted to
+  `checkJs`. The generated tsconfig defends against hostile app settings and
+  switches shape for TypeScript 7 after probing `tsc --version`; the feature
+  uses the stable CLI protocol, not TypeScript 6 APIs or Volar.
+
+- **Snippets pass a template that a component can stamp repeatedly with data
+  (D166).** The caller declares parameters as bare attributes and optionally
+  routes by `fits`; the component supplies each stamp's values by name:
+
+  ```html
+  <UserList><Snippet fits="row" user>{ user.name }</Snippet></UserList>
+  {#for user in users}<Slot name="row" user={ user } />{/for}
+  ```
+
+  Each stamp gets fresh vnodes, while the snippet function travels through the
+  children channel so it does not defeat component-prop shallow comparison.
+  Development warns about argument-shape mismatches; markers and `ref=` inside
+  a Snippet body are compile errors. `__PUZZLE_HAS_SNIPPETS__` leaves non-users
+  at zero bytes and costs users about 48–60 B gzip (roughly 50 B).
+
+- **The playground has a parser-and-codegen WebAssembly compiler core (D164).**
+  The tooling-only `js/wasm` command exposes the real template diagnostics,
+  generated JavaScript, scoped CSS, warnings, and errors through a bounded
+  worker protocol. It deliberately omits bundling, asset resolution, and
+  TypeScript transformation, and adds no app/runtime surface.
+
 - **Route views and layouts can load on demand with `lazy()`.** Wrap a dynamic
   import such as `view: lazy(() => import('./views/Admin.pzl'))` to defer that
   class until its route passes guards. A matched route's lazy views and layout
@@ -166,6 +197,32 @@ one is *not* a compile error; it silently builds a different product.
   first navigation.
 
 ### Fixed
+
+- **Multi-line `{#raw}` blocks pass the single-root gates they actually
+  satisfy.** Formatting whitespace around the raw markers no longer counts as
+  stray content in a `{#for}` row, component root, or component skeleton.
+  Genuine multi-root raw bodies still fail.
+
+- **Inlined `{#svg}` root attributes stay authored literals.** Attributes such
+  as `bind:value` and brace-looking values no longer enter template data or
+  directive paths. Framework-reserved `ref`, `island`, `key`, and `flip` asset
+  attributes are discarded; in particular, an asset `key` cannot suppress the
+  synthetic key required by a surrounding `{#for}`.
+
+- **The TypeScript import-clause scanner cannot hang a build or watcher.** It
+  now models type-only imports as erased value bindings and guarantees forward
+  progress even on an unclassified byte in a malformed `<script>`, leaving
+  esbuild to report the script error instead of spinning a CPU core forever.
+
+- **Path-mode fragment pops stay native in-page navigation (D41).** A browser
+  pop between `/docs` and `/docs#faq` now updates the route snapshot without
+  re-running route loads or `data()`, remounting views, moving focus, announcing
+  a route, or applying router scroll behavior.
+
+- **App-wide adapter defaults no longer make local models fault (D161).** A
+  model with neither an endpoint nor an authored read verb remains a pure local
+  snapshot even when the app installs `adapter.defaults(...)`; write-only
+  models do too. Explicit `store.loadMany` remains an intentional dispatch.
 
 - **`puzzle init --template todos` renders again.** The scaffolded app's `Todo`
   model declared `endpoint: '/api/todos'` while the template shipped no backend
@@ -221,7 +278,9 @@ one is *not* a compile error; it silently builds a different product.
   ISO datetimes and epoch millis via `new Date(v)`, a bare `YYYY-MM-DD` as local
   midnight (the D114 calendar-date rule the date formatters use). Validation
   stays strict — an unparseable value is left exactly as it arrived so §20 still
-  reports it — and serialization is unchanged (`Date#toJSON` emits ISO).
+  reports it. Instant dates still serialize as ISO timestamps, while a bare
+  date revives to `CalendarDate`, whose `toJSON()` preserves the original
+  `YYYY-MM-DD` in every time zone instead of shifting it to a UTC instant.
 - **`update()` with a reserved key applies the rest of the patch.** `_type` is
   defined non-writable, so `record.update({ title, _type, done })` threw
   `TypeError: Cannot assign to read only property '_type'` **mid-loop** under
@@ -232,21 +291,20 @@ one is *not* a compile error; it silently builds a different product.
   (`_store`/`_type`/`_synced`/`_deleted` plus the prototype-pollution family),
   dropping those keys with a development warning instead of throwing, and stamps
   D125 mutation revisions on only the keys that actually landed.
-- **`puzzle upgrade` resolves the install it is upgrading from the running
-  executable (D76).** Documented since 0.5.0, but the resolution still walked up
-  from the current directory, so a globally installed CLI invoked inside a
-  Puzzle app upgraded the *app's* dependency, printed
-  `✓ upgraded <old> → <new>` comparing the running CLI's version against that
-  project's, and left the global CLI stale — which it then re-offered to upgrade
-  on every build. Detection now runs `os.Executable()` through its symlinks and
-  reads only the directory that owns the `node_modules` the binary lives in: no
-  `node_modules` is a `go install` binary, an owning `package.json` that
-  declares `@magic-spells/puzzle` is a project install, anything else (including
-  pnpm's global root) is a global one. A **workspace** root that hoisted the
-  binary out of a member package is neither: the command names the root and the
-  `-w <member>` install shape and exits without running anything, rather than
-  installing globally behind your back. The success line names the scope —
-  `upgraded the global CLI …` or `upgraded @magic-spells/puzzle … in <dir>`.
+- **`puzzle upgrade` resolves and proves the install it is upgrading from the
+  running executable (D76).** Documented since 0.5.0, but resolution still
+  walked up from the current directory, so a global CLI invoked inside an app
+  could upgrade the app and leave itself stale. Detection now follows
+  `os.Executable()` through symlinks and finds the owning installed package.
+  Project dependencies update in place; a global install is accepted only when
+  `npm root -g`/`pnpm root -g` names its `node_modules` or the validated pnpm
+  global-root shape matches. Workspace-hoisted, nested, ephemeral, and unknown
+  installs explain and stop — there is no "does not look local, so it must be
+  global" fallthrough. Global-upgrade tests now assert the surrounding
+  `node_modules` directory itself, closing the vacuous check that previously
+  could not detect an accidental project install. The success line names the
+  scope: `upgraded the global CLI …` or
+  `upgraded @magic-spells/puzzle … in <dir>`.
 
 - **Tracked `findOne` honors collection completeness (D161).** After a
   successful no-options collection load, a tracked `findOne` for an id the

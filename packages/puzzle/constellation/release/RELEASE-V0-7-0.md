@@ -69,16 +69,43 @@ route `view` or `layout` as on-demand, and the router resolves those markers
 after guards pass and before anything constructs. A gated route never
 downloads, a failed load is an ordinary failed push, and the previous view
 holds until the new one commits — there is no new loading UI, because a lazy
-route is just a slow route.
+route is just a slow route. The resolver itself sits behind
+`__PUZZLE_HAS_LAZY__`, so an app that never calls `lazy()` does not ship it at
+all — about 0.6 KB gzip off every lazy-free SPA. Detecting that now means the
+D89 usage scan reads the app's `.js`/`.ts` modules as well as its templates,
+since `lazy()` is called from `routes.js`.
 
-The second thread is repo shape. [[DECISION-D162-MONOREPO-PACKAGES]] pulls the
+The second thread is composition. v1.79 snippets
+([[DECISION-D166-SNIPPETS]]) close the last item on the SPEC's deferred
+composition list: slots render a passed-in template, and a snippet renders it
+repeatedly, with data. A caller writes `<Snippet fits="row" user group>…`
+inside a component invocation — bare attributes declare the parameters — and
+the component stamps it by handing values out through its own markers,
+`<Slot name="row" user={ user }>`. The benefit lands mostly on pieces: a
+`data-table` can finally let the app decide what a cell looks like, and a
+windowed list piece becomes possible. Apps that use neither snippets nor marker
+arguments pay nothing for it.
+
+The third is tooling. `puzzle check` ([[DECISION-D165-PUZZLE-CHECK]], v1.78) is
+the first thing in Puzzle's history that type-checks a `.pzl` — script bodies
+and template expressions both — by emitting virtual files under
+`.puzzle/check/` and running the app's own `tsc` over them, then mapping every
+diagnostic back to the authored line and column. It is built entirely on the
+`tsc` CLI protocol, never a TypeScript compiler API, which is why it works
+today on 4.9 and on the 7.0 Go rewrite. Separately,
+[[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]] adds a `js/wasm` build of the parser
+and codegen for the documentation site's playground: real diagnostics and real
+generated code in the browser, behind a bounded worker protocol, with no
+bundling, no asset resolution, and no new app surface.
+
+The fourth is repo shape. [[DECISION-D162-MONOREPO-PACKAGES]] pulls the
 framework, the pieces registry, the DevTools extension, and the `.pzl`
 lint/format plugins into one repository under `packages/`, versioning as one
 train. Nothing about the published package changes — same name, exports, and
 tarball layout — but a pieces release can no longer lag the CLI it is
 version-locked to.
 
-The third is reach: the CLI ships a Windows x64 binary, so the release goes out
+The fifth is reach: the CLI ships a Windows x64 binary, so the release goes out
 as six npm packages instead of five and `npm install` on Windows resolves a real
 `puzzle.exe` rather than printing the unsupported-platform message. A
 `windows-latest` CI job runs the Go suite and scaffolds and builds an app with
@@ -111,7 +138,36 @@ capability):**
   `phase: 'navigation'` with URL, history, and DOM untouched. `build.splitting`
   (D160) turns each loader into a chunk; both prerender modes await the same
   markers. `examples/blog` splits its `/settings` section as the acceptance
-  case.
+  case. The resolver is gated behind `__PUZZLE_HAS_LAZY__`, so a lazy-free app
+  ships none of it; a marker that reaches a compiled-out build fails loudly at
+  route-compile time rather than mounting as if it were a view class.
+- **Snippets** (D166): `<Snippet fits="row" user group>…</Snippet>` at a
+  component call site declares a parameterized body, and data attributes on the
+  component's own `<Slot name="row" user={ user }>` / `<Children user={ user }>`
+  stamp it once per item with fresh vnodes. Binding is by name, paired marker
+  bodies remain D141 fallbacks, and the snippet function travels in the children
+  channel rather than as a prop so it cannot defeat the props shallow compare.
+  Development warns on argument-shape mismatches, unconsumed snippets, and
+  markers filled with plain content; composition markers and `ref=` inside a
+  snippet body are positioned compile errors. `SNIPPET_TAG`/`isSnippet` join the
+  public type surface, and `__PUZZLE_HAS_SNIPPETS__` keeps non-users at zero
+  bytes (users pay roughly 50 B gzip).
+- **`puzzle check`** (D165): the new CLI command type-checks `.pzl` files with
+  the app's own installed TypeScript. It emits virtual files under
+  `.puzzle/check/src/` — a `lang="ts"` script verbatim plus a generated wrapper
+  that restates every template expression as typed statements, or, for a
+  JavaScript component, an unchecked script mirror alongside that wrapper —
+  runs `node_modules/.bin/tsc --noEmit --pretty false` as a subprocess, and
+  remaps diagnostics to exact `.pzl` positions through byte-exact segment
+  tables. The generated tsconfig extends the app's, neutralizes the settings
+  that would break the workspace, and switches shape for TypeScript 7 after
+  probing `tsc --version`; one unparsable file no longer aborts the run.
+  Nothing in it touches a TypeScript compiler API.
+- **A WebAssembly compiler core for the playground** (D164): the tooling-only
+  `js/wasm` command exposes the real parser and codegen — diagnostics,
+  generated JavaScript, scoped CSS, warnings — through a bounded worker
+  protocol. It ships in no npm package and deliberately omits bundling, asset
+  resolution, and TypeScript transformation.
 - `output: 'static'` pages carry the build's read state in a second inline
   island (versioned, omitted when the build settled nothing), so `mountStatic`
   does not refetch every collection and re-404 every id the build already
@@ -207,10 +263,10 @@ capability):**
 - The darwin CLI binaries carry an `LC_UUID` load command; the build floor is
   Go 1.24.
 
-Sizes grew with the settle loop and again with `lazy()`: roughly 21.9 KB gzip
-for hello-world and 24.8 KB for todos, against 19.6 / 22.7 in 0.6.0.
-`release:prep` re-measures and fails on a stale banner — the README figures
-still read 20.6 / 23.6 and must be regenerated before ship.
+Sizes grew with the settle loop, again with `lazy()`, and a little with
+snippets: **21.4 KB gzip for hello-world and 24.4 KB for todos**, against
+19.6 / 22.7 in 0.6.0. The README banner was regenerated at close-out and now
+matches those figures, so `release:prep`'s size check passes.
 
 ## Upgrade notes
 
@@ -244,14 +300,17 @@ untouched.
   navigation anyway — but the failure moved earlier, to the `Router`
   constructor, and a bare function is called out by name (D163).
 
+Snippets and `puzzle check` are purely additive: no existing template or
+command changes behavior, and an app that adopts neither is byte-identical
+except for the shared fixes above.
+
 ## Still open before ship
 
 The matching `@magic-spells/puzzle-pieces` 0.7.0 publish (version-locked — it
-must land at or before the CLI release), `release:prep`, and the prose sweep.
-`DOC-RELEASE-SURFACE` has been brought forward for D163 but still describes the
-0.6.0 surface elsewhere. The CHANGELOG's 0.7.0 section carries the lazy-route
-entries but is still missing the compiler, fragment-pop, local-model-fault, and
-`upgrade` hardening items listed above, and two of its claims went stale
-(date-only fields now serialize as `YYYY-MM-DD` via `CalendarDate#toJSON`;
-`upgrade` no longer falls through to "must be global"). The README size banner
-is stale by measurement and `release:prep` will fail on it.
+must land at or before the CLI release), `release:prep`, and the remaining
+release-checklist items on this card's close-out note: the editor grammars
+(vscode/sublime/zed) gaining the `Snippet` marker, and the site's llms.txt +
+playground go-live with a re-vendored skill file. The prose sweep is done —
+the CHANGELOG's 0.7.0 section is complete, `DOC-RELEASE-SURFACE` describes the
+0.7.0 surface, the SPEC carries §63 (`puzzle check`) and §64 (snippets), and
+the README size banner is current by measurement.

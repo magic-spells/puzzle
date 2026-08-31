@@ -53,10 +53,17 @@
             @click={ choose(row, event) }
             @mouseenter={ hover(row) }>
             {#if row.kind === 'option'}
-              <span class="truncate">{ row.label }</span>
-              {#if row.hint}
-                <span class="shrink-0 text-xs text-muted">{ row.hint }</span>
-              {/if}
+              <Slot
+                name="option"
+                item={ row.item }
+                active={ row.active }
+                selected={ row.selected }
+                disabled={ row.disabled }>
+                <span class="truncate">{ row.label }</span>
+                {#if row.hint}
+                  <span class="shrink-0 text-xs text-muted">{ row.hint }</span>
+                {/if}
+              </Slot>
             {:else}
               { row.label }
             {/if}
@@ -91,6 +98,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   keywords? — string[] of extra terms that also match the query
 //   disabled? — rendered but not selectable, skipped by keyboard nav
 //   hint?     — right-aligned kbd-ish hint text (⌘K, ⏎, "Recent"…)
+//
+// OPTION SNIPPET. A direct-child <Snippet fits="option" item active selected
+// disabled> replaces only the visual content inside each option element. `item`
+// is the original authored option/item object; `active` is the current keyboard/
+// pointer highlight; `selected` is persistent controlled-value membership (false
+// in Command, which has no persistent selection, and in MultiSelect's dropdown,
+// where selected entries are hidden); `disabled` mirrors item.disabled. The
+// piece still owns the option element's id, role, aria state, and handlers. The
+// Snippet body cannot contain composition markers or ref=. With no snippet, the
+// marker fallback renders the stock row unchanged.
 //
 // CONTROLLED BY THE PARENT. The parent owns `open`; Command syncs the native
 // element to it (showModal()/close() in mounted()/afterUpdate(), exactly like a
@@ -168,6 +185,7 @@ export default class Command extends PuzzleView {
         else return; // no match — drop it
       }
       matched.push({
+        item: entry,
         value: entry.value,
         label,
         hint: entry.hint != null ? String(entry.hint) : '',
@@ -206,11 +224,13 @@ export default class Command extends PuzzleView {
         kind: 'option',
         id: `${base}-opt-${optIndex}`,
         optIndex,
+        item: m.item,
         value: m.value,
         label: m.label,
         hint: m.hint,
         disabled: m.disabled,
         active: false,
+        selected: false,
       };
       rows.push(row);
       options.push(row);

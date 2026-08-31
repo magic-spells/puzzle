@@ -332,3 +332,58 @@ being inlined into `app.js`. Shipped in v1.75 ([[DECISION-D160-SPA-CODE-SPLITTIN
   `import()`. `lazy()` (v1.77, D163) is the route-driven counterpart, and it is
   an ordinary consumer of this machinery — the loader's `import()` becomes a
   chunk when this flag is on, and is inlined (still working) when it is off.
+
+## 63. `puzzle check`: type-checking `.pzl` with the app's own tsc (v1.78)
+
+`puzzle check [dir]` type-checks an app's `.pzl` files — script bodies **and**
+template expressions — and reports every diagnostic at its authored `.pzl` line
+and column. Shipped in v1.78 ([[DECISION-D165-PUZZLE-CHECK]]). It is a separate,
+opt-in command: `puzzle build` and `puzzle dev` remain transpile-only (§25/D54),
+and nothing about compilation or output changes.
+
+```
+$ puzzle check
+app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
+```
+
+- **The app's own TypeScript does the checking.** The command resolves
+  `node_modules/.bin/tsc` (`tsc.cmd` under `cmd.exe` on Windows) and runs it as
+  a subprocess with `--noEmit --pretty false`. Puzzle never installs a compiler
+  and never links against a TypeScript API: a missing install is the message
+  `puzzle check needs TypeScript: npm install -D typescript`, and a directory
+  with no `app/` is reported as "not a Puzzle project" **before** the
+  TypeScript check, so a wrong working directory is never reported as a missing
+  dependency.
+- **Virtual files under `.puzzle/check/`** (§13's scratch dir) mirror the `app/`
+  tree and are rebuilt from scratch each run, so a deleted `.pzl` leaves no
+  ghost. A `lang="ts"` component emits one `.pzl.ts`: its script bytes verbatim,
+  followed by a generated function — never executed — whose body re-states every
+  template expression as typed statements. `{#if}`/`{#case}` become `if`/`switch`,
+  `{#for}` becomes a declared visitor call whose item type is destructured out
+  of the collection, formatter pipes become declared calls, and each `@event`
+  binding is assigned to a handler-typed const. The root `<puzzle-view>` tag's
+  own attributes and the `<puzzle-skeleton>` body are checked like any others.
+- **A JavaScript component emits a pair**: an unchecked `.pzl.script.js` mirror
+  of the script body plus the checked `.pzl.ts` template wrapper that imports
+  it. Plain JavaScript is never silently promoted into `checkJs`. (`--js`, which
+  would check JS script bodies too, is reserved and errors as not implemented.)
+- **Positions are byte-exact.** Each virtual file carries a `.segments.json`
+  sidecar pairing emitted ranges with the source ranges they were copied from;
+  generated scaffolding and inserted data prefixes carry no segment, so they
+  can never be mistaken for authored code. Diagnostics whose position cannot be
+  mapped are passed through unrewritten rather than relocated.
+- **The generated tsconfig extends the app's** when one exists, so the app's
+  `strict`/`lib`/`paths` settings are what get enforced — with the options that
+  would break the generated workspace overridden (`rootDir`, `composite`,
+  `skipLibCheck`, the `noUnused*` pair), the input extensions spelled out rather
+  than globbed, and `exclude` forced empty. It is also **version-aware**: the
+  runner probes `tsc --version` once and, on TypeScript 7 and up, clears
+  `baseUrl` and `moduleResolution` (both removed there) while keeping the proven
+  node-resolution pair below 7. Verified against tsc 4.9, 5.7, and 7.0.
+- **Scope.** Template expressions are checked against the component class's
+  declared fields; values produced by `data()` fall through an index signature
+  and are not typed. Cross-file inference of `data()` shapes is deliberately out
+  of scope.
+- **One unparsable `.pzl` does not abort the run.** It is reported as its own
+  positioned diagnostic and skipped; every other file still checks, because the
+  virtual files do not link to each other.
