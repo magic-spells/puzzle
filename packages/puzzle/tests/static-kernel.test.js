@@ -327,7 +327,7 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(el.querySelector('.sync-leaf').textContent).toBe('SYNC-CONTENT');
 	});
 
-	it('mounts snippet output once during static takeover with zero dev warnings', async () => {
+	it('mounts transitively forwarded snippet output once during static takeover with zero dev warnings', async () => {
 		class ScopedList extends PuzzleView {
 			render() {
 				return h('ul', { class: 'takeover-scoped-list' }, [
@@ -336,10 +336,26 @@ describe('static kernel — mountStatic (D81)', () => {
 			}
 		}
 		stamp(ScopedList, 'app/components/ScopedList.pzl');
+		class InnerWrapper extends PuzzleView {
+			render() {
+				return h('section', { class: 'takeover-inner-wrapper' }, [
+					h(ScopedList, {}, [slot()]),
+				]);
+			}
+		}
+		stamp(InnerWrapper, 'app/components/InnerWrapper.pzl');
+		class OuterWrapper extends PuzzleView {
+			render() {
+				return h('div', { class: 'takeover-outer-wrapper' }, [
+					h(InnerWrapper, {}, [slot()]),
+				]);
+			}
+		}
+		stamp(OuterWrapper, 'app/components/OuterWrapper.pzl');
 		class ScopedPage extends PuzzleView {
 			render() {
 				return h('main', {}, [
-					h(ScopedList, {}, [
+					h(OuterWrapper, {}, [
 						snippet('row', ['item'], ({ item }) => [
 							h('strong', { class: 'takeover-stamp' }, [text(item.label)]),
 						]),
@@ -352,16 +368,18 @@ describe('static kernel — mountStatic (D81)', () => {
 			target: '#app',
 			routes: [{ path: '/', name: 'scoped', view: ScopedPage }],
 		};
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const { pages } = await prerender(cfg, { mode: 'static' });
 		const page = pages[0];
 		const el = seedDocument({ content: page.html, data: page.data });
 		const prerendered = el.innerHTML;
-		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 		await mountStatic({ target: '#app', views: [ScopedPage], route: page.route });
 
 		expect(el.innerHTML).toBe(prerendered);
 		expect(el.querySelector('.takeover-stamp').textContent).toBe('static');
+		expect(el.querySelector('.takeover-inner-wrapper')).not.toBeNull();
+		expect(el.querySelector('.takeover-outer-wrapper')).not.toBeNull();
 		expect(warn).not.toHaveBeenCalled();
 	});
 

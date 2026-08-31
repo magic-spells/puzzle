@@ -585,6 +585,11 @@ const rawAtEscape = "@@"
 // evidence the false usage define folded the whole branch away.
 const snippetsMarker = "snippetUses"
 
+// snippetVnodes is the ordered metadata side-list used only by the wrapper
+// forwarding amendment. Pin it independently so the core snippet join cannot
+// keep passing while forwarding bookkeeping leaks into snippet-free bundles.
+const snippetForwardingMarker = "snippetVnodes"
+
 // lazyResolverMarker is a throw message unique to router/lazy.js's RESOLVER half
 // — the part __PUZZLE_HAS_LAZY__ removes. Like flipEasing it is a string
 // literal, so it survives minification and its absence is real evidence the
@@ -614,7 +619,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker, snippetsMarker} {
+	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker, snippetsMarker, snippetForwardingMarker} {
 		if strings.Contains(string(withoutJS), marker) {
 			t.Errorf("bundle without feature usage retained %q", marker)
 		}
@@ -660,8 +665,10 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 		t.Fatalf("Build with snippet usage failed: %v", err)
 	}
 	snippetJS := readFile(t, filepath.Join(withSnippets, "dist", "app.js"))
-	if !strings.Contains(snippetJS, snippetsMarker) {
-		t.Errorf("bundle with <Snippet> should retain the %q runtime join", snippetsMarker)
+	for _, marker := range []string{snippetsMarker, snippetForwardingMarker} {
+		if !strings.Contains(snippetJS, marker) {
+			t.Errorf("bundle with <Snippet> should retain %q", marker)
+		}
 	}
 }
 

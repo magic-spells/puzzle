@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG, SNIPPET_TAG } from '../client-runtime/views/ViewNode.js';
+import { expandSlots } from '../client-runtime/views/viewManager.js';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -248,6 +249,257 @@ describe('snippets — runtime join (D166)', () => {
 	});
 });
 
+describe('snippets — forwarding through wrappers (D166 amendment)', () => {
+	it('forwards the original metadata vnode without invoking or modifying it', () => {
+		class Inner extends PuzzleView {}
+		const fn = vi.fn(() => [text('stamped')]);
+		const forwarded = snippet('row', ['item'], fn);
+		const attrs = forwarded.attrs;
+		const tree = comp(Inner, {}, [
+			h('div', { class: 'nested-call-site' }, [marker('', null)]),
+		]);
+
+		const expanded = expandSlots(tree, [forwarded]);
+
+		expect(expanded).not.toBe(tree);
+		expect(expanded.children).toHaveLength(2);
+		expect(expanded.children[0].children).toEqual([]);
+		expect(expanded.children[1]).toBe(forwarded);
+		expect(forwarded.attrs).toBe(attrs);
+		expect(fn).not.toHaveBeenCalled();
+	});
+
+	it('forwards ordinary default content and every named snippet to the inner component', async () => {
+		class Inner extends PuzzleView {
+			render() {
+				return h('article', { class: 'forwarded-regions' }, [
+					h('h2', {}, [marker('heading', { title: 'Inner' })]),
+					h('p', { class: 'forwarded-row' }, [marker('row', { item: { label: 'Row' } })]),
+					h('div', { class: 'forwarded-default' }, [marker('', null)]),
+				]);
+			}
+		}
+		class Wrapper extends PuzzleView {
+			render() {
+				return h('section', { class: 'wrapper' }, [
+					comp(Inner, {}, [
+						h('div', { class: 'nested-call-site' }, [marker('', null)]),
+					]),
+				]);
+			}
+		}
+
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const view = new Wrapper();
+		mounted.push(view);
+		const el = container();
+		await view.mount(el, {
+			children: [
+				h('em', { class: 'caller-default' }, [text('Body')]),
+				snippet('heading', ['title'], ({ title }) => [text(`heading:${title}`)]),
+				snippet('row', ['item'], ({ item }) => [text(`row:${item.label}`)]),
+			],
+		});
+
+		expect(el.querySelector('h2').textContent).toBe('heading:Inner');
+		expect(el.querySelector('.forwarded-row').textContent).toBe('row:Row');
+		expect(el.querySelector('.forwarded-default .caller-default').textContent).toBe('Body');
+		expect(warn).not.toHaveBeenCalled();
+	});
+
+	it('does not stamp a forwarded default snippet until the inner marker supplies args', async () => {
+		class Inner extends PuzzleView {
+			render() {
+				return h('div', { class: 'default-recipient' }, [marker('', { item: 'inner' })]);
+			}
+		}
+		class Wrapper extends PuzzleView {
+			render() {
+				return comp(Inner, {}, [marker('', null)]);
+			}
+		}
+
+		const handed = [];
+		const view = new Wrapper();
+		mounted.push(view);
+		const el = container();
+		await view.mount(el, {
+			children: [snippet('', ['item'], (args) => {
+				handed.push(args);
+				return [text(args.item ?? 'missing')];
+			})],
+		});
+
+		expect(handed).toEqual([{ item: 'inner' }]);
+		expect(el.querySelector('.default-recipient').textContent).toBe('inner');
+	});
+
+	it('forwards transitively through two wrappers to a third-level consumer', async () => {
+		class Leaf extends PuzzleView {
+			render() {
+				return h('div', { class: 'forwarding-leaf' }, [marker('row', { item: 'three' })]);
+			}
+		}
+		class InnerWrapper extends PuzzleView {
+			render() {
+				return comp(Leaf, {}, [marker('', null)]);
+			}
+		}
+		class OuterWrapper extends PuzzleView {
+			render() {
+				return comp(InnerWrapper, {}, [marker('', null)]);
+			}
+		}
+
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const view = new OuterWrapper();
+		mounted.push(view);
+		const el = container();
+		await view.mount(el, {
+			children: [snippet('row', ['item'], ({ item }) => [text(`level:${item}`)])],
+		});
+
+		expect(el.querySelector('.forwarding-leaf').textContent).toBe('level:three');
+		expect(warn).not.toHaveBeenCalled();
+	});
+
+	it('forwards a snippet even after the wrapper stamps it for its own marker', async () => {
+		class Leaf extends PuzzleView {
+			render() {
+				return h('p', { class: 'inner-consumer' }, [marker('shared', { value: 'inner' })]);
+			}
+		}
+		class ConsumingWrapper extends PuzzleView {
+			render() {
+				return h('section', {}, [
+					h('p', { class: 'wrapper-consumer' }, [marker('shared', { value: 'wrapper' })]),
+					comp(Leaf, {}, [marker('', null)]),
+				]);
+			}
+		}
+
+		const stamps = [];
+		const view = new ConsumingWrapper();
+		mounted.push(view);
+		const el = container();
+		await view.mount(el, {
+			children: [snippet('shared', ['value'], ({ value }) => {
+				stamps.push(value);
+				return [text(value)];
+			})],
+		});
+
+		expect(stamps).toEqual(['wrapper', 'inner']);
+		expect(el.querySelector('.wrapper-consumer').textContent).toBe('wrapper');
+		expect(el.querySelector('.inner-consumer').textContent).toBe('inner');
+	});
+
+	it('stamps an args-bearing call-site marker instead of forwarding through it', async () => {
+		class BareSink extends PuzzleView {
+			render() { return h('div', { class: 'args-sink' }, [marker('', null)]); }
+		}
+		class ArgsWrapper extends PuzzleView {
+			render() {
+				return comp(BareSink, {}, [marker('', { value: 'wrapper' })]);
+			}
+		}
+
+		const handed = [];
+		const view = new ArgsWrapper();
+		mounted.push(view);
+		const el = container();
+		await view.mount(el, {
+			children: [snippet('', ['value'], (args) => {
+				handed.push(args);
+				return [text(args.value ?? 'missing')];
+			})],
+		});
+
+		expect(handed).toEqual([{ value: 'wrapper' }]);
+		expect(el.querySelector('.args-sink').textContent).toBe('wrapper');
+	});
+
+	it('keeps a bare marker in the wrapper template on the ordinary local stamp path', async () => {
+		class DirectWrapper extends PuzzleView {
+			render() { return h('div', { class: 'direct-wrapper' }, [marker('', null)]); }
+		}
+
+		const fn = vi.fn(() => [text('local')]);
+		const view = new DirectWrapper();
+		mounted.push(view);
+		const el = container();
+		await view.mount(el, { children: [snippet('', [], fn)] });
+
+		expect(fn).toHaveBeenCalledOnce();
+		expect(fn).toHaveBeenCalledWith({});
+		expect(el.querySelector('.direct-wrapper').textContent).toBe('local');
+	});
+
+	it('leaves the unused warning to the innermost component and emits it once', async () => {
+		class Sink extends PuzzleView {
+			render() { return h('div', { class: 'snippet-sink' }); }
+		}
+		class InnerWrapper extends PuzzleView {
+			render() { return comp(Sink, {}, [marker('', null)]); }
+		}
+		class OuterWrapper extends PuzzleView {
+			render() { return comp(InnerWrapper, {}, [marker('', null)]); }
+		}
+
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const view = new OuterWrapper();
+		mounted.push(view);
+		await view.mount(container(), {
+			children: [snippet('missing', ['item'], () => [text('unused')])],
+		});
+
+		const unused = warn.mock.calls.filter(([message]) =>
+			message.includes('snippet fits slot "missing", but no matching slot marker consumed it')
+		);
+		expect(unused).toEqual([
+			['[puzzle] snippet fits slot "missing", but no matching slot marker consumed it'],
+		]);
+	});
+
+	it('never mounts or patches forwarded metadata during keyed reconciliation', async () => {
+		class KeyedLeaf extends PuzzleView {
+			render() {
+				return h('ul', {}, [
+					h('li', { key: 'one' }, [marker('row', { item: 'one' })]),
+					h('li', { key: 'two' }, [marker('row', { item: 'two' })]),
+				]);
+			}
+		}
+		class KeyedWrapper extends PuzzleView {
+			created() { this.setData({ tick: 0 }); }
+			render() {
+				return h('section', { 'data-tick': this.getData().tick }, [
+					comp(KeyedLeaf, { key: 'leaf' }, [marker('', null)]),
+				]);
+			}
+		}
+
+		const createElement = vi.spyOn(document, 'createElement');
+		const view = new KeyedWrapper();
+		mounted.push(view);
+		const el = container();
+		await view.mount(el, {
+			children: [snippet('row', ['item'], ({ item }) => [
+				h('strong', { key: 'stamp' }, [text(item)]),
+			])],
+		});
+		const rows = [...el.querySelectorAll('li')];
+		const stamps = [...el.querySelectorAll('strong')];
+
+		view.setData('tick', 1);
+		view.flushUpdates();
+
+		expect([...el.querySelectorAll('li')]).toEqual(rows);
+		expect([...el.querySelectorAll('strong')]).toEqual(stamps);
+		expect(createElement.mock.calls.some(([tag]) => tag === SNIPPET_TAG)).toBe(false);
+	});
+});
+
 describe('snippets — development diagnostics', () => {
 	it('warns once per component/slot when handed and declared shapes differ', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -334,5 +586,27 @@ describe('snippets — SSG', () => {
 		));
 		expect(html).toBe('<ul><li><strong>one</strong></li><li><strong>two</strong></li></ul>');
 		expect(await serialize(snippet('unused', [], () => [text('never')]))).toBe('');
+	});
+
+	it('serializes snippets forwarded through two wrappers via the shared expansion pipe', async () => {
+		class ServerList extends PuzzleView {
+			render() {
+				return h('ul', {}, [h('li', {}, [marker('row', { item: 'ssg' })])]);
+			}
+		}
+		class InnerWrapper extends PuzzleView {
+			render() { return comp(ServerList, {}, [marker('', null)]); }
+		}
+		class OuterWrapper extends PuzzleView {
+			render() { return comp(InnerWrapper, {}, [marker('', null)]); }
+		}
+
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const html = await serialize(comp(OuterWrapper, {}, [
+			snippet('row', ['item'], ({ item }) => [h('strong', {}, [text(item)])]),
+		]));
+
+		expect(html).toBe('<ul><li><strong>ssg</strong></li></ul>');
+		expect(warn).not.toHaveBeenCalled();
 	});
 });

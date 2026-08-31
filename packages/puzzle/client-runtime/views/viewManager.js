@@ -297,7 +297,10 @@ export class ViewManager {
  * attribute; <Children/> and the bare <Slot/> take the unattributed remainder.
  * Snippet-free AND slot-attr-free call sites take the same fast path they
  * always did — the default bucket is the original `slotChildren` array (no
- * clones) and no vnode changes unless a marker is actually present.
+ * clones) and no vnode changes unless a marker is actually present. A bare
+ * default marker inside a nested component invocation forwards the caller's
+ * snippet metadata with that bucket; the nested component owns the eventual
+ * stamp (or unused-snippet warning).
  */
 export function expandSlots(vnode, slotChildren, component = null) {
 	const parts = partitionSlots(slotChildren);
@@ -319,16 +322,19 @@ export function expandSlots(vnode, slotChildren, component = null) {
 }
 
 /**
- * Split captured call-site children into { default, named } by the `slot`
- * attribute (D53). A node carrying a non-empty static `slot` is routed to that
- * named bucket, CLONED minus the `slot` attr so it never reaches the DOM (and so
- * the original parent-owned vnode is never mutated); everything else is default
- * content. When no child carries a `slot` attr the fast path returns the
- * original array as `default` with `named` null — byte-identical to pre-D53.
+ * Split captured call-site children into default, named, and snippet buckets.
+ * A node carrying a non-empty static `slot` is routed to that named bucket,
+ * CLONED minus the `slot` attr so it never reaches the DOM (and so the original
+ * parent-owned vnode is never mutated); everything else is default content.
+ * Snippet lookup stays keyed by `fits`, while `snippetVnodes` preserves every
+ * original metadata vnode in call-site order for forwarding. When no child
+ * carries routing metadata the fast path returns the original array as
+ * `default` with `named` null — byte-identical to pre-D53.
  */
 function partitionSlots(slotChildren) {
 	let named = null;
 	let snippets = null;
+	let snippetVnodes = null;
 	let def = null; // null until the first named child forces a fresh default list
 	for (let i = 0; i < slotChildren.length; i++) {
 		const sc = slotChildren[i];
@@ -338,6 +344,7 @@ function partitionSlots(slotChildren) {
 			sc.tag === SNIPPET_TAG
 		) {
 			if (!snippets) snippets = Object.create(null);
+			(snippetVnodes ??= []).push(sc);
 			if (def === null) def = slotChildren.slice(0, i);
 			snippets[sc.attrs.fits || 'default'] = sc;
 			continue;
@@ -365,7 +372,9 @@ function partitionSlots(slotChildren) {
 			default: def ?? [],
 			named,
 			snippets,
+			snippetVnodes,
 			snippetUses: snippets && Object.create(null),
+			callSite: null,
 		};
 	}
 	if (named === null) return { default: slotChildren, named: null };
@@ -410,6 +419,13 @@ function stripSlotAttr(vnode) {
  * entered — it expands its own slots against these children at render time.
  * Substituted content becomes ordinary slot content for the component; the
  * routed vnode's pinned `instance` rides along and is adopted at mount as usual.
+ * The snippet-only `parts.callSite` context mirrors the parser's D71 descent so
+ * the forwarding path can tell a call-site marker from an identical marker in
+ * the wrapper's own template. Each component creates a nearest-owner context:
+ * a marker nested under call-site markup still causes metadata to be appended
+ * to the COMPONENT'S direct children, where its partition pass can see it. The
+ * entire context state machine folds away with the snippets define; ordinary
+ * D71 recursion keeps its original call shape.
  */
 function expandNode(vnode, parts) {
 	if (vnode.isText || vnode.isSlot) return vnode;
@@ -417,7 +433,27 @@ function expandNode(vnode, parts) {
 	// vnode array — no slot marker can live inside them, so return the node as-is.
 	if (typeof vnode.children === 'string') return vnode;
 
-	const out = expandChildList(vnode.children, parts);
+	let callSite = null;
+	let parentCallSite = null;
+	if (
+		(typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+			__PUZZLE_HAS_SNIPPETS__) &&
+		parts.snippetVnodes &&
+		vnode.isComponent
+	) {
+		parentCallSite = parts.callSite;
+		callSite = { forwarded: false };
+		parts.callSite = callSite;
+	}
+	let out = expandChildList(vnode.children, parts);
+	if (
+		(typeof __PUZZLE_HAS_SNIPPETS__ === 'undefined' ||
+			__PUZZLE_HAS_SNIPPETS__) &&
+		callSite
+	) {
+		parts.callSite = parentCallSite;
+		if (callSite.forwarded) out = [...(out ?? vnode.children), ...parts.snippetVnodes];
+	}
 	if (!out) return vnode;
 
 	const clone = new ViewNode(vnode.tag, vnode.attrs, out);
@@ -455,6 +491,35 @@ function expandChildList(kids, parts) {
 				__PUZZLE_HAS_SNIPPETS__
 			) {
 				const hasArgs = Object.prototype.hasOwnProperty.call(k.attrs, 'args');
+				if (
+					parts.callSite &&
+					markerName === 'default' &&
+					!hasArgs &&
+					parts.snippetVnodes
+				) {
+					// D71-style implicit forwarding: a bare default marker authored in a
+					// component invocation hands the caller's ordinary default content AND
+					// every original Snippet vnode to that nested component. Default content
+					// stays at the marker position; the nearest call-site context appends the
+					// metadata to the component's DIRECT children after this descent, so a
+					// marker nested under authored markup still reaches partitionSlots.
+					if (bucket && bucket.length) {
+						for (const sc of bucket) out.push(sc);
+					} else {
+						for (const fb of k.children) out.push(expandNode(fb, parts));
+					}
+					parts.callSite.forwarded = true;
+					for (const forwarded of parts.snippetVnodes) {
+						// Forwarding transfers warning ownership too: the wrapper used this
+						// declaration by handing it on; the innermost recipient still warns if
+						// none of its own markers consumes it.
+						parts.snippetUses[forwarded.attrs.fits || 'default'] = true;
+					}
+					// Forward every snippet even if a different marker in this wrapper already
+					// consumed it — snippet functions are reusable, and two consumers may stamp
+					// the same declaration. The original vnodes remain unmodified and uninvoked.
+					continue;
+				}
 				const snippet = parts.snippets && parts.snippets[markerName];
 				if (snippet) {
 					parts.snippetUses[markerName] = true;
