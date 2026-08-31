@@ -167,7 +167,7 @@
     },
     {
       "name": "calendar",
-      "description": "Inline month-grid calendar with days/months/years drill-down, full keyboard nav, min/max + disabledDates, locale-aware labels via Intl, and an opt-in display-only range/preview shading overlay",
+      "description": "Inline month-grid calendar with days/months/years drill-down, full keyboard nav, min/max + disabledDates, locale-aware labels via Intl, caller-owned day-cell snippets, and an opt-in display-only range/preview shading overlay",
       "files": [
         "Calendar.pzl"
       ],
@@ -316,7 +316,7 @@
     },
     {
       "name": "date-picker",
-      "description": "Field-shaped trigger + popover composing Calendar: controlled ISO value, optional-controlled open, label/hint/error, locale-aware trigger label, auto-flip, and optional trigger↔panel morph",
+      "description": "Field-shaped trigger + popover composing Calendar: controlled ISO value, optional-controlled open, label/hint/error, locale-aware trigger label, auto-flip, forwarded day-cell snippets, and optional trigger↔panel morph",
       "files": [
         "DatePicker.pzl"
       ],
@@ -331,7 +331,7 @@
     },
     {
       "name": "date-range-picker",
-      "description": "Start/end range selection in a field-shaped trigger + popover composing Calendar: controlled {start,end} ISO value, in-between range + hover-preview shading, optional-controlled open, one or two months, and optional presets",
+      "description": "Start/end range selection in a field-shaped trigger + popover composing Calendar: controlled {start,end} ISO value, in-between range + hover-preview shading, optional-controlled open, one or two months, optional presets, and forwarded day-cell snippets",
       "files": [
         "DateRangePicker.pzl"
       ],

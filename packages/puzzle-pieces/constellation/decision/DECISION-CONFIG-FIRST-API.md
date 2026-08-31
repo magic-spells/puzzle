@@ -4,6 +4,20 @@ status: built
 connections:
   - DOC-REGISTRY
   - DECISION-WRAP-WEB-COMPONENTS
+notes:
+  - kind: decision
+    text: >-
+      Calendar family day-cell snippet (0.7.0, framework D166): Calendar declares <Slot name="day"
+      date day selected today outside disabled inRange rangeStart rangeEnd> once inside its day loop
+      — date is the ISO YYYY-MM-DD string, day the numeric day, the rest booleans describing cell
+      state; the day number stays the fallback so existing callers see no change. The snippet
+      replaces only the day button's inner content: the button, its ARIA
+      (selected/current/disabled), grid roles, keyboard navigation, and range-highlight classes
+      remain piece-owned. DatePicker and DateRangePicker do NOT redeclare the slot — they forward
+      the caller's <Snippet fits="day"> through a bare <Children/> into the inner Calendar (D166
+      forwarding), so one marker declaration serves every rendered grid; range flags are always
+      false in DatePicker. Verified: 42 inner day buttons received forwarded snippet markup (jsdom),
+      selected-state propagated.
 ---
 
 # Config-first APIs over compound components
@@ -29,7 +43,6 @@ The one sanctioned controlled-state relaxation is a **wrapped** overlay ([[DECIS
 
 ## Consequences
 
-- Repeated presentational customization no longer requires coordinating child components or a compose-directly escape hatch when an args-bearing marker can keep behavior in the piece. The marker's fallback is part of the compatibility contract.
+- Where a slot must be **looped** — one stamp per item — pieces use framework **snippets** (Puzzle D166, 0.7.0): the piece declares an argument-bearing marker inside its own loop (`<Slot name="cell" cell={ cell } row={ row }>{ cell.value }</Slot>`) and the caller supplies `<Snippet fits="cell" cell row>…</Snippet>`; the marker's paired body stays the fallback, so adoption never breaks an existing caller. Adopted so far: data-table (`cell`, `header-cell`), virtual-list (`row`), combobox/select/multi-select/command (`option`), tree (`node`), kanban (`card`, `column-header`), calendar (`day`, forwarded through date-picker and date-range-picker via a bare `<Children/>`). Pieces that have not adopted a snippet point yet still document the compose-directly recipe in their file headers; the pre-0.7.0 "named slots are static" limitation no longer applies.
+- The standard prop/callback vocabulary (`variant`, `size`, `disabled`, `value`; `@change`, `@press`, `@show`, `@hide`, `@ready`) is the contract every piece inherits (full list in CLAUDE.md). A wrapper's props map one-to-one onto the custom element's attributes. Snippet slot names and parameters are part of that contract: a slot is named for the thing it stamps (`option`, `node`, `card`, `day`, `row`, `cell`), the primary parameter carries the item under that same noun, and state flags are booleans (`active`, `selected`, `disabled`, `expanded`, `today`…).
 - A snippet receives only the documented values and cannot reach into piece internals. The piece must preserve the semantic wrapper and must not move keyboard, selection, focus, or ARIA ownership into caller markup.
-- Static named slots remain the presentational tool for fixed regions. Repeated caller-owned item content uses Puzzle's args-bearing Snippet contract: the component keeps iteration, state, accessibility, and interaction, while one marker site hands each item's values to caller markup. Tree and Kanban are the registry exemplars; this is still config-first composition, not cross-component context or coordinating subcomponents.
-- The standard prop/callback vocabulary (`variant`, `size`, `disabled`, `value`; `@change`, `@press`, `@show`, `@hide`, `@ready`) is the contract every piece inherits (full list in CLAUDE.md). A wrapper's props map one-to-one onto the custom element's attributes.

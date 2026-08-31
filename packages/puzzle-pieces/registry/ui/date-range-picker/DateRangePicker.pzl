@@ -63,11 +63,11 @@
               </div>
             {/if}
 
-            {#if twoMonths}
-              <div class="flex gap-2 p-1">
+            <div class={ calendarsClass }>
+              {#for cal in calendars}
                 <Calendar
                   frameless={ true }
-                  value={ calStartValue }
+                  value={ cal.value }
                   range={ calRange }
                   previewDate={ calPreview }
                   min={ calMin }
@@ -75,39 +75,14 @@
                   disabledDates={ calDisabledDates }
                   locale={ calLocale }
                   firstDayOfWeek={ calFirstDay }
-                  autofocus={ calAutofocus }
-                  label="Range start month"
-                  @change={ onCalendarChange } />
-                <Calendar
-                  frameless={ true }
-                  value={ calEndValue }
-                  range={ calRange }
-                  previewDate={ calPreview }
-                  min={ calMin }
-                  max={ calMax }
-                  disabledDates={ calDisabledDates }
-                  locale={ calLocale }
-                  firstDayOfWeek={ calFirstDay }
-                  label="Range end month"
-                  @change={ onCalendarChange } />
-              </div>
-            {:else}
-              <div class="p-1">
-                <Calendar
-                  frameless={ true }
-                  value={ calAnchorValue }
-                  range={ calRange }
-                  previewDate={ calPreview }
-                  min={ calMin }
-                  max={ calMax }
-                  disabledDates={ calDisabledDates }
-                  locale={ calLocale }
-                  firstDayOfWeek={ calFirstDay }
-                  autofocus={ calAutofocus }
-                  label="Date range"
-                  @change={ onCalendarChange } />
-              </div>
-            {/if}
+                  autofocus={ cal.autofocus }
+                  label={ cal.label }
+                  @change={ onCalendarChange }
+                  key={ cal.key }>
+                  <Children/>
+                </Calendar>
+              {/for}
+            </div>
           </div>
         </div>
       {/if}
@@ -137,6 +112,19 @@ import { parseISODate, toDate, compareDates } from '../../lib/date-math.js';
 //   <DateRangePicker value={ range } presets={ presets } @change={ setRange } />
 //   <DateRangePicker value={ range } open={ open } @change={ setRange }
 //                    @show={ onShow } @hide={ onHide } />       // controlled open
+//   const eventDates = new Set(['2026-08-12', '2026-08-19']);
+//   <DateRangePicker value={ range } @change={ setRange }>
+//     <Snippet fits="day" date day selected today>
+//       <span class="flex size-full flex-col items-center justify-center leading-none">
+//         <span class={ today ? 'font-semibold' : '' }>{ day }</span>
+//         {#if eventDates.has(date)}
+//           <span
+//             class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
+//             aria-hidden="true"></span>
+//         {/if}
+//       </span>
+//     </Snippet>
+//   </DateRangePicker>
 //
 // PROPS
 //   value          { start, end }  controlled ISO range; either side '' = unset. Parent-
@@ -164,6 +152,18 @@ import { parseISODate, toDate, compareDates } from '../../lib/date-math.js';
 //   name           string   emits two hidden inputs: `${name}-start` and `${name}-end`,
 //                           each carrying its ISO endpoint (empty when unset).
 //   class          string   appended to the root element.
+//
+// DAY SNIPPET (forwarded unchanged to every inner Calendar)
+//   <Snippet fits="day" date day selected today outside disabled inRange rangeStart rangeEnd>
+//     is stamped once inside every rendered day button (in both grids when
+//     `months={ 2 }`). `date` is the ISO string; `day` is the numeric day-of-month;
+//     `selected`, `today`, `outside`, and `disabled` mirror the button state.
+//     `inRange` is the painted committed/preview interior (committed endpoints
+//     excluded); `rangeStart` and `rangeEnd` identify those committed endpoints.
+//     The snippet replaces only the button's INNER content — DateRangePicker retains
+//     the field/popover and Calendar retains its button, ARIA, grid roles, keyboard
+//     behavior, and range classes. Normal markup, components, and control flow are
+//     allowed; nested <Children>/<Slot>/<Snippet> markers and `ref=` are compile errors.
 //
 // CALLBACKS
 //   @change(range, event)   value-first { start, end }. Fires on EACH committed endpoint:
@@ -307,6 +307,12 @@ export default class DateRangePicker extends PuzzleView {
     const placement = (open && prev.placement) || 'bottom';
 
     const twoMonths = Number(props.months) === 2;
+    const calendars = twoMonths
+      ? [
+          { key: 'start', value: start || '', label: 'Range start month', autofocus: open },
+          { key: 'end', value: end || '', label: 'Range end month', autofocus: false },
+        ]
+      : [{ key: 'anchor', value: start || end || '', label: 'Date range', autofocus: open }];
     const presetList = (Array.isArray(props.presets) ? props.presets : []).map((p, i) => ({
       key: `preset-${i}`,
       label: p.label,
@@ -345,20 +351,19 @@ export default class DateRangePicker extends PuzzleView {
       presetClass: PRESET_CLASS,
       hasPresets: presetList.length > 0,
       presetList,
-      twoMonths,
-      // Calendar pass-through. The `range` prop paints the endpoints + band (display-only);
-      // `value` anchors each grid's displayed month + focus on its endpoint.
+      calendarsClass: twoMonths ? 'flex gap-2 p-1' : 'p-1',
+      calendars,
+      // Calendar pass-through. One keyed invocation site renders one or two grids so
+      // its single <Children/> declaration can forward caller snippets to every grid.
+      // The `range` prop paints the endpoints + band (display-only); each calendar's
+      // `value` anchors its displayed month + focus on the relevant endpoint.
       calRange: { start, end },
       calPreview: preview,
-      calAnchorValue: start || end || '',
-      calStartValue: start || '',
-      calEndValue: end || '',
       calMin: props.min,
       calMax: props.max,
       calDisabledDates: props.disabledDates,
       calLocale: props.locale,
       calFirstDay: props.firstDayOfWeek,
-      calAutofocus: open,
     };
   }
 
