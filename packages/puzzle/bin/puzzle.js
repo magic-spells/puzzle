@@ -7,14 +7,19 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-// process.platform-process.arch → platform package name. Windows-on-ARM runs the
-// x64 binary under emulation, so there is deliberately no win32-arm64 package.
+// process.platform-process.arch → platform package name. There is deliberately no
+// win32-arm64 PACKAGE — Windows runs the x64 binary under emulation — but there
+// must still be a win32-arm64 ROW: a native ARM64 build of Node reports
+// process.arch === 'arm64', so without this fold the key misses the table and the
+// CLI dies on a platform the docs call supported. The x64 package's "cpu" field
+// is widened to match, so npm actually installs it there.
 const PLATFORM_PACKAGES = {
 	'darwin-arm64': '@magic-spells/puzzle-darwin-arm64',
 	'darwin-x64': '@magic-spells/puzzle-darwin-x64',
 	'linux-x64': '@magic-spells/puzzle-linux-x64',
 	'linux-arm64': '@magic-spells/puzzle-linux-arm64',
 	'win32-x64': '@magic-spells/puzzle-win32-x64',
+	'win32-arm64': '@magic-spells/puzzle-win32-x64',
 };
 
 const key = `${process.platform}-${process.arch}`;
@@ -36,8 +41,11 @@ if (pkg) {
 }
 
 if (!binPath) {
-	const supported = Object.keys(PLATFORM_PACKAGES)
-		.map((k) => `  - ${k}`)
+	// Printed as host → package, not as a bare host list: win32-arm64 and win32-x64
+	// resolve the SAME package, and a plain list of keys would read as a promise of
+	// two Windows binaries that do not exist.
+	const supported = Object.entries(PLATFORM_PACKAGES)
+		.map(([hostKey, name]) => `  - ${hostKey} → ${name}`)
 		.join('\n');
 	process.stderr.write(
 		`puzzle: no prebuilt CLI binary available for this platform (${key}).\n\n` +

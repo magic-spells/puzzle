@@ -378,6 +378,12 @@ func platformBinaryName() string {
 func platformPackageNameFor(goos, goarch string) string {
 	if goos == "windows" {
 		goos = "win32"
+		// Windows-on-ARM has no package of its own: it installs the x64 one and
+		// runs it under the OS's x64 emulation (bin/puzzle.js folds the same key
+		// the same way, and the x64 manifest's "cpu" lists arm64 so npm puts it
+		// there). Without this fold `puzzle upgrade` would name a package that has
+		// never been published and report nothing to upgrade.
+		goarch = "amd64"
 	}
 	if goarch == "amd64" {
 		goarch = "x64"

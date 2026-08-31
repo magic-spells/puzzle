@@ -23,8 +23,14 @@
 //   3. Cross-compile the per-platform CLI binaries into npm/<pkg>/bin/puzzle
 //      (puzzle.exe on windows), version-stamped via -ldflags.
 //   4. Copy LICENSE.txt (MIT) into each platform package dir.
+//   4.5. Platform pack inspection — dry-pack every platform package and assert the
+//      binary its manifest declares is actually IN the tarball and non-empty. Four
+//      of the five binaries are never executed here (wrong OS), so without this
+//      their only proof is `go build` exiting 0 — which says nothing about
+//      whether the file landed at the path "files" declares.
 //   5. Host smoke test — run the binary built for THIS platform with --version and
-//      assert it reports the expected version.
+//      assert it reports the expected version. Windows EXECUTION is proved by CI
+//      on a Windows runner, not here.
 //   6. Pack the ROOT tarball for publishing, and assert the manifest INSIDE it
 //      carries every platform pin (D120 — the root package must be published
 //      as this .tgz, never as a directory; see the note on step 7).
@@ -37,12 +43,15 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, copyFileSync, chmodSync, statSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { packedBinaryProblem } from './release-checks.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // GOOS, GOARCH, platform package dir name — the release build matrix.
 // Windows-on-ARM runs the x64 binary under emulation, so there is deliberately
-// no windows/arm64 row.
+// no windows/arm64 row here. It is not absent everywhere: bin/puzzle.js and
+// upgrade.go both FOLD the win32-arm64 host onto this x64 package, and that
+// package's "cpu" lists arm64 so npm installs it there.
 const MATRIX = [
 	{ goos: 'darwin', goarch: 'arm64', pkg: 'puzzle-darwin-arm64' },
 	{ goos: 'darwin', goarch: 'amd64', pkg: 'puzzle-darwin-x64' },
@@ -58,6 +67,10 @@ const HOST_PACKAGES = {
 	'linux-x64': 'puzzle-linux-x64',
 	'linux-arm64': 'puzzle-linux-arm64',
 	'win32-x64': 'puzzle-win32-x64',
+	// Native ARM64 Node on Windows reports arch 'arm64' and resolves the x64
+	// package (emulation). Present so a release cut from such a host smoke-tests
+	// the binary it would actually run, instead of silently SKIPping.
+	'win32-arm64': 'puzzle-win32-x64',
 };
 
 // The Windows binary needs its .exe suffix to be executable at all; the packed
@@ -307,6 +320,50 @@ for (const { pkg } of MATRIX) {
 		fail(`could not copy LICENSE.txt into npm/${pkg}: ${err.message}`);
 	}
 	console.log(`  OK  ${dest}`);
+}
+
+// --- 4.5 Every platform package must PACK its binary ------------------------
+// Step 5 below runs exactly one of the five binaries — the host's. The other four
+// are cross-compiled and then trusted, and "go build exited 0" is a claim about
+// the compiler, not about the tarball: a `bin/puzzle` vs `bin/puzzle.exe`
+// mismatch between the build and the "files" field, an .npmignore, or a stale
+// manifest all produce a package that publishes and installs cleanly with no
+// binary inside it. The shim then has nothing to spawn — the 0.3.0 failure shape
+// reached from the other end. Dry-packing asks npm the same question it will
+// answer at publish time, on every platform, from this machine.
+console.log('\nrelease-prep: inspecting the platform package tarballs...');
+for (const { goos, pkg } of MATRIX) {
+	const binaryPath = `bin/${binName(goos)}`;
+	let report;
+	try {
+		const raw = execFileSync('npm', ['pack', '--dry-run', '--json', `./npm/${pkg}`], {
+			cwd: repoRoot,
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+		report = JSON.parse(raw);
+	} catch (err) {
+		fail(`could not dry-pack npm/${pkg}: ${err.message}`);
+	}
+	const entry = Array.isArray(report) ? report[0] : report;
+	const problem = packedBinaryProblem({
+		pkgName: `@magic-spells/${pkg}`,
+		binaryPath,
+		files: entry?.files,
+	});
+	if (problem) {
+		fail(
+			`${problem}\n` +
+				`  npm/${pkg}/package.json declares "files": ["${binaryPath}"] — the cross-compile\n` +
+				'  and the manifest must name the same path, or the published package is a\n' +
+				'  manifest with no CLI behind it.'
+		);
+	}
+	const sizeMB = entry.files.find((f) => f.path === binaryPath || f.path === `package/${binaryPath}`)
+		.size / (1024 * 1024);
+	console.log(
+		`  OK  @magic-spells/${pkg} packs ${binaryPath} (${sizeMB.toFixed(2)} MB, ${entry.entryCount} entries)`
+	);
 }
 
 // --- 5. Host smoke test ----------------------------------------------------

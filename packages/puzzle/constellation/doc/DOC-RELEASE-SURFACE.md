@@ -48,6 +48,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 ## Package and application
 
 
+
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `lazy` (the D163 route-view loader marker), and
   compiler support exports (`ViewNode`, `SLOT_TAG`, `PORTAL_TAG`, and
@@ -70,9 +71,13 @@ second specification. Decision cards hold rationale and git holds chronology.
   macOS and Linux on arm64/x64, and Windows on x64 (`puzzle-win32-x64`, whose
   packed file is `bin/puzzle.exe`). The packages are keyed the way Node spells
   the platform — `win32`, not Go's `windows` — because the shim looks them up
-  by `process.platform`/`process.arch`. Windows-on-ARM runs the x64 binary
-  under emulation, so there is deliberately no `win32-arm64` package. Anything
-  else gets a Go-install fallback message.
+  by `process.platform`/`process.arch`. There is no `win32-arm64` package:
+  Windows runs the x64 binary under emulation, so a `win32-arm64` HOST is folded
+  onto the x64 package — by the shim's lookup table, by `puzzle upgrade`'s Go
+  equivalent, and by that package's `cpu: ["x64", "arm64"]` so npm installs it
+  there. Native ARM64 Node on Windows reports `arch === 'arm64'`, so all three
+  are needed for the emulation story to actually hold. Anything else gets a
+  Go-install fallback message.
 - App config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
   `adapter`, `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode`
   (a mode object from `/router-modes`; a string throws), `routerBase`,

@@ -136,7 +136,8 @@ var lazyCallRe = regexp.MustCompile(`\blazy\s*\(`)
 // (`import { lazy as page } from …`) is still recognised as lazy usage even
 // though `page(` never looks like a lazy call. The clause of a module statement
 // contains no quote or semicolon, so excluding both keeps the match inside one
-// statement without needing a real parser.
+// statement without needing a real parser. The captured clause is also what
+// scanScriptUsage tests for a `*` — the whole-namespace shape.
 var puzzleImportRe = regexp.MustCompile(`(?s)\b(?:import|export)\b([^;'"]*)\bfrom\s*['"]@magic-spells/puzzle['"]`)
 
 var lazyIdentRe = regexp.MustCompile(`\blazy\b`)
@@ -180,14 +181,24 @@ var scriptScanExts = map[string]bool{
 //   - a `lazy(`-shaped call anywhere in the file, however the name was obtained
 //     (bare import, namespace import, dynamic import destructuring);
 //   - a `lazy` specifier in an import/export clause from '@magic-spells/puzzle',
-//     which covers the renamed binding a call-shape match cannot see.
+//     which covers the renamed binding a call-shape match cannot see;
+//   - a WHOLE-NAMESPACE clause from '@magic-spells/puzzle' —
+//     `import * as puzzle from …` or `export * from …`. Neither statement names
+//     lazy, and a binding taken off the namespace object by any route other than
+//     a `lazy(`-shaped call is invisible to both rules above:
+//     `const { lazy: page } = puzzle` then calls `page(`, and a star re-export
+//     hands the name to another module that may rename it on the way in. A
+//     namespace importer that never touches lazy pays ~0.6 KB gzip for a
+//     resolver it does not use; the other side of the trade is an app whose
+//     lazy routes throw "lazy support was compiled out" at route-table
+//     validation, so the scan takes the bytes.
 func scanScriptUsage(src string, usage *fileUsage) {
 	if lazyCallRe.MatchString(src) {
 		usage.hasLazy = true
 		return
 	}
 	for _, m := range puzzleImportRe.FindAllStringSubmatch(src, -1) {
-		if lazyIdentRe.MatchString(m[1]) {
+		if lazyIdentRe.MatchString(m[1]) || strings.Contains(m[1], "*") {
 			usage.hasLazy = true
 			return
 		}

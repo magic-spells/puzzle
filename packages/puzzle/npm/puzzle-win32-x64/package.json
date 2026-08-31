@@ -1,12 +1,13 @@
 {
 	"name": "@magic-spells/puzzle-win32-x64",
 	"version": "0.7.0",
-	"description": "The Windows x64 binary for the Puzzle framework CLI.",
+	"description": "The Windows x64 binary for the Puzzle framework CLI. Also installed on Windows ARM64, which runs it under the OS's x64 emulation — hence the two-entry \"cpu\" field.",
 	"os": [
 		"win32"
 	],
 	"cpu": [
-		"x64"
+		"x64",
+		"arm64"
 	],
 	"files": [
 		"bin/puzzle.exe"

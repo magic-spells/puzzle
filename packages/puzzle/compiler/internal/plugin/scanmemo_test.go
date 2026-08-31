@@ -195,6 +195,21 @@ func TestUsageScannerMatchesColdScan(t *testing.T) {
 	if u.HasLazy {
 		t.Fatal("lazy() removed from routes.js was still reported")
 	}
+
+	// The namespace rule is memoized like every other script fact: an edit that
+	// turns a plain module into a whole-namespace importer has to move HasLazy
+	// on the warm path too.
+	writePZL(t, routes, "import * as puzzle from '@magic-spells/puzzle';\nconst { lazy: page } = puzzle;\nexport default [{ path: '/', view: page(() => import('./views/A.pzl')) }];\n")
+	u = assertSame("routes module adds a namespace import")
+	if !u.HasLazy {
+		t.Fatal("a namespace import of the root package did not report HasLazy")
+	}
+
+	writePZL(t, routes, "export default [{ path: '/', view: A }];\n")
+	u = assertSame("routes module drops the namespace import")
+	if u.HasLazy {
+		t.Fatal("namespace import removed from routes.js was still reported")
+	}
 	if err := os.Remove(routes); err != nil {
 		t.Fatal(err)
 	}
