@@ -143,7 +143,10 @@ one is *not* a compile error; it silently builds a different product.
   checked template wrapper so ordinary JS is not silently promoted to
   `checkJs`. The generated tsconfig defends against hostile app settings and
   switches shape for TypeScript 7 after probing `tsc --version`; the feature
-  uses the stable CLI protocol, not TypeScript 6 APIs or Volar.
+  uses the stable CLI protocol, not TypeScript 6 APIs or Volar. Every
+  expression the compiler emits is checked, including marker arguments
+  (`<Slot name="row" user={ user }>`) and `<Snippet>` bodies, whose declared
+  parameters shadow the caller's data exactly as codegen scopes them.
 
 - **Snippets pass a template that a component can stamp repeatedly with data
   (D166).** The caller declares parameters as bare attributes and optionally

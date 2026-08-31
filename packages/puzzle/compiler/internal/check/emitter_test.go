@@ -119,7 +119,7 @@ func TestGenerateWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"puzzle-env", "const Children", "const Slot", "const Portal"} {
+	for _, want := range []string{"puzzle-env", "const Children", "const Slot", "const Portal", "__puzzle_check_snippet"} {
 		if !strings.Contains(string(shimBytes), want) {
 			t.Errorf("shim missing %q", want)
 		}

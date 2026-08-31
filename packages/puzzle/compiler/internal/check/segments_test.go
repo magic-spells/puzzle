@@ -104,8 +104,8 @@ func TestRemapFromGeneratedScaffoldingOnTheSameLine(t *testing.T) {
 	v.Table.generatedBytes = v.Contents
 	v.Table.sourceBytes = source
 
-	// The `void` keyword of `  void __d.missing.deep;` — pure scaffolding.
-	voidOffset := strings.Index(string(v.Contents), "void __d.")
+	// The `void` keyword of `  void (__d.missing.deep);` — pure scaffolding.
+	voidOffset := strings.Index(string(v.Contents), "void (__d.")
 	line, column := utf16LineColumn(v.Contents, voidOffset)
 	got, ok := v.Table.Remap(line, column)
 	if !ok {

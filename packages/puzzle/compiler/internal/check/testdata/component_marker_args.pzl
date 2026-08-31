@@ -1,0 +1,22 @@
+<puzzle-view>
+  <div>
+    <header>
+      <Slot name="heading" total={ members.length }>Team</Slot>
+    </header>
+    <ol>
+      {#for member in members, index}
+        <li key={ member.id }>
+          <Children member={ member } position={ index }>{ member.name }</Children>
+        </li>
+      {/for}
+    </ol>
+  </div>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class MarkerArgs extends PuzzleView {
+  members: Array<{ id: number; name: string }> = [];
+}
+</script>

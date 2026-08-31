@@ -31,6 +31,10 @@ func TestOverNestingDepthCountsElementsAndBlocks(t *testing.T) {
 		{"a closed level is popped", "<div><span>x</span></div><div><em>y</em></div>", 2, false},
 		{"markup inside a script body is text", "<script>{#raw}<div><div><div>x</div></div></div>{/raw}</script>", 2, false},
 		{"markup inside {#raw} still counts", "{#raw}<div><div><div>x</div></div></div>{/raw}", 2, true},
+		// {#svg} is a VOID block (D46) with no {/svg} closer, so counting it as a
+		// level made a flat row of icons look like ever-deepening nesting.
+		{"flat {#svg} siblings never nest", strings.Repeat("{#svg 'icons/heart.svg'}", 250), 200, false},
+		{"a {#svg} inside real nesting still sits at its parent's depth", "<div><span>{#svg 'icons/heart.svg'}</span></div>", 2, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

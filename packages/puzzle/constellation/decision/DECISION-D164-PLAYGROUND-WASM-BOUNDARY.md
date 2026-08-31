@@ -10,6 +10,14 @@ connections:
   - FILE-PZL-WASM
   - DECISION-D59-SCOPED-STYLES
   - RELEASE-V0-7-0
+notes:
+  - kind: gotcha
+    text: >-
+      The nesting-depth scan counts token pairs, so a VOID block breaks it: `{#svg 'icon.svg'}`
+      opens a TokBlockOpen with no `{/svg}` to pop it, and 201 flat sibling icons tripped "template
+      nesting exceeds 200" with zero real nesting. `scanNesting` now treats a `svg` block header as
+      self-contained. Any future void directive must be added there too — the guard has no other way
+      to know a block never closes.
 ---
 
 # D164 — Playground compilation is parser+codegen-only WASM behind a worker protocol

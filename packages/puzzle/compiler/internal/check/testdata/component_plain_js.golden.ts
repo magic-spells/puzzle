@@ -6,9 +6,9 @@ void function (this: InstanceType<typeof __PuzzleCheckViewClass> & Record<string
   const __d = this;
   if (__d.active) {
   } else {
-    void __d.tone;
+    void (__d.tone);
   }
-  void __d.title;
+  void (__d.title);
   void (__d.draft);
   const __puzzle_check_event_0: ((event: any) => any) | null = (event) => this.events.update(event);
   void __puzzle_check_event_0;
@@ -16,5 +16,5 @@ void function (this: InstanceType<typeof __PuzzleCheckViewClass> & Record<string
   void __puzzle_check_event_1;
 
   // <puzzle-skeleton>
-  void __d.loadingLabel;
+  void (__d.loadingLabel);
 };
