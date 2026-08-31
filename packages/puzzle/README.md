@@ -394,6 +394,42 @@ import Icon from './Icon.pzl';              // relative
 import Icon from '@/components/Icon.pzl';   // app/components/Icon.pzl
 ```
 
+### Component families
+
+Related components can import as one unit and invoke with dot notation. Group
+them in a directory with a plain JS barrel — `.pzl` stays one class per file:
+
+```
+app/components/Frame/
+  Frame.pzl  Wrapper.pzl  Content.pzl  index.js
+```
+
+```js
+// index.js
+import Frame from './Frame.pzl';
+import Wrapper from './Wrapper.pzl';
+import Content from './Content.pzl';
+
+export { Frame, Wrapper, Content };
+export default Object.assign(Frame, { Wrapper, Content });
+```
+
+```html
+<script>
+  import Frame from '@/components/Frame';
+</script>
+
+<Frame>
+  <Frame.Wrapper>
+    <Frame.Content>…</Frame.Content>
+  </Frame.Wrapper>
+</Frame>
+```
+
+A dotted tag is an ordinary member expression resolved against module scope —
+no registry, no compiler magic. `puzzle generate component Frame --family
+Wrapper,Content` scaffolds the whole directory, barrel included.
+
 ## Monorepo
 
 The framework lives at the repo root. `packages/` holds what releases in

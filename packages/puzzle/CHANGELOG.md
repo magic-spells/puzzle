@@ -135,6 +135,40 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Added
 
+- **Component families: dotted component tags and a barrel convention (D167).**
+  Related components import as one unit and invoke with dot notation:
+
+  ```html
+  <script>import Frame from '@/components/Frame';</script>
+
+  <Frame><Frame.Wrapper><Frame.Content>…</Frame.Content></Frame.Wrapper></Frame>
+  ```
+
+  A capitalized tag is now validated as `Ident('.'Ident)*` with each segment
+  `[A-Za-z_][A-Za-z0-9_]*`. That is a bug fix as much as a feature: the tag text
+  has always been emitted verbatim as the ViewNode tag expression, so
+  `<Frame.Wrapper>` already compiled to `new ViewNode(Frame.Wrapper, …)` — but
+  nothing validated the name, and a capitalized `<Frame-x>` or `<Frame.>`
+  compiled cleanly into syntactically broken JavaScript. Those are positioned
+  compile errors now, as is a dotted name rooted at a reserved composition
+  marker (`<Slot.Foo>`). Lowercase tags are untouched: custom elements with
+  dashes and namespaced SVG keep working, and `{#raw}` bodies still take any
+  tag literally. Codegen is unchanged — a dotted tag resolves lexically against
+  module scope at runtime, with no registry and no import inspection.
+
+  The family itself is a convention, not a mechanism: a directory of `.pzl`
+  files (still strictly one class per file) beside a plain JS `index.js` that
+  re-exports the members and hangs them off the root with
+  `export default Object.assign(Frame, { Wrapper, Content })`, so both
+  `import Frame` and `import { Frame, Wrapper }` work.
+  `puzzle generate component Frame --family Wrapper,Content` scaffolds the
+  directory, one component stub per member, and the barrel. Member names are
+  validated (PascalCase, no duplicates, no collision with the root, no marker
+  names), `--family` on a non-component type is an error, and the scaffold is
+  all-or-nothing — a collision without `--force` writes nothing, while
+  `--force` rewrites the family's own files and leaves everything else in the
+  directory alone. Without `--family`, `generate component` is unchanged.
+
 - **`puzzle check` type-checks `.pzl` files with the app's own TypeScript
   installation (D165).** The command emits virtual files under
   `.puzzle/check/src/`, runs `node_modules/.bin/tsc --noEmit`, and maps
