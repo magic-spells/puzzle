@@ -90,13 +90,8 @@ PuzzleView reserved-name list in SPEC §4; §20/§22/§27/§34 amended in place.
 
 ## Deferred (from the same review, deliberately)
 
-
 License decisions (resolved pre-0.1.0: MIT, everywhere — root LICENSE.txt, all five
 package.json license fields, platform LICENSE.txt copies, README); Windows CI + win32
-package; bundle budgets; compiler benchmarks;
-D65 3-tier transitionMode trim; router file
-decomposition; persistence write-batching; destroy()/delete() rename; scheduler
+package; bundle budgets; compiler benchmarks; D65 3-tier transitionMode trim; router
+file decomposition; persistence write-batching; destroy()/delete() rename; scheduler
 unification; belongsTo null-FK subscription gap.
-
-Concurrent-`mount()` promise sharing was on this list from 0.1.0 and is now done:
-calls made while a mount is in flight share that mount's promise.

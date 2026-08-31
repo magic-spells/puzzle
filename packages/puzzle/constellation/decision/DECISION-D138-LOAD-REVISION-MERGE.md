@@ -41,7 +41,6 @@ save responses do".
 
 ## Decision
 
-
 Exact D125 parity — the protected window is the request's OWN flight, per
 field, not open-ended dirtiness:
 

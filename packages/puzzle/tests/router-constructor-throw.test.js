@@ -31,7 +31,7 @@ class DefaultLayout extends PuzzleView {
 function makeLeafThrowingOnce(name, error) {
 	let attempts = 0;
 	return class extends PuzzleView {
-		guard = (() => {
+		boom = (() => {
 			if (++attempts === 1) throw error;
 			return true;
 		})();
@@ -117,7 +117,7 @@ describe('routed constructor throws', () => {
 		const errors = [];
 		let attempts = 0;
 		class BoomLayout extends PuzzleView {
-			guard = (() => {
+			boom = (() => {
 				if (++attempts === 1) throw failure;
 				return true;
 			})();
