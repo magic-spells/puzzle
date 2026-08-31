@@ -9,11 +9,20 @@ connections:
   - DECISION-D54-TYPESCRIPT-SCRIPTS
   - DECISION-D32-CLI-TOOLING
   - DECISION-D153-PUZZLE-SCRATCH-DIR
+  - DECISION-D166-SNIPPETS
   - DOC-SPEC-BUILD
   - DOC-RELEASE-SURFACE
   - RELEASE-V0-7-0
+notes:
+  - kind: gotcha
+    text: >-
+      Every emitted expression statement must be parenthesized: `void` binds tighter than every
+      binary operator, so a bare `void a + 1` type-checks `undefined + 1` — it reported "Object is
+      possibly 'undefined'" on a correct `{ a + 1 }` under a strict app tsconfig while checking
+      nothing about the expression the author wrote. `emitVoid` always parenthesized;
+      `emitInterpolation` did not, and every interpolation carrying an operator was that false
+      positive until it was fixed pre-0.7.0.
 ---
-
 
 `puzzle check` type-checks an app's `.pzl` files — script bodies *and* template
 expressions — by emitting virtual TypeScript beside the app and running the
@@ -127,11 +136,25 @@ directory is never reported as a missing dependency.
 
 ## Scope of what is actually typed
 
+
 Template expressions are checked against the component class's **declared
 fields** — `this` in the wrapper is `InstanceType<typeof Class> &
 Record<string, any>`, and `__d` is that same value. So a typo in a declared
 field or a misused method signature is caught; a read of a `data()`-derived key
 falls through the index signature and is not.
+
+**Every expression the compiler emits is walked**, which includes the D166
+composition surface: a marker's arguments (`<Slot name="x" total={ … }>`,
+`<Children item={ … }>`) go through the same attribute-expression path as an
+element's bindings, and a `<Snippet item index>` body is walked inside a
+`__puzzle_check_snippet((item, index) => { … })` call so its parameters are
+declared bindings that shadow caller data exactly as codegen scopes them, while
+every other name in the body still resolves against the caller's view instance.
+Snippet parameters are typed `any`: their values come from the marker arguments
+in the *component's* template, a different `.pzl` this command checks
+independently, so there is nothing in the caller's file to infer from — unlike a
+loop variable, whose type `__puzzle_check_each` destructures out of the
+collection expression standing right there.
 
 **Inferring `data()` shapes cross-file is explicitly out of scope.** The owner
 rejected build-time dynamic structure inference outright: it means guessing at
@@ -144,6 +167,7 @@ bodies) is declared and deliberately errors as not implemented, reserving the
 spelling.
 
 ## Alternatives rejected
+
 
 - **Volar-style language tooling** (a virtual-file language service, an LSP,
   editor-level checking). It is the right long-term shape and it is *deferred*,
@@ -169,3 +193,10 @@ spelling.
 - **Promoting JS components into `checkJs`.** It turns every untyped app into a
   wall of inference noise on the first run. The unchecked mirror keeps the
   template win available to JS apps at zero cost.
+- **Inferring a snippet parameter's type from the marker that fills it.** It is
+  the same cross-file guess `data()` inference was rejected for, one file
+  further out: the marker lives in the component's `.pzl`, which the walk
+  reaches only by resolving the caller's component import and re-deriving that
+  file's marker arguments. `any` reports nothing rather than reporting the wrong
+  thing, and the parameters are still *declared*, so a body that misspells one
+  is a `Cannot find name` at the right column.

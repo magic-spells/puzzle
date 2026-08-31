@@ -1,0 +1,21 @@
+<puzzle-view>
+  <Roster members={ team }>
+    <Snippet fits="heading" total>
+      <h2>{ total } of { caption }</h2>
+    </Snippet>
+    <Snippet member index>
+      <span>{ index + 1 }</span>
+      <span title={ caption }>{ member.name }</span>
+    </Snippet>
+  </Roster>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+import Roster from '../components/Roster.pzl';
+
+export default class ViewSnippets extends PuzzleView {
+  caption = 'the roster';
+  team: Array<{ id: number; name: string }> = [];
+}
+</script>

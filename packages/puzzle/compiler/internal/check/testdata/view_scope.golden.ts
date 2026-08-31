@@ -17,12 +17,12 @@ export default class ViewScope extends PuzzleView {
 void function (this: InstanceType<typeof ViewScope> & Record<string, any>): void {
   const __d = this;
   void (__d.classes);
-  void __puzzle_check_formatter("upper", __d.name);
+  void (__puzzle_check_formatter("upper", __d.name));
   if (__d.user) {
-    void __puzzle_check_formatter("fallback", __d.user.name, 'friend');
+    void (__puzzle_check_formatter("fallback", __d.user.name, 'friend'));
   } else {
     if (__d.loading) {
-      void __d.status;
+      void (__d.status);
     } else {
     }
   }
@@ -30,15 +30,15 @@ void function (this: InstanceType<typeof ViewScope> & Record<string, any>): void
     void (item.done);
     const __puzzle_check_event_0: ((event: any) => any) | null = (event) => this.events.select(item, index);
     void __puzzle_check_event_0;
-    void index;
-    void item.label;
+    void (index);
+    void (item.label);
   });
   switch (__d.kind) {
     case 'alpha':
     case 'beta':
-      void __d.kind;
+      void (__d.kind);
       break;
     default:
-      void __d.fallbackLabel;
+      void (__d.fallbackLabel);
   }
 };

@@ -39,6 +39,16 @@ declare global {
     ) => void,
   ): void;
 
+  // A <Snippet> body's parameters (D166) are filled by the marker arguments in
+  // the COMPONENT's template — a different .pzl, compiled independently — so
+  // there is nothing in the caller's file to infer them from. The rest
+  // parameter contextually types each one as ANY, which keeps a strict app
+  // tsconfig from reporting an implicit any on a binding the user never
+  // annotated.
+  function __puzzle_check_snippet(
+    visit: (...values: any[]) => void,
+  ): void;
+
   function __puzzle_check_range(
     from: number,
     to: number,
@@ -408,7 +418,18 @@ func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent i
 				return err
 			}
 		case *parser.Slot:
+			// A marker's arguments (D166) are ordinary bindings evaluated at every
+			// render — codegen puts them in the marker vnode's args object — so they
+			// are checked exactly like an element's attributes. The fallback children
+			// are a separate body, checked after them in the same scope.
+			if err := e.emitAttrs(n.Args, scope, indent); err != nil {
+				return err
+			}
 			if err := e.emitNodes(n.Children, scope, indent); err != nil {
+				return err
+			}
+		case *parser.Snippet:
+			if err := e.emitSnippet(n, scope, indent); err != nil {
 				return err
 			}
 		case *parser.Portal:
@@ -505,7 +526,11 @@ func (e *emitter) emitInterpolation(n *parser.Interpolation, scope map[string]bo
 	if err != nil {
 		return err
 	}
-	e.b.WriteString(spaces(indent) + "void ")
+	// The parentheses are load-bearing: `void` binds tighter than every binary
+	// operator, so an unparenthesized `void a + 1` type-checks `undefined + 1`
+	// and reports "Object is possibly 'undefined'" on a correct template under
+	// strictNullChecks — while checking nothing about `a + 1` itself.
+	e.b.WriteString(spaces(indent) + "void (")
 	for i := len(n.Formatters) - 1; i >= 0; i-- {
 		e.b.WriteString("__puzzle_check_formatter(" + strconv.Quote(n.Formatters[i].Name) + ", ")
 	}
@@ -519,7 +544,7 @@ func (e *emitter) emitInterpolation(n *parser.Interpolation, scope map[string]bo
 		}
 		e.b.WriteString(")")
 	}
-	e.b.WriteString(";\n")
+	e.b.WriteString(");\n")
 	return nil
 }
 
@@ -587,6 +612,30 @@ func (e *emitter) emitFor(n *parser.For, scope map[string]bool, indent int) erro
 	bodyScope[n.Item] = true
 	if n.Counter != "" {
 		bodyScope[n.Counter] = true
+	}
+	if err := e.emitNodes(n.Body, bodyScope, indent+2); err != nil {
+		return err
+	}
+	e.b.WriteString(spaces(indent) + "});\n")
+	return nil
+}
+
+// emitSnippet walks a D166 snippet body under a scope that declares the
+// snippet's parameters, so a parameter read stays a bare identifier — shadowing
+// caller data of the same name, exactly as codegen scopes it — while every
+// other name still resolves against the caller's view instance.
+//
+// The parameters are typed `any`, unlike a loop variable: an each-loop's item
+// type is inferred from the collection expression standing right there in the
+// same file, but a snippet parameter's values come from the marker arguments in
+// the COMPONENT's template, a different .pzl that this check compiles
+// independently. There is nothing in this file to infer from, and guessing
+// would report errors the user cannot act on.
+func (e *emitter) emitSnippet(n *parser.Snippet, scope map[string]bool, indent int) error {
+	e.b.WriteString(spaces(indent) + "__puzzle_check_snippet((" + strings.Join(n.Params, ", ") + ") => {\n")
+	bodyScope := cloneScope(scope)
+	for _, param := range n.Params {
+		bodyScope[param] = true
 	}
 	if err := e.emitNodes(n.Body, bodyScope, indent+2); err != nil {
 		return err
