@@ -104,6 +104,7 @@ import ToggleGroupDoc from './views/components/ToggleGroupDoc.pzl';
 import ToolbarDoc from './views/components/ToolbarDoc.pzl';
 import TooltipDoc from './views/components/TooltipDoc.pzl';
 import TreeDoc from './views/components/TreeDoc.pzl';
+import VirtualListDoc from './views/components/VirtualListDoc.pzl';
 
 export default [
 	{
@@ -840,5 +841,12 @@ export default [
 		view: TreeDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Tree — Puzzle Pieces' },
+	},
+	{
+		path: '/components/virtual-list',
+		name: 'virtual-list',
+		view: VirtualListDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Virtual List — Puzzle Pieces' },
 	},
 ];

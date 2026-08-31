@@ -39,11 +39,11 @@ source with a `piece.json` manifest describing its files and dependencies.
 
 ## What's inside
 
-**94 pieces**, from primitives (Button, Field, Select, Checkbox, Switch) through
+**96 pieces**, from primitives (Button, Field, Select, Checkbox, Switch) through
 overlays (Dialog, Sheet, Popover, DropdownMenu, Command), data display (DataTable,
 Timeline, Tree, StatCard), charts (LineChart, BarChart, AreaChart, PieChart,
 Sparkline), rich editing (RichTextEditor, MarkdownEditor), and app-scale composites
-(Kanban, Sidebar, ChatScroller, Stepper).
+(Kanban, Sidebar, ChatScroller, Stepper, VirtualList).
 Browse them all in the [live component library](https://magicspells.io/puzzle-pieces),
 in [`registry/ui/`](./registry/ui/), or by running the docs app locally:
 

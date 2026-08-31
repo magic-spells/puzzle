@@ -178,7 +178,7 @@ export const SECTIONS = [
 		{ name: "collapsible", title: "Collapsible", path: "/components/collapsible",
 			description: "Animated disclosure with speed-based duration and inert/aria-hidden discipline" },
 		{ name: "data-table", title: "Data Table", path: "/components/data-table",
-			description: "Interactive data table over the presentational Table conventions — optional-controlled column sorting, row selection with select-all, and built-in pagination via the Pagination piece" },
+			description: "Interactive data table over the presentational Table conventions — optional-controlled sorting, row selection with select-all, pagination, and caller-owned header/body cell snippets" },
 		{ name: "description-list", title: "Description List", path: "/components/description-list",
 			description: "Semantic key-value description list rendered from an items array — stacked or inline two-column layout, optional row dividers, two sizes" },
 		{ name: "empty", title: "Empty", path: "/components/empty",
@@ -223,6 +223,8 @@ export const SECTIONS = [
 			description: "Horizontal or vertical grouped controls container with role=toolbar and roving-tabindex arrow-key navigation across buttons, toggles, and separators" },
 		{ name: "tree", title: "Tree", path: "/components/tree",
 			description: "Config-first WAI-ARIA tree view — nested nodes with expand/collapse, roving-tabindex keyboard nav, and a selection callback" },
+		{ name: "virtual-list", title: "Virtual List", path: "/components/virtual-list",
+			description: "Windowed vertical list for large fixed-height collections — native scrolling, configurable viewport and overscan, keyed rows, and a caller-owned row snippet" },
 		],
 	},
 	{
