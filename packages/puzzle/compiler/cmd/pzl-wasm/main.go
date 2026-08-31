@@ -112,7 +112,15 @@ func compile(_ js.Value, args []js.Value) (result any) {
 		return compileResult("", "", nil, []any{diagnostic("source must be a string", 1, 1)})
 	}
 
+	// Reject on the JS-side length first: args[0].String() copies the whole
+	// string into Go memory, so checking only afterwards pays for the copy.
+	if n := args[0].Get("length").Int(); n > maxSourceBytes {
+		return compileResult("", "", nil, []any{diagnostic(
+			fmt.Sprintf("source exceeds playground limit of %d bytes (got %d)", maxSourceBytes, n), 1, 1)})
+	}
+
 	source := args[0].String()
+	// Kept: UTF-16 units are not bytes, so a multi-byte source can pass above.
 	if len(source) > maxSourceBytes {
 		return compileResult("", "", nil, []any{diagnostic(
 			fmt.Sprintf("source exceeds playground limit of %d bytes (got %d)", maxSourceBytes, len(source)), 1, 1)})

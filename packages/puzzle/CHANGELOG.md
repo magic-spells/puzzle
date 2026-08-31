@@ -461,6 +461,15 @@ one is *not* a compile error; it silently builds a different product.
   still in flight, or none — exactly as `prepareRefresh` derives its own unwind
   target, and nested fences restore it only when the outermost one exits.
 
+- **The playground's nesting guard counts `{:else if}` clauses (D164).** Each
+  clause desugars into a nested `If`, so codegen recurses once per clause while
+  the token scan saw a single level — a flat 2,000-clause chain passed the guard
+  and then produced 96 MB of JavaScript in a WASM instance that cannot survive
+  running out of memory. The scan now keeps a per-block clause count, so a chain
+  is measured at its true codegen depth and the single `{/if}` still pops the
+  whole synthetic chain. The WASM entry also rejects an oversized source by its
+  JavaScript-side length before copying it into Go memory.
+
 ### Changed
 
 - **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing
