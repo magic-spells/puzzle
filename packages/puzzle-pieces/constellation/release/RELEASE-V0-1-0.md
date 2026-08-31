@@ -1,6 +1,6 @@
 ---
 name: v0.1.0 — first publish (public registry + add CLI)
-status: built
+status: verified
 connections:
   - DOC-REGISTRY
   - FEATURE-ADD-CLI

@@ -1,0 +1,8 @@
+{
+  "name": "virtual-list",
+  "description": "Windowed vertical list for large fixed-height collections — native scrolling, configurable viewport and overscan, keyed rows, and a caller-owned row snippet",
+  "files": ["VirtualList.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

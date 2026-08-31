@@ -1,0 +1,189 @@
+<puzzle-view>
+  <div
+    class={ viewportClass }
+    style={ viewportStyle }
+    role="list"
+    aria-label={ label }
+    tabindex="0"
+    @scroll={ onScroll(event) }>
+    <div aria-hidden="true" style={ topSpacerStyle }></div>
+
+    {#for row in visibleRows}
+      <div
+        class={ rowClass }
+        style={ rowStyle }
+        role="listitem"
+        aria-setsize={ total }
+        aria-posinset={ row.position }
+        key={ row.key }>
+        <Slot name="row" item={ row.item } index={ row.index }>{ row.item }</Slot>
+      </div>
+    {/for}
+
+    <div aria-hidden="true" style={ bottomSpacerStyle }></div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// VirtualList — fixed-height vertical windowing for large collections. The
+// component owns scroll math and row wrappers; the parent owns the items and
+// caller markup. A top spacer + rendered window + bottom spacer always add up
+// to the collection's full height, preserving native scrollbar geometry while
+// keeping the mounted row count bounded.
+//
+//   <VirtualList
+//     items={ activity }
+//     rowHeight={ 52 }
+//     height={ 420 }
+//     overscan={ 5 }
+//     itemKey="id"
+//     label="Deployment activity">
+//     <Snippet fits="row" item index>
+//       <div class="flex h-full w-full items-center gap-3">
+//         <span class="text-muted">#{ index + 1 }</span>
+//         <strong>{ item.title }</strong>
+//       </div>
+//     </Snippet>
+//   </VirtualList>
+//
+// PROPS
+//   items      array — caller-owned collection; default [].
+//   rowHeight  positive number in px — REQUIRED. Every row wrapper is locked to
+//              this height; an invalid value warns and falls back to 40px.
+//   height     positive number in px — fixed viewport height. Defaults to 400
+//              when neither height nor maxHeight is provided.
+//   maxHeight  positive number in px — optional viewport cap. Use it without
+//              height to let short lists shrink and long lists scroll.
+//   overscan   non-negative row count rendered above AND below the viewport;
+//              default 5.
+//   itemKey    optional string field containing each item's stable key. Without
+//              it, item.id, then item.key, then the absolute index is used.
+//   label      accessible name for the role=list scroll region; default 'Items'.
+//   class      appended to the scroll container.
+//
+// SNIPPET
+//   <Snippet fits="row" item index> is stamped once per rendered row. `index`
+//   is absolute in the full items array, not relative to the visible slice.
+//   Omitting the snippet keeps the `{ item }` text fallback.
+//
+// PERFORMANCE. The native scroll handler derives the first visible row and
+// refreshes only when the overscanned start bucket changes — scrolling within
+// one row is a no-op. Rendered rows are keyed, and overflow anchoring is disabled
+// so changing spacer heights cannot make the browser fight the scroll position.
+//
+// DELIBERATE V1 LIMIT. Row heights are fixed. There is no measuring,
+// ResizeObserver, dynamic-height cache, horizontal mode, fetching, or selection.
+// Caller row content must fit rowHeight; overflow is clipped so geometry stays
+// exact. Use an ordinary list when item heights vary.
+//
+// A11Y. The focusable scroll container is a named role=list. Each mounted row is
+// role=listitem with aria-setsize + aria-posinset so assistive tech knows its
+// position in the full virtual collection; geometry spacers are aria-hidden.
+const VIEWPORT =
+  'w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-surface ' +
+  '[overflow-anchor:none] outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
+const ROW =
+  'box-border flex w-full items-center overflow-hidden border-b border-border px-4 text-sm text-body';
+
+const DEFAULT_ROW_HEIGHT = 40;
+const DEFAULT_HEIGHT = 400;
+const DEFAULT_OVERSCAN = 5;
+
+function positiveNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(value, max));
+}
+
+function itemKey(item, index, field) {
+  let value;
+  if (field && item && typeof item === 'object') value = item[field];
+  if (value == null && item && typeof item === 'object') value = item.id;
+  if (value == null && item && typeof item === 'object') value = item.key;
+  return value == null ? `row-${index}` : String(value);
+}
+
+export default class VirtualList extends PuzzleView {
+  created() {
+    this._windowStart = 0;
+    this._warnedRowHeight = false;
+  }
+
+  data(params, props) {
+    const items = Array.isArray(props.items) ? props.items : [];
+    const requestedRowHeight = positiveNumber(props.rowHeight);
+    if (!requestedRowHeight && !this._warnedRowHeight) {
+      this._warnedRowHeight = true;
+      if (typeof console !== 'undefined') {
+        console.warn(
+          '[VirtualList] `rowHeight` is required and must be a positive number; falling back to 40px.'
+        );
+      }
+    }
+    const rowHeight = requestedRowHeight || DEFAULT_ROW_HEIGHT;
+
+    const requestedHeight = positiveNumber(props.height);
+    const maxHeight = positiveNumber(props.maxHeight);
+    const height = requestedHeight || (maxHeight ? null : DEFAULT_HEIGHT);
+    const viewportHeight = Math.min(height || maxHeight, maxHeight || Infinity);
+
+    const rawOverscan = Number(props.overscan);
+    const overscan = props.overscan == null || !Number.isFinite(rawOverscan)
+      ? DEFAULT_OVERSCAN
+      : Math.max(0, Math.floor(rawOverscan));
+    const visibleCount = Math.max(1, Math.ceil(viewportHeight / rowHeight));
+    const windowCount = visibleCount + overscan * 2;
+    const maxStart = Math.max(0, items.length - windowCount);
+    const start = clamp(this._windowStart, 0, maxStart);
+    this._windowStart = start;
+
+    const end = Math.min(items.length, start + windowCount);
+    const visibleRows = items.slice(start, end).map((item, offset) => {
+      const index = start + offset;
+      return {
+        item,
+        index,
+        position: index + 1,
+        key: itemKey(item, index, props.itemKey),
+      };
+    });
+    const below = Math.max(0, items.length - end);
+
+    const viewportStyle = [];
+    if (height) viewportStyle.push(`height:${height}px`);
+    if (maxHeight) viewportStyle.push(`max-height:${maxHeight}px`);
+
+    return {
+      visibleRows,
+      total: items.length,
+      rowHeight,
+      overscan,
+      maxStart,
+      viewportClass: [VIEWPORT, props.class || ''].filter(Boolean).join(' '),
+      viewportStyle: viewportStyle.join(';'),
+      rowClass: ROW,
+      rowStyle: `height:${rowHeight}px;min-height:${rowHeight}px;max-height:${rowHeight}px`,
+      topSpacerStyle: `height:${start * rowHeight}px`,
+      bottomSpacerStyle: `height:${below * rowHeight}px`,
+      label: props.label || 'Items',
+    };
+  }
+
+  events = {
+    onScroll: (event) => {
+      const { rowHeight, overscan, maxStart } = this.getData();
+      const firstVisible = Math.floor(Math.max(0, event.target.scrollTop) / rowHeight);
+      const nextStart = clamp(firstVisible - overscan, 0, maxStart);
+      if (nextStart !== this._windowStart) {
+        this._windowStart = nextStart;
+        this.refresh();
+      }
+    },
+  };
+}
+</script>
