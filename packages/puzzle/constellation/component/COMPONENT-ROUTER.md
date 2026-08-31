@@ -28,6 +28,15 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: decision
+    text: >-
+      A view or layout CONSTRUCTOR throw is a pre-commit navigation failure handled exactly like a
+      lazy-loader rejection: reported through onError with phase 'navigation', run through the
+      shared failed-navigation recovery, URL/history/mounted tree untouched, and the same path
+      retryable (before the fix the rejected promise stayed latched to the pending-nav path and
+      every later push() to it replayed the rejection). The abandoned instances are DROPPED, never
+      destroy()ed — a constructed-only view holds no subscription, timer, or registry entry, so
+      destroy() would fire destroyed() for a view whose created() never ran.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

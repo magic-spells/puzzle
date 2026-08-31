@@ -233,6 +233,9 @@ function writeChainsFor(store) {
 // imports none of this file, so it must ship none of this state (D157).
 
 const readStateByStore = new WeakMap();
+// record → the highest read generation that has landed on it. Keyed by the
+// record itself so the entry dies with it: no pruning, no serialization.
+const LOAD_GENERATIONS = new WeakMap();
 // Bounded so a page that walks user-supplied ids cannot grow the negative cache
 // without limit. No TTL: an identity the server 404s is absent until something
 // makes it present (see clearAbsent's call sites).
@@ -247,6 +250,7 @@ function readStateFor(store) {
 			many: new Map(), // type → in-flight complete-collection request
 			absent: new Map(), // "type id" → true, insertion-ordered (LRU)
 			complete: new Set(), // types whose complete collection has loaded
+			seq: 0, // monotonic read-dispatch counter (see LOAD_GENERATIONS)
 		};
 		readStateByStore.set(store, state);
 	}
@@ -505,6 +509,9 @@ class AdapterStoreMethods {
 
 	async _loadMany(type, options) {
 		const pk = this.modelFor(type).primaryKey();
+		// Dispatch order, so a response that lost the race cannot overwrite a newer
+		// one that already landed on the same record.
+		const gen = ++readStateFor(this).seq;
 		const revisionsAtDispatch = new Map(
 			Array.from(this._typeMap(type).values(), (record) => [
 				recordKey(record[pk]),
@@ -533,7 +540,7 @@ class AdapterStoreMethods {
 			}
 		}
 		const records = list.map((data) =>
-			this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])))
+			this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])), gen)
 		);
 		// A complete collection answers "is this identity absent?" for every id it
 		// omits, so both facts land together (D161). An empty array counts.
@@ -564,6 +571,9 @@ class AdapterStoreMethods {
 	async _loadOne(type, id, strict = false) {
 		const existing = this._typeMap(type).get(recordKey(id));
 		const revisionAtDispatch = existing ? recordMutationRevision(existing) : undefined;
+		// Dispatch order, so a response that lost the race cannot overwrite a newer
+		// one that already landed on the same record.
+		const gen = ++readStateFor(this).seq;
 		let data;
 		try {
 			data = await this._adapterResult(this._adapterVerb(type, 'loadOne')(id));
@@ -600,7 +610,7 @@ class AdapterStoreMethods {
 				`[puzzle] loadOne('${type}', ${JSON.stringify(id)}) returned a record with primary key ${JSON.stringify(data[pk])} — the response must be the requested record`
 			);
 		}
-		const record = this._upsert(type, data, revisionAtDispatch);
+		const record = this._upsert(type, data, revisionAtDispatch, gen);
 		// _upsert clears the negative entry for the key the RESPONSE carried. On the
 		// permissive path those keys can differ, so clear the REQUESTED one too — a
 		// slug the server just resolved is not an absent identity. Redundant whenever
@@ -834,8 +844,12 @@ class AdapterStoreMethods {
 	 * @param {object} data
 	 * @param {number} [throughRevision] D138 load-response revision boundary.
 	 * Public callers use upsert(), which deliberately leaves this undefined.
+	 * @param {number} [gen] D138 read-dispatch generation. Only loadOne/loadMany
+	 * (and so the auto-fetch faults routed through them) pass it; save
+	 * reconciliation, the public upsert(), and the rehydrate sweep do not
+	 * participate in read ordering and deliberately leave it undefined.
 	 */
-	_upsert(type, data, throughRevision) {
+	_upsert(type, data, throughRevision, gen) {
 		const Model = this.modelFor(type);
 		const pk = Model.primaryKey();
 		// The JSON hydration boundary for EVERY read path: loadOne/loadMany (and so
@@ -847,12 +861,17 @@ class AdapterStoreMethods {
 		clearAbsent(this, type, fields?.[pk]); // present now, whichever branch below runs
 		const existing = fields?.[pk] != null ? this._typeMap(type).get(recordKey(fields[pk])) : null;
 		if (existing) {
+			// A later read already landed here, so this response is stale for THIS
+			// record: nothing merges, nothing notifies, _synced is left alone.
+			if (gen !== undefined && (LOAD_GENERATIONS.get(existing) ?? 0) > gen) return existing;
 			safeMerge(existing, fields, throughRevision);
+			if (gen !== undefined) LOAD_GENERATIONS.set(existing, gen);
 			existing._synced = true; // came from the server (constellation/doc/DOC-SPEC.md §22, D50)
 			this._notify(type, fields[pk]);
 			return existing;
 		}
 		const record = this._instantiate(type, fields);
+		if (gen !== undefined) LOAD_GENERATIONS.set(record, gen);
 		record._synced = true; // server-sourced → PUT on first save() (§22, D50)
 		this._notify(type, record[pk]);
 		return record;

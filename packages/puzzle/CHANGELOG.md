@@ -201,6 +201,36 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **A throwing view or layout constructor no longer poisons the route it was
+  on.** The routed instances are built ~60 lines above the guarded load region,
+  so a throw from a class field initializer or a constructor body escaped the
+  navigation without running the failure recovery — the pending-navigation latch
+  stayed paired with the rejected promise, and every later `push()` to that same
+  path handed back that same rejection instead of retrying. Construction is now
+  guarded on its own and treated as the pre-commit failure it is (D61): reported
+  through `onError` with `phase: 'navigation'`, URL, history and the mounted tree
+  untouched, and the path retryable.
+
+- **A second `mount()` during boot no longer resolves early.** `_mounted` is
+  claimed before the awaited `router.start()`, so a `mount()` call made while
+  the initial navigation was still running took the already-mounted early-out
+  and resolved immediately — against the documented contract that the promise
+  resolves once the initial route has rendered, and hiding the first call's
+  rejection. Every call made while a mount is in flight now shares that mount's
+  promise and settles with it; after the mount completes, the already-mounted
+  early-out behaves exactly as before.
+
+- **A slow load response no longer rolls back a newer one that already
+  landed.** `loadOne`/`loadMany` captured only the local-mutation revision
+  (D138), and nothing advanced it for a server response — so two overlapping
+  reads of the same identity were decided by arrival order and the loser of the
+  race won whenever it finished last. This covered an explicit `loadOne` racing
+  an automatic fault too, since faulting routes through the same method. Reads
+  now carry a per-store dispatch generation and each record remembers the
+  highest one that landed on it, so a stale response is dropped for that record
+  (D138). Save responses and the public `upsert()` deliberately do not
+  participate, and local-edit protection is unchanged.
+
 - **A read made while another view is waiting on data can no longer fetch, or
   fail that view.** Auto-fetching finds (D161, new in this release) decided
   whether a query was allowed to fault from a slot on the Store itself, which

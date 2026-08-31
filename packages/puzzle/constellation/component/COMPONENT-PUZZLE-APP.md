@@ -23,6 +23,14 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      Concurrent mount() calls share the in-flight promise: the public mount() is a thin wrapper
+      around a private #mount(), latching its promise until settlement and clearing it in
+      #teardown() so an unmount() mid-mount never hands the next cycle a dying promise. The _mounted
+      early-out is claimed before the awaited router.start(), so without the latch a second mount()
+      during navigation zero resolved before the initial route had rendered and swallowed the first
+      call's rejection.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
