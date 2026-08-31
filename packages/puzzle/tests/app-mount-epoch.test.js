@@ -340,3 +340,117 @@ describe('PuzzleApp — mount generation (unmount + remount mid-mount)', () => {
 		expect(beforeUnmountCalls).toBe(0);
 	});
 });
+
+// Concurrent mount() (deferred since 0.1.0). `_mounted` is claimed BEFORE the
+// awaited router.start(), so a second mount() during navigation zero used to
+// take the already-mounted early-out and resolve immediately — breaking the
+// documented "resolves once the initial route has rendered" contract and
+// swallowing the first call's rejection. Every call made while a mount is in
+// flight now shares that mount's promise.
+describe('PuzzleApp — concurrent mount()', () => {
+	it('a second mount() during navigation zero shares the first promise', async () => {
+		const el = container();
+
+		let releaseData;
+		class GateHome extends PuzzleView {
+			async data() {
+				await new Promise((resolve) => {
+					releaseData = resolve;
+				});
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'home' }, [text('HOME')]);
+			}
+		}
+
+		const app = make({ target: '#app', routes: routesWith(GateHome) });
+
+		const first = app.mount();
+		await tick(); // inside router.start() → navigation #0 → GateHome.data()
+		const second = app.mount();
+		expect(second).toBe(first);
+
+		let secondSettled = false;
+		second.then(() => {
+			secondSettled = true;
+		});
+		await tick();
+		expect(secondSettled).toBe(false); // the initial route has not rendered yet
+		expect(el.children.length).toBe(0);
+
+		releaseData();
+		await expect(first).resolves.toBe(app);
+		await expect(second).resolves.toBe(app);
+		expect(el.querySelector('.layout main .home')).not.toBeNull();
+	});
+
+	it('a second mount() rejects with the in-flight mount’s own failure', async () => {
+		container();
+
+		let rejectFirst;
+		const app = make({
+			target: '#app',
+			routes: routesWith(),
+			beforeMount() {
+				return new Promise((_resolve, reject) => {
+					rejectFirst = reject;
+				});
+			},
+		});
+
+		const first = app.mount();
+		const second = app.mount();
+		expect(second).toBe(first);
+		// Observe both up front so the rejection is never unhandled.
+		const outcomes = Promise.all([
+			first.then(
+				() => null,
+				(err) => err
+			),
+			second.then(
+				() => null,
+				(err) => err
+			),
+		]);
+		await tick();
+
+		const failure = new Error('seed failed');
+		rejectFirst(failure);
+
+		expect(await outcomes).toEqual([failure, failure]);
+	});
+
+	it('an unmount() mid-mount releases the shared promise for the next cycle', async () => {
+		const el = container();
+
+		let releaseFirst;
+		let beforeMountCalls = 0;
+		const app = make({
+			target: '#app',
+			routes: routesWith(),
+			beforeMount() {
+				beforeMountCalls++;
+				if (beforeMountCalls === 1) {
+					return new Promise((resolve) => {
+						releaseFirst = resolve;
+					});
+				}
+			},
+		});
+
+		const first = app.mount();
+		await tick(); // suspended inside the awaited beforeMount of cycle 1
+		app.unmount();
+
+		const third = app.mount();
+		expect(third).not.toBe(first); // a dying cycle's promise is never reused
+		await expect(third).resolves.toBe(app);
+		expect(el.querySelector('.layout main .home')).not.toBeNull();
+
+		// Cycle 1 still settles on its own, without disturbing cycle 2.
+		releaseFirst();
+		await expect(first).resolves.toBe(app);
+		expect(el.querySelector('.layout main .home')).not.toBeNull();
+	});
+});

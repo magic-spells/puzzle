@@ -83,6 +83,12 @@ export class PuzzleApp {
 	// question it always was (unmount()'s idempotency guard, the abort read).
 	#mountEpoch = 0;
 
+	// The in-flight #mount() promise, so concurrent mount() calls share ONE
+	// settlement. `_mounted` is claimed before the awaited router.start(), so a
+	// second call during the initial navigation would otherwise take the
+	// already-mounted early-out and resolve before the route had rendered.
+	#mountPromise = null;
+
 	/**
 	 * @param {object} config the frozen v1 surface (SPEC §2)
 	 * @param {string|Element} config.target CSS selector or Element to mount into
@@ -207,8 +213,22 @@ export class PuzzleApp {
 	 * Boot the app (APP_ANATOMY §3). Resolves the target, wires the three ctx
 	 * services, and runs the initial navigation. Returns a promise that resolves
 	 * to `this` once the initial route has rendered (router.start is async).
+	 * Calls made while a mount is still in flight share that mount's promise, so
+	 * they settle with it — resolution or rejection — rather than early.
 	 */
-	async mount() {
+	mount() {
+		if (this.#mountPromise) return this.#mountPromise;
+		const p = this.#mount();
+		this.#mountPromise = p;
+		// Not .finally(): that mints a second promise whose rejection nobody handles.
+		const clear = () => {
+			if (this.#mountPromise === p) this.#mountPromise = null;
+		};
+		p.then(clear, clear);
+		return p;
+	}
+
+	async #mount() {
 		if (this._mounted) return this;
 
 		// SSG importability (M1): a user `app/app.js` calls `app.mount()` at top
@@ -536,6 +556,8 @@ export class PuzzleApp {
 		// teardown body so nothing below can be undone by a continuation that still
 		// believes it owns the app.
 		this.#mountEpoch++;
+		// An unmount() mid-mount must not hand the next mount() this dying promise.
+		this.#mountPromise = null;
 		// Dev HMR (constellation/doc/DOC-SPEC.md §27, D57): retract the published app so a
 		// stale reference can't outlive this instance — but only if it still points
 		// at us (a re-mount elsewhere may have replaced it).

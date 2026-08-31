@@ -211,6 +211,15 @@ one is *not* a compile error; it silently builds a different product.
   through `onError` with `phase: 'navigation'`, URL, history and the mounted tree
   untouched, and the path retryable.
 
+- **A second `mount()` during boot no longer resolves early.** `_mounted` is
+  claimed before the awaited `router.start()`, so a `mount()` call made while
+  the initial navigation was still running took the already-mounted early-out
+  and resolved immediately — against the documented contract that the promise
+  resolves once the initial route has rendered, and hiding the first call's
+  rejection. Every call made while a mount is in flight now shares that mount's
+  promise and settles with it; after the mount completes, the already-mounted
+  early-out behaves exactly as before.
+
 - **A slow load response no longer rolls back a newer one that already
   landed.** `loadOne`/`loadMany` captured only the local-mutation revision
   (D138), and nothing advanced it for a server response — so two overlapping
