@@ -153,6 +153,10 @@ func TestGenerateNameValidation(t *testing.T) {
 		{KindView, "my-view"},        // hyphen
 		{KindLayout, "admin_layout"}, // underscore
 		{KindComponent, "9Thing"},    // leading digit
+		{KindComponent, "Slot"},      // reserved composition marker (D134)
+		{KindComponent, "Children"},  // reserved composition marker (D134)
+		{KindComponent, "Snippet"},   // reserved composition marker (D134)
+		{KindComponent, "Portal"},    // reserved composition marker (D134)
 		{KindModel, "User"},          // uppercase model
 		{KindModel, "user-profile"},  // hyphen in model
 		{KindModel, "2fast"},         // leading digit
@@ -549,5 +553,88 @@ export default class Page extends PuzzleView {
 		if !strings.Contains(out.JS, want) {
 			t.Errorf("caller output missing %q\n%s", want, out.JS)
 		}
+	}
+}
+
+// TestGenerateRejectsMarkerComponentNames pins the D134 guard on the PLAIN
+// component scaffold: the compiler matches a marker tag before it resolves a
+// component, so a component scaffolded at a marker name could never be invoked.
+// Views and layouts are routed by class, never written as tags, so they keep
+// the name.
+func TestGenerateRejectsMarkerComponentNames(t *testing.T) {
+	root := newProject(t)
+	for _, name := range []string{"Children", "Slot", "Snippet", "Portal"} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Generate(Options{Root: root, Kind: KindComponent, Name: name})
+			if err == nil {
+				t.Fatalf("expected %q to be refused as a component name", name)
+			}
+			if !strings.Contains(err.Error(), "reserved composition marker") {
+				t.Errorf("error = %q, want 'reserved composition marker'", err)
+			}
+			if _, serr := os.Stat(filepath.Join(root, "app", "components", name+".pzl")); !os.IsNotExist(serr) {
+				t.Errorf("a refused marker name must write nothing (err=%v)", serr)
+			}
+		})
+	}
+	if _, err := Generate(Options{Root: root, Kind: KindView, Name: "Portal"}); err != nil {
+		t.Errorf("a VIEW named Portal is routed by class, not by tag, and must still scaffold: %v", err)
+	}
+}
+
+// TestGenerateFamilyHintFollowsPath pins the import specifier the hint prints:
+// `@` is the alias for the project's app/ directory, so a family under app/ is
+// advertised at its real alias path — not the default one — and a family placed
+// outside app/ falls back to the project-relative directory instead of an alias
+// path that resolves to nothing.
+func TestGenerateFamilyHintFollowsPath(t *testing.T) {
+	cases := []struct {
+		name       string
+		dir        string
+		root       string
+		wantImport string
+		wantLead   string
+	}{
+		{
+			name:       "default directory",
+			dir:        "",
+			root:       "Frame",
+			wantImport: "import Frame from '@/components/Frame';",
+			wantLead:   "Import the family as one unit:",
+		},
+		{
+			name:       "nested under app",
+			dir:        "app/components/ui",
+			root:       "Card",
+			wantImport: "import Card from '@/components/ui/Card';",
+			wantLead:   "Import the family as one unit:",
+		},
+		{
+			name:       "outside app",
+			dir:        "lib/widgets",
+			root:       "Panel",
+			wantImport: "import Panel from 'lib/widgets/Panel';",
+			wantLead:   "Import the family as one unit (path shown from the project root):",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			project := newProject(t)
+			res, err := Generate(Options{Root: project, Kind: KindComponent, Name: tc.root, Dir: tc.dir, Family: []string{"Body"}})
+			if err != nil {
+				t.Fatalf("Generate: %v", err)
+			}
+			if !strings.Contains(res.Hint, tc.wantImport) {
+				t.Errorf("hint missing %q:\n%s", tc.wantImport, res.Hint)
+			}
+			if !strings.Contains(res.Hint, tc.wantLead) {
+				t.Errorf("hint missing lead %q:\n%s", tc.wantLead, res.Hint)
+			}
+			// The default-directory path is the only one the old hardcoded
+			// '@/components/<Root>' got right; the others must not print it.
+			if tc.dir != "" && strings.Contains(res.Hint, "'@/components/"+tc.root+"'") {
+				t.Errorf("hint printed the default alias path for --path %s:\n%s", tc.dir, res.Hint)
+			}
+		})
 	}
 }

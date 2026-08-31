@@ -149,10 +149,10 @@ func Generate(opts Options) (*Result, error) {
 	return res, nil
 }
 
-// markerNames are the reserved capitalized composition markers (D134/D167). A
-// family cannot be rooted at one and cannot carry one as a member: the compiler
-// resolves those tags itself, so <Slot.Foo> and <Frame.Slot> are compile errors,
-// not components.
+// markerNames are the reserved capitalized composition markers (D134/D167). No
+// scaffolded component may be named one — plain, family root, or family member:
+// the compiler matches these tags before it resolves a component, so <Slot>,
+// <Slot.Foo>, and <Frame.Slot> are markers or compile errors, never yours.
 var markerNames = []string{"Children", "Slot", "Snippet", "Portal"}
 
 func isMarkerName(s string) bool {
@@ -256,7 +256,7 @@ func generateFamily(opts Options) (*Result, error) {
 		Path:  familyDir,
 		Rel:   relOrAbs(opts.Root, familyDir),
 		Files: written,
-		Hint:  familyHint(opts.Name, opts.Family),
+		Hint:  familyHint(opts.Root, familyDir, opts.Name, opts.Family),
 	}, nil
 }
 
@@ -276,16 +276,38 @@ func familyBarrel(root string, members []string) string {
 }
 
 // familyHint is the invocation example printed after a family is scaffolded:
-// one import, dotted tags.
-func familyHint(root string, members []string) string {
-	inner := root
+// one import, dotted tags. The specifier follows --path, so a family that did
+// not land in the default directory is not advertised at an import path that
+// resolves to nothing.
+func familyHint(projectRoot, familyDir, name string, members []string) string {
+	inner := name
 	if len(members) > 0 {
-		inner = root + "." + members[0]
+		inner = name + "." + members[0]
 	}
-	return "Import the family as one unit:\n" +
-		fmt.Sprintf("    import %s from '@/components/%s';\n", root, root) +
+	spec, aliased := familyImportSpecifier(projectRoot, familyDir)
+	lead := "Import the family as one unit:\n"
+	if !aliased {
+		lead = "Import the family as one unit (path shown from the project root):\n"
+	}
+	return lead +
+		fmt.Sprintf("    import %s from '%s';\n", name, spec) +
 		"    // then invoke members with dot notation:\n" +
-		fmt.Sprintf("    <%s><%s>…</%s></%s>", root, inner, inner, root)
+		fmt.Sprintf("    <%s><%s>…</%s></%s>", name, inner, inner, name)
+}
+
+// familyImportSpecifier renders the module specifier familyHint prints. `@` is
+// the built-in alias for the project's app/ directory, so a family under app/
+// gets the alias form that works from any depth. A family placed elsewhere with
+// --path has no alias to reach it, so it falls back to the project-relative
+// directory — accurate about WHERE the family is, and flagged as such by the
+// caller rather than printing an alias path that resolves to nothing.
+func familyImportSpecifier(projectRoot, familyDir string) (spec string, aliased bool) {
+	rel := relOrAbs(projectRoot, familyDir)
+	const appPrefix = "app/"
+	if strings.HasPrefix(rel, appPrefix) && !strings.HasPrefix(rel, "../") {
+		return "@/" + strings.TrimPrefix(rel, appPrefix), true
+	}
+	return rel, false
 }
 
 // render returns the file body and base filename for a kind+name, validating the
@@ -295,6 +317,14 @@ func render(kind Kind, name string) (content, filename string, err error) {
 	case KindComponent, KindView, KindLayout:
 		if !pascalCase.MatchString(name) {
 			return "", "", fmt.Errorf("%s name %q must be PascalCase (e.g. UserCard)", kind, name)
+		}
+		// The compiler matches the composition markers BEFORE it resolves a
+		// capitalized tag as a component (D134), so <Slot>, <Children>, <Snippet>,
+		// and <Portal> can never name YOUR component — a scaffold at one of those
+		// names is a file nothing can ever invoke. Views and layouts are routed by
+		// class, never written as tags, so the guard is component-only.
+		if kind == KindComponent && isMarkerName(name) {
+			return "", "", fmt.Errorf("component name %q is a reserved composition marker (Children, Slot, Snippet, Portal) — the compiler resolves <%s> itself, so a component by that name could never be invoked", name, name)
 		}
 		tmpl := map[Kind]string{
 			KindComponent: componentTemplate,
