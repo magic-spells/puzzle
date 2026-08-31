@@ -44,6 +44,7 @@ user's CSS.
 
 ## Decision
 
+
 Every transient build directory lives under `<root>/.puzzle/tmp/` as
 `staging-*` and `dist-old-*`, and `<root>/.puzzle` carries a `.gitignore`
 holding `*`, created when absent and never overwritten. One directory for a user
@@ -61,9 +62,13 @@ the destination, so it is unaffected.
 (the SPA dev path never calls `Build`, and a dev session is where a build is
 most likely to be killed mid-flight). It is deliberately narrow, because it
 deletes trees: two known locations only, exact name prefixes only, real
-directories only — a symlink is skipped outright, so it can never follow a link
-out of the app root — and only entries untouched for ten minutes, so a
-concurrently running build's staging tree survives. It also sweeps the legacy
+directories only, and only entries untouched for ten minutes, so a concurrently
+running build's staging tree survives. It cannot follow a link out of the app
+root at either level: a swept ENTRY that is a symlink is skipped outright, and a
+symlinked `.puzzle` ANCESTOR disables the scratch sweep entirely — the leaf
+check alone never saw the ancestor. `ensureWorkTmp` and `check.Generate` reject
+that symlinked `.puzzle` with a diagnostic rather than silently, since both
+create and clear trees beneath it. `SweepWorkDirs` also sweeps the legacy
 app-root names, so existing projects heal themselves on their next build.
 
 `dist/` itself is left alone. Where it is gitignored (every Puzzle template

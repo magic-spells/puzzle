@@ -126,6 +126,35 @@ func TestGenerateWorkspace(t *testing.T) {
 	}
 }
 
+// Generate clears .puzzle/check wholesale, so a symlinked .puzzle would put
+// that RemoveAll outside the app root.
+func TestGenerateRejectsSymlinkedScratchRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	marker := filepath.Join(outside, "check", "marker.txt")
+	if err := os.MkdirAll(filepath.Dir(marker), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(marker, []byte("do not delete"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, ".puzzle")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if _, err := Generate(root, 7); err == nil {
+		t.Fatal("Generate accepted a symlinked .puzzle")
+	} else if !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %v, want it to name the symbolic link", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("Generate cleared a directory outside the app root: %v", err)
+	}
+}
+
 func TestTsconfigVersionedDefaults(t *testing.T) {
 	cases := []struct {
 		name             string

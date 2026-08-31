@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/parser"
 )
 
@@ -118,6 +119,10 @@ func Generate(appRoot string, typescriptMajor int) (*Result, error) {
 	}
 	appDir, err := sourceDir(root)
 	if err != nil {
+		return nil, err
+	}
+	// The RemoveAll below must not reach through a symlinked .puzzle.
+	if err := fsutil.RejectSymlink(filepath.Join(root, ".puzzle")); err != nil {
 		return nil, err
 	}
 	checkDir := filepath.Join(root, ".puzzle", "check")

@@ -479,6 +479,15 @@ one is *not* a compile error; it silently builds a different product.
   promise always meant. The sidecars are still written, as the inspectable
   artifact they were always documented to be.
 
+- **A symlinked `.puzzle` no longer sends the scratch sweep out of the app root
+  (D153).** `SweepWorkDirs` skipped a swept *entry* that was a symlink, but
+  nothing looked at the `.puzzle` ancestor itself — so with `.puzzle` pointing
+  elsewhere, the sweep read and removed stale `staging-*`/`dist-old-*`
+  directories at the link target, and `puzzle check` cleared `check/` there.
+  The sweep now leaves a symlinked scratch root alone (the legacy app-root
+  sweep still runs), while `puzzle build` and `puzzle check` refuse it with a
+  diagnostic naming the path.
+
 ### Changed
 
 - **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing

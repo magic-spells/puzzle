@@ -101,6 +101,40 @@ func TestSweepWorkDirsSkipsSymlinks(t *testing.T) {
 	}
 }
 
+// The leaf guard covers a swept ENTRY; this covers the ancestor. A symlinked
+// .puzzle would make every sweep target a path outside the app root.
+func TestSweepWorkDirsSkipsSymlinkedScratchRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	marker := mkStale(t, filepath.Join(outside, "tmp", stagingPrefix+"old"))
+	if err := os.Symlink(outside, filepath.Join(root, puzzleWorkDir)); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	SweepWorkDirs(root)
+
+	if !exists(marker) {
+		t.Fatal("the sweep followed a symlinked .puzzle out of the app root and deleted a stale dir there")
+	}
+}
+
+// The sweep is documented as failure-ignoring, so ensureWorkTmp is what has to
+// tell the user why nothing works.
+func TestEnsureWorkTmpRejectsSymlinkedScratchRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, puzzleWorkDir)); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	_, err := ensureWorkTmp(root)
+	if err == nil {
+		t.Fatal("ensureWorkTmp accepted a symlinked .puzzle")
+	}
+	if !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %v, want it to name the symbolic link", err)
+	}
+}
+
 // The scratch root has to ignore itself, and the compiler must never rewrite an
 // ignore file it did not author.
 func TestEnsureWorkTmpWritesSelfIgnoringGitignore(t *testing.T) {
