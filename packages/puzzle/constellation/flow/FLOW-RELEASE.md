@@ -34,8 +34,13 @@ notes:
 Publishing Puzzle means publishing **six** npm packages by hand from one
 machine: the root `@magic-spells/puzzle` plus the five
 `@magic-spells/puzzle-<platform>-<arch>` packages carrying the compiled Go CLI
-(macOS and Linux on arm64/x64, and Windows on x64 — Windows-on-ARM runs the x64
-binary under emulation, so there is no `win32-arm64` package).
+(macOS and Linux on arm64/x64, and Windows on x64). There is no `win32-arm64`
+package: Windows runs the x64 binary under emulation. That is a fold, not a
+gap — `bin/puzzle.js` and `platformPackageNameFor` in
+`compiler/cmd/puzzle/upgrade.go` both map a `win32-arm64` host onto the x64
+package, and that package's `cpu` field lists `arm64` so npm installs it there.
+Native ARM64 Node on Windows reports `arch === 'arm64'`, so without all three
+the CLI dies on a platform this card calls supported.
 None of it is automated. The monorepo-root `.github/workflows/ci.yml` runs
 eight jobs — the Go and JS suites, the Windows Go suite + CLI smoke,
 `verify:pack`, `test:types`, the packed-tarball e2e, the browser smoke, and the
@@ -43,10 +48,11 @@ pieces/devtools/lint-plugin suites — on push and on pull requests for both
 `main` and `release/**`, so a release branch is covered; it has no publish job,
 and publishing is entirely by hand.
 
-The order is not stylistic. Publish the root before its platform packages, or
-publish it from the repo directory instead of from the packed tarball, and npm
-accepts a release that installs cleanly with no working `puzzle` command behind
-it ([[DECISION-D120-TARBALL-PUBLISH]]).
+The order is not stylistic. Publishing the root before its platform packages, or
+publishing it from the repo directory instead of from the packed tarball, makes
+npm accept a release that installs cleanly with no working `puzzle` command
+behind it ([[DECISION-D120-TARBALL-PUBLISH]]). Platform packages first, root
+last, and the root as a file.
 
 1. **Bump every place the version is written by hand** — this package's
    `package.json`, `compiler/internal/version/version.go`, the five
@@ -82,6 +88,8 @@ it ([[DECISION-D120-TARBALL-PUBLISH]]).
    zero-config `add piece` to an older minor — or hard-fails when none exists.
    - `PUZZLE_PIECES_REGISTRY` overrides the npm transport entirely. Unset it
      before smoke-testing the published path or the check proves nothing.
+     `verify:published` deletes it from the child environment for exactly this
+     reason: it is exported in the maintainer's shell profile.
 6. **Run `npm run release:prep`** — the only release pipeline there is, fail-fast
    at the first problem.
    - Restores `package.json` first: an aborted pack leaves the injected pins
@@ -97,6 +105,11 @@ it ([[DECISION-D120-TARBALL-PUBLISH]]).
      and runs the host-platform binary's `--version`. The Windows target is
      the one whose output file is named `puzzle.exe`; every other target ships
      an extensionless `bin/puzzle`.
+   - **Dry-packs all five platform packages** and asserts each tarball actually
+     contains the binary its manifest declares, at a non-zero size. Four of the
+     five are never executed here, so without this their only proof is
+     `go build` exiting 0 — which says nothing about whether the file landed at
+     the path `files` names.
    - Packs the root tarball, reads every platform pin back out of the packed
      bytes, and prints the publish commands in the required order.
 7. **Publish the five platform packages first**, as ordinary directory
@@ -112,7 +125,12 @@ it ([[DECISION-D120-TARBALL-PUBLISH]]).
 9. **Run `npm run verify:published`** — the only check in the repo that inspects
    the registry metadata npm actually resolves installs against, and the only
    one that installs the published version into a temp dir outside the repo and
-   runs `puzzle --version`.
+   runs `puzzle --version`. It also closes the pieces half of the release:
+   `@magic-spells/puzzle-pieces` must exist on the registry at the **exact** same
+   version, and the installed CLI must scaffold an app and resolve
+   `add piece` to that version with `PUZZLE_PIECES_REGISTRY` deleted from the
+   child environment — the resolved spec is read back out of `pieces.lock`, and
+   the compatibility-fallback notice is treated as a failure.
 10. **Hand the release off.** Cory creates the version tag and merges the
     release branch into `main`. An agent does neither, ever.
 
@@ -149,6 +167,10 @@ lands.
 - `e2e-pack` proves the **runtime resolves** from a real install. It runs while
   the platform packages are deliberately unpublished, so it can never catch a
   missing binary.
+- `release:prep`'s platform dry-pack proves each platform package **contains a
+  binary**. It cannot prove that binary runs — only that the cross-compile and
+  the manifest's `files` field name the same path, which is the one thing four
+  of the five have no other witness for.
 - The Windows CI job proves the **win32-x64 target is real**: it runs the Go
   suite on `windows-latest` and then scaffolds and builds an app with a freshly
   built `puzzle.exe`. Nothing in the release pipeline itself executes a
@@ -157,7 +179,9 @@ lands.
   binary works at all.
 - `verify:published` proves the **release**. It is the only one that runs after
   publishing, and the only one that answers whether someone installing right now
-  gets a CLI that runs.
+  gets a CLI that runs — and, since the pieces transport went version-locked, the
+  only one that answers whether `add piece` reaches the matching pieces release
+  rather than quietly falling back to an older line.
 
 A correct tarball is not evidence that a release is installable. Every check in
 the pipeline was green for the release that shipped with no working binary,

@@ -27,6 +27,31 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      Two checks were added on either side of this card's failure, both aimed at the same shape it
+      names — a publish that looks healthy and installs no working CLI.
+
+
+      release:prep dry-packs every platform package (`npm pack --dry-run --json`) and asserts the
+      binary the manifest's `files` declares is present and non-empty. This card's failure was a
+      correct tarball behind a wrong packument; this is the mirror case, a correct packument in
+      front of a tarball with no binary in it. Four of the five binaries are cross-compiled and
+      never executed on the release host, so before this their only proof was `go build` exiting 0,
+      which says nothing about where the file landed.
+
+
+      verify:published gained the pieces half of the release: @magic-spells/puzzle-pieces must exist
+      at the exact framework version, and the installed CLI must resolve `add piece` to that version
+      with PUZZLE_PIECES_REGISTRY deleted from the child environment. The version lock's failure
+      mode is the quiet kind this card is about — `add piece` does not error when its major.minor is
+      unpublished, it prints a note and drops to an older line, so a half-published release degraded
+      every user's first `add piece` while every existing check stayed green.
+
+
+      Both predicates are pure and live in scripts/release-checks.mjs (tested in
+      tests/release-checks.test.js), because release-prep.mjs and verify-published.mjs are top-level
+      scripts that exit on import and cannot be unit-tested in place.
 ---
 
 `npm publish` is never run against the repo directory for the root package. The

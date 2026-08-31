@@ -650,6 +650,27 @@ export default [{ path: '/late', view: page(() => import('./views/Late.pzl')) }]
 			want:  true,
 		},
 		{
+			// The shape that defeats BOTH of the first two rules: a namespace
+			// import (whose clause never names lazy) whose binding is taken off
+			// the namespace object by destructuring-with-rename, so the call site
+			// reads `page(` and the token `lazy` is never followed by `(`.
+			// Whole-namespace importers are treated as lazy users for exactly this
+			// case.
+			name: "namespace import aliased through a destructure",
+			files: map[string]string{"app/routes.js": `import * as puzzle from '@magic-spells/puzzle';
+const { lazy: page } = puzzle;
+export default [{ path: '/late', view: page(() => import('./views/Late.pzl')) }];
+`},
+			want: true,
+		},
+		{
+			// A star RE-EXPORT hands the whole namespace to some other module,
+			// which may rename lazy on the way in. Same blind spot, same answer.
+			name:  "star re-export of the root package",
+			files: map[string]string{"app/puzzle.js": "export * from '@magic-spells/puzzle';\n"},
+			want:  true,
+		},
+		{
 			// A .pzl is read whole before it is split, so a lazy() call in its
 			// <script> section counts exactly like one in a plain module.
 			name: "lazy() inside a .pzl script section",

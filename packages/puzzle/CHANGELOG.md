@@ -201,6 +201,26 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **The CLI installs and runs on Windows ARM64.** The bin shim resolved an
+  exact `<platform>-<arch>` key and declared no `win32-arm64` row, and the
+  Windows package restricted itself to `cpu: ["x64"]` — so on a native ARM64
+  build of Node (`process.arch === 'arm64'`) npm skipped the platform package
+  and `puzzle` exited with "no prebuilt CLI binary available". Emulation only
+  covers a process already running the x64 binary; it does not change what Node
+  reports. A `win32-arm64` host now folds onto `@magic-spells/puzzle-win32-x64`
+  in the shim, in `puzzle upgrade`, and in that package's `cpu` field. Still
+  five platform packages — the fold is in the lookup, not the matrix.
+
+- **A namespace import no longer compiles `lazy()` support out of an app that
+  uses it.** The usage scan recognized a `lazy(`-shaped call and a `lazy`
+  specifier in an import clause, but not
+  `import * as puzzle from '@magic-spells/puzzle'` followed by
+  `const { lazy: page } = puzzle` — neither rule can see that shape, so
+  `__PUZZLE_HAS_LAZY__` came out false and every lazy route threw "lazy support
+  was compiled out" at route-table validation. Any whole-namespace import or
+  star re-export of the package now counts as lazy usage, at a cost of ~0.6 KB
+  gzip for a namespace importer that never calls it.
+
 - **Multi-line `{#raw}` blocks pass the single-root gates they actually
   satisfy.** Formatting whitespace around the raw markers no longer counts as
   stray content in a `{#for}` row, component root, or component skeleton.

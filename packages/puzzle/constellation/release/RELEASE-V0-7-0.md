@@ -42,6 +42,37 @@ notes:
       grammars (vscode/sublime/zed) gain the Snippet marker; (7) site: llms.txt + playground (site
       PR #3) go live at Cory's manual wrangler deploy + domain cutover; re-vendor puzzle-skill.md at
       the site's 0.7.0 bump (drift gate enforces).
+  - kind: state
+    text: >-
+      Windows-on-ARM now actually works, and the release pipeline grew two checks (deep-review
+      round, branch fix/build-platform-release).
+
+
+      The card's "Windows-on-ARM runs the x64 binary under emulation, so there is deliberately no
+      win32-arm64 package" was a claim the code did not honor. bin/puzzle.js resolved an exact
+      `${process.platform}-${process.arch}` key with no win32-arm64 row, and the x64 package
+      declared `cpu: ["x64"]` — so on a NATIVE ARM64 build of Node (arch === 'arm64') npm never
+      installed the package and the shim exited 1 with "no prebuilt CLI binary available". Emulation
+      only covers a process already running the x64 binary; it does not make an ARM64 Node report
+      x64. Fixed in three places that must agree: the shim's PLATFORM_PACKAGES maps win32-arm64 →
+      @magic-spells/puzzle-win32-x64, that manifest widens to `cpu: ["x64", "arm64"]`, and
+      platformPackageNameFor in compiler/cmd/puzzle/upgrade.go folds windows/arm64 to the same
+      package so `puzzle upgrade` names the install that exists. Still five published packages — the
+      fold is in the lookup, not the matrix. The shim's unsupported-platform message now prints host
+      → package so the two Windows keys do not read as two binaries. Covered by
+      tests/bin-shim-resolver.test.js (spawns the real shim against a planted fake node_modules,
+      with process.platform/arch redefined per case) and a new row in TestPlatformPackageNames.
+
+
+      Release-pipeline additions: release:prep now dry-packs all five platform packages and asserts
+      each tarball carries the binary its manifest declares at a non-zero size — four of the five
+      are never executed on the release host, so `go build` exiting 0 was their only witness.
+      verify:published now also asserts @magic-spells/puzzle-pieces exists at the EXACT framework
+      version and that the installed CLI scaffolds an app and resolves `add piece` to that version
+      with PUZZLE_PIECES_REGISTRY deleted from the child env (it is exported in Cory's shell and
+      would otherwise satisfy the check from local files); the compatibility-fallback notice is a
+      failure and pieces.lock's resolved `registry` is the authoritative assertion. Both predicates
+      live in scripts/release-checks.mjs with tests/release-checks.test.js.
 ---
 
 # 0.7.0 — reads take care of themselves

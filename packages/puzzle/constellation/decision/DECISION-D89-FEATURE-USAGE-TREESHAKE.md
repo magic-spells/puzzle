@@ -54,6 +54,7 @@ The todos bundle roughly doubled (11.3 → 20.9 KB gzip) over two weeks of featu
 
 ## Decision
 
+
 **Runtime — `head.js` splits on a real seam.** `head.js` keeps the always-present core (`resolveHead`, `resolveField`, `HEAD_FIELDS`, and a new one-line `syncTitle`); the tag machinery (`MANAGED_TAGS`, `syncTags`, `setTagValue`) moves to `headTags.js`. The router calls `syncTitle` unconditionally and `syncTags` behind the gate. This split is justified independently of bundle size: it separates a pure resolver from a DOM mutator, and stops title-only apps running ~10 no-op `querySelector` probes on every navigation.
 
 **Runtime — guard probes are inlined, never abstracted.** Every site that REFERENCES a gated import writes the full `typeof __PUZZLE_HAS_X__ === 'undefined' || __PUZZLE_HAS_X__` expression. A named module const or arrow helper is **NOT** constant-propagated by esbuild — verified empirically: with a named const, `var t=!1` survived and the guarded calls kept `flip.js` alive. Only the inlined form folds. Undefined ⇒ probe is true, so vitest, unbundled consumers, and foreign bundlers keep full behavior with no compiler.
@@ -102,11 +103,20 @@ have re-pinned `lazy.js` and defeated the gate.
 - **lazy — deliberately over-inclusive, and the one SCRIPT-level bit.**
   `lazy()` is called from `routes.js`, never from a template, so the walk reads
   `.js`/`.mjs`/`.cjs`/`.jsx`/`.ts`/`.mts`/`.cts`/`.tsx` files as TEXT alongside
-  the `.pzl` files it parses. Two independent regex rules each suffice: a
-  `lazy(`-shaped call anywhere in the file, or a `lazy` specifier inside an
-  `import`/`export … from '@magic-spells/puzzle'` clause. The second rule exists
-  for the renamed binding (`import { lazy as page }`), which no call-shape match
-  can see. A `.pzl` runs the same text match over its whole source before the
+  the `.pzl` files it parses. Three independent regex rules each suffice:
+  a `lazy(`-shaped call anywhere in the file; a `lazy` specifier inside an
+  `import`/`export … from '@magic-spells/puzzle'` clause; or a WHOLE-NAMESPACE
+  clause from that package — `import * as puzzle from …` or `export * from …`.
+  The second rule exists for the renamed binding (`import { lazy as page }`),
+  which no call-shape match can see. The third exists for the shape that defeats
+  both of the others: a namespace statement never NAMES `lazy`, so a binding
+  taken off the namespace object by anything but a `lazy(`-shaped call —
+  `const { lazy: page } = puzzle`, or a star re-export another module renames on
+  the way in — was a silent false negative that compiled the resolver out of an
+  app whose lazy routes then threw "lazy support was compiled out" at route-table
+  validation. Its price is ~0.6 KB gzip for a namespace importer that never
+  calls `lazy`, which is the cheaper side of this scan's standing trade.
+  A `.pzl` runs the same text match over its whole source before the
   split, so a `lazy()` call in a `<script>` section counts — and it runs BEFORE
   the template parse, so a `.pzl` the parser rejects still contributes the bit
   rather than losing it to the fail-soft path. Detection is regex-level on

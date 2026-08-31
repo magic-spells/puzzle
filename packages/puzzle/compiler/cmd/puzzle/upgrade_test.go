@@ -87,6 +87,12 @@ func TestPlatformPackageNames(t *testing.T) {
 		{goos: "linux", goarch: "amd64", pkg: "puzzle-linux-x64", binary: "puzzle"},
 		{goos: "linux", goarch: "arm64", pkg: "puzzle-linux-arm64", binary: "puzzle"},
 		{goos: "windows", goarch: "amd64", pkg: "puzzle-win32-x64", binary: "puzzle.exe"},
+		// Windows-on-ARM has no package of its own: it resolves the x64 one and
+		// runs it under the OS's x64 emulation. Pinned here because the mapping is
+		// a deliberate fold, not a missing row — bin/puzzle.js maps the same key
+		// the same way, and `puzzle upgrade` has to name the package that is
+		// actually installed or it upgrades nothing.
+		{goos: "windows", goarch: "arm64", pkg: "puzzle-win32-x64", binary: "puzzle.exe"},
 	}
 
 	for _, tt := range tests {
