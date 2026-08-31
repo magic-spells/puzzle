@@ -1,6 +1,6 @@
 
 import { PuzzleView } from '@magic-spells/puzzle';
-import SnippetList from './SnippetList.compiled.js';
+import Wrapper from './Wrapper.compiled.js';
 
 export default class SnippetsHost extends PuzzleView {
   created() {
@@ -27,7 +27,7 @@ SnippetsHost.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', { class: 'snippets-host' }, [
-    new ViewNode(SnippetList, {
+    new ViewNode(Wrapper, {
       users: __d.users,
       group: __d.group,
     }, [

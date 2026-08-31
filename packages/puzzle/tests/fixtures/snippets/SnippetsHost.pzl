@@ -1,5 +1,5 @@
 <puzzle-view class="snippets-host">
-  <SnippetList users={ users } group={ group }>
+  <Wrapper users={ users } group={ group }>
     <Snippet fits="heading" group>
       { group.title } / { suffix }
     </Snippet>
@@ -13,12 +13,12 @@
     <Snippet group>
       default:{ group.title }:{ suffix }
     </Snippet>
-  </SnippetList>
+  </Wrapper>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import SnippetList from './SnippetList.compiled.js';
+import Wrapper from './Wrapper.compiled.js';
 
 export default class SnippetsHost extends PuzzleView {
   created() {

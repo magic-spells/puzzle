@@ -540,7 +540,7 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.querySelector('.sync-leaf').textContent).toBe('SYNC-CONTENT');
 	});
 
-	it('mounts snippet output once during hybrid takeover with zero dev warnings', async () => {
+	it('mounts transitively forwarded snippet output once during hybrid takeover with zero dev warnings', async () => {
 		class ScopedList extends PuzzleView {
 			render() {
 				return h('ul', { class: 'takeover-scoped-list' }, [
@@ -548,10 +548,24 @@ describe('router SSG takeover (M2)', () => {
 				]);
 			}
 		}
+		class InnerWrapper extends PuzzleView {
+			render() {
+				return h('section', { class: 'takeover-inner-wrapper' }, [
+					h(ScopedList, {}, [slot()]),
+				]);
+			}
+		}
+		class OuterWrapper extends PuzzleView {
+			render() {
+				return h('div', { class: 'takeover-outer-wrapper' }, [
+					h(InnerWrapper, {}, [slot()]),
+				]);
+			}
+		}
 		class ScopedPage extends PuzzleView {
 			render() {
 				return h('main', {}, [
-					h(ScopedList, {}, [
+					h(OuterWrapper, {}, [
 						snippet('row', ['item'], ({ item }) => [
 							h('strong', { class: 'takeover-stamp' }, [text(item.label)]),
 						]),
@@ -560,16 +574,18 @@ describe('router SSG takeover (M2)', () => {
 			}
 		}
 		const routes = [{ path: '/', name: 'scoped', view: ScopedPage }];
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
 		const el = ssgContainer(pages[0].html);
 		const prerendered = el.innerHTML;
-		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const app = boot({ target: '#app', routes, routerMode: memoryRouter() });
 
 		await app.mount();
 
 		expect(el.innerHTML).toBe(prerendered);
 		expect(el.querySelector('.takeover-stamp').textContent).toBe('hybrid');
+		expect(el.querySelector('.takeover-inner-wrapper')).not.toBeNull();
+		expect(el.querySelector('.takeover-outer-wrapper')).not.toBeNull();
 		expect(warn).not.toHaveBeenCalled();
 	});
 

@@ -1,0 +1,18 @@
+<puzzle-view>
+  <div class="snippet-wrapper">
+    <SnippetList users={ users } group={ group }>
+      <Children/>
+    </SnippetList>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import SnippetList from './SnippetList.compiled.js';
+
+export default class Wrapper extends PuzzleView {
+  data(params, props) {
+    return { users: props.users, group: props.group };
+  }
+}
+</script>
