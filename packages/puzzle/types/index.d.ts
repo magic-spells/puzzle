@@ -294,15 +294,18 @@ export interface Store {
 	createRecord(type: string, data?: Record<string, any>): any;
 	/**
 	 * Look up one record by primary key (auto-subscribes). Null when absent.
-	 * Inside a tracked `data()` run with the adapter capability installed, a miss
-	 * also fetches the record and the view settles before it commits, so a
-	 * committed null means the record does not exist (D161).
+	 * A miss also FETCHES the record — and the view settles before it commits, so
+	 * a committed null means the record does not exist — when, and only when, the
+	 * read is made through the view's own `this.ctx.store` handle inside that
+	 * view's `data()` run, on an app with the adapter capability (D161). Any
+	 * other read — an event handler, a captured `app.store`, a model method — is
+	 * a local snapshot.
 	 */
 	findOne(type: string, id: any): any;
 	/**
-	 * List records of a type, optionally filtered (auto-subscribes). Inside a
-	 * tracked `data()` run the collection loads once if it has not already; the
-	 * filter always runs locally (D161).
+	 * List records of a type, optionally filtered (auto-subscribes). Read through
+	 * `this.ctx.store` inside `data()`, the collection loads once if it has not
+	 * already; the filter always runs locally (D161).
 	 */
 	findMany(type: string, options?: FindManyOptions): any[];
 	// Adapter methods are attached by the app's adapter capability and declared through
@@ -381,6 +384,12 @@ export declare class FormatterRegistry {
 
 /** The minimal per-view service object — `this.ctx` in every view. */
 export interface PuzzleContext {
+	/**
+	 * The datastore. On an app with the adapter capability this is a PER-VIEW
+	 * handle on the app's store, and it is the only channel through which a
+	 * tracked read may fetch what it missed (D161) — read the store as
+	 * `this.ctx.store`, not through a captured `app.store`.
+	 */
 	store: Store;
 	router: Router;
 	formatters: FormatterRegistry;

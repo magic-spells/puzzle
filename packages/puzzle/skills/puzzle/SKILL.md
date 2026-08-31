@@ -421,10 +421,14 @@ What follows from the rule:
 - **`null` is never "still loading."** `{#if post} … {:else} Not found` needs no
   companion `loaded` flag. A `null` you can see is a 404 (or a model with no
   read verb), full stop.
-- **Only tracked `data()` runs fetch.** Event handlers, model methods, and
-  anything outside `data()` get a local snapshot and never issue a request. A
-  handler that needs fresh server data changes state and calls `this.refresh()`,
-  which re-enters the loop. Calling `store.loadOne`/`store.loadMany` from inside
+- **Only a tracked `data()` run fetches, and only through `this.ctx.store`.**
+  Read the store the way the example above does. `this.ctx.store` is a per-view
+  handle, and a read through it, by this view, during this view's own `data()`
+  run is the one thing that can fault: event handlers, model methods, timers,
+  and a store captured in a module variable all get a local snapshot and never
+  issue a request. A handler that needs fresh server data changes state and
+  calls `this.refresh()`, which re-enters the loop. Calling
+  `store.loadOne`/`store.loadMany` from inside
   `data()` warns in dev and points you at `findOne`/`findMany` — the imperative
   loaders are a force-refresh escape hatch, not the read path.
 - **Relationships never fetch.** `post.author` and `post.comments` are local

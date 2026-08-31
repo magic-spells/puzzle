@@ -453,7 +453,9 @@ describe('exempt read paths accept data that would fail validation (SPEC §20)',
 		const store = new Store({ user: ApiUser }, { apiURL: 'https://x.test', adapter });
 
 		const requests = new Map();
-		store.withTracking({}, () => store.findOne('user', 's1'), false, {}, requests);
+		const subscriber = {};
+		const handle = store._handleFor(subscriber); // D161: faulting rides the handle
+		store.withTracking(subscriber, () => handle.findOne('user', 's1'), false, {}, requests);
 		await Promise.all(requests.values());
 
 		expect(store.findOne('user', 's1').name).toBe(''); // invalid data landed

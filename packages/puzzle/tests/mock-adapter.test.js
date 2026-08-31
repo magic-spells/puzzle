@@ -516,11 +516,23 @@ describe('production posture — one advisory warning per model', () => {
 // app as far as a tracked query is concerned, which is what makes the mock the
 // supported way to develop a settling view without a running API.
 describe('tracked queries settle against the mock', () => {
+	/**
+	 * One tracked pass. D161 attributes faulting by identity, so the read has to
+	 * come through the subscriber's own store handle — `fn` gets it as `store`,
+	 * shadowing the raw store the test built.
+	 */
+	function trackedPass(store, fn, subscriber = {}) {
+		const requests = new Map();
+		const handle = store._handleFor(subscriber);
+		const value = store.withTracking(subscriber, () => fn(handle), false, {}, requests);
+		return { value, requests };
+	}
+
 	/** One settle round: run the tracked pass, await what it queued, repeat. */
 	async function settle(store, fn) {
+		const subscriber = {};
 		for (;;) {
-			const requests = new Map();
-			const value = store.withTracking({}, fn, false, {}, requests);
+			const { value, requests } = trackedPass(store, fn, subscriber);
 			if (requests.size === 0) return value;
 			await Promise.all(requests.values());
 		}
@@ -534,38 +546,34 @@ describe('tracked queries settle against the mock', () => {
 			],
 		});
 
-		const done = await settle(store, () => store.findMany('todo', { filter: (t) => t.done }));
+		const done = await settle(store, (store) => store.findMany('todo', { filter: (t) => t.done }));
 		expect(done.map((todo) => todo.id)).toEqual(['t2']);
 
 		// Complete now: a second tracked pass is pure local.
-		const requests = new Map();
-		store.withTracking({}, () => store.findMany('todo'), false, {}, requests);
-		expect(requests.size).toBe(0);
+		expect(trackedPass(store, (store) => store.findMany('todo')).requests.size).toBe(0);
 	});
 
 	it('a tracked findOne for a record the mock does not have settles to null', async () => {
 		const store = storeWith({ data: [{ id: 't1', text: 'a' }] });
 
-		expect(await settle(store, () => store.findOne('todo', 't1'))).toMatchObject({ text: 'a' });
-		expect(await settle(store, () => store.findOne('todo', 'ghost'))).toBeNull();
+		expect(await settle(store, (store) => store.findOne('todo', 't1'))).toMatchObject({
+			text: 'a',
+		});
+		expect(await settle(store, (store) => store.findOne('todo', 'ghost'))).toBeNull();
 
 		// The mock's 404 was recorded as absence — asking again requests nothing.
-		const requests = new Map();
-		store.withTracking({}, () => store.findOne('todo', 'ghost'), false, {}, requests);
-		expect(requests.size).toBe(0);
+		expect(trackedPass(store, (store) => store.findOne('todo', 'ghost')).requests.size).toBe(0);
 	});
 
 	it('a mock failure rejects the run and leaves the type incomplete', async () => {
 		const store = storeWith({ data: [{ id: 't1', text: 'a' }], fail: true });
-		const requests = new Map();
-		store.withTracking({}, () => store.findMany('todo'), false, {}, requests);
+		const { requests } = trackedPass(store, (store) => store.findMany('todo'));
 
 		const error = await Promise.all(requests.values()).catch((err) => err);
 		expect(error).toBeInstanceOf(PuzzleAdapterError);
 		expect(error.status).toBe(500);
 
-		const retry = new Map();
-		store.withTracking({}, () => store.findMany('todo'), false, {}, retry);
+		const retry = trackedPass(store, (store) => store.findMany('todo')).requests;
 		expect(retry.size).toBe(1);
 		await Promise.all(retry.values()).catch(() => {});
 	});

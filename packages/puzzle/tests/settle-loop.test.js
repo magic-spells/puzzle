@@ -1,4 +1,9 @@
 // @vitest-environment jsdom
+//
+// Every fixture view here reads through `this.ctx.store` — the per-view handle
+// D161 attributes tracked faulting by. A read on the raw store the test built is
+// a local snapshot and settles nothing, which is the point of that design and
+// the idiom every example uses.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
@@ -85,8 +90,8 @@ describe('D161 settle loop — rounds', () => {
 			data() {
 				runs.push('data');
 				return {
-					post: store.findOne('post', 'p1'),
-					user: store.findOne('user', 'u1'),
+					post: this.ctx.store.findOne('post', 'p1'),
+					user: this.ctx.store.findOne('user', 'u1'),
 				};
 			}
 			render() {
@@ -110,8 +115,8 @@ describe('D161 settle loop — rounds', () => {
 		const store = makeStore();
 		class View extends PuzzleView {
 			data() {
-				const post = store.findOne('post', 'p1');
-				const author = post && store.findOne('user', post.authorId);
+				const post = this.ctx.store.findOne('post', 'p1');
+				const author = post && this.ctx.store.findOne('user', post.authorId);
 				return { byline: post && author ? `${post.title} — ${author.name}` : null };
 			}
 			render() {
@@ -130,7 +135,7 @@ describe('D161 settle loop — rounds', () => {
 		const store = makeStore();
 		class View extends PuzzleView {
 			data() {
-				return { post: store.findOne('post', 'ghost') };
+				return { post: this.ctx.store.findOne('post', 'ghost') };
 			}
 			render() {
 				return h('div', {}, [text(this.getData().post ? 'found' : 'not found')]);
@@ -147,7 +152,7 @@ describe('D161 settle loop — rounds', () => {
 		class View extends PuzzleView {
 			async data() {
 				await tick();
-				return { post: store.findOne('post', 'p1') };
+				return { post: this.ctx.store.findOne('post', 'p1') };
 			}
 			render() {
 				return h('div', {}, [text(this.getData().post?.title ?? '')]);
@@ -169,9 +174,9 @@ describe('D161 settle loop — rounds', () => {
 		const store = makeStore();
 		class DeepView extends PuzzleView {
 			data() {
-				let post = store.findOne('post', 'p1');
+				let post = this.ctx.store.findOne('post', 'p1');
 				for (let hops = 0; post && post.nextId && hops < 30; hops++) {
-					post = store.findOne('post', post.nextId);
+					post = this.ctx.store.findOne('post', post.nextId);
 				}
 				return { last: post };
 			}
@@ -200,9 +205,9 @@ describe('D161 settle loop — supersession and subscriptions', () => {
 		const store = makeStore();
 		class View extends PuzzleView {
 			data() {
-				const post = store.findOne('post', 'p1');
+				const post = this.ctx.store.findOne('post', 'p1');
 				// The provisional pass reads u2; the committed pass reads the author.
-				return { user: post ? store.findOne('user', post.authorId) : store.findOne('user', 'u2') };
+				return { user: post ? this.ctx.store.findOne('user', post.authorId) : this.ctx.store.findOne('user', 'u2') };
 			}
 			render() {
 				return h('div', {}, [text(this.getData().user?.name ?? '')]);
@@ -223,7 +228,7 @@ describe('D161 settle loop — supersession and subscriptions', () => {
 		class View extends PuzzleView {
 			data() {
 				runs++;
-				return { post: store.findOne('post', 'p1') };
+				return { post: this.ctx.store.findOne('post', 'p1') };
 			}
 			render() {
 				return h('div', {}, [text(this.getData().post?.title ?? '')]);
@@ -256,7 +261,7 @@ describe('D161 settle loop — supersession and subscriptions', () => {
 		class View extends PuzzleView {
 			data() {
 				runs++;
-				return { post: store.findOne('post', 'p1') };
+				return { post: this.ctx.store.findOne('post', 'p1') };
 			}
 			render() {
 				return h('div', {}, [text(this.getData().post?.title ?? '')]);
@@ -283,7 +288,7 @@ describe('D161 settle loop — supersession and subscriptions', () => {
 			const store = makeStore();
 			class View extends PuzzleView {
 				data() {
-					const post = store.findOne('post', 'p1');
+					const post = this.ctx.store.findOne('post', 'p1');
 					throw new Error('data blew up');
 				}
 				render() {
@@ -361,7 +366,7 @@ describe('D161 settle loop — skeletons and prepared refreshes', () => {
 		const store = makeStore();
 		class View extends PuzzleView {
 			data(params) {
-				return { post: store.findOne('post', params.id ?? 'p1') };
+				return { post: this.ctx.store.findOne('post', params.id ?? 'p1') };
 			}
 			render() {
 				return h('div', {}, [text(this.getData().post?.title ?? '')]);

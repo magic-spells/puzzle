@@ -7,7 +7,7 @@
  */
 
 import { createAdapterCapability, registerReadState } from '../capabilities.js';
-import { Store } from './store.js';
+import { HANDLE_CTX, Store } from './store.js';
 import { PuzzleView } from '../views/PuzzleView.js';
 import {
 	PuzzleModel,
@@ -33,6 +33,13 @@ const MAX_SETTLE_ROUNDS = 10;
 
 const noop = () => {};
 const writeChainsByStore = new WeakMap();
+// D161: store → (subscriber → its store handle). Two-level so one subscriber
+// used against two stores gets a handle per store rather than a shared one.
+const handlesByStore = new WeakMap();
+// A handle's raw Store, for the consumer that needs the true identity. Declared
+// here rather than in core: nothing without the adapter ever mints a handle, so
+// a no-adapter bundle should not carry even the symbol.
+export const STORE_RAW = Symbol('puzzleRawStore');
 const adapterBindingsByStore = new WeakMap();
 const warnedAdapterConfigs = new WeakSet();
 const warnedTrackedLoads = new WeakMap();
@@ -294,7 +301,10 @@ function sweepAbsent(store) {
  * absent. Versioned so an older kernel can reject a newer envelope.
  */
 export function serializeReadState(store) {
-	const state = readStateByStore.get(store);
+	// Read state is keyed by the RAW Store, so unwrap a per-view handle first: a
+	// caller holding `this.ctx.store` is holding a Store as far as it knows, and
+	// must not silently get an empty envelope (D161).
+	const state = readStateByStore.get(store?.[STORE_RAW] ?? store);
 	if (!state) return { v: 1, complete: [], absent: [] };
 	return {
 		v: 1,
@@ -309,8 +319,9 @@ export function serializeReadState(store) {
  * an id another page later supplied cannot suppress a live read. In-flight work
  * is never transferred — an unresolved miss simply refetches.
  */
-export function hydrateReadState(store, envelope) {
+export function hydrateReadState(handleOrStore, envelope) {
 	if (!envelope || envelope.v !== 1) return;
+	const store = handleOrStore?.[STORE_RAW] ?? handleOrStore; // see serializeReadState
 	const state = readStateFor(store);
 	if (Array.isArray(envelope.complete)) {
 		for (const type of envelope.complete) state.complete.add(type);
@@ -631,6 +642,66 @@ class AdapterStoreMethods {
 	}
 
 	// ---- tracked auto-fetch (D161) ---------------------------
+
+	/**
+	 * The per-subscriber STORE HANDLE — the channel a tracked read has to come
+	 * through to be allowed to fault. PuzzleView mints one per view in its
+	 * constructor and exposes it as `this.ctx.store`; nothing else does.
+	 *
+	 * It is a Proxy over the raw Store whose only real overrides are
+	 * `findOne`/`findMany`, which pass this subscriber's currently-open request
+	 * map (null when it has none) to the tracked forms. Everything else forwards
+	 * to the raw store, and every forwarded METHOD is bound to it: `this === the
+	 * raw Store` is load-bearing all over this module — readStateFor's WeakMap
+	 * key, `_a`, `_asyncTrackingChain`, `_typeMap`, the subscription Maps — and
+	 * none of that may end up shadowed onto a proxy.
+	 *
+	 * Returns null for a store with no adapter capability, which is what keeps an
+	 * adapter-free app on the raw store with its `ctx.store === app.store`
+	 * identity intact (D157).
+	 */
+	_handleFor(subscriber) {
+		if (!this._a || !subscriber) return null;
+		let byStore = handlesByStore.get(this);
+		if (!byStore) handlesByStore.set(this, (byStore = new WeakMap()));
+		const cached = byStore.get(subscriber);
+		if (cached) return cached;
+
+		const store = this;
+		const hctx = { requests: null, dead: false };
+		const findOne = (type, id) => store._findOneTracked(type, id, hctx.requests);
+		const findMany = (type, options) => store._findManyTracked(type, options, hctx.requests);
+		// Bound methods are memoized per key, re-bound only if the underlying
+		// function changes — installFixtures() swaps `_network` on the prototype
+		// mid-session, so a permanently cached binding would outlive its source.
+		const bound = new Map();
+		const handle = new Proxy(store, {
+			get(target, key) {
+				if (key === 'findOne') return findOne;
+				if (key === 'findMany') return findMany;
+				if (key === STORE_RAW) return target;
+				if (key === HANDLE_CTX) return hctx;
+				const value = Reflect.get(target, key, target);
+				if (typeof value !== 'function') return value;
+				const entry = bound.get(key);
+				if (entry && entry.raw === value) return entry.fn;
+				const fn = value.bind(target);
+				bound.set(key, { raw: value, fn });
+				return fn;
+			},
+			set(target, key, value) {
+				target[key] = value;
+				return true;
+			},
+		});
+
+		// The context rides on the SUBSCRIBER so Store.withTracking finds it by
+		// identity, with no lookup table in core. Non-enumerable: a view's own
+		// property surface must not grow a framework key.
+		Object.defineProperty(subscriber, HANDLE_CTX, { value: hctx, configurable: true });
+		byStore.set(subscriber, handle);
+		return handle;
+	}
 
 	/**
 	 * Core Store calls this from findOne() when a tracked evaluation missed. It

@@ -42,6 +42,21 @@ const noop = () => {}; // observes an abandoned async tracking evaluation's reje
 // exactly once (constellation/doc/DOC-SPEC.md §21, D49).
 const RELS_INSTALLED = Symbol('puzzleRelationshipsInstalled');
 
+/**
+ * D161 tracked-read attribution. A subscriber that reads the store through its
+ * own HANDLE (a Proxy minted by `_handleFor`, adapter-side) carries that
+ * handle's context here: `{ requests, dead }`. `withTracking` installs the
+ * evaluation's request map on the SUBSCRIBER'S context rather than on the
+ * Store, so faulting is attributed by object identity — only reads made through
+ * that handle, by that subscriber, during that evaluation can queue a fetch.
+ * Every other reader in the realm (the raw store, another subscriber's handle,
+ * a record's `_store`) gets a pure local snapshot.
+ *
+ * One slot per subscriber, so a subscriber belongs to exactly one store — which
+ * is what a PuzzleView is: `this.ctx.store` is minted once, in its constructor.
+ */
+export const HANDLE_CTX = Symbol('puzzleStoreHandleCtx');
+
 export class Store {
 	/**
 	 * @param {object} models   type name → model class (from PuzzleApp config)
@@ -72,11 +87,11 @@ export class Store {
 		this._tracking = null; // current subscriber during data() evaluation
 		this._asyncTrackingChain = null; // in-flight async tracked eval, or null
 		this._trackingAdded = null; // keys the in-flight eval has queried (transactional reset)
-		// D161: the current evaluation's request map (key → promise) while a view's
-		// settle loop is running data(), else null. Its presence is what makes a
-		// query fault in what it missed; the adapter module owns everything about
-		// the requests themselves, so an app with no adapter never sets this.
-		this._requests = null;
+		// D161: there is deliberately NO ambient request slot on the Store. An
+		// evaluation's request map lives on its subscriber's handle context
+		// (HANDLE_CTX above), so a read by anyone else — including code that runs
+		// while an async data() sits at an await — can never fault or join a
+		// batch it does not own.
 		// D146: subscriber → Map<key, holdCount> for PREPARED (evaluated but not yet
 		// committed/discarded) evals. Held keys are live subscriptions that no OTHER
 		// eval may reclaim as garbage: a store-change refresh landing mid-gate runs
@@ -315,24 +330,40 @@ export class Store {
 	}
 
 	/**
-	 * Query one record by primary key (D161). Inside a TRACKED data() run that
-	 * carries a request set — and only there — a miss also asks the installed
-	 * adapter for the record: the view's settle loop awaits whatever gets queued
-	 * and re-runs data(), so the model it commits is settled and a committed null
-	 * means "does not exist". Everywhere else (event handlers, model methods, an
-	 * app with no adapter) this is the local snapshot it has always been.
+	 * Query one record by primary key. On the RAW Store this is, and always is, a
+	 * pure local snapshot — the public method faults nothing (D161).
+	 *
+	 * Fetching belongs to the tracked form below, reached only through a view's
+	 * own store handle (`this.ctx.store`) during that view's own data()
+	 * evaluation: the settle loop awaits whatever that read queued and re-runs
+	 * data(), so the model it commits is settled and a committed null means "does
+	 * not exist". Event handlers, model methods, timers and adapter-free apps get
+	 * the local snapshot this has always been.
 	 */
 	findOne(type, id) {
-		const record = this._findOneLocal(type, id);
-		if (!record && this._requests) this._faultOne(type, id, this._requests);
-		return record;
+		return this._findOneTracked(type, id, null);
 	}
 
 	/** @param {object} [options] { filter: (record) => boolean } */
 	findMany(type, options = {}) {
+		return this._findManyTracked(type, options, null);
+	}
+
+	/**
+	 * The tracked halves. `requests` is the open evaluation's request map, handed
+	 * in by the caller's handle — never read off ambient state, which is the whole
+	 * point: a null map is a local read, whoever is mid-evaluation elsewhere.
+	 */
+	_findOneTracked(type, id, requests) {
+		const record = this._findOneLocal(type, id);
+		if (!record && requests) this._faultOne(type, id, requests);
+		return record;
+	}
+
+	_findManyTracked(type, options, requests) {
 		// The collection, not the filter, is what can be missing: a filter is always
 		// applied locally and is never serialized into a request.
-		if (this._requests) this._faultMany(type, this._requests);
+		if (requests) this._faultMany(type, requests);
 		return this._findManyLocal(type, options);
 	}
 
@@ -426,11 +457,15 @@ export class Store {
 	 *   eval's own additions, leaving the live set exactly as it was). Scope restore
 	 *   (`_tracking`/`_trackingAdded`) is NEVER deferred — that is stack discipline.
 	 *   A failing eval reconciles(false) immediately and leaves `pending` untouched.
-	 * @param {?Map} [requests=null] D161 per-evaluation request map. Installed as
-	 *   `_requests` for the duration of the eval, which is what lets a missed
-	 *   findOne/findMany queue the fetch the caller's settle loop then awaits.
-	 *   Per EVALUATION, never Store-global: concurrent views may share a request
-	 *   promise but never each other's bookkeeping.
+	 * @param {?Map} [requests=null] D161 per-evaluation request map. Installed on
+	 *   the SUBSCRIBER'S handle context for the duration of the eval, which is
+	 *   what lets a miss read through that subscriber's handle queue the fetch the
+	 *   caller's settle loop then awaits. Per EVALUATION and per SUBSCRIBER, never
+	 *   Store-global: concurrent views may share a request promise but never each
+	 *   other's bookkeeping, and a reader holding anything but this subscriber's
+	 *   handle cannot fault at all — before or after an await. A subscriber with
+	 *   no handle context (a bare object) installs no map anywhere; its reads are
+	 *   local.
 	 */
 	withTracking(subscriber, fn, expectsAsync = false, pending = null, requests = null) {
 		// Liveness probe: a subscriber destroyed since this eval was scheduled must
@@ -469,13 +504,14 @@ export class Store {
 		const before = new Set(this.keysBySubscriber.get(subscriber) ?? []);
 		const prevTracking = this._tracking;
 		const prevAdded = this._trackingAdded;
-		const prevRequests = this._requests;
 		const added = new Set();
 		this._tracking = subscriber;
 		this._trackingAdded = added;
-		// Same save/restore stack discipline as _tracking, for the same reason: a
-		// nested synchronous eval must not leave its request map installed under the
-		// suspended scope that resumes after it (D161).
+		// D161: the request map goes on THIS SUBSCRIBER'S handle context, not on the
+		// Store. Same save/restore stack discipline as _tracking, for the same
+		// reason — a nested synchronous eval must not leave its map installed under
+		// the suspended scope that resumes after it — but scoped to one identity, so
+		// a foreign read during a suspension has nothing to find.
 		//
 		// The capability check is the STORE half of the D157 boundary. install()
 		// copies the fault methods onto Store.prototype once per realm and never
@@ -483,7 +519,9 @@ export class Store {
 		// _faultOne/_faultMany; refusing the request map here is what makes them
 		// unreachable, whatever hands this eval one. One check per evaluation, not
 		// per query — findOne/findMany stay exactly as cheap as they were.
-		this._requests = this._a ? requests : null;
+		const hctx = subscriber?.[HANDLE_CTX];
+		const prevRequests = hctx ? hctx.requests : null;
+		if (hctx) hctx.requests = this._a ? requests : null;
 
 		// How many UNCOMMITTED prepared evals currently hold this key for this
 		// subscriber (D146). Refcounted, so two overlapping prepares that query the
@@ -554,7 +592,10 @@ export class Store {
 			} else reconcile(ok);
 			this._tracking = prevTracking;
 			this._trackingAdded = prevAdded;
-			this._requests = prevRequests;
+			// A subscriber destroyed while this eval was open is DEAD: restoring the
+			// enclosing eval's map would re-arm a torn-down view's suspended
+			// continuation, which is precisely what unsubscribe() just disarmed.
+			if (hctx) hctx.requests = hctx.dead ? null : prevRequests;
 		};
 
 		let result;
@@ -627,7 +668,15 @@ export class Store {
 		if (this._tracking === subscriber) {
 			this._tracking = null;
 			this._trackingAdded = null;
-			this._requests = null; // a destroyed subscriber's resumed eval must not fetch either
+		}
+		// D161: disarm this subscriber's handle unconditionally — its identity, not
+		// the ambient tracking target, is what decides whether its reads fault, and
+		// `dead` also stops any still-open eval of its own from restoring a map on
+		// the way out. A destroyed view's resumed data() must not fetch.
+		const hctx = subscriber?.[HANDLE_CTX];
+		if (hctx) {
+			hctx.dead = true;
+			hctx.requests = null;
 		}
 		// D146: a destroyed subscriber holds nothing. Any prepared eval still pointing
 		// at it resolves to a reconcile over an already-empty key set (a no-op).

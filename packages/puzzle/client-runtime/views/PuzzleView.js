@@ -51,6 +51,11 @@ import {
 // definition, so the differ never churns the listener, and typing does nothing.
 const INERT_BIND = () => {};
 
+// D161: marks a per-view ctx and names the app ctx it derives from, so a nested
+// view chains off the BASE rather than off its parent's derived ctx (one link,
+// never one per level of nesting). See the constructor.
+const CTX_BASE = Symbol('puzzleCtxBase');
+
 // Dev steering for a .then-style data(), once per view CLASS (D161) — the fix is
 // one edit in one file, so one warning per class is the whole message. Allocated
 // lazily inside the __PUZZLE_DEV__ gate in #noteAsyncShape so production keeps
@@ -212,7 +217,30 @@ export class PuzzleView {
 
 	/** @param {object} ctx exactly { store, router, formatters } (SPEC §10) */
 	constructor(ctx = {}) {
-		this.ctx = ctx;
+		// D161 tracked-read attribution. On an adapter app this view reads the store
+		// through its OWN handle: only reads made through `this.ctx.store`, by this
+		// view, during this view's data() evaluation may fault in what they missed.
+		// A read by anyone else — the raw `app.store`, another view's handle, a
+		// module capture — is a local snapshot and can neither fire a request nor
+		// land a failure in a batch it does not own.
+		//
+		// The derived ctx is prototype-chained off the app's, so `router`,
+		// `formatters` and anything else stay LIVE rather than snapshotted, and it
+		// is always chained off the BASE ctx: a component built with its parent's
+		// derived ctx would otherwise add a link per level of nesting.
+		//
+		// `_handleFor` returns null without the adapter capability (and is absent
+		// entirely when the module is not in the graph), so an adapter-free app
+		// keeps `this.ctx === ctx` and `ctx.store === app.store` — identity and all
+		// (D157).
+		const handle = ctx.store?._handleFor?.(this);
+		if (handle) {
+			const base = ctx[CTX_BASE] ?? ctx;
+			this.ctx = Object.create(base, {
+				store: { value: handle, enumerable: true },
+				[CTX_BASE]: { value: base },
+			});
+		} else this.ctx = ctx;
 	}
 
 	// ---- state ---------------------------------------------------------------

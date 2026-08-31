@@ -44,6 +44,26 @@ Plain base class for every component, view, and layout. It owns state,
 lifecycle, tracked `data()` evaluation, refresh tokens, animations, refs, and
 update scheduling; [[COMPONENT-VIEW-MANAGER]] owns DOM operations.
 
+The constructor is where a view acquires its store handle. When the passed
+ctx's store carries the adapter capability, `ctx.store._handleFor(this)`
+returns a per-view Proxy on the app's store and the view's own `ctx` is
+`Object.create`d off the app's with `store` overridden by it, so `router`,
+`formatters` and any other ctx field stay LIVE rather than snapshotted. That
+handle is the only channel through which a read may fault (D161): reads through
+it, by this view, during this view's evaluation, join that evaluation's request
+map; every other read in the realm is a local snapshot. The derived ctx always
+chains off the BASE ctx — a nested component is built with its parent's derived
+ctx, and re-deriving from that would add a prototype link per level of nesting.
+Two consequences a change here must preserve: the handle binds every forwarded
+method to the RAW store (see [[COMPONENT-STORE]]), and any WeakMap keyed by ctx
+identity must resolve through the prototype chain, which is why `errors.js`
+looks the app's error config up that way. Without the capability the
+constructor is `this.ctx = ctx` exactly as before —
+`ctx.store === app.store`, identity and all — and `_handleFor` is not even in
+the bundle ([[DECISION-D157-ADAPTER-SUBPATH]]). The five construction sites
+(router views, layouts, components, error views, prerender, static mount) all
+reach this one constructor and need no code of their own.
+
 State has two layers. A successful `data(params, props)` result replaces the
 model layer, so omitted model keys disappear. `setData()` mutates a persistent
 local layer that wins over model values until the next successful model commit.
@@ -64,7 +84,11 @@ no-adapter apps ship a single-pass evaluator and none of the loop. Both halves
 of that test matter: the install is realm-wide and permanent, so a later
 no-adapter app in the same realm inherits the METHODS and must be held back by
 its own store's capability, while the `_settleData` half is what keeps the loop
-out of a bundle that never installs it. Each pass carries its own
+out of a bundle that never installs it. `store` at both sites is
+`this.ctx.store` — the view's handle — and the proxied `withTracking` binds
+back to the raw store while `subscriber === this` carries the handle context,
+so the loop's own code needed no change to become attribution-aware. Each pass
+carries its own
 pending-request Map and held reconcile; a
 pass that queued fetches is not committed — the batch is awaited, the
 provisional pass's subscriptions are unwound, and `data()` re-runs, so only
@@ -75,7 +99,9 @@ view and the round's request keys. Store notifications arriving mid-settle
 coalesce into `_settleDirty` — one more pass, never a competing refresh —
 while prepared (D146) runs keep their live-update behavior. A destroyed,
 leaving, or superseded view stops the loop after its current await without
-aborting shared requests. `refresh()`, `preload()`, and
+aborting shared requests, and `unsubscribe()` disarms its handle so the
+suspended evaluation cannot fault on the way out either. `refresh()`,
+`preload()`, and
 `prepareRefresh().ready` therefore resolve only after settlement, and a
 previously-sync `data()` may return a promise when it misses.
 
@@ -107,7 +133,9 @@ recursion. There is no per-view `errorContent` API or ancestor walk
 
 Public instance surface includes `ctx`, `props`, `params`, `route`, `element`,
 `refs`, `loaded`, `getData`, `setData`, `refresh`, `memo`, `isDestroyed`,
-`playIn`, `playOut`, `skipEnter`, and `destroyAnimated`. `this.route` is the
+`playIn`, `playOut`, `skipEnter`, and `destroyAnimated`. `this.ctx` is the
+per-view ctx described above — the documented way to reach the store, and on an
+adapter app the only way a read fetches. `this.route` is the
 frozen per-navigation snapshot that is safe inside the pre-commit data gate.
 `memo(key, deps, factory)` compares deps with `Object.is` and keeps
 reference-stable derived props.

@@ -16,9 +16,13 @@ const json = (body, status = 200) => ({
 });
 
 /** One tracked pass, spelled the way PuzzleView's settle loop spells it. */
+// D161 attributes faulting by identity, so `fn` receives the SUBSCRIBER'S store
+// handle — the channel a view reads through as `this.ctx.store`. The closures
+// below name the parameter `store`, shadowing the raw store the test built.
 function trackedPass(store, fn, subscriber = {}) {
 	const requests = new Map();
-	const value = store.withTracking(subscriber, fn, false, {}, requests);
+	const handle = store._handleFor(subscriber) ?? store;
+	const value = store.withTracking(subscriber, () => fn(handle), false, {}, requests);
 	return { value, requests };
 }
 
@@ -80,7 +84,7 @@ describe('app-wide adapter defaults never make a local model fault (D161 / SKILL
 	it('a model with no static adapter stays pure-local under an app-wide dialect', async () => {
 		const store = makeStore(endpointDialect());
 
-		const { value, requests } = trackedPass(store, () => ({
+		const { value, requests } = trackedPass(store, (store) => ({
 			notes: store.findMany('note'),
 			one: store.findOne('note', 'n1'),
 		}));
@@ -95,7 +99,7 @@ describe('app-wide adapter defaults never make a local model fault (D161 / SKILL
 	it('a model that declares only a write verb stays pure-local', async () => {
 		const store = makeStore(endpointDialect());
 
-		const { requests } = trackedPass(store, () => ({
+		const { requests } = trackedPass(store, (store) => ({
 			drafts: store.findMany('draft'),
 			one: store.findOne('draft', 'd1'),
 		}));
@@ -109,12 +113,12 @@ describe('app-wide adapter defaults never make a local model fault (D161 / SKILL
 		fetchMock.mockResolvedValueOnce(json({ data: [{ id: 'p1', title: 'Post' }] }));
 		const store = makeStore(endpointDialect());
 
-		const first = trackedPass(store, () => store.findMany('post'));
+		const first = trackedPass(store, (store) => store.findMany('post'));
 		expect(first.requests.size).toBe(1);
 		await Promise.all(first.requests.values());
 
 		expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([`${API}/api/posts`]);
-		expect(trackedPass(store, () => store.findMany('post')).value).toMatchObject([
+		expect(trackedPass(store, (store) => store.findMany('post')).value).toMatchObject([
 			{ title: 'Post' },
 		]);
 	});
@@ -122,13 +126,13 @@ describe('app-wide adapter defaults never make a local model fault (D161 / SKILL
 	it('an authored read verb faults with no endpoint (D161: endpoints are not required)', async () => {
 		const store = makeStore(endpointDialect());
 
-		const first = trackedPass(store, () => store.findMany('memo'));
+		const first = trackedPass(store, (store) => store.findMany('memo'));
 		expect(first.requests.size).toBe(1);
 		await Promise.all(first.requests.values());
 
 		expect(authoredLoadMany).toHaveBeenCalledTimes(1);
 		expect(fetchMock).not.toHaveBeenCalled();
-		expect(trackedPass(store, () => store.findMany('memo')).value).toMatchObject([
+		expect(trackedPass(store, (store) => store.findMany('memo')).value).toMatchObject([
 			{ body: 'authored' },
 		]);
 	});

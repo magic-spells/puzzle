@@ -28,9 +28,11 @@ notes:
       Bundle boundary mechanics: the settle loop is installed onto PuzzleView.prototype by
       installAdapter() (AdapterViewMethods), and static/index.js reaches the read-state codecs
       through a capabilities.js relay — never import datastore/adapter.js from core or from the
-      static kernel. Cost of the core seam on a no-adapter app is +177 B gzip (fault-hook branches +
-      _settleData call sites); the loop itself is provably absent (grep the built bundle for
-      MAX_SETTLE / "settle rounds" — both 0).
+      static kernel. The core seam costs a no-adapter app +177 B gzip for the fault hooks and
+      _settleData call sites, plus ~+144 B for the identity-attribution seam (the HANDLE_CTX slot in
+      withTracking/unsubscribe, the tracked read pair, the constructor's handle mint, and the
+      prototype-chain lookup in errors.js). The loop itself is provably absent (grep the built
+      bundle for MAX_SETTLE / "settle rounds" — both 0).
   - kind: verified
     text: >-
       Post-merge claim-level verification: every Decision claim traced to code and tests (both
@@ -44,27 +46,30 @@ notes:
       Post-merge hardening (Codex review round): (1) _faultOne now enforces the card's
       collection-complete ⇒ pure-local rule — it previously checked only nullish id / negative cache
       / in-flight / verb, so a missing id on a complete type still queued a detail GET. (2) The "per
-      evaluation, never Store-global" request-map rule survives .then-style data(): a plain function
-      returning a Promise runs once inline before the store can know its shape, and that abandoned
-      first invocation's post-await finds recorded into whichever eval held _requests. Mitigated
-      with a sticky per-view `_dataAsyncShape` flag (underscore-public — the settle loop installed
-      by the adapter capability ORs it into its per-pass expectsAsync hint) plus a dev-only
-      warn-once steering to `async data()`.
-  - kind: deviation
+      evaluation" request-map rule survives .then-style data(): a plain function returning a Promise
+      runs once inline before the store can know its shape, and that abandoned first invocation's
+      post-await finds record into whichever evaluation is open when they resume. Mitigated with a
+      sticky per-view `_dataAsyncShape` flag (underscore-public — the settle loop installed by the
+      adapter capability ORs it into its per-pass expectsAsync hint) plus a dev-only warn-once
+      steering to `async data()`. Identity attribution later narrowed the blast radius of that
+      residue to the view's own evaluations.
+  - kind: decision
     text: >-
-      KNOWN GAP against this card's "Reads outside data() never fetch" claim — the code does NOT
-      honor it yet. `_requests` stays installed for the whole lifetime of an async `data()`, across
-      every await, so an untracked query running while a view is suspended (event handler, timer,
-      model method) issues a real request AND lands in that suspended evaluation's request map — an
-      unrelated 500 can reject a view that never queried that type. Unfixable store-side: an eval's
-      post-await segments are structurally indistinguishable from foreign code (no withTracking
-      frame, call depth 0, later task), and simply dropping post-await faulting would commit empty
-      for `async data(){ await x; return {posts: findMany('post')} }`, making committed-empty mean
-      "still loading" — the exact ambiguity this card exists to prevent. The fix belongs at the
-      runtime's reentry points (PuzzleView.#withCommittedScope + the __withCommittedScope bridge)
-      and needs "restore only while you still own it" discipline, NOT a naive save/restore — a naive
-      fence clobbers an inner async eval's map when a handler calls refresh(). Shipped in 0.7.0
-      as-is; deliberate, tracked, own branch.
+      Why identity-based attribution beat fencing the reentry points. The ambient `_requests` slot
+      could not be made correct: an evaluation's post-await segments are indistinguishable from
+      foreign code (no withTracking frame, call depth 0, later task), so the only choices were leak,
+      or drop post-await faulting — which would commit empty for `async data(){ await x; return
+      {posts: findMany('post')} }` and make committed-empty mean "still loading", the exact
+      ambiguity this card exists to prevent. Fencing PuzzleView.#withCommittedScope /
+      __withCommittedScope only covers callers that re-enter through Puzzle's own fences; timers,
+      fetch().then continuations, third-party callbacks and every app.store consumer still leak, and
+      the card's own text conceded that residue. Attributing by handle identity covers every foreign
+      caller BY CONSTRUCTION, at the cost of one Proxy per view and the rule that a view reads
+      through this.ctx.store. Two accommodations the design forced and that a future change must
+      preserve: the handle's get trap binds every forwarded method to the RAW store (readStateFor's
+      WeakMap key, _a, _asyncTrackingChain, _typeMap and the subscription Maps all break under a
+      proxy `this`), and errors.js resolves its ctx-keyed CONFIG WeakMap through the prototype
+      chain, because a view's ctx is now derived from the app's rather than being it.
   - kind: verified
     text: >-
       destroy() now records absence like delete(); identity guard narrowed to the automatic fault
@@ -104,6 +109,7 @@ views, no `{#await}` templates, no separate `load()` hook.
 
 ## Decision
 
+
 **The settle loop** (owned by PuzzleView, wrapped around every tracked
 `data()` evaluation — refresh, routed preload, D146 prepareRefresh, component
 mount, prerender):
@@ -121,6 +127,43 @@ mount, prerender):
    last round's request keys). Never warn-and-commit: a partial commit would
    make `null` ambiguous again.
 
+**"Tracked" means read through the view's own store handle.** Faulting is
+attributed by OBJECT IDENTITY, not by ambient state. On an app carrying the
+adapter capability, each PuzzleView mints a per-view handle on the app's store
+in its constructor — a `Proxy` whose `findOne`/`findMany` pass that
+subscriber's currently-open request map to the tracked read, and which forwards
+everything else to the raw Store with `this` bound to the raw Store (every
+WeakMap key, `_a`, `_asyncTrackingChain` and Map in the module depends on that
+identity). The handle is exposed as `this.ctx.store`: the view's `ctx` is
+`Object.create`d off the app's, so `router`/`formatters` stay live, and it is
+always chained off the BASE ctx so nesting adds no links. `withTracking`
+installs the evaluation's request map on the subscriber's handle context —
+never on the Store, which has no ambient request slot at all — with the same
+save/restore stack discipline `_tracking` uses, plus a `dead` flag that
+`unsubscribe()` sets so a destroyed view's still-open evaluation cannot be
+re-armed on the way out. An adapter-free app mints nothing: `ctx.store` is the
+raw store, identity and all.
+
+The consequence is the SPEC's sentence made literally true. Reads through the
+raw `app.store`, through another view's handle, from a module capture, from a
+record's `_store` inside a relationship getter, or from any code running while
+some other view sits at an `await` — event handlers, timers, third-party
+callbacks — are pure local snapshots. They cannot issue a request, and they
+cannot drop a promise into a settle batch they do not own, so an unrelated 500
+can no longer fail a view that never queried that type. Server-backed rendering
+belongs in `data()`; handlers read local and call `refresh()`.
+
+Two residues are documented, not defects. (1) The view's OWN deferred code
+holding its OWN handle during its own suspension — a `setTimeout` inside
+`data()` reading `this.ctx.store` — is attributed to that open evaluation and
+does fault: same view, same data. (2) SUBSCRIPTION attribution stays ambient
+(`_tracking`/`_trackingAdded`), because relationship getters resolve through
+`record._store` and a record holds the raw Store — there is no identity to hang
+a handle on, and traversal inside `data()` must keep auto-subscribing. A
+foreign read during a suspension can therefore add one subscription key to the
+suspended view, which that view's next evaluation reconciles away. Benign and
+self-healing; it costs at most one extra notify.
+
 **Fetch eligibility.** A tracked miss faults only when the MODEL ITSELF
 declares server intent: its own `static adapter` names the read verb as a
 function, or it declares an `endpoint`. `findOne` needs `loadOne`, `findMany`
@@ -136,10 +179,6 @@ local-first apps (no capability, or models with no endpoint and no authored
 read verb) are untouched. A fixtures app faults like a server app:
 `installFixtures()` installs the capability itself, and the mock serves the
 faults at the `_network` seam.
-
-**Reads outside `data()` never fetch.** Event handlers and model methods get
-local snapshots; server-backed rendering belongs in `data()` (handlers use
-`refresh()`). An untracked fetch would have no guaranteed consumer.
 
 **Relationships never fault.** `belongsTo`/`hasMany` getters resolve through
 private local-only lookups that record the same subscription keys (D49
@@ -161,7 +200,9 @@ requested id before mutation — an implicit fault would otherwise miss
 forever; explicit `store.loadOne` accepts what the server returns (a
 slug-resolving endpoint, say). A type is collection-complete only after a
 successful no-options collection load (empty-array success counts);
-options-bearing loads stay partial.
+options-bearing loads stay partial. The read-state codecs unwrap a handle
+before keying, so a caller holding `this.ctx.store` gets its store's real state
+rather than a silently empty envelope.
 
 **One/Many rename.** `store.loadAll` → `store.loadMany`, and the adapter verb
 key everywhere (model `static adapter`, `adapter.defaults()`, bound adapter).
@@ -188,6 +229,7 @@ never touches `apiURL` at all.
 
 ## Alternatives rejected
 
+
 - **Async cache-first finds** (`await store.findOne(...)` in `data()`) — works,
   but puts an `await` and its un-awaited-Promise failure mode in every view;
   the settle loop keeps `data()` sync-looking, which is the learning-curve
@@ -208,6 +250,25 @@ never touches `apiURL` at all.
   guaranteed subscriber.
 - **Warn-and-commit at the round cap** — breaks the `null`-means-missing
   contract the whole design exists to provide.
+- **An ambient request slot on the Store** (the original shape) — the slot
+  stays installed for the whole lifetime of an `async data()`, across every
+  await, so every caller in the realm sees it: a foreign read fired a request
+  the contract forbids and landed the promise in a suspended view's settle
+  batch, where an unrelated 500 failed a view that never queried that type.
+  Post-await segments of an evaluation are structurally indistinguishable from
+  foreign code (no frame, call depth 0, later task), so no amount of care at
+  the read site can tell them apart — the ambient design cannot be made
+  correct.
+- **Fencing the runtime's reentry points** (`PuzzleView.#withCommittedScope`
+  and the `__withCommittedScope` bridge, with "restore only while you still own
+  it" discipline) — covers only code that re-enters through Puzzle's own
+  fences. Timers, `fetch().then` continuations, third-party callbacks and any
+  consumer of `app.store` still leak, so the hole narrows rather than closes.
+  Identity-based attribution covers every foreign caller by construction, and
+  its residue is same-view code only.
+- **Passing the store into the hook** (`data(params, props, { store })`) — a
+  public signature change for every view and example, and `this.ctx.store`
+  would remain a live trap beside it.
 
 ## Consequences
 
