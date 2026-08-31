@@ -450,7 +450,7 @@ describe('exempt read paths accept data that would fail validation (SPEC §20)',
 			};
 			static adapter = { endpoint: '/api/users' };
 		}
-		const store = new Store({ user: ApiUser }, { apiURL: 'https://x.test' });
+		const store = new Store({ user: ApiUser }, { apiURL: 'https://x.test', adapter });
 
 		const requests = new Map();
 		store.withTracking({}, () => store.findOne('user', 's1'), false, {}, requests);

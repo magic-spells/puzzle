@@ -58,7 +58,7 @@ describe('D161 settle window — only the run that owns it may clear the dirty f
 			})
 		);
 
-		const store = new Store({ post: Post, tick: Tick }, { apiURL: API });
+		const store = new Store({ post: Post, tick: Tick }, { apiURL: API, adapter });
 
 		// data() is async, so the settle window stays open across the suspension —
 		// which is exactly the window onStoreChange folds a notification into.

@@ -77,7 +77,7 @@ function serve(posts = {}) {
 	return { calls, fetchMock };
 }
 
-const makeStore = () => new Store({ post: Post, flaky: Flaky }, { apiURL: API });
+const makeStore = () => new Store({ post: Post, flaky: Flaky }, { apiURL: API, adapter });
 
 /** The steering warning, isolated from the other advisories the runtime emits. */
 const shapeWarnings = (spy) =>

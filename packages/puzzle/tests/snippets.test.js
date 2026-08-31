@@ -435,7 +435,12 @@ describe('snippets — forwarding through wrappers (D166 amendment)', () => {
 		expect(el.querySelector('.direct-wrapper').textContent).toBe('local');
 	});
 
-	it('leaves the unused warning to the innermost component and emits it once', async () => {
+	it('forwards a snippet nothing consumes without warning or mounting the metadata', async () => {
+		// A declaration no marker in the chain fits is simply never stamped. It is
+		// forwarded to the innermost component, dropped by that component's
+		// partition, and never reaches the DOM — silently: a marker under a false
+		// {#if} or an empty {#for} is not rendered either, so "no marker consumed it"
+		// is not evidence of an authoring mistake and used to be reported as one.
 		class Sink extends PuzzleView {
 			render() { return h('div', { class: 'snippet-sink' }); }
 		}
@@ -447,18 +452,18 @@ describe('snippets — forwarding through wrappers (D166 amendment)', () => {
 		}
 
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const createElement = vi.spyOn(document, 'createElement');
 		const view = new OuterWrapper();
 		mounted.push(view);
-		await view.mount(container(), {
-			children: [snippet('missing', ['item'], () => [text('unused')])],
+		const el = container();
+		await view.mount(el, {
+			children: [snippet('missing', ['item'], () => [text('unconsumed')])],
 		});
 
-		const unused = warn.mock.calls.filter(([message]) =>
-			message.includes('snippet fits slot "missing", but no matching slot marker consumed it')
-		);
-		expect(unused).toEqual([
-			['[puzzle] snippet fits slot "missing", but no matching slot marker consumed it'],
-		]);
+		expect(warn).not.toHaveBeenCalled();
+		expect(el.querySelector('.snippet-sink')).not.toBeNull();
+		expect(el.textContent).toBe('');
+		expect(createElement.mock.calls.some(([tag]) => tag === SNIPPET_TAG)).toBe(false);
 	});
 
 	it('never mounts or patches forwarded metadata during keyed reconciliation', async () => {
@@ -522,7 +527,11 @@ describe('snippets — development diagnostics', () => {
 		]);
 	});
 
-	it('warns for an unconsumed Snippet fits-name', async () => {
+	it('stays quiet for a Snippet no marker consumed', async () => {
+		// There is no unused-snippet warning: a marker inside a currently-false
+		// {#if} or an empty {#for} never renders, so an observation of "nothing
+		// consumed this" cannot tell a real authoring mistake from ordinary
+		// conditional markup. The other three diagnostics below stay.
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		class NoMarkers extends PuzzleView {
 			render() { return h('div'); }
@@ -530,11 +539,9 @@ describe('snippets — development diagnostics', () => {
 		const view = new NoMarkers();
 		mounted.push(view);
 		await view.mount(container(), {
-			children: [snippet('missing', ['item'], () => [text('unused')])],
+			children: [snippet('missing', ['item'], () => [text('unconsumed')])],
 		});
-		expect(warn).toHaveBeenCalledWith(
-			'[puzzle] snippet fits slot "missing", but no matching slot marker consumed it'
-		);
+		expect(warn).not.toHaveBeenCalled();
 	});
 
 	it('warns and renders fallback when plain content fills an args-bearing marker', async () => {
@@ -585,7 +592,12 @@ describe('snippets — SSG', () => {
 			[snippet('row', ['row'], ({ row }) => [h('strong', {}, [text(row.name)])])],
 		));
 		expect(html).toBe('<ul><li><strong>one</strong></li><li><strong>two</strong></li></ul>');
-		expect(await serialize(snippet('unused', [], () => [text('never')]))).toBe('');
+		// A snippet vnode that reaches the serializer was never consumed by an
+		// expansion pass — the D89 metadata-tag diagnostic, not empty output
+		// (tests/snippet-tag-escape.test.js owns that boundary).
+		await expect(serialize(snippet('unconsumed', [], () => [text('never')]))).rejects.toThrow(
+			/vnode tag "#snippet" reached the DOM/
+		);
 	});
 
 	it('serializes snippets forwarded through two wrappers via the shared expansion pipe', async () => {

@@ -1211,7 +1211,9 @@ describe('Store — local reads and the D161 fault hook', () => {
 	});
 
 	it('a request map is installed only for the evaluation it was handed to', () => {
-		const store = makeStore();
+		// WITH the capability: a store built without it refuses the map outright
+		// (tests/adapter-realm-isolation.test.js pins that half).
+		const store = makeStore({ adapter });
 		const requests = new Map();
 		let inner = 'unset';
 		store.withTracking(

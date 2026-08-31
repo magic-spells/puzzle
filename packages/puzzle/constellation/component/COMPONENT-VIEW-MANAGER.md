@@ -46,6 +46,15 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      Refines the metadata-tag sentence in the composition paragraph (2026-08-30): the THROW is
+      ungated in every build, as written, but the EXPLANATION is development-only.
+      `metadataTagError(tag)` (views/ViewNode.js) builds the long D89 paragraph behind the inline
+      `__PUZZLE_DEV__` probe and returns `[puzzle] metadata tag "<tag>" reached the DOM (compiled
+      out)` in production, because shipping the prose everywhere cost ~190 B gzip per app. The
+      `startsWith('#')` checks in mount() and ssg/serialize.js are unchanged and stay outside every
+      gate.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -134,13 +143,21 @@ children — supplied content wins completely — and contributes no nodes when 
 has none (D141).
 `SNIPPET_TAG` children form a third bucket keyed by `fits`; an args-bearing
 marker calls the matching Snippet function for fresh vnodes on every stamp.
-Development diagnoses shape mismatches, unused snippets, plain fills for
-args-bearing markers, and defensive marker vnodes in function output. Hybrid
-and static takeover preload against an expanded tree and mount that exact tree
-without expanding it again, preserving both pinned component instances and the
-first pass's snippet-use accounting.
+Development diagnoses shape mismatches, plain fills for args-bearing markers,
+and defensive marker vnodes in function output — there is no unused-snippet
+warning, because a marker inside a false `{#if}` or an empty `{#for}` is not
+visited either and the observation reported both as one. Hybrid and static
+takeover preload against an expanded tree and mount that exact tree without
+expanding it again, preserving pinned component instances; that `slotsExpanded`
+branch of `render()` sits behind the inline `__PUZZLE_TAKEOVER__` probe, and
+`renderFresh()` — recovery only, never handed a prepared tree — always expands.
 Buckets are null-prototype objects and forwarding descends through component
-call-site children while preserving pinned routed instances.
+call-site children while preserving pinned routed instances. Any reserved
+`#`-prefixed metadata tag that survives expansion and reaches element creation
+(or the SSG serializer) throws the shared `metadataTagError` diagnostic, ungated
+in every build: the only way one gets there is a vnode from a build the D89
+usage scan could not read (see [[DECISION-D89-FEATURE-USAGE-TREESHAKE]]), and a
+DOM `InvalidCharacterError` named none of that.
 
 Host behavior includes SVG namespaces/`foreignObject`, per-node listener
 installation and removal, event modifiers with once-spend persistence (the

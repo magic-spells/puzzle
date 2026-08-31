@@ -580,10 +580,11 @@ const portalMarker = "data-puzzle-portal"
 
 const rawAtEscape = "@@"
 
-// snippetUses is a property used only by ViewManager's snippet
-// partition/join path. Property names survive minification, so its absence is
-// evidence the false usage define folded the whole branch away.
-const snippetsMarker = "snippetUses"
+// snippets is the partition bucket used only by ViewManager's snippet
+// partition/join path — every other reference to it lives inside the same gated
+// block. Property names survive minification, so its absence is evidence the
+// false usage define folded the whole branch away.
+const snippetsMarker = "snippets"
 
 // snippetVnodes is the ordered metadata side-list used only by the wrapper
 // forwarding amendment. Pin it independently so the core snippet join cannot

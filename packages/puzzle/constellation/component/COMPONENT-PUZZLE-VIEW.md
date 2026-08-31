@@ -24,6 +24,16 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      Settle-path selection is per-STORE, not per-prototype (2026-08-30). `#refreshInner` and
+      `prepareRefresh` choose the D161 settle loop on `store._a && this._settleData`, not on
+      `_settleData` alone. The capability install is realm-wide and permanent, so a second app
+      mounted later in the same realm WITHOUT `config.adapter` used to inherit the settle path from
+      the first and fault reads it had deliberately opted out of (a model carrying adapter metadata
+      was enough). The `_settleData` half of the test stays: without the capability anywhere in the
+      realm the loop is not in the bundle at all (D157). Regression:
+      tests/adapter-realm-isolation.test.js.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -45,13 +55,17 @@ navigation — it evaluates `data()` against the destination without touching
 committed state and hands back commit/discard
 ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]).
 
-With the adapter capability installed, every tracked `data()` evaluation runs
-inside the D161 settle loop — `_settleData`, installed onto the prototype by
-[[COMPONENT-ADAPTER]]; core holds only the `!this._settleData` branch at its
-two call sites — refresh and prepareRefresh; preload, mount, and prerender all
-reach the loop through refresh — so no-adapter apps ship a single-pass
-evaluator and none of the loop. Each pass carries its own pending-request Map
-and held reconcile; a
+When THIS app's store carries the adapter capability, every tracked `data()`
+evaluation runs inside the D161 settle loop — `_settleData`, installed onto the
+prototype by [[COMPONENT-ADAPTER]]. Core holds only the `!store._a ||
+!this._settleData` test at its two call sites — refresh and prepareRefresh;
+preload, mount, and prerender all reach the loop through refresh — so
+no-adapter apps ship a single-pass evaluator and none of the loop. Both halves
+of that test matter: the install is realm-wide and permanent, so a later
+no-adapter app in the same realm inherits the METHODS and must be held back by
+its own store's capability, while the `_settleData` half is what keeps the loop
+out of a bundle that never installs it. Each pass carries its own
+pending-request Map and held reconcile; a
 pass that queued fetches is not committed — the batch is awaited, the
 provisional pass's subscriptions are unwound, and `data()` re-runs, so only
 the final warm pass's subscriptions and model commit

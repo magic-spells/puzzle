@@ -60,6 +60,36 @@ export const PLACEHOLDER_TAG = '#';
 // `children` are the teleported subtree.
 export const PORTAL_TAG = 'portal';
 
+/**
+ * The one diagnostic for a reserved '#'-prefixed metadata tag that reached a
+ * rendering path (D89 boundary). Every such tag is consumed by expansion before
+ * mount/serialize; one that survives means the vnode came from somewhere the
+ * feature-usage scan never read — in practice a COMPILED component package,
+ * which is not a supported input for the gate (pieces ship as source, compiled
+ * by the app's own build). The browser used to answer that with a DOM
+ * InvalidCharacterError and the SSG serializer with silent empty output, neither
+ * of which names the cause.
+ *
+ * THROWING is ungated — the check at each call site is a bare `startsWith('#')`
+ * on a string already in hand, and a metadata tag must fail loudly in every
+ * build. The EXPLANATION is not: it is a paragraph about an unsupported build
+ * shape, so it sits behind the inline `__PUZZLE_DEV__` probe (hoisting the
+ * probe into a module const stops esbuild folding it — see build_test.go) and
+ * production keeps a short line naming the tag. Development is where anyone
+ * reads the long form anyway. Both are built only on the throw path.
+ */
+export function metadataTagError(tag) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		return new Error(
+			`[puzzle] vnode tag "${tag}" reached the DOM — it is framework metadata; ` +
+				'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ' +
+				'Compiled component packages are not scanned for feature usage; use source pieces ' +
+				'or force the feature on.'
+		);
+	}
+	return new Error(`[puzzle] metadata tag "${tag}" reached the DOM (compiled out)`);
+}
+
 // A row whose key resolves to null/undefined drops the whole list to positional
 // diffing (silently, pre-v1.26). Warn at most once per session — a bounded
 // global, like viewManager's warnDuplicateKey and animate.js's malformed-spec

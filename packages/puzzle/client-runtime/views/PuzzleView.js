@@ -1078,10 +1078,17 @@ export class PuzzleView {
 		let result;
 		if (!store) {
 			result = run();
-		} else if (!this._settleData) {
-			// No adapter capability installed: no query can fault, so this is the
-			// single-evaluation path it has always been, and the settle loop is not
-			// even in the bundle (D157 boundary — the capability installs it).
+		} else if (!store._a || !this._settleData) {
+			// No adapter capability on THIS app's store: no query can fault, so this is
+			// the single-evaluation path it has always been, and without the capability
+			// anywhere in the realm the settle loop is not even in the bundle (D157
+			// boundary — the capability installs it).
+			//
+			// The seam is the STORE's capability, not `_settleData`'s presence.
+			// install() copies the methods onto the shared prototypes once per realm
+			// and never removes them (concurrent apps depend on that), so an app
+			// mounted after an adapter app would otherwise inherit the settle path and
+			// fault reads it deliberately opted out of.
 			result = store.withTracking(this, run, expectsAsync);
 		} else {
 			// The loop owns the settle window it opens under `token`, so this stays one
@@ -1224,10 +1231,11 @@ export class PuzzleView {
 		// discarded as they are anywhere else; the FINAL pass's reconcile is parked on
 		// `pending`, so commit()/discard() below are unchanged. Store notifications
 		// are NOT coalesced here — while the gate is open the ancestor still shows its
-		// committed route and must keep taking live updates (D146).
+		// committed route and must keep taking live updates (D146). Gated on the
+		// STORE's capability for the same realm-leak reason as #refreshInner above.
 		const result = !store
 			? run()
-			: this._settleData
+			: store._a && this._settleData
 				? this._settleData(
 						store,
 						run,
@@ -2352,8 +2360,8 @@ export class PuzzleView {
 				devperfRenderStart(this);
 			}
 			// A takeover-prepared tree was already slot-expanded while nested
-			// components were preloaded. Preserve that exact tree and its snippet-use
-			// accounting instead of expanding it a second time in ViewManager.
+			// components were preloaded. Hand that exact tree through instead of
+			// repeating the expansion in ViewManager.
 			this.#vm.render(tree, preparedTree !== undefined);
 		} else if (this.#vm.currentTree) {
 			// A HAND-WRITTEN render() that returned a tree before and returns null now

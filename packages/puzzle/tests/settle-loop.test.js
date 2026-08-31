@@ -59,7 +59,10 @@ function serveFrom({ posts = {}, users = {} } = {}) {
 	return { calls, fetchMock };
 }
 
-const makeStore = () => new Store({ post: Post, user: User }, { apiURL: API });
+// The capability is passed to the Store exactly as PuzzleApp.mount() passes it:
+// installing the prototypes is realm-wide, but the settle/fault seam is gated on
+// the store the app actually built with it (D157 boundary).
+const makeStore = () => new Store({ post: Post, user: User }, { apiURL: API, adapter });
 
 beforeEach(() => {
 	document.body.innerHTML = '';

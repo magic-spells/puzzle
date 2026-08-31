@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Store } from '../client-runtime/datastore/store.js';
-import { PuzzleAdapterError } from '../client-runtime/datastore/adapter.js';
+import { adapter, PuzzleAdapterError } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { installFixtures } from '../client-runtime/fixtures/index.js';
 
@@ -27,7 +27,9 @@ const modelWith = (mock, schema) => {
 };
 
 const storeWith = (mock, options, schema) =>
-	new Store({ todo: modelWith(mock, schema) }, { apiURL: API, ...options });
+	// `adapter` rides along the way PuzzleApp.mount() passes it: the settle/fault
+	// seam is gated on the store's own capability, not on the realm-wide install.
+	new Store({ todo: modelWith(mock, schema) }, { apiURL: API, adapter, ...options });
 
 let fetchSpy;
 let uninstall;

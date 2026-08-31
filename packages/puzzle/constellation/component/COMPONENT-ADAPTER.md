@@ -40,6 +40,20 @@ notes:
       Invariants + Gotchas re-truthed: removal-records-absence, fault-path-only identity guard, no
       build-time server — PRs #83/#84.
     sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+  - kind: state
+    text: >-
+      install() stays one-shot per realm; the GATE moved to the store (2026-08-30).
+      `installAdapter()` still copies AdapterStoreMethods/AdapterModelMethods/AdapterViewMethods
+      onto the shared prototypes behind the module-global `installed` flag, and prototypes are
+      deliberately never uninstalled on unmount (concurrent apps in one realm would lose their
+      surface). The consequence had to be closed elsewhere: a second app mounted later WITHOUT
+      `config.adapter` still saw `_settleData` on PuzzleView.prototype and took the D161 settle
+      path, so a model carrying adapter metadata could fault reads that app had opted out of. Both
+      seams now gate on the CURRENT store's capability (`store._a`, set from the value
+      PuzzleApp.mount() passed): PuzzleView picks the settle loop on `store._a && this._settleData`,
+      and Store.withTracking installs the request map only when `_a` is set, which makes
+      `_faultOne`/`_faultMany` unreachable for a capability-free store. Regression:
+      tests/adapter-realm-isolation.test.js.
 ---
 
 # Server adapter runtime
@@ -56,6 +70,7 @@ surprise.
 
 ## What installing grafts on
 
+
 Installing copies three method bags onto the core prototypes as ordinary
 property descriptors.
 
@@ -65,12 +80,20 @@ property descriptors.
 - [[COMPONENT-PUZZLE-MODEL]] gains `save()` and `delete()`.
 - [[COMPONENT-PUZZLE-VIEW]] gains `_settleData` — the
   [[DECISION-D161-AUTO-FETCHING-FINDS]] settle executor. Core PuzzleView holds
-  only the call seam (`!this._settleData` branches at its two entry points —
+  only the call seam (`!store._a || !this._settleData` at its two entry points —
   refresh and prepareRefresh; preload, mount, and prerender all reach the loop
   through refresh), so a no-adapter app ships none of the loop.
 
 Install is idempotent and realm-global: the first call wins, later ones are
-no-ops, and several apps on one page share one installed surface.
+no-ops, and several apps on one page share one installed surface. The
+prototypes are never un-installed — a concurrent app would lose its surface —
+so METHOD PRESENCE cannot answer "did this app opt in", and nothing may use it
+as the test. The store's retained capability answers it instead: PuzzleView
+picks the settle loop on `store._a && this._settleData`, and
+`Store.withTracking` installs the D161 request map only for a store that
+carries the capability, which is what keeps `_faultOne`/`_faultMany`
+unreachable for an app that shipped no adapter even though its prototypes carry
+them (tests/adapter-realm-isolation.test.js).
 [[COMPONENT-PUZZLE-APP]] rejects a truthy `adapter` that is not a capability at
 construction time, installs before constructing the Store, and warns in
 development when a model declares `static adapter` while no capability was
