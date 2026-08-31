@@ -488,6 +488,12 @@ one is *not* a compile error; it silently builds a different product.
   sweep still runs), while `puzzle build` and `puzzle check` refuse it with a
   diagnostic naming the path.
 
+- **Split-mode `puzzle dev` writes its chunks atomically (D160).** The rebuild
+  wrote each output straight into the live `dist/` with `os.WriteFile`, whose
+  truncate-then-write window a lazy `import()` landing mid-rebuild can observe —
+  and split mode is the one path that makes such fetches routine. Outputs now go
+  through the same write-and-rename every other live-`dist/` writer uses.
+
 ### Changed
 
 - **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing

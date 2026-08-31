@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -343,7 +344,9 @@ func (b *WatchBuilder) writeSplitOutputs(result api.BuildResult) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return fmt.Errorf("puzzle dev: creating %s: %w", filepath.Dir(rel), err)
 		}
-		if err := os.WriteFile(target, out.Contents, 0o644); err != nil {
+		// dist/ is being served: a lazy import() landing mid-rebuild must never
+		// see os.WriteFile's truncate-then-write window.
+		if err := fsutil.WriteFileAtomic(target, out.Contents, 0o644); err != nil {
 			return fmt.Errorf("puzzle dev: writing %s: %w", rel, err)
 		}
 		written[filepath.ToSlash(rel)] = true
