@@ -69,18 +69,25 @@
             class={ row.rowClass }
             @click={ choose(row, event) }>
             {#if row.kind === 'option'}
-              <span class="flex-1 truncate">{ row.label }</span>
-              {#if row.selected}
-                <svg
-                  class="size-4 shrink-0 text-brand"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  aria-hidden="true">
-                  <path d="M5 10l3 3 7-7" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              {/if}
+              <Slot
+                name="option"
+                item={ row.item }
+                active={ row.active }
+                selected={ row.selected }
+                disabled={ row.disabled }>
+                <span class="flex-1 truncate">{ row.label }</span>
+                {#if row.selected}
+                  <svg
+                    class="size-4 shrink-0 text-brand"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    aria-hidden="true">
+                    <path d="M5 10l3 3 7-7" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                {/if}
+              </Slot>
             {:else if row.kind === 'group'}
               { row.label }
             {/if}
@@ -117,6 +124,16 @@ import { MorphEngine } from '@magic-spells/morph-engine';
 //   { value, label, disabled? }   — a selectable option
 //   { group: 'Heading' }          — a non-interactive group heading (role=presentation)
 //   { divider: true }             — a visual separator (role=separator)
+//
+// OPTION SNIPPET. A direct-child <Snippet fits="option" item active selected
+// disabled> replaces only the visual content inside each option element. `item`
+// is the original authored option/item object; `active` is the current keyboard/
+// pointer highlight; `selected` is persistent controlled-value membership (false
+// in Command, which has no persistent selection, and in MultiSelect's dropdown,
+// where selected entries are hidden); `disabled` mirrors item.disabled. The
+// piece still owns the option element's id, role, aria state, and handlers. The
+// Snippet body cannot contain composition markers or ref=. With no snippet, the
+// marker fallback renders the stock row unchanged.
 //
 // POSITIONING. The `position` prop picks the panel mode:
 //   'down' / 'up'  — anchored below / above the trigger.
@@ -251,6 +268,7 @@ export default class Select extends PuzzleView {
         kind: 'option',
         id: `${base}-opt-${optIndex}`,
         optIndex,
+        item: entry,
         value: entry.value,
         label: entry.label != null ? String(entry.label) : String(entry.value ?? ''),
         disabled,

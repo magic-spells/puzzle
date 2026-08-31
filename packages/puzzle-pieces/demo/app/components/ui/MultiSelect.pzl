@@ -95,7 +95,14 @@
                 @click={ choose(row, event) }
                 @mouseenter={ hover(row) }>
                 {#if row.kind === 'option'}
-                  <span class="flex-1 truncate">{ row.label }</span>
+                  <Slot
+                    name="option"
+                    item={ row.item }
+                    active={ row.active }
+                    selected={ row.selected }
+                    disabled={ row.disabled }>
+                    <span class="flex-1 truncate">{ row.label }</span>
+                  </Slot>
                 {:else if row.kind === 'group'}
                   { row.label }
                 {/if}
@@ -145,6 +152,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   { value, label, disabled? }  — a selectable option
 //   { group: 'Heading' }         — a non-interactive section heading
 //   { divider: true }            — a visual separator
+//
+// OPTION SNIPPET. A direct-child <Snippet fits="option" item active selected
+// disabled> replaces only the visual content inside each option element. `item`
+// is the original authored option/item object; `active` is the current keyboard/
+// pointer highlight; `selected` is persistent controlled-value membership (false
+// in Command, which has no persistent selection, and in MultiSelect's dropdown,
+// where selected entries are hidden); `disabled` mirrors item.disabled. The
+// piece still owns the option element's id, role, aria state, and handlers. The
+// Snippet body cannot contain composition markers or ref=. With no snippet, the
+// marker fallback renders the stock row unchanged.
 //
 // SELECTED = HIDDEN. Already-picked options are removed from the listbox (the
 // simplest, least-ambiguous UX — the chips already show them). A heading whose
@@ -335,10 +352,12 @@ export default class MultiSelect extends PuzzleView {
       kind: 'option',
       id: `${base}-opt-${optIndex}`,
       optIndex,
+      item: entry,
       value: entry.value,
       label: entry.label != null ? String(entry.label) : String(entry.value ?? ''),
       disabled: !!entry.disabled,
       active: false,
+      selected: false,
     });
 
     // No active query — authored order, headings, and dividers, minus selected
@@ -399,6 +418,7 @@ export default class MultiSelect extends PuzzleView {
         else return;
       }
       matched.push({
+        item: entry,
         value: entry.value,
         label,
         disabled: !!entry.disabled,
@@ -433,10 +453,12 @@ export default class MultiSelect extends PuzzleView {
         kind: 'option',
         id: `${base}-opt-${optIndex}`,
         optIndex,
+        item: m.item,
         value: m.value,
         label: m.label,
         disabled: m.disabled,
         active: false,
+        selected: false,
       };
       rows.push(opt);
       options.push(opt);
