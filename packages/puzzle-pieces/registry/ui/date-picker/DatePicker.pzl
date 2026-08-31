@@ -57,7 +57,9 @@
             locale={ calLocale }
             firstDayOfWeek={ calFirstDay }
             autofocus={ calAutofocus }
-            @change={ onCalendarChange } />
+            @change={ onCalendarChange }>
+            <Children/>
+          </Calendar>
         </div>
       {/if}
     </div>
@@ -92,6 +94,19 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 //   <DatePicker value={ iso } open={ open } @change={ setDate }
 //               @show={ onShow } @hide={ onHide } />           // controlled open
 //   <DatePicker value={ iso } name="date" morph @change={ setDate } />
+//   const eventDates = new Set(['2026-08-12', '2026-08-19']);
+//   <DatePicker value={ iso } @change={ setDate }>
+//     <Snippet fits="day" date day selected today>
+//       <span class="flex size-full flex-col items-center justify-center leading-none">
+//         <span class={ today ? 'font-semibold' : '' }>{ day }</span>
+//         {#if eventDates.has(date)}
+//           <span
+//             class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
+//             aria-hidden="true"></span>
+//         {/if}
+//       </span>
+//     </Snippet>
+//   </DatePicker>
 //
 // PROPS
 //   value          string   controlled ISO 'YYYY-MM-DD' (or '' = no selection).
@@ -122,6 +137,17 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 //                           (Select's exact opt-in shape). Degrades to the plain
 //                           absolute-positioned panel when off or under reduced motion.
 //   class          string   appended to the root element.
+//
+// DAY SNIPPET (forwarded unchanged to the inner Calendar)
+//   <Snippet fits="day" date day selected today outside disabled inRange rangeStart rangeEnd>
+//     is stamped once inside every rendered Calendar day button. `date` is the ISO
+//     string; `day` is the numeric day-of-month; `selected`, `today`, `outside`,
+//     and `disabled` mirror the button state. DatePicker does not pass a range, so
+//     `inRange`, `rangeStart`, and `rangeEnd` are always false here. The snippet
+//     replaces only the button's INNER content — DatePicker retains the field/popover
+//     and Calendar retains its button, ARIA, grid roles, keyboard behavior, and classes.
+//     Normal markup, components, and control flow are allowed; nested
+//     <Children>/<Slot>/<Snippet> markers and `ref=` are compile errors.
 //
 // CALLBACKS
 //   @change(isoValue, date)  re-emitted from Calendar on day selection; DatePicker

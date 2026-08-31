@@ -65,7 +65,19 @@
                   tabindex={ d.tabindex }
                   aria-label={ d.ariaLabel }
                   aria-disabled={ d.ariaDisabled }
-                  @click={ onDay(d, event) }>{ d.dayNum }</button>
+                  @click={ onDay(d, event) }>
+                  <Slot
+                    name="day"
+                    date={ d.iso }
+                    day={ d.day }
+                    selected={ d.selected }
+                    today={ d.today }
+                    outside={ d.outside }
+                    disabled={ d.disabled }
+                    inRange={ d.inRange }
+                    rangeStart={ d.rangeStart }
+                    rangeEnd={ d.rangeEnd }>{ d.dayNum }</Slot>
+                </button>
               </div>
             {/for}
           </div>
@@ -158,6 +170,19 @@ import {
 //             @change={ setDate } @monthChange={ onMonth } />
 //   <Calendar range={ { start, end } } previewDate={ hoveredIso }
 //             @change={ onEndpoint } />        // range shading (display-only)
+//   const eventDates = new Set(['2026-08-12', '2026-08-19']);
+//   <Calendar value={ iso } @change={ setDate }>
+//     <Snippet fits="day" date day selected today>
+//       <span class="flex size-full flex-col items-center justify-center leading-none">
+//         <span class={ today ? 'font-semibold' : '' }>{ day }</span>
+//         {#if eventDates.has(date)}
+//           <span
+//             class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
+//             aria-hidden="true"></span>
+//         {/if}
+//       </span>
+//     </Snippet>
+//   </Calendar>
 //
 // PROPS
 //   value          string   controlled ISO 'YYYY-MM-DD' (or '' / null = no selection).
@@ -188,6 +213,18 @@ import {
 //                           endpoint to the hovered day (a live drag-to-preview band).
 //                           Ignored when both endpoints are set or no endpoint is set.
 //   class          string   appended to the root element.
+//
+// DAY SNIPPET (caller-owned; omission keeps the current day-number fallback)
+//   <Snippet fits="day" date day selected today outside disabled inRange rangeStart rangeEnd>
+//     is stamped once inside every rendered day button. `date` is its ISO string;
+//     `day` is the numeric day-of-month. The remaining parameters are booleans:
+//     `selected`, `today`, `outside`, and `disabled` mirror the button state;
+//     `inRange` is the painted range/preview interior (committed endpoints excluded),
+//     while `rangeStart` / `rangeEnd` identify the committed endpoints. Range flags
+//     are false when `range` is absent. The snippet replaces only the button's INNER
+//     content — Calendar retains the button, ARIA, grid roles, keyboard behavior, and
+//     range classes. Normal markup, components, and control flow are allowed; nested
+//     <Children>/<Slot>/<Snippet> markers and `ref=` are compile errors.
 //
 // CALLBACKS
 //   @change(isoValue, date)      fires on day selection (single date). `date` is a
@@ -500,8 +537,11 @@ export default class Calendar extends PuzzleView {
       days: row.map((cell, col) => {
         const iso = formatISODate(cell);
         const disabled = this._isDayDisabled(cell, props);
+        const outside = !cell.isCurrentMonth;
+        const rangeStartDay = !!rangeStart && isSameDay(cell, rangeStart);
+        const rangeEndDay = !!rangeEnd && isSameDay(cell, rangeEnd);
         // Endpoints reuse the selected disc; with no range this collapses to the old `selected`.
-        const selected = isSameDay(cell, committed) || isRangeEndpoint(cell);
+        const selected = isSameDay(cell, committed) || rangeStartDay || rangeEndDay;
         const isToday = isSameDay(cell, today);
         const interior = isBandInterior(cell);
         const roundL = interior && (col === 0 || !isBandInterior(addDays(cell, -1)));
@@ -509,14 +549,22 @@ export default class Calendar extends PuzzleView {
         return {
           key: iso,
           iso,
+          day: cell.day,
           dayNum: String(cell.day),
+          selected,
+          today: isToday,
+          outside,
+          disabled,
+          inRange: interior,
+          rangeStart: rangeStartDay,
+          rangeEnd: rangeEndDay,
           ariaLabel: fmt.dayLabel.format(toDate(cell)),
           ariaDisabled: disabled ? 'true' : false,
           ariaSelected: selected ? 'true' : false,
           ariaCurrent: isToday ? 'date' : false,
           tabindex: isSameDay(cell, focused) ? 0 : -1,
           cellClass: dayCellClass({ interior, roundL, roundR }),
-          buttonClass: dayButtonClass({ disabled, outside: !cell.isCurrentMonth, selected, today: isToday }),
+          buttonClass: dayButtonClass({ disabled, outside, selected, today: isToday }),
         };
       }),
     }));
