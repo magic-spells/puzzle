@@ -6,22 +6,37 @@
       {#for column in viewColumns}
         <section class={ columnClass } data-kb-col={ column.id } aria-label={ column.title } key={ column.id }>
           <header class="flex items-center justify-between gap-2 px-3 py-2.5">
-            <h3 class="text-sm font-semibold text-ink">{ column.title }</h3>
-            <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-surface px-1.5 text-xs font-medium text-muted">{ column.count }</span>
+            <Slot name="column-header" column={ column.raw } count={ column.count }>
+              <h3 class="text-sm font-semibold text-ink">{ column.title }</h3>
+              <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-surface px-1.5 text-xs font-medium text-muted">{ column.count }</span>
+            </Slot>
           </header>
 
           <ul class={ column.listClass } role="list" data-kb-list>
             {#for item in column.items}
-              <li class="list-none" key={ item.key } flip={ flipOpts }>
+              <li
+                class={ item.rowClass }
+                key={ item.key }
+                flip={ item.floating ? false : flipOpts }
+                style={ item.floating ? ghostStyle : false }
+                data-kb-ghost={ item.floating ? 'true' : false }
+                aria-hidden={ item.floating ? 'true' : false }>
                 {#if item.placeholder}
                   <div class="rounded-lg border-2 border-dashed border-brand bg-brand-tint/50" style={ item.placeholderStyle } aria-hidden="true"></div>
                 {:else}
-                  <KanbanCard
-                    card={ item.card }
-                    grabbed={ item.grabbed }
-                    disabled={ disabled }
+                  <div
+                    class={ item.rootClass }
+                    data-kb-card={ item.floating ? false : item.id }
+                    role={ item.floating ? false : 'button' }
+                    aria-roledescription={ item.floating ? false : 'Draggable card' }
+                    aria-grabbed={ item.grabbed }
+                    tabindex={ item.floating ? false : '0' }
                     @pointerdown={ onCardPointerDown(column.id, item.id, event) }
-                    @keydown={ onCardKey(column.id, item.id, event) }/>
+                    @keydown={ onCardKey(column.id, item.id, event) }>
+                    <Slot name="card" card={ item.card } column={ column.raw }>
+                      <KanbanCard card={ item.card } variant="content"/>
+                    </Slot>
+                  </div>
                 {/if}
               </li>
             {/for}
@@ -29,12 +44,6 @@
         </section>
       {/for}
     </div>
-
-    {#if dragging}
-      <div class="pointer-events-none fixed left-0 top-0 z-50 will-change-transform" data-kb-ghost style={ ghostStyle } aria-hidden="true">
-        <KanbanCard card={ ghost } variant="ghost"/>
-      </div>
-    {/if}
   </div>
 </puzzle-view>
 
@@ -50,6 +59,26 @@ import KanbanCard from './KanbanCard.pzl';
 // waits for the parent to pass new `columns` back down.
 //
 //   <Kanban columns={ columns } @move={ onMove } />
+//
+// Customize each card's INNER content and, optionally, each column header with
+// caller-owned snippets. The declared params must match each handed-over shape:
+//
+//   <Kanban columns={ columns } @move={ onMove }>
+//     <Snippet fits="card" card column>
+//       <div class="space-y-1">
+//         <p class="text-sm font-semibold text-ink">{ card.title }</p>
+//         <p class="text-xs text-muted">In { column.title }</p>
+//       </div>
+//     </Snippet>
+//     <Snippet fits="column-header" column count>
+//       <h3 class="text-sm font-semibold text-ink">{ column.title }</h3>
+//       <span class="text-xs text-muted">{ count } cards</span>
+//     </Snippet>
+//   </Kanban>
+//
+// Without either snippet, the existing KanbanCard body and title/count header
+// are the FALLBACKS. Kanban always owns the draggable card surface, handlers,
+// columns, and drop placeholder; snippets cannot replace those mechanics.
 //
 //   events = {
 //     // Remove the card from wherever it is, then insert it into toColumnId's
@@ -85,11 +114,10 @@ import KanbanCard from './KanbanCard.pzl';
 //         },
 //       ],
 //
-// CARD RENDERING lives in the sibling KanbanCard.pzl, not here. The board hands
-// it the raw card object and keeps only the drag state; edit that file to change
-// what a card looks like or to read extra fields off your own card objects. The
-// board renders it in both places a card appears — the column row and the
-// floating drag ghost — so the two can't drift.
+// STOCK CARD CONTENT lives in the sibling KanbanCard.pzl and is mounted through
+// the `card` marker's fallback. Custom content comes from the caller's matching
+// Snippet. During a pointer drag the SAME keyed card row becomes the fixed ghost,
+// so either rendering follows the pointer without a duplicate snippet stamp.
 //     },
 //   ]
 //
@@ -114,20 +142,23 @@ import KanbanCard from './KanbanCard.pzl';
 // POINTER MODEL (mirrors Slider/Sheet/ScrollArea):
 //   - pointerdown on a card ARMS a gesture; it only promotes to a drag once the
 //     pointer moves past DRAG_THRESHOLD, so plain clicks/focus taps are untouched.
-//   - Once dragging, the source card is REMOVED from the rendered lists and a
-//     floating ghost (position:fixed) follows the pointer — its translate is
-//     written imperatively via `element.style.transform` (the real transform
-//     property, unlike Tailwind's `translate-*` which sets the `translate`
-//     property and would not compose). The rotate-2 tilt on the ghost sets the
-//     independent `rotate` property, so it composes with the imperative translate.
+//   - Once dragging, the source card's keyed <li> becomes a fixed, aria-hidden
+//     ghost and follows the pointer. Its translate is written imperatively via
+//     `element.style.transform` (the real transform property, unlike Tailwind's
+//     `translate-*` which sets the `translate` property and would not compose).
+//     The rotate-2 tilt on the inner surface sets the independent `rotate`
+//     property, so it composes with the imperative translate. Reusing the row is
+//     what keeps a caller snippet identical in-column and in-flight.
 //   - The hovered column + insertion index are computed from the pointer against
 //     the LIVE card rects (rAF-throttled) and drawn as a dashed placeholder in the
-//     hovered column. Because the source card is not rendered while dragging, the
-//     rects never include it, so the index math stays clean.
-//   - setPointerCapture is taken on the ROOT (never the card — the card is removed
-//     mid-drag, which would fire a spurious pointercancel), mouse/pen only; touch
-//     rides implicit capture. window pointermove/up/cancel/keydown listeners carry
-//     the gesture; a window touchmove preventDefaults once a drag is live.
+//     hovered column. The fixed source row carries no data-kb-card identity and
+//     is explicitly skipped, so the rects never include it and index math stays
+//     clean.
+//   - setPointerCapture is taken on the ROOT, so capture survives the card row's
+//     switch into fixed-preview mode and every drag-state re-render. Mouse/pen use
+//     explicit capture; touch rides implicit capture. Window pointermove/up/
+//     cancel/keydown listeners carry the gesture; a window touchmove
+//     preventDefaults once a drag is live.
 //   - Escape or pointercancel aborts with no @move; a real drop emits @move unless
 //     it resolves to the card's original slot (a no-op).
 
@@ -138,6 +169,17 @@ const DRAG_THRESHOLD = 5;
 // animation the user waits on. Template expressions do not admit inline object
 // literals, so this rides through data() as `flipOpts`.
 const FLIP = { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' };
+
+// Kanban owns this surface because it owns its focus, pointer, and keyboard
+// behavior. KanbanCard renders only the stock inner fallback. Keeping the ghost
+// tilt on the surface and the imperative translate on its <li> wrapper lets the
+// independent CSS properties compose.
+const CARD_SURFACE = 'rounded-lg border border-border bg-surface p-3 text-left';
+const CARD_BASE =
+  CARD_SURFACE +
+  ' block w-full shadow-sm select-none touch-pinch-zoom transition-shadow hover:shadow-md ' +
+  'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
+const GHOST_BASE = CARD_SURFACE + ' rotate-2 shadow-xl ring-1 ring-brand';
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
@@ -190,27 +232,46 @@ export default class Kanban extends PuzzleView {
     const disabled = !!props.disabled;
     const dragging = !!d.dragging;
     const dragCardId = dragging ? d.dragCardId : null;
+    const dragFromCol = dragging ? d.dragFromCol : null;
     const hoveredColId = dragging ? d.hoveredColId : null;
     const targetIndex = dragging ? d.targetIndex : -1;
     const grabbedId = d.grabbedId || null;
 
-    // Drag bookkeeping only — everything visual about a card lives in
-    // KanbanCard, which receives the raw card object untouched. `grabbed` is the
-    // exception that has to be decided here: whether ANY card is grabbed is
-    // board-wide knowledge, and it selects between omitting aria-grabbed
-    // entirely and stating true/false on every card.
-    const cardView = (card) => ({
-      id: card.id,
-      key: card.id,
-      placeholder: false,
-      card,
-      grabbed: grabbedId ? (grabbedId === card.id ? 'true' : 'false') : false,
-    });
+    // The board owns the draggable surface; KanbanCard owns only its stock inner
+    // fallback. Whether ANY card is grabbed is board-wide knowledge, and it
+    // selects between omitting aria-grabbed entirely and stating true/false on
+    // every live card. A pointer-dragged card is the same keyed view with fixed
+    // ghost chrome, never a second rendering.
+    const cardView = (card, floating = false) => {
+      const grabbed = floating
+        ? false
+        : grabbedId
+          ? grabbedId === card.id ? 'true' : 'false'
+          : false;
+      return {
+        id: card.id,
+        key: card.id,
+        placeholder: false,
+        floating,
+        card,
+        grabbed,
+        rowClass: floating
+          ? 'list-none pointer-events-none fixed left-0 top-0 z-50 will-change-transform'
+          : 'list-none',
+        rootClass: [
+          floating ? GHOST_BASE : CARD_BASE,
+          floating ? '' : disabled ? 'cursor-default' : 'cursor-grab',
+          grabbed === 'true' ? 'ring-2 ring-brand shadow-md' : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      };
+    };
 
     const viewColumns = cols.map((col) => {
       const rawCards = Array.isArray(col.cards) ? col.cards : [];
       const kept = rawCards.filter((c) => !(dragging && c.id === dragCardId));
-      const items = kept.map(cardView);
+      const items = kept.map((card) => cardView(card));
       if (dragging && col.id === hoveredColId) {
         const idx = clamp(targetIndex, 0, items.length);
         // The gap has to be exactly as tall as the card that left it. A fixed
@@ -219,19 +280,28 @@ export default class Kanban extends PuzzleView {
         items.splice(idx, 0, {
           placeholder: true,
           key: '__kb_placeholder__',
+          floating: false,
+          rowClass: 'list-none',
           placeholderStyle: `height:${d.ghostH || 64}px`,
         });
       }
+      if (dragging && col.id === dragFromCol && d.dragCard) {
+        const originalIndex = rawCards.findIndex((c) => c.id === dragCardId);
+        items.splice(
+          clamp(originalIndex < 0 ? items.length : originalIndex, 0, items.length),
+          0,
+          cardView(d.dragCard, true)
+        );
+      }
       return {
         id: col.id,
+        raw: col,
         title: col.title || '',
         count: kept.length,
         items,
         listClass: 'flex min-h-12 flex-1 flex-col gap-2 px-2 pb-3',
       };
     });
-
-    const ghostCard = dragging && d.dragCard ? d.dragCard : null;
 
     return {
       rootClass: [
@@ -248,8 +318,6 @@ export default class Kanban extends PuzzleView {
       flipOpts: FLIP,
       disabled,
       dragging,
-      // The raw card, straight through — KanbanCard's ghost variant styles it.
-      ghost: ghostCard || {},
       ghostStyle: dragging ? `width:${d.ghostW || 288}px` : false,
       announce: d.announce || '',
     };
@@ -291,7 +359,8 @@ export default class Kanban extends PuzzleView {
 
   // Column chosen by X (clamped to the nearest by center X when between/outside);
   // insertion index = the first live card whose vertical midpoint is below the
-  // pointer, else the end. The dragged card is not rendered, so its rect is absent.
+  // pointer, else the end. The fixed dragged row is explicitly skipped, so its
+  // rect is absent from the calculation even though its custom content stays live.
   _computeTarget(clientX, clientY) {
     if (!this.element) return null;
     const colEls = Array.from(this.element.querySelectorAll('[data-kb-col]'));
@@ -333,6 +402,7 @@ export default class Kanban extends PuzzleView {
     const listTop = list.getBoundingClientRect().top - list.offsetTop;
     let index = 0;
     for (const row of list.children) {
+      if (row.hasAttribute('data-kb-ghost')) continue;
       if (!row.querySelector('[data-kb-card]')) continue; // skip the placeholder
       if (clientY > listTop + row.offsetTop + row.offsetHeight / 2) index += 1;
     }

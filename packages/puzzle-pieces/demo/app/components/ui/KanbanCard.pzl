@@ -29,12 +29,12 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// KanbanCard — the visual body of a single Kanban card. Presentational only: it
-// owns every pixel of a card and none of the drag logic. Kanban renders it twice
-// per dragged card — once as the row in a column, once as the floating ghost that
-// follows the pointer — so the two can never drift apart. THIS is the file to edit
-// when you want different card content (a due date, a cover image, a label row);
-// both renderings pick the change up for free.
+// KanbanCard — the stock visual body of a single Kanban card. Presentational
+// only: the parent owns every drag interaction. Kanban uses `variant="content"`
+// inside its card marker FALLBACK, so existing callers keep this title/badge/meta/
+// assignee rendering while a caller-provided <Snippet fits="card" ...> replaces
+// only the inner content. The board's same keyed surface becomes the drag preview,
+// so either fallback or custom content follows the pointer without a second stamp.
 //
 //   <KanbanCard card={ card } grabbed={ grabbed } disabled={ disabled }
 //               @pointerdown={ onDown(card.id, event) }
@@ -42,9 +42,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // Props
 //   card      the raw card object: { id, title, badge, badgeVariant, meta, assignee }.
-//   variant   'card' (default) — an interactive row — or 'ghost', the tilted
-//             copy that rides the pointer mid-drag (no role, no tabindex, no
-//             data-kb-card, so the board's geometry queries never see it).
+//   variant   'card' (default) — an interactive standalone row; 'ghost' — a
+//             tilted presentational copy; or 'content' — a display-contents
+//             wrapper used by Kanban's stock card fallback. The latter two carry
+//             no role, tabindex, or data-kb-card identity.
 //   grabbed   the aria-grabbed VALUE, decided by the board, not derived here:
 //             'true' | 'false' while some card is keyboard-grabbed, or false to
 //             omit the attribute entirely when none is. Whether a board has a
@@ -107,28 +108,32 @@ function avatarStyle(name) {
 export default class KanbanCard extends PuzzleView {
   data(params, props) {
     const card = props.card || {};
+    const content = props.variant === 'content';
     const ghost = props.variant === 'ghost';
-    const grabbed = ghost ? false : props.grabbed || false;
+    const interactive = !ghost && !content;
+    const grabbed = interactive ? props.grabbed || false : false;
     const assignee = card.assignee || '';
 
-    const rootClass = [
-      ghost ? GHOST_BASE : CARD_BASE,
-      ghost ? '' : props.disabled ? 'cursor-default' : 'cursor-grab',
-      grabbed === 'true' ? 'ring-2 ring-brand shadow-md' : '',
-      props.class || '',
-    ]
-      .filter(Boolean)
-      .join(' ');
+    const rootClass = content
+      ? 'contents'
+      : [
+          ghost ? GHOST_BASE : CARD_BASE,
+          ghost ? '' : props.disabled ? 'cursor-default' : 'cursor-grab',
+          grabbed === 'true' ? 'ring-2 ring-brand shadow-md' : '',
+          props.class || '',
+        ]
+          .filter(Boolean)
+          .join(' ');
 
     return {
       rootClass,
-      // The ghost carries no identity: it sits outside the columns and the
-      // board hit-tests on [data-kb-card], so leaving it unmarked keeps it out
-      // of every query by construction rather than by luck of placement.
-      cardId: ghost ? false : card.id,
-      role: ghost ? false : 'button',
-      roleDescription: ghost ? false : 'Draggable card',
-      tabindex: ghost ? false : '0',
+      // Presentational variants carry no identity. The board hit-tests on
+      // [data-kb-card], so leaving them unmarked keeps them out of every query
+      // by construction rather than by luck of placement.
+      cardId: interactive ? card.id : false,
+      role: interactive ? 'button' : false,
+      roleDescription: interactive ? 'Draggable card' : false,
+      tabindex: interactive ? '0' : false,
       grabbed,
       title: card.title || '',
       badge: card.badge || '',
