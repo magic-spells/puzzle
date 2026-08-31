@@ -1307,10 +1307,6 @@ export class Router {
 		}
 
 		const reusedViews = cur ? cur.views.slice(0, keep) : [];
-		const freshViews = [];
-		for (let i = keep; i < entry.chain.length; i++) {
-			freshViews.push(new viewClasses[i](this.#ctx));
-		}
 
 		// Layout is ROOT-only: reuse the instance iff its class matches (a shared
 		// root ⇒ same layout class ⇒ always reused) — unless the old layout is the
@@ -1322,11 +1318,36 @@ export class Router {
 			!cur.layoutInvalid &&
 			cur.layoutClass === LayoutClass
 		);
-		const layout = reuseLayout
-			? cur.layout
-			: LayoutClass
-				? new LayoutClass(this.#ctx)
-				: null;
+
+		// Construction is guarded on its own: a class field initializer or
+		// constructor body can throw, and that is a PRE-COMMIT failure exactly like
+		// the lazy-loader rejection above — without #recoverFailedNavigation the
+		// rejected promise stays latched to #pendingNavPath and every later push()
+		// to the same path replays it.
+		const freshViews = [];
+		let layout = null;
+		try {
+			for (let i = keep; i < entry.chain.length; i++) {
+				freshViews.push(new viewClasses[i](this.#ctx));
+			}
+			layout = reuseLayout ? cur.layout : LayoutClass ? new LayoutClass(this.#ctx) : null;
+		} catch (err) {
+			const info = reportError(
+				this.#ctx,
+				err,
+				{ phase: 'navigation', route: to },
+				'[puzzle] route view construction failed:',
+				err
+			);
+			// Constructed-only instances own nothing yet — created() runs in preload()
+			// and registerView in mount() — so they are dropped, not destroy()ed:
+			// destroy() would fire destroyed() for a view that never ran created().
+			this.#recoverFailedNavigation(token);
+			if (retryView && token === this.#token) {
+				await retryView.__retryErrorView?.(err, info);
+			}
+			return;
+		}
 
 		// LOAD (pre-commit, parallel, D19 gate). Fresh views preload (created +
 		// data off-DOM); reused ancestors refresh with the new params and are

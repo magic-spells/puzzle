@@ -201,6 +201,16 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **A throwing view or layout constructor no longer poisons the route it was
+  on.** The routed instances are built ~60 lines above the guarded load region,
+  so a throw from a class field initializer or a constructor body escaped the
+  navigation without running the failure recovery — the pending-navigation latch
+  stayed paired with the rejected promise, and every later `push()` to that same
+  path handed back that same rejection instead of retrying. Construction is now
+  guarded on its own and treated as the pre-commit failure it is (D61): reported
+  through `onError` with `phase: 'navigation'`, URL, history and the mounted tree
+  untouched, and the path retryable.
+
 - **A read made while another view is waiting on data can no longer fetch, or
   fail that view.** Auto-fetching finds (D161, new in this release) decided
   whether a query was allowed to fault from a slot on the Store itself, which
