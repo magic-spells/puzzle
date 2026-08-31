@@ -78,6 +78,7 @@ persistence is in-memory with optional localStorage.
 
 ## 8. Store (v1 surface)
 
+
 ```js
 const store = this.ctx.store;
 
@@ -98,7 +99,7 @@ The server methods in this example exist only when the app passed the `adapter`
 capability from `@magic-spells/puzzle/adapter`; `store.loadAll` — the pre-0.7.0
 spelling — throws naming `loadMany`. Local Store methods are always present.
 
-Any query made inside `data()` auto-subscribes the component; changes to matching records re-run `data()`. With the adapter capability, a tracked `findOne`/`findMany` miss also faults the missing data in and the view commits once the pass settles — see §61 (D161). Reads outside `data()` are pure local snapshots and never fetch. Calling `loadOne`/`loadMany` inside a tracked run warns in development — the finds already fetch.
+Any query made inside `data()` auto-subscribes the component; changes to matching records re-run `data()`. With the adapter capability, a tracked `findOne`/`findMany` miss also faults the missing data in and the view commits once the pass settles — see §61 (D161). **Every other read is a pure local snapshot and never fetches** — that is literally true of the raw `app.store`, whose `findOne`/`findMany` never issue a request at all. Fetching belongs to the per-view handle `this.ctx.store`, and only during that view's own `data()` run, so read the store that way rather than through a captured `app.store` (§61). Calling `loadOne`/`loadMany` inside a tracked run warns in development — the finds already fetch.
 
 **Record identity is number/string-insensitive (D112).** The store indexes number primary keys by their string form, so `findOne('todo', id)` returns the same record whether `id` is `7` or `'7'` — route params are always strings while JSON payloads usually carry numbers. Only numbers normalize: `null`/objects keep strict identity, and there is no numeric parsing (`'01'` ≠ `1`). The record's own pk field keeps its original type; a type-variant duplicate pk is a duplicate (`createRecord` throws, `upsert` updates in place).
 
@@ -307,6 +308,7 @@ install the same received/imported capability before constructing stores.
 
 ## 61. Auto-fetching finds: tracked fault-in and the settle loop (v1.76)
 
+
 Tracked `findOne`/`findMany` fetch what the store is missing; views need zero
 loading code (D161). The one rule: **server data comes from `data()` — a
 committed `null` means the record does not exist, never "still loading".**
@@ -328,6 +330,23 @@ data(params) {
   model and subscriptions. Dependent reads settle across rounds with no
   declared dependency graph. Ten rounds throw through the normal data-failure
   path, naming the view and the round's request keys — never warn-and-commit.
+- **Attribution is by identity — `this.ctx.store` is the fetching channel.**
+  On an adapter app every view reads the store through its own per-view
+  HANDLE, minted in the PuzzleView constructor and exposed as `this.ctx.store`
+  (`ctx` is prototype-chained off the app's, so `router`/`formatters` stay
+  live; an adapter-free app keeps the raw store, identity and all). A read may
+  fault only when it is made through that handle, by that view, during that
+  view's own evaluation — before or after an `await`. The evaluation's request
+  map rides the subscriber's handle context; the Store carries no ambient
+  request slot, so a read by anyone else — the app's raw `store`, another
+  view's handle, a module capture, a record's `_store` inside a relationship
+  getter — is a pure local snapshot that can neither issue a request nor land a
+  failure in a batch it does not own. Two documented residues: the view's OWN
+  deferred code holding its OWN handle during its own suspension (a `setTimeout`
+  inside `data()`) is attributed to that evaluation and does fault — same view,
+  same data; and SUBSCRIPTION attribution stays ambient, so a foreign read
+  during a suspension can add one subscription key to the suspended view, which
+  that view's next evaluation reconciles away (benign and self-healing).
 - **Fetch eligibility:** a tracked miss faults only when §22's dispatch
   resolves the read verb (`findOne` → `loadOne`, `findMany` → `loadMany`).
   No capability, no resolvable verb, nullish/unkeyable id, negative-cached id,
@@ -350,7 +369,8 @@ data(params) {
   D52 anti-flash rule; without one, the previous route holds until settlement.
 - **Store notifications mid-settle** coalesce into one more pass instead of a
   competing refresh; `setData()` is unchanged. A destroyed/leaving/superseded
-  view stops its loop without aborting shared requests.
+  view stops its loop without aborting shared requests, and a destroyed view's
+  still-suspended evaluation can no longer fault at all.
 - **Output modes:** a prerender read must be answerable from the build
   machine. An absolute `apiURL` drives the same loop for real; a model with no
   `endpoint` and no read verb never faults, so its data comes from seeding the

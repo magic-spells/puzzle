@@ -201,6 +201,32 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **A read made while another view is waiting on data can no longer fetch, or
+  fail that view.** Auto-fetching finds (D161, new in this release) decided
+  whether a query was allowed to fault from a slot on the Store itself, which
+  stayed installed for the whole lifetime of an `async data()` — across every
+  `await`. Any other read in the meantime — an event handler, a timer, a model
+  method, another component — therefore issued a request the contract says it
+  never should, and dropped that promise into the waiting view's settle batch,
+  where an unrelated 500 could reject a view that never queried that type.
+
+  Faulting is now attributed by identity: every view on an adapter app reads
+  through its own store handle, which is exactly what `this.ctx.store` has
+  always been, and only reads made through that handle, by that view, during
+  that view's own `data()` run may fetch. Everything else — the app's raw
+  `store`, another view's handle, a record's relationship getters — is the pure
+  local snapshot the SPEC always described. Two consequences worth knowing:
+
+  - **Read the store as `this.ctx.store`.** A view that captured the app store
+    in a module variable and called `findOne` on it inside `data()` gets a local
+    read that never fetches. Every example, the scaffold and the docs already
+    use `this.ctx.store`; this is now the difference between fetching and not.
+  - **A destroyed view's suspended `data()` can no longer fetch**, in the nested
+    cases where it previously could.
+
+  Subscription tracking is unchanged — `belongsTo`/`hasMany` traversal inside
+  `data()` still auto-subscribes and still never fetches.
+
 - **The CLI installs and runs on Windows ARM64.** The bin shim resolved an
   exact `<platform>-<arch>` key and declared no `win32-arm64` row, and the
   Windows package restricted itself to `cpu: ["x64"]` — so on a native ARM64

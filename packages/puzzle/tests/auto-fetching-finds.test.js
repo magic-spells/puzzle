@@ -14,9 +14,15 @@ const API = 'https://x.test';
 
 // A tracked evaluation, spelled the way PuzzleView's settle loop spells it: one
 // request map per pass, handed to withTracking. Returns { value, requests }.
+//
+// D161 attributes faulting by identity, so `fn` is called with the SUBSCRIBER'S
+// store handle — the same channel a view reads through as `this.ctx.store`.
+// Every closure below takes it as a parameter named `store`, shadowing the raw
+// store the test built: a read on the raw one is always a local snapshot.
 function trackedPass(store, fn, subscriber = {}) {
 	const requests = new Map();
-	const value = store.withTracking(subscriber, fn, false, {}, requests);
+	const handle = store._handleFor(subscriber) ?? store;
+	const value = store.withTracking(subscriber, () => fn(handle), false, {}, requests);
 	return { value, requests };
 }
 
@@ -93,7 +99,7 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 		store.createRecord('post', { id: 'p1', title: 'local' });
 		// The collection is not complete, so findMany still owes a load; findOne of a
 		// present record owes nothing.
-		const { value, requests } = trackedPass(store, () => store.findOne('post', 'p1'));
+		const { value, requests } = trackedPass(store, (store) => store.findOne('post', 'p1'));
 		expect(value.title).toBe('local');
 		expect(requests.size).toBe(0);
 		expect(fetchMock).not.toHaveBeenCalled();
@@ -103,12 +109,12 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 		fetchMock.mockImplementation(async () => json({ id: 'p1', title: 'from server' }));
 		const store = makeStore();
 
-		const first = trackedPass(store, () => store.findOne('post', 'p1'));
+		const first = trackedPass(store, (store) => store.findOne('post', 'p1'));
 		expect(first.value).toBeNull();
 		expect([...first.requests.keys()]).toEqual(['post p1']);
 		await Promise.all(first.requests.values());
 
-		const second = trackedPass(store, () => store.findOne('post', 'p1'));
+		const second = trackedPass(store, (store) => store.findOne('post', 'p1'));
 		expect(second.requests.size).toBe(0);
 		expect(second.value.title).toBe('from server');
 		expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -117,7 +123,7 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 
 	it('a nullish id returns null without building a request', async () => {
 		const store = makeStore();
-		const { value, requests } = trackedPass(store, () => [
+		const { value, requests } = trackedPass(store, (store) => [
 			store.findOne('post', null),
 			store.findOne('post', undefined),
 		]);
@@ -132,7 +138,7 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 			static adapter = { create: async () => ({ id: 'x' }) };
 		}
 		const store = makeStore({ note: Note, writeOnly: WriteOnly });
-		const { requests } = trackedPass(store, () => [
+		const { requests } = trackedPass(store, (store) => [
 			store.findOne('note', 'n1'),
 			store.findMany('note'),
 			store.findOne('writeOnly', 'w1'),
@@ -154,7 +160,7 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 			{ apiURL: API, adapter: { d: { loadMany: defaultLoad } } }
 		);
 
-		await settle(store, () => [store.findMany('article'), store.findMany('bare')]);
+		await settle(store, (store) => [store.findMany('article'), store.findMany('bare')]);
 
 		expect(modelLoad).toHaveBeenCalledTimes(1);
 		// `bare` declares no adapter of its own. An app-wide dialect says HOW this
@@ -174,7 +180,7 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 		}
 		const store = makeStore({ post: NumPost });
 
-		const { requests } = trackedPass(store, () => [
+		const { requests } = trackedPass(store, (store) => [
 			store.findOne('post', 7),
 			store.findOne('post', '7'),
 			store.findOne('post', 7),
@@ -191,8 +197,8 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 		);
 		const store = makeStore();
 
-		const a = trackedPass(store, () => store.findOne('post', 'p1'), { id: 'a' });
-		const b = trackedPass(store, () => store.findOne('post', 'p1'), { id: 'b' });
+		const a = trackedPass(store, (store) => store.findOne('post', 'p1'), { id: 'a' });
+		const b = trackedPass(store, (store) => store.findOne('post', 'p1'), { id: 'b' });
 
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(a.requests).not.toBe(b.requests);
@@ -201,11 +207,15 @@ describe('D161 — tracked queries fault, untracked ones never do', () => {
 		await Promise.all([...a.requests.values(), ...b.requests.values()]);
 	});
 
-	it('a request map never leaks past its evaluation', () => {
+	it('a request map never leaks past its evaluation, and never onto the Store', () => {
 		const store = makeStore();
-		trackedPass(store, () => store.findOne('post', 'p1'));
-		expect(store._requests).toBeNull();
-		store.findOne('post', 'p2'); // untracked, after a tracked run
+		const subscriber = {};
+		trackedPass(store, (store) => store.findOne('post', 'p1'), subscriber);
+		// The Store has no ambient request slot at all (D161) — the map rode the
+		// subscriber's handle, and its evaluation put it back.
+		expect(store._requests).toBeUndefined();
+		expect(store._handleFor(subscriber).findOne('post', 'p2')).toBeNull();
+		store.findOne('post', 'p3'); // raw, always local
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 });
@@ -215,12 +225,12 @@ describe('D161 — negative cache', () => {
 		fetchMock.mockImplementation(async () => json({ error: 'gone' }, 404));
 		const store = makeStore();
 
-		const { value, rounds } = await settle(store, () => store.findOne('post', 'ghost'));
+		const { value, rounds } = await settle(store, (store) => store.findOne('post', 'ghost'));
 		expect(value).toBeNull();
 		expect(rounds).toBe(1);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 
-		const again = trackedPass(store, () => store.findOne('post', 'ghost'));
+		const again = trackedPass(store, (store) => store.findOne('post', 'ghost'));
 		expect(again.requests.size).toBe(0);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -229,13 +239,13 @@ describe('D161 — negative cache', () => {
 		fetchMock.mockImplementation(async () => json({ error: 'boom' }, 500));
 		const store = makeStore();
 
-		const first = trackedPass(store, () => store.findOne('post', 'p1'));
+		const first = trackedPass(store, (store) => store.findOne('post', 'p1'));
 		const error = await Promise.all(first.requests.values()).catch((err) => err);
 		expect(error).toBeInstanceOf(PuzzleAdapterError);
 		expect(error.status).toBe(500);
 
 		fetchMock.mockImplementation(async () => json({ id: 'p1', title: 'ok now' }));
-		const { value } = await settle(store, () => store.findOne('post', 'p1'));
+		const { value } = await settle(store, (store) => store.findOne('post', 'p1'));
 		expect(value.title).toBe('ok now');
 	});
 
@@ -249,11 +259,11 @@ describe('D161 — negative cache', () => {
 			};
 		}
 		const store = makeStore({ odd: Odd });
-		const { requests } = trackedPass(store, () => store.findOne('odd', 'o1'));
+		const { requests } = trackedPass(store, (store) => store.findOne('odd', 'o1'));
 		await expect(Promise.all(requests.values())).rejects.toThrow('nope');
 
 		// Not recorded as absent: the next tracked pass tries again.
-		const again = trackedPass(store, () => store.findOne('odd', 'o1'));
+		const again = trackedPass(store, (store) => store.findOne('odd', 'o1'));
 		expect(again.requests.size).toBe(1);
 		await Promise.all(again.requests.values()).catch(() => {});
 	});
@@ -261,7 +271,7 @@ describe('D161 — negative cache', () => {
 	it('createRecord, upsert and hydration each clear a recorded absence', async () => {
 		fetchMock.mockImplementation(async () => json({}, 404));
 		const store = makeStore();
-		await settle(store, () => [
+		await settle(store, (store) => [
 			store.findOne('post', 'p1'),
 			store.findOne('post', 'p2'),
 			store.findOne('post', 'p3'),
@@ -291,7 +301,7 @@ describe('D161 — negative cache', () => {
 		const store = makeStore();
 		store.upsert('post', { id: 'p1', title: 'a' }).destroy();
 
-		const { value, requests } = trackedPass(store, () => store.findOne('post', 'p1'));
+		const { value, requests } = trackedPass(store, (store) => store.findOne('post', 'p1'));
 		expect(value).toBeNull();
 		expect(requests.size).toBe(0);
 		expect(fetchMock).not.toHaveBeenCalled();
@@ -324,7 +334,7 @@ describe('D161 — negative cache', () => {
 	it('an explicit loadOne bypasses the negative cache and its outcome refreshes the entry', async () => {
 		fetchMock.mockImplementation(async () => json({}, 404));
 		const store = makeStore();
-		await settle(store, () => store.findOne('post', 'p1'));
+		await settle(store, (store) => store.findOne('post', 'p1'));
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 
 		await expect(store.loadOne('post', 'p1')).rejects.toBeInstanceOf(PuzzleAdapterError);
@@ -340,14 +350,14 @@ describe('D161 — negative cache', () => {
 		const store = makeStore();
 		for (let i = 0; i < 1001; i++) {
 			// eslint-disable-next-line no-await-in-loop
-			await settle(store, () => store.findOne('post', `p${i}`));
+			await settle(store, (store) => store.findOne('post', `p${i}`));
 		}
 		const absent = serializeReadState(store).absent;
 		expect(absent).toHaveLength(1000);
 		expect(absent).not.toContain('post p0');
 
 		const calls = fetchMock.mock.calls.length;
-		trackedPass(store, () => store.findOne('post', 'p0'));
+		trackedPass(store, (store) => store.findOne('post', 'p0'));
 		expect(fetchMock.mock.calls.length).toBe(calls + 1);
 	});
 });
@@ -357,7 +367,7 @@ describe('D161 — loadOne identity guard', () => {
 		fetchMock.mockImplementation(async () => json({ id: 'other', title: 'wrong record' }));
 		const store = makeStore();
 
-		await expect(settle(store, () => store.findOne('post', 'p1'))).rejects.toThrow(
+		await expect(settle(store, (store) => store.findOne('post', 'p1'))).rejects.toThrow(
 			/returned a record with primary key "other"/
 		);
 		expect(store.findOne('post', 'other')).toBeNull();
@@ -372,7 +382,7 @@ describe('D161 — loadOne identity guard', () => {
 		fetchMock.mockImplementation(async () => json({ id: 7, title: 'seven' }));
 		const store = makeStore({ post: NumPost });
 
-		const { value } = await settle(store, () => store.findOne('post', '7'));
+		const { value } = await settle(store, (store) => store.findOne('post', '7'));
 		expect(value).toMatchObject({ title: 'seven' });
 	});
 
@@ -404,10 +414,10 @@ describe('D161 — loadOne identity guard', () => {
 describe('D161 — collection completeness', () => {
 	it('a successful no-options load completes the type, empty response included', async () => {
 		const store = makeStore();
-		await settle(store, () => store.findMany('post'));
+		await settle(store, (store) => store.findMany('post'));
 		expect(serializeReadState(store).complete).toEqual(['post']);
 
-		const again = trackedPass(store, () => store.findMany('post'));
+		const again = trackedPass(store, (store) => store.findMany('post'));
 		expect(again.requests.size).toBe(0);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -421,7 +431,7 @@ describe('D161 — collection completeness', () => {
 		await store.loadOne('post', 'p1');
 
 		expect(serializeReadState(store).complete).toEqual([]);
-		const { requests } = trackedPass(store, () => store.findMany('post'));
+		const { requests } = trackedPass(store, (store) => store.findMany('post'));
 		expect(requests.size).toBe(1);
 		await Promise.all(requests.values()).catch(() => {});
 	});
@@ -439,12 +449,12 @@ describe('D161 — collection completeness', () => {
 	it('a failed collection load clears the in-flight entry without completing the type', async () => {
 		fetchMock.mockImplementation(async () => json({ error: 'x' }, 500));
 		const store = makeStore();
-		const first = trackedPass(store, () => store.findMany('post'));
+		const first = trackedPass(store, (store) => store.findMany('post'));
 		await Promise.all(first.requests.values()).catch(() => {});
 		expect(serializeReadState(store).complete).toEqual([]);
 
 		fetchMock.mockImplementation(async () => json([{ id: 'p1', title: 'retry' }]));
-		const { value } = await settle(store, () => store.findMany('post'));
+		const { value } = await settle(store, (store) => store.findMany('post'));
 		expect(value.map((post) => post.id)).toEqual(['p1']);
 	});
 
@@ -457,7 +467,7 @@ describe('D161 — collection completeness', () => {
 
 		// The stale-link case: an id the complete load did not return. The collection
 		// already proved it absent, so this must never become a detail GET.
-		const { value, requests } = trackedPass(store, () => store.findOne('post', 'missing-id'));
+		const { value, requests } = trackedPass(store, (store) => store.findOne('post', 'missing-id'));
 		expect(value).toBeNull();
 		expect(requests.size).toBe(0);
 		expect(fetchMock).not.toHaveBeenCalled();
@@ -470,7 +480,7 @@ describe('D161 — collection completeness', () => {
 		expect(serializeReadState(store).complete).toEqual([]);
 
 		fetchMock.mockImplementation(async () => json({ id: 'p2', title: 'faulted' }));
-		const { value } = await settle(store, () => store.findOne('post', 'p2'));
+		const { value } = await settle(store, (store) => store.findOne('post', 'p2'));
 		expect(value.title).toBe('faulted');
 	});
 
@@ -494,7 +504,7 @@ describe('D161 — collection completeness', () => {
 			])
 		);
 		const store = makeStore();
-		const { value } = await settle(store, () => ({
+		const { value } = await settle(store, (store) => ({
 			mine: store.findMany('post', { filter: (post) => post.authorId === 'u1' }),
 			yours: store.findMany('post', { filter: (post) => post.authorId === 'u2' }),
 		}));
@@ -528,7 +538,7 @@ describe('D161 — relationships stay local', () => {
 		const post = store.upsert('post', { id: 'p1', authorId: 'u1' });
 		const subscriber = {};
 
-		const { value, requests } = trackedPass(store, () => post.author, subscriber);
+		const { value, requests } = trackedPass(store, (store) => post.author, subscriber);
 		expect(value).toBeNull();
 		expect(requests.size).toBe(0);
 		expect(fetchMock).not.toHaveBeenCalled();
@@ -537,7 +547,7 @@ describe('D161 — relationships stay local', () => {
 
 		const user = store.upsert('user', { id: 'u1', name: 'Ada' });
 		expect(post.author).toBe(user);
-		expect(trackedPass(store, () => user.posts).requests.size).toBe(0);
+		expect(trackedPass(store, (store) => user.posts).requests.size).toBe(0);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 });
@@ -548,17 +558,34 @@ describe('D161 — static / HMR read-state seam', () => {
 			String(url).endsWith('/api/posts') ? json([]) : json({}, 404)
 		);
 		const build = makeStore();
-		await settle(build, () => [build.findMany('post'), build.findOne('user', 'ghost')]);
+		await settle(build, (store) => [store.findMany('post'), store.findOne('user', 'ghost')]);
 		const envelope = serializeReadState(build);
 		expect(envelope).toEqual({ v: 1, complete: ['post'], absent: ['user ghost'] });
 
 		const browser = makeStore();
 		hydrateReadState(browser, envelope);
-		const { requests } = trackedPass(browser, () => [
-			browser.findMany('post'),
-			browser.findOne('user', 'ghost'),
+		const { requests } = trackedPass(browser, (store) => [
+			store.findMany('post'),
+			store.findOne('user', 'ghost'),
 		]);
 		expect(requests.size).toBe(0);
+	});
+
+	it('the codecs accept a per-view handle, not just the raw store', async () => {
+		fetchMock.mockImplementation(async () => json({}, 404));
+		const store = makeStore();
+		const subscriber = {};
+		const handle = store._handleFor(subscriber);
+		await settle(store, (store) => store.findOne('user', 'ghost'), subscriber);
+
+		// Read state is keyed by the RAW Store, and `this.ctx.store` is a handle —
+		// a caller holding one must not get a silently empty envelope back.
+		expect(serializeReadState(handle)).toEqual(serializeReadState(store));
+		expect(serializeReadState(handle).absent).toEqual(['user ghost']);
+
+		const browser = makeStore();
+		hydrateReadState(browser._handleFor({}), { v: 1, complete: ['post'], absent: [] });
+		expect(serializeReadState(browser).complete).toEqual(['post']);
 	});
 
 	it('drops a transferred absence whose record is present', () => {
@@ -624,7 +651,7 @@ describe('D161 — loadAll migration guards', () => {
 
 		// The internal fault path uses the un-warned loaders.
 		warn.mockClear();
-		await settle(store, () => store.findMany('user'));
+		await settle(store, (store) => store.findMany('user'));
 		expect(warn.mock.calls.filter(([m]) => /store\./.test(m))).toHaveLength(0);
 	});
 });

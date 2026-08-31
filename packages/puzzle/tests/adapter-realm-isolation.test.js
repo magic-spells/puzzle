@@ -123,7 +123,10 @@ describe('adapter install does not leak into a later no-adapter app', () => {
 		expect(localRuns).toEqual(['data']);
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(document.querySelector('.local').textContent).toBe('MISSING');
-		expect(second.store._requests).toBe(null);
+		// D161: no adapter capability ⇒ no per-view handle, so the view reads the raw
+		// app store itself — identity intact — and the Store has no request slot at all.
+		expect(second.store._requests).toBeUndefined();
+		expect(second.store._handleFor({})).toBeNull();
 		warn.mockRestore();
 	});
 

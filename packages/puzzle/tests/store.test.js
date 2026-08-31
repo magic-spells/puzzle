@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Store } from '../client-runtime/datastore/store.js';
+import { HANDLE_CTX, Store } from '../client-runtime/datastore/store.js';
 import { adapter } from '../client-runtime/datastore/adapter.js';
 
 adapter.install();
@@ -1210,21 +1210,31 @@ describe('Store — local reads and the D161 fault hook', () => {
 		expect(store._findManyLocal('todo')).toEqual([todo]);
 	});
 
-	it('a request map is installed only for the evaluation it was handed to', () => {
+	it('a request map is installed only on the subscriber it was handed to', () => {
 		// WITH the capability: a store built without it refuses the map outright
 		// (tests/adapter-realm-isolation.test.js pins that half).
 		const store = makeStore({ adapter });
 		const requests = new Map();
+		const mine = {};
+		const other = {};
+		const handle = store._handleFor(mine);
+		const otherHandle = store._handleFor(other);
+		const ctxOf = (subscriber) => store._handleFor(subscriber)[HANDLE_CTX];
 		let inner = 'unset';
+
 		store.withTracking(
-			{},
+			mine,
 			() => {
-				expect(store._requests).toBe(requests);
+				expect(ctxOf(mine).requests).toBe(requests);
+				// D161: the map rides the SUBSCRIBER, so nobody else's reads can see it —
+				// not another subscriber's handle, and not the raw store.
+				expect(ctxOf(other).requests).toBeNull();
+				expect(store._requests).toBeUndefined();
 				// A nested evaluation without one restores the outer scope on exit.
-				store.withTracking({}, () => {
-					inner = store._requests;
+				store.withTracking(mine, () => {
+					inner = ctxOf(mine).requests;
 				});
-				expect(store._requests).toBe(requests);
+				expect(ctxOf(mine).requests).toBe(requests);
 			},
 			false,
 			{},
@@ -1232,6 +1242,9 @@ describe('Store — local reads and the D161 fault hook', () => {
 		);
 
 		expect(inner).toBeNull();
-		expect(store._requests).toBeNull();
+		expect(ctxOf(mine).requests).toBeNull();
+		// And both handles keep forwarding everything else to the raw store.
+		expect(handle.findOne('todo', 'nope')).toBeNull();
+		expect(otherHandle.findMany('todo')).toEqual([]);
 	});
 });

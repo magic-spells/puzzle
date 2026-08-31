@@ -7,7 +7,7 @@
  */
 
 import { createAdapterCapability, registerReadState } from '../capabilities.js';
-import { Store } from './store.js';
+import { HANDLE_CTX, Store } from './store.js';
 import { PuzzleView } from '../views/PuzzleView.js';
 import {
 	PuzzleModel,
@@ -33,6 +33,17 @@ const MAX_SETTLE_ROUNDS = 10;
 
 const noop = () => {};
 const writeChainsByStore = new WeakMap();
+// D161: subscriber → its store handle. One entry per subscriber, matching the
+// one HANDLE_CTX slot a subscriber carries: a subscriber belongs to exactly one
+// store, which is what a PuzzleView is — `this.ctx.store` is minted once, in its
+// constructor, and never re-pointed.
+const handleBySubscriber = new WeakMap();
+// A handle's raw Store, for the consumer that needs the true identity, and the
+// marker naming the app ctx a per-view ctx derives from. Declared here rather
+// than in core: nothing without the adapter ever mints a handle or a derived
+// ctx, so a no-adapter bundle carries neither symbol.
+export const STORE_RAW = Symbol('puzzleRawStore');
+const CTX_BASE = Symbol('puzzleCtxBase');
 const adapterBindingsByStore = new WeakMap();
 const warnedAdapterConfigs = new WeakSet();
 const warnedTrackedLoads = new WeakMap();
@@ -294,7 +305,10 @@ function sweepAbsent(store) {
  * absent. Versioned so an older kernel can reject a newer envelope.
  */
 export function serializeReadState(store) {
-	const state = readStateByStore.get(store);
+	// Read state is keyed by the RAW Store, so unwrap a per-view handle first: a
+	// caller holding `this.ctx.store` is holding a Store as far as it knows, and
+	// must not silently get an empty envelope (D161).
+	const state = readStateByStore.get(store?.[STORE_RAW] ?? store);
 	if (!state) return { v: 1, complete: [], absent: [] };
 	return {
 		v: 1,
@@ -309,8 +323,9 @@ export function serializeReadState(store) {
  * an id another page later supplied cannot suppress a live read. In-flight work
  * is never transferred — an unresolved miss simply refetches.
  */
-export function hydrateReadState(store, envelope) {
+export function hydrateReadState(handleOrStore, envelope) {
 	if (!envelope || envelope.v !== 1) return;
+	const store = handleOrStore?.[STORE_RAW] ?? handleOrStore; // see serializeReadState
 	const state = readStateFor(store);
 	if (Array.isArray(envelope.complete)) {
 		for (const type of envelope.complete) state.complete.add(type);
@@ -631,6 +646,108 @@ class AdapterStoreMethods {
 	}
 
 	// ---- tracked auto-fetch (D161) ---------------------------
+
+	/**
+	 * The tracked halves of the two queries — the only reads that can fault, and
+	 * only ever called by a store handle. `requests` is the open evaluation's
+	 * request map, handed in by that handle: never read off ambient state, which
+	 * is the whole point. A null map is a local read, whoever is mid-evaluation
+	 * elsewhere. Core's public `findOne`/`findMany` are the plain local reads and
+	 * do not route through these, so a no-adapter bundle carries neither.
+	 */
+	_findOneTracked(type, id, requests) {
+		const record = this._findOneLocal(type, id);
+		if (!record && requests) this._faultOne(type, id, requests);
+		return record;
+	}
+
+	_findManyTracked(type, options, requests) {
+		// The collection, not the filter, is what can be missing: a filter is always
+		// applied locally and is never serialized into a request.
+		if (requests) this._faultMany(type, requests);
+		return this._findManyLocal(type, options);
+	}
+
+	/**
+	 * The per-subscriber STORE HANDLE — the channel a tracked read has to come
+	 * through to be allowed to fault. PuzzleView mints one per view in its
+	 * constructor and exposes it as `this.ctx.store`; nothing else does.
+	 *
+	 * It is a Proxy over the raw Store whose only real overrides are
+	 * `findOne`/`findMany`, which pass this subscriber's currently-open request
+	 * map (null when it has none) to the tracked forms. Everything else forwards
+	 * to the raw store, and every forwarded METHOD is bound to it: `this === the
+	 * raw Store` is load-bearing all over this module — readStateFor's WeakMap
+	 * key, `_a`, `_asyncTrackingChain`, `_typeMap`, the subscription Maps — and
+	 * none of that may end up shadowed onto a proxy.
+	 *
+	 * Returns null for a store with no adapter capability, which is what keeps an
+	 * adapter-free app on the raw store with its `ctx.store === app.store`
+	 * identity intact (D157).
+	 */
+	_handleFor(subscriber) {
+		if (!this._a || !subscriber) return null;
+		const cached = handleBySubscriber.get(subscriber);
+		if (cached) return cached;
+
+		const store = this;
+		const hctx = { requests: null };
+		const findOne = (type, id) => store._findOneTracked(type, id, hctx.requests);
+		const findMany = (type, options) => store._findManyTracked(type, options, hctx.requests);
+		// Bound methods are memoized per key, re-bound only if the underlying
+		// function changes — installFixtures() swaps `_network` on the prototype
+		// mid-session, so a permanently cached binding would outlive its source.
+		const bound = new Map();
+		const handle = new Proxy(store, {
+			get(target, key) {
+				if (key === 'findOne') return findOne;
+				if (key === 'findMany') return findMany;
+				if (key === STORE_RAW) return target;
+				if (key === HANDLE_CTX) return hctx;
+				const value = Reflect.get(target, key, target);
+				if (typeof value !== 'function') return value;
+				const entry = bound.get(key);
+				if (entry && entry.raw === value) return entry.fn;
+				const fn = value.bind(target);
+				bound.set(key, { raw: value, fn });
+				return fn;
+			},
+			set(target, key, value) {
+				target[key] = value;
+				return true;
+			},
+		});
+
+		// The context rides on the SUBSCRIBER so Store.withTracking finds it by
+		// identity, with no lookup table in core. Non-enumerable: a view's own
+		// property surface must not grow a framework key.
+		Object.defineProperty(subscriber, HANDLE_CTX, { value: hctx, configurable: true });
+		handleBySubscriber.set(subscriber, handle);
+		return handle;
+	}
+
+	/**
+	 * The per-view ctx a PuzzleView reads through — the whole of D161's view-side
+	 * mechanics, kept out of core so a no-adapter bundle carries none of it. The
+	 * app's ctx is the prototype, so `router`, `formatters` and any other field
+	 * stay LIVE rather than snapshotted, and only `store` is overridden.
+	 *
+	 * Always chained off the BASE ctx: a nested component is constructed with its
+	 * parent's DERIVED ctx, and re-deriving from that would add one prototype link
+	 * per level of nesting. The chain is therefore exactly two deep at any depth.
+	 *
+	 * Returns undefined for a store with no capability, so core's call site falls
+	 * back to the app ctx itself — identity and all.
+	 */
+	_deriveCtx(ctx, view) {
+		const handle = this._handleFor(view);
+		if (!handle) return undefined;
+		const base = ctx[CTX_BASE] ?? ctx;
+		return Object.create(base, {
+			store: { value: handle, enumerable: true },
+			[CTX_BASE]: { value: base },
+		});
+	}
 
 	/**
 	 * Core Store calls this from findOne() when a tracked evaluation missed. It

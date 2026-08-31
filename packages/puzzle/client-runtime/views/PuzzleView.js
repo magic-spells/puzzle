@@ -212,7 +212,20 @@ export class PuzzleView {
 
 	/** @param {object} ctx exactly { store, router, formatters } (SPEC §10) */
 	constructor(ctx = {}) {
-		this.ctx = ctx;
+		// D161 tracked-read attribution. On an adapter app this view reads the store
+		// through its OWN handle: only reads made through `this.ctx.store`, by this
+		// view, during this view's data() evaluation may fault in what they missed.
+		// A read by anyone else — the raw `app.store`, another view's handle, a
+		// module capture — is a local snapshot and can neither fire a request nor
+		// land a failure in a batch it does not own.
+		//
+		// `_deriveCtx` builds that per-view ctx and lives in the adapter module
+		// beside the handle it wraps (D157): it returns undefined for a store with
+		// no capability, and is absent entirely when the module is not in the graph,
+		// so an adapter-free app keeps `this.ctx === ctx` and
+		// `ctx.store === app.store` — identity and all — for the cost of one
+		// optional call.
+		this.ctx = ctx.store?._deriveCtx?.(ctx, this) ?? ctx;
 	}
 
 	// ---- state ---------------------------------------------------------------

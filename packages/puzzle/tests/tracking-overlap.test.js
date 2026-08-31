@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 //
 // The sync-SHAPED async overlap hazard (D161). Store.withTracking keeps its
-// tracking state — `_tracking`, `_trackingAdded`, `_requests` — in mutable Store
-// fields, so exactly one async evaluation may be open at a time. A DECLARED-async
+// SUBSCRIPTION state — `_tracking`, `_trackingAdded` — in mutable Store fields,
+// so exactly one async evaluation may be open at a time. A DECLARED-async
 // data() is hinted (`expectsAsync`) and defers before it runs, which is safe. A
 // .then-style data() — a plain function returning a promise — is not: withTracking
 // runs it optimistically inline, discovers the promise, unwinds, and retries behind
 // the chain, but the ABANDONED first invocation's continuations still run later and
-// record their store reads into whichever evaluation holds `_requests` by then.
+// record their store reads into whichever evaluation is open by then. Faulting is
+// attributed by handle identity, so that residue is confined to the view's own
+// evaluations; subscription attribution is what stays ambient.
 //
 // These lock the three mitigations: the sticky per-view async-shape flag, the
 // per-invocation eval-scope identity guard in prepareRefresh, and the dev-only
@@ -172,8 +174,12 @@ describe('D161 overlap — the sticky async-shape flag', () => {
 		store.flush(); // same seed-notification drain as above — keep the run counts deterministic
 
 		const gate = deferred();
+		// Both views read through their OWN handle (`this.ctx.store`) — the channel
+		// D161 attributes faulting by, and the idiom every example uses. A read on
+		// the raw store this test built would be a local snapshot and fault nothing.
 		class SlowView extends PuzzleView {
 			async data() {
+				const store = this.ctx.store;
 				await gate.promise;
 				// A MISS: this fault belongs to this view's request map and nobody else's.
 				return { title: store.findOne('post', 'p1')?.title };
@@ -185,6 +191,7 @@ describe('D161 overlap — the sticky async-shape flag', () => {
 
 		class ThenView extends PuzzleView {
 			data(params) {
+				const store = this.ctx.store;
 				// The store read happens in the CONTINUATION — after withTracking has had
 				// its chance to abandon this invocation.
 				return Promise.resolve().then(() =>
