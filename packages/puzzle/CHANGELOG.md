@@ -11,7 +11,7 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Seven breaking changes are easy to miss on a multi-version jump. Most fail
+Eight breaking changes are easy to miss on a multi-version jump. Most fail
 loudly — a compile error, a constructor throw, an unresolvable import. Four are
 quiet: `output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
 are greppable; the stricter write-response guard (0.6.0) is not — it depends on
@@ -53,6 +53,17 @@ capability:
   `TypeError: Failed to parse URL`. A build-time read also means a private API
   needs its credentials available to the build — `beforeRequest` still runs, and
   a 404 settles as absence exactly as it does at runtime.
+
+**Capitalized tag names are validated (0.7.0, D167).** A capitalized tag is a
+component, and its name must now be `Ident('.'Ident)*` — `<Card>` or the new
+dotted family form `<Frame.Wrapper>`. A capitalized name carrying a `-`, a `:`,
+or an empty segment (`<Frame-x>`, `<Frame:Wrapper>`, `<Frame.>`) is a positioned
+compile error, as is a dotted name rooted at a composition marker
+(`<Slot.Foo>`). This fails loudly, and a build it fails was already broken:
+the tag text is emitted verbatim as the ViewNode tag expression, so those names
+compiled silently into syntactically invalid JavaScript. Lowercase tags are
+untouched — custom elements with dashes and namespaced SVG keep working, so the
+fix for a capitalized `<My-Widget>` is usually to lowercase it.
 
 **`routerMode` takes a factory, not a string (0.6.0, D159).** Path routing is
 the zero-config default — omit `routerMode` entirely. Hash and memory routing
