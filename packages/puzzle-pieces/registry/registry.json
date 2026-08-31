@@ -304,7 +304,7 @@
     },
     {
       "name": "data-table",
-      "description": "Interactive data table over the presentational Table conventions — optional-controlled column sorting, row selection with select-all, and built-in pagination via the Pagination piece",
+      "description": "Interactive data table over the presentational Table conventions — optional-controlled sorting, row selection with select-all, pagination, and caller-owned header/body cell snippets",
       "files": [
         "DataTable.pzl"
       ],
@@ -1057,6 +1057,16 @@
       "description": "Config-first WAI-ARIA tree view — nested nodes with expand/collapse, roving-tabindex keyboard nav, and a selection callback",
       "files": [
         "Tree.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [],
+      "targetDir": "app/components/ui"
+    },
+    {
+      "name": "virtual-list",
+      "description": "Windowed vertical list for large fixed-height collections — native scrolling, configurable viewport and overscan, keyed rows, and a caller-owned row snippet",
+      "files": [
+        "VirtualList.pzl"
       ],
       "registryDependencies": [],
       "dependencies": [],

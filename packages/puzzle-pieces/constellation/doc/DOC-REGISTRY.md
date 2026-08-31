@@ -35,7 +35,7 @@ The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing ru
 
 ## registry.json is generated
 
-`registry.json` is not hand-maintained per entry — it is the aggregation of all `piece.json` manifests, pieces alphabetical, with a top-level `theme` pointer and `version`. **Regenerate it whenever a piece is added or renamed** (re-run the aggregation; lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`). Current count: **85 pieces** — keep the README and the demo shell (`Introduction.pzl`, `ComponentsIndex.pzl`) count in sync when it changes.
+`registry.json` is not hand-maintained per entry — it is the aggregation of all `piece.json` manifests, pieces alphabetical, with a top-level `theme` pointer and `version`. **Regenerate it whenever a piece is added or renamed** (re-run the aggregation; lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`). Current count: **96 pieces** — keep the README and the demo shell (`Introduction.pzl`, `ComponentsIndex.pzl`) count in sync when it changes.
 
 ## theme/pieces.css is the token source
 
@@ -43,6 +43,6 @@ Every piece styles itself exclusively through the semantic utilities these `@the
 
 ## lib/ convention
 
-`registry/lib/` holds shared plain-JS helpers copied to the consumer's `app/lib/`: `date-math.js` (local-time date math for Calendar/DatePicker), `panel-stack.js` (pure panel-state class helpers), `highlight.js` (Code piece). They are pulled in only via a piece's `registryDependencies` — no piece imports another piece's `.pzl`, only its lib.
+`registry/lib/` holds shared plain-JS helpers copied to the consumer's `app/lib/`; examples include date math for Calendar/DatePicker, panel-state helpers, document models, chart/slider math, and Code's highlight adapter. They are pulled in only via a piece's `registryDependencies` — no piece imports another piece's `.pzl`, only its lib.
 
-Per-piece specifics are NOT catalogued here — one card per piece would drift against 41 `piece.json` descriptions + file header comments. See [[DECISION-WRAP-WEB-COMPONENTS]] and [[DECISION-CONFIG-FIRST-API]] for the conventions all pieces share.
+Per-piece specifics are NOT catalogued here — one card per piece would drift against 96 `piece.json` descriptions + file header comments. See [[DECISION-WRAP-WEB-COMPONENTS]] and [[DECISION-CONFIG-FIRST-API]] for the conventions all pieces share.

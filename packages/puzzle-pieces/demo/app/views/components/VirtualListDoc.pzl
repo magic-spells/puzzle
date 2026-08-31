@@ -1,0 +1,190 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Virtual List</h1>
+        <p class="mt-2 text-body">
+          A windowed vertical list for large, fixed-height collections. Native scrolling
+          keeps the expected scrollbar and input behavior while Puzzle mounts only the
+          visible rows plus a small overscan cushion; caller-owned snippets provide the row design.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-2xl">
+          <VirtualList
+            items={ activity }
+            rowHeight={ 56 }
+            height={ 420 }
+            overscan={ 5 }
+            itemKey="id"
+            label="Build activity">
+            <Snippet fits="row" item index>
+              <div class="flex h-full w-full min-w-0 items-center gap-3">
+                <span class="w-12 shrink-0 font-mono text-xs tabular-nums text-muted">#{ index + 1 }</span>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-medium text-ink">{ item.title }</p>
+                  <p class="truncate text-xs text-muted">{ item.branch }</p>
+                </div>
+                <Badge variant={ item.variant }>{ item.status }</Badge>
+              </div>
+            </Snippet>
+          </VirtualList>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Virtual List has no registry or npm dependencies. It uses the pieces.css surface,
+          border, text, and focus tokens.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <section id="windowing" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Windowing model</h2>
+        <p class="mb-3 text-sm/relaxed text-body">
+          The scroll viewport renders the rows it can show plus
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">overscan</code>
+          rows on both sides (five by default). Top and bottom spacers reserve everything
+          outside that window, so the scrollbar still represents the full collection. The
+          row snippet receives the original item and its absolute array index.
+        </p>
+        <CodeBlock code={ codeWindowing }/>
+      </section>
+
+      <section id="sizing" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Sizing and the fixed-height limit</h2>
+        <p class="mb-3 text-sm/relaxed text-body">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">rowHeight</code>
+          is required and every caller row must fit it. Use
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">height</code>
+          for a fixed viewport, or
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">maxHeight</code>
+          by itself when a short list should shrink. Dynamic/measured row heights are
+          deliberately out of scope in v1: they need a measurement cache and scroll-anchor
+          correction that this small, predictable piece does not pretend to provide.
+        </p>
+        <CodeBlock code={ codeSizing }/>
+      </section>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <ul class="space-y-2 text-sm text-body">
+          <li>
+            The focusable scroll viewport carries
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">role="list"</code>
+            and a meaningful label, so keyboard users can focus and scroll it as one named region.
+          </li>
+          <li>
+            Mounted rows use
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">role="listitem"</code>
+            with <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">aria-setsize</code>
+            and <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">aria-posinset</code>,
+            exposing each virtual row's position in the full collection. Spacer geometry is hidden from assistive tech.
+          </li>
+          <li>
+            The snippet owns interactive controls inside a row. Give those controls their usual
+            native semantics and accessible names; Virtual List does not impose selection or roving focus.
+          </li>
+        </ul>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import VirtualList from '@/components/ui/VirtualList.pzl';
+import Badge from '@/components/ui/Badge.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece virtual-list';
+const usageImport = `import VirtualList from '@/components/ui/VirtualList.pzl';`;
+const usageMarkup = `<VirtualList items={ items } rowHeight={ 48 } height={ 400 } itemKey="id">
+  <Snippet fits="row" item index>
+    <div class="flex h-full items-center">{ index + 1 }. { item.label }</div>
+  </Snippet>
+</VirtualList>`;
+
+const codeHero = `// 10,000 caller-owned records; only the viewport window is mounted.
+<VirtualList items={ activity } rowHeight={ 56 } height={ 420 }
+             overscan={ 5 } itemKey="id" label="Build activity">
+  <Snippet fits="row" item index>
+    <div class="flex h-full w-full items-center gap-3">
+      <span>#{ index + 1 }</span>
+      <strong class="flex-1">{ item.title }</strong>
+      <Badge variant={ item.variant }>{ item.status }</Badge>
+    </div>
+  </Snippet>
+</VirtualList>`;
+
+const codeWindowing = `// Default overscan is five rows above and below. itemKey names the
+// stable item field used by keyed row wrappers; id/key/index are the fallbacks.
+<VirtualList items={ results } rowHeight={ 44 } height={ 352 }
+             overscan={ 5 } itemKey="uuid" label="Search results">
+  <Snippet fits="row" item index>{ item.title }</Snippet>
+</VirtualList>`;
+
+const codeSizing = `// Fixed viewport: always 480px tall.
+<VirtualList items={ rows } rowHeight={ 48 } height={ 480 } />
+
+// Capped viewport: short lists shrink; long lists scroll at 480px.
+<VirtualList items={ rows } rowHeight={ 48 } maxHeight={ 480 } />
+
+// v1 deliberately does not measure variable-height content.`;
+
+const BRANCHES = ['release/0.7.0', 'feat/snippets', 'feat/virtual-list', 'docs/pieces'];
+const STATES = [
+  { status: 'Passed', variant: 'brand' },
+  { status: 'Running', variant: 'outline' },
+  { status: 'Queued', variant: 'default' },
+  { status: 'Failed', variant: 'danger' },
+];
+
+const ACTIVITY = Array.from({ length: 10000 }, (_, index) => {
+  const state = STATES[index % STATES.length];
+  return {
+    id: `build-${index + 1}`,
+    title: `Build ${String(index + 1).padStart(5, '0')}`,
+    branch: BRANCHES[index % BRANCHES.length],
+    status: state.status,
+    variant: state.variant,
+  };
+});
+
+export default class VirtualListDoc extends PuzzleView {
+  data() {
+    return {
+      activity: ACTIVITY,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeWindowing,
+      codeSizing,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Windowing model', href: '#windowing' },
+        { label: 'Sizing and limits', href: '#sizing' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+}
+</script>
