@@ -528,6 +528,15 @@ func (p *parser) parseElement() (Node, *ParseError) {
 				}
 			}
 		}
+		// Every capitalized tag that is not an exact marker name resolves as a
+		// component, so its text has to be a legal JS expression before codegen
+		// emits it verbatim (D167). The marker branches above have already run,
+		// so only component names reach here.
+		if isCapitalized(name) && !isCompositionMarker(name) {
+			if nameErr := checkComponentName(name, pos, p.file); nameErr != nil {
+				return nil, nameErr
+			}
+		}
 	}
 
 	var children []Node
@@ -1283,6 +1292,67 @@ func firstWord(s string) string {
 
 func isCapitalized(s string) bool {
 	return len(s) > 0 && s[0] >= 'A' && s[0] <= 'Z'
+}
+
+// isCompositionMarker reports whether name is one of the reserved capitalized
+// composition markers (D134/D141/D144/D166). Markers are exact-match: a dotted
+// name is never a marker, which is why checkComponentName rejects a marker root
+// rather than routing it here.
+func isCompositionMarker(name string) bool {
+	switch name {
+	case "Children", "Slot", "Snippet", "Portal":
+		return true
+	}
+	return false
+}
+
+// checkComponentName validates a capitalized tag as a component name (D167).
+// The grammar is Ident('.'Ident)* with each segment [A-Za-z_][A-Za-z0-9_]* — a
+// plain component (<Card>) or a family member (<Frame.Wrapper>). The lexer's
+// tag-name scanner accepts '-', ':', and '.' so lowercase custom elements and
+// namespaced SVG tags keep working, which used to let a capitalized <Frame-x>
+// or <Frame.> through to codegen, where the tag text is emitted verbatim as a
+// JS expression and produced syntactically broken output instead of an error.
+func checkComponentName(name string, pos Position, file string) *ParseError {
+	segments := strings.Split(name, ".")
+	if len(segments) > 1 && isCompositionMarker(segments[0]) {
+		return errAt(file, pos,
+			"<%s> is not a component — %s is a reserved composition marker and cannot be a component family root (D134/D167)",
+			name, segments[0])
+	}
+	for _, seg := range segments {
+		if seg == "" {
+			return errAt(file, pos,
+				"component tag <%s> has an empty name segment — a component name is an identifier or a dotted family member like <Frame.Wrapper> (D167)",
+				name)
+		}
+		if !isIdentSegment(seg) {
+			return errAt(file, pos,
+				"component tag <%s> is not a valid component name — %q is not an identifier. A capitalized tag names a component (<Frame>) or a family member (<Frame.Wrapper>); lowercase the tag for a custom element (D167)",
+				name, seg)
+		}
+	}
+	return nil
+}
+
+// isIdentSegment reports whether seg is a bare JS identifier by shape:
+// [A-Za-z_][A-Za-z0-9_]*. Deliberately ASCII-only and '$'-free — a component
+// name is also a filename in the family convention.
+func isIdentSegment(seg string) bool {
+	for i := 0; i < len(seg); i++ {
+		c := seg[i]
+		switch {
+		case c == '_':
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9':
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return len(seg) > 0
 }
 
 func allStatic(parts []Part) bool {
