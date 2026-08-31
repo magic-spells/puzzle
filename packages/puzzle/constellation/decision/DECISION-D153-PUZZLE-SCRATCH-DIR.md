@@ -44,7 +44,6 @@ user's CSS.
 
 ## Decision
 
-
 Every transient build directory lives under `<root>/.puzzle/tmp/` as
 `staging-*` and `dist-old-*`, and `<root>/.puzzle` carries a `.gitignore`
 holding `*`, created when absent and never overwritten. One directory for a user
