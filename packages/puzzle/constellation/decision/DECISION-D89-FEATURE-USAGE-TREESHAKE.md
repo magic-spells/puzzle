@@ -49,6 +49,20 @@ notes:
       false define, and the compiled-package boundary. The check is a bare `startsWith('#')` on a
       string already in hand and sits OUTSIDE every gate, so it holds in every build; only the
       message is built, on the throw path. Regression: tests/snippet-tag-escape.test.js.
+  - kind: decision
+    text: >-
+      Amends the note above: the metadata-tag THROW is ungated, its EXPLANATION is not (2026-08-30).
+      Shipping the full paragraph in every bundle cost ~190 B gzip — four times the whole snippets
+      feature — for a message about a build shape the framework does not support. So
+      `metadataTagError(tag)` returns the long form (metadata tag, the false define, the
+      compiled-package boundary, the two escapes) behind the inline `typeof __PUZZLE_DEV__ ===
+      'undefined' || __PUZZLE_DEV__` probe, and production returns `[puzzle] metadata tag "<tag>"
+      reached the DOM (compiled out)`. Both are built only on the throw path, both name the tag, and
+      the `startsWith('#')` checks at the two call sites stay ungated — a metadata tag still fails
+      loudly in every build, which is the part that matters. Measured after the split: hello-world
+      +72 B gzip and todos +54 B over the pre-change baseline (was +195 / +177), and production
+      bundles contain no trace of the long string. tests/snippet-tag-escape.test.js pins both
+      shapes, the production one by setting the define false.
 name: 'D89 — pay-for-what-you-use runtime: feature-usage scan drives DCE defines'
 ---
 

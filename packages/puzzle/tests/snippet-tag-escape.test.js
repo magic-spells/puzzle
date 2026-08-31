@@ -26,6 +26,7 @@ const DIAGNOSTIC = 'it is framework metadata';
 
 afterEach(() => {
 	delete globalThis.__PUZZLE_HAS_SNIPPETS__;
+	delete globalThis.__PUZZLE_DEV__;
 	document.body.innerHTML = '';
 });
 
@@ -52,5 +53,23 @@ describe('a snippet vnode that reaches the DOM is diagnosed, not a DOM error', (
 		expect(() => vm.render(h('div', {}, [snippet('row', [], () => [])]))).toThrow(
 			/vnode tag "#snippet" reached the DOM/
 		);
+	});
+
+	it('still throws in a production build, with the explanation compiled out', () => {
+		// The THROW is ungated; only the paragraph explaining an unsupported build
+		// shape is development-only, so production folds ~190 B gzip of prose out of
+		// every app and keeps a line that still names the tag.
+		globalThis.__PUZZLE_DEV__ = false;
+		const vm = new ViewManager(container(), {});
+		let thrown;
+		try {
+			vm.render(h('div', {}, [snippet('row', [], () => [])]));
+		} catch (err) {
+			thrown = err;
+		}
+
+		expect(thrown).toBeInstanceOf(Error);
+		expect(thrown.message).toBe('[puzzle] metadata tag "#snippet" reached the DOM (compiled out)');
+		expect(thrown.message).not.toMatch(/__PUZZLE_HAS_SNIPPETS__/);
 	});
 });

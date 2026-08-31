@@ -46,6 +46,15 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      Refines the metadata-tag sentence in the composition paragraph (2026-08-30): the THROW is
+      ungated in every build, as written, but the EXPLANATION is development-only.
+      `metadataTagError(tag)` (views/ViewNode.js) builds the long D89 paragraph behind the inline
+      `__PUZZLE_DEV__` probe and returns `[puzzle] metadata tag "<tag>" reached the DOM (compiled
+      out)` in production, because shipping the prose everywhere cost ~190 B gzip per app. The
+      `startsWith('#')` checks in mount() and ssg/serialize.js are unchanged and stay outside every
+      gate.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

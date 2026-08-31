@@ -68,16 +68,26 @@ export const PORTAL_TAG = 'portal';
  * which is not a supported input for the gate (pieces ship as source, compiled
  * by the app's own build). The browser used to answer that with a DOM
  * InvalidCharacterError and the SSG serializer with silent empty output, neither
- * of which names the cause. Built only on the throw path, so the check at each
- * call site stays a bare `startsWith('#')` on a string already in hand.
+ * of which names the cause.
+ *
+ * THROWING is ungated — the check at each call site is a bare `startsWith('#')`
+ * on a string already in hand, and a metadata tag must fail loudly in every
+ * build. The EXPLANATION is not: it is a paragraph about an unsupported build
+ * shape, so it sits behind the inline `__PUZZLE_DEV__` probe (hoisting the
+ * probe into a module const stops esbuild folding it — see build_test.go) and
+ * production keeps a short line naming the tag. Development is where anyone
+ * reads the long form anyway. Both are built only on the throw path.
  */
 export function metadataTagError(tag) {
-	return new Error(
-		`[puzzle] vnode tag "${tag}" reached the DOM — it is framework metadata; ` +
-			'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ' +
-			'Compiled component packages are not scanned for feature usage; use source pieces ' +
-			'or force the feature on.'
-	);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		return new Error(
+			`[puzzle] vnode tag "${tag}" reached the DOM — it is framework metadata; ` +
+				'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ' +
+				'Compiled component packages are not scanned for feature usage; use source pieces ' +
+				'or force the feature on.'
+		);
+	}
+	return new Error(`[puzzle] metadata tag "${tag}" reached the DOM (compiled out)`);
 }
 
 // A row whose key resolves to null/undefined drops the whole list to positional
