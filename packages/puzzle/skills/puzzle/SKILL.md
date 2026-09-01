@@ -118,7 +118,8 @@ helpers — the project term is *formatter*, never *filter*),
 (trailing `, name` binds the index), `{#case}/{:when}`, `{#raw}…{/raw}` (brace
 grammar off inside — literal braces compile as-is, HTML still parses; no
 nesting, and attribute-value use is a compile error),
-`@event={ handler }` with modifiers, component imports used as capitalized tags.
+`@event={ handler }` with modifiers, component imports used as capitalized tags
+(dotted family members too — `<Frame.Wrapper>`).
 `<script lang="ts">` for TypeScript (build remains transpile-only; run
 `puzzle check` separately for static checks).
 
@@ -152,6 +153,31 @@ Rules that bite:
   <!-- inside UserList.pzl: one marker in the loop produces N stamps -->
   {#for user in users}<Slot name="row" user={ user } />{/for}
   ```
+
+- **Component families are dotted tags + a barrel** (puzzle ≥ 0.7.0). A
+  capitalized tag must be `Ident('.'Ident)*` — `<Card>` or `<Frame.Wrapper>`;
+  a dash, a colon, or an empty segment is a compile error, and a marker name
+  (`Children`/`Slot`/`Snippet`/`Portal`) cannot be a family root. A dotted tag
+  is a plain member expression resolved against module scope, so group the
+  family in a directory with a plain JS barrel — `.pzl` stays ONE class per
+  file, and there is no registry or compiler magic:
+
+  ```js
+  // app/components/Frame/index.js — beside Frame.pzl, Wrapper.pzl, Content.pzl
+  import Frame from './Frame.pzl';
+  import Wrapper from './Wrapper.pzl';
+  import Content from './Content.pzl';
+
+  export { Frame, Wrapper, Content };
+  export default Object.assign(Frame, { Wrapper, Content });
+  ```
+
+  ```html
+  <!-- import Frame from '@/components/Frame'; -->
+  <Frame><Frame.Wrapper><Frame.Content>…</Frame.Content></Frame.Wrapper></Frame>
+  ```
+
+  `puzzle generate component Frame --family Wrapper,Content` scaffolds it all.
 
 - **`<Portal>` teleports overlays.** `<Portal>…</Portal>` (paired-only,
   attribute-free) mounts its children into a framework-created outlet beside

@@ -25,6 +25,20 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      `puzzle generate component` gained `--family Wrapper,Content` (D167): scaffolds
+      `app/components/<Root>/` with one `.pzl` per member plus an `index.js` barrel (`Object.assign`
+      default export + named exports). Root and members are PascalCase-validated, and reserved
+      marker names (Children/Slot/Snippet/Portal) are refused — that marker guard now also covers
+      plain `generate component` (previously `generate component Slot` scaffolded an uninvocable
+      component); views are deliberately exempt, being routed by class and never written as tags.
+      Collision handling is all-or-nothing: every destination is stat'd before the first write, and
+      `--force` rewrites only the family's own files, never siblings. `--path` places the family
+      directory inside the override, and the printed import hint follows it — a dir under `app/`
+      prints the `@` alias form, anything else the project-relative path. Family stubs are
+      composition-shaped (`<Children/>` + caller `class` override), unlike the plain component stub,
+      because nested members would otherwise render nothing; non-family output stays byte-identical.
 ---
 
 # Compiler CLI

@@ -147,7 +147,7 @@ decision cards explain why the contract has its current shape.
   carrying the framework version; grammars stay in their own repos; absorbed
   repos are archived, never deleted.
 - **Playground compiler Phase 1:** [[FEATURE-PLAYGROUND-WASM-COMPILER]] / [[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]] adds the esbuild-free parser+codegen WASM module, its synchronous JS globals, the pinned worker envelope, filesystem-free asset diagnostics, and size/dependency/smoke gates. The worker and UI remain later phases.
-- The next free decision number is D167.
+- The next free decision number is D168.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode

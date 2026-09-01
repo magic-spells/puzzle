@@ -45,6 +45,39 @@ export default class __NAME__ extends PuzzleView {
 </style>
 `
 
+// familyTemplate is the stub every member of a `--family` scaffold gets, root
+// included (D167). It differs from componentTemplate in exactly one way that
+// matters: the root element carries `<Children/>`, because a family exists to
+// nest — `<Frame><Frame.Wrapper>…</Frame.Wrapper></Frame>` renders nothing at
+// all if the members drop their children. It still compiles in component mode
+// (D20: a single root element, no attributes on `<puzzle-view>`).
+const familyTemplate = `<puzzle-view>
+  <div class={ classes }>
+    <Children/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class __NAME__ extends PuzzleView {
+  // Family members compose: <Children/> above renders whatever the caller
+  // nests inside <__NAME__>. ` + "`class`" + ` is the usual caller override prop.
+  data(params, props) {
+    return {
+      classes: ['__NAME__', props.class].filter(Boolean).join(' ')
+    };
+  }
+}
+</script>
+
+<style>
+.__NAME__ {
+  display: block;
+}
+</style>
+`
+
 // viewTemplate compiles in view mode (D20): the `<puzzle-view>` root becomes a
 // real element and may carry attributes. data(params, props) returns the model.
 const viewTemplate = `<puzzle-view class="__NAME__">

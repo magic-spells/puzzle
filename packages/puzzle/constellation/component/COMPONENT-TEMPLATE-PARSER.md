@@ -94,6 +94,20 @@ the valued one. Event names are exempt: the colon is their modifier channel, and
 filters stay keyboard-only), static islands, literal inline SVG roots/paths,
 list identifiers/keys, and unique static refs.
 
+Component-name grammar ([[DECISION-D167-COMPONENT-FAMILIES]]): a capitalized
+tag that survives marker resolution must be a valid member path —
+`Ident('.'Ident)*`, each segment `[A-Za-z_][A-Za-z0-9_]*` — enforced by
+`checkComponentName` immediately ahead of the parser's single `*Component`
+construction site, so every classification path (template and skeleton bodies,
+conditional/loop/case bodies, marker fallback bodies, Snippet and Portal
+children) is covered. Any other capitalized name (a `-`, a `:`, an empty
+segment) is a positioned compile error — before D167 those flowed into codegen
+as syntactically broken JS. A dotted name whose first segment is a marker name
+(`<Slot.Foo>`) gets a steering error; the check does not run inside `{#raw}`,
+and lowercase tags are untouched, so custom elements keep their dashes. Dotted
+names are the component-family idiom — codegen emits them verbatim as member
+expressions.
+
 Composition grammar (D134/D141/D144/D166): `<Children>` is the default marker,
 `<Slot>` is the router outlet, `<Slot name="x">` is a named marker,
 `<Snippet>` declares caller-owned parameterized content, and `<Portal>` is the

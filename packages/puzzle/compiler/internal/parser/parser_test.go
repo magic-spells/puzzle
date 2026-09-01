@@ -2336,3 +2336,121 @@ func TestParseEventModifierErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestParseComponentNamesD167 pins the component-name grammar: a capitalized tag
+// must be Ident('.'Ident)* so codegen's verbatim tag emission is always a legal
+// JS expression. Lowercase tags — custom elements with dashes, namespaced SVG —
+// stay untouched.
+func TestParseComponentNamesD167(t *testing.T) {
+	t.Run("dotted names parse as components", func(t *testing.T) {
+		cases := []string{"Frame", "Frame.Wrapper", "Frame.Wrapper.Header", "Frame._x0", "F1.W2"}
+		for _, name := range cases {
+			t.Run(name, func(t *testing.T) {
+				root := parseContent(t, "<"+name+">body</"+name+">")
+				c, ok := elementChildren(root.Children)[0].(*Component)
+				if !ok {
+					t.Fatalf("expected *Component, got %T", elementChildren(root.Children)[0])
+				}
+				if c.Name != name {
+					t.Fatalf("Name = %q, want %q", c.Name, name)
+				}
+			})
+		}
+	})
+
+	t.Run("lowercase tags keep dashes and colons", func(t *testing.T) {
+		for _, name := range []string{"my-element", "puzzle-view-thing"} {
+			root := parseContent(t, "<"+name+"></"+name+">")
+			el, ok := elementChildren(root.Children)[0].(*Element)
+			if !ok {
+				t.Fatalf("expected *Element for %q, got %T", name, elementChildren(root.Children)[0])
+			}
+			if el.Tag != name {
+				t.Fatalf("Tag = %q, want %q", el.Tag, name)
+			}
+		}
+	})
+
+	errs := []struct {
+		name        string
+		src         string
+		wantMessage string
+	}{
+		{
+			name:        "dash in a component name",
+			src:         `<puzzle-view><Frame-x/></puzzle-view>` + "\n<script></script>",
+			wantMessage: `component tag <Frame-x> is not a valid component name — "Frame-x" is not an identifier. A capitalized tag names a component (<Frame>) or a family member (<Frame.Wrapper>); lowercase the tag for a custom element (D167)`,
+		},
+		{
+			name:        "trailing dot",
+			src:         `<puzzle-view><Frame./></puzzle-view>` + "\n<script></script>",
+			wantMessage: "component tag <Frame.> has an empty name segment — a component name is an identifier or a dotted family member like <Frame.Wrapper> (D167)",
+		},
+		{
+			name:        "empty middle segment",
+			src:         `<puzzle-view><Frame..Wrapper/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "component tag <Frame..Wrapper> has an empty name segment — a component name is an identifier or a dotted family member like <Frame.Wrapper> (D167)",
+		},
+		{
+			name:        "colon in a component name",
+			src:         `<puzzle-view><Frame:Wrapper/></puzzle-view>` + "\n<script></script>",
+			wantMessage: `component tag <Frame:Wrapper> is not a valid component name — "Frame:Wrapper" is not an identifier. A capitalized tag names a component (<Frame>) or a family member (<Frame.Wrapper>); lowercase the tag for a custom element (D167)`,
+		},
+		{
+			name:        "marker root Slot",
+			src:         `<puzzle-view><Slot.Foo/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Slot.Foo> is not a component — Slot is a reserved composition marker and cannot be a component family root (D134/D167)",
+		},
+		{
+			name:        "marker root Children",
+			src:         `<puzzle-view><Children.Foo/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Children.Foo> is not a component — Children is a reserved composition marker and cannot be a component family root (D134/D167)",
+		},
+		{
+			name:        "marker root Snippet",
+			src:         `<puzzle-view><Snippet.Row/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Snippet.Row> is not a component — Snippet is a reserved composition marker and cannot be a component family root (D134/D167)",
+		},
+		{
+			name:        "marker root Portal",
+			src:         `<puzzle-view><Portal.Layer/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Portal.Layer> is not a component — Portal is a reserved composition marker and cannot be a component family root (D134/D167)",
+		},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte(tc.src), "test.pzl")
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected positioned *ParseError, got %T (%v)", err, err)
+			}
+			if pe.Message != tc.wantMessage {
+				t.Fatalf("message = %q, want %q", pe.Message, tc.wantMessage)
+			}
+			// Every fixture puts the offending tag immediately after <puzzle-view>.
+			if pe.Line != 1 || pe.Col != 14 {
+				t.Fatalf("position = %d:%d, want 1:14 at the offending tag", pe.Line, pe.Col)
+			}
+		})
+	}
+
+	// {#raw} documents markup, so a name the grammar rejects outside the block is
+	// a literal element inside it.
+	t.Run("raw bodies keep invalid names as literal elements", func(t *testing.T) {
+		root := parseContent(t, `{#raw}<Frame-x/><Slot.Foo/>{/raw}`)
+		kids := elementChildren(root.Children)
+		want := []string{"Frame-x", "Slot.Foo"}
+		if len(kids) != len(want) {
+			t.Fatalf("children: got %d, want %d", len(kids), len(want))
+		}
+		for i, tag := range want {
+			el, ok := kids[i].(*Element)
+			if !ok || el.Tag != tag {
+				t.Fatalf("child %d: got %#v, want literal <%s>", i, kids[i], tag)
+			}
+		}
+	})
+}

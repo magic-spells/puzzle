@@ -1,0 +1,19 @@
+<puzzle-view>
+  <Frame.Wrapper label={ title } @close={ dismiss(event) }>
+    <Frame.Content>{ body }</Frame.Content>
+  </Frame.Wrapper>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+import Frame from '../components/Frame';
+
+export default class ViewComponentFamily extends PuzzleView {
+  title = 'Frame';
+  body = '';
+
+  events = {
+    dismiss: (event: Event) => event.type,
+  };
+}
+</script>

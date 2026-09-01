@@ -11,7 +11,7 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Seven breaking changes are easy to miss on a multi-version jump. Most fail
+Eight breaking changes are easy to miss on a multi-version jump. Most fail
 loudly — a compile error, a constructor throw, an unresolvable import. Four are
 quiet: `output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
 are greppable; the stricter write-response guard (0.6.0) is not — it depends on
@@ -53,6 +53,17 @@ capability:
   `TypeError: Failed to parse URL`. A build-time read also means a private API
   needs its credentials available to the build — `beforeRequest` still runs, and
   a 404 settles as absence exactly as it does at runtime.
+
+**Capitalized tag names are validated (0.7.0, D167).** A capitalized tag is a
+component, and its name must now be `Ident('.'Ident)*` — `<Card>` or the new
+dotted family form `<Frame.Wrapper>`. A capitalized name carrying a `-`, a `:`,
+or an empty segment (`<Frame-x>`, `<Frame:Wrapper>`, `<Frame.>`) is a positioned
+compile error, as is a dotted name rooted at a composition marker
+(`<Slot.Foo>`). This fails loudly, and a build it fails was already broken:
+the tag text is emitted verbatim as the ViewNode tag expression, so those names
+compiled silently into syntactically invalid JavaScript. Lowercase tags are
+untouched — custom elements with dashes and namespaced SVG keep working, so the
+fix for a capitalized `<My-Widget>` is usually to lowercase it.
 
 **`routerMode` takes a factory, not a string (0.6.0, D159).** Path routing is
 the zero-config default — omit `routerMode` entirely. Hash and memory routing
@@ -134,6 +145,40 @@ one is *not* a compile error; it silently builds a different product.
 ## 0.7.0 — Unreleased
 
 ### Added
+
+- **Component families: dotted component tags and a barrel convention (D167).**
+  Related components import as one unit and invoke with dot notation:
+
+  ```html
+  <script>import Frame from '@/components/Frame';</script>
+
+  <Frame><Frame.Wrapper><Frame.Content>…</Frame.Content></Frame.Wrapper></Frame>
+  ```
+
+  A capitalized tag is now validated as `Ident('.'Ident)*` with each segment
+  `[A-Za-z_][A-Za-z0-9_]*`. That is a bug fix as much as a feature: the tag text
+  has always been emitted verbatim as the ViewNode tag expression, so
+  `<Frame.Wrapper>` already compiled to `new ViewNode(Frame.Wrapper, …)` — but
+  nothing validated the name, and a capitalized `<Frame-x>` or `<Frame.>`
+  compiled cleanly into syntactically broken JavaScript. Those are positioned
+  compile errors now, as is a dotted name rooted at a reserved composition
+  marker (`<Slot.Foo>`). Lowercase tags are untouched: custom elements with
+  dashes and namespaced SVG keep working, and `{#raw}` bodies still take any
+  tag literally. Codegen is unchanged — a dotted tag resolves lexically against
+  module scope at runtime, with no registry and no import inspection.
+
+  The family itself is a convention, not a mechanism: a directory of `.pzl`
+  files (still strictly one class per file) beside a plain JS `index.js` that
+  re-exports the members and hangs them off the root with
+  `export default Object.assign(Frame, { Wrapper, Content })`, so both
+  `import Frame` and `import { Frame, Wrapper }` work.
+  `puzzle generate component Frame --family Wrapper,Content` scaffolds the
+  directory, one component stub per member, and the barrel. Member names are
+  validated (PascalCase, no duplicates, no collision with the root, no marker
+  names), `--family` on a non-component type is an error, and the scaffold is
+  all-or-nothing — a collision without `--force` writes nothing, while
+  `--force` rewrites the family's own files and leaves everything else in the
+  directory alone. Without `--family`, `generate component` is unchanged.
 
 - **`puzzle check` type-checks `.pzl` files with the app's own TypeScript
   installation (D165).** The command emits virtual files under

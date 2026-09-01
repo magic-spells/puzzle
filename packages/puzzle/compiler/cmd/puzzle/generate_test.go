@@ -13,6 +13,8 @@ func runGenerate(t *testing.T, dir string, args ...string) error {
 	chdir(t, dir)
 	_ = generateCmd.Flags().Set("path", "")
 	_ = generateCmd.Flags().Set("force", "false")
+	_ = generateCmd.Flags().Set("family", "")
+	generateCmd.Flags().Lookup("family").Changed = false
 	rootCmd.SetArgs(append([]string{"generate"}, args...))
 	return rootCmd.Execute()
 }
@@ -105,5 +107,56 @@ func TestGenerateCommandNotAProject(t *testing.T) {
 	dir := t.TempDir() // no package.json marker
 	if err := runGenerate(t, dir, "component", "Thing"); err == nil {
 		t.Skip("an ancestor of TempDir carries a project marker; walk-up correctly found it")
+	}
+}
+
+// TestGenerateCommandFamily drives the D167 --family flag end-to-end: the
+// directory, every member, and the barrel land under app/components/<Name>/.
+func TestGenerateCommandFamily(t *testing.T) {
+	root := stubProject(t)
+	if err := runGenerate(t, root, "component", "Frame", "--family", "Wrapper, Content"); err != nil {
+		t.Fatalf("generate component --family: %v", err)
+	}
+	for _, rel := range []string{"Frame.pzl", "Wrapper.pzl", "Content.pzl", "index.js"} {
+		if _, err := os.Stat(filepath.Join(root, "app", "components", "Frame", rel)); err != nil {
+			t.Errorf("expected app/components/Frame/%s: %v", rel, err)
+		}
+	}
+	// A plain single-file component is not left behind next to the family dir.
+	if _, err := os.Stat(filepath.Join(root, "app", "components", "Frame.pzl")); !os.IsNotExist(err) {
+		t.Errorf("--family should not also write app/components/Frame.pzl (err=%v)", err)
+	}
+}
+
+func TestGenerateCommandFamilyPathAndForce(t *testing.T) {
+	root := stubProject(t)
+	if err := runGenerate(t, root, "component", "Frame", "--family", "Wrapper", "--path", "app/components/ui"); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "app", "components", "ui", "Frame", "index.js")); err != nil {
+		t.Errorf("expected the family under --path: %v", err)
+	}
+	if err := runGenerate(t, root, "component", "Frame", "--family", "Wrapper", "--path", "app/components/ui"); err == nil {
+		t.Error("expected refusal without --force")
+	}
+	if err := runGenerate(t, root, "component", "Frame", "--family", "Wrapper", "--path", "app/components/ui", "--force"); err != nil {
+		t.Errorf("expected --force to succeed: %v", err)
+	}
+}
+
+func TestGenerateCommandFamilyRejectsNonComponent(t *testing.T) {
+	root := stubProject(t)
+	if err := runGenerate(t, root, "view", "Frame", "--family", "Wrapper"); err == nil {
+		t.Error("expected --family on a view to be an error")
+	}
+}
+
+func TestGenerateCommandFamilyRejectsBadMember(t *testing.T) {
+	root := stubProject(t)
+	if err := runGenerate(t, root, "component", "Frame", "--family", "Wrap-per"); err == nil {
+		t.Error("expected a dashed family member to be rejected")
+	}
+	if err := runGenerate(t, root, "component", "Frame", "--family", "Wrapper,"); err == nil {
+		t.Error("expected a trailing empty family member to be rejected")
 	}
 }

@@ -69,16 +69,26 @@ type Options struct {
 	Dir string
 	// Force allows overwriting an existing file.
 	Force bool
+	// Family, when non-empty, scaffolds a component FAMILY (D167): a directory
+	// named after Name holding Name.pzl, one .pzl per member, and an index.js
+	// barrel. Component kind only.
+	Family []string
 }
 
 // Result reports what Generate produced.
 type Result struct {
-	// Path is the absolute path of the written file.
+	// Path is the absolute path of the written file — the family DIRECTORY for a
+	// family scaffold.
 	Path string
 	// Rel is Path relative to the project root (for display).
 	Rel string
+	// Files lists every written file relative to the project root, in write
+	// order. A single-file scaffold writes exactly one; a family writes the root
+	// .pzl, each member .pzl, then index.js.
+	Files []string
 	// Hint is a non-empty, multi-line instruction when the user must take a
-	// manual follow-up step (model registration); empty otherwise.
+	// manual follow-up step (model registration) or an invocation example (a
+	// component family); empty otherwise.
 	Hint string
 }
 
@@ -87,6 +97,9 @@ type Result struct {
 func Generate(opts Options) (*Result, error) {
 	if opts.Root == "" {
 		return nil, fmt.Errorf("no project root")
+	}
+	if len(opts.Family) > 0 {
+		return generateFamily(opts)
 	}
 
 	content, filename, err := render(opts.Kind, opts.Name)
@@ -128,11 +141,173 @@ func Generate(opts Options) (*Result, error) {
 		return nil, err
 	}
 
-	res := &Result{Path: dest, Rel: relOrAbs(opts.Root, dest)}
+	rel := relOrAbs(opts.Root, dest)
+	res := &Result{Path: dest, Rel: rel, Files: []string{rel}}
 	if opts.Kind == KindModel {
 		res.Hint = modelHint(opts.Name)
 	}
 	return res, nil
+}
+
+// markerNames are the reserved capitalized composition markers (D134/D167). No
+// scaffolded component may be named one — plain, family root, or family member:
+// the compiler matches these tags before it resolves a component, so <Slot>,
+// <Slot.Foo>, and <Frame.Slot> are markers or compile errors, never yours.
+var markerNames = []string{"Children", "Slot", "Snippet", "Portal"}
+
+func isMarkerName(s string) bool {
+	for _, m := range markerNames {
+		if s == m {
+			return true
+		}
+	}
+	return false
+}
+
+// generateFamily scaffolds a component family (D167): a directory named after
+// the root component holding Root.pzl, one .pzl per member, and an index.js
+// barrel that re-exports the members and hangs them off the root as properties,
+// so `import Frame from '@/components/Frame'` makes `<Frame.Wrapper>` resolve.
+//
+// It is all-or-nothing: every destination is checked for collisions BEFORE the
+// first byte is written, so a refused family leaves nothing behind. --force
+// overwrites the family's OWN files and never removes anything else already in
+// the directory (a hand-written Frame.css or a second family member survives a
+// re-scaffold).
+func generateFamily(opts Options) (*Result, error) {
+	if opts.Kind != KindComponent {
+		return nil, fmt.Errorf("--family is only valid for a component (got %s)", opts.Kind)
+	}
+	if !pascalCase.MatchString(opts.Name) {
+		return nil, fmt.Errorf("component name %q must be PascalCase (e.g. UserCard)", opts.Name)
+	}
+	if isMarkerName(opts.Name) {
+		return nil, fmt.Errorf("component family root %q is a reserved composition marker (Children, Slot, Snippet, Portal)", opts.Name)
+	}
+
+	seen := map[string]bool{opts.Name: true}
+	for _, member := range opts.Family {
+		switch {
+		case member == "":
+			return nil, fmt.Errorf("empty family member name (--family takes a comma-separated list, e.g. --family Wrapper,Content)")
+		case !pascalCase.MatchString(member):
+			return nil, fmt.Errorf("family member %q must be PascalCase (e.g. Wrapper)", member)
+		case isMarkerName(member):
+			return nil, fmt.Errorf("family member %q is a reserved composition marker (Children, Slot, Snippet, Portal)", member)
+		case member == opts.Name:
+			return nil, fmt.Errorf("family member %q collides with the family root", member)
+		case seen[member]:
+			return nil, fmt.Errorf("duplicate family member %q", member)
+		}
+		seen[member] = true
+	}
+
+	dir := opts.Dir
+	if dir == "" {
+		dir = opts.Kind.defaultDir()
+	}
+	outDir := dir
+	if !filepath.IsAbs(outDir) {
+		outDir = filepath.Join(opts.Root, dir)
+	}
+	familyDir := filepath.Join(outDir, opts.Name)
+	if err := withinRoot(opts.Root, familyDir); err != nil {
+		return nil, err
+	}
+
+	type pending struct {
+		path    string
+		content string
+	}
+	files := []pending{{filepath.Join(familyDir, opts.Name+".pzl"), fill(familyTemplate, opts.Name, "")}}
+	for _, member := range opts.Family {
+		files = append(files, pending{filepath.Join(familyDir, member+".pzl"), fill(familyTemplate, member, "")})
+	}
+	files = append(files, pending{filepath.Join(familyDir, "index.js"), familyBarrel(opts.Name, opts.Family)})
+
+	// Pre-flight: containment and collisions for EVERY destination before any
+	// write, so a refusal never leaves a half-scaffolded family behind.
+	for _, f := range files {
+		if err := withinRoot(opts.Root, f.path); err != nil {
+			return nil, err
+		}
+		if opts.Force {
+			continue
+		}
+		if _, err := os.Stat(f.path); err == nil {
+			return nil, fmt.Errorf("%s already exists (use --force to overwrite)", relOrAbs(opts.Root, f.path))
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+
+	if err := os.MkdirAll(familyDir, 0o755); err != nil {
+		return nil, err
+	}
+	written := make([]string, 0, len(files))
+	for _, f := range files {
+		if err := os.WriteFile(f.path, []byte(f.content), 0o644); err != nil {
+			return nil, err
+		}
+		written = append(written, relOrAbs(opts.Root, f.path))
+	}
+
+	return &Result{
+		Path:  familyDir,
+		Rel:   relOrAbs(opts.Root, familyDir),
+		Files: written,
+		Hint:  familyHint(opts.Root, familyDir, opts.Name, opts.Family),
+	}, nil
+}
+
+// familyBarrel renders the plain-JS index.js that makes the family one import
+// (D167). It is ordinary JavaScript the bundler resolves with no framework
+// opinions — no registry, no compiler magic.
+func familyBarrel(root string, members []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "import %s from './%s.pzl';\n", root, root)
+	for _, m := range members {
+		fmt.Fprintf(&b, "import %s from './%s.pzl';\n", m, m)
+	}
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "export { %s };\n", strings.Join(append([]string{root}, members...), ", "))
+	fmt.Fprintf(&b, "export default Object.assign(%s, { %s });\n", root, strings.Join(members, ", "))
+	return b.String()
+}
+
+// familyHint is the invocation example printed after a family is scaffolded:
+// one import, dotted tags. The specifier follows --path, so a family that did
+// not land in the default directory is not advertised at an import path that
+// resolves to nothing.
+func familyHint(projectRoot, familyDir, name string, members []string) string {
+	inner := name
+	if len(members) > 0 {
+		inner = name + "." + members[0]
+	}
+	spec, aliased := familyImportSpecifier(projectRoot, familyDir)
+	lead := "Import the family as one unit:\n"
+	if !aliased {
+		lead = "Import the family as one unit (path shown from the project root):\n"
+	}
+	return lead +
+		fmt.Sprintf("    import %s from '%s';\n", name, spec) +
+		"    // then invoke members with dot notation:\n" +
+		fmt.Sprintf("    <%s><%s>…</%s></%s>", name, inner, inner, name)
+}
+
+// familyImportSpecifier renders the module specifier familyHint prints. `@` is
+// the built-in alias for the project's app/ directory, so a family under app/
+// gets the alias form that works from any depth. A family placed elsewhere with
+// --path has no alias to reach it, so it falls back to the project-relative
+// directory — accurate about WHERE the family is, and flagged as such by the
+// caller rather than printing an alias path that resolves to nothing.
+func familyImportSpecifier(projectRoot, familyDir string) (spec string, aliased bool) {
+	rel := relOrAbs(projectRoot, familyDir)
+	const appPrefix = "app/"
+	if strings.HasPrefix(rel, appPrefix) && !strings.HasPrefix(rel, "../") {
+		return "@/" + strings.TrimPrefix(rel, appPrefix), true
+	}
+	return rel, false
 }
 
 // render returns the file body and base filename for a kind+name, validating the
@@ -142,6 +317,14 @@ func render(kind Kind, name string) (content, filename string, err error) {
 	case KindComponent, KindView, KindLayout:
 		if !pascalCase.MatchString(name) {
 			return "", "", fmt.Errorf("%s name %q must be PascalCase (e.g. UserCard)", kind, name)
+		}
+		// The compiler matches the composition markers BEFORE it resolves a
+		// capitalized tag as a component (D134), so <Slot>, <Children>, <Snippet>,
+		// and <Portal> can never name YOUR component — a scaffold at one of those
+		// names is a file nothing can ever invoke. Views and layouts are routed by
+		// class, never written as tags, so the guard is component-only.
+		if kind == KindComponent && isMarkerName(name) {
+			return "", "", fmt.Errorf("component name %q is a reserved composition marker (Children, Slot, Snippet, Portal) — the compiler resolves <%s> itself, so a component by that name could never be invoked", name, name)
 		}
 		tmpl := map[Kind]string{
 			KindComponent: componentTemplate,
