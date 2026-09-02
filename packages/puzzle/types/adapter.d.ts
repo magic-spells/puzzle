@@ -147,8 +147,11 @@ declare module './index.js' {
 		): BoundAdapterConfig<TConfig>;
 		/**
 		 * GET the collection endpoint and upsert every record. Called with no
-		 * options it is a complete-collection load and marks the type complete;
-		 * an options-bearing call stays partial (D161).
+		 * options the type stops re-faulting on a tracked findMany, and — when the
+		 * generated REST transport made the request — is also marked exhaustive, so
+		 * a findOne miss answers locally. An authored loadMany may have returned one
+		 * page, so it never marks exhaustive; an options-bearing call marks neither
+		 * (D161/D158).
 		 */
 		loadMany(type: string, options?: AdapterLoadManyOptions): Promise<any[]>;
 		/** GET one record by id and upsert it. Bypasses the negative cache. */

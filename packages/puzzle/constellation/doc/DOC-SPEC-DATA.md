@@ -149,6 +149,7 @@ static schema = {
 
 ## 22. Adapter write sync (v1.18)
 
+
 The write half of the D21 adapter story. Shipped in v1.18 (D50), moved to the
 opt-in subpath by D157, and generalized by D158. The model's `static adapter`
 supplies per-verb transports; `endpoint` generates any missing REST defaults.
@@ -200,8 +201,11 @@ on one page may carry different dialects.
 authored transport. The generated transport serializes non-nullish entries with
 `URLSearchParams`; calls without options retain the original byte-identical
 collection URL. Loading several pages accumulates records in the Store and
-merges duplicate primary keys; only a no-options success marks the type
-collection-complete for §61. `store.adapter(type)` returns a stable per-store,
+merges duplicate primary keys; a no-options success stops §61's tracked
+`findMany` from re-loading the type, and marks it EXHAUSTIVE for §61's
+`findOne` only when the request came from the generated transport — an authored
+`loadMany` may have returned page one. `store.adapter(type)` returns a stable
+per-store,
 per-type view with enhanced fetch pre-bound to every function, generated verbs
 included; custom methods are author-invoked only and commonly compose with
 `store.upsert()`. A function using global fetch instead bypasses the hook and
@@ -309,6 +313,7 @@ install the same received/imported capability before constructing stores.
 ## 61. Auto-fetching finds: tracked fault-in and the settle loop (v1.76)
 
 
+
 Tracked `findOne`/`findMany` fetch what the store is missing; views need zero
 loading code (D161). The one rule: **server data comes from `data()` — a
 committed `null` means the record does not exist, never "still loading".**
@@ -341,7 +346,11 @@ data(params) {
   request slot, so a read by anyone else — the app's raw `store`, another
   view's handle, a module capture, a record's `_store` inside a relationship
   getter — is a pure local snapshot that can neither issue a request nor land a
-  failure in a batch it does not own. Two documented residues: the view's OWN
+  failure in a batch it does not own. The same identity decides the dev nudge
+  for an imperative `loadOne`/`loadMany`: it fires only for a call through the
+  view's own handle while that view's evaluation is open, never for a click
+  handler or a timer that happens to run while some view is suspended. Two
+  documented residues: the view's OWN
   deferred code holding its OWN handle during its own suspension (a `setTimeout`
   inside `data()`) is attributed to that evaluation and does fault — same view,
   same data; and SUBSCRIPTION attribution stays ambient, so a foreign read
@@ -350,7 +359,8 @@ data(params) {
 - **Fetch eligibility:** a tracked miss faults only when §22's dispatch
   resolves the read verb (`findOne` → `loadOne`, `findMany` → `loadMany`).
   No capability, no resolvable verb, nullish/unkeyable id, negative-cached id,
-  or collection-complete type ⇒ pure local. Untracked reads (event handlers,
+  a type already loaded (for `findMany`) or known exhaustive (for `findOne`)
+  ⇒ pure local. Untracked reads (event handlers,
   model methods) never fetch — handlers read local and call `refresh()`.
 - **Caches, per Store, adapter-owned:** in-flight dedup by `recordKey`
   identity (same-pass duplicates and concurrent views share one request); a
@@ -358,9 +368,15 @@ data(params) {
   when the identity arrives by any path; removing a record by any path —
   confirmed `delete()` or local `destroy()` — records absence; explicit
   `loadOne` bypasses it as the refresh escape hatch and also clears the
-  requested id's entry on success); and the collection-complete type set (only
-  a successful no-options collection load marks it; empty-array success
-  counts; options-bearing loads stay partial).
+  requested id's entry on success); and TWO collection sets. A successful
+  no-options collection load marks the type LOADED, so a tracked `findMany`
+  stops faulting (empty-array success counts; options-bearing loads mark
+  nothing). It marks the type EXHAUSTIVE — a `findOne` miss on it is an
+  authoritative "does not exist", owing no detail request — only when the
+  framework generated the request itself (§58's endpoint-derived REST default).
+  An authored `loadMany`, model-level or from an `adapter.defaults()` dialect,
+  is opaque: a paginated first page is a valid response and says nothing about
+  the ids it omits, so a later miss still fetches. Exhaustive implies loaded.
 - **Failures:** only a normalized 404 becomes `null` + a negative entry.
   Network errors, 5xx, 401/403, and shape errors reject the run into the
   ordinary navigation-failure / `errorView` path and poison no caches.
@@ -368,7 +384,14 @@ data(params) {
   skeleton shows from the first miss and holds through every round under the
   D52 anti-flash rule; without one, the previous route holds until settlement.
 - **Store notifications mid-settle** coalesce into one more pass instead of a
-  competing refresh; `setData()` is unchanged. A destroyed/leaving/superseded
+  competing refresh; `setData()` is unchanged. A run that ends WITHOUT
+  committing — superseded by a D146 prepared commit, gone stale, or failed —
+  hands a folded notification back rather than clearing it, so the change
+  reaches the view that is actually on screen. In the other direction, the
+  flush carrying a settle run's own upserts is recognised and skipped by the
+  view that committed behind it: a settle that fetched renders once, not twice.
+  A change any other writer makes during that committing pass is still
+  delivered. A destroyed/leaving/superseded
   view stops its loop without aborting shared requests, and a destroyed view's
   still-suspended evaluation can no longer fault at all.
 - **Output modes:** a prerender read must be answerable from the build
@@ -377,8 +400,10 @@ data(params) {
   store in `beforeMount({ store })`; an app-relative URL fails the build with a
   diagnostic naming the route and both remedies. §49's hook runs in the build
   context. Static pages transfer read state in a second data island
-  (`data-puzzle-static-read`, `{ v: 1, complete, absent }`) hydrated after
-  records so `mountStatic` repeats none of the build's loads or 404s; hybrid
+  (`data-puzzle-static-read`, `{ v: 1, complete, loaded, absent }`) hydrated
+  after records so `mountStatic` repeats none of the build's loads or 404s;
+  `complete` keeps its exhaustive meaning, and an envelope without `loaded` (one
+  written before 0.7.0) reads its `complete` list as both. Hybrid
   transfers nothing — takeover re-runs `data()` fresh. The dev HMR snapshot
   carries read state; in-flight promises never transfer anywhere.
 - **`data()` must tolerate multiple runs per navigation** — already true under

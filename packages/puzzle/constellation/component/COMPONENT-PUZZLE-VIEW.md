@@ -34,6 +34,17 @@ notes:
       was enough). The `_settleData` half of the test stays: without the capability anywhere in the
       realm the loop is not in the bundle at all (D157). Regression:
       tests/adapter-realm-isolation.test.js.
+  - kind: state
+    text: >-
+      `onStoreChange(seq)` takes the Store's batch sequence and returns early when `seq <=
+      this._settleMark` (0.7.0). `_settleMark` joins `_settlingToken`/`_settleDirty` as an
+      underscore-public settle field: the adapter's `_settleData` records the store's `_notifySeq`
+      as of the start of each pass and stamps it onto `_settleMark` when an OWNING run's pass
+      commits — never for a parked (D146 prepared) run, whose model is not on screen until commit. A
+      batch at or below the mark predates the evaluation that produced the committed model, so it is
+      already rendered; anything a second writer queues during that pass sorts above it and still
+      refreshes. Called with no argument (the settle loop handing a folded notification back, a
+      manual invocation) it never skips.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

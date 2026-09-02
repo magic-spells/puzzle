@@ -121,14 +121,15 @@ views, no `{#await}` templates, no separate `load()` hook.
 
 ## Decision
 
+
 **The settle loop** (owned by PuzzleView, wrapped around every tracked
 `data()` evaluation — refresh, routed preload, D146 prepareRefresh, component
 mount, prerender):
 
 1. Run a pass with its own pending-request set. A tracked read that isn't
-   already satisfied — a `findOne` miss, or a `findMany` on a type not yet
-   collection-complete — returns its local value (`null`/locals) and queues a
-   deduped fetch when the model has a resolvable read verb.
+   already satisfied — a `findOne` miss, or a `findMany` on a type whose
+   collection has not been loaded — returns its local value (`null`/locals) and
+   queues a deduped fetch when the model has a resolvable read verb.
 2. Pending set non-empty ⇒ do not commit; await the batch, discard the
    intermediate pass's subscriptions, re-run.
 3. Commit the first pass that queues nothing; only that pass's subscriptions
@@ -171,6 +172,15 @@ cannot drop a promise into a settle batch they do not own, so an unrelated 500
 can no longer fail a view that never queried that type. Server-backed rendering
 belongs in `data()`; handlers read local and call `refresh()`.
 
+The dev nudge for an imperative `loadOne`/`loadMany` is attributed the same
+way, and for the same reason. It lives on the HANDLE, not on the Store method:
+a forwarded handle method is bound to the raw store, so by the time the verb
+runs there is nothing left to say which reference the caller held. Keying it on
+the ambient `_tracking` instead was wrong — that field stays set across every
+`await` of any suspended async `data()`, so a click handler or a timer calling
+`store.loadMany()` in that window warned about a run it had nothing to do with,
+and the warn-once latch then hid the genuine case for the rest of the session.
+
 Two residues are documented, not defects. (1) The view's OWN deferred code
 holding its OWN handle during its own suspension — a `setTimeout` inside
 `data()` reading `this.ctx.store` — is attributed to that open evaluation and
@@ -191,8 +201,9 @@ server-backed, or every local-only model in a dialect app would fault to
 `GET undefined`. Only the AUTOMATIC path is gated this way: an explicit
 `store.loadOne`/`loadMany` still dispatches through the app-wide dialect
 exactly as D158 specifies, and the write verbs are untouched. No adapter
-capability, no resolvable verb, nullish id, negative-cached id, or
-collection-complete type ⇒ pure local, exactly the prior behavior —
+capability, no resolvable verb, nullish id, negative-cached id, an
+already-loaded type (`findMany`) or a type known exhaustive (`findOne`)
+⇒ pure local, exactly the prior behavior —
 local-first apps (no capability, or models with no endpoint and no authored
 read verb) are untouched. A fixtures app faults like a server app:
 `installFixtures()` installs the capability itself, and the mock serves the
@@ -205,7 +216,7 @@ amended) — `post.author` in a 50-row list must not become 50 GETs.
 **Read state is adapter-owned** (WeakMap keyed by Store, in the `/adapter`
 module — the D157 no-adapter bundle carries none of it): in-flight dedup (by
 `recordKey` identity for single records, by type for collection loads), a
-never-persisted 1000-entry negative LRU, and a collection-complete type set.
+never-persisted 1000-entry negative LRU, and TWO collection sets.
 Only a framework-normalized 404
 (`PuzzleAdapterError`) records absence; network/5xx/401/403/shape errors
 reject the run and poison nothing. Removing a record by any path — confirmed
@@ -216,23 +227,55 @@ refresh escape hatch, and on success also clears the *requested* id's entry.
 Only the AUTOMATIC fault path rejects a response whose pk differs from the
 requested id before mutation — an implicit fault would otherwise miss
 forever; explicit `store.loadOne` accepts what the server returns (a
-slug-resolving endpoint, say). A type is collection-complete only after a
-successful no-options collection load (empty-array success counts);
-options-bearing loads stay partial. The read-state codecs unwrap a handle
+slug-resolving endpoint, say). The read-state codecs unwrap a handle
 before keying, so a caller holding `this.ctx.store` gets its store's real state
 rather than a silently empty envelope.
+
+**Loaded is not exhaustive.** A successful no-options collection load marks the
+type LOADED — the request has run, so a tracked `findMany` stops faulting it
+(empty-array success counts; options-bearing loads mark nothing). It marks the
+type EXHAUSTIVE — a `findOne` miss is an authoritative "does not exist" and
+owes no detail request — only when the FRAMEWORK generated the request, from
+the model's `endpoint` (D158's REST default). An authored `loadMany`, on the
+model or in an `adapter.defaults()` dialect, is opaque: returning a paginated
+first page is a perfectly good implementation and says nothing about the ids it
+omits, so treating it as exhaustive reported real records as missing — a
+committed `null` that means "page two", which is exactly the ambiguity this
+card exists to prevent. One set could not carry both meanings: dropping the
+mark entirely would make every tracked `findMany` re-request the collection on
+every settle pass, trading a wrong answer for a request loop. Exhaustive
+implies loaded; the island envelope keeps `complete` meaning exhaustive and
+adds `loaded` beside it, so an older kernel reading a newer envelope is still
+right about every id.
+
+**The settle window is a delivery contract, not just a coalescing trick.** A
+store notification landing while a run owns the window folds into it
+(`_settleDirty`) and is delivered by the extra pass that run takes before
+committing. Clearing that flag is therefore only earned by a pass that actually
+runs: a run that ends WITHOUT committing — superseded by a D146 prepared
+commit, gone stale, or failed — hands the notification back through
+`onStoreChange()` instead, or the change is lost outright (the prepared commit
+paints a model captured before the edit, and D146's re-derive does not fire,
+because folding deliberately never bumped `#runToken`). In the other direction,
+the flush carrying a run's OWN upserts must not buy a third `data()` run: the
+Store stamps every notification with a monotonic sequence number, the
+committing pass records the sequence as of its start, and a batch whose highest
+sequence for that view is at or below the mark is already reflected in the
+committed model and is skipped. The mark is read before `data()` runs, so it can
+only be conservative — a change any other writer queues DURING the pass sorts
+above it and is delivered as usual.
 
 **One/Many rename.** `store.loadAll` → `store.loadMany`, and the adapter verb
 key everywhere (model `static adapter`, `adapter.defaults()`, bound adapter).
 Every old spelling throws naming `loadMany` — including a registered model
 carrying a `loadAll` key, caught at Store init, because silent fallback to
 generated REST would quietly hit different URLs. `loadOne`/`loadMany` are
-demoted from the taught default to escape hatches (dev-mode warning when
-called inside a tracked run).
+demoted from the taught default to escape hatches (dev-mode warning when the
+view calls one through its own handle inside its own tracked run).
 
 **Prerender fetches at build time** through the same loop; a non-404 fault
 failure fails the build naming the route (a 404 settles as absence, exactly
-as at runtime). Static output transfers read state (collection-complete
+as at runtime). Static output transfers read state (loaded and exhaustive
 types + negative identities) in a versioned data-island envelope so
 `mountStatic` doesn't refetch what the build settled; hybrid deliberately
 transfers nothing — its SPA takeover re-runs `data()` as a fresh session.

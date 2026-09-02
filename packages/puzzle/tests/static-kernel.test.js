@@ -873,6 +873,7 @@ describe('static kernel — read-state island (D161)', () => {
 		expect(serializeReadState(lastStore)).toEqual({
 			v: 1,
 			complete: ['note'],
+			loaded: ['note'],
 			absent: ['note gone'],
 		});
 	});

@@ -100,7 +100,12 @@ export class Store {
 		// overlapping prepares compose — each holds every key it queried, and only the
 		// last hold to be released exposes the key to reconciliation again.
 		this._heldKeys = new Map();
-		this._pendingKeys = new Set();
+		// key → the sequence number of the most recent _notify that queued it.
+		// The number is what lets a subscriber tell a change it has ALREADY seen
+		// (enqueued before the evaluation that produced its committed model) from
+		// one that postdates it — see _deliverNotifications and D161.
+		this._pendingKeys = new Map();
+		this._notifySeq = 0;
 		this._flushScheduled = false;
 		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
 		this._persistPending = false; // dirty flag: storage write is batched into flush()
@@ -705,8 +710,9 @@ export class Store {
 	// ---- change notification (batched) ---------------------------------------
 
 	_notify(type, id) {
-		this._pendingKeys.add(type);
-		this._pendingKeys.add(type + REC_SEP + id);
+		const seq = ++this._notifySeq;
+		this._pendingKeys.set(type, seq);
+		this._pendingKeys.set(type + REC_SEP + id, seq);
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfStoreNotify(this, this._tracking);
 		}
@@ -781,45 +787,50 @@ export class Store {
 	_deliverNotifications() {
 		if (this._pendingKeys.size === 0) return;
 
-		const keys = [...this._pendingKeys];
+		const pending = [...this._pendingKeys];
 		this._pendingKeys.clear();
 
-		const notified = new Set();
-		for (const key of keys) {
+		// Gather first, deliver second. Every target's set is snapshotted BEFORE
+		// any subscriber runs: a subscriber's sync data() can mount a child that
+		// queries one of these keys, and the just-mounted child must not be handed
+		// a redundant onStoreChange this same tick (it already has fresh data from
+		// its own data()). Gathering also gives each subscriber the HIGHEST
+		// sequence number among the keys it is subscribed to in this batch, which
+		// is what lets it recognise a batch it has already accounted for (D161).
+		const targets = new Map();
+		for (const [key, seq] of pending) {
 			const subs = this.subscribersByKey.get(key);
 			if (!subs) continue;
-			// Snapshot the Set (like `keys` above): a subscriber's sync data() can mount
-			// a child that queries this same key, adding it to `subs` mid-iteration —
-			// and JS Sets DO visit entries added during iteration, so the live loop
-			// would hand the just-mounted child a redundant onStoreChange this same tick
-			// (it already has fresh data from its own data()). The snapshot only notifies
-			// subscribers present when the flush began.
-			for (const sub of [...subs]) {
-				if (notified.has(sub)) continue;
-				notified.add(sub);
-				// Each subscriber is isolated: a synchronous throw is logged and
-				// delivery CONTINUES to the remaining subscribers. Without this a
-				// single throwing subscriber would both skip every later subscriber
-				// AND lose those notifications for good — _pendingKeys was already
-				// cleared above, so they never come back. Function subscribers may
-				// also return a thenable; a rejection is logged the same way. Object
-				// subscribers route through onStoreChange(), which catches its own
-				// async failures and returns undefined, so only the function path
-				// needs the thenable guard (no double-logging).
-				try {
-					if (typeof sub === 'function') {
-						const result = sub();
-						if (result && typeof result.then === 'function') {
-							result.catch((err) =>
-								console.error('[puzzle] store subscriber failed:', err)
-							);
-						}
-					} else {
-						sub.onStoreChange?.();
+			for (const sub of subs) {
+				const seen = targets.get(sub);
+				if (seen === undefined || seq > seen) targets.set(sub, seq);
+			}
+		}
+
+		const keys = pending.map(([key]) => key);
+		const notified = new Set();
+		for (const [sub, seq] of targets) {
+			notified.add(sub);
+			// Each subscriber is isolated: a synchronous throw is logged and
+			// delivery CONTINUES to the remaining subscribers. Without this a
+			// single throwing subscriber would both skip every later subscriber
+			// AND lose those notifications for good — _pendingKeys was already
+			// cleared above, so they never come back. Function subscribers may
+			// also return a thenable; a rejection is logged the same way. Object
+			// subscribers route through onStoreChange(), which catches its own
+			// async failures and returns undefined, so only the function path
+			// needs the thenable guard (no double-logging).
+			try {
+				if (typeof sub === 'function') {
+					const result = sub();
+					if (result && typeof result.then === 'function') {
+						result.catch((err) => console.error('[puzzle] store subscriber failed:', err));
 					}
-				} catch (err) {
-					console.error('[puzzle] store subscriber failed:', err);
+				} else {
+					sub.onStoreChange?.(seq);
 				}
+			} catch (err) {
+				console.error('[puzzle] store subscriber failed:', err);
 			}
 		}
 

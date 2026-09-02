@@ -106,7 +106,9 @@ app passed is retained on the Store, and verb dispatch reads its app-default
 functions from there. Per Store too is the D161 read state, in module-level
 `WeakMap`s: in-flight single-record requests keyed type + `recordKey(id)`,
 in-flight collection requests keyed by type, a 1000-entry insertion-ordered
-negative LRU, and the collection-complete type set. Implicit faults dedup
+negative LRU, and two collection sets — the types whose collection has LOADED,
+and the exhaustive subset of those the framework fetched itself. Implicit
+faults dedup
 against the in-flight maps; explicit `loadOne`/`loadMany` always issue a
 request, and explicit `loadOne` bypasses the negative cache (the force-refresh
 escape hatch — its outcome still refreshes the entry).
@@ -118,6 +120,7 @@ build classifies an app's adapter without importing this module and dragging the
 sync runtime into its graph.
 
 ## Surface
+
 
 `store.adapter(type)` is the author-facing view of a model's adapter: every
 function the model declared, pre-bound to an enhanced fetch, plus the five
@@ -133,9 +136,11 @@ through it (D158) — the D161 negative cache records absence on exactly
 `status === 404`; every other failure rejects and poisons nothing.
 
 `serializeReadState(store)` and `hydrateReadState(store, envelope)` are the
-D161 read-state codecs — envelope `{ v: 1, complete: [...types], absent:
-['type recordKey', ...] }`. Records hydrate first; hydrate drops any absence
-whose record is present and ignores unknown versions. The static kernel and
+D161 read-state codecs — envelope `{ v: 1, complete: [...types],
+loaded: [...types], absent: ['type recordKey', ...] }`, where `complete` is the
+exhaustive subset of `loaded`. Records hydrate first; hydrate drops any absence
+whose record is present, reads a `loaded`-less envelope (written before 0.7.0)
+as `loaded === complete`, and ignores unknown versions. The static kernel and
 devstate reach these through the `capabilities.js` relay (the adapter registers
 its codecs there at module scope) so neither ever imports this module.
 
@@ -145,9 +150,10 @@ class), and `adapter.defaults()` keys must be the five verb names with function
 values. The exception is `loadAll` — the pre-0.7.0 spelling throws in
 production too, everywhere it can appear (`store.loadAll()` trap, model key at
 Store init, `defaults()` key, verb binding), one message naming `loadMany`.
-Development also warns once per store per verb when user code calls
-`loadOne`/`loadMany` inside a tracked `data()` run — the fault path calls
-un-warned internal loaders.
+Development also warns once per store per verb when a view calls
+`loadOne`/`loadMany` through its OWN handle while its own tracked evaluation is
+open — the fault path calls un-warned internal loaders, and a call on the raw
+store (a click handler, a timer) is nobody's tracked read and stays silent.
 
 ## Invariants
 
@@ -186,6 +192,7 @@ un-warned internal loaders.
 
 ## Gotchas
 
+
 - `store.upsert()` is not a core Store method. Nor are `save()` and `delete()`
   core record methods — only `destroy()`, the local-only removal, is. Without the
   capability those names simply do not exist, and calling one is a plain "not a
@@ -201,12 +208,18 @@ un-warned internal loaders.
 - The generated transports are the only thing tied to REST. Nothing above them
   is: an app can replace every verb and keep validation, identity, ordering,
   reconciliation, and notification exactly as they are.
-- Collection completeness comes ONLY from a successful no-options collection
-  load — implicit fault or explicit `loadMany(type)` with no argument
-  (`null` counts as no-options; `{}` does not). `loadOne`, `createRecord`,
-  `upsert`, `save`, hydration, and options-bearing loads never mark a type
-  complete, so paginated partial loads keep accumulating and page 2 can't
-  masquerade as the whole collection. An empty-array success DOES mark complete.
+- LOADED and EXHAUSTIVE are two different facts and only one of them is about
+  the framework's own request. A successful no-options collection load —
+  implicit fault or explicit `loadMany(type)` with no argument (`null` counts as
+  no-options; `{}` does not) — marks the type loaded, which is what stops a
+  tracked `findMany` re-requesting it every settle pass. It marks the type
+  exhaustive, letting a `findOne` miss answer `null` with no detail request,
+  ONLY when the endpoint-generated REST transport made the request. A `loadMany`
+  authored on the model or supplied by an `adapter.defaults()` dialect is opaque
+  — page one is a legitimate response — so its loads never mark exhaustive, and
+  an off-page id is still fetched. `loadOne`, `createRecord`, `upsert`, `save`,
+  hydration, and options-bearing loads mark neither. An empty-array success from
+  the generated transport DOES mark both.
 - A prerender read must be answerable from the build machine: an absolute
   `apiURL` is fetched for real, a model with no `endpoint` and no read verb
   never faults (seed the store in `beforeMount`), and an app-relative URL fails

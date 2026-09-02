@@ -246,6 +246,47 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **A store change that lands while a view is settling is never swallowed.** A
+  notification arriving during a settle run folds into that run and is delivered
+  by the extra pass it takes before committing (D161) — but a run that ends
+  WITHOUT committing was clearing the flag anyway. The reachable case: a D146
+  prepared commit supersedes the run, paints a model captured before the edit,
+  and does not re-derive (folding deliberately never bumped the run token), so
+  the DOM showed the old value and the store the new one until some unrelated
+  later write. A run that stops without committing — superseded, stale, or
+  failed — now hands the notification back instead of clearing it.
+
+- **A settle that fetched renders once, not twice.** The `Store.flush()`
+  carrying the settle loop's own upserts reached the view after its committing
+  pass had subscribed, so every navigation into an unsettled store ran `data()`
+  a third time and re-rendered identical content — N-fold on a list page. Store
+  notifications now carry a sequence number, and a view skips a batch that was
+  already queued when the pass behind its committed model began. A change any
+  other writer makes during that pass still refreshes as before.
+
+- **`store.loadMany()`/`loadOne()` from outside `data()` no longer warns about a
+  tracked run.** The dev nudge keyed on the ambient tracking target, which stays
+  set across every `await` of any suspended async `data()` — so a click handler
+  or a timer firing in that window was blamed for someone else's run, and the
+  warn-once latch then hid the genuine case for the rest of the session. It is
+  now attributed by handle identity, the same way faulting is: only a call
+  through the view's own `this.ctx.store` while that view's evaluation is open.
+
+- **An authored paginated `loadMany` no longer makes a `findOne` miss
+  authoritative.** A no-options collection load marked the type
+  collection-complete whoever ran the request, so a later tracked `findOne` on
+  an id outside the first page committed `null` — "not found" for a record that
+  exists — with no request. The framework can only vouch that a response was the
+  whole collection when it generated the request itself (the D158 REST default),
+  so read state now tracks two facts: LOADED, earned by any successful
+  no-options load, which stops a tracked `findMany` re-requesting the
+  collection; and EXHAUSTIVE, only from the generated transport, which is what
+  lets a `findOne` miss answer locally. A `loadMany` written on the model or
+  supplied by an `adapter.defaults()` dialect marks only the first. The static
+  read-state island gains a `loaded` array beside `complete`; `complete` keeps
+  its exhaustive meaning, so an older kernel reading a newer envelope is still
+  right about every id.
+
 - **A throwing view or layout constructor no longer poisons the route it was
   on.** The routed instances are built ~60 lines above the guarded load region,
   so a throw from a class field initializer or a constructor body escaped the

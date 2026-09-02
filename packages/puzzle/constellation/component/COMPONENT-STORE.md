@@ -52,6 +52,21 @@ notes:
       options the way the app does, AND read through `store._handleFor(subscriber)` — a raw
       `store.findOne` is always local. Regression: tests/adapter-realm-isolation.test.js,
       tests/tracked-read-attribution.test.js.
+  - kind: state
+    text: >-
+      Notifications now carry ORDER, not just identity (0.7.0, D161 follow-up). `_pendingKeys` is a
+      Map<key, seq> rather than a Set, stamped from a monotonic `_notifySeq` bumped once per
+      `_notify`, and `_deliverNotifications` gathers before it delivers: one pass builds
+      Map<subscriber, highest seq among the keys it holds in this batch>, a second pass calls
+      `sub.onStoreChange(seq)`. A subscriber can therefore recognise a batch that was already
+      enqueued when the evaluation behind its committed model began and skip it — which is how a
+      settle run's own upsert flush stopped buying a redundant third `data()` run. Two consequences
+      to keep in mind: gathering first means EVERY subscriber set is snapshotted before any
+      subscriber runs (previously only the set for the key being visited was), so a child mounted
+      during delivery is never handed a notification for a later key in the same batch — the
+      stricter reading of the behaviour the old per-key snapshot comment was already after; and
+      `_pendingKeys` is a Map now, so anything sampling it (client-runtime/testing/settled.js,
+      devperf) must iterate `.keys()`. Function subscribers still receive no argument.
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

@@ -138,6 +138,14 @@ export class PuzzleView {
 	// (D157). Internal; nothing outside the framework may touch them.
 	_settlingToken = 0;
 	_settleDirty = false;
+	// The store's notification sequence as of the start of the pass that produced
+	// the committed model (D161). A flush whose highest sequence for this view is
+	// at or below it was already enqueued when that pass ran, so the committed
+	// model reflects it — delivering it would re-run data() for nothing, which is
+	// exactly what every settle that fetched used to do with its OWN upserts.
+	// Anything a second writer queues DURING the pass sorts above the mark and is
+	// delivered as usual.
+	_settleMark = 0;
 	// Sticky "this view's data() came back thenable at least once" (D161). The
 	// `expectsAsync` hint withTracking serializes on is otherwise
 	// `data.constructor.name === 'AsyncFunction'`, which a .then-style data() — a
@@ -1351,8 +1359,17 @@ export class PuzzleView {
 		};
 	}
 
-	/** Store subscription callback (Store.flush → subscribed components). */
-	onStoreChange() {
+	/**
+	 * Store subscription callback (Store.flush → subscribed components).
+	 *
+	 * @param {number} [seq] the highest notification sequence in this batch for
+	 * this subscriber. A batch at or below `_settleMark` predates the evaluation
+	 * that produced the committed model, so it is already on screen — skip it
+	 * (D161). Called with no sequence (the framework's own re-delivery, a manual
+	 * invocation) it always refreshes.
+	 */
+	onStoreChange(seq) {
+		if (seq !== undefined && seq <= this._settleMark) return;
 		// D146: a store flush landing mid-gate is committed-state work (see
 		// #withCommittedScope) — refresh() fences its own body, but the reportError
 		// context and the boundary funnel below read this.route too.

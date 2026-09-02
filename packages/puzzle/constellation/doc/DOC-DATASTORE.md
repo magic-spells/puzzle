@@ -50,6 +50,7 @@ remain valid.
 
 ## Store API
 
+
 Views access the store as `this.ctx.store`.
 
 The local methods are core. The server methods shown below are installed only
@@ -58,10 +59,10 @@ when the app passes the `/adapter` capability to `PuzzleApp`.
 | API | Behavior |
 | --- | --- |
 | `createRecord(type, data)` | Apply defaults, generate/validate the primary key, validate all fields, insert, and notify. |
-| `findOne(type, id)` | Return one record or `null`; tracked inside `data()`. Number/string-insensitive on `id` (D112). A tracked miss with a resolvable `loadOne` queues the fetch — the view's settle loop re-runs `data()` and commits the warm pass (D161). |
-| `findMany(type, { filter }?)` | Return local records, optionally filtered (`filter` always runs locally); tracked at collection level. First tracked read of a type with a resolvable `loadMany` queues one collection fetch and marks the type complete on success. |
-| `loadOne(type, id)` | Run the model's one-record transport and identity-preserving upsert. Bypasses the D161 negative cache — the force-refresh escape hatch. Warns in dev inside a tracked run. |
-| `loadMany(type, options?)` | Run the collection transport, forwarding pagination options, and upsert every returned record. No-options success marks the type collection-complete; options-bearing loads stay partial. Warns in dev inside a tracked run. `loadAll` — the pre-0.7.0 spelling — throws naming this method. |
+| `findOne(type, id)` | Return one record or `null`; tracked inside `data()`. Number/string-insensitive on `id` (D112). A tracked miss with a resolvable `loadOne` queues the fetch — the view's settle loop re-runs `data()` and commits the warm pass (D161) — unless the type is known EXHAUSTIVE, where the miss is the answer. |
+| `findMany(type, { filter }?)` | Return local records, optionally filtered (`filter` always runs locally); tracked at collection level. First tracked read of a type with a resolvable `loadMany` queues one collection fetch and marks the type loaded on success, so later runs don't re-request it. |
+| `loadOne(type, id)` | Run the model's one-record transport and identity-preserving upsert. Bypasses the D161 negative cache — the force-refresh escape hatch. Warns in dev when called through the view's own handle during that view's `data()` run. |
+| `loadMany(type, options?)` | Run the collection transport, forwarding pagination options, and upsert every returned record. No-options success marks the type loaded, and exhaustive as well when the generated REST transport made the request; options-bearing loads stay partial. Warns in dev when called through the view's own handle during that view's `data()` run. `loadAll` — the pre-0.7.0 spelling — throws naming this method. |
 | `adapter(type)` | Return the memoized adapter with enhanced fetch bound to all standard and custom functions. |
 | `upsert(type, objectOrArray)` | Apply server-authoritative object(s) by explicit primary key, preserving identity and marking records synchronized. |
 | `request(type, path?, options?)` | Custom adapter request with method/body/headers; 204/empty responses map to `null`. |
@@ -88,6 +89,16 @@ never fetch — event handlers get local snapshots and use `refresh()` — and
 apps without the capability or a resolvable read verb see pure-local behavior
 exactly as before.
 
+**Loaded vs exhaustive collections (D161/D158).** A successful no-options
+`loadMany` always marks the type LOADED: the collection request has run, so a
+tracked `findMany` stops re-faulting it. It marks the type EXHAUSTIVE — a
+`findOne` miss answers `null` with no detail request — only when the framework
+built the request itself, from the model's `endpoint`. An authored `loadMany`
+(on the model, or from an `adapter.defaults()` dialect) is opaque to the
+framework: returning a paginated first page is a perfectly good implementation
+and says nothing about the ids it left out, so a later miss on an off-page id
+still fetches rather than reporting a real record as missing.
+
 **Transport functions (D158).** Standard verbs receive enhanced fetch first:
 `loadMany(fetch, options?)`, `loadOne(fetch, id)`, `create(fetch, record)`,
 `update(fetch, record)`, and `delete(fetch, record)`. It is platform-shaped —
@@ -110,7 +121,7 @@ undefined when absent); per-model function signatures are unchanged.
 The endpoint-generated `loadMany` serializes non-nullish option values with
 `URLSearchParams`; authored transports receive the exact options object. Pages
 accumulate in the identity map rather than replacing the collection, and an
-options-bearing load never marks the type complete.
+options-bearing load marks the type neither loaded nor exhaustive.
 
 ## Validation boundaries
 
