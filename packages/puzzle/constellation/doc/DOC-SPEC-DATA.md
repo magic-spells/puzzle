@@ -149,7 +149,6 @@ static schema = {
 
 ## 22. Adapter write sync (v1.18)
 
-
 The write half of the D21 adapter story. Shipped in v1.18 (D50), moved to the
 opt-in subpath by D157, and generalized by D158. The model's `static adapter`
 supplies per-verb transports; `endpoint` generates any missing REST defaults.
@@ -205,8 +204,8 @@ merges duplicate primary keys; a no-options success stops §61's tracked
 `findMany` from re-loading the type, and marks it EXHAUSTIVE for §61's
 `findOne` only when the request came from the generated transport — an authored
 `loadMany` may have returned page one. `store.adapter(type)` returns a stable
-per-store,
-per-type view with enhanced fetch pre-bound to every function, generated verbs
+per-store, per-type view with enhanced fetch pre-bound to every function,
+generated verbs
 included; custom methods are author-invoked only and commonly compose with
 `store.upsert()`. A function using global fetch instead bypasses the hook and
 mock seam exactly as written. Non-function keys other than `endpoint` and
@@ -312,8 +311,6 @@ install the same received/imported capability before constructing stores.
 
 ## 61. Auto-fetching finds: tracked fault-in and the settle loop (v1.76)
 
-
-
 Tracked `findOne`/`findMany` fetch what the store is missing; views need zero
 loading code (D161). The one rule: **server data comes from `data()` — a
 committed `null` means the record does not exist, never "still loading".**
@@ -403,7 +400,10 @@ data(params) {
   (`data-puzzle-static-read`, `{ v: 1, complete, loaded, absent }`) hydrated
   after records so `mountStatic` repeats none of the build's loads or 404s;
   `complete` keeps its exhaustive meaning, and an envelope without `loaded` (one
-  written before 0.7.0) reads its `complete` list as both. Hybrid
+  written before 0.7.0) reads its `complete` list as both. A kernel that never
+  learned about `loaded` therefore still answers every id correctly — it only
+  re-loads the collection once for a type whose authored `loadMany` was never
+  exhaustive. Hybrid
   transfers nothing — takeover re-runs `data()` fresh. The dev HMR snapshot
   carries read state; in-flight promises never transfer anywhere.
 - **`data()` must tolerate multiple runs per navigation** — already true under

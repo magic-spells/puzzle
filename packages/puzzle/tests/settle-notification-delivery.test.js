@@ -127,6 +127,33 @@ describe('a store change folded into an owned settle run', () => {
 	});
 });
 
+describe('notification delivery membership', () => {
+	it('does not call a subscriber an earlier subscriber unsubscribed in the same batch', () => {
+		const store = makeStore();
+		store.createRecord('post', { id: 'p1', title: 'One' });
+		store.createRecord('user', { id: 'u1', name: 'Ada' });
+		store.flush();
+
+		let lateCalls = 0;
+		// `late` subscribes to the user key; `early` to the post key. One batch
+		// touches both, and `early` tears `late` down before delivery reaches it.
+		const late = () => {
+			lateCalls++;
+		};
+		const early = () => {
+			store.unsubscribe(late);
+		};
+		store.withTracking(late, () => store.findOne('user', 'u1'));
+		store.withTracking(early, () => store.findOne('post', 'p1'));
+
+		store.findOne('post', 'p1').update({ title: 'Two' });
+		store.findOne('user', 'u1').update({ name: 'Grace' });
+		store.flush();
+
+		expect(lateCalls).toBe(0);
+	});
+});
+
 describe('the flush carrying a settle run’s own upserts', () => {
 	it('does not re-run data() after the pass that committed it', async () => {
 		vi.stubGlobal('fetch', vi.fn(async () => json({ id: 'p1', title: 'Post' })));

@@ -50,7 +50,6 @@ remain valid.
 
 ## Store API
 
-
 Views access the store as `this.ctx.store`.
 
 The local methods are core. The server methods shown below are installed only

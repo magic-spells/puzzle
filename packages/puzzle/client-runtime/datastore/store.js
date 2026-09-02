@@ -790,27 +790,45 @@ export class Store {
 		const pending = [...this._pendingKeys];
 		this._pendingKeys.clear();
 
-		// Gather first, deliver second. Every target's set is snapshotted BEFORE
-		// any subscriber runs: a subscriber's sync data() can mount a child that
+		// Gather first, deliver second. Every target's set is read BEFORE any
+		// subscriber runs: a subscriber's sync data() can mount a child that
 		// queries one of these keys, and the just-mounted child must not be handed
 		// a redundant onStoreChange this same tick (it already has fresh data from
 		// its own data()). Gathering also gives each subscriber the HIGHEST
 		// sequence number among the keys it is subscribed to in this batch, which
 		// is what lets it recognise a batch it has already accounted for (D161).
+		// The key that carried that sequence rides along for the membership
+		// re-check below.
 		const targets = new Map();
 		for (const [key, seq] of pending) {
 			const subs = this.subscribersByKey.get(key);
 			if (!subs) continue;
 			for (const sub of subs) {
 				const seen = targets.get(sub);
-				if (seen === undefined || seq > seen) targets.set(sub, seq);
+				if (seen === undefined || seq > seen[0]) targets.set(sub, [seq, key]);
 			}
 		}
 
-		const keys = pending.map(([key]) => key);
-		const notified = new Set();
-		for (const [sub, seq] of targets) {
-			notified.add(sub);
+		// Dev-only bookkeeping for the DevTools/profiler probe at the tail. Built
+		// inside the inline gate — never unconditionally — so production DCE folds
+		// both away rather than allocating a Set and a key array on every flush.
+		let keys;
+		let notified;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			keys = pending.map(([key]) => key);
+			notified = new Set();
+		}
+		for (const [sub, [seq, key]] of targets) {
+			// Membership is re-checked at CALL time, not just at gather time: an
+			// earlier subscriber in this same batch may have unsubscribed this one
+			// (a parent's data() destroying a child, an app callback removing
+			// another). Delivering to a subscriber that asked to stop is a bug the
+			// gather pass cannot see — a plain `store.subscribe(fn)` callback has no
+			// destroyed-guard of its own, so this is its only protection. The test
+			// is the set this subscriber was GATHERED from, which is what
+			// unsubscribe() empties, rather than the keysBySubscriber side index.
+			if (!this.subscribersByKey.get(key)?.has(sub)) continue;
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) notified.add(sub);
 			// Each subscriber is isolated: a synchronous throw is logged and
 			// delivery CONTINUES to the remaining subscribers. Without this a
 			// single throwing subscriber would both skip every later subscriber

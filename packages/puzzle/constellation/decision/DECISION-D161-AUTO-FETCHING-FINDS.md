@@ -121,7 +121,6 @@ views, no `{#await}` templates, no separate `load()` hook.
 
 ## Decision
 
-
 **The settle loop** (owned by PuzzleView, wrapped around every tracked
 `data()` evaluation — refresh, routed preload, D146 prepareRefresh, component
 mount, prerender):
@@ -246,7 +245,8 @@ mark entirely would make every tracked `findMany` re-request the collection on
 every settle pass, trading a wrong answer for a request loop. Exhaustive
 implies loaded; the island envelope keeps `complete` meaning exhaustive and
 adds `loaded` beside it, so an older kernel reading a newer envelope is still
-right about every id.
+right about every id — it merely re-loads the collection once for a type whose
+authored `loadMany` was never exhaustive.
 
 **The settle window is a delivery contract, not just a coalescing trick.** A
 store notification landing while a run owns the window folds into it

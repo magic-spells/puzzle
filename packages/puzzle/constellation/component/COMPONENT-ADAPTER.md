@@ -70,7 +70,6 @@ surprise.
 
 ## What installing grafts on
 
-
 Installing copies three method bags onto the core prototypes as ordinary
 property descriptors.
 
@@ -107,9 +106,8 @@ functions from there. Per Store too is the D161 read state, in module-level
 `WeakMap`s: in-flight single-record requests keyed type + `recordKey(id)`,
 in-flight collection requests keyed by type, a 1000-entry insertion-ordered
 negative LRU, and two collection sets — the types whose collection has LOADED,
-and the exhaustive subset of those the framework fetched itself. Implicit
-faults dedup
-against the in-flight maps; explicit `loadOne`/`loadMany` always issue a
+and the exhaustive subset of those the framework fetched itself. Implicit faults
+dedup against the in-flight maps; explicit `loadOne`/`loadMany` always issue a
 request, and explicit `loadOne` bypasses the negative cache (the force-refresh
 escape hatch — its outcome still refreshes the entry).
 
@@ -120,7 +118,6 @@ build classifies an app's adapter without importing this module and dragging the
 sync runtime into its graph.
 
 ## Surface
-
 
 `store.adapter(type)` is the author-facing view of a model's adapter: every
 function the model declared, pre-bound to an enhanced fetch, plus the five
@@ -140,9 +137,12 @@ D161 read-state codecs — envelope `{ v: 1, complete: [...types],
 loaded: [...types], absent: ['type recordKey', ...] }`, where `complete` is the
 exhaustive subset of `loaded`. Records hydrate first; hydrate drops any absence
 whose record is present, reads a `loaded`-less envelope (written before 0.7.0)
-as `loaded === complete`, and ignores unknown versions. The static kernel and
-devstate reach these through the `capabilities.js` relay (the adapter registers
-its codecs there at module scope) so neither ever imports this module.
+as `loaded === complete`, and ignores unknown versions. A kernel that never
+learned about `loaded` still answers every id correctly — it only re-loads the
+collection once for a type whose authored `loadMany` was never exhaustive. The
+static kernel and devstate reach these codecs through the `capabilities.js`
+relay (the adapter registers them there at module scope) so neither ever
+imports this module.
 
 Development builds validate two shapes and warn rather than throw: a model's
 adapter keys must be `endpoint`, `mock`, or functions (warned once per model
@@ -191,7 +191,6 @@ store (a click handler, a timer) is nobody's tracked read and stays silent.
   entry on success.
 
 ## Gotchas
-
 
 - `store.upsert()` is not a core Store method. Nor are `save()` and `delete()`
   core record methods — only `destroy()`, the local-only removal, is. Without the

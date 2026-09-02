@@ -54,17 +54,22 @@ notes:
       tests/tracked-read-attribution.test.js.
   - kind: state
     text: >-
-      Notifications now carry ORDER, not just identity (0.7.0, D161 follow-up). `_pendingKeys` is a
-      Map<key, seq> rather than a Set, stamped from a monotonic `_notifySeq` bumped once per
-      `_notify`, and `_deliverNotifications` gathers before it delivers: one pass builds
-      Map<subscriber, highest seq among the keys it holds in this batch>, a second pass calls
-      `sub.onStoreChange(seq)`. A subscriber can therefore recognise a batch that was already
-      enqueued when the evaluation behind its committed model began and skip it — which is how a
-      settle run's own upsert flush stopped buying a redundant third `data()` run. Two consequences
-      to keep in mind: gathering first means EVERY subscriber set is snapshotted before any
-      subscriber runs (previously only the set for the key being visited was), so a child mounted
-      during delivery is never handed a notification for a later key in the same batch — the
-      stricter reading of the behaviour the old per-key snapshot comment was already after; and
+      Notifications carry ORDER, not just identity (0.7.0, D161 follow-up). `_pendingKeys` is a
+      Map<key, seq> stamped from a monotonic `_notifySeq` bumped once per `_notify`.
+      `_deliverNotifications` runs in two phases. Phase one gathers Map<subscriber, highest seq
+      among the keys it holds in this batch>; phase two calls `sub.onStoreChange(seq)`, so a
+      subscriber can recognise a batch that was already enqueued when the evaluation behind its
+      committed model began and skip it — which is how a settle run's own upsert flush stopped
+      buying a redundant third `data()` run. Two delivery rules follow from the split and both are
+      load-bearing. Subscriber sets are read in phase one, before any subscriber runs: a subscriber
+      ADDED mid-delivery (a child mounted by another subscriber's data()) is not notified for that
+      batch. Membership is re-checked at call time against `keysBySubscriber`: a subscriber REMOVED
+      mid-delivery — one that an earlier subscriber in the same batch unsubscribed — is not called.
+      The re-check is the only protection a plain `store.subscribe(fn)` callback has, since it
+      carries no destroyed-guard of its own; regression is
+      tests/settle-notification-delivery.test.js 'does not call a subscriber an earlier subscriber
+      unsubscribed in the same batch'. The dev-only `keys`/`notified` bookkeeping for the DevTools
+      probe is built inside the `__PUZZLE_DEV__` gate so production allocates neither.
       `_pendingKeys` is a Map now, so anything sampling it (client-runtime/testing/settled.js,
       devperf) must iterate `.keys()`. Function subscribers still receive no argument.
 verified_at: '2026-08-24T21:39:23.520Z'

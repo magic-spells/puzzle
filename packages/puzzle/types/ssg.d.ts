@@ -39,7 +39,10 @@ export interface PrerenderReadState {
 	/**
 	 * Model type names whose collection request finished, exhaustive or not, so a
 	 * tracked findMany does not re-fault. A superset of `complete`; absent from
-	 * envelopes written before 0.7.0, where `complete` carried both meanings.
+	 * envelopes written before 0.7.0, where `complete` carried both meanings. A
+	 * kernel that does not read this field still answers every id correctly — it
+	 * just re-loads the collection once for a type whose authored `loadMany` was
+	 * never exhaustive.
 	 */
 	loaded?: string[];
 	/** Identity keys (`type` + separator + `id`) settled as absent by a 404. */
