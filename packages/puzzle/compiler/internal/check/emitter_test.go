@@ -119,9 +119,15 @@ func TestGenerateWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"puzzle-env", "const Children", "const Slot", "const Portal", "__puzzle_check_snippet"} {
+	for _, want := range []string{"puzzle-env", "__puzzle_check_each", "__puzzle_check_snippet"} {
 		if !strings.Contains(string(shimBytes), want) {
 			t.Errorf("shim missing %q", want)
+		}
+	}
+	// The emitter never writes a marker tag name, so the shim declares none.
+	for _, absent := range []string{"const Children", "const Slot", "const Portal", "const Snippet"} {
+		if strings.Contains(string(shimBytes), absent) {
+			t.Errorf("shim declares %q, which the emitter never names", absent)
 		}
 	}
 }

@@ -32,6 +32,15 @@ notes:
       Go fatal error — the recursive-descent parser exhausts the stack on a pathologically deep
       source, so "parse it and then measure the tree" is not available there. Nothing in a native
       build calls it.
+  - kind: gotcha
+    text: >-
+      "composition markers are positioned errors at every depth" in a `<Snippet>` body includes a
+      `<Snippet>` hanging off a component invocation INSIDE that body — `nestedSnippetBodyMarker`
+      recurses through `*Component` on purpose, so `<Snippet item><Card><Snippet cell>…` is rejected
+      even though the runtime could stamp it. A snippet body is a composition LEAF (D166); nesting
+      is expressed by extraction, and the error message says so. Do not "fix" the Component
+      recursion into an escape hatch — `snippets_test.go`'s "nested Snippet declaration" case pins
+      it.
 ---
 
 # Template parser

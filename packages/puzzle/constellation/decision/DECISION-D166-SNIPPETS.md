@@ -173,10 +173,18 @@ none of it.
 
 ## Guardrails (from the adversarial review)
 
-- **A composition marker inside a `<Snippet>` body is a positioned compile
-  error.** Stamped output cannot declare composition positions; the marker
-  belongs in the component's own template. A dev-mode warning catches the case
-  where a snippet function returns one anyway.
+
+- **A snippet body is a composition LEAF.** No `<Children>`, `<Slot>`,
+  `<Portal>`, or `<Snippet>` anywhere inside it, at any depth — including a
+  `<Snippet>` attached to a component invocation *within* the body. Every one of
+  them is a positioned compile error steering to the fix: stamped output cannot
+  declare composition positions, so the marker belongs in the component's own
+  template, and nesting is expressed by **extraction** — move the inner
+  invocation and its snippet into their own component, whose template holds the
+  snippet at top level. That component is then a plain tag inside the snippet
+  body. Component invocations themselves are perfectly legal in a snippet body;
+  only markers are not. A dev-mode warning catches the case where a snippet
+  function returns a marker anyway.
 - **`ref=` inside a `<Snippet>` body is a positioned compile error.** A ref
   names one element on one instance, and a snippet body is stamped N times.
 - **Same-name marker declarations stay unique**, but the per-body uniqueness
@@ -187,8 +195,8 @@ none of it.
 - **One snippet per `fits` name per invocation**, `default` included; a snippet
   and a `slot="x"` element cannot target the same name, and a default snippet
   cannot coexist with plain default content.
-- A snippet body is a **new caller-owned body** for validation: it may contain
-  its own component invocations with their own snippets, and D141's
+- A snippet body is otherwise a **new caller-owned body** for validation: it
+  carries the caller's scope plus the declared parameters, and D141's
   nested-fallback rule does not fire on it.
 
 ## Naming
@@ -206,6 +214,7 @@ before release.
 
 ## Alternatives rejected
 
+
 - **Svelte-4 `let:user` / Vue `v-slot="{ user }"`.** Function parameters in
   attribute costume, with the declaration far from its use. Svelte itself
   deprecated `let:` in favor of declared snippets.
@@ -221,6 +230,18 @@ before release.
   `v-slot="{ user }"`.
 - **`name=` as the routing attribute.** It reserves `name`, a thoroughly
   plausible parameter word; `fits` frees it.
+- **Allowing a nested component invocation inside a snippet body to carry its
+  own `<Snippet>`.** The runtime would cope — a stamped
+  `ViewNode(Card, {…}, [ViewNode(SNIPPET_TAG, …)])` is exactly what `Card`
+  partitions on mount — and the data-table cell rendering a `<Select>` with its
+  own option snippet is a real case. It is refused on authoring grounds: three
+  marker levels in one template is where composition stops being readable, and
+  where "which body does this parameter come from" stops being obvious at a
+  glance. One obvious shape is worth more here than one saved file, for humans
+  and for agents alike. The extraction workaround costs a component and is
+  arguably the better code: the inner invocation and its snippet move into a
+  component whose template declares the marker at top level, and the snippet
+  body names it as a plain tag.
 - **Compile-time cross-file shape checking.** The compiler is per-file and
   cannot see the component's marker declarations from the caller, so the fit
   check is a dev-mode runtime warning instead.

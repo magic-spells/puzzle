@@ -77,11 +77,12 @@ func walkRefs(nodes []Node, file string, seen map[string]Position, inFor, inSkel
 				return perr
 			}
 		case *Snippet:
+			// snippetBodyRef covers the same node kinds at the same depths as
+			// this walk and rejects every ref it finds, so the body needs no
+			// second pass: anything walkRefs could report there is already an
+			// error here.
 			if ref := snippetBodyRef(node.Body); ref != nil {
 				return errAt(file, attrPos(ref), "ref is not allowed inside a <Snippet> body — stamped output has no per-stamp ref semantics; put the ref in the component's own template instead")
-			}
-			if perr := walkRefs(node.Body, file, seen, inFor, inSkeleton); perr != nil {
-				return perr
 			}
 		case *Portal:
 			// Portaled content is ordinary template content owned by this view —

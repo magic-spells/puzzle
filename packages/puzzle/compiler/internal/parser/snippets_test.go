@@ -180,6 +180,11 @@ func TestParseSnippetCompositionRules(t *testing.T) {
 	}
 }
 
+// A snippet body is a composition LEAF (D166): no Children, Slot, Portal, or
+// Snippet inside it at any depth, including a Snippet attached to a nested
+// component invocation. The workaround is extraction — move that invocation and
+// its snippet into their own component, whose template declares the marker at
+// top level.
 func TestParseSnippetBodyRejectsCompositionMarkers(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -205,7 +210,7 @@ func TestParseSnippetBodyRejectsCompositionMarkers(t *testing.T) {
 			if !ok {
 				t.Fatalf("error = %T (%v), want *ParseError", err, err)
 			}
-			wantMessage := "a composition marker cannot appear inside a <Snippet> body — stamped output cannot declare composition positions; put the marker in the component's own template"
+			wantMessage := "a composition marker cannot appear inside a <Snippet> body — stamped output cannot declare composition positions; put the marker in the component's own template, and to give a nested component invocation a snippet of its own, move that invocation and its snippet into their own component"
 			if pe.Message != wantMessage {
 				t.Fatalf("message = %q, want %q", pe.Message, wantMessage)
 			}

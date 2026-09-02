@@ -1,7 +1,6 @@
 package check
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -153,25 +152,22 @@ func TestPlainJSTemplateErrorsAreReported(t *testing.T) {
 func liveTSCApp(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("the local-bin symlink fixture is Unix-only")
+		t.Skip("the node_modules symlink fixture is Unix-only")
 	}
-	tsc, err := exec.LookPath("tsc")
-	if err != nil {
-		t.Skip("tsc not available on PATH")
-	}
-	root := t.TempDir()
-	binDir := filepath.Join(root, "node_modules", ".bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	wrapper := fmt.Sprintf("#!/bin/sh\nexec %q \"$@\"\n", tsc)
-	if err := os.WriteFile(filepath.Join(binDir, "tsc"), []byte(wrapper), 0o755); err != nil {
-		t.Fatal(err)
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not available on PATH")
 	}
 	packageRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The app's own TypeScript install is what puzzle check resolves, so the
+	// fixture links this package's copy in as the scratch app's.
+	typescriptDir := filepath.Join(packageRoot, "node_modules", "typescript")
+	if _, err := os.Stat(filepath.Join(typescriptDir, "bin", "tsc")); err != nil {
+		t.Skip("typescript not installed in the package's node_modules")
+	}
+	root := t.TempDir()
 	moduleDir := filepath.Join(root, "node_modules", "@magic-spells")
 	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -179,7 +175,46 @@ func liveTSCApp(t *testing.T) string {
 	if err := os.Symlink(packageRoot, filepath.Join(moduleDir, "puzzle")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink(typescriptDir, filepath.Join(root, "node_modules", "typescript")); err != nil {
+		t.Fatal(err)
+	}
 	return root
+}
+
+// The Windows `.bin/tsc.cmd` shim had to be run through `cmd.exe /d /s /c`,
+// which strips the quotes Go puts around a path containing a space — so
+// `puzzle check` could not run at all from a directory like "My Projects".
+// Resolving the TypeScript package's own JS entry and running it under node
+// takes the shell out of the picture on every OS.
+func TestTSCRunsUnderNodeFromAPathWithSpaces(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not available on PATH")
+	}
+	root := filepath.Join(t.TempDir(), "my app")
+	binDir := filepath.Join(root, "node_modules", "typescript", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A non-executable stand-in for tsc: nothing about the invocation may depend
+	// on the exec bit or on a `.bin` shim, only on node reading the file.
+	entry := filepath.Join(binDir, "tsc")
+	if err := os.WriteFile(entry, []byte("console.log('Version 5.7.3');\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool, err := resolveTSC(root)
+	if err != nil {
+		t.Fatalf("resolveTSC: %v", err)
+	}
+	if tool.entry != entry {
+		t.Fatalf("entry = %q, want the typescript package entry %q", tool.entry, entry)
+	}
+	major, err := readTypeScriptMajor(tool)
+	if err != nil {
+		t.Fatalf("readTypeScriptMajor: %v", err)
+	}
+	if major != 5 {
+		t.Fatalf("major = %d, want 5", major)
+	}
 }
 
 func writeLiveView(t *testing.T, root, source string) {

@@ -339,18 +339,21 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## CLI
 
+
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
 - `puzzle check [dir]` (D165): type-checks the app's `.pzl` script bodies and
   template expressions by emitting virtual files under `.puzzle/check/` and
-  running the app's own `node_modules/.bin/tsc --noEmit` over them, remapping
-  every diagnostic to its authored `.pzl` line and column. TypeScript scripts
-  are checked as written; JavaScript components get an unchecked script mirror
-  plus a checked template wrapper. The generated tsconfig extends the app's,
-  neutralizes the settings that would break the workspace, and switches shape
-  for TypeScript 7 after probing `tsc --version`. A missing TypeScript install
-  is an error naming `npm install -D typescript` — Puzzle never installs one.
-  `--js` is reserved and not yet implemented.
+  running the app's own TypeScript over them — `node
+  node_modules/typescript/bin/tsc --noEmit`, the same invocation on every OS —
+  remapping every diagnostic to its authored `.pzl` line and column. TypeScript
+  scripts are checked as written; JavaScript components get an unchecked script
+  mirror plus a checked template wrapper. The generated tsconfig extends the
+  app's, neutralizes the settings that would break the workspace, and switches
+  shape for TypeScript 7 after probing `tsc --version`. A missing TypeScript
+  install is an error naming `npm install -D typescript` — Puzzle never installs
+  one — and a missing `node` on `PATH` its counterpart. `--js` is reserved and
+  not yet implemented.
 - `--profile-build` on `build` and `dev` (or `PUZZLE_PROFILE_BUILD=1`, D156):
   opt-in per-phase timing tables on stderr; never changes artifacts or stdout.
 - `puzzle preview [--port] [--strict-port]` (D148): serves an existing `dist/`
