@@ -335,7 +335,6 @@ being inlined into `app.js`. Shipped in v1.75 ([[DECISION-D160-SPA-CODE-SPLITTIN
 
 ## 63. `puzzle check`: type-checking `.pzl` with the app's own tsc (v1.78)
 
-
 `puzzle check [dir]` type-checks an app's `.pzl` files — script bodies **and**
 template expressions — and reports every diagnostic at its authored `.pzl` line
 and column. Shipped in v1.78 ([[DECISION-D165-PUZZLE-CHECK]]). It is a separate,

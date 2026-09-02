@@ -339,7 +339,6 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## CLI
 
-
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
 - `puzzle check [dir]` (D165): type-checks the app's `.pzl` script bodies and

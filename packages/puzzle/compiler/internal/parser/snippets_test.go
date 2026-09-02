@@ -180,11 +180,12 @@ func TestParseSnippetCompositionRules(t *testing.T) {
 	}
 }
 
-// A snippet body is a composition LEAF (D166): no Children, Slot, Portal, or
-// Snippet inside it at any depth, including a Snippet attached to a nested
-// component invocation. The workaround is extraction — move that invocation and
-// its snippet into their own component, whose template declares the marker at
-// top level.
+// A snippet body is a composition LEAF (D166): no Children, Slot, or Snippet
+// inside it at any depth, including a Snippet attached to a nested component
+// invocation. The workaround is extraction — move that invocation and its
+// snippet into their own component, whose template declares the marker at top
+// level. <Portal> is NOT in that set: it is a render target, not composition,
+// so it is walked like any element (see TestParseSnippetBodyAllowsPortal).
 func TestParseSnippetBodyRejectsCompositionMarkers(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -219,5 +220,16 @@ func TestParseSnippetBodyRejectsCompositionMarkers(t *testing.T) {
 				t.Fatalf("position = %d:%d, want 1:%d at inner marker", pe.Line, pe.Col, wantCol)
 			}
 		})
+	}
+}
+
+// A <Portal> in a snippet body is legal: it relocates DOM, it does not declare a
+// composition position, so nestedSnippetBodyMarker walks through it exactly as
+// it walks an element. Only a marker INSIDE the portal is rejected, which the
+// "nested below Portal" case above covers.
+func TestParseSnippetBodyAllowsPortal(t *testing.T) {
+	src := `<puzzle-view><List><Snippet item><Portal><div>{ item }</div></Portal></Snippet></List></puzzle-view>` + "\n<script></script>"
+	if _, err := Parse([]byte(src), "test.pzl"); err != nil {
+		t.Fatalf("a bare <Portal> in a snippet body must compile: %v", err)
 	}
 }

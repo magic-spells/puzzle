@@ -44,7 +44,6 @@ notes:
 # Compiler CLI
 
 
-
 Cobra command surface shipped by the platform binary:
 
 - `puzzle build [dir] [--mode] [--static|--hybrid]` runs the production/

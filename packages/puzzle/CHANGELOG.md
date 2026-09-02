@@ -206,12 +206,13 @@ one is *not* a compile error; it silently builds a different product.
 
   Each stamp gets fresh vnodes, while the snippet function travels through the
   children channel so it does not defeat component-prop shallow comparison.
-  Development warns about argument-shape mismatches; markers and `ref=` inside
-  a Snippet body are compile errors — a snippet body is a composition **leaf**,
-  so that includes a `<Snippet>` on a component invocation nested inside the
-  body. Nest by extracting: move that invocation and its snippet into their own
-  component, whose template declares the marker at top
-  level. `__PUZZLE_HAS_SNIPPETS__` leaves non-users
+  Development warns about argument-shape mismatches; `<Children>`, `<Slot>`,
+  `<Snippet>`, and `ref=` inside a Snippet body are compile errors — a snippet
+  body is a composition **leaf**, so that includes a `<Snippet>` on a component
+  invocation nested inside the body. Nest by extracting: move that invocation
+  and its snippet into their own component, whose template declares the marker
+  at top level. (`<Portal>` relocates DOM rather than declaring a composition
+  position, so it stays legal there.) `__PUZZLE_HAS_SNIPPETS__` leaves non-users
   at zero bytes and costs users about 48–60 B gzip (roughly 50 B).
 
 - **The playground has a parser-and-codegen WebAssembly compiler core (D164).**

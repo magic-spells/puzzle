@@ -150,7 +150,6 @@ router, the compiler, and the CLI.
 
 ## What's in it
 
-
 **Breaking (all three from D161, and only for apps passing the `/adapter`
 capability):**
 
@@ -181,10 +180,11 @@ capability):**
   channel rather than as a prop so it cannot defeat the props shallow compare.
   Development warns on argument-shape mismatches, markers filled with plain
   content, and snippet output that contains a composition marker. A snippet body
-  is a composition **leaf**: `<Children>`, `<Slot>`, `<Portal>`, `<Snippet>`,
-  and `ref=` inside one are positioned compile errors at any depth — including a
+  is a composition **leaf**: `<Children>`, `<Slot>`, `<Snippet>`, and `ref=`
+  inside one are positioned compile errors at any depth — including a
   `<Snippet>` on a component invocation inside the body, which the error steers
   to fix by extracting that invocation and its snippet into their own component.
+  (`<Portal>` is not composition and stays legal there.)
   `SNIPPET_TAG`/`isSnippet` join the
   public type surface, and `__PUZZLE_HAS_SNIPPETS__` keeps non-users at zero
   bytes (users pay roughly 50 B gzip).

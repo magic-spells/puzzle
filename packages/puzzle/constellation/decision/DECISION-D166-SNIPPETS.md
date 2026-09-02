@@ -173,18 +173,19 @@ none of it.
 
 ## Guardrails (from the adversarial review)
 
-
-- **A snippet body is a composition LEAF.** No `<Children>`, `<Slot>`,
-  `<Portal>`, or `<Snippet>` anywhere inside it, at any depth — including a
-  `<Snippet>` attached to a component invocation *within* the body. Every one of
-  them is a positioned compile error steering to the fix: stamped output cannot
-  declare composition positions, so the marker belongs in the component's own
-  template, and nesting is expressed by **extraction** — move the inner
-  invocation and its snippet into their own component, whose template holds the
-  snippet at top level. That component is then a plain tag inside the snippet
-  body. Component invocations themselves are perfectly legal in a snippet body;
-  only markers are not. A dev-mode warning catches the case where a snippet
-  function returns a marker anyway.
+- **A snippet body is a composition LEAF.** No `<Children>`, `<Slot>`, or
+  `<Snippet>` anywhere inside it, at any depth — including a `<Snippet>`
+  attached to a component invocation *within* the body. Every one of them is a
+  positioned compile error steering to the fix: stamped output cannot declare
+  composition positions, so the marker belongs in the component's own template,
+  and nesting is expressed by **extraction** — move the inner invocation and its
+  snippet into their own component, whose template holds the snippet at top
+  level. That component is then a plain tag inside the snippet body. Component
+  invocations themselves are perfectly legal in a snippet body, and so is
+  `<Portal>` — it relocates DOM rather than declaring a composition position, so
+  it is walked like any element (a marker *inside* the portal is still
+  rejected). A dev-mode warning catches the case where a snippet function
+  returns a marker anyway.
 - **`ref=` inside a `<Snippet>` body is a positioned compile error.** A ref
   names one element on one instance, and a snippet body is stamped N times.
 - **Same-name marker declarations stay unique**, but the per-body uniqueness
@@ -213,7 +214,6 @@ before release.
   components are the feature's first customers.
 
 ## Alternatives rejected
-
 
 - **Svelte-4 `let:user` / Vue `v-slot="{ user }"`.** Function parameters in
   attribute costume, with the declaration far from its use. Svelte itself

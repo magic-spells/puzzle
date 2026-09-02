@@ -57,7 +57,6 @@ is verified live against tsc **4.9.5, 5.7.3, and 7.0.2**.
 
 ## The design
 
-
 **Emit virtual files, do not transform in memory.** Each `.pzl` under `app/`
 becomes one or two files under `.puzzle/check/src/` (D153's scratch dir),
 mirroring the app tree. `Generate` clears and rebuilds the whole workspace each
@@ -151,7 +150,6 @@ status 1". Running the JS entry under `node` is one code path on every OS, and
 `node` is already a hard prerequisite — the app's TypeScript is npm-installed.
 
 ## Scope of what is actually typed
-
 
 
 Template expressions are checked against the component class's **declared
