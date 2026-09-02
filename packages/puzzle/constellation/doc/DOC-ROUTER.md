@@ -129,7 +129,6 @@ export default class UserView extends PuzzleView {
 
 ## The route snapshot: `this.route` (v1.15)
 
-
 **Settled (D47, SPEC §19).** Inside any routed `data()` run, `this.route` is `{ path, pathname, query, hash, route, params, chain }` (the parsed `pathname`/`query`/`hash` fields joined in v1.49 — next section) — the same shape as `router.current` — describing **the navigation this `data()` run belongs to**. Use it for anything derived from "where is the app navigating", most importantly active-nav highlighting:
 
 ```js
@@ -150,6 +149,8 @@ Why not `window.location.pathname` or `ctx.router.current`? Both describe the **
 - Store-change re-runs keep the snapshot; only the next navigation replaces it.
 - `this.route` is `null` in components the router doesn't manage — pass route-derived state down as props from the routed view.
 - **Once the view is mounted, `this.route` mirrors the last COMMITTED navigation — the fragment included.** An in-page anchor move (`/docs` ⇄ `/docs#faq`) is not a navigation (D41): nothing loads, nothing refreshes, and no new snapshot is delivered, so `this.route.hash` still reads the fragment the last navigation committed with. The live fragment is `ctx.router.current.hash`, which the fragment pop updates in place. A view that must react to an anchor jump reads that and listens for `hashchange`/`popstate` itself — there is deliberately no re-render behind it.
+
+---
 
 ## URL-backed transient state: `query`, `hash`, and `replace()` (v1.49)
 

@@ -19,6 +19,12 @@ notes:
       Restore now fires the show bracket (viewWillShow → viewDidShow) instead of leaving it dangling
       — PR #84.
     sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+  - kind: gotcha
+    text: >-
+      §3 leave inertness applies to a never-mounted view, but the hide bracket does not: a leave on
+      a view whose first data() is still pending makes it inert and fires nothing, because hooks and
+      the out animation pair with a completed mount (D28). Inertness is about what a leaving view
+      may still do; the bracket is about whether it was ever shown.
 ---
 
 # D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown (v1.64)

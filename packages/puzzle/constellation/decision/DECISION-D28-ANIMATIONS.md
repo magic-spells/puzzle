@@ -28,26 +28,22 @@ notes:
       handle's finished.
   - kind: state
     text: >-
-      The component-removal path (viewManager unmount) now honors the zero-duration hook rule: a
-      child that OVERRIDES viewWillHide/viewDidHide routes through destroyAnimated() even with no
-      animations.out (detected via PuzzleView's __hasHideHooks getter — a base-prototype comparison,
-      since viewManager can't see the base class). Previously only animations.out took that path, so
-      hook-only components skipped both hide hooks on removal. Components declaring neither hooks
-      nor animations keep the synchronous instant destroy() — teardown timing changes only for the
-      hook-declaring case, whose element now lingers a microtask.
-  - kind: state
+      Two conditions decide the component-removal path in viewManager's unmount(). (1) The view must
+      OVERRIDE viewWillHide/viewDidHide or declare animations.out — detected via PuzzleView's
+      __hasHideHooks getter, a base-prototype comparison, since viewManager cannot see the base
+      class. Hooks without an animation still route through destroyAnimated(), because they are
+      lifecycle, not animation callbacks. (2) The view must have COMPLETED its mount —
+      child.__isMounted. A view that fails either test takes the synchronous instant destroy(). So
+      the element lingers a microtask only for a mounted view that declares hooks or an out
+      animation; everything else tears down synchronously, as it always has.
+  - kind: gotcha
     text: >-
-      Refines the note above it: routing hook-only components through destroyAnimated() is now gated
-      on a COMPLETED mount. A child whose async data() was still pending when its parent removed it
-      fired the whole hide bracket with no prior mounted()/viewWillShow()/viewDidShow() — 0.6.0 took
-      the instant destroy() there, so this was a 0.7.0 regression, caught in the pre-release review.
-      Two seams carry the one rule: viewManager's unmount() checks child.__isMounted before choosing
-      destroyAnimated(), and playOut() skips the bracket and the out spec when the view never
-      reached #mounted (that second one is what covers the router's leave paths, which call playOut
-      directly). Pinned by tests/leave-inertness-and-hooks.test.js, describe "the hide bracket fires
-      only for a view that completed its mount (D28)". Note the consequence for that file's older
-      D136 §3 test: calling playOut() on a still-loading view now logs nothing, where it used to log
-      willHide/didHide.
+      playOut() is the second home of the completed-mount rule, and it has to be: the router's leave
+      paths (#swap, #startOverlapLeave) call it directly and never pass through viewManager's
+      unmount(), so a gate placed only there would leave the router uncovered. It captures #mounted
+      before arming #leaving and skips both hooks and the out spec when false. A never-mounted view
+      still becomes #leaving, unsubscribes from the store, and cancels a running enter — only the
+      bracket and the out are skipped.
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/views/PuzzleView.js
@@ -80,10 +76,9 @@ Five sub-decisions, each with a rejected alternative:
 
 ## Consequences
 
-
 **Supporting contracts:** four no-op lifecycle hooks (`viewWillShow/viewDidShow` around `in`; `viewWillHide/viewDidHide` around `out`) fire in order **even with no `animations` field** — they are lifecycle, not animation callbacks (zero-duration semantics). Malformed specs warn-once and skip (never break rendering). `prefers-reduced-motion: reduce` zeroes all durations (hooks still fire). jsdom/ancient browsers lacking `el.animate` degrade to instant-finish, never breakage. `destroy()` stays synchronous; animated teardown is a separate explicit path so existing callers and error paths are unaffected.
 
-**The brackets pair with the mount.** The hide bracket and the out animation fire only for a view that **completed its mount** — one that reached `#completeMount` and fired `mounted()`. A view whose async `data()` was still pending when its owner removed it was never shown, so there is nothing to hide: it takes the instant, synchronous `destroy()` (which still cancels the pending data run and fires `destroyed()`), and `viewWillHide`/`viewDidHide` never fire. Without the pairing a hook that tears down what `viewDidShow()` built runs against state that was never created — it throws, and the throw is swallowed as a leave failure. `PuzzleView.__isMounted` is the seam: `viewManager`'s `unmount()` reads it to choose between `destroyAnimated()` and `destroy()`, and `playOut()` carries the same rule for the router's leave paths, which reach it without going through the ViewManager. A never-shown view still becomes `#leaving` (inert, unsubscribed) and still cancels a running skeleton enter — only the bracket and the out spec are skipped.
+**The brackets pair with the mount.** The hide bracket and the out animation fire only for a view that **completed its mount** — one that reached `#completeMount` and fired `mounted()`. A view whose first `data()` was still pending when its owner removed it was never shown, so there is nothing to hide: it takes the instant, synchronous `destroy()` — its pending data run is cancelled, its store subscription dropped, `destroyed()` fires — and `viewWillHide`/`viewDidHide` never run. Without the pairing a hook that tears down what `viewDidShow()` built runs against state that was never created: it throws, and the throw is swallowed as a leave failure. `PuzzleView.__isMounted` is the seam — `viewManager`'s `unmount()` reads it to choose between `destroyAnimated()` and `destroy()`, and `playOut()` carries the same rule for the router's leave paths, which reach it without going through the ViewManager. A view declaring a `<puzzle-skeleton>` is NOT in this category: the skeleton render completes the mount, so a skeleton view leaves with the full bracket like any other.
 
 **Fixed-height inner-content pattern (collapse animations).** WAAPI cannot animate to `height: auto`, so height-based enter/leave effects animate between explicit `px` values. The shipped `TodoItem` wraps its row content in a fixed-height inner element and animates that height (plus opacity/scale) — documented in USER_GUIDE ([[DOC-USER-GUIDE]]) as the canonical collapse recipe.
 

@@ -21,12 +21,12 @@ notes:
     text: >-
       playOut() captures `shown = #mounted` BEFORE it arms #leaving, and skips both hide hooks and
       the out spec when it is false (D28: the brackets pair with the mount). The capture order is
-      the point — #completeMount refuses to run on a leaving view, so once #leaving is set the flag
-      can no longer flip, and reading it later inside the async task would be reading a value that
-      can never change anyway; capturing up front just makes that explicit and keeps the
-      spent-#outTask branch reading the same value. What a never-shown view still does: become
-      #leaving, unsubscribe from the store, #abortEnter() and cancel #currentAnimation (a skeleton
-      can have a running enter on a real element). Only the bracket and the out are skipped.
+      what makes that readable rather than subtle — #completeMount refuses to run on a leaving view,
+      so once #leaving is set the flag can no longer move, and both the main task and the
+      spent-#outTask branch read the same value. A never-shown view still becomes #leaving,
+      unsubscribes from the store, and cancels a running enter animation; only the bracket and the
+      out are skipped. Note that a skeleton view does NOT qualify as never-shown: the skeleton
+      render completes its mount.
 ---
 
 # Animation and visibility runtime
