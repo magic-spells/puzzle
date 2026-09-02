@@ -1265,9 +1265,11 @@ export class Router {
 					err
 				);
 				// Pre-commit failure, exactly like the data() failure below: no fresh view
-				// exists yet, so URL, history and the mounted tree are all untouched and
-				// this is a plain failed push (D61).
+				// exists yet, so history and the mounted tree are untouched and this is a
+				// plain failed push (D61). The ADDRESS BAR is the pop-only exception — the
+				// browser moved it before we ran — so put it back (see #restoreCommittedUrl).
 				this.#recoverFailedNavigation(token);
+				if (pop && cur && this.#state === cur) this.#restoreCommittedUrl(cur.path);
 				if (retryView && token === this.#token) {
 					await retryView.__retryErrorView?.(err, info);
 				}
@@ -1343,6 +1345,8 @@ export class Router {
 			// and registerView in mount() — so they are dropped, not destroy()ed:
 			// destroy() would fire destroyed() for a view that never ran created().
 			this.#recoverFailedNavigation(token);
+			// Pop-only URL repair, same as the lazy rejection above.
+			if (pop && cur && this.#state === cur) this.#restoreCommittedUrl(cur.path);
 			if (retryView && token === this.#token) {
 				await retryView.__retryErrorView?.(err, info);
 			}
@@ -1487,6 +1491,11 @@ export class Router {
 				// clamp + #swap skipOut path. The restored unit's playOut memo stays spent:
 				// a later navigation away swaps it out instantly, no second out animation.
 				this.#recoverFailedNavigation(token);
+				// Pop-only URL repair, same as the two pre-commit catches above: the
+				// browser already moved the address bar onto the popped entry and we are
+				// staying put, so restore it before the retry redraw paints a face for a
+				// route the URL would otherwise claim we are on.
+				if (pop && cur && this.#state === cur) this.#restoreCommittedUrl(cur.path);
 				// Retry redraw (D145/v1.71). Staying put means the user keeps the page still
 				// on screen, and a retry navigation keeps its error view mounted for exactly
 				// that reason — so this position is not blank, it is showing a face for the

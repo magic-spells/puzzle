@@ -17,6 +17,16 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: gotcha
+    text: >-
+      playOut() captures `shown = #mounted` BEFORE it arms #leaving, and skips both hide hooks and
+      the out spec when it is false (D28: the brackets pair with the mount). The capture order is
+      the point — #completeMount refuses to run on a leaving view, so once #leaving is set the flag
+      can no longer flip, and reading it later inside the async task would be reading a value that
+      can never change anyway; capturing up front just makes that explicit and keeps the
+      spent-#outTask branch reading the same value. What a never-shown view still does: become
+      #leaving, unsubscribe from the store, #abortEnter() and cancel #currentAnimation (a skeleton
+      can have a running enter on a real element). Only the bracket and the out are skipped.
 ---
 
 # Animation and visibility runtime

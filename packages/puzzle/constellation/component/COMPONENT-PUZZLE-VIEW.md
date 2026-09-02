@@ -34,6 +34,16 @@ notes:
       was enough). The `_settleData` half of the test stays: without the capability anywhere in the
       realm the loop is not in the bundle at all (D157). Regression:
       tests/adapter-realm-isolation.test.js.
+  - kind: gotcha
+    text: >-
+      `this.route` is a frozen per-navigation snapshot, so in a MOUNTED view it mirrors the last
+      COMMITTED navigation and nothing else — an in-page anchor move (`/docs` ⇄ `/docs#faq`) is not
+      a navigation (D41), delivers no new snapshot, and therefore leaves `this.route.hash` reading
+      the fragment the last navigation committed with, indefinitely. The live fragment is
+      `ctx.router.current.hash`, which the router's fragment pop mutates in place. This is design,
+      not drift: the snapshot commits with the tree (D146). A view that must react to an anchor jump
+      reads router.current.hash and listens for hashchange/popstate itself; there is deliberately no
+      refresh behind an in-page move. Documented in SPEC §19 and DOC-ROUTER.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

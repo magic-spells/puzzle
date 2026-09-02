@@ -35,6 +35,19 @@ notes:
       hook-only components skipped both hide hooks on removal. Components declaring neither hooks
       nor animations keep the synchronous instant destroy() — teardown timing changes only for the
       hook-declaring case, whose element now lingers a microtask.
+  - kind: state
+    text: >-
+      Refines the note above it: routing hook-only components through destroyAnimated() is now gated
+      on a COMPLETED mount. A child whose async data() was still pending when its parent removed it
+      fired the whole hide bracket with no prior mounted()/viewWillShow()/viewDidShow() — 0.6.0 took
+      the instant destroy() there, so this was a 0.7.0 regression, caught in the pre-release review.
+      Two seams carry the one rule: viewManager's unmount() checks child.__isMounted before choosing
+      destroyAnimated(), and playOut() skips the bracket and the out spec when the view never
+      reached #mounted (that second one is what covers the router's leave paths, which call playOut
+      directly). Pinned by tests/leave-inertness-and-hooks.test.js, describe "the hide bracket fires
+      only for a view that completed its mount (D28)". Note the consequence for that file's older
+      D136 §3 test: calling playOut() on a still-loading view now logs nothing, where it used to log
+      willHide/didHide.
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/views/PuzzleView.js
@@ -66,7 +79,11 @@ Five sub-decisions, each with a rejected alternative:
 - **Animating height to `auto`** (see below): silently produces no transition (the browser jumps).
 
 ## Consequences
+
+
 **Supporting contracts:** four no-op lifecycle hooks (`viewWillShow/viewDidShow` around `in`; `viewWillHide/viewDidHide` around `out`) fire in order **even with no `animations` field** — they are lifecycle, not animation callbacks (zero-duration semantics). Malformed specs warn-once and skip (never break rendering). `prefers-reduced-motion: reduce` zeroes all durations (hooks still fire). jsdom/ancient browsers lacking `el.animate` degrade to instant-finish, never breakage. `destroy()` stays synchronous; animated teardown is a separate explicit path so existing callers and error paths are unaffected.
+
+**The brackets pair with the mount.** The hide bracket and the out animation fire only for a view that **completed its mount** — one that reached `#completeMount` and fired `mounted()`. A view whose async `data()` was still pending when its owner removed it was never shown, so there is nothing to hide: it takes the instant, synchronous `destroy()` (which still cancels the pending data run and fires `destroyed()`), and `viewWillHide`/`viewDidHide` never fire. Without the pairing a hook that tears down what `viewDidShow()` built runs against state that was never created — it throws, and the throw is swallowed as a leave failure. `PuzzleView.__isMounted` is the seam: `viewManager`'s `unmount()` reads it to choose between `destroyAnimated()` and `destroy()`, and `playOut()` carries the same rule for the router's leave paths, which reach it without going through the ViewManager. A never-shown view still becomes `#leaving` (inert, unsubscribed) and still cancels a running skeleton enter — only the bracket and the out spec are skipped.
 
 **Fixed-height inner-content pattern (collapse animations).** WAAPI cannot animate to `height: auto`, so height-based enter/leave effects animate between explicit `px` values. The shipped `TodoItem` wraps its row content in a fixed-height inner element and animates that height (plus opacity/scale) — documented in USER_GUIDE ([[DOC-USER-GUIDE]]) as the canonical collapse recipe.
 

@@ -55,6 +55,16 @@ notes:
       out)` in production, because shipping the prose everywhere cost ~190 B gzip per app. The
       `startsWith('#')` checks in mount() and ssg/serialize.js are unchanged and stay outside every
       gate.
+  - kind: gotcha
+    text: >-
+      unmount()'s leave branch is gated on THREE things, not two: an out animation or a hide hook,
+      AND a completed mount (child.__isMounted). The third was added in 0.7.0's pre-release review.
+      Reading only the first two routed a child whose async data() was still pending through
+      destroyAnimated(), firing the full hide bracket for a view that never fired
+      mounted()/viewWillShow()/viewDidShow(). A never-mounted child takes the instant, synchronous
+      destroy() — the 0.6.0 timing, and the timing every non-animating removal already had. Keep the
+      gate first in the condition: it is the cheap check and it is the one that preserves
+      synchronous teardown.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
