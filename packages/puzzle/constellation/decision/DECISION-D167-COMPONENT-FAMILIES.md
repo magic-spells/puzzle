@@ -24,6 +24,16 @@ notes:
       `generate component Slot` scaffolded a component unreachable from templates); views stay
       exempt, being routed by class. Also: the printed import hint follows `--path` — a family dir
       under `app/` prints the `@` alias form, anything else the project-relative path.
+  - kind: state
+    text: >-
+      Editor grammar sweep done (2026-08-31), stacked as `feat/0.7.0-grammar` on each repo's pending
+      `feat/0.6.0-grammar` branch: puzzle-vscode PR #2 (component open/close regexes accept
+      `(?:\.Ident)*`; the marker lookahead also had to exclude `.` so `<Slot.Custom>` reads as a
+      component), puzzle-sublime PR #2 (`puzzle_component_name` accepts dotted segments; HTML's
+      `tag_name_break` already stops markers at a `.`), puzzle-zed PR #2 (no grammar change —
+      `tag_name` already accepts dots — corpus test + highlight comment only). Sublime syntax tests
+      can only run inside Sublime Text; the others ran green. None of the grammars flag invalid
+      dotted names (`<Frame.>`, `<Frame-x>`) — the framework's positioned errors are the backstop.
 ---
 
 # D167 — component families: dotted component tags + the family barrel convention (v1.80)
