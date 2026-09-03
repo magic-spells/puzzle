@@ -1031,7 +1031,12 @@ describe('static read-state island (D161)', () => {
 		expect(pages[0].html).toContain('alpha');
 		expect(pages[0].html).toContain('missing');
 		expect(pages[0].data.note).toHaveLength(1);
-		expect(pages[0].readState).toEqual({ v: 1, complete: ['note'], absent: ['note gone'] });
+		expect(pages[0].readState).toEqual({
+			v: 1,
+			complete: ['note'],
+			loaded: ['note'],
+			absent: ['note gone'],
+		});
 	});
 
 	it('writes the envelope as a second JSON island beside the record island', async () => {
@@ -1043,7 +1048,12 @@ describe('static read-state island (D161)', () => {
 		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
 		const start = index.indexOf('data-puzzle-static-read>') + 'data-puzzle-static-read>'.length;
 		const island = index.slice(start, index.indexOf('</script>', start));
-		expect(JSON.parse(island)).toEqual({ v: 1, complete: ['note'], absent: ['note gone'] });
+		expect(JSON.parse(island)).toEqual({
+			v: 1,
+			complete: ['note'],
+			loaded: ['note'],
+			absent: ['note gone'],
+		});
 		// It rides between the record island and the per-page module.
 		expect(index.indexOf('data-puzzle-static-data')).toBeLessThan(
 			index.indexOf('data-puzzle-static-read')

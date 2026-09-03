@@ -31,8 +31,20 @@ export interface ResolvedRouteHead {
 export interface PrerenderReadState {
 	/** Envelope version — `1` today; a kernel rejects anything it does not know. */
 	v: number;
-	/** Model type names settled collection-complete by a no-options load. */
+	/**
+	 * Model type names whose no-options load was EXHAUSTIVE — a findOne miss on
+	 * one of them is authoritative. Only the generated REST transport earns this.
+	 */
 	complete: string[];
+	/**
+	 * Model type names whose collection request finished, exhaustive or not, so a
+	 * tracked findMany does not re-fault. A superset of `complete`; absent from
+	 * envelopes written before 0.7.0, where `complete` carried both meanings. A
+	 * kernel that does not read this field still answers every id correctly — it
+	 * just re-loads the collection once for a type whose authored `loadMany` was
+	 * never exhaustive.
+	 */
+	loaded?: string[];
 	/** Identity keys (`type` + separator + `id`) settled as absent by a 404. */
 	absent: string[];
 }

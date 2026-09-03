@@ -41,6 +41,24 @@ notes:
       matched the runtime, and the card was rewritten to state what the code actually does. Verified
       at this sha with the framework suite green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: decision
+    text: >-
+      Only the GENERATED transport can vouch that a collection response was exhaustive (0.7.0). D161
+      read state used one "complete" set for two different facts, and marked it on any successful
+      no-options `loadMany` — including an authored one. But an authored `loadMany` is opaque by
+      this card's own design: returning a paginated first page is a perfectly good implementation of
+      the verb, and the framework has no way to know it was one. The consequence was a real record
+      reported as missing — a tracked `findOne` on an off-page id committed `null` with no request.
+      The facts are now split: LOADED (the collection request ran, so a tracked `findMany` stops
+      re-faulting) is earned by any successful no-options load; EXHAUSTIVE (a `findOne` miss owes no
+      detail request) only when the endpoint-derived REST transport made the request, i.e. the model
+      declares an `endpoint`, names no function for the verb, and no `adapter.defaults()` dialect
+      supplies one either. A dialect counts as authored for this purpose: it says HOW the app talks
+      to its server, not that its responses are whole collections. Simply not marking anything for
+      authored loads was not an option — every tracked `findMany` would then re-request the
+      collection on every settle pass, trading a wrong answer for a request loop; hence two sets
+      rather than one. Adding an opt-in verb flag was rejected as new API for a rule the framework
+      can derive.
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:

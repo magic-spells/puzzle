@@ -97,9 +97,17 @@ function assertRenamedVerbs(models) {
  * always a leftover from hand-rolled loading — findOne/findMany fetch what is
  * missing and settle before the view commits. Once per store per verb; the
  * internal fault path calls _loadOne/_loadMany and never lands here.
+ *
+ * Attributed by HANDLE IDENTITY, exactly as faulting is: only a call arriving
+ * through a view's own store handle whose evaluation is open (`hctx.requests`
+ * is installed) is that view's read. The ambient `store._tracking` is not a
+ * usable test — it stays set across every `await` of any suspended async
+ * `data()`, so a click handler or a timer calling `store.loadMany()` in that
+ * window warned about a run it has nothing to do with, and the warn-once latch
+ * then hid the genuine case for the rest of the session.
  */
-function warnTrackedLoad(store, verb, replacement) {
-	if (!store._tracking) return;
+function warnTrackedLoad(store, hctx, verb, replacement) {
+	if (!hctx.requests) return;
 	let warned = warnedTrackedLoads.get(store);
 	if (!warned) warnedTrackedLoads.set(store, (warned = new Set()));
 	if (warned.has(verb)) return;
@@ -249,7 +257,14 @@ function readStateFor(store) {
 			one: new Map(), // "type id" → in-flight single-record request
 			many: new Map(), // type → in-flight complete-collection request
 			absent: new Map(), // "type id" → true, insertion-ordered (LRU)
-			complete: new Set(), // types whose complete collection has loaded
+			// Two facts, not one (D161). `loaded`: a no-options collection request
+			// finished, so a tracked findMany must not re-fault. `complete`: that
+			// response was EXHAUSTIVE, so a findOne miss is an authoritative "does
+			// not exist" and owes no detail request. Only the generated REST
+			// transport earns the second — an authored loadMany is opaque, and a
+			// paginated first page is a perfectly good response. complete ⊆ loaded.
+			loaded: new Set(),
+			complete: new Set(),
 			seq: 0, // monotonic read-dispatch counter (see LOAD_GENERATIONS)
 		};
 		readStateByStore.set(store, state);
@@ -313,10 +328,14 @@ export function serializeReadState(store) {
 	// caller holding `this.ctx.store` is holding a Store as far as it knows, and
 	// must not silently get an empty envelope (D161).
 	const state = readStateByStore.get(store?.[STORE_RAW] ?? store);
-	if (!state) return { v: 1, complete: [], absent: [] };
+	if (!state) return { v: 1, complete: [], loaded: [], absent: [] };
 	return {
 		v: 1,
+		// `complete` keeps its original meaning — exhaustive — so an older kernel
+		// reading a newer envelope is still right about every id. `loaded` is
+		// additive; a kernel that does not know it falls back to `complete`.
 		complete: [...state.complete],
+		loaded: [...state.loaded],
 		absent: [...state.absent.keys()],
 	};
 }
@@ -332,7 +351,15 @@ export function hydrateReadState(handleOrStore, envelope) {
 	const store = handleOrStore?.[STORE_RAW] ?? handleOrStore; // see serializeReadState
 	const state = readStateFor(store);
 	if (Array.isArray(envelope.complete)) {
-		for (const type of envelope.complete) state.complete.add(type);
+		for (const type of envelope.complete) {
+			state.complete.add(type);
+			state.loaded.add(type);
+		}
+	}
+	// Absent from an envelope written before the loaded/complete split, in which
+	// case `complete` above already carried everything that had loaded.
+	if (Array.isArray(envelope.loaded)) {
+		for (const type of envelope.loaded) state.loaded.add(type);
 	}
 	if (Array.isArray(envelope.absent)) {
 		for (const key of envelope.absent) {
@@ -376,6 +403,21 @@ function faultVerb(store, type, verb) {
 	return typeof bound[verb] === 'function' ? bound[verb] : null;
 }
 
+/**
+ * Did the FRAMEWORK generate this verb's request (the D158 endpoint-derived
+ * REST transport), rather than an author or an app-wide dialect? Only then can
+ * the framework make claims about what a response means beyond the records it
+ * carried — see the `loaded` / `complete` split in readStateFor (D161/D158).
+ */
+function isGeneratedVerb(store, type, verb) {
+	const declared = store.modelFor(type).adapter;
+	const config =
+		declared && typeof declared === 'object' && !Array.isArray(declared) ? declared : null;
+	if (!config?.endpoint) return false;
+	if (typeof config[verb] === 'function') return false;
+	return typeof store._a?.d?.[verb] !== 'function';
+}
+
 class AdapterStoreMethods {
 	// ---- wrapped core methods (D161 read-state invalidation) --
 
@@ -394,7 +436,7 @@ class AdapterStoreMethods {
 	/**
 	 * Removing a record by ANY path — `record.destroy()`, a confirmed
 	 * `delete()` — records that identity absent, so a tracked findOne on a type
-	 * that is not collection-complete returns null instead of faulting the id
+	 * whose collection is not known exhaustive returns null instead of faulting it
 	 * straight back in (D161). Anything that brings the id back clears the entry:
 	 * createRecord, _upsert via loadOne/loadMany/upsert, and the hydration sweep.
 	 * `loadOne` is the explicit refresh.
@@ -496,14 +538,12 @@ class AdapterStoreMethods {
 	 *
 	 * Imperative and unconditional: it always issues a request (the force-refresh
 	 * escape hatch), unlike the deduplicated fault the tracked findMany queues.
-	 * Called with NO options it is a complete-collection load, so the type becomes
-	 * collection-complete; an options-bearing call — `{}` included — is a partial,
+	 * Called with NO options it is a whole-collection load, so the type is marked
+	 * loaded — and exhaustive too when the generated transport made the request
+	 * (see _loadMany). An options-bearing call — `{}` included — is a partial,
 	 * accumulating load and marks nothing (D161).
 	 */
 	loadMany(type, options) {
-		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			warnTrackedLoad(this, 'loadMany', 'findMany');
-		}
 		return this._loadMany(type, options);
 	}
 
@@ -542,9 +582,16 @@ class AdapterStoreMethods {
 		const records = list.map((data) =>
 			this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])), gen)
 		);
-		// A complete collection answers "is this identity absent?" for every id it
-		// omits, so both facts land together (D161). An empty array counts.
-		if (options == null) readStateFor(this).complete.add(type);
+		// A no-options load is the whole collection as far as REQUESTING goes, so
+		// the tracked findMany stops faulting either way. It answers "is this
+		// identity absent?" for every id it omits only when the FRAMEWORK built the
+		// request — an authored loadMany may well have returned page one (D161). An
+		// empty array counts; an options-bearing call marks nothing.
+		if (options == null) {
+			const state = readStateFor(this);
+			state.loaded.add(type);
+			if (isGeneratedVerb(this, type, 'loadMany')) state.complete.add(type);
+		}
 		this._persist();
 		return records;
 	}
@@ -562,9 +609,6 @@ class AdapterStoreMethods {
 	 * strict (see _loadOne).
 	 */
 	loadOne(type, id) {
-		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			warnTrackedLoad(this, 'loadOne', 'findOne');
-		}
 		return this._loadOne(type, id);
 	}
 
@@ -704,6 +748,23 @@ class AdapterStoreMethods {
 		const hctx = { requests: null };
 		const findOne = (type, id) => store._findOneTracked(type, id, hctx.requests);
 		const findMany = (type, options) => store._findManyTracked(type, options, hctx.requests);
+		// The dev nudge's call seam (D161). It lives HERE, not on Store.loadMany /
+		// Store.loadOne, because that is where the identity is: a forwarded handle
+		// method is bound to the raw store, so by the time the verb runs there is
+		// nothing left to say which reference the caller held. Built only in dev,
+		// so production keeps the plain forwarding path.
+		let trackedLoadMany;
+		let trackedLoadOne;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			trackedLoadMany = (type, options) => {
+				warnTrackedLoad(store, hctx, 'loadMany', 'findMany');
+				return store._loadMany(type, options);
+			};
+			trackedLoadOne = (type, id) => {
+				warnTrackedLoad(store, hctx, 'loadOne', 'findOne');
+				return store._loadOne(type, id);
+			};
+		}
 		// Bound methods are memoized per key, re-bound only if the underlying
 		// function changes — installFixtures() swaps `_network` on the prototype
 		// mid-session, so a permanently cached binding would outlive its source.
@@ -712,6 +773,8 @@ class AdapterStoreMethods {
 			get(target, key) {
 				if (key === 'findOne') return findOne;
 				if (key === 'findMany') return findMany;
+				if (trackedLoadMany && key === 'loadMany') return trackedLoadMany;
+				if (trackedLoadOne && key === 'loadOne') return trackedLoadOne;
 				if (key === STORE_RAW) return target;
 				if (key === HANDLE_CTX) return hctx;
 				const value = Reflect.get(target, key, target);
@@ -764,9 +827,9 @@ class AdapterStoreMethods {
 	 * decides — with all the state that decision needs living out here — whether a
 	 * request is owed, and records the one to wait for under its diagnostic key.
 	 *
-	 * Silent (no request, no entry) when: the id is nullish or unkeyable, the type
-	 * is collection-complete, the identity is known absent, or the model declares
-	 * no loadOne of its own and no endpoint (see faultVerb — an app-wide dialect
+	 * Silent (no request, no entry) when: the id is nullish or unkeyable, the
+	 * type's collection is known exhaustive, the identity is known absent, or the
+	 * model declares no loadOne of its own and no endpoint (see faultVerb — an app-wide dialect
 	 * alone never makes a local model fault). A pending identical request is
 	 * joined rather than reissued.
 	 */
@@ -775,10 +838,12 @@ class AdapterStoreMethods {
 		const key = identityKey(type, id);
 		if (key === null) return;
 		const state = readStateFor(this);
-		// A complete collection already answered every id it omits, so a miss here is
-		// a local fact, not a cache gap — pure local, same as a negative-cache hit
+		// An EXHAUSTIVE collection already answered every id it omits, so a miss here
+		// is a local fact, not a cache gap — pure local, same as a negative-cache hit
 		// (D161). Without this, a stale link's id would fetch a detail GET whose 500
-		// turns a known absence into a failed view.
+		// turns a known absence into a failed view. `loaded` is deliberately NOT the
+		// test: an authored loadMany may have returned page one, and an id it left
+		// out is a record that exists.
 		if (state.complete.has(type)) return;
 		if (isAbsent(state, key)) return;
 		const inflight = state.one.get(key);
@@ -805,13 +870,16 @@ class AdapterStoreMethods {
 	}
 
 	/**
-	 * The findMany half. Completeness is tracked independently of record presence:
-	 * local records prove nothing about the rest of the collection, so the first
-	 * tracked findMany on a type still loads it once. Filters stay local.
+	 * The findMany half. Having loaded is tracked independently of record
+	 * presence: local records prove nothing about the rest of the collection, so
+	 * the first tracked findMany on a type still loads it once. Filters stay
+	 * local. This half asks only "has the collection request run?" — an authored
+	 * loadMany answers that as well as a generated one, which is what keeps a
+	 * paginated adapter from re-requesting page one on every settle pass.
 	 */
 	_faultMany(type, requests) {
 		const state = readStateFor(this);
-		if (state.complete.has(type)) return;
+		if (state.loaded.has(type)) return;
 		const inflight = state.many.get(type);
 		if (inflight) {
 			requests.set(type, inflight);
@@ -1310,12 +1378,22 @@ class AdapterViewMethods {
 		const close = (value) => {
 			if (ownsWindow()) {
 				this._settlingToken = 0;
+				const folded = this._settleDirty;
 				this._settleDirty = false;
+				// A folded notification is only DELIVERED by the pass that commits
+				// (the extra round in afterPass below). A run that closes the window
+				// still carrying one never committed — it was superseded by a D146
+				// prepared commit, went stale, or failed — and the model now on screen
+				// predates that store change. Hand the notification back rather than
+				// swallow it; onStoreChange re-folds it into whatever run owns the
+				// window by then, or refreshes. Deferred so this never re-enters the
+				// loop ahead of its own caller's commit.
+				if (folded) queueMicrotask(() => this.onStoreChange());
 			}
 			return value;
 		};
 
-		const afterPass = (model, requests, channel) => {
+		const afterPass = (model, requests, channel, mark) => {
 			if (isStale()) {
 				channel.reconcile?.(false);
 				return undefined;
@@ -1330,7 +1408,17 @@ class AdapterViewMethods {
 					return pass();
 				}
 				if (parked) parked.reconcile = channel.reconcile;
-				else channel.reconcile?.(true);
+				else {
+					channel.reconcile?.(true);
+					// This pass is the committed one, so every notification the store
+					// had already queued when it started is baked into `model` — most
+					// of them this run's OWN upserts, whose flush lands after the
+					// subscriptions above go live. Record the boundary so that flush
+					// does not buy a third data() run and a second render of identical
+					// content (D161). Only an owning run marks: a prepared run's model
+					// is not on screen until its commit.
+					this._settleMark = mark;
+				}
 				return model;
 			}
 			if (++rounds > MAX_SETTLE_ROUNDS) {
@@ -1345,8 +1433,12 @@ class AdapterViewMethods {
 					// looks live to the committing pass's reconciliation, so an unreleased
 					// intermediate branch would strand subscriptions the final pass dropped.
 					channel.reconcile?.(false);
+					// Clearing the dirty flag is only earned by the pass about to run —
+					// that pass is what delivers the folded change. A run that stops here
+					// leaves the flag set for close() to hand back, or the change is lost.
+					if (isStale()) return undefined;
 					if (ownsWindow()) this._settleDirty = false;
-					return isStale() ? undefined : pass();
+					return pass();
 				},
 				(err) => {
 					channel.reconcile?.(false);
@@ -1358,6 +1450,10 @@ class AdapterViewMethods {
 		const pass = () => {
 			const requests = new Map();
 			const channel = {};
+			// The store's notification sequence as this pass begins (see the commit
+			// branch in afterPass). Read before data() runs, so it can only be
+			// conservative: a change queued later is delivered, never dropped.
+			const mark = store._notifySeq ?? 0;
 			// Re-read the sticky shape flag per pass, not once for the loop: a
 			// .then-style data() only reveals itself by returning a promise, and the
 			// pass that revealed it must not leave the NEXT round still hinting sync
@@ -1370,8 +1466,8 @@ class AdapterViewMethods {
 				requests
 			);
 			return result && typeof result.then === 'function'
-				? result.then((model) => afterPass(model, requests, channel))
-				: afterPass(result, requests, channel);
+				? result.then((model) => afterPass(model, requests, channel, mark))
+				: afterPass(result, requests, channel, mark);
 		};
 
 		let out;
