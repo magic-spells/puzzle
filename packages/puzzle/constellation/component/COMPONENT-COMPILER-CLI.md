@@ -85,16 +85,20 @@ Cobra command surface shipped by the platform binary:
   restating every template expression as typed statements, or, for a JavaScript
   component, an unchecked `.pzl.script.js` mirror alongside that wrapper (the
   `.script` infix stops TypeScript's extension substitution resolving the
-  wrapper's import back to itself). It then runs `node_modules/.bin/tsc
-  --noEmit --pretty false -p .puzzle/check` as a subprocess and rewrites each
-  diagnostic to its authored `.pzl` line/column through the `.segments.json`
-  sidecars, passing anything unmappable through untouched. The generated
+  wrapper's import back to itself). It then resolves the app's
+  `node_modules/typescript/bin/tsc` and runs `node <that entry> --noEmit
+  --pretty false -p .puzzle/check` as a subprocess — the same invocation on
+  every OS, never a `.bin` shim and never `cmd.exe`, so a project path
+  containing a space works on Windows too — then rewrites each diagnostic to its
+  authored `.pzl` line/column through the `.segments.json` sidecars, passing
+  anything unmappable through untouched. The generated
   tsconfig extends the app's when present, overrides the options that would
   break the workspace (`rootDir`, `composite`, `skipLibCheck`, the `noUnused*`
   pair, an inherited `exclude`), and switches shape for TypeScript 7 after
   probing `tsc --version` once. Nothing here links against a TypeScript API.
   A missing tsc is the message `puzzle check needs TypeScript: npm install -D
-  typescript`, checked AFTER the "not a Puzzle project" test; a `.pzl` that
+  typescript`, checked AFTER the "not a Puzzle project" test (a missing `node`
+  on `PATH` is its counterpart); a `.pzl` that
   fails to compile is reported as its own positioned diagnostic and skipped
   rather than aborting the run. `--js` is registered and deliberately errors as
   not implemented.

@@ -333,12 +333,19 @@ arguments** — one such marker inside `{#for}` is precisely the intended N-stam
 case — while markers without arguments keep the old rule. Argument-bearing
 markers remain rejected inside `island` subtrees (§17).
 
-**Snippet bodies are stamped output, not composition owners.** A composition
-marker anywhere inside a `<Snippet>` body is a positioned compile error (put it
-in the component's own template), and so is `ref=` (§38: a ref names one element
-on one instance, and a snippet body is stamped N times). A snippet body *may*
-contain component invocations with their own snippets, and §24's
-nested-fallback restriction does not apply to it.
+**A snippet body is a composition LEAF.** `<Children>`, `<Slot>`, and
+`<Snippet>` are positioned compile errors anywhere inside a `<Snippet>` body, at
+any depth — **including a `<Snippet>` on a component invocation inside that
+body**. Stamped output cannot declare composition positions; the marker belongs
+in the component's own template. Ordinary component invocations are legal in a
+snippet body, and so is `<Portal>` — it relocates DOM rather than declaring a
+composition position, so it is walked like any element, though a marker *inside*
+the portal is still rejected. Nesting a snippet is expressed by **extraction** —
+move that invocation and its snippet into their own component, whose template
+holds the marker at top level, and name that component in the snippet body.
+`ref=` is rejected there for the same stamped-N-times reason (§38: a ref names
+one element on one instance). §24's nested-fallback restriction does not apply
+to a snippet body.
 
 **Semantics.** A snippet compiles to a function carried in the invocation's
 **children**, not its props: it closes over the caller's render data, so it

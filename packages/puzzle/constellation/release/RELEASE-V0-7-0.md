@@ -178,9 +178,14 @@ capability):**
   stamp it once per item with fresh vnodes. Binding is by name, paired marker
   bodies remain D141 fallbacks, and the snippet function travels in the children
   channel rather than as a prop so it cannot defeat the props shallow compare.
-  Development warns on argument-shape mismatches, unconsumed snippets, and
-  markers filled with plain content; composition markers and `ref=` inside a
-  snippet body are positioned compile errors. `SNIPPET_TAG`/`isSnippet` join the
+  Development warns on argument-shape mismatches, markers filled with plain
+  content, and snippet output that contains a composition marker. A snippet body
+  is a composition **leaf**: `<Children>`, `<Slot>`, `<Snippet>`, and `ref=`
+  inside one are positioned compile errors at any depth — including a
+  `<Snippet>` on a component invocation inside the body, which the error steers
+  to fix by extracting that invocation and its snippet into their own component.
+  (`<Portal>` is not composition and stays legal there.)
+  `SNIPPET_TAG`/`isSnippet` join the
   public type surface, and `__PUZZLE_HAS_SNIPPETS__` keeps non-users at zero
   bytes (users pay roughly 50 B gzip).
 - **`puzzle check`** (D165): the new CLI command type-checks `.pzl` files with
@@ -188,7 +193,8 @@ capability):**
   `.puzzle/check/src/` — a `lang="ts"` script verbatim plus a generated wrapper
   that restates every template expression as typed statements, or, for a
   JavaScript component, an unchecked script mirror alongside that wrapper —
-  runs `node_modules/.bin/tsc --noEmit --pretty false` as a subprocess, and
+  runs the app's `node_modules/typescript/bin/tsc` under `node`
+  (`--noEmit --pretty false`), the same invocation on every OS, and
   remaps diagnostics to exact `.pzl` positions through byte-exact segment
   tables. The generated tsconfig extends the app's, neutralizes the settings
   that would break the workspace, and switches shape for TypeScript 7 after

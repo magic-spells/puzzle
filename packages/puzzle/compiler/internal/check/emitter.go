@@ -23,9 +23,10 @@ const shim = `/// <reference types="@magic-spells/puzzle/puzzle-env" />
 import type { PuzzleView } from '@magic-spells/puzzle';
 
 declare global {
-  const Children: unique symbol;
-  const Slot: unique symbol;
-  const Portal: unique symbol;
+  // Composition markers are deliberately absent: the emitter never writes a
+  // marker's TAG NAME into the virtual file (only its argument expressions,
+  // which are checked in the surrounding view scope), so a declaration for
+  // Children/Slot/Portal/Snippet would name nothing.
 
   // The collection type is captured whole and destructured with a conditional
   // so that an untyped collection yields an ANY item, not an UNKNOWN one:

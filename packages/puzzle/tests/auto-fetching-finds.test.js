@@ -560,7 +560,12 @@ describe('D161 — static / HMR read-state seam', () => {
 		const build = makeStore();
 		await settle(build, (store) => [store.findMany('post'), store.findOne('user', 'ghost')]);
 		const envelope = serializeReadState(build);
-		expect(envelope).toEqual({ v: 1, complete: ['post'], absent: ['user ghost'] });
+		expect(envelope).toEqual({
+			v: 1,
+			complete: ['post'],
+			loaded: ['post'],
+			absent: ['user ghost'],
+		});
 
 		const browser = makeStore();
 		hydrateReadState(browser, envelope);
@@ -638,11 +643,23 @@ describe('D161 — loadAll migration guards', () => {
 	it('warns once when the imperative loaders run inside a tracked evaluation', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const store = makeStore();
-		await store.withTracking({}, async () => {
-			await store.loadMany('post').catch(() => {});
-			await store.loadMany('post').catch(() => {});
-			await store.loadOne('post', 'p1').catch(() => {});
-		});
+		// Through the subscriber's OWN handle, with its evaluation open: the same
+		// identity attribution faulting uses. A call on the raw store — including
+		// one made while some other view is suspended — is not that view's read
+		// and is left alone (tests/tracked-load-warning.test.js).
+		const subscriber = { onStoreChange() {} };
+		const handle = store._handleFor(subscriber);
+		await store.withTracking(
+			subscriber,
+			async () => {
+				await handle.loadMany('post').catch(() => {});
+				await handle.loadMany('post').catch(() => {});
+				await handle.loadOne('post', 'p1').catch(() => {});
+			},
+			true,
+			null,
+			new Map()
+		);
 
 		const messages = warn.mock.calls.map(([message]) => message).filter((m) => /store\./.test(m));
 		expect(messages).toHaveLength(2);

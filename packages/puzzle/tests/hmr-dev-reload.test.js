@@ -538,7 +538,12 @@ describe('HMR dev reload — adapter read state (D161)', () => {
 
 		app.__devSnapshot();
 		const blob = JSON.parse(sessionStorage.getItem(HMR_KEY));
-		expect(blob.read).toEqual({ v: 1, complete: ['todo'], absent: ['todo gone'] });
+		expect(blob.read).toEqual({
+			v: 1,
+			complete: ['todo'],
+			loaded: ['todo'],
+			absent: ['todo gone'],
+		});
 		app.unmount();
 
 		container();

@@ -346,7 +346,11 @@ func nestedFallbackMarker(nodes []Node) Node {
 // caller-owned stamped output. Unlike nestedFallbackMarker, component and
 // Portal boundaries do not create an escape hatch: their call-site children are
 // part of the same fn() output and an inner marker would still reach the runtime
-// unexpanded.
+// unexpanded. A snippet body is a composition LEAF (D166) — that includes a
+// <Snippet> hanging off a nested component invocation, which is why the
+// *Component case recurses instead of stopping. Nesting is expressed by
+// extraction: move the inner invocation and its snippet into their own
+// component, whose template declares the marker at top level.
 func nestedSnippetBodyMarker(nodes []Node) Node {
 	for _, n := range nodes {
 		switch node := n.(type) {
@@ -390,7 +394,7 @@ func nestedSnippetBodyMarker(nodes []Node) Node {
 }
 
 func snippetBodyMarkerErr(n Node, file string) *ParseError {
-	return errAt(file, nodePos(n), "a composition marker cannot appear inside a <Snippet> body — stamped output cannot declare composition positions; put the marker in the component's own template")
+	return errAt(file, nodePos(n), "a composition marker cannot appear inside a <Snippet> body — stamped output cannot declare composition positions; put the marker in the component's own template, and to give a nested component invocation a snippet of its own, move that invocation and its snippet into their own component")
 }
 
 // validateCallSiteSlots enforces the call-site slot rules on the DIRECT children

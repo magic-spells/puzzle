@@ -269,8 +269,8 @@ function navigationSource(router, method, args) {
 function recordStoreNotifications(store) {
 	// Sampling (never mutating) the pending key set is cheap and preserves the
 	// model type that would be lost once public, idempotent flush() returns.
-	if (!(store._pendingKeys instanceof Set)) return;
-	for (const key of store._pendingKeys) {
+	if (!(store._pendingKeys instanceof Map)) return;
+	for (const key of store._pendingKeys.keys()) {
 		if (typeof key === 'string' && !key.includes(' ')) {
 			recordActivity(`store notifications for ${key}`);
 		}

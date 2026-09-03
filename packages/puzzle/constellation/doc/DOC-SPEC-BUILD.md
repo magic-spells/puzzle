@@ -346,14 +346,17 @@ $ puzzle check
 app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
 ```
 
-- **The app's own TypeScript does the checking.** The command resolves
-  `node_modules/.bin/tsc` (`tsc.cmd` under `cmd.exe` on Windows) and runs it as
-  a subprocess with `--noEmit --pretty false`. Puzzle never installs a compiler
-  and never links against a TypeScript API: a missing install is the message
-  `puzzle check needs TypeScript: npm install -D typescript`, and a directory
-  with no `app/` is reported as "not a Puzzle project" **before** the
-  TypeScript check, so a wrong working directory is never reported as a missing
-  dependency.
+- **The app's own TypeScript does the checking.** The command resolves the app's
+  `node_modules/typescript/bin/tsc` — the JavaScript entry every `.bin` shim
+  points at — and runs it as `node <that path> --noEmit --pretty false …`, the
+  same invocation on every OS (no platform shell, so a project path containing a
+  space is fine). Puzzle never installs a compiler and never links against a
+  TypeScript API: a missing install is the message
+  `puzzle check needs TypeScript: npm install -D typescript`, a missing `node`
+  on `PATH` is `puzzle check needs Node.js on PATH: it runs the app's TypeScript
+  compiler`, and a directory with no `app/` is reported as "not a Puzzle
+  project" **before** the TypeScript check, so a wrong working directory is
+  never reported as a missing dependency.
 - **Virtual files under `.puzzle/check/`** (§13's scratch dir) mirror the `app/`
   tree and are rebuilt from scratch each run, so a deleted `.pzl` leaves no
   ghost. A `lang="ts"` component emits one `.pzl.ts`: its script bytes verbatim,
