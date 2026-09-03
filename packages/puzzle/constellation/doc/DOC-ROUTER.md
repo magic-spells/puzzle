@@ -148,6 +148,7 @@ Why not `window.location.pathname` or `ctx.router.current`? Both describe the **
 - Match on **route names** (`this.route.route.name`, or `this.route.chain[0].name` for section-level highlighting), not on `path` — `path` is the raw pushed path and can carry `?query` and `#anchor` suffixes (v1.10).
 - Store-change re-runs keep the snapshot; only the next navigation replaces it.
 - `this.route` is `null` in components the router doesn't manage — pass route-derived state down as props from the routed view.
+- **Once the view is mounted, `this.route` mirrors the last COMMITTED navigation — the fragment included.** An in-page anchor move (`/docs` ⇄ `/docs#faq`) is not a navigation (D41): nothing loads, nothing refreshes, and no new snapshot is delivered, so `this.route.hash` still reads the fragment the last navigation committed with. The live fragment is `ctx.router.current.hash`, which the fragment pop updates in place. A view that must react to an anchor jump reads that and listens for `hashchange`/`popstate` itself — there is deliberately no re-render behind it.
 
 ---
 

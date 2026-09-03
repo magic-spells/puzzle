@@ -253,6 +253,28 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **Hide hooks no longer fire on a component that was never shown.** Routing
+  hook-only components through the animated removal path (new in this release)
+  did not check whether the component had actually mounted, so a child whose
+  first `async data()` was still pending when its parent removed it ran the
+  whole `viewWillHide()` → `viewDidHide()` bracket with no preceding
+  `mounted()`/`viewWillShow()`/`viewDidShow()` — and a hook tearing down what
+  `viewDidShow()` built threw against state that was never created, swallowed as
+  a leave failure. The hide bracket and the `out` animation now pair with the
+  mount (D28): a view that never reached `mounted()` takes the instant,
+  synchronous `destroy()` it took in 0.6.0 — its pending data run is cancelled
+  and `destroyed()` still fires. The rule lives at both seams, so it covers the
+  router's leave paths as well as ordinary component removal.
+
+- **A failed back/forward navigation no longer leaves the address bar on the
+  page it failed to reach.** A pop moves the URL before the router runs, so a
+  pre-commit failure that stays put has to put it back — but only the two guard
+  paths did. A `lazy()` loader rejection, a view-constructor throw, or a
+  `data()` rejection on a pop left the browser sitting on the popped entry over
+  an unchanged tree, so a reload landed on a page the app was not showing. All
+  five failure paths now restore the committed URL with a `replaceState`, adding
+  no history entry: after any failed pop the address bar matches the DOM.
+
 - **A store change that lands while a view is settling is never swallowed.** A
   notification arriving during a settle run folds into that run and is delivered
   by the extra pass it takes before committing (D161) — but a run that ends

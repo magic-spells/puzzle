@@ -1552,6 +1552,18 @@ export class PuzzleView {
 		);
 	}
 
+	/**
+	 * INTERNAL — did this instance complete its mount (#completeMount ran, so
+	 * mounted() fired)? The hide bracket and the out-animation pair with the mount:
+	 * a view that was never shown has nothing to hide, so it takes the instant
+	 * destroy() path. viewManager's unmount() reads this to decide between
+	 * destroyAnimated() and destroy(); playOut() enforces the same rule for the
+	 * router's leave paths, which reach it directly.
+	 */
+	get __isMounted() {
+		return this.#mounted;
+	}
+
 	// ---- animation (constellation/doc/DOC-SPEC.md §12) ----------------------
 
 	// A subclass MAY also declare an optional `transitionMode` field here,
@@ -1876,10 +1888,20 @@ export class PuzzleView {
 	 * "did" hook is skipped once destroyed, since destroy() fires destroyed()).
 	 * The element stays in the DOM for the whole out-animation; the CALLER
 	 * removes it afterwards (see destroyAnimated / ViewManager leave path).
+	 *
+	 * The hide bracket pairs with the MOUNT (D28): both hooks and the out spec fire
+	 * only for a view that completed its mount. A view removed while its async
+	 * data() was still pending never fired mounted()/viewWillShow()/viewDidShow(),
+	 * so announcing a departure it never made would run teardown code against state
+	 * its show hooks never created. It still becomes #leaving (inert, unsubscribed)
+	 * and still cancels any skeleton enter animation — only the bracket is skipped.
 	 * @returns {Promise<void>}
 	 */
 	playOut() {
 		if (this.#leaving) return this.#leaving;
+		// Captured before #leaving is armed: #completeMount refuses to run on a
+		// leaving view, so this can never flip underneath the task below.
+		const shown = this.#mounted;
 		if (this.#outTask) {
 			// A restored view leaving for real. The out sequence is spent, so the
 			// animation must not replay — but D136's leave-inertness rule is about the
@@ -1905,7 +1927,7 @@ export class PuzzleView {
 			// out of playOut() — #startOverlapLeave passes this straight into a
 			// Promise.all(), where a sync throw would escape its .catch entirely.
 			const spentTask = (async () => {
-				if (this.#destroyed) return;
+				if (this.#destroyed || !shown) return;
 				this.viewWillHide();
 				await this.#runAnimation(undefined);
 				if (this.#destroyed || !this.#leaving) return;
@@ -1943,6 +1965,10 @@ export class PuzzleView {
 			// check there.
 			this.#currentAnimation?.cancel();
 			this.#currentAnimation = null;
+			// Never shown: no hide bracket and no out animation (see the doc comment
+			// above). The view is already inert and unsubscribed; the caller's
+			// destroy() follows immediately.
+			if (!shown) return;
 			// A `trigger`/`triggerOffset`/`triggerAnchor` on the OUT spec is meaningless
 			// (leave is never scroll-gated) — warn once and ignore it; the leave path is
 			// unchanged (D73).

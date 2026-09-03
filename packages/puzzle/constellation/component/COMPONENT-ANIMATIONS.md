@@ -17,6 +17,16 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: gotcha
+    text: >-
+      playOut() captures `shown = #mounted` BEFORE it arms #leaving, and skips both hide hooks and
+      the out spec when it is false (D28: the brackets pair with the mount). The capture order is
+      what makes that readable rather than subtle — #completeMount refuses to run on a leaving view,
+      so once #leaving is set the flag can no longer move, and both the main task and the
+      spent-#outTask branch read the same value. A never-shown view still becomes #leaving,
+      unsubscribes from the store, and cancels a running enter animation; only the bracket and the
+      out are skipped. Note that a skeleton view does NOT qualify as never-shown: the skeleton
+      render completes its mount.
 ---
 
 # Animation and visibility runtime

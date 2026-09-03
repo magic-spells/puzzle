@@ -37,6 +37,32 @@ notes:
       every later push() to it replayed the rejection). The abandoned instances are DROPPED, never
       destroy()ed — a constructed-only view holds no subscription, timer, or registry entry, so
       destroy() would fire destroyed() for a view whose created() never ran.
+  - kind: decision
+    text: >-
+      The failed-POP URL invariant, made uniform in 0.7.0's pre-release review: after ANY navigation
+      failure that leaves the tree on the committed route, the address bar matches the DOM. A push
+      never moved the URL (pushState fires at commit, D61), so it needs no repair; a pop is the
+      asymmetric case — the browser moved the address bar before #navigate ran. Only the two guard
+      paths (blocked guard, no-op guard redirect) restored it before; the three pre-commit catches —
+      lazy() marker rejection (D163), view/layout constructor throw, and the data() rejection — left
+      the URL on the popped entry over an unchanged tree, so a reload landed on a page the app was
+      not showing. All five now run `if (pop && cur && this.#state === cur)
+      this.#restoreCommittedUrl(cur.path)`. The `this.#state === cur` test is what keeps it correct
+      under a redirect or a newer navigation that already moved the state. #restoreCommittedUrl is a
+      replaceState, so the repair adds no history entry; a urlless mode short-circuits inside it.
+      Pinned by tests/router-failed-pop-url.test.js (one case per failure kind, each asserting
+      location and history.length).
+  - kind: gotcha
+    text: >-
+      #applyFragmentPop mutates #state's path/pathname/query/hash IN PLACE, so `router.current.hash`
+      tracks an in-page anchor move live — but the frozen snapshot each mounted view holds as
+      `this.route` does NOT. A fragment move is not a navigation (D41): nothing loads, nothing
+      refreshes, no snapshot is delivered, so `this.route.hash` keeps whatever the last COMMITTED
+      navigation carried. That is the intended design, not a gap — the snapshot commits with the
+      tree (D146), and adding an `_adoptRoute` seam to push a fresh snapshot into the committed
+      chain would give views a route object that moves without the tree under it. Documented
+      instead, in SPEC §19 and DOC-ROUTER's route-snapshot section: a view that must react to an
+      anchor jump reads `ctx.router.current.hash` and listens for hashchange/popstate itself.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

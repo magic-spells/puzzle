@@ -116,9 +116,11 @@ describe('leave inertness covers the mount/commit path (D136 §3)', () => {
 
 		// The parent removes it: hide hooks now route removal through the async
 		// destroyAnimated() path, so the view is #leaving with no animation at all.
+		// The bracket itself stays SILENT — this view never completed its mount, so
+		// it has no departure to announce (see the never-shown describe below).
 		const leaving = child.playOut();
 		await leaving;
-		expect(order).toEqual(['willHide', 'didHide']);
+		expect(order).toEqual([]);
 
 		// data() lands AFTER the leave started. Nothing may render, and mounted()
 		// must not fire on a view its owner has already let go.
@@ -126,13 +128,13 @@ describe('leave inertness covers the mount/commit path (D136 §3)', () => {
 		await mounting;
 		await tick();
 
-		expect(order).toEqual(['willHide', 'didHide']);
+		expect(order).toEqual([]);
 		expect(el.querySelector('.child')).toBeNull();
 		expect(el.textContent).not.toContain('LOADED');
 
 		child.destroy();
 		await tick();
-		expect(order).toEqual(['willHide', 'didHide', 'destroyed']);
+		expect(order).toEqual(['destroyed']);
 	});
 
 	it('a refresh committing mid-leave does not paint into the removed subtree', async () => {
@@ -335,5 +337,167 @@ describe('restored-then-departed hook order (D28 / D136 §3)', () => {
 			'didHide',
 			'destroyed',
 		]);
+	});
+});
+
+// D28 — the hide bracket pairs with the MOUNT. A component removed by its parent
+// while its async data() is still pending never fired
+// mounted()/viewWillShow()/viewDidShow(), so it must not fire viewWillHide()/
+// viewDidHide() either: a hook tearing down what viewDidShow() built would throw
+// on state that was never created. 0.6.0 took the instant destroy() here; the
+// 0.7.0 change that routes hook-only components through destroyAnimated()
+// regressed it until the __isMounted gate.
+describe('the hide bracket fires only for a view that completed its mount (D28)', () => {
+	it('a never-shown child removed by its parent logs only destroyed', async () => {
+		const order = [];
+
+		class Child extends PuzzleView {
+			async data() {
+				await new Promise(() => {}); // never resolves — mount never completes
+				return {};
+			}
+			mounted() {
+				order.push('mounted');
+			}
+			viewWillShow() {
+				order.push('willShow');
+			}
+			viewDidShow() {
+				order.push('didShow');
+			}
+			viewWillHide() {
+				order.push('willHide');
+			}
+			viewDidHide() {
+				order.push('didHide');
+			}
+			destroyed() {
+				order.push('destroyed');
+			}
+			render() {
+				return h('span', { class: 'child' }, [text('child')]);
+			}
+		}
+
+		class Parent extends PuzzleView {
+			created() {
+				this.setData({ show: true });
+			}
+			data() {
+				return {};
+			}
+			render() {
+				return h('div', {}, this.getData().show ? [comp(Child)] : []);
+			}
+		}
+
+		const el = container();
+		const parent = await new Parent().mount(el);
+		await tick();
+		expect(order).toEqual([]);
+
+		parent.setData({ show: false });
+		await frame();
+		await tick();
+
+		expect(order).toEqual(['destroyed']);
+		expect(el.querySelector('.child')).toBeNull();
+	});
+
+	it('a never-shown child with animations.out plays no out animation', async () => {
+		installFakeAnimate();
+		const order = [];
+
+		class Child extends PuzzleView {
+			animations = { out: OUT };
+			async data() {
+				await new Promise(() => {});
+				return {};
+			}
+			viewWillHide() {
+				order.push('willHide');
+			}
+			viewDidHide() {
+				order.push('didHide');
+			}
+			destroyed() {
+				order.push('destroyed');
+			}
+			render() {
+				return h('puzzle-view', { class: 'child' }, [text('child')]);
+			}
+		}
+
+		class Parent extends PuzzleView {
+			created() {
+				this.setData({ show: true });
+			}
+			data() {
+				return {};
+			}
+			render() {
+				return h('div', {}, this.getData().show ? [comp(Child)] : []);
+			}
+		}
+
+		const el = container();
+		const parent = await new Parent().mount(el);
+		await tick();
+
+		parent.setData({ show: false });
+		await frame();
+		await tick();
+
+		expect(fakeAnimations).toEqual([]);
+		expect(order).toEqual(['destroyed']);
+	});
+
+	it('a MOUNTED hooks-only child removed by its parent fires the pair in order', async () => {
+		const order = [];
+
+		class Child extends PuzzleView {
+			data() {
+				return {};
+			}
+			mounted() {
+				order.push('mounted');
+			}
+			viewWillHide() {
+				order.push('willHide');
+			}
+			viewDidHide() {
+				order.push('didHide');
+			}
+			destroyed() {
+				order.push('destroyed');
+			}
+			render() {
+				return h('span', { class: 'child' }, [text('child')]);
+			}
+		}
+
+		class Parent extends PuzzleView {
+			created() {
+				this.setData({ show: true });
+			}
+			data() {
+				return {};
+			}
+			render() {
+				return h('div', {}, this.getData().show ? [comp(Child)] : []);
+			}
+		}
+
+		const el = container();
+		const parent = await new Parent().mount(el);
+		await tick();
+		expect(order).toEqual(['mounted']);
+
+		parent.setData({ show: false });
+		await frame();
+		await tick();
+
+		expect(order).toEqual(['mounted', 'willHide', 'didHide', 'destroyed']);
+		expect(el.querySelector('.child')).toBeNull();
 	});
 });

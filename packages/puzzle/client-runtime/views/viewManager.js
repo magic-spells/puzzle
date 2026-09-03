@@ -1076,7 +1076,14 @@ function unmount(vnode) {
 		// zero-duration semantics, exactly as the router's teardown already fires
 		// them. Nothing else changes for that view — playOut() with no `out` spec
 		// awaits no animation, so the hooks and destroy() land in the same order.
-		if (child?.animations?.out || child?.__hasHideHooks) {
+		//
+		// The leave path is gated on a COMPLETED mount (D28): a child removed while
+		// its async data() was still pending never fired mounted()/viewDidShow(), so
+		// it has no departure to announce and no shown state to animate away. It
+		// takes the instant, synchronous destroy() — 0.6.0's behaviour, and the
+		// timing every non-animating removal already has. playOut() carries the same
+		// rule for the router's leave paths, which never come through here.
+		if (child.__isMounted && (child?.animations?.out || child?.__hasHideHooks)) {
 			const leavingEl = child.element;
 			if (leavingEl && leavingEl.nodeType === 1 /* ELEMENT_NODE */) {
 				leavingEls.add(leavingEl);
