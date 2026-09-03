@@ -13,7 +13,8 @@ var checkCmd = &cobra.Command{
 	Use:   "check [dir]",
 	Short: "Type-check .pzl scripts and template expressions",
 	Long: `Type-check the app's .pzl files with the TypeScript compiler the app itself
-has installed (node_modules/.bin/tsc — puzzle never installs one for you).
+has installed (node_modules/typescript, run under node — puzzle never installs
+one for you).
 
 Each .pzl becomes a virtual file under .puzzle/check/: a lang="ts" script is
 checked as written, and every template expression is re-emitted as typed

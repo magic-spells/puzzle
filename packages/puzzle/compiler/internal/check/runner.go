@@ -7,12 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 )
 
 const missingTypeScriptMessage = "puzzle check needs TypeScript: npm install -D typescript"
+
+const missingNodeMessage = "puzzle check needs Node.js on PATH: it runs the app's TypeScript compiler"
 
 var tscDiagnosticRE = regexp.MustCompile(`^(.+)\(([0-9]+),([0-9]+)\): error TS[0-9]+: (.*)$`)
 
@@ -31,11 +32,11 @@ func Run(appRoot string) (int, error) {
 	if _, err := sourceDir(root); err != nil {
 		return 0, err
 	}
-	tsc, err := resolveTSC(root)
+	tool, err := resolveTSC(root)
 	if err != nil {
 		return 0, err
 	}
-	typescriptMajor, err := readTypeScriptMajor(tsc)
+	typescriptMajor, err := readTypeScriptMajor(tool)
 	if err != nil {
 		return 0, err
 	}
@@ -45,7 +46,7 @@ func Run(appRoot string) (int, error) {
 	}
 
 	args := []string{"--noEmit", "--pretty", "false", "-p", filepath.Join(".puzzle", "check")}
-	cmd := tscCommand(tsc, args...)
+	cmd := tool.command(args...)
 	cmd.Dir = root
 	output, runErr := cmd.CombinedOutput()
 	if runErr == nil {
@@ -69,8 +70,8 @@ func Run(appRoot string) (int, error) {
 	return result.Files, errors.New(formatted)
 }
 
-func readTypeScriptMajor(tsc string) (int, error) {
-	output, err := tscCommand(tsc, "--version").CombinedOutput()
+func readTypeScriptMajor(tool tscTool) (int, error) {
+	output, err := tool.command("--version").CombinedOutput()
 	if err != nil {
 		return 0, fmt.Errorf("read TypeScript version: %w", err)
 	}
@@ -81,12 +82,19 @@ func readTypeScriptMajor(tsc string) (int, error) {
 	return major, nil
 }
 
-func tscCommand(tsc string, args ...string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
-		cmdArgs := append([]string{"/d", "/s", "/c", tsc}, args...)
-		return exec.Command("cmd.exe", cmdArgs...)
-	}
-	return exec.Command(tsc, args...)
+// tscTool is the app's TypeScript compiler entry point plus the node binary that
+// runs it. tsc is a plain JavaScript file, so `node <entry> args…` is the same
+// invocation on every OS. The `.bin` shims are deliberately not used: the
+// Windows one is a `tsc.cmd` batch file that has to go through `cmd.exe /s`,
+// which strips the quotes Go put around a path containing a space and runs
+// `C:\Users\Cory` instead of the compiler (D165).
+type tscTool struct {
+	node  string
+	entry string
+}
+
+func (t tscTool) command(args ...string) *exec.Cmd {
+	return exec.Command(t.node, append([]string{t.entry}, args...)...)
 }
 
 func emitDiagnosticsError(result *Result) error {
@@ -96,17 +104,21 @@ func emitDiagnosticsError(result *Result) error {
 	return errors.New(strings.Join(result.Diagnostics, "\n"))
 }
 
-func resolveTSC(appRoot string) (string, error) {
-	name := "tsc"
-	if runtime.GOOS == "windows" {
-		name = "tsc.cmd"
-	}
-	path := filepath.Join(appRoot, "node_modules", ".bin", name)
-	info, err := os.Stat(path)
+// resolveTSC finds the app's own TypeScript compiler. It targets the package's
+// own `bin/tsc` entry — what every `.bin` shim points at, under npm, pnpm, and
+// yarn layouts alike — rather than the shim, so the command never depends on a
+// platform shell.
+func resolveTSC(appRoot string) (tscTool, error) {
+	entry := filepath.Join(appRoot, "node_modules", "typescript", "bin", "tsc")
+	info, err := os.Stat(entry)
 	if err != nil || info.IsDir() {
-		return "", errors.New(missingTypeScriptMessage)
+		return tscTool{}, errors.New(missingTypeScriptMessage)
 	}
-	return path, nil
+	node, err := exec.LookPath("node")
+	if err != nil {
+		return tscTool{}, errors.New(missingNodeMessage)
+	}
+	return tscTool{node: node, entry: entry}, nil
 }
 
 func remapTSCOutput(appRoot, output string, tables map[string]*SegmentTable) string {

@@ -129,12 +129,25 @@ app still checks, because nothing links the virtual files to each other. Its
 diagnostic is printed alongside the type errors — it is a real failure of the
 run and the reason that file is absent from everything tsc just checked.
 
-**tsc is resolved, never installed.** `node_modules/.bin/tsc` (`tsc.cmd` under
-`cmd.exe` on Windows) or the message
-`puzzle check needs TypeScript: npm install -D typescript`. Puzzle does not
-install a compiler for you (D3's posture applied to tooling). "You are not in a
-Puzzle project" is checked *before* "TypeScript is missing", so a wrong working
-directory is never reported as a missing dependency.
+**tsc is resolved, never installed, and always run under `node`.** The runner
+resolves the app's own `node_modules/typescript/bin/tsc` — the plain JavaScript
+entry every `.bin` shim points at, under npm, pnpm, and yarn layouts alike — and
+executes `node <that path> …` with `node` taken from `PATH`. Missing TypeScript
+is the message `puzzle check needs TypeScript: npm install -D typescript`; a
+missing `node` is its counterpart, `puzzle check needs Node.js on PATH: it runs
+the app's TypeScript compiler`. Puzzle does not install a compiler for you (D3's
+posture applied to tooling). "You are not in a Puzzle project" is checked
+*before* "TypeScript is missing", so a wrong working directory is never reported
+as a missing dependency.
+
+The `.bin` shims are deliberately not used, and that is a **bug fix, not a
+preference**: the Windows shim is a `tsc.cmd` batch file, so it had to run as
+`cmd.exe /d /s /c <path> args…`, and `/s` strips the first and last quote on the
+line — the quotes Go put around a path containing a space. Any Windows project
+under `C:\Users\Cory Schulz\…` therefore ran `C:\Users\Cory` instead of the
+compiler and failed at the version probe with "read TypeScript version: exit
+status 1". Running the JS entry under `node` is one code path on every OS, and
+`node` is already a hard prerequisite — the app's TypeScript is npm-installed.
 
 ## Scope of what is actually typed
 
@@ -156,7 +169,10 @@ Snippet parameters are typed `any`: their values come from the marker arguments
 in the *component's* template, a different `.pzl` this command checks
 independently, so there is nothing in the caller's file to infer from — unlike a
 loop variable, whose type `__puzzle_check_each` destructures out of the
-collection expression standing right there.
+collection expression standing right there. The shim declares no composition
+marker names: the emitter never writes a marker's TAG into the virtual file,
+only its argument expressions, so a `Children`/`Slot`/`Portal`/`Snippet`
+declaration there would name nothing.
 
 **Inferring `data()` shapes cross-file is explicitly out of scope.** The owner
 rejected build-time dynamic structure inference outright: it means guessing at
