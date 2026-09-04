@@ -240,7 +240,186 @@ one is *not* a compile error; it silently builds a different product.
   build output, and a marker that reaches the route table anyway fails loudly
   at route-compile time rather than mounting as if it were a view class.
 
+- **Windows x64 CLI binaries.** `npm install @magic-spells/puzzle` on Windows
+  now resolves a real `puzzle.exe` instead of failing with "no prebuilt CLI
+  binary available for this platform". A fifth platform package,
+  `@magic-spells/puzzle-win32-x64`, joins the four existing ones as a pinned
+  `optionalDependency` of the root package, and the bin shim resolves
+  `bin/puzzle.exe` through it. Windows-on-ARM runs the x64 binary under
+  emulation, so there is deliberately no `win32-arm64` package. `puzzle upgrade`
+  learned the same spelling — the platform package is keyed the way Node spells
+  the platform (`win32`), not the way Go does (`windows`), which is what it had
+  been deriving the name from.
+
+  CI gained a `windows-latest` job that runs the compiler's Go suite and then
+  scaffolds and builds a real app with the Windows binary, so the target is
+  verified on every push rather than at release time.
+
+  One deliberate gap: the interactive keyboard controls in `puzzle dev` (the
+  single-key restart/quit shortcuts) are Unix-only and are silently absent on
+  Windows. The dev server, watcher, rebuilds, and live reload all work; only the
+  keystroke shortcuts do not. Use Ctrl-C to stop the server.
+
+- **`output: 'static'` pages carry the build's read state (D161).** Each
+  prerendered page already ships its records in a `data-puzzle-static-data`
+  island; it now ships what the build *learned* beside them, so `mountStatic`
+  does not refetch every collection and re-404 every id the build already
+  settled. A second inline island follows the record island immediately:
+
+  ```html
+  <script type="application/json" data-puzzle-static-read>
+  {"v":1,"complete":["post","user"],"absent":["post 999"]}
+  </script>
+  ```
+
+  `complete` is the collection-complete type names; `absent` is the identities
+  the build confirmed missing, spelled `"<type> <recordKey>"`. The kernel
+  hydrates records **first**, then the read state, and drops any absence whose
+  record turned out to be present — a build that 404'd an id another page later
+  supplied cannot suppress a live read. The envelope is versioned so an older
+  kernel rejects a newer one rather than misreading it, and it is **omitted
+  entirely** when the page settled nothing, so an adapter-less build emits the
+  same bytes it did before the envelope existed. `output: 'hybrid'` transfers
+  nothing new by design: its SPA takeover re-runs `data()` as a fresh session.
+
+- **HMR preserves read state across a dev reload (D161).** The dev-state
+  snapshot carries the collection-complete set and the negative cache along with
+  the records, so editing a template does not re-issue every collection load the
+  session had already settled. In-flight promises are never carried — an
+  unresolved miss simply refetches after the reload — and app persistence stays
+  records-only.
+
 ### Changed
+
+- **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing
+  (D161).** Reading server data no longer needs any loading code. Inside a
+  view's `data()`, a find that misses returns its local value and queues a
+  fetch; the view does **not** commit that pass. Puzzle re-runs `data()` behind
+  the batch and commits the first pass whose reads all came up warm, so `data()`
+  keeps reading like plain synchronous code:
+
+  ```js
+  data(params) {
+    const store = this.ctx.store;
+    const post = store.findOne('post', params.id);
+    const author = post ? store.findOne('user', post.authorId) : null;
+    return { post, author };
+  }
+  ```
+
+  Deep-linked into an empty store that settles in three rounds — miss the post,
+  get the post and miss the author, get both — and renders once, fully
+  populated. Dependent reads resolve on their own; nothing declares an order.
+
+  The contract that makes this usable is that **a committed `null` means the
+  record does not exist**, never "still loading", so `{#if post} … {:else} Not
+  found` needs no companion `loaded` flag. Everything else follows from
+  protecting it:
+
+  | Read | Behavior |
+  |---|---|
+  | Tracked hit | synchronous return, no request |
+  | Tracked miss, resolvable read verb | local value + queued fetch, deduped by identity |
+  | Tracked miss, identity known absent | `null`, no request |
+  | `findMany` on a collection-complete type | pure local; `{ filter }` is always local |
+  | No `/adapter` capability, or no resolvable verb | pure local — exactly the 0.6.0 behavior |
+  | Outside `data()` (handlers, model methods) | pure local snapshot, never fetches |
+  | `belongsTo`/`hasMany` getters | local lookup, never fetches |
+
+  A miss faults only when D158 dispatch resolves a read verb — model function,
+  app default, or endpoint-generated REST — so `findOne` needs a `loadOne` and
+  `findMany` needs a `loadMany`. Local-first apps are untouched: no capability,
+  no endpoint, no verb, no request. Fixture-driven apps fault exactly like
+  production — the mock intercepts at the `_network` seam, so a tracked miss is
+  served from the mock collection and a mock 404 exercises the negative cache
+  for real. Relationships
+  deliberately never fault (a 50-row list must not become 50 GETs); when a view
+  needs a related record that may be missing, it adds one more tracked find on
+  the foreign key, and `post.author` then resolves off the warm store.
+
+  Only a framework-normalized 404 becomes a committed `null`. Network failures,
+  5xx, 401/403, and malformed bodies reject the run through the normal
+  navigation-failure / `errorView` path and poison no cache. Ten settle rounds
+  without converging **throws**, naming the view and the last round's request
+  keys — never a partial commit, which would make `null` ambiguous again.
+
+  Caching a migrating app should know about: a type is collection-complete only
+  after a **successful no-options** collection load (an empty array counts), so
+  `loadMany(type, options)` — including `{}` — stays partial and accumulating;
+  absent identities go in a never-persisted 1000-entry LRU and clear the moment
+  the identity arrives by any path (create, upsert, load, hydration, save
+  reconcile, primary-key adoption); removing a record by any path — a confirmed
+  `record.delete()` or a local `record.destroy()` — records that identity absent,
+  so an optimistic delete cannot fault the row straight back in; and explicit
+  `store.loadOne` bypasses
+  the negative cache, which makes it the force-refresh escape hatch. Only the
+  automatic fault path requires the response to carry the requested primary key
+  (a mismatch there would re-request the id every settle round); an explicit
+  `store.loadOne` is one-shot and upserts whatever record the server returns, so
+  `store.loadOne('post', 'my-slug')` against a slug-resolving endpoint works.
+  `data()`
+  now runs however many times the waterfall needs, so keep it a pure derivation.
+
+  The eager-seed idiom is retired. The 0.6.0 advice — seed whole collections
+  after `mount()`, and *never* load inside `data()`, or the upsert's own
+  notification loops the view — is what this replaces; the loop discards each
+  intermediate pass's subscriptions, so the cycle it warned about cannot form.
+  A leftover seed still works (it marks the types complete, and the views that
+  follow read a warm store), so migration is deletion at your convenience, not a
+  breaking edit. Calling `store.loadOne`/`store.loadMany` from inside a tracked
+  `data()` run warns once in dev and points at `findOne`/`findMany`.
+
+  Prerendering fetches at build time through the same loop: a request failure
+  fails the build naming the route, `beforeRequest` runs in the build context,
+  and `prerender: false` is still the opt-out. Skeletons are unchanged — every
+  settle round counts as one load, held by the existing `min-duration`.
+  Deliberately deferred: server-side query/pagination pass-through on
+  `findMany`, TTL/`reload(type)` invalidation, and request cancellation.
+
+- **BREAKING: the collection verb is `loadMany`, and `loadAll` throws (D161).**
+  One/Many is the framework's naming pair, and the old spelling is not aliased:
+  a silent fallback to generated REST would quietly hit different URLs than the
+  adapter you wrote. Every site that could have accepted it rejects it by name
+  instead, so an unmigrated app fails at boot rather than rendering empty lists.
+
+  | Before | After |
+  |---|---|
+  | `store.loadAll(type, options)` | `store.loadMany(type, options)` |
+  | `static adapter = { loadAll }` | `static adapter = { loadMany }` |
+  | `adapter.defaults({ loadAll })` | `adapter.defaults({ loadMany })` |
+  | `store.adapter(type).loadAll` | `store.adapter(type).loadMany` |
+
+  The four guards, all carrying the same message:
+
+  - `store.loadAll()` is kept as a throwing trap, not removed — an app that
+    still calls it would otherwise look migrated while its models never renamed
+    their verb.
+  - A registered model whose `static adapter` carries an own `loadAll` key
+    throws at **Store construction**, before any navigation.
+  - `adapter.defaults({ loadAll })` throws immediately, in production too: an
+    app-wide default silently covers every model.
+  - The verb-binding loop rejects `loadAll` **before** its custom-function
+    branch, so it cannot bind as a harmless custom verb nothing ever calls.
+
+  TypeScript follows: `AdapterLoadAllOptions` is `AdapterLoadManyOptions`.
+
+- **BREAKING: generated read failures are `PuzzleAdapterError` (D161).** A
+  non-OK response to a generated `loadMany`/`loadOne` now normalizes exactly
+  like a write does, and like an author function returning a non-OK `Response`.
+  Reads previously rejected with a plain `Error` carrying only a message:
+
+  ```
+  before:  [puzzle] load 'post' failed: 404 Not Found
+  after:   [puzzle] adapter request failed: 404 Not Found   (PuzzleAdapterError, .status === 404)
+  ```
+
+  The auto-fetch path needs the status to tell "absent" from "broken", and a
+  plain `Error` carries none. Code that matched on the old message string must
+  match on `err instanceof PuzzleAdapterError` and `err.status` instead; import
+  `PuzzleAdapterError` from `@magic-spells/puzzle/adapter`. A custom `loadOne`
+  reports "no such record" the same way — `return new Response(null, { status:
+  404 })`. Returning `null` remains a response-shape error, not an alternate
+  not-found convention.
 
 - **A route's `view`/`layout` is validated when the route table compiles.** It
   must be a `PuzzleView` subclass or a `lazy()` marker; anything else now throws
@@ -250,6 +429,15 @@ one is *not* a compile error; it silently builds a different product.
   view class or a loader. If your app passed something that is not a
   `PuzzleView` subclass in a view position, it fails at boot now rather than at
   first navigation.
+
+- **The framework develops in a monorepo (D162).** `@magic-spells/puzzle`,
+  `@magic-spells/puzzle-pieces`, the DevTools extension, and the `.pzl`
+  lint/format plugins now live in one repository — `magic-spells/puzzle`,
+  under `packages/` — and version as one release train. Nothing about the
+  published package changes: same name, same exports, same tarball layout.
+  The npm `repository` metadata now points into `packages/puzzle`, and a
+  pieces release can no longer lag the CLI it is version-locked to — the
+  release pipeline asserts the whole train.
 
 ### Fixed
 
@@ -430,6 +618,7 @@ one is *not* a compile error; it silently builds a different product.
   read, write, and delete is local and a fresh app renders a working list the
   moment it starts. `app.js` documents the upgrade to a real API. The `default`
   template was never affected — it declares no models.
+
 - **Prerender fails an app-relative endpoint with a diagnostic, not a raw URL
   parse error.** Because D161 moved the read path to build time, a prerendered
   app using an app-relative endpoint shape (`apiURL: '/api'`) hit Node's
@@ -441,12 +630,14 @@ one is *not* a compile error; it silently builds a different product.
   `beforeMount({ store })`. The check sits on the global `fetch`, not on
   `apiURL`, so an authored verb that hardcodes a path (the D158 escape hatch
   `examples/blog` uses) is diagnosed too.
+
 - **`types/ssg.d.ts` knows about the read-state envelope.** `PrerenderedPage`
   and `injectStaticShell` were never taught the `readState` field D161 added,
   so a TypeScript consumer driving a custom prerender pipeline could not read
   `page.readState` or pass it through — a compile error on correct code. Both
   now carry it, typed as the exported `PrerenderReadState`
   (`{ v, complete, absent }`).
+
 - **A payload key naming a model method no longer shadows it.** An ordinary
   permission flag (`{ id, name, update: true, delete: false }`) used to land as
   an own data property over `PuzzleModel.prototype.update`, so the next
@@ -461,6 +652,7 @@ one is *not* a compile error; it silently builds a different product.
   a model: a schema entry named after a model method (framework verb or one of
   your own) throws at app construction in development, naming the model and the
   field.
+
 - **`date()` fields hydrated from JSON are revived as `Date`s.** JSON has no
   Date type, so a `Puzzle.date()` field arriving from `loadMany`/`loadOne`/
   `upsert`, a save response, or a `storage:` round trip was a string — and
@@ -475,6 +667,7 @@ one is *not* a compile error; it silently builds a different product.
   reports it. Instant dates still serialize as ISO timestamps, while a bare
   date revives to `CalendarDate`, whose `toJSON()` preserves the original
   `YYYY-MM-DD` in every time zone instead of shifting it to a UTC instant.
+
 - **`update()` with a reserved key applies the rest of the patch.** `_type` is
   defined non-writable, so `record.update({ title, _type, done })` threw
   `TypeError: Cannot assign to read only property '_type'` **mid-loop** under
@@ -485,6 +678,7 @@ one is *not* a compile error; it silently builds a different product.
   (`_store`/`_type`/`_synced`/`_deleted` plus the prototype-pollution family),
   dropping those keys with a development warning instead of throwing, and stamps
   D125 mutation revisions on only the keys that actually landed.
+
 - **`puzzle upgrade` resolves and proves the install it is upgrading from the
   running executable (D76).** Documented since 0.5.0, but resolution still
   walked up from the current directory, so a global CLI invoked inside an app
@@ -647,198 +841,6 @@ one is *not* a compile error; it silently builds a different product.
   exits as soon as the summary is flushed to the pipe. The timeout message says
   "a `data()` that never resolves", which is now the only thing that can cause
   it.
-
-### Changed
-
-- **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing
-  (D161).** Reading server data no longer needs any loading code. Inside a
-  view's `data()`, a find that misses returns its local value and queues a
-  fetch; the view does **not** commit that pass. Puzzle re-runs `data()` behind
-  the batch and commits the first pass whose reads all came up warm, so `data()`
-  keeps reading like plain synchronous code:
-
-  ```js
-  data(params) {
-    const store = this.ctx.store;
-    const post = store.findOne('post', params.id);
-    const author = post ? store.findOne('user', post.authorId) : null;
-    return { post, author };
-  }
-  ```
-
-  Deep-linked into an empty store that settles in three rounds — miss the post,
-  get the post and miss the author, get both — and renders once, fully
-  populated. Dependent reads resolve on their own; nothing declares an order.
-
-  The contract that makes this usable is that **a committed `null` means the
-  record does not exist**, never "still loading", so `{#if post} … {:else} Not
-  found` needs no companion `loaded` flag. Everything else follows from
-  protecting it:
-
-  | Read | Behavior |
-  |---|---|
-  | Tracked hit | synchronous return, no request |
-  | Tracked miss, resolvable read verb | local value + queued fetch, deduped by identity |
-  | Tracked miss, identity known absent | `null`, no request |
-  | `findMany` on a collection-complete type | pure local; `{ filter }` is always local |
-  | No `/adapter` capability, or no resolvable verb | pure local — exactly the 0.6.0 behavior |
-  | Outside `data()` (handlers, model methods) | pure local snapshot, never fetches |
-  | `belongsTo`/`hasMany` getters | local lookup, never fetches |
-
-  A miss faults only when D158 dispatch resolves a read verb — model function,
-  app default, or endpoint-generated REST — so `findOne` needs a `loadOne` and
-  `findMany` needs a `loadMany`. Local-first apps are untouched: no capability,
-  no endpoint, no verb, no request. Fixture-driven apps fault exactly like
-  production — the mock intercepts at the `_network` seam, so a tracked miss is
-  served from the mock collection and a mock 404 exercises the negative cache
-  for real. Relationships
-  deliberately never fault (a 50-row list must not become 50 GETs); when a view
-  needs a related record that may be missing, it adds one more tracked find on
-  the foreign key, and `post.author` then resolves off the warm store.
-
-  Only a framework-normalized 404 becomes a committed `null`. Network failures,
-  5xx, 401/403, and malformed bodies reject the run through the normal
-  navigation-failure / `errorView` path and poison no cache. Ten settle rounds
-  without converging **throws**, naming the view and the last round's request
-  keys — never a partial commit, which would make `null` ambiguous again.
-
-  Caching a migrating app should know about: a type is collection-complete only
-  after a **successful no-options** collection load (an empty array counts), so
-  `loadMany(type, options)` — including `{}` — stays partial and accumulating;
-  absent identities go in a never-persisted 1000-entry LRU and clear the moment
-  the identity arrives by any path (create, upsert, load, hydration, save
-  reconcile, primary-key adoption); removing a record by any path — a confirmed
-  `record.delete()` or a local `record.destroy()` — records that identity absent,
-  so an optimistic delete cannot fault the row straight back in; and explicit
-  `store.loadOne` bypasses
-  the negative cache, which makes it the force-refresh escape hatch. Only the
-  automatic fault path requires the response to carry the requested primary key
-  (a mismatch there would re-request the id every settle round); an explicit
-  `store.loadOne` is one-shot and upserts whatever record the server returns, so
-  `store.loadOne('post', 'my-slug')` against a slug-resolving endpoint works.
-  `data()`
-  now runs however many times the waterfall needs, so keep it a pure derivation.
-
-  The eager-seed idiom is retired. The 0.6.0 advice — seed whole collections
-  after `mount()`, and *never* load inside `data()`, or the upsert's own
-  notification loops the view — is what this replaces; the loop discards each
-  intermediate pass's subscriptions, so the cycle it warned about cannot form.
-  A leftover seed still works (it marks the types complete, and the views that
-  follow read a warm store), so migration is deletion at your convenience, not a
-  breaking edit. Calling `store.loadOne`/`store.loadMany` from inside a tracked
-  `data()` run warns once in dev and points at `findOne`/`findMany`.
-
-  Prerendering fetches at build time through the same loop: a request failure
-  fails the build naming the route, `beforeRequest` runs in the build context,
-  and `prerender: false` is still the opt-out. Skeletons are unchanged — every
-  settle round counts as one load, held by the existing `min-duration`.
-  Deliberately deferred: server-side query/pagination pass-through on
-  `findMany`, TTL/`reload(type)` invalidation, and request cancellation.
-
-- **BREAKING: the collection verb is `loadMany`, and `loadAll` throws (D161).**
-  One/Many is the framework's naming pair, and the old spelling is not aliased:
-  a silent fallback to generated REST would quietly hit different URLs than the
-  adapter you wrote. Every site that could have accepted it rejects it by name
-  instead, so an unmigrated app fails at boot rather than rendering empty lists.
-
-  | Before | After |
-  |---|---|
-  | `store.loadAll(type, options)` | `store.loadMany(type, options)` |
-  | `static adapter = { loadAll }` | `static adapter = { loadMany }` |
-  | `adapter.defaults({ loadAll })` | `adapter.defaults({ loadMany })` |
-  | `store.adapter(type).loadAll` | `store.adapter(type).loadMany` |
-
-  The four guards, all carrying the same message:
-
-  - `store.loadAll()` is kept as a throwing trap, not removed — an app that
-    still calls it would otherwise look migrated while its models never renamed
-    their verb.
-  - A registered model whose `static adapter` carries an own `loadAll` key
-    throws at **Store construction**, before any navigation.
-  - `adapter.defaults({ loadAll })` throws immediately, in production too: an
-    app-wide default silently covers every model.
-  - The verb-binding loop rejects `loadAll` **before** its custom-function
-    branch, so it cannot bind as a harmless custom verb nothing ever calls.
-
-  TypeScript follows: `AdapterLoadAllOptions` is `AdapterLoadManyOptions`.
-
-- **BREAKING: generated read failures are `PuzzleAdapterError` (D161).** A
-  non-OK response to a generated `loadMany`/`loadOne` now normalizes exactly
-  like a write does, and like an author function returning a non-OK `Response`.
-  Reads previously rejected with a plain `Error` carrying only a message:
-
-  ```
-  before:  [puzzle] load 'post' failed: 404 Not Found
-  after:   [puzzle] adapter request failed: 404 Not Found   (PuzzleAdapterError, .status === 404)
-  ```
-
-  The auto-fetch path needs the status to tell "absent" from "broken", and a
-  plain `Error` carries none. Code that matched on the old message string must
-  match on `err instanceof PuzzleAdapterError` and `err.status` instead; import
-  `PuzzleAdapterError` from `@magic-spells/puzzle/adapter`. A custom `loadOne`
-  reports "no such record" the same way — `return new Response(null, { status:
-  404 })`. Returning `null` remains a response-shape error, not an alternate
-  not-found convention.
-
-- **The framework develops in a monorepo (D162).** `@magic-spells/puzzle`,
-  `@magic-spells/puzzle-pieces`, the DevTools extension, and the `.pzl`
-  lint/format plugins now live in one repository — `magic-spells/puzzle`,
-  under `packages/` — and version as one release train. Nothing about the
-  published package changes: same name, same exports, same tarball layout.
-  The npm `repository` metadata now points into `packages/puzzle`, and a
-  pieces release can no longer lag the CLI it is version-locked to — the
-  release pipeline asserts the whole train.
-
-### Added
-
-- **Windows x64 CLI binaries.** `npm install @magic-spells/puzzle` on Windows
-  now resolves a real `puzzle.exe` instead of failing with "no prebuilt CLI
-  binary available for this platform". A fifth platform package,
-  `@magic-spells/puzzle-win32-x64`, joins the four existing ones as a pinned
-  `optionalDependency` of the root package, and the bin shim resolves
-  `bin/puzzle.exe` through it. Windows-on-ARM runs the x64 binary under
-  emulation, so there is deliberately no `win32-arm64` package. `puzzle upgrade`
-  learned the same spelling — the platform package is keyed the way Node spells
-  the platform (`win32`), not the way Go does (`windows`), which is what it had
-  been deriving the name from.
-
-  CI gained a `windows-latest` job that runs the compiler's Go suite and then
-  scaffolds and builds a real app with the Windows binary, so the target is
-  verified on every push rather than at release time.
-
-  One deliberate gap: the interactive keyboard controls in `puzzle dev` (the
-  single-key restart/quit shortcuts) are Unix-only and are silently absent on
-  Windows. The dev server, watcher, rebuilds, and live reload all work; only the
-  keystroke shortcuts do not. Use Ctrl-C to stop the server.
-
-- **`output: 'static'` pages carry the build's read state (D161).** Each
-  prerendered page already ships its records in a `data-puzzle-static-data`
-  island; it now ships what the build *learned* beside them, so `mountStatic`
-  does not refetch every collection and re-404 every id the build already
-  settled. A second inline island follows the record island immediately:
-
-  ```html
-  <script type="application/json" data-puzzle-static-read>
-  {"v":1,"complete":["post","user"],"absent":["post 999"]}
-  </script>
-  ```
-
-  `complete` is the collection-complete type names; `absent` is the identities
-  the build confirmed missing, spelled `"<type> <recordKey>"`. The kernel
-  hydrates records **first**, then the read state, and drops any absence whose
-  record turned out to be present — a build that 404'd an id another page later
-  supplied cannot suppress a live read. The envelope is versioned so an older
-  kernel rejects a newer one rather than misreading it, and it is **omitted
-  entirely** when the page settled nothing, so an adapter-less build emits the
-  same bytes it did before the envelope existed. `output: 'hybrid'` transfers
-  nothing new by design: its SPA takeover re-runs `data()` as a fresh session.
-
-- **HMR preserves read state across a dev reload (D161).** The dev-state
-  snapshot carries the collection-complete set and the negative cache along with
-  the records, so editing a template does not re-issue every collection load the
-  session had already settled. In-flight promises are never carried — an
-  unresolved miss simply refetches after the reload — and app persistence stays
-  records-only.
 
 ## 0.6.0 — 2026-08-15
 
