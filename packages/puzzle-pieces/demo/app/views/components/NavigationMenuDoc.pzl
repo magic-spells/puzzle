@@ -4,33 +4,86 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Navigation Menu</h1>
         <p class="mt-2 text-body">
-          A horizontal site-header navigation rendered from an
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">items</code>
-          array. Plain links sit alongside flyout triggers whose children open as a panel of link cards, with
-          delayed hover intent, keyboard support, and viewport-clamped panels. It uses the accessible
-          disclosure pattern — real
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-expanded</code>
-          buttons over plain
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<a>' }</code>
-          links, not menubar roles.
+          A horizontal site-header bar with hover or click flyout panels of link cards. It is a
+          compound <strong class="font-medium text-ink">family</strong> composed over the shared
+          <a class="text-brand underline underline-offset-2" href="#/components/dropdown-panel">Dropdown Panel</a>
+          base, so hover intent, the hover bridge, one-open-at-a-time arbitration, outside-press
+          dismissal and the whole keyboard model come from the web component rather than from a
+          hand-rolled copy in this file.
         </p>
+        <p class="mt-3 text-body">
+          Accessibility is the <strong class="font-medium text-ink">disclosure</strong> pattern, not
+          menubar or menuitem roles: those promise a desktop-app keyboard model that links to pages
+          do not deliver. Every trigger is a real button the component wires with
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-expanded</code>,
+          and every item is a real
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<a>' }</code>
+          and a natural Tab stop.
+        </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">items</code>
+            and <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">activePath</code>
+            props are gone. The bar is now written as markup — nested
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">items[].children[]</code>
+            config is exactly the shape a compound family replaces. Active state is per link
+            (<code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">current</code>),
+            and the old rAF viewport clamp is replaced by
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">wide</code>
+            and <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">align="end"</code>,
+            both pure CSS.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
         <div class="flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
           <span class="text-sm font-semibold text-ink">Acme</span>
-          <NavigationMenu items={ heroItems }/>
+          <NavigationMenu label="Main">
+            <NavigationMenu.Item>
+              <NavigationMenu.Trigger>Products</NavigationMenu.Trigger>
+              <NavigationMenu.Content columns={ 2 } align="end" class="w-max max-w-lg">
+                {#for row in products}
+                  <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label } description={ row.description }/>
+                {/for}
+              </NavigationMenu.Content>
+            </NavigationMenu.Item>
+
+            <NavigationMenu.Item>
+              <NavigationMenu.Trigger>Resources</NavigationMenu.Trigger>
+              <NavigationMenu.Content align="end" class="w-max max-w-sm">
+                {#for row in resources}
+                  <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label } description={ row.description }/>
+                {/for}
+              </NavigationMenu.Content>
+            </NavigationMenu.Item>
+
+            <li><NavigationMenu.Link variant="bar" href="#pricing" label="Pricing"/></li>
+          </NavigationMenu>
         </div>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
         <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
+          Copy the family into your app. It pulls the shared
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">dropdown-panel</code>
+          base along with it:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          That base has a runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheets into your app's style entry. The first is required; the second
+          draws the trigger arrow and the entrance effects, and the stock trigger already carries
+          the arrow hook:
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
-          No npm dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction).
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
       </section>
 
@@ -38,39 +91,153 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          The <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<nav>' }</code>
+          is <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">relative</code>
+          and that is load-bearing: a <span class="font-medium text-ink">wide</span> mega panel's
+          host goes <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">position: static</code>
+          so the panel spans the nearest positioned ancestor, and this element is it.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          <span class="font-medium text-ink">Item</span> is the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<li>' }</code>
+          that keeps the bar valid list markup, with the dropdown inside it — which is fine, because
+          the direct-children rule is about the trigger and panel being direct children of the
+          dropdown component, and the list item sits outside it. Every Item is a dropdown; a plain
+          top-level link needs no member at all — write a bare
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<li>' }</code>
+          around a <span class="font-medium text-ink">Link</span> with
+          <span class="font-medium text-ink">variant="bar"</span>.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="active" title="Active route" code={ codeActive }>
-          <div class="flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-            <span class="text-sm font-semibold text-ink">Acme</span>
-            <NavigationMenu items={ heroItems } activePath="/pricing"/>
+        <ExampleBox id="mega" title="Mega panel" code={ codeMega }>
+          <div class="flex w-full flex-col items-stretch gap-3">
+            <div class="flex w-full max-w-3xl items-center gap-6 rounded-xl border border-border bg-surface px-4 py-3">
+              <span class="text-sm font-semibold text-ink">Acme</span>
+              <NavigationMenu class="flex-1">
+                <NavigationMenu.Item>
+                  <NavigationMenu.Trigger>Platform</NavigationMenu.Trigger>
+                  <NavigationMenu.Content wide={ true } columns={ 2 } effect="slide">
+                    {#for row in platform}
+                      <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label } description={ row.description }/>
+                    {/for}
+                  </NavigationMenu.Content>
+                </NavigationMenu.Item>
+
+                <li><NavigationMenu.Link variant="bar" href="#pricing" label="Pricing" current={ true }/></li>
+              </NavigationMenu>
+            </div>
+            <p class="mt-3 w-full max-w-3xl text-sm text-muted">
+              <span class="font-medium text-ink">wide</span> makes the panel span the whole
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<nav>' }</code>
+              rather than hang off its trigger — that element is the positioned ancestor, so give it
+              the width you want the panel to have (here <span class="font-medium text-ink">flex-1</span>). The Pricing link is
+              <span class="font-medium text-ink">current</span>, which is the per-link replacement for
+              the old bar-wide <span class="font-medium text-ink">activePath</span>.
+            </p>
           </div>
         </ExampleBox>
 
-        <ExampleBox id="single-column" title="Single column" code={ codeSingle }>
-          <div class="flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-            <span class="text-sm font-semibold text-ink">Acme</span>
-            <NavigationMenu items={ resourceItems }/>
+        <ExampleBox id="submenu" title="Nested submenu and right alignment" code={ codeSubmenu }>
+          <div class="flex w-full flex-col items-stretch gap-3">
+            <div class="flex w-full max-w-2xl items-center justify-end rounded-xl border border-border bg-surface px-4 py-3">
+              <NavigationMenu>
+                <NavigationMenu.Item>
+                  <NavigationMenu.Trigger>Company</NavigationMenu.Trigger>
+                  <NavigationMenu.Content align="end" class="w-max max-w-xs">
+                    <NavigationMenu.Link href="#about" label="About"/>
+                    <NavigationMenu.Link href="#careers" label="Careers"/>
+
+                    <NavigationMenu.Item>
+                      <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
+                      <NavigationMenu.Content opens="right" class="w-max max-w-xs">
+                        <NavigationMenu.Link href="#contact" label="Contact us"/>
+                        <NavigationMenu.Link href="#help" label="Help center"/>
+                      </NavigationMenu.Content>
+                    </NavigationMenu.Item>
+                  </NavigationMenu.Content>
+                </NavigationMenu.Item>
+              </NavigationMenu>
+            </div>
+            <p class="mt-3 w-full max-w-2xl text-sm text-muted">
+              A submenu is an Item nested inside a Content with
+              <span class="font-medium text-ink">opens="right"</span>. Escape closes one level at a
+              time, and the left arrow returns from a submenu to its trigger. The outer panel is
+              <span class="font-medium text-ink">align="end"</span>, which hugs the right edge with
+              two utilities instead of the measuring pass the old piece ran every open.
+            </p>
           </div>
         </ExampleBox>
 
         <section id="keyboard" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
-          <p class="mb-3 text-sm text-body">Triggers and their flyouts support the disclosure-pattern keys:</p>
-          <ul class="mb-4 space-y-1.5 text-sm text-body">
-            <li><span class="font-medium text-ink">Enter / Space</span> — toggle the focused trigger's panel</li>
-            <li><span class="font-medium text-ink">Down arrow</span> — open the panel and move into its first link</li>
-            <li><span class="font-medium text-ink">Up / Down arrows</span> — move link focus inside an open panel</li>
-            <li><span class="font-medium text-ink">Tab</span> — move through the links in natural order</li>
-            <li><span class="font-medium text-ink">Escape</span> — close the panel and return focus to the trigger</li>
-          </ul>
-          <ExampleBox code={ codeKeyboard }>
-            <div class="flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-              <span class="text-sm font-semibold text-ink">Acme</span>
-              <NavigationMenu items={ heroItems }/>
-            </div>
-          </ExampleBox>
+          <p class="mb-3 text-sm text-body">
+            All of it lives in the web component; this piece adds no key handling of its own.
+          </p>
+          <div class="text-sm">
+            {#for row in keyRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+        </section>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">NavigationMenu</h3>
+          <div class="text-sm">
+            {#for row in rootRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">NavigationMenu.Item</h3>
+          <div class="text-sm">
+            {#for row in itemRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">NavigationMenu.Trigger</h3>
+          <div class="text-sm">
+            {#for row in triggerRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">NavigationMenu.Content</h3>
+          <div class="text-sm">
+            {#for row in contentRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">NavigationMenu.Link</h3>
+          <div class="text-sm">
+            {#for row in linkRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
         </section>
       </div>
     </article>
@@ -81,121 +248,171 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import NavigationMenu from '@/components/ui/NavigationMenu.pzl';
+import NavigationMenu from '@/components/ui/NavigationMenu/index.js';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
+// Docs page for the NavigationMenu family. Code samples live as
+// template-literal consts because literal tag names and {#…} tokens would be
+// parsed as template syntax in prose.
 const installCmd = 'puzzle add piece navigation-menu';
-const usageImport = `import NavigationMenu from '@/components/ui/NavigationMenu.pzl';`;
-const usageMarkup = `<NavigationMenu items={ nav } />`;
+const installDep = 'npm install @magic-spells/dropdown-panel';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+@import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */`;
 
-const codeHero = `const nav = [
-  {
-    label: 'Products',
-    children: [
-      { label: 'Analytics', href: '/products/analytics',
-        description: 'Real-time dashboards and funnels for every event you track.' },
-      { label: 'Automation', href: '/products/automation',
-        description: 'Trigger workflows from any signal without writing glue code.' },
-      { label: 'Data Warehouse', href: '/products/warehouse',
-        description: 'Query your raw events with standard SQL, no pipeline to babysit.' },
-      { label: 'Integrations', href: '/products/integrations',
-        description: 'Two hundred connectors that sync both ways out of the box.' },
-    ],
-  },
-  { label: 'Pricing', href: '/pricing' },
-  { label: 'Docs', href: '/docs' },
+const usageImport = `import NavigationMenu from '@/components/ui/NavigationMenu';`;
+
+const usageMarkup = `<NavigationMenu label="Main">
+  <NavigationMenu.Item>
+    <NavigationMenu.Trigger>Products</NavigationMenu.Trigger>
+    <NavigationMenu.Content columns={ 2 } class="w-max max-w-lg">
+      <NavigationMenu.Link href="/analytics" label="Analytics" description="Traffic and funnels." />
+      <NavigationMenu.Link href="/billing" label="Billing" description="Plans and invoices." />
+    </NavigationMenu.Content>
+  </NavigationMenu.Item>
+
+  <li><NavigationMenu.Link variant="bar" href="/pricing" label="Pricing" /></li>
+</NavigationMenu>`;
+
+const codeHero = `// Two flyouts and a plain bar link. columns={ 2 } is explicit now —
+// the old piece counted children and guessed.
+<NavigationMenu label="Main">
+  <NavigationMenu.Item>
+    <NavigationMenu.Trigger>Products</NavigationMenu.Trigger>
+    <NavigationMenu.Content columns={ 2 } class="w-max max-w-lg">
+      <NavigationMenu.Link href="/analytics" label="Analytics" description="…" />
+      …
+    </NavigationMenu.Content>
+  </NavigationMenu.Item>
+
+  <li><NavigationMenu.Link variant="bar" href="/pricing" label="Pricing" /></li>
+</NavigationMenu>`;
+
+const codeMega = `// wide spans the whole bar. It works because NavigationMenu's <nav>
+// is position: relative — a wide panel's own host goes static.
+<NavigationMenu.Item>
+  <NavigationMenu.Trigger>Platform</NavigationMenu.Trigger>
+  <NavigationMenu.Content wide={ true } columns={ 2 } effect="slide">
+    …links…
+  </NavigationMenu.Content>
+</NavigationMenu.Item>
+
+// Active state is per link, replacing the old bar-wide activePath:
+<NavigationMenu.Link variant="bar" href="/pricing" label="Pricing" current={ true } />`;
+
+const codeSubmenu = `// A submenu is just an Item nested in a Content with opens="right",
+// which moves the panel beside its trigger and rotates the hover
+// bridge onto the horizontal axis.
+<NavigationMenu.Content align="end" class="w-max max-w-xs">
+  <NavigationMenu.Link href="/about" label="About" />
+
+  <NavigationMenu.Item>
+    <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
+    <NavigationMenu.Content opens="right" class="w-max max-w-xs">
+      <NavigationMenu.Link href="/contact" label="Contact us" />
+    </NavigationMenu.Content>
+  </NavigationMenu.Item>
+</NavigationMenu.Content>`;
+
+const keyRows = [
+  { name: 'Enter / Space', desc: 'On a trigger: toggle its panel.' },
+  { name: 'ArrowDown / ArrowUp', desc: 'On a closed trigger: open and focus the first (or last) link. Inside an open panel: move link focus, wrapping at the ends.' },
+  { name: 'Home / End', desc: 'Inside an open panel: first / last link.' },
+  { name: 'ArrowRight / ArrowLeft', desc: 'Open an opens="right" submenu, and close it again returning focus to its trigger.' },
+  { name: 'Escape', desc: 'Close one level and focus its trigger. Only the innermost open panel answers.' },
+  { name: 'Tab', desc: 'Normal order through the links. A closed panel is inert, so it is skipped.' },
 ];
 
-// >4 children lay out grid-cols-2; the panel is w-max max-w-lg.
-<NavigationMenu items={ nav } />`;
-
-const codeActive = `// The plain link or child whose href === activePath gets the active
-// underline treatment and aria-current="page".
-<NavigationMenu items={ nav } activePath="/pricing" />`;
-
-const codeSingle = `// Four or fewer children lay out in a single column.
-const nav = [
-  {
-    label: 'Resources',
-    children: [
-      { label: 'Documentation', href: '/docs',
-        description: 'Guides, API reference, and tutorials.' },
-      { label: 'Support', href: '/support',
-        description: 'Reach the team and browse the help center.' },
-    ],
-  },
-  { label: 'Blog', href: '/blog' },
+const rootRows = [
+  { name: 'label', desc: 'aria-label for the <nav>. Defaults to "Main".' },
+  { name: 'gap', desc: 'Tailwind gap utility for the bar. Defaults to gap-1.' },
+  { name: 'class', desc: 'Merged onto <nav>, after the load-bearing `relative`.' },
 ];
 
-<NavigationMenu items={ nav } />`;
+const itemRows = [
+  { name: 'trigger', desc: "'hover' | 'click' | 'both' (default), forwarded to the base." },
+  { name: 'arrow', desc: "'flip' (default) | 'static' | 'none', forwarded to the base." },
+  { name: 'open', desc: 'Optional-controlled and edge-triggered, forwarded. Omit it and the component owns its own state.' },
+  { name: '@show / @hide', desc: "Fired when THIS item's panel opens or closes; a nested submenu's events are filtered out." },
+  { name: 'class', desc: 'Merged onto the <li>.' },
+];
 
-const codeKeyboard = `<NavigationMenu items={ nav } />`;
+const triggerRows = [
+  { name: 'variant', desc: "'bar' (default) for top-level chrome, 'card' for an in-panel submenu trigger — a full-width row with the arrow at the trailing edge." },
+  { name: 'arrow', desc: 'true (default) renders the [data-dropdown-arrow] hook the effects stylesheet draws into. false drops it.' },
+  { name: 'class', desc: 'Merged onto <dropdown-trigger>, after the variant chrome.' },
+];
+
+const contentRows = [
+  { name: 'columns', desc: '1 (default) or 2. Two columns is one column below md and two from md up.' },
+  { name: 'wide', desc: 'A full-width mega panel spanning the <nav>.' },
+  { name: 'opens', desc: "'down' (default) | 'right' for a submenu." },
+  { name: 'align', desc: "'start' (default) | 'end'. end is left-auto right-0 — pure CSS, no measuring." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+  { name: 'class', desc: 'Merged onto <dropdown-panel>, after the layout classes. Never overflow-hidden.' },
+];
+
+const linkRows = [
+  { name: 'href', desc: "Defaults to '#'." },
+  { name: 'label', desc: "The text. Falls back to the component's children when unset, which is how you put an icon or a badge in a link." },
+  { name: 'description', desc: 'A second line under the label, clamped to two lines. Card variant in practice.' },
+  { name: 'variant', desc: "'card' (default) for an in-panel link card, 'bar' for a top-level bar link." },
+  { name: 'current', desc: 'true adds aria-current="page" and the active treatment. Per link — there is no bar-wide activePath any more.' },
+  { name: 'class', desc: 'Merged onto the <a>.' },
+];
+
+const PRODUCTS = [
+  { label: 'Analytics', href: '#analytics', description: 'Traffic, funnels and retention in one place.' },
+  { label: 'Billing', href: '#billing', description: 'Plans, invoices and usage-based pricing.' },
+  { label: 'Automations', href: '#automations', description: 'Trigger work from any event in your account.' },
+  { label: 'Directory', href: '#directory', description: 'People, teams and roles, synced from your IdP.' },
+];
+
+const RESOURCES = [
+  { label: 'Documentation', href: '#docs', description: 'Guides, references and recipes.' },
+  { label: 'Changelog', href: '#changelog', description: 'Everything that shipped, newest first.' },
+  { label: 'Community', href: '#community', description: 'Ask questions and share what you built.' },
+];
+
+const PLATFORM = [
+  { label: 'Data pipeline', href: '#pipeline', description: 'Ingest, transform and land events anywhere.' },
+  { label: 'Warehouse', href: '#warehouse', description: 'Query everything you have collected.' },
+  { label: 'Identity', href: '#identity', description: 'SSO, SCIM and audit logs.' },
+  { label: 'Edge network', href: '#edge', description: 'Serve from the closest region, always.' },
+  { label: 'Observability', href: '#observability', description: 'Traces, metrics and alerts.' },
+  { label: 'Marketplace', href: '#marketplace', description: 'Extensions built by the community.' },
+];
 
 export default class NavigationMenuDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
+      products: PRODUCTS,
+      resources: RESOURCES,
+      platform: PLATFORM,
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
-      codeActive,
-      codeSingle,
-      codeKeyboard,
-      heroItems: [
-        {
-          label: 'Products',
-          children: [
-            {
-              label: 'Analytics',
-              href: '/products/analytics',
-              description: 'Real-time dashboards and funnels for every event you track.',
-            },
-            {
-              label: 'Automation',
-              href: '/products/automation',
-              description: 'Trigger workflows from any signal without writing glue code.',
-            },
-            {
-              label: 'Data Warehouse',
-              href: '/products/warehouse',
-              description: 'Query your raw events with standard SQL, no pipeline to babysit.',
-            },
-            {
-              label: 'Integrations',
-              href: '/products/integrations',
-              description: 'Two hundred connectors that sync both ways out of the box.',
-            },
-          ],
-        },
-        { label: 'Pricing', href: '/pricing' },
-        { label: 'Docs', href: '/docs' },
-      ],
-      resourceItems: [
-        {
-          label: 'Resources',
-          children: [
-            {
-              label: 'Documentation',
-              href: '/docs',
-              description: 'Guides, API reference, and tutorials.',
-            },
-            {
-              label: 'Support',
-              href: '/support',
-              description: 'Reach the team and browse the help center.',
-            },
-          ],
-        },
-        { label: 'Blog', href: '/blog' },
-      ],
+      codeMega,
+      codeSubmenu,
+      keyRows,
+      rootRows,
+      itemRows,
+      triggerRows,
+      contentRows,
+      linkRows,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Active route', href: '#active' },
-        { label: 'Single column', href: '#single-column' },
+        { label: 'Mega panel', href: '#mega' },
+        { label: 'Nested submenu', href: '#submenu' },
         { label: 'Keyboard', href: '#keyboard' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }

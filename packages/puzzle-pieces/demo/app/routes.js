@@ -41,6 +41,7 @@ import DateRangePickerDoc from './views/components/DateRangePickerDoc.pzl';
 import DescriptionListDoc from './views/components/DescriptionListDoc.pzl';
 import DialogDoc from './views/components/DialogDoc.pzl';
 import DropdownMenuDoc from './views/components/DropdownMenuDoc.pzl';
+import DropdownPanelDoc from './views/components/DropdownPanelDoc.pzl';
 import DropzoneDoc from './views/components/DropzoneDoc.pzl';
 import EmojiPickerDoc from './views/components/EmojiPickerDoc.pzl';
 import EmojiPickerSimpleDoc from './views/components/EmojiPickerSimpleDoc.pzl';
@@ -400,6 +401,13 @@ export default [
 		view: DropdownMenuDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Dropdown Menu — Puzzle Pieces' },
+	},
+	{
+		path: '/components/dropdown-panel',
+		name: 'dropdown-panel',
+		view: DropdownPanelDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Dropdown Panel — Puzzle Pieces' },
 	},
 	{
 		path: '/components/dropzone',

@@ -1,0 +1,49 @@
+<puzzle-view>
+  <dropdown-trigger class={ triggerClass }><Children/></dropdown-trigger>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DropdownPanel.Trigger — the thing you press or hover. A member of the
+// DropdownPanel family (D167); see DropdownPanel.pzl for the whole story.
+//
+//   <DropdownPanel>
+//     <DropdownPanel.Trigger class="rounded-md px-3 py-2 text-sm font-medium text-body hover:text-ink">
+//       Menu<span data-dropdown-arrow aria-hidden="true"></span>
+//     </DropdownPanel.Trigger>
+//     <DropdownPanel.Panel>…</DropdownPanel.Panel>
+//   </DropdownPanel>
+//
+// It must be a DIRECT child of <DropdownPanel> — the component resolves it with
+// a child selector. This member renders <dropdown-trigger> as its single root
+// and adds no wrapper, so that holds.
+//
+// DO NOT AUTHOR ARIA OR FOCUS ATTRIBUTES HERE. role="button", tabindex="0",
+// aria-haspopup, aria-expanded and aria-controls are DERIVED OUTPUT — the
+// component writes them at upgrade and on every state change, and will
+// overwrite anything you put there.
+//
+// DO NOT STYLE dropdown-trigger::before. That pseudo-element is the hover
+// BRIDGE: an invisible, hit-testable, skewed shape that keeps the pointer
+// "inside" the component while it crosses the gap to the panel. Declaring your
+// own ::before on the trigger cascades onto the same box and breaks it, and
+// the menu starts closing under the cursor.
+//
+// So a dropdown arrow has to be a REAL CHILD ELEMENT, never a pseudo-element:
+//   Menu<span data-dropdown-arrow aria-hidden="true"></span>
+// Leave that span EMPTY and the effects stylesheet draws the glyph and animates
+// it; put your own SVG inside and the sheet only handles the open/close
+// behaviour. `:empty` is literal — whitespace counts as content, so close the
+// tag tight, on the same line, with no space before it. The arrow is
+// decorative, so it needs aria-hidden="true" (the string form).
+//
+// Props
+//   class   merged onto <dropdown-trigger>
+
+export default class Trigger extends PuzzleView {
+  data(params, props) {
+    return { triggerClass: props.class || false };
+  }
+}
+</script>

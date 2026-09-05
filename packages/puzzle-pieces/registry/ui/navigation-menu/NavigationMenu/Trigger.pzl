@@ -1,0 +1,59 @@
+<puzzle-view>
+  <DropdownPanel.Trigger class={ triggerClass }><span><Children/></span>{#if arrow}<span data-dropdown-arrow aria-hidden="true"></span>{/if}</DropdownPanel.Trigger>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// NavigationMenu.Trigger — the pressable label that opens an Item's panel.
+// A member of the NavigationMenu family (D167); it composes
+// DropdownPanel.Trigger and adds this bar's token chrome, so it renders
+// <dropdown-trigger> as its single root with no wrapper — the direct-children
+// contract holds.
+//
+//   <NavigationMenu.Trigger>Products</NavigationMenu.Trigger>
+//
+// THE ARROW is a real child <span data-dropdown-arrow>, closed tight because
+// the effects stylesheet draws it with :empty and whitespace counts as content.
+// It is never a ::before on the trigger — that pseudo-element is the package's
+// hover BRIDGE and overwriting it breaks pointer travel to the panel. Import
+// "@magic-spells/dropdown-panel/css/effects" and the glyph is drawn and flips
+// on open; skip that sheet and the hook renders nothing at all, which is a fine
+// way to run without an arrow. `arrow={ false }` drops the hook entirely.
+//
+// role, tabindex, aria-haspopup, aria-expanded and aria-controls are written by
+// the component. Do not author them.
+//
+// Props
+//   variant  'bar' (default) — top-level bar chrome
+//            'card' — an in-panel submenu trigger: full-width row with the
+//                     arrow pushed to the far edge, matching Link's cards
+//   arrow    true (default) → render the [data-dropdown-arrow] hook
+//   class    merged onto <dropdown-trigger>, after the variant chrome
+
+// The outline COLOR is set unconditionally (outline-ring) so transition-colors
+// does not flash it in from the default on focus.
+const BAR =
+  'inline-flex items-center gap-1 whitespace-nowrap select-none cursor-pointer ' +
+  'rounded-md px-3 py-2 text-sm font-medium text-body transition-colors hover:text-ink ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+// A submenu trigger sitting inside a panel: same box as a Link card, with the
+// arrow pushed to the trailing edge.
+const CARD =
+  'flex w-full items-center justify-between gap-2 select-none cursor-pointer ' +
+  'rounded-md p-3 text-sm font-medium text-ink transition-colors hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+export default class Trigger extends PuzzleView {
+  data(params, props) {
+    return {
+      arrow: props.arrow !== false,
+      triggerClass: [props.variant === 'card' ? CARD : BAR, props.class]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+}
+</script>

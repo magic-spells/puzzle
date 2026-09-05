@@ -1,0 +1,81 @@
+<puzzle-view>
+  <a href={ href } aria-current={ currentAttr } class={ linkClass }>
+    <span class={ labelClass }>{#if label}{ label }{:else}<Children/>{/if}</span>
+    {#if description}
+      <span class="mt-1 block text-sm text-muted line-clamp-2">{ description }</span>
+    {/if}
+  </a>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// NavigationMenu.Link — a real <a>, in one of two shapes. A member of the
+// NavigationMenu family (D167).
+//
+//   <NavigationMenu.Link variant="bar" href="/pricing" label="Pricing" current={ true }/>
+//   <NavigationMenu.Link href="/analytics" label="Analytics" description="Traffic and funnels."/>
+//
+// Real links, not menuitems: this bar is a DISCLOSURE, so every item is a
+// natural Tab stop, screen readers announce "link", and middle-click and
+// back/forward behave. The web component's arrow keys move between them on top
+// of that; nothing here overrides them.
+//
+// Active state is PER LINK (`current`), not a bar-wide `activePath` — the old
+// prop is gone with the 0.7.0 rewrite. Pass `current={ href === path }` from
+// whatever owns the route.
+//
+// Props
+//   href         defaults to '#'
+//   label        the text; falls back to this component's children when unset,
+//                which is how you put an icon or a badge in a link
+//   description  a second line under the label, clamped to two lines. Card
+//                variant only in practice — a bar link has no room for it.
+//   variant      'card' (default) — an in-panel link card
+//                'bar' — a top-level bar link
+//   current      true → aria-current="page" plus the active treatment
+//   class        merged onto the <a>
+
+const BAR =
+  'inline-flex items-center whitespace-nowrap select-none ' +
+  'rounded-md px-3 py-2 text-sm font-medium transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+// The outline COLOR is unconditional (outline-ring) so transition-colors does
+// not flash it in from the default on every focus.
+const LINK_ACTIVE = 'text-ink underline decoration-2 underline-offset-8 decoration-brand';
+const LINK_INACTIVE = 'text-body hover:text-ink';
+
+const CARD_BASE =
+  'block rounded-md p-3 transition-colors hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const CARD_LABEL = 'block text-sm font-medium text-ink';
+// Card labels can't carry underline-offset-8 (it would collide with the
+// description), so the active card gets the same decoration at a tighter offset.
+const CARD_LABEL_ACTIVE = 'underline decoration-2 underline-offset-4 decoration-brand';
+
+export default class Link extends PuzzleView {
+  data(params, props) {
+    const bar = props.variant === 'bar';
+    const current = !!props.current;
+
+    return {
+      href: props.href != null ? String(props.href) : '#',
+      label: props.label != null && props.label !== '' ? String(props.label) : '',
+      description: props.description != null ? String(props.description) : '',
+      // aria-current takes the STRING form; `false` omits the attribute.
+      currentAttr: current ? 'page' : false,
+      linkClass: [
+        bar ? BAR : CARD_BASE,
+        bar ? (current ? LINK_ACTIVE : LINK_INACTIVE) : current ? 'bg-surface-sunken' : '',
+        props.class,
+      ]
+        .filter(Boolean)
+        .join(' '),
+      labelClass: bar
+        ? 'contents'
+        : [CARD_LABEL, current ? CARD_LABEL_ACTIVE : ''].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>

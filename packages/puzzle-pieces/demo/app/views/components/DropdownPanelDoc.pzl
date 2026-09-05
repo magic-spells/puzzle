@@ -1,0 +1,468 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Dropdown Panel</h1>
+        <p class="mt-2 text-body">
+          The shared base for every trigger-and-panel overlay in the registry: a hover or click
+          disclosure whose panel is positioned entirely in CSS, with nested submenus, full-width
+          mega panels, one-open-at-a-time arbitration, and a complete arrow-key and Escape model.
+        </p>
+        <p class="mt-3 text-body">
+          This piece is a <strong class="font-medium text-ink">wrapper</strong>, not a port: it
+          renders the real
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<dropdown-component>' }</code>,
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<dropdown-trigger>' }</code>
+          and
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<dropdown-panel>' }</code>
+          custom elements from
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/dropdown-panel</code>
+          and binds attributes to them. The value down there is interaction — hover intent, the
+          invisible hover bridge that keeps the pointer inside while it crosses to the panel, the
+          latch from hover-open to click-open, and a keyboard model that answers only in the
+          innermost open panel. None of it is worth forking. Nothing visual is down there at all:
+          the component's stylesheet declares no colours and no custom properties, so every pixel of
+          chrome on this page is Tailwind on our side.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          It is a <strong class="font-medium text-ink">family</strong>: one import, three members
+          invoked with dot notation. Other pieces build on it rather than repeating it —
+          <a class="text-brand underline underline-offset-2" href="#/components/navigation-menu">Navigation Menu</a>
+          is the first.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="relative flex w-full max-w-2xl justify-center rounded-xl border border-border bg-surface px-4 py-3">
+          <DropdownPanel>
+            <DropdownPanel.Trigger class={ triggerChrome }>Menu<span data-dropdown-arrow aria-hidden="true"></span></DropdownPanel.Trigger>
+            <DropdownPanel.Panel>
+              {#for row in simple}
+                <a key={ row.href } href={ row.href } class={ itemChrome }>{ row.label }</a>
+              {/for}
+            </DropdownPanel.Panel>
+          </DropdownPanel>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the family into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          It has a runtime dependency: the web component it wraps.
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheets into your app's style entry
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
+          The first is required — the positioning, the open and closed states and the hover bridge
+          all live there, so the piece does nothing without it. The second is optional: it adds the
+          five entrance effects and draws the trigger arrow, and without it
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">effect</code>,
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">arrow</code>
+          and
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">arrowShape</code>
+          are no-ops.
+        </p>
+        <CodeBlock code={ installCss }/>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">layer(components)</code>
+          is not decoration. Both sheets style plain element selectors, so an unlayered import would
+          outrank every Tailwind utility you put on these elements. In the components layer the
+          normal mental model holds: your utilities win, the component's defaults fill in the rest.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          <span class="font-medium text-ink">The trigger and the panel must be direct children.</span>
+          The component resolves them with a child selector, so never wrap either one in a div, and
+          never put an
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '{#if}' }</code>
+          around one at that level — move the condition inside the member instead. A Puzzle
+          component renders its own single root and adds no wrapper, which is exactly why the
+          members compose cleanly.
+        </p>
+        <p class="mt-3 text-sm text-body">
+          <span class="font-medium text-ink">The arrow is a real child element.</span>
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<span data-dropdown-arrow aria-hidden="true"></span>' }</code>,
+          closed tight — the effects sheet draws the glyph only when the hook is
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">:empty</code>,
+          and whitespace counts as content. It can never be a
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">::before</code>
+          on the trigger: that pseudo-element is the package's hover bridge, and overwriting it
+          breaks pointer travel to the panel.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          <span class="font-medium text-ink">Derived output, never authored.</span>
+          role, tabindex, aria-haspopup, aria-expanded and aria-controls on the trigger, and
+          aria-hidden and inert on the panel, are written by the component and will overwrite
+          anything you put there.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="align" title="Alignment and effects" code={ codeAlign }>
+          <div class="flex w-full flex-col items-stretch gap-3">
+            <div class="relative flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
+              <DropdownPanel effect="slide">
+                <DropdownPanel.Trigger class={ triggerChrome }>Left aligned<span data-dropdown-arrow aria-hidden="true"></span></DropdownPanel.Trigger>
+                <DropdownPanel.Panel effect="slide">
+                  {#for row in simple}
+                    <a key={ row.href } href={ row.href } class={ itemChrome }>{ row.label }</a>
+                  {/for}
+                </DropdownPanel.Panel>
+              </DropdownPanel>
+
+              <DropdownPanel trigger="click">
+                <DropdownPanel.Trigger class={ triggerChrome }>Right aligned<span data-dropdown-arrow aria-hidden="true"></span></DropdownPanel.Trigger>
+                <DropdownPanel.Panel align="end" effect="scale">
+                  {#for row in simple}
+                    <a key={ row.href } href={ row.href } class={ itemChrome }>{ row.label }</a>
+                  {/for}
+                </DropdownPanel.Panel>
+              </DropdownPanel>
+            </div>
+            <p class="mt-3 w-full max-w-2xl text-sm text-muted">
+              <span class="font-medium text-ink">align="end"</span> is the package's own right-align
+              recipe (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">left: auto; right: 0</code>)
+              as two utilities. There is no measuring pass and nothing to re-run on resize. The second
+              menu is <span class="font-medium text-ink">trigger="click"</span>, so hovering it does
+              nothing.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="submenu" title="Nested submenu" code={ codeSubmenu }>
+          <div class="flex w-full flex-col items-stretch gap-3">
+            <div class="relative flex w-full max-w-2xl justify-center rounded-xl border border-border bg-surface px-4 py-3">
+              <DropdownPanel>
+                <DropdownPanel.Trigger class={ triggerChrome }>Resources<span data-dropdown-arrow aria-hidden="true"></span></DropdownPanel.Trigger>
+                <DropdownPanel.Panel>
+                  <a href="#docs" class={ itemChrome }>Documentation</a>
+                  <a href="#changelog" class={ itemChrome }>Changelog</a>
+
+                  <DropdownPanel class="block">
+                    <DropdownPanel.Trigger class={ submenuChrome }>Support<span data-dropdown-arrow aria-hidden="true"></span></DropdownPanel.Trigger>
+                    <DropdownPanel.Panel opens="right">
+                      <a href="#contact" class={ itemChrome }>Contact us</a>
+                      <a href="#help" class={ itemChrome }>Help center</a>
+                    </DropdownPanel.Panel>
+                  </DropdownPanel>
+                </DropdownPanel.Panel>
+              </DropdownPanel>
+            </div>
+            <p class="mt-3 w-full max-w-2xl text-sm text-muted">
+              A dropdown inside a panel is just another dropdown.
+              <span class="font-medium text-ink">opens="right"</span> moves its panel beside the
+              trigger and rotates the hover bridge onto the horizontal axis;
+              <span class="font-medium text-ink">class="block"</span> on the nested root undoes the
+              component's <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">display: inline-block</code>.
+              Escape closes one level at a time, and only the innermost open panel answers a key.
+              Nothing in the chain may be
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">overflow-hidden</code>
+              or the submenu is clipped at its parent's edge.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="controlled" title="Controlled open" code={ codeControlled }>
+          <div class="flex w-full flex-col items-stretch gap-3">
+            <div class="relative flex w-full max-w-2xl items-center gap-4 rounded-xl border border-border bg-surface px-4 py-3">
+              <Button variant="outline" size="sm" @press={ toggleControlled() }>
+                { controlled ? 'Close from outside' : 'Open from outside' }
+              </Button>
+              <DropdownPanel open={ controlled } @show={ onShow() } @hide={ onHide() }>
+                <DropdownPanel.Trigger class={ triggerChrome }>Account<span data-dropdown-arrow aria-hidden="true"></span></DropdownPanel.Trigger>
+                <DropdownPanel.Panel>
+                  {#for row in account}
+                    <a key={ row.href } href={ row.href } class={ itemChrome }>{ row.label }</a>
+                  {/for}
+                </DropdownPanel.Panel>
+              </DropdownPanel>
+              <span class="text-sm text-muted">show: { shows } · hide: { hides }</span>
+            </div>
+            <p class="mt-3 w-full max-w-2xl text-sm text-muted">
+              <span class="font-medium text-ink">open</span> is optional-controlled and
+              edge-triggered: leave it off and the component owns its own state, which is the normal
+              case. Pass it and only a <em>change</em> acts, so an unrelated re-render can never
+              re-open a panel the user just dismissed. The dropdown still closes itself on Escape, an
+              outside press or another dropdown opening, and reports it through
+              <span class="font-medium text-ink">@hide</span> — flip your flag back there so the next
+              open is a fresh edge.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+          <p class="mb-4 text-sm text-body">
+            Every attribute prop renders no attribute at all when unset, so the component's own
+            default applies.
+          </p>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">DropdownPanel</h3>
+          <div class="text-sm">
+            {#for row in rootRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">DropdownPanel.Trigger</h3>
+          <div class="text-sm">
+            {#for row in triggerRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">DropdownPanel.Panel</h3>
+          <div class="text-sm">
+            {#for row in panelRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Keyboard</h3>
+          <div class="text-sm">
+            {#for row in keyRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+          <p class="mt-3 text-sm text-muted">
+            All of it is upstream. This piece adds no key handling, no timers and no document
+            listeners of its own.
+          </p>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '@/components/ui/DropdownPanel/index.js';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for the DropdownPanel base family — follows the ScrollStackDoc
+// exemplar. Code samples live as template-literal consts because literal tag
+// names and {#…} tokens would be parsed as template syntax in prose.
+const installCmd = 'puzzle add piece dropdown-panel';
+const installDep = 'npm install @magic-spells/dropdown-panel';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+@import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */`;
+
+const usageImport = `import DropdownPanel from '@/components/ui/DropdownPanel';`;
+
+const usageMarkup = `<DropdownPanel>
+  <DropdownPanel.Trigger class="rounded-md px-3 py-2 text-sm font-medium">
+    Menu<span data-dropdown-arrow aria-hidden="true"></span>
+  </DropdownPanel.Trigger>
+  <DropdownPanel.Panel>
+    <a href="/one" class="block rounded-md px-3 py-2 text-sm hover:bg-surface-sunken">One</a>
+    <a href="/two" class="block rounded-md px-3 py-2 text-sm hover:bg-surface-sunken">Two</a>
+  </DropdownPanel.Panel>
+</DropdownPanel>`;
+
+const codeHero = `// trigger defaults to "both": hover opens it where the pointer can hover,
+// and a click always toggles. The arrow hook must be closed TIGHT — the
+// effects sheet only draws into an :empty element.
+<DropdownPanel>
+  <DropdownPanel.Trigger class="rounded-md px-3 py-2 text-sm font-medium text-body hover:text-ink">
+    Menu<span data-dropdown-arrow aria-hidden="true"></span>
+  </DropdownPanel.Trigger>
+  <DropdownPanel.Panel>
+    <a href="/dashboard" class="block rounded-md px-3 py-2 text-sm hover:bg-surface-sunken">Dashboard</a>
+    …
+  </DropdownPanel.Panel>
+</DropdownPanel>`;
+
+const codeAlign = `// align="end" right-aligns the panel with pure CSS — no measuring.
+// effect needs the effects stylesheet; without it, it is a no-op.
+<DropdownPanel trigger="click">
+  <DropdownPanel.Trigger class="rounded-md px-3 py-2 text-sm font-medium">
+    Right aligned<span data-dropdown-arrow aria-hidden="true"></span>
+  </DropdownPanel.Trigger>
+  <DropdownPanel.Panel align="end" effect="scale">
+    …items…
+  </DropdownPanel.Panel>
+</DropdownPanel>`;
+
+const codeSubmenu = `// A dropdown inside a panel is just another dropdown.
+// class="block" undoes the component's display: inline-block.
+<DropdownPanel.Panel>
+  <a href="/docs" class="block rounded-md px-3 py-2 text-sm">Documentation</a>
+
+  <DropdownPanel class="block">
+    <DropdownPanel.Trigger class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm">
+      Support<span data-dropdown-arrow aria-hidden="true"></span>
+    </DropdownPanel.Trigger>
+    <DropdownPanel.Panel opens="right">
+      <a href="/contact" class="block rounded-md px-3 py-2 text-sm">Contact us</a>
+    </DropdownPanel.Panel>
+  </DropdownPanel>
+</DropdownPanel.Panel>`;
+
+const codeControlled = `// open is optional-controlled and EDGE-triggered: only a change acts.
+// The dropdown still closes itself and reports it — flip the flag back
+// in @hide so the next open is a fresh edge.
+<Button @press={ toggle }>Open from outside</Button>
+
+<DropdownPanel open={ open } @show={ onShow } @hide={ onHide }>
+  <DropdownPanel.Trigger class="rounded-md px-3 py-2 text-sm">
+    Account<span data-dropdown-arrow aria-hidden="true"></span>
+  </DropdownPanel.Trigger>
+  <DropdownPanel.Panel>…</DropdownPanel.Panel>
+</DropdownPanel>
+
+// in the parent view
+events = {
+  toggle: () => this.setData('open', !this.getData().open),
+  onHide: () => this.setData('open', false),
+};`;
+
+const rootRows = [
+  { name: 'trigger', desc: "'hover' | 'click' | 'both' (default). hover falls back to click where (hover: hover) does not match, so a menu is never unopenable on a phone." },
+  { name: 'arrow', desc: "'flip' (default) | 'static' | 'none' — how the drawn trigger arrow behaves. Effects stylesheet only." },
+  { name: 'arrowShape', desc: "'chevron' (default) | 'triangle'. Drawn only when the [data-dropdown-arrow] hook is empty. Effects stylesheet only." },
+  { name: 'effectDuration', desc: 'CSS time for the entrance effect and the arrow flip. Reaches only panels that carry an effect — the core fade is a fixed 200ms.' },
+  { name: 'effectEasing', desc: 'CSS easing for the same.' },
+  { name: 'open', desc: 'Optional-controlled and edge-triggered. Omit it and the component owns its own state.' },
+  { name: '@show / @hide', desc: 'Fired when THIS dropdown opens or closes. The component’s events bubble, so a nested submenu’s are filtered out by target.' },
+  { name: 'class', desc: 'Merged onto <dropdown-component>.' },
+];
+
+const triggerRows = [
+  { name: 'class', desc: 'Merged onto <dropdown-trigger>. There are no other props — role, tabindex, aria-haspopup, aria-expanded and aria-controls are written by the component.' },
+];
+
+const panelRows = [
+  { name: 'wide', desc: 'A full-width mega panel. The host goes position: static, so the panel spans the nearest POSITIONED ANCESTOR — give the bar it should span position: relative.' },
+  { name: 'opens', desc: "'down' (default) | 'right'. right puts the panel beside its trigger and rotates the hover bridge onto the horizontal axis — what a submenu wants." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet; degrades to a plain fade under prefers-reduced-motion." },
+  { name: 'align', desc: "'start' (default) | 'end'. end is left-auto right-0 — pure CSS, no measuring pass. Ignored on a wide panel and on opens=\"right\", where it is meaningless." },
+  { name: 'class', desc: 'Merged onto <dropdown-panel> after the stock chrome, so your utilities win. Never overflow-hidden — it clips nested submenus.' },
+];
+
+const keyRows = [
+  { name: 'Enter / Space', desc: 'On the trigger: toggle.' },
+  { name: 'ArrowDown / ArrowUp', desc: 'On a closed trigger: open and focus the first (or last) item. Inside an open panel: move item focus, wrapping at the ends.' },
+  { name: 'Home / End', desc: 'Inside an open panel: first / last item.' },
+  { name: 'ArrowRight', desc: 'On a submenu trigger with opens="right": open it and focus the first item.' },
+  { name: 'ArrowLeft', desc: 'Inside an opens="right" panel: close it and return focus to its trigger.' },
+  { name: 'Escape', desc: 'Close this level only, and focus its trigger. Only the innermost open dropdown answers.' },
+  { name: 'Tab', desc: 'Normal tab order. A closed panel is inert, so its contents are skipped.' },
+];
+
+const TRIGGER_CHROME =
+  'inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-body ' +
+  'transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'outline-ring focus-visible:outline-ring';
+
+const SUBMENU_CHROME =
+  'flex w-full items-center justify-between gap-2 rounded-md p-3 text-sm font-medium text-ink ' +
+  'transition-colors hover:bg-surface-sunken focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const ITEM_CHROME =
+  'block rounded-md px-3 py-2 text-sm text-body transition-colors hover:bg-surface-sunken ' +
+  'hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring ' +
+  'focus-visible:outline-ring';
+
+const SIMPLE = [
+  { label: 'Dashboard', href: '#dashboard' },
+  { label: 'Reports', href: '#reports' },
+  { label: 'Settings', href: '#settings' },
+];
+
+const ACCOUNT = [
+  { label: 'Profile', href: '#profile' },
+  { label: 'Billing', href: '#billing' },
+  { label: 'Sign out', href: '#sign-out' },
+];
+
+export default class DropdownPanelDoc extends PuzzleView {
+  created() {
+    this.setData({ controlled: false, shows: 0, hides: 0 });
+  }
+
+  data() {
+    const prev = this.getData();
+    return {
+      simple: SIMPLE,
+      account: ACCOUNT,
+      triggerChrome: TRIGGER_CHROME,
+      submenuChrome: SUBMENU_CHROME,
+      itemChrome: ITEM_CHROME,
+      controlled: prev.controlled ?? false,
+      shows: prev.shows ?? 0,
+      hides: prev.hides ?? 0,
+      installCmd,
+      installDep,
+      installCss,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeAlign,
+      codeSubmenu,
+      codeControlled,
+      rootRows,
+      triggerRows,
+      panelRows,
+      keyRows,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Alignment', href: '#align' },
+        { label: 'Nested submenu', href: '#submenu' },
+        { label: 'Controlled open', href: '#controlled' },
+        { label: 'Reference', href: '#reference' },
+      ],
+    };
+  }
+
+  events = {
+    toggleControlled: () => {
+      this.setData('controlled', !this.getData().controlled);
+      this.refresh();
+    },
+    onShow: () => {
+      this.setData('shows', this.getData().shows + 1);
+      this.refresh();
+    },
+    // The dropdown closes itself too, so the parent flips its flag back here —
+    // that is what keeps the next `open` a fresh edge.
+    onHide: () => {
+      this.setData({ hides: this.getData().hides + 1, controlled: false });
+      this.refresh();
+    },
+  };
+}
+</script>
