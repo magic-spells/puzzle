@@ -1,8 +1,15 @@
 {
   "name": "hover-card",
-  "description": "Hover/focus-triggered floating card for link previews and user cards — open/close delays, hover-persistent panel, auto-flip placement, optional-controlled open",
-  "files": ["HoverCard.pzl"],
-  "registryDependencies": [],
+  "description": "Hover-triggered preview card for link previews and user cards — a compound family over the shared dropdown-panel base, with open/close delays, the package's hover bridge keeping the card hoverable, and optional-controlled open",
+  "files": [
+    "HoverCard/HoverCard.pzl",
+    "HoverCard/Trigger.pzl",
+    "HoverCard/Content.pzl",
+    "HoverCard/index.js"
+  ],
+  "registryDependencies": [
+    "dropdown-panel"
+  ],
   "dependencies": [],
   "targetDir": "app/components/ui"
 }

@@ -4,37 +4,74 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Hover Card</h1>
         <p class="mt-2 text-body">
-          Popover's hover- and focus-triggered cousin, for supplementary previews like link
-          previews and user cards. It opens on hover or keyboard focus after a delay, stays up
-          while you move onto its panel, and closes shortly after you leave. No click toggle —
-          reach for Popover when the content must be clicked.
+          A hover-triggered preview card for link previews and user cards. It is a compound
+          <strong class="font-medium text-ink">family</strong> composed over the shared
+          <a class="text-brand underline underline-offset-2" href="#/components/dropdown-panel">Dropdown Panel</a>
+          base, so hover intent, the hover bridge that keeps the card open while the pointer
+          travels onto it, dismissal and the keyboard model all come from the web component.
+          Nothing in the piece schedules a timer or listens on the document.
         </p>
+        <p class="mt-3 text-body">
+          A hover card is <strong class="font-medium text-ink">supplementary</strong> by design.
+          Never put content that is only available here — anything critical belongs in the normal
+          document flow. Use <a class="text-brand underline underline-offset-2" href="#/components/popover">Popover</a>
+          for interactive, must-reach content.
+        </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">label</code>
+            prop, the trigger slot and
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">side</code>
+            are gone; the card is written as markup. The delays survive as
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">openDelay</code>
+            and <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">closeDelay</code>,
+            forwarded to the component. They are honoured by
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/dropdown-panel</code>
+            2.1.0 and up and ignored by 2.0.0 — where an unknown attribute is simply inert, so the
+            card opens and closes immediately instead.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <p class="text-sm text-body">
-          Follow
+        <div class="w-full max-w-xl py-8 text-sm text-body">
+          Pull requests from
           <HoverCard>
-            <a slot="trigger" href="#" class="font-medium text-brand underline decoration-dotted underline-offset-2 outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">@ada</a>
-            <div class="flex items-start gap-3">
-              <span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand text-base font-semibold text-brand-ink">A</span>
-              <div class="min-w-0">
-                <p class="font-medium text-ink">Ada Lovelace</p>
-                <p class="text-muted">@ada</p>
-                <p class="mt-1.5 text-body">Mathematician. Writing the first algorithm and occasionally some prose about it.</p>
+            <HoverCard.Trigger>@ada</HoverCard.Trigger>
+            <HoverCard.Content>
+              <div class="flex gap-3">
+                <Avatar name="Ada Lovelace" size="md"/>
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-ink">Ada Lovelace</p>
+                  <p class="text-sm text-muted">Works on the compiler and the runtime.</p>
+                  <p class="mt-2 text-xs text-muted">Joined June 2019 · 412 commits</p>
+                </div>
               </div>
-            </div>
+            </HoverCard.Content>
           </HoverCard>
-          for updates.
-        </p>
+          are usually reviewed within a day.
+        </div>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
         <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
+          Copy the family into your app. It pulls the shared
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">dropdown-panel</code>
+          base along with it:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          That base has a runtime dependency — the web component it wraps. Version 2.1.0 or newer
+          is what makes the delays real:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheets into your app's style entry. The first is required; the
+          second adds the entrance effects and the drawn trigger arrow:
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -44,62 +81,95 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          The trigger element itself is the control — the component gives it
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">role="button"</code>
+          and a tab stop. A real link inside still navigates (the component leaves an interactive
+          descendant's activation alone), at the cost of a second tab stop; do that only when the
+          preview hangs off a link that must navigate.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          <span class="font-medium text-ink">trigger="hover"</span> falls back to click where
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">(hover: hover)</code>
+          does not match, so the card is still reachable on a phone.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="delays" title="Delays" code={ codeDelays }>
-          <div class="flex flex-wrap items-center justify-center gap-8 text-sm text-body">
-            <HoverCard openDelay={ 100 } closeDelay={ 100 }>
-              <a slot="trigger" href="#" class="font-medium text-brand underline decoration-dotted underline-offset-2 outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Snappy</a>
-              <p>Opens almost immediately (100ms) and closes fast when you leave.</p>
-            </HoverCard>
-            <HoverCard openDelay={ 900 }>
-              <a slot="trigger" href="#" class="font-medium text-brand underline decoration-dotted underline-offset-2 outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Patient</a>
-              <p>Waits 900ms before opening, so a passing cursor never triggers it.</p>
-            </HoverCard>
-          </div>
-        </ExampleBox>
-
-        <ExampleBox id="controlled" title="Controlled open" code={ codeControlled }>
-          <div class="flex flex-col items-center gap-4 text-sm text-body">
-            <button
-              type="button"
-              class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2"
-              @click={ toggleCard }>
-              { cardOpen ? 'Force close' : 'Force open' }
-            </button>
-            <p>
-              Hover this
-              <HoverCard open={ cardOpen } @show={ onShow } @hide={ onHide }>
-                <a slot="trigger" href="#" class="font-medium text-brand underline decoration-dotted underline-offset-2 outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">reference</a>
-                <p>The parent owns <span class="font-medium text-ink">open</span>. Hover fires @show / @hide so it stays in sync, and the button can force it either way.</p>
+          <div class="flex w-full max-w-xl flex-col gap-4 py-8 text-sm text-body">
+            <div>
+              A snappy card:
+              <HoverCard openDelay={ 100 } closeDelay={ 100 }>
+                <HoverCard.Trigger>#4821</HoverCard.Trigger>
+                <HoverCard.Content class="w-64">
+                  <p class="text-sm font-medium text-ink">Compile pieces path-preserving</p>
+                  <p class="mt-1 text-sm text-muted">Merged two days ago into release/0.7.0.</p>
+                </HoverCard.Content>
               </HoverCard>
-              — the card is currently <span class="font-medium text-ink">{ cardOpen ? 'open' : 'closed' }</span>.
+            </div>
+            <div>
+              And a patient one:
+              <HoverCard openDelay={ 900 } closeDelay={ 600 }>
+                <HoverCard.Trigger>#4822</HoverCard.Trigger>
+                <HoverCard.Content class="w-64">
+                  <p class="text-sm font-medium text-ink">Wrap the dropdown family</p>
+                  <p class="mt-1 text-sm text-muted">Open, awaiting review.</p>
+                </HoverCard.Content>
+              </HoverCard>
+            </div>
+            <p class="text-sm text-muted">
+              On dropdown-panel 2.0.0 both open instantly — the delay attributes are inert there.
             </p>
           </div>
         </ExampleBox>
 
-        <section id="accessibility" class="scroll-mt-20">
-          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
-          <p class="mb-3 text-sm text-body">
-            A hover card is <span class="font-medium text-ink">supplementary</span> by design. Keep these limits in mind:
-          </p>
-          <ul class="mb-4 space-y-1.5 text-sm text-body">
-            <li><span class="font-medium text-ink">Never put critical content here.</span> Anything a task depends on — an action, a destination, required information — must also live in the normal document flow. The card is a bonus, not the only path.</li>
-            <li><span class="font-medium text-ink">The panel carries no role and no focus requirement.</span> It is not a dialog and does not trap focus; it is inert preview markup that happens to be hoverable.</li>
-            <li><span class="font-medium text-ink">Keyboard users get it too.</span> Focusing the trigger opens the card on the same delay; Escape closes it immediately.</li>
-            <li><span class="font-medium text-ink">Interactive content belongs in a Popover.</span> If people need to click inside the floating surface, that is a popover, not a hover card.</li>
-          </ul>
-          <ExampleBox code={ codeA11y }>
-            <p class="text-sm text-body">
-              See
-              <HoverCard>
-                <a slot="trigger" href="#" class="font-medium text-brand underline decoration-dotted underline-offset-2 outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">the docs</a>
-                <p>Tab to the link and the card opens on focus — the preview is a convenience, and the link still works on its own.</p>
-              </HoverCard>
-              for details.
-            </p>
-          </ExampleBox>
+        <ExampleBox id="alignment" title="Right alignment" code={ codeAlign }>
+          <div class="flex w-full max-w-xl justify-end py-8 text-sm text-body">
+            <HoverCard>
+              <HoverCard.Trigger variant="plain" class="font-medium text-ink">Storage usage</HoverCard.Trigger>
+              <HoverCard.Content align="end">
+                <p class="text-sm font-medium text-ink">41.2 GB of 100 GB</p>
+                <p class="mt-1 text-sm text-muted">
+                  Counted across every project in the workspace, refreshed hourly.
+                </p>
+              </HoverCard.Content>
+            </HoverCard>
+          </div>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">HoverCard</h3>
+          <div class="text-sm">
+            {#for row in rootRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">HoverCard.Trigger</h3>
+          <div class="text-sm">
+            {#for row in triggerRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">HoverCard.Content</h3>
+          <div class="text-sm">
+            {#for row in contentRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
         </section>
       </div>
     </article>
@@ -110,89 +180,94 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import HoverCard from '@/components/ui/HoverCard.pzl';
+import HoverCard from '@/components/ui/HoverCard/index.js';
+import Avatar from '@/components/ui/Avatar.pzl';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
+// Docs page for the HoverCard family. Code samples live as template-literal
+// consts because literal tag names and {#…} tokens would be parsed as template
+// syntax in prose.
 const installCmd = 'puzzle add piece hover-card';
-const usageImport = `import HoverCard from '@/components/ui/HoverCard.pzl';`;
-const usageMarkup = `<HoverCard></HoverCard>`;
+const installDep = 'npm install @magic-spells/dropdown-panel';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+@import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */`;
 
-const codeHero = `<HoverCard>
-  <a slot="trigger" href="/u/ada" class="…">@ada</a>
-  <div class="flex items-start gap-3">
-    <span class="…">A</span>
-    <div>
-      <p class="font-medium text-ink">Ada Lovelace</p>
-      <p class="text-muted">@ada</p>
-      <p class="mt-1.5">Mathematician. Writing the first algorithm.</p>
-    </div>
-  </div>
+const usageImport = `import HoverCard from '@/components/ui/HoverCard';`;
+
+const usageMarkup = `<HoverCard>
+  <HoverCard.Trigger>@ada</HoverCard.Trigger>
+  <HoverCard.Content>
+    …profile preview…
+  </HoverCard.Content>
 </HoverCard>`;
 
-const codeDelays = `// openDelay (default 600ms) — how long a hover must dwell before the card opens
-// closeDelay (default 300ms) — grace period after leaving, so you can reach the panel
-<HoverCard openDelay={ 100 } closeDelay={ 100 }>…</HoverCard>
-<HoverCard openDelay={ 900 }>…</HoverCard>`;
-
-const codeControlled = `// open is optional-controlled: pass it and the parent owns the state.
-// Hover still fires @show / @hide so a controlled parent can keep in sync.
-<HoverCard open={ cardOpen } @show={ onShow } @hide={ onHide }>
-  <a slot="trigger" href="#" class="…">reference</a>
-  <p>…preview…</p>
-</HoverCard>
-
-events = {
-  onShow: () => this.setData('cardOpen', true),
-  onHide: () => this.setData('cardOpen', false),
-};`;
-
-const codeA11y = `// A hover card is supplementary — the trigger works without it.
-// The link is a real destination; the card only previews it on hover/focus.
+const codeHero = `// The card is HOVERABLE — the package's hover bridge keeps the
+// component hovered while the pointer travels onto it, so you can
+// read and click inside. That is what separates it from a tooltip.
 <HoverCard>
-  <a slot="trigger" href="/docs" class="…">the docs</a>
-  <p>…preview…</p>
+  <HoverCard.Trigger>@ada</HoverCard.Trigger>
+  <HoverCard.Content>…</HoverCard.Content>
 </HoverCard>`;
+
+const codeDelays = `// Defaults are openDelay={ 600 } closeDelay={ 300 } — the old piece's
+// numbers, forwarded to the component's open-delay / close-delay.
+<HoverCard openDelay={ 100 } closeDelay={ 100 }>…</HoverCard>
+<HoverCard openDelay={ 900 } closeDelay={ 600 }>…</HoverCard>`;
+
+const codeAlign = `// align="end" hugs the right edge. Pure CSS — the auto-flip
+// measuring pass is gone with the wrap.
+<HoverCard>
+  <HoverCard.Trigger variant="plain">Storage usage</HoverCard.Trigger>
+  <HoverCard.Content align="end">…</HoverCard.Content>
+</HoverCard>`;
+
+const rootRows = [
+  { name: 'openDelay', desc: 'Milliseconds of hover intent before the card shows. Defaults to 600. Needs dropdown-panel 2.1.0+.' },
+  { name: 'closeDelay', desc: 'Milliseconds of grace after the pointer leaves. Defaults to 300. Needs dropdown-panel 2.1.0+.' },
+  { name: 'open', desc: 'Optional-controlled and edge-triggered. Omit it and the component owns its own state.' },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+  { name: 'class', desc: 'Merged onto the dropdown component host.' },
+  { name: '@show / @hide', desc: 'Fired when THIS card opens or closes.' },
+];
+
+const triggerRows = [
+  { name: 'variant', desc: "'link' (default) — underlined inline text, the @mention shape. 'plain' inherits the surrounding type." },
+  { name: 'class', desc: 'Merged onto the trigger, after the variant chrome.' },
+];
+
+const contentRows = [
+  { name: 'align', desc: "'start' (default) | 'end'." },
+  { name: 'opens', desc: "'down' (default) | 'right'." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+  { name: 'class', desc: 'Merged onto the panel, after the card box. Never overflow-hidden.' },
+];
 
 export default class HoverCardDoc extends PuzzleView {
-  created() {
-    this.setData({ cardOpen: false });
-  }
-
-  data(params, props) {
+  data() {
     return {
-      ...this.getData(),
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
       codeDelays,
-      codeControlled,
-      codeA11y,
+      codeAlign,
+      rootRows,
+      triggerRows,
+      contentRows,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Delays', href: '#delays' },
-        { label: 'Controlled open', href: '#controlled' },
-        { label: 'Accessibility', href: '#accessibility' },
+        { label: 'Right alignment', href: '#alignment' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
-
-  events = {
-    toggleCard: () => {
-      this.setData('cardOpen', !this.getData().cardOpen);
-      this.refresh();
-    },
-    onShow: () => {
-      this.setData('cardOpen', true);
-      this.refresh();
-    },
-    onHide: () => {
-      this.setData('cardOpen', false);
-      this.refresh();
-    },
-  };
 }
 </script>

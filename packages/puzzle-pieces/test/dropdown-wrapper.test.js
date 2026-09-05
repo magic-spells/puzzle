@@ -30,6 +30,32 @@ const NAV_FILES = [
 	'NavigationMenu/index.js',
 ];
 
+const POPOVER_FILES = [
+	'Popover/Popover.pzl',
+	'Popover/Trigger.pzl',
+	'Popover/Content.pzl',
+	'Popover/index.js',
+];
+const HOVER_CARD_FILES = [
+	'HoverCard/HoverCard.pzl',
+	'HoverCard/Trigger.pzl',
+	'HoverCard/Content.pzl',
+	'HoverCard/index.js',
+];
+const MENUBAR_FILES = [
+	'Menubar/Menubar.pzl',
+	'Menubar/Menu.pzl',
+	'Menubar/Trigger.pzl',
+	'Menubar/Content.pzl',
+	'Menubar/Item.pzl',
+	'Menubar/Link.pzl',
+	'Menubar/Separator.pzl',
+	'Menubar/Label.pzl',
+	'Menubar/Shortcut.pzl',
+	'Menubar/index.js',
+];
+const POPCONFIRM_FILES = ['Popconfirm.pzl'];
+
 const PIECES = [
 	{
 		piece: 'dropdown-panel',
@@ -47,6 +73,44 @@ const PIECES = [
 		registryDependencies: ['dropdown-panel'],
 		dependencies: [],
 	},
+	{
+		piece: 'popover',
+		manifest: '../registry/ui/popover/piece.json',
+		files: POPOVER_FILES,
+		registryDependencies: ['dropdown-panel'],
+		dependencies: [],
+	},
+	{
+		piece: 'hover-card',
+		manifest: '../registry/ui/hover-card/piece.json',
+		files: HOVER_CARD_FILES,
+		registryDependencies: ['dropdown-panel'],
+		dependencies: [],
+	},
+	{
+		piece: 'popconfirm',
+		manifest: '../registry/ui/popconfirm/piece.json',
+		files: POPCONFIRM_FILES,
+		registryDependencies: ['dropdown-panel'],
+		dependencies: [],
+	},
+	{
+		piece: 'menubar',
+		manifest: '../registry/ui/menubar/piece.json',
+		files: MENUBAR_FILES,
+		registryDependencies: ['dropdown-panel'],
+		dependencies: [],
+	},
+];
+
+// Every consumer file in the batch, paired with the piece it belongs to, for the
+// rule sweeps below.
+const CONSUMER_FILES = [
+	...NAV_FILES.map((file) => ['navigation-menu', file]),
+	...POPOVER_FILES.map((file) => ['popover', file]),
+	...HOVER_CARD_FILES.map((file) => ['hover-card', file]),
+	...POPCONFIRM_FILES.map((file) => ['popconfirm', file]),
+	...MENUBAR_FILES.map((file) => ['menubar', file]),
 ];
 
 for (const entry of PIECES) {
@@ -88,17 +152,20 @@ test('registry.json pieces stay alphabetical', async () => {
 
 test(`exactly one dynamic import of ${PACKAGE}, in the base root`, async () => {
 	const sources = await Promise.all(
-		[...BASE_FILES, ...NAV_FILES].map(async (file) => {
-			const piece = file.startsWith('DropdownPanel/') ? 'dropdown-panel' : 'navigation-menu';
-			return [file, await readText(`../registry/ui/${piece}/${file}`)];
-		})
+		[
+			...BASE_FILES.map((file) => ['dropdown-panel', file]),
+			...CONSUMER_FILES,
+		].map(async ([piece, file]) => [
+			`${piece}/${file}`,
+			await readText(`../registry/ui/${piece}/${file}`),
+		])
 	);
 
 	const dynamic = new RegExp(`import\\(\\s*['"]${SPECIFIER}['"]\\s*\\)`);
 	const holders = sources.filter(([, source]) => dynamic.test(source)).map(([file]) => file);
 	assert.deepEqual(
 		holders,
-		['DropdownPanel/DropdownPanel.pzl'],
+		['dropdown-panel/DropdownPanel/DropdownPanel.pzl'],
 		'the upgrade import belongs in the base root and nowhere else — it is module-cached, so a second one buys nothing and a member that imports is a member that cannot be dropped'
 	);
 
@@ -126,8 +193,10 @@ test(`exactly one dynamic import of ${PACKAGE}, in the base root`, async () => {
 });
 
 test('no template binds the reflected `visible` attribute', async () => {
-	for (const file of [...BASE_FILES, ...NAV_FILES]) {
-		const piece = file.startsWith('DropdownPanel/') ? 'dropdown-panel' : 'navigation-menu';
+	for (const [piece, file] of [
+		...BASE_FILES.map((f) => ['dropdown-panel', f]),
+		...CONSUMER_FILES,
+	]) {
 		const source = await readText(`../registry/ui/${piece}/${file}`);
 		const template = source.slice(0, source.indexOf('<script>'));
 		assert.equal(
@@ -173,5 +242,56 @@ test('navigation-menu composes the base rather than re-exporting it', async () =
 			/import DropdownPanel from '\.\.\/DropdownPanel\/index\.js';/,
 			`${file} must import the sibling base family — the copies land side by side under app/components/ui/`
 		);
+	}
+});
+
+test('the 0.7.0 consumers compose the base from the right relative depth', async () => {
+	// A family member sits one directory down (app/components/ui/Popover/…), a
+	// flat piece sits beside the base (app/components/ui/Popconfirm.pzl). Get the
+	// depth wrong and the copy resolves nothing in a consumer app.
+	const nested = [
+		['popover', ['Popover/Popover.pzl', 'Popover/Trigger.pzl', 'Popover/Content.pzl']],
+		['hover-card', ['HoverCard/HoverCard.pzl', 'HoverCard/Trigger.pzl', 'HoverCard/Content.pzl']],
+		['menubar', ['Menubar/Menu.pzl', 'Menubar/Trigger.pzl', 'Menubar/Content.pzl']],
+	];
+	for (const [piece, files] of nested) {
+		for (const file of files) {
+			const source = await readText(`../registry/ui/${piece}/${file}`);
+			assert.match(source, /import DropdownPanel from '\.\.\/DropdownPanel\/index\.js';/, file);
+		}
+	}
+	const popconfirm = await readText('../registry/ui/popconfirm/Popconfirm.pzl');
+	assert.match(popconfirm, /import DropdownPanel from '\.\/DropdownPanel\/index\.js';/);
+});
+
+test('the new family barrels export the D167 Object.assign shape', async () => {
+	const popover = await readText('../registry/ui/popover/Popover/index.js');
+	assert.match(popover, /export default Object\.assign\(Popover, \{ Trigger, Content \}\)/);
+
+	const hoverCard = await readText('../registry/ui/hover-card/HoverCard/index.js');
+	assert.match(hoverCard, /export default Object\.assign\(HoverCard, \{ Trigger, Content \}\)/);
+
+	const menubar = await readText('../registry/ui/menubar/Menubar/index.js');
+	assert.match(menubar, /export default Object\.assign\(Menubar, \{/);
+	for (const member of ['Menu', 'Trigger', 'Content', 'Item', 'Link', 'Separator', 'Label', 'Shortcut']) {
+		assert.ok(menubar.includes(`import ${member} from './${member}.pzl';`), member);
+	}
+});
+
+test('menubar claims no ARIA menu roles', async () => {
+	// Upstream is a DISCLOSURE and provides no bar-level roving, so role="menubar"
+	// / role="menuitem" would promise a keyboard model that is not there. The one
+	// sanctioned role in the family is separator.
+	for (const file of MENUBAR_FILES.filter((f) => f.endsWith('.pzl'))) {
+		const source = await readText(`../registry/ui/menubar/${file}`);
+		// Template only — the header comments explain the decision in prose.
+		const template = source.slice(0, source.indexOf('<script>'));
+		for (const role of ['menubar', 'menuitem', 'menu']) {
+			assert.equal(
+				template.includes(`role="${role}"`),
+				false,
+				`${file} authors an ARIA menu role`
+			);
+		}
 	}
 });

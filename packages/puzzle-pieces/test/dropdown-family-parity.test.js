@@ -23,7 +23,47 @@ const FAMILIES = [
 			'index.js',
 		],
 	},
+	{
+		piece: 'popover',
+		dir: 'Popover',
+		files: ['Popover.pzl', 'Trigger.pzl', 'Content.pzl', 'index.js'],
+	},
+	{
+		piece: 'hover-card',
+		dir: 'HoverCard',
+		files: ['HoverCard.pzl', 'Trigger.pzl', 'Content.pzl', 'index.js'],
+	},
+	{
+		piece: 'menubar',
+		dir: 'Menubar',
+		files: [
+			'Menubar.pzl',
+			'Menu.pzl',
+			'Trigger.pzl',
+			'Content.pzl',
+			'Item.pzl',
+			'Link.pzl',
+			'Separator.pzl',
+			'Label.pzl',
+			'Shortcut.pzl',
+			'index.js',
+		],
+	},
 ];
+
+// Popconfirm is the one single-file piece in this batch: its panel is entirely
+// prop-driven, so the one content channel a piece gets goes to the trigger.
+const FLAT = [{ piece: 'popconfirm', file: 'Popconfirm.pzl' }];
+
+for (const flat of FLAT) {
+	test(`registry and demo ${flat.piece} copies stay byte-identical`, async () => {
+		const [registrySource, demoSource] = await Promise.all([
+			readFile(new URL(`../registry/ui/${flat.piece}/${flat.file}`, import.meta.url)),
+			readFile(new URL(`../demo/app/components/ui/${flat.file}`, import.meta.url)),
+		]);
+		assert.equal(Buffer.compare(registrySource, demoSource), 0, `${flat.file} copy drifted`);
+	});
+}
 
 for (const family of FAMILIES) {
 	test(`registry and demo ${family.piece} family copies stay byte-identical`, async () => {

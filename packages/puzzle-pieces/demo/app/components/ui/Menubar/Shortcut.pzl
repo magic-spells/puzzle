@@ -1,0 +1,32 @@
+<puzzle-view>
+  <kbd class={ kbdClass }><Children/></kbd>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Menubar.Shortcut — the keyboard hint at the trailing edge of an Item. A member
+// of the Menubar family (D167); plain markup.
+//
+//   <Menubar.Item value="new" @press={ run }>New file<Menubar.Shortcut>⌘N</Menubar.Shortcut></Menubar.Item>
+//
+// It is a HINT, not a binding: nothing here registers a key handler, and the
+// text is whatever you write. `ml-auto` is what pushes it to the trailing edge of
+// the row, so it works wherever it sits in the item's children.
+//
+// The Kbd piece's styling is inlined so the family needs no registry dependency
+// beyond the shared dropdown-panel base.
+//
+// Props
+//   class  merged onto the <kbd>
+
+const KBD =
+  'ml-auto inline-flex items-center rounded border border-border bg-surface-sunken px-1.5 py-px ' +
+  'font-sans text-xs text-muted shadow-[inset_0_-1px_0_var(--color-border)]';
+
+export default class Shortcut extends PuzzleView {
+  data(params, props) {
+    return { kbdClass: [KBD, props.class].filter(Boolean).join(' ') };
+  }
+}
+</script>

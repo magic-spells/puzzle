@@ -1,0 +1,73 @@
+<puzzle-view>
+  <DropdownPanel
+    class={ rootClass }
+    trigger={ triggerMode }
+    arrow={ arrowMode }
+    open={ openState }
+    effect={ effect }
+    @show={ onShow() }
+    @hide={ onHide() }><Children/></DropdownPanel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// Menubar.Menu — one menu in the bar: a trigger and the panel it opens. A member
+// of the Menubar family (D167); see Menubar.pzl for the whole story. It composes
+// the DropdownPanel base and renders <dropdown-component> as its single root
+// with no wrapper, so the direct-children contract holds.
+//
+//   <Menubar.Menu>
+//     <Menubar.Trigger>File</Menubar.Trigger>
+//     <Menubar.Content>…</Menubar.Content>
+//   </Menubar.Menu>
+//
+// SUBMENUS ARE JUST NESTED MENUS. Put a Menu inside a Content and give its
+// Content opens="right":
+//
+//   <Menubar.Content>
+//     <Menubar.Item value="save" @press={ run }>Save</Menubar.Item>
+//     <Menubar.Menu>
+//       <Menubar.Trigger variant="item">Export as</Menubar.Trigger>
+//       <Menubar.Content opens="right">…</Menubar.Content>
+//     </Menubar.Menu>
+//   </Menubar.Content>
+//
+// The `block` below is why that works and is NOT cosmetic. <dropdown-component>
+// ships display: inline-block, so a nested one shrink-wraps its trigger text —
+// and an opens="right" panel resolves left: 100% against that narrow box, landing
+// on top of the parent panel instead of beside it. At the top level the bar's
+// flex row makes it a no-op.
+//
+// trigger="both" (the default here) is classic menubar feel: hover opens, and a
+// click latches so the menu stays put. The component already switches menus on
+// hover once one is open, and closes every other one when this opens.
+//
+// Props
+//   trigger  'hover' | 'click' | 'both' (default), forwarded
+//   arrow    'flip' | 'static' | 'none' (default here — bar labels carry no
+//            glyph; pass 'flip' if you add an arrow hook to the Trigger)
+//   open     optional-controlled and edge-triggered, forwarded
+//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class    merged onto <dropdown-component>, after the load-bearing `block`
+//   @show / @hide  fired when THIS menu opens or closes; a nested submenu's
+//            events are filtered out by the base — see DropdownPanel.pzl.
+
+export default class Menu extends PuzzleView {
+  data(params, props) {
+    return {
+      rootClass: ['block', props.class].filter(Boolean).join(' '),
+      triggerMode: props.trigger || 'both',
+      arrowMode: props.arrow || 'none',
+      openState: props.open,
+      effect: props.effect,
+    };
+  }
+
+  events = {
+    onShow: () => this.props.show?.(),
+    onHide: () => this.props.hide?.(),
+  };
+}
+</script>

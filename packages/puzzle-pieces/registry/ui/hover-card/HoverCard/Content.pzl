@@ -1,0 +1,48 @@
+<puzzle-view>
+  <DropdownPanel.Panel
+    class={ contentClass }
+    align={ align }
+    opens={ opens }
+    effect={ effect }><Children/></DropdownPanel.Panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// HoverCard.Content — the preview card. A member of the HoverCard family (D167);
+// it composes DropdownPanel.Panel and adds the card's width and padding, so it
+// renders <dropdown-panel> as its single root with no wrapper — the
+// direct-children contract holds.
+//
+//   <HoverCard.Content class="w-80">…profile preview…</HoverCard.Content>
+//
+// The card is HOVERABLE — the package's hover bridge keeps the component
+// "hovered" while the pointer travels here, and `closeDelay` covers the gap. That
+// is what separates a hover card from a tooltip, whose chip is inert.
+//
+// PLACEMENT IS PURE CSS: align="end" for a card near the right edge. There is no
+// measuring pass and no auto-flip; that JS is gone with the wrap. Never
+// overflow-hidden, here or above it.
+//
+// Props (forwarded to DropdownPanel.Panel unless noted)
+//   align   'start' (default) | 'end'
+//   opens   'down' (default) | 'right'
+//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class   merged onto <dropdown-panel>, after the card box
+
+// The base Panel carries the border, surface, shadow, rounding and z-index; a
+// hover card just wants a wider, roomier box than a menu.
+const CONTENT = 'w-72 p-4 text-sm';
+
+export default class Content extends PuzzleView {
+  data(params, props) {
+    return {
+      contentClass: [CONTENT, props.class].filter(Boolean).join(' '),
+      align: props.align,
+      opens: props.opens,
+      effect: props.effect,
+    };
+  }
+}
+</script>

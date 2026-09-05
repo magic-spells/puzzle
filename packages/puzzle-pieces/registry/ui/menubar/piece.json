@@ -1,8 +1,21 @@
 {
   "name": "menubar",
-  "description": "Desktop-app-style horizontal menu bar — top labels open dropdowns with keyboard-shortcut hints, separators, disabled and danger items, hover-switching, and full menubar keyboard nav",
-  "files": ["Menubar.pzl"],
-  "registryDependencies": [],
+  "description": "Desktop-app-style horizontal menu bar — a compound family over the shared dropdown-panel base, with hover-switching menus, nested submenus, shortcut hints, separators, labels, link rows, and disabled and danger items",
+  "files": [
+    "Menubar/Menubar.pzl",
+    "Menubar/Menu.pzl",
+    "Menubar/Trigger.pzl",
+    "Menubar/Content.pzl",
+    "Menubar/Item.pzl",
+    "Menubar/Link.pzl",
+    "Menubar/Separator.pzl",
+    "Menubar/Label.pzl",
+    "Menubar/Shortcut.pzl",
+    "Menubar/index.js"
+  ],
+  "registryDependencies": [
+    "dropdown-panel"
+  ],
   "dependencies": [],
   "targetDir": "app/components/ui"
 }

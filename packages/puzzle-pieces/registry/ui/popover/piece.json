@@ -1,8 +1,15 @@
 {
   "name": "popover",
-  "description": "Click-toggled floating panel with slot trigger, auto-flip, and outside-click dismiss",
-  "files": ["Popover.pzl"],
-  "registryDependencies": [],
+  "description": "Click-toggled floating panel with arbitrary content — a compound family over the shared dropdown-panel base, with press-to-toggle latching, outside-press and Escape dismissal, focus return, and CSS-only end alignment",
+  "files": [
+    "Popover/Popover.pzl",
+    "Popover/Trigger.pzl",
+    "Popover/Content.pzl",
+    "Popover/index.js"
+  ],
+  "registryDependencies": [
+    "dropdown-panel"
+  ],
   "dependencies": [],
   "targetDir": "app/components/ui"
 }
