@@ -58,10 +58,13 @@
 
   <!-- Mobile nav: the same SideNav inside our own Collapsible, below lg only. -->
   <div class="border-b border-border px-gutter py-2 lg:hidden">
-    <Collapsible label="Menu" open={ mobileNavOpen } @change={ setMobileNavOpen }>
-      <div class="max-h-[60vh] overflow-y-auto pb-2">
-        <SideNav path={ path }/>
-      </div>
+    <Collapsible open={ mobileNavOpen } @change={ setMobileNavOpen }>
+      <Collapsible.Trigger>Menu</Collapsible.Trigger>
+      <Collapsible.Content>
+        <div class="max-h-[60vh] overflow-y-auto pb-2">
+          <SideNav path={ path }/>
+        </div>
+      </Collapsible.Content>
     </Collapsible>
   </div>
 
@@ -87,7 +90,7 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Toaster from '../components/ui/Toaster.pzl';
-import Collapsible from '../components/ui/Collapsible.pzl';
+import Collapsible from '../components/ui/Collapsible/index.js';
 import DropdownMenu from '../components/ui/DropdownMenu.pzl';
 import SideNav from '../components/docs/SideNav.pzl';
 import SearchDialog from '../components/docs/SearchDialog.pzl';

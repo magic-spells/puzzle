@@ -51,6 +51,17 @@
 @import "@magic-spells/dropdown-panel/css/effects" layer(components);
 
 /*
+ * The Collapsible and Accordion families wrap @magic-spells/collapsible-content.
+ * This sheet is REQUIRED: display:block, overflow:hidden, the height transition
+ * the whole animation runs on, the button reset, and the prefers-reduced-motion
+ * opt-out all live in it — the pieces do not animate without it. Same
+ * `layer(components)` reasoning as above: it is plain element selectors
+ * (collapsible-group, collapsible-component, collapsible-content), so an
+ * unlayered import would outrank every Tailwind utility the pieces put on them.
+ */
+@import "@magic-spells/collapsible-content/css" layer(components);
+
+/*
  * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
  * and JS so the utility classes they use are generated. Paths are relative to
  * this stylesheet (app/styles/), so "../" is the app root.

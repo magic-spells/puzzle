@@ -1,8 +1,15 @@
 {
   "name": "collapsible",
-  "description": "Animated disclosure with speed-based duration and inert/aria-hidden discipline",
-  "files": ["Collapsible.pzl"],
+  "description": "Animated disclosure family — a button and a height-animating region with the full ARIA wiring, distance-derived duration and reduced-motion behaviour; wraps the @magic-spells/collapsible-content web component rather than porting it",
+  "files": [
+    "Collapsible/Collapsible.pzl",
+    "Collapsible/Trigger.pzl",
+    "Collapsible/Content.pzl",
+    "Collapsible/index.js"
+  ],
   "registryDependencies": [],
-  "dependencies": [],
+  "dependencies": [
+    "@magic-spells/collapsible-content"
+  ],
   "targetDir": "app/components/ui"
 }

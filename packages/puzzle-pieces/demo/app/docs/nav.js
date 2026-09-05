@@ -166,7 +166,7 @@ export const SECTIONS = [
 		label: "Content",
 		items: [
 		{ name: "accordion", title: "Accordion", path: "/components/accordion",
-			description: "Config-first WAI-ARIA accordion group over Collapsible's speed-based open/close animation, single or multiple open" },
+			description: "Coordinated disclosure family — single or multiple open, with exclusivity, height animation and every ARIA attribute coming from the collapsible-content web component; panel bodies take arbitrary markup" },
 		{ name: "aspect-ratio", title: "Aspect Ratio", path: "/components/aspect-ratio",
 			description: "Fixed width:height ratio box that constrains slotted media or content to a chosen aspect" },
 		{ name: "breadcrumb", title: "Breadcrumb", path: "/components/breadcrumb",
@@ -178,7 +178,7 @@ export const SECTIONS = [
 		{ name: "code", title: "Code", path: "/components/code",
 			description: "Code panel with syntax highlighting (highlight.js, GitHub light/dark palette), optional line-number gutter, copy button, and a collapsible View Code preview that animates open" },
 		{ name: "collapsible", title: "Collapsible", path: "/components/collapsible",
-			description: "Animated disclosure with speed-based duration and inert/aria-hidden discipline" },
+			description: "Animated disclosure family — a button and a height-animating region with the full ARIA wiring, distance-derived duration and reduced-motion behaviour; wraps the @magic-spells/collapsible-content web component rather than porting it" },
 		{ name: "data-table", title: "Data Table", path: "/components/data-table",
 			description: "Interactive data table over the presentational Table conventions — optional-controlled sorting, row selection with select-all, pagination, and caller-owned header/body cell snippets" },
 		{ name: "description-list", title: "Description List", path: "/components/description-list",
