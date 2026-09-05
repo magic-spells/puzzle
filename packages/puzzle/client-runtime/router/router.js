@@ -342,6 +342,17 @@ export class Router {
 	// at #navigate's token bump). Distinguishes those re-entries from externally-
 	// initiated navigations so the #guardRedirectCount reset skips them.
 	#guardRedirecting = false;
+	// Ownership record of the guard-redirect chain currently in flight, or null:
+	// a mutable `{ token }` box created by the frame that STARTS a chain and
+	// re-stamped by every re-entry of that same chain (the nested guard→A→B case
+	// keeps one box, so the whole chain reads as one logical navigation). The
+	// redirect continuation holds the box by identity and reads it back after its
+	// await, so it can tell "the chain still owns the location" from "something
+	// newer superseded us" — a bare token compare cannot, because the re-entrant
+	// #navigate always bumps #token. A LATER, unrelated chain installs its own box
+	// here, which is exactly why the continuation keeps its own reference instead
+	// of reading this slot again.
+	#guardChain = null;
 	// The instance an in-flight transition is currently animating OUT (or null).
 	// A newer navigation reads this to cancel the running out and proceed
 	// immediately (constellation/doc/DOC-SPEC.md §12 interruption rule).
@@ -721,6 +732,7 @@ export class Router {
 		this.#mode?.reset?.();
 		this.#guardRedirectCount = 0;
 		this.#guardRedirecting = false;
+		this.#guardChain = null;
 		this.#pendingNavPath = null;
 		this.#pendingNavPromise = null;
 		this.#positions.clear();
@@ -1130,6 +1142,10 @@ export class Router {
 		const guardReentry = this.#guardRedirecting;
 		this.#guardRedirecting = false;
 		if (!guardReentry) this.#guardRedirectCount = 0;
+		// A guard-redirect re-entry IS the chain that started it, continued: stamp the
+		// chain's box with the token this frame just took, so the waiting continuation
+		// can recognize its own redirect as the current owner of the location.
+		else if (this.#guardChain) this.#guardChain.token = token;
 		// A real push supersedes any in-flight memory pop and truncates forward
 		// entries (D42), so the pending pop target is moot — reset it here (at the
 		// point supersession becomes real) so a go() arriving before this push commits
@@ -1214,6 +1230,13 @@ export class Router {
 				// Mark the re-entry so replace()'s #navigate keeps the redirect budget
 				// (Fix 2); clear unconditionally after the await in case replace() was a
 				// no-op that never re-entered #navigate to consume the flag.
+				//
+				// The chain's ownership box (#guardChain): a nested redirect continues the
+				// box it re-entered on, an externally-initiated one starts a fresh box.
+				// Held by identity across the await so a LATER chain installing its own box
+				// cannot be mistaken for ours.
+				const chain = guardReentry && this.#guardChain ? this.#guardChain : { token };
+				this.#guardChain = chain;
 				this.#guardRedirecting = true;
 				let redirected;
 				try {
@@ -1228,7 +1251,15 @@ export class Router {
 				// case. A redirect that COMMITTED already rewrote the URL through
 				// #commitLocation (#state moved off `cur`), and a push never moved the URL,
 				// so both skip this. `cur` is non-null on any pop (pops follow a commit).
-				if (pop && cur && this.#state === cur) this.#restoreCommittedUrl(cur.path);
+				//
+				// Ownership is checked against the CHAIN's token, not `token`: the
+				// re-entrant #navigate unconditionally bumps #token, so a bare
+				// `token === this.#token` would disable every legitimate repair here.
+				// `#state === cur` alone is equally insufficient — a newer POP still in its
+				// load phase shares this same `cur`, and a pop commit writes no URL, so an
+				// unguarded replaceState would strand the address bar on our route forever.
+				if (pop && cur && this.#token === chain.token && this.#state === cur)
+					this.#restoreCommittedUrl(cur.path);
 				return redirected;
 			}
 		}
