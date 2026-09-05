@@ -104,6 +104,24 @@ notes:
       upstream disagreed, upstream won; there were no substantive disagreements, only the panel
       `align` attribute, which the base ignores in favour of the existing utility recipe five
       shipped families already depend on.
+  - kind: gotcha
+    text: >-
+      2026-09-05 (feat/select-marquee-quantity): three framework facts every wrapper must respect,
+      established while wrapping select-dropdown / scrolling-content / quantity-input. (1) Puzzle's
+      patcher PROPS set (client-runtime viewManager.js,
+      `value`/`checked`/`disabled`/`selected`/`muted`) is name-keyed, not tag-keyed: `value={…}` on
+      ANY element, custom elements included, is a property write with NO attribute. A component that
+      reads `getAttribute('value')` (select-option does) sees nothing — set the attribute
+      imperatively from `mounted()`/`afterUpdate()` (see Select.Option). `disabled={…}` on a custom
+      element likewise writes an expando before upgrade; it only works because the patcher also
+      writes the attribute and these components observe it. (2) `patchAttrs` force-syncs `value` on
+      `<input>`/`<textarea>` against the LIVE DOM property on every patch, so the "frozen prerender
+      seed" pattern is wrong whenever a web component also writes that field — the seed re-asserts
+      and reverts the component. Render the live (clamped) prop with a `String()` D147 escape
+      instead (QuantityInput). (3) Never defer a component call with requestAnimationFrame to dodge
+      an event-ordering problem — rAF does not fire in a hidden tab, so a parent-driven `open`
+      stalls; fix the ordering upstream (select-dropdown 0.3.0 defers its own outside-click
+      listener) and call `show()`/`hide()` synchronously.
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work

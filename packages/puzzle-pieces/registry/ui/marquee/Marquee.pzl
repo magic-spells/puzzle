@@ -1,364 +1,135 @@
 <puzzle-view>
-  <div
+  <scrolling-content
     class={ rootClass }
     style={ rootStyle }
-    data-marquee-root
-    @pointerenter={ onEnter(event) }
-    @pointerleave={ onLeave(event) }
-    @pointerdown={ onDown(event) }>
-    <div class={ trackClass } data-marquee-track>
-      <div class={ copyClass } data-marquee-copy>
-        <Slot/>
-      </div>
-    </div>
-  </div>
+    speed={ speedAttr }
+    direction={ directionAttr }
+    pause-on-hover={ pauseAttr }
+    drag={ dragAttr }
+    fade={ fadeAttr }><scrolling-track><scrolling-item><Children/></scrolling-item></scrolling-track></scrolling-content>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Marquee — a continuously scrolling ticker of content (logos, announcements,
-// testimonials). The content items are the component's DEFAULT-SLOT CHILDREN, so a
-// consumer drops arbitrary markup in and the piece loops it seamlessly.
+// testimonials). The children are one pass of that content; the component clones
+// them enough times to overfill the row and translates the track forever.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <scrolling-content>
+// custom element from @magic-spells/scrolling-content in its ADOPT form — the
+// `<scrolling-track>` and `<scrolling-item>` are authored here, which is the
+// supported framework-friendly shape: with both already present the component
+// moves nothing, it measures the authored item and appends clones after it. The
+// rAF loop, the seamless wrap, the clone accounting, pause-on-hover,
+// drag-to-scrub and prefers-reduced-motion are upstream's.
 //
 //   <Marquee>
 //     <span>Acme</span> <span>Globex</span> <span>Initech</span>
 //   </Marquee>
 //
-//   <Marquee direction="right" speed={ 80 } pauseOnHover={ false } gap={ 8 }>
+//   <Marquee direction="right" speed={ 80 } gap={ 8 } fade pauseOnHover={ false }>
 //     …logos…
 //   </Marquee>
 //
-// MECHANISM — pure JS rAF, NO CSS @keyframes, NO shared-file change. The slot
-// content is wrapped in one "copy" group; at mount the piece measures that copy,
-// clones it enough times to overfill the viewport, neuters those clones (see A11Y
-// below), and then advances an offset by `speed * dt` every animation frame —
-// writing `track.style.transform = 'translateX(offset)'` directly. Setting the CSS
-// `transform` PROPERTY imperatively sidesteps the Tailwind
-// translate-*-in-transition gotcha entirely (Tailwind's
-// `translate-*` sets the `translate` property, which won't compose in a transition;
-// we never use it). The offset wraps by exactly one copy's extent (content size +
-// gap) for a seamless infinite loop — the same loopDistance technique a hand-rolled
-// scrolling-content web component uses.
+// THE TRACK AND ITEM MUST EXIST AT CONNECT TIME. They do, because Puzzle builds
+// a component's whole subtree before inserting it — but that is why they are
+// written into this template rather than generated. Never re-create the
+// <scrolling-item> element itself from a conditional: the component's
+// MutationObserver is pinned to the element present at connect, and swapping it
+// out leaves the clones stale (call `element.rebuild()` if you ever must).
+// Patching INSIDE the item is fine and is the normal case — an edited promo
+// string rebuilds every clone on the next frame, automatically.
 //
-// This gives pause-on-hover and drag-to-scroll for free (both just stop/adjust the
-// same offset), and it needs nothing added to pieces.css / any <style> block.
+// FIRST PAINT IS ONE STATIC ROW. The stylesheet exempts pre-authored markup from
+// the `:not(:defined)` hide, so a prerendered page shows a single un-cloned pass
+// immediately; the clones arrive on the ResizeObserver's first callback, a frame
+// after the module lands.
+//
+// NO VERTICAL DIRECTION. The 0.7.0 rewrite dropped `direction="up"`/`"down"`:
+// upstream is a horizontal marquee and a vertical mode belongs there, not in a
+// fork. `direction` is 'left' or 'right'.
+//
+// `paused` IS NOT A PROP. <scrolling-content> REFLECTS that attribute (its own
+// start()/stop() and the hover gate write it), so a binding would fight the
+// patcher every render. Reach for `element.start()` / `element.stop()` if you
+// need programmatic control.
+//
+// A11Y. Clones carry `data-clone`, `aria-hidden` and `inert` — unannounced AND
+// out of the tab order, so a cloned link is never a focus stop a screen reader
+// cannot describe. Ids inside clones are stripped. The obsolete `marquee` role is
+// deliberately not used.
+//
+// STYLESHEET. This piece needs the component's CSS, which is not part of the
+// copied file. Add it once to your app's style entry:
+//   @import "@magic-spells/scrolling-content/css" layer(components);
+// It carries the host's overflow, the track's flex/gap/max-content sizing (which
+// the clone measurement depends on), the drag cursors and the edge-fade mask.
+// Importing it is duplicate-free — the component detects the sheet through its
+// `--scrolling-content-styles` sentinel and skips its own <style> injection. The
+// layer is not optional cosmetics: the sheet is plain element selectors, so an
+// unlayered import would outrank every Tailwind utility on these elements.
 //
 // Props
-//   direction     'left' (default) | 'right' | 'up' | 'down' — scroll direction
-//                 (up/down switch the track to a vertical column)
+//   direction     'left' (default) | 'right'
 //   speed         pixels per second (default 40; larger = faster)
-//   pauseOnHover  pause the scroll while the pointer is over the marquee (default
-//                 true; mouse only — touch drives drag instead)
-//   gap           Tailwind spacing step between items AND between loop copies
-//                 (default 4 → gap-4); whitelisted so Tailwind's scan sees it
-//   class         merged onto the root (width, height, rounding, borders, …)
-//
-// A11Y — the obsolete `marquee` role is intentionally not used; the root is a plain
-// region. THE CLONES ARE FULLY INERT, not merely unannounced: `aria-hidden` alone
-// would leave cloned links and buttons in the Tab order (the axe `aria-hidden-focus`
-// violation — a focus stop a screen reader cannot describe), duplicate every `id` in
-// the document (breaking getElementById / label `for` / aria-labelledby, which all
-// resolve to the FIRST match), and submit every cloned form control's `name` N times.
-// So each clone gets `inert` (one attribute that removes it from AT, focus, and hit
-// testing), has every `id` stripped, and has its form controls disabled and unnamed.
-// The net effect: exactly ONE interactive, announced, identifiable copy of the slot
-// content exists no matter how many clones the measurement asks for.
-// Slot content is therefore PRESENTATIONAL ticker content by contract — an item may
-// be a link or a button, but the piece guarantees only the original copy of it is
-// reachable, so nothing should depend on a specific clone being operable.
-// prefers-reduced-motion is respected: no auto-scroll runs, the content renders
-// static (drag still works — it is user-driven, not motion).
-const ROOT = 'relative overflow-hidden select-none';
-
-// Whitelisted gap classes so Tailwind's static scan emits them (no runtime concat).
-const GAP = {
-  0: 'gap-0',
-  1: 'gap-1',
-  2: 'gap-2',
-  3: 'gap-3',
-  4: 'gap-4',
-  6: 'gap-6',
-  8: 'gap-8',
-  10: 'gap-10',
-  12: 'gap-12',
-  16: 'gap-16',
-};
-
-// Cap per-frame delta so a backgrounded/stalled tab doesn't jump the track on resume.
-const MAX_DT = 0.05;
+//   pauseOnHover  pause while a MOUSE pointer is over the marquee (default true;
+//                 a touch tap does not latch it paused)
+//   drag          drag-to-scrub (default true)
+//   gap           Tailwind spacing STEP between items and between loop copies
+//                 (default 4 → 1rem), written as --scrolling-content-gap
+//   fade          false (default) | true → the stylesheet's 4rem edge mask |
+//                 any CSS length string → that mask width
+//   class         merged onto the host (height, rounding, borders, …)
+//   style         merged after the piece's own custom-property declarations
 
 export default class Marquee extends PuzzleView {
-  created() {
-    this._raf = null;
-    this._running = false;
-    this._prev = 0;
-    this._offset = 0;
-    this._loop = 0;
-    this._hoverPaused = false;
-    this._dragging = false;
-    this._dragPointer = null;
-    this._dragStart = 0;
-    this._dragStartOffset = 0;
-    this._ro = null;
-    this._listening = false;
-    this._onWinMove = (e) => this._dragMove(e);
-    this._onWinUp = (e) => this._dragEnd(e);
-  }
-
   data(params, props) {
-    const dir = ['left', 'right', 'up', 'down'].includes(props.direction)
-      ? props.direction
-      : 'left';
-    const vertical = dir === 'up' || dir === 'down';
-    const speed = Number(props.speed);
-    const speedPx = Number.isFinite(speed) && speed > 0 ? speed : 40;
-    const gapClass = GAP[props.gap] || GAP[4];
-
-    const trackFlow = vertical
-      ? 'flex flex-col items-start h-max'
-      : 'flex flex-nowrap items-center w-max';
-    const copyFlow = vertical
-      ? 'flex flex-col items-start shrink-0'
-      : 'flex flex-nowrap items-center shrink-0';
+    const declarations = [];
+    // Tailwind spacing step → rem, so `gap={ 8 }` reads like `gap-8` elsewhere
+    // in the registry. The component's own default is 1rem, i.e. step 4.
+    const step = Number.isFinite(props.gap) ? props.gap : 4;
+    declarations.push(`--scrolling-content-gap:${step * 0.25}rem`);
+    // A `fade="<length>"` makes upstream write --scrolling-content-fade into this
+    // same inline style, which the patcher owns and rewrites wholesale. Declaring
+    // the identical value here keeps the two in agreement, so a render that
+    // rewrites `style` for an unrelated reason can never drop the mask width. A
+    // BARE `fade` is left out on purpose: upstream REMOVES the property in that
+    // case, and the stylesheet's 4rem default applies.
+    const fadeLength = props.fade === true || !props.fade ? null : String(props.fade);
+    if (fadeLength) declarations.push(`--scrolling-content-fade:${fadeLength}`);
+    if (props.style) declarations.push(String(props.style));
 
     return {
-      vertical,
-      direction: dir,
-      speedPx,
-      rootClass: [ROOT, props.class || ''].filter(Boolean).join(' '),
-      // Let the browser scroll the page along the cross axis while drag captures
-      // the marquee's own axis.
-      rootStyle: vertical ? 'touch-action:pan-x' : 'touch-action:pan-y',
-      trackClass: [trackFlow, gapClass, 'will-change-transform'].join(' '),
-      copyClass: [copyFlow, gapClass].join(' '),
+      rootClass: props.class || false,
+      rootStyle: declarations.join(';'),
+      // always written: the piece's default is 40 px/s, upstream's is 60
+      speedAttr: Number.isFinite(props.speed) ? props.speed : 40,
+      directionAttr: props.direction === 'right' ? 'right' : 'left',
+      // both are opt-OUT attributes upstream — the string 'false' is the only
+      // value that means anything, so the default renders no attribute at all
+      pauseAttr: props.pauseOnHover === false ? 'false' : false,
+      dragAttr: props.drag === false ? 'false' : false,
+      // bare `fade` takes the stylesheet's default width; a string sets it
+      fadeAttr: props.fade === true ? true : fadeLength || false,
     };
   }
 
   mounted() {
-    this._build();
-    if (typeof ResizeObserver !== 'undefined' && this.element) {
-      this._ro = new ResizeObserver(() => this._build());
-      this._ro.observe(this.element);
-    }
-    this._start();
+    // Browser-only by construction: the package registers its custom elements at
+    // module scope with `class extends HTMLElement`, which is a ReferenceError
+    // under Node — a top-level import would take the prerender pass down with it.
+    if (typeof window === 'undefined') return;
+    // Fire-and-forget: every bound attribute is observed and none of them is
+    // written back, so the markup is already correct and the elements upgrade in
+    // place the moment the module lands.
+    import('@magic-spells/scrolling-content').catch((error) => {
+      console.error(
+        '[Marquee] failed to load @magic-spells/scrolling-content — the row will ' +
+          'render but not scroll.',
+        error
+      );
+    });
   }
-
-  afterUpdate() {
-    // A parent re-render recreates the slot content and drops the clones + the
-    // inline transform we wrote imperatively — rebuild, then resume (guarded).
-    this._build();
-    this._start();
-  }
-
-  destroyed() {
-    this._stop();
-    if (this._ro) this._ro.disconnect();
-    this._removeWindowListeners();
-  }
-
-  // --- element lookups --------------------------------------------------------
-
-  _track() {
-    return this.element && this.element.querySelector('[data-marquee-track]');
-  }
-  // The original copy only (clones carry data-marquee-clone).
-  _copy() {
-    return (
-      this.element &&
-      this.element.querySelector('[data-marquee-copy]:not([data-marquee-clone])')
-    );
-  }
-
-  // --- build / measure (imperative — never setData) ---------------------------
-
-  _build() {
-    const track = this._track();
-    const copy = this._copy();
-    if (!track || !copy) return;
-
-    // Drop any previous clones before re-measuring.
-    const clones = track.querySelectorAll('[data-marquee-clone]');
-    for (let i = 0; i < clones.length; i++) clones[i].remove();
-
-    const d = this.getData();
-    const rect = copy.getBoundingClientRect();
-    const size = d.vertical ? rect.height : rect.width;
-    const gap = this._gapPx(track, d.vertical);
-    this._loop = size + gap;
-    if (this._loop <= 0) {
-      this._apply();
-      return;
-    }
-
-    const vpRect = this.element.getBoundingClientRect();
-    const viewport = d.vertical ? vpRect.height : vpRect.width;
-    // Track must span at least viewport + one loop so the visible band is always
-    // covered while the offset lives in (-loop, 0].
-    const needed = Math.max(2, Math.ceil((viewport + this._loop) / this._loop) + 1);
-    for (let i = 1; i < needed; i++) {
-      // cloneNode(true) is a verbatim copy — ids, focusability and form names
-      // included — so every clone has to be neutered before it enters the DOM.
-      // See the A11Y note in the header for why each line is load-bearing.
-      const clone = copy.cloneNode(true);
-      clone.setAttribute('data-marquee-clone', '');
-      clone.setAttribute('aria-hidden', 'true');
-      // inert removes the subtree from AT, the Tab order, and hit testing at once;
-      // aria-hidden stays for the (older) engines that lack inert support.
-      clone.setAttribute('inert', '');
-      if (clone.id) clone.removeAttribute('id');
-      for (const el of clone.querySelectorAll('[id]')) el.removeAttribute('id');
-      for (const el of clone.querySelectorAll('input, select, textarea, button')) {
-        el.disabled = true;
-        el.removeAttribute('name'); // never submit duplicated values
-      }
-      track.appendChild(clone);
-    }
-
-    this._normalize();
-    this._apply();
-    // If mount-time _start() bailed because the copy had no layout yet (loop 0),
-    // this successful rebuild is the only chance to get moving — _start() is
-    // fully guarded, so this is a no-op when already running/paused/dragging.
-    this._start();
-  }
-
-  _gapPx(track, vertical) {
-    const cs = getComputedStyle(track);
-    const g = parseFloat(vertical ? cs.rowGap : cs.columnGap);
-    return Number.isFinite(g) ? g : 0;
-  }
-
-  _normalize() {
-    if (this._loop <= 0) return;
-    while (this._offset <= -this._loop) this._offset += this._loop;
-    while (this._offset > 0) this._offset -= this._loop;
-  }
-
-  _apply() {
-    const track = this._track();
-    if (!track) return;
-    track.style.transform = this.getData().vertical
-      ? `translateY(${this._offset}px)`
-      : `translateX(${this._offset}px)`;
-  }
-
-  // --- rAF loop ---------------------------------------------------------------
-
-  _reducedMotion() {
-    return (
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    );
-  }
-
-  _start() {
-    if (this._running) return;
-    if (this._reducedMotion()) return;
-    if (this._hoverPaused || this._dragging) return;
-    if (this._loop <= 0) return;
-    this._running = true;
-    this._prev = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    this._raf = requestAnimationFrame((t) => this._tick(t));
-  }
-
-  _stop() {
-    if (this._raf) cancelAnimationFrame(this._raf);
-    this._raf = null;
-    this._running = false;
-  }
-
-  _tick(ts) {
-    if (!this._running) return;
-    const dt = Math.min(MAX_DT, Math.max(0, (ts - this._prev) / 1000));
-    this._prev = ts;
-    const d = this.getData();
-    const sign = d.direction === 'right' || d.direction === 'down' ? 1 : -1;
-    this._offset += sign * d.speedPx * dt;
-    this._normalize();
-    this._apply();
-    this._raf = requestAnimationFrame((t) => this._tick(t));
-  }
-
-  // --- drag-to-scroll (pointer capture) ---------------------------------------
-
-  _addWindowListeners() {
-    if (this._listening || typeof window === 'undefined') return;
-    this._listening = true;
-    window.addEventListener('pointermove', this._onWinMove);
-    window.addEventListener('pointerup', this._onWinUp);
-    window.addEventListener('pointercancel', this._onWinUp);
-  }
-
-  _removeWindowListeners() {
-    if (!this._listening || typeof window === 'undefined') return;
-    this._listening = false;
-    window.removeEventListener('pointermove', this._onWinMove);
-    window.removeEventListener('pointerup', this._onWinUp);
-    window.removeEventListener('pointercancel', this._onWinUp);
-  }
-
-  _dragMove(event) {
-    if (!this._dragging || event.pointerId !== this._dragPointer) return;
-    const d = this.getData();
-    const cur = d.vertical ? event.clientY : event.clientX;
-    this._offset = this._dragStartOffset + (cur - this._dragStart);
-    this._normalize();
-    this._apply();
-  }
-
-  _dragEnd(event) {
-    if (!this._dragging || event.pointerId !== this._dragPointer) return;
-    this._dragging = false;
-    this._dragPointer = null;
-    const track = this._track();
-    try {
-      if (track && track.hasPointerCapture && track.hasPointerCapture(event.pointerId)) {
-        track.releasePointerCapture(event.pointerId);
-      }
-    } catch (_) {
-      /* best effort */
-    }
-    this._removeWindowListeners();
-    if (!this._hoverPaused) this._start();
-  }
-
-  events = {
-    // Pointer (not mouse) enter/leave, gated to real mice: a touch tap fires
-    // synthetic mouseenter with no matching mouseleave, which would pause the
-    // marquee forever — pointerType lets us keep pause-on-hover mouse-only.
-    onEnter: (event) => {
-      if (this.props.pauseOnHover === false) return;
-      if (event.pointerType !== 'mouse') return;
-      this._hoverPaused = true;
-      this._stop();
-    },
-
-    onLeave: (event) => {
-      if (this.props.pauseOnHover === false) return;
-      if (event.pointerType !== 'mouse') return;
-      this._hoverPaused = false;
-      if (!this._dragging) this._start();
-    },
-
-    onDown: (event) => {
-      if (event.pointerType === 'mouse' && event.button !== 0) return;
-      if (this._loop <= 0) return;
-      this._dragging = true;
-      this._dragPointer = event.pointerId;
-      const d = this.getData();
-      this._dragStart = d.vertical ? event.clientY : event.clientX;
-      this._dragStartOffset = this._offset;
-      this._stop();
-      const track = this._track();
-      try {
-        if (track) track.setPointerCapture(event.pointerId);
-      } catch (_) {
-        /* best effort */
-      }
-      this._addWindowListeners();
-    },
-  };
 }
 </script>

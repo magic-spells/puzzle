@@ -1,11 +1,16 @@
 <puzzle-view>
-  <div class={ rootClass }>
+  <quantity-input
+    class={ rootClass }
+    min={ minAttr }
+    max={ maxAttr }
+    step={ stepAttr }
+    disabled={ disabledAttr }>
     <button
       type="button"
       class={ buttonClass }
       aria-label="Decrease"
-      disabled={ decDisabled }
-      @click={ decrement }>
+      data-action-decrement
+      disabled={ decDisabled }>
       <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
         <line x1="3.5" y1="8" x2="12.5" y2="8" />
       </svg>
@@ -14,51 +19,107 @@
       type="number"
       class={ inputClass }
       inputmode="numeric"
-      value={ value }
-      min={ min }
-      max={ max }
-      step={ step }
-      name={ name }
+      value={ String(current) }
+      min={ minAttr }
+      max={ maxAttr }
+      step={ stepAttr }
+      name={ nameAttr }
       aria-label={ label }
-      disabled={ disabled }
-      @change={ inputChange(event) } />
+      disabled={ disabledAttr } />
     <button
       type="button"
       class={ buttonClass }
       aria-label="Increase"
-      disabled={ incDisabled }
-      @click={ increment }>
+      data-action-increment
+      disabled={ incDisabled }>
       <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
         <line x1="3.5" y1="8" x2="12.5" y2="8" />
         <line x1="8" y1="3.5" x2="8" y2="12.5" />
       </svg>
     </button>
-  </div>
+  </quantity-input>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// QuantityInput — an e-commerce stepper ported from @magic-spells/quantity-input.
-// Controlled: the parent owns `value` and updates it from `@change`. The whole
-// group is one bordered control (decrement | number input | increment); the
-// group — not the input — shows the focus ring via focus-within. Every emitted
-// value is CLAMPED to [min, max]: the buttons stop at the bounds (and disable
-// there), typing is clamped on commit, and an empty/NaN entry snaps the input
-// back to the current clamped value on blur.
+// QuantityInput — an e-commerce stepper: decrement and increment buttons around
+// a number field, clamped to [min, max].
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <quantity-input>
+// custom element from @magic-spells/quantity-input around the three controls the
+// component ADOPTS — `[data-action-decrement]`, an `<input>`, and
+// `[data-action-increment]`. The clamping, the stepping, the Enter-key swallow,
+// the empty/NaN snap-back and the disabled bookkeeping are all upstream's; this
+// file is markup, Tailwind and the controlled-value bridge.
 //
 //   <QuantityInput value={ qty } @change={ setQty } />
-//   <QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />
+//   <QuantityInput value={ qty } min={ 0 } max={ 10 } step={ 5 } @change={ setQty } />
 //
-// Clamp semantics (ported verbatim from quantity-input.js #clamp): with a max,
-// Math.max(min, Math.min(v, max)); without one, Math.max(min, v). A change only
-// fires when the clamped result actually differs from the current value.
-const clamp = (v, min, max) =>
-  max != null ? Math.max(min, Math.min(v, max)) : Math.max(min, v);
+// CONTROLLED, VALUE-FIRST. The parent owns `value` and stores what @change
+// reports. There is no local mirror: the component updates itself first (its
+// `value` attribute is reflected synchronously BEFORE `quantity-input:change`
+// fires), reports, and the parent's re-render simply confirms what is already on
+// screen. A parent that ignores @change leaves the field showing the user's
+// number while its own state disagrees — the wrapped-component contract, the same
+// one Collapsible documents. The next actual change to `value` re-syncs it.
+//
+// THE HOST `value` ATTRIBUTE IS NEVER TEMPLATE-BOUND. <quantity-input> OBSERVES
+// `value` and REFLECTS it (every user step writes it back), so a live binding
+// would fight the patcher on every render. It is written imperatively instead:
+// once in mounted() before the upgrade — without it the component would connect
+// at `min`, since a missing `value` attribute reads as `min` — and again from
+// afterUpdate() whenever props.value actually changes. Writing a value that is
+// already current is a no-op and dispatches nothing, so there is no echo loop
+// and no #syncing flag is needed.
+//
+// THE FIELD'S OWN `value` IS THE LIVE CLAMPED PROP, AND IT HAS TO BE. Puzzle
+// force-syncs `value` on an <input> against the LIVE DOM property on every patch
+// (the controlled-input rule — see patchAttrs), not against the previous vnode.
+// A frozen prerender seed would therefore be re-asserted onto the field after
+// every render and silently revert what the component just wrote: click + twice
+// and the host reads 3 while the field still shows 1. The field is a controlled
+// input like any other, and this piece and upstream write the same number to it.
+//
+// `String()` and not a bare `current`: it keeps the expression off the
+// `ident`/`ident.ident` shape D147 auto-binds. A synthesized bind here would
+// write into this piece's LOCAL state and be reverted by the next data() commit.
+// Same escape NumberField uses. Verify with the compiler, not by eye: compile and
+// grep the output for `__bind(`.
+//
+// UPSTREAM OWNS `disabled` ON ALL THREE CONTROLS. #syncInput recomputes it on
+// every sync: host `disabled` disables the buttons and the field, and each button
+// is additionally disabled at its bound. The `disabled` rendered here from props
+// is for PRERENDER only — it paints the right state before the JS lands — and is
+// never re-asserted against the component afterwards. Same for the field's
+// `type`, `inputMode`, `pattern`, `min` and `max`, which upstream force-writes too.
+//
+// NO STYLESHEET IMPORT. Unlike every other wrapper piece, this one does NOT want
+// `@magic-spells/quantity-input/styles`: that sheet carries four hex colours and
+// fixed control sizing, which is exactly what this registry replaces with tokens.
+// The one rule worth having — hiding the native number spinners — is here as the
+// arbitrary variants on INPUT_BASE, which is also the prerender-correct form
+// (upstream injects its copy from the constructor, i.e. at upgrade time). The
+// component works with no CSS of its own.
+//
+// Props
+//   value     the current quantity; controlled by the parent
+//   min       default 1. ZERO IS A REAL MINIMUM — pass min={ 0 } for a cart row
+//             whose "remove" state is 0.
+//   max       optional upper bound; no attribute means unbounded
+//   step      positive integer the buttons add and subtract (default 1)
+//   disabled  disables both buttons and the field
+//   name      submitted with an enclosing form
+//   label     aria-label on the field (default 'Quantity')
+//   class     merged onto the <quantity-input> host
+//   @change(value)  value-first; fires on a button step, on a committed typed
+//                   value, and on Enter (which upstream preventDefaults, so it
+//                   never submits the enclosing form)
 
 const ROOT_BASE =
   'inline-flex h-9 items-center rounded-lg border border-border bg-surface ' +
-  'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring';
+  'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring ' +
+  '[&[disabled]]:opacity-50';
 
 const BUTTON_BASE =
   'size-9 flex items-center justify-center text-body hover:text-ink ' +
@@ -70,62 +131,106 @@ const INPUT_BASE =
   '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ' +
   '[-moz-appearance:textfield]';
 
+const clamp = (v, min, max) =>
+  max != null ? Math.max(min, Math.min(v, max)) : Math.max(min, v);
+
+const int = (v, fallback) => (Number.isFinite(v) ? Math.trunc(v) : fallback);
+
 export default class QuantityInput extends PuzzleView {
+  #live = false;
+  #ready = false;
+  #last;
+
+  // quantity-input:change BUBBLES, so a nested stepper's event would otherwise
+  // travel through this element on its way up and be reported as ours.
+  #onChange = (event) => {
+    if (event.target !== this.element) return;
+    const value = event.detail?.value;
+    if (!Number.isFinite(value)) return;
+    // #last is NEVER set from what we report — it tracks props.value only, so an
+    // ignored @change leaves no stale edge behind for a later render to act on.
+    this.props.change?.(value);
+  };
+
+  // Before the upgrade the intent goes on the attribute (the component reads it
+  // in connectedCallback); after it, through the reflecting property. Never
+  // touch `.value` on an un-upgraded element — quantity-input does not reinstate
+  // shadowed own properties at upgrade time.
+  #push(value) {
+    const el = this.element;
+    if (!el || !Number.isFinite(value)) return;
+    if (this.#ready) {
+      if (el.value !== value) el.value = value;
+      return;
+    }
+    el.setAttribute('value', String(Math.trunc(value)));
+  }
+
   data(params, props) {
-    const min = typeof props.min === 'number' ? props.min : 1;
-    const max = typeof props.max === 'number' ? props.max : undefined;
-    const step = typeof props.step === 'number' && props.step > 0 ? props.step : 1;
-    const raw = typeof props.value === 'number' ? props.value : min;
-    const value = clamp(raw, min, max);
+    const min = int(props.min, 1);
+    const max = Number.isFinite(props.max) ? Math.trunc(props.max) : undefined;
+    const rawStep = int(props.step, 1);
+    const step = rawStep > 0 ? rawStep : 1;
+    const value = clamp(int(props.value, min), min, max);
     const disabled = !!props.disabled;
+
     return {
-      min,
-      max,
-      step,
-      value,
-      disabled,
-      name: props.name,
+      current: value,
+      minAttr: min,
+      maxAttr: max === undefined ? false : max,
+      stepAttr: step,
+      disabledAttr: disabled ? true : false,
+      nameAttr: props.name || false,
       label: props.label || 'Quantity',
       decDisabled: disabled || value <= min,
       incDisabled: disabled || (max != null && value >= max),
-      rootClass: [ROOT_BASE, props.class || ''].join(' '),
+      rootClass: [ROOT_BASE, props.class].filter(Boolean).join(' '),
       buttonClass: BUTTON_BASE,
       inputClass: INPUT_BASE,
     };
   }
 
-  emit(next, event) {
-    const { change } = this.props;
-    if (typeof change === 'function') change(next, event);
+  mounted() {
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#last = this.props.value;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this.element.addEventListener('quantity-input:change', this.#onChange);
+
+    // Seed the attribute BEFORE the import so the component connects on the
+    // right number instead of snapping to min for a frame.
+    this.#push(this.props.value);
+
+    import('@magic-spells/quantity-input')
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+        this.#push(this.props.value);
+      })
+      .catch((error) => {
+        console.error(
+          '[QuantityInput] failed to load @magic-spells/quantity-input — the ' +
+            'buttons will not step.',
+          error
+        );
+      });
   }
 
-  events = {
-    decrement: (event) => {
-      const { value, step, min, max, disabled } = this.getData();
-      if (disabled) return;
-      const next = clamp(value - step, min, max);
-      if (next !== value) this.emit(next, event);
-    },
-    increment: (event) => {
-      const { value, step, min, max, disabled } = this.getData();
-      if (disabled) return;
-      const next = clamp(value + step, min, max);
-      if (next !== value) this.emit(next, event);
-    },
-    inputChange: (event) => {
-      const { value, min, max } = this.getData();
-      const parsed = parseInt(event.target.value, 10);
-      // Empty or non-numeric entry: snap the field back to the clamped current.
-      if (Number.isNaN(parsed)) {
-        event.target.value = value;
-        return;
-      }
-      const next = clamp(parsed, min, max);
-      // Reflect the clamped value in the field even when it equals the current
-      // (e.g. the parent won't re-render because value didn't change).
-      event.target.value = next;
-      if (next !== value) this.emit(next, event);
-    },
-  };
+  afterUpdate() {
+    if (!this.#live) return;
+    // Edge-triggered on props, never level-triggered: a re-render carrying the
+    // same `value` is not a request.
+    const value = this.props.value;
+    if (value === this.#last) return;
+    this.#last = value;
+    this.#push(value);
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.element?.removeEventListener('quantity-input:change', this.#onChange);
+  }
 }
 </script>

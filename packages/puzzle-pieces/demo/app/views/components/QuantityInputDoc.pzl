@@ -5,9 +5,12 @@
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Quantity Input</h1>
         <p class="mt-2 text-body">
           An e-commerce stepper: decrement and increment buttons around a number input, as one bordered control. Every
-          emitted value is clamped to
+          committed value is clamped to
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">[min, max]</code>
-          — the buttons stop and disable at the bounds, and typing is clamped on commit.
+          — the buttons stop and disable at the bounds, typing is clamped on commit, and an empty entry snaps back.
+          The piece <strong class="font-medium text-ink">wraps</strong> the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@magic-spells/quantity-input</code>
+          web component rather than reimplementing it.
         </p>
       </header>
 
@@ -24,8 +27,14 @@
           Copy the piece into your app — it compiles with your build and the code is yours:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          It has one runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
         <p class="mt-3 text-sm text-muted">
-          Requires the pieces.css tokens merged into your app styles (see Introduction).
+          There is no stylesheet to merge. The component needs no CSS of its own, and its optional
+          sheet ships hex colors and fixed control sizing — this piece styles itself with the
+          pieces.css tokens instead (see Introduction).
         </p>
       </section>
 
@@ -42,6 +51,40 @@
             <p class="text-sm text-muted">2–6 · Current: { boxes }</p>
           </div>
         </ExampleBox>
+
+        <ExampleBox id="zero" title="Zero minimum" code={ codeZero }>
+          <div class="flex items-center gap-6">
+            <QuantityInput value={ cart } min={ 0 } max={ 5 } @change={ setCart } />
+            <p class="text-sm text-muted">
+              { cart === 0 ? 'Removed from cart' : 'In cart: ' + cart }
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="step" title="Step" code={ codeStep }>
+          <div class="flex items-center gap-6">
+            <QuantityInput value={ pack } min={ 0 } max={ 60 } step={ 5 } @change={ setPack } />
+            <p class="text-sm text-muted">Steps of 5 · Current: { pack }</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
+          <div class="flex items-center gap-6">
+            <QuantityInput value={ 3 } min={ 1 } max={ 10 } disabled />
+            <p class="text-sm text-muted">Both buttons and the field are inert</p>
+          </div>
+        </ExampleBox>
+
+        <section id="behavior" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Behavior</h2>
+          <ul class="space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Controlled</span> — the parent owns <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">value</code> and stores what <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@change</code> reports; the callback is value-first</li>
+            <li><span class="font-medium text-ink">Zero is a real value</span> — <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ 'min={ 0 }' }</code> reaches 0 instead of bottoming out at 1, which is what a cart row's "remove" state needs</li>
+            <li><span class="font-medium text-ink">Enter commits, it does not submit</span> — the component preventDefaults the key and commits the typed value, so a stepper inside a form never navigates the page</li>
+            <li><span class="font-medium text-ink">Empty or junk snaps back</span> — clearing the field and blurring restores the committed value rather than leaving a dirty input</li>
+            <li><span class="font-medium text-ink">Disabled is owned by the component</span> — host <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">disabled</code> disables all three controls, and each button is additionally disabled at its bound, recomputed on every change</li>
+          </ul>
+        </section>
       </div>
     </article>
 
@@ -57,6 +100,7 @@ import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
 const installCmd = 'puzzle add piece quantity-input';
+const installDep = 'npm install @magic-spells/quantity-input';
 const usageImport = `import QuantityInput from '@/components/ui/QuantityInput.pzl';`;
 const usageMarkup = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />`;
 
@@ -70,23 +114,40 @@ events = {
 const codeBounds = `// buttons disable at the bounds; typing past them clamps on commit
 <QuantityInput value={ boxes } min={ 2 } max={ 6 } @change={ setBoxes } />`;
 
+const codeZero = `// min={ 0 } really reaches zero — the "remove from cart" state
+<QuantityInput value={ cart } min={ 0 } max={ 5 } @change={ setCart } />`;
+
+const codeStep = `// each press adds or subtracts step, still clamped to [min, max]
+<QuantityInput value={ pack } min={ 0 } max={ 60 } step={ 5 } @change={ setPack } />`;
+
+const codeDisabled = `// disables both buttons and the field
+<QuantityInput value={ 3 } min={ 1 } max={ 10 } disabled />`;
+
 export default class QuantityInputDoc extends PuzzleView {
   created() {
-    this.setData({ qty: 1, boxes: 2 });
+    this.setData({ qty: 1, boxes: 2, cart: 1, pack: 10 });
   }
 
   data(params, props) {
     return {
       ...this.getData(),
       installCmd,
+      installDep,
       usageImport,
       usageMarkup,
       codeHero,
       codeBounds,
+      codeZero,
+      codeStep,
+      codeDisabled,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Bounds', href: '#bounds' },
+        { label: 'Zero minimum', href: '#zero' },
+        { label: 'Step', href: '#step' },
+        { label: 'Disabled', href: '#disabled' },
+        { label: 'Behavior', href: '#behavior' },
       ],
     };
   }
@@ -98,6 +159,14 @@ export default class QuantityInputDoc extends PuzzleView {
     },
     setBoxes: (v) => {
       this.setData('boxes', v);
+      this.refresh();
+    },
+    setCart: (v) => {
+      this.setData('cart', v);
+      this.refresh();
+    },
+    setPack: (v) => {
+      this.setData('pack', v);
       this.refresh();
     },
   };

@@ -90,6 +90,37 @@
 @import "@magic-spells/panel-stack/css" layer(components);
 
 /*
+ * The Select family wraps @magic-spells/select-dropdown. This sheet is REQUIRED,
+ * not cosmetic: the panel's at-rest `opacity: 0; visibility: hidden;
+ * pointer-events: none` and the `select-dropdown[visible]` rule that reverses
+ * them ARE the show/hide mechanism, and `select-dropdown:not(:defined)
+ * select-panel { display: none }` is what keeps the un-upgraded option list out
+ * of a prerendered page. Same `layer(components)` reasoning as above — plain
+ * element selectors (select-dropdown, select-trigger, select-panel,
+ * select-option), so an unlayered import would outrank every Tailwind utility
+ * the family puts on them.
+ */
+@import "@magic-spells/select-dropdown/css" layer(components);
+
+/*
+ * The Marquee piece wraps @magic-spells/scrolling-content. REQUIRED: the host's
+ * overflow, the track's flex / max-content sizing (which the clone measurement
+ * is derived from), the gap custom property, the drag cursors and the edge-fade
+ * mask all live here. Importing it is duplicate-free — the component detects
+ * this sheet through its `--scrolling-content-styles` sentinel and skips its own
+ * <style> injection. `layer(components)` for the usual reason.
+ */
+@import "@magic-spells/scrolling-content/css" layer(components);
+
+/*
+ * The QuantityInput piece wraps @magic-spells/quantity-input and deliberately
+ * imports NOTHING: that package's optional stylesheet carries hex colours and
+ * fixed control sizing, which is what this registry replaces with tokens, and the
+ * one rule worth having (hiding the native number spinners) is a Tailwind
+ * arbitrary variant in the piece itself. The component needs no CSS to work.
+ */
+
+/*
  * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
  * and JS so the utility classes they use are generated. Paths are relative to
  * this stylesheet (app/styles/), so "../" is the app root.

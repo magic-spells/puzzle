@@ -1,8 +1,8 @@
 {
   "name": "quantity-input",
-  "description": "E-commerce stepper: decrement/increment buttons around a number input, always clamped to [min, max]",
+  "description": "E-commerce stepper: decrement/increment buttons around a number input, clamped to [min, max] with a configurable step and a real zero minimum; wraps the @magic-spells/quantity-input web component rather than porting it",
   "files": ["QuantityInput.pzl"],
   "registryDependencies": [],
-  "dependencies": [],
+  "dependencies": ["@magic-spells/quantity-input"],
   "targetDir": "app/components/ui"
 }
