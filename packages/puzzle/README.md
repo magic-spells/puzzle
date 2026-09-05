@@ -531,6 +531,15 @@ size banner also names your largest dependencies and, in production builds,
 flags any single one over 200 KB (the threshold assumes minified bytes, so dev
 builds never warn).
 
+Splitting adds one deployment rule: chunk filenames are content-hashed, so a
+new deploy writes new ones, and a tab still holding the previous `app.js` will
+ask for the chunk names that entry graph was built with. Keep the previous
+`dist/chunks/` files available for a support window after a deploy, or deploy
+immutably (each build to its own directory, with the old one still served). If a
+lazy chunk does 404, the failure is contained the same way any other route
+failure is: it surfaces through the app-level `errorView` with a working retry
+once the client reloads.
+
 On an interactive terminal, `build` and `dev` also use a cached, non-blocking
 daily check to mention newer Puzzle releases. Set `PUZZLE_NO_UPDATE_CHECK=1` to
 disable it; the check is skipped automatically when `CI` is set.

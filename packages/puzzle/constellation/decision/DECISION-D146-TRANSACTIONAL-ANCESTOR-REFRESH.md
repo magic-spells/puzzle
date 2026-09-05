@@ -90,6 +90,7 @@ strand holds in `Store._heldKeys`.
 
 ## Subscription holding
 
+
 A prepared run never weakens the live subscription set. Last-good keys stay
 subscribed AND the prepared run's keys go live, so the view is transiently
 over-subscribed (an extra notify at worst) and a discard can never strand a
@@ -99,6 +100,18 @@ caller's commit/discard decides direction (commit drops `before \ added`,
 discard drops `added \ before` — both subject to the holds below). Scope
 restore of `_tracking`/`_trackingAdded` is never deferred — that is stack
 discipline. A failing eval reconciles immediately, exactly as before.
+
+**The decision can precede the lease.** The pending object `prepareRefresh`
+allocates is decision-bearing, not a mailbox for a callback: commit and
+discard record their verdict on it whether or not the evaluation has finished.
+An ASYNC prepared `data()` publishes its held reconcile late — by then the
+router may already have discarded the handle on a superseded or failed
+navigation — so the publishing side reads the recorded verdict and applies it
+in the same turn: a handle already discarded releases its holds immediately,
+and one already committed adopts them immediately. Nothing is parked waiting
+for a reconcile callback that will never be installed, so a decision taken
+before the run finishes can never leave a mounted view's keys leased to a run
+nobody owns.
 
 `Store._heldKeys` (subscriber → `Map<key, {count, adopted}>`) fences prepared
 keys from every other eval's garbage collection. Holds are **refcounted over
@@ -153,16 +166,28 @@ Subscriptions panel.
 
 ## Known residual
 
+
 `#evalScope` persists across a prepared ASYNC `data()`'s awaits. Every
 runtime-controlled reentry is fenced (see Ordering above), but a closure app
 code itself schedules from inside the gate — a `setTimeout`, a
 `fetch().then`, a captured `this` — runs outside any fence and reads the
 destination scope. There is no browser primitive for async-local scope, so
-this window is documented rather than closed. A second narrow shape:
-slot-forwarded content patches with the enclosing manager's owner, so a
-handler defined in one view but patched through another view's manager is
-fenced against that manager's owner — harmless today (it nulls an
-already-null scope) but not a complete fence for that composition.
+this window is documented rather than closed.
+
+A second shape is a real divergence, not a theoretical one. Slot-forwarded
+content is patched by the ENCLOSING view's manager, so a handler AUTHORED in
+one view but rendered into another view's tree is fenced against the
+RECEIVING manager's owner: `#withCommittedScope` nulls the receiver's scope —
+already null — while the author's prepared scope stays installed for the whole
+gate. During a pending params-only navigation such a handler therefore reads
+the DESTINATION route from `this.params`/`this.route` while nothing has
+committed and the screen still shows the old route. It reproduces with a plain
+default slot; snippets are not required, and the shape is not confined to
+them. **App-side mitigation:** a handler forwarded through composition should
+take its ids from the rendered model or from its props, which describe what is
+on screen, rather than from `this.params`. The runtime fix — carrying the
+authoring view on the forwarded vnode at slot-partition time so the listener
+installer fences the AUTHOR — is planned for 0.7.1 and is not shipped.
 
 ## Alternatives rejected
 

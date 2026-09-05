@@ -63,6 +63,16 @@ notes:
       chain would give views a route object that moves without the tree under it. Documented
       instead, in SPEC §19 and DOC-ROUTER's route-snapshot section: a view that must react to an
       anchor jump reads `ctx.router.current.hash` and listens for hashchange/popstate itself.
+  - kind: decision
+    text: >-
+      Guard-redirect continuations join the failed-POP URL invariant. A redirect re-enters #navigate
+      for the target while the original pop's address bar is still live, so its own pre-commit
+      failures owe the same replaceState repair as the five direct sites — but `this.#state === cur`
+      is not the right ownership test there, because the redirect chain is not the committed state.
+      The continuation carries a chain token and repairs only while that token still owns the
+      location: a redirect superseded mid-flight (a newer navigation, or a further redirect)
+      restores nothing and leaves the winner's URL alone, exactly the posture the sibling sites get
+      from the state identity check.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

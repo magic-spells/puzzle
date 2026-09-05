@@ -441,6 +441,49 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **A superseded run's failure no longer reaches `onError` or the error view.**
+  A refresh whose token had moved, or whose view was destroyed or leaving, had
+  its RESULT discarded but not its REJECTION, so a navigation the app had
+  already left behind could still report a failure and replace a live position
+  with the error view; the settle loop had the same asymmetry between its
+  success and rejection arms. Staleness now governs both outcomes with one
+  predicate, and the error funnel only ever sees failures of the run that is
+  actually on screen.
+
+- **A navigation discarded before an ancestor's `data()` finished no longer
+  holds its store subscriptions open.** The prepared run's decision is recorded
+  the moment the router commits or discards, even when the async evaluation is
+  still running, so a lease published afterwards is released (or adopted) in the
+  same turn instead of waiting for a reconcile callback that will never arrive.
+
+- **A delete no longer loses to a read that was already in flight.** A record
+  removed by an acknowledged `delete()` or a local `destroy()` stamps its
+  absence with the current dispatch sequence, so a load that was dispatched
+  BEFORE the removal and landed after it is discarded whole — it no longer
+  clears the absence, re-allocates the record, or notifies subscribers. A read
+  dispatched after the removal is the app asking again and merges as before;
+  requests and wire format are unchanged.
+
+- **Static pages no longer refetch a collection the build already loaded.** The
+  read-state transfer counted only exhaustive and absent entries, so a type the
+  build had merely LOADED — the collection came from an authored, possibly
+  paginated `loadMany` — was omitted from the page's island and re-requested on
+  arrival. Loaded-only types now transfer too, matching the documented envelope.
+
+- **A guard redirect on a back/forward navigation restores the address bar when
+  it fails.** The redirect continuation was the one pre-commit failure path with
+  no pop-URL repair, so a redirected pop whose target then failed left the
+  browser on the popped entry over an unchanged tree. It now repairs like its
+  siblings — and only while the redirect chain still owns the location, so a
+  redirect superseded mid-flight leaves the winner's URL alone.
+
+- **A build run from a symlinked project directory no longer compiles out
+  features the app uses.** The usage scan that sets the `__PUZZLE_HAS_*` flags
+  compared scanned paths against an unresolved project root, so under a symlink
+  it matched nothing and concluded the app used no Portals, no snippets, and no
+  built-in formatters — dropping that runtime from the bundle. The scan resolves
+  the root first, so a symlinked checkout builds byte-for-byte like a real one.
+
 - **Hide hooks no longer fire on a component that was never shown.** Routing
   hook-only components through the animated removal path (new in this release)
   did not check whether the component had actually mounted, so a child whose

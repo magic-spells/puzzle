@@ -121,6 +121,7 @@ views, no `{#await}` templates, no separate `load()` hook.
 
 ## Decision
 
+
 **The settle loop** (owned by PuzzleView, wrapped around every tracked
 `data()` evaluation — refresh, routed preload, D146 prepareRefresh, component
 mount, prerender):
@@ -183,13 +184,17 @@ and the warn-once latch then hid the genuine case for the rest of the session.
 Two residues are documented, not defects. (1) The view's OWN deferred code
 holding its OWN handle during its own suspension — a `setTimeout` inside
 `data()` reading `this.ctx.store` — is attributed to that open evaluation and
-does fault: same view, same data. (2) SUBSCRIPTION attribution stays ambient
-(`_tracking`/`_trackingAdded`), because relationship getters resolve through
-`record._store` and a record holds the raw Store — there is no identity to hang
-a handle on, and traversal inside `data()` must keep auto-subscribing. A
-foreign read during a suspension can therefore add one subscription key to the
-suspended view, which that view's next evaluation reconciles away. Benign and
-self-healing; it costs at most one extra notify.
+does fault: same view, same data. It carries one consequence worth stating
+plainly: the fault joins that evaluation's request batch, so if it REJECTS
+(a 5xx, a network error) it fails that refresh, even though `data()` itself
+never queried the type. Deferred code that must not be able to fail the render
+should read the app's raw `store`, which never faults. (2) SUBSCRIPTION
+attribution stays ambient (`_tracking`/`_trackingAdded`), because relationship
+getters resolve through `record._store` and a record holds the raw Store —
+there is no identity to hang a handle on, and traversal inside `data()` must
+keep auto-subscribing. A foreign read during a suspension can therefore add one
+subscription key to the suspended view, which that view's next evaluation
+reconciles away. Benign and self-healing; it costs at most one extra notify.
 
 **Fetch eligibility.** A tracked miss faults only when the MODEL ITSELF
 declares server intent: its own `static adapter` names the read verb as a
@@ -218,17 +223,29 @@ module — the D157 no-adapter bundle carries none of it): in-flight dedup (by
 never-persisted 1000-entry negative LRU, and TWO collection sets.
 Only a framework-normalized 404
 (`PuzzleAdapterError`) records absence; network/5xx/401/403/shape errors
-reject the run and poison nothing. Removing a record by any path — confirmed
-`delete()` or local `destroy()` — records absence; the identity clears on any
-load/create that returns it (create, upsert, load, hydration, save
-reconcile/pk adoption). Explicit `loadOne` bypasses the negative cache as the
-refresh escape hatch, and on success also clears the *requested* id's entry.
+reject the run and poison nothing. Explicit `loadOne` bypasses the negative
+cache as the refresh escape hatch, and on success also clears the *requested*
+id's entry.
 Only the AUTOMATIC fault path rejects a response whose pk differs from the
 requested id before mutation — an implicit fault would otherwise miss
 forever; explicit `store.loadOne` accepts what the server returns (a
 slug-resolving endpoint, say). The read-state codecs unwrap a handle
 before keying, so a caller holding `this.ctx.store` gets its store's real state
 rather than a silently empty envelope.
+
+**Removal outranks reads that predate it.** Removing a record by any path — an
+acknowledged server `delete()` or a local `destroy()` — records absence, and
+the entry is stamped with the read state's current dispatch sequence, the same
+monotonic counter D138 uses to order two loads of one identity. A read
+DISPATCHED BEFORE the removal that lands after it is discarded before any
+`_upsert` side effect: no absence clearing, no record allocation, no merge, no
+notify. It is describing a row the app has since removed, and the local removal
+is the newer fact. A read dispatched AFTER the removal is the app asking again,
+so it clears absence and merges exactly as before; a create at that identity
+clears it too. The wire format and the request itself are unchanged — this is
+local bookkeeping about which answer is newer, and it is what makes "the
+identity clears when it arrives again" true in the presence of a slow request
+in flight across the delete.
 
 **Loaded is not exhaustive.** A successful no-options collection load marks the
 type LOADED — the request has run, so a tracked `findMany` stops faulting it
@@ -246,7 +263,10 @@ every settle pass, trading a wrong answer for a request loop. Exhaustive
 implies loaded; the island envelope keeps `complete` meaning exhaustive and
 adds `loaded` beside it, so an older kernel reading a newer envelope is still
 right about every id — it merely re-loads the collection once for a type whose
-authored `loadMany` was never exhaustive.
+authored `loadMany` was never exhaustive. A type that is merely LOADED is read
+state like any other: the static transfer carries it on that strength alone,
+so a build that loaded a non-exhaustive collection does not make the page
+re-fetch it on arrival.
 
 **The settle window is a delivery contract, not just a coalescing trick.** A
 store notification landing while a run owns the window folds into it
@@ -264,6 +284,15 @@ sequence for that view is at or below the mark is already reflected in the
 committed model and is skipped. The mark is read before `data()` runs, so it can
 only be conservative — a change any other writer queues DURING the pass sorts
 above it and is delivered as usual.
+
+**Staleness governs both outcomes of a run.** The predicate that discards a
+superseded run's RESULT discards its FAILURE too. `PuzzleView.refresh` applies
+the same token/destroyed/leaving check on the rejection path that it applies on
+the fulfillment path, and the settle loop's rejection arm consults `isStale()`
+exactly as its success arm does. A failure belonging to work the runtime has
+already decided to throw away therefore reaches nothing: not the D145 funnel,
+not an `errorView` replacement, not the view's committed state. The app is told
+only about failures of the run that is actually on screen.
 
 **One/Many rename.** `store.loadAll` → `store.loadMany`, and the adapter verb
 key everywhere (model `static adapter`, `adapter.defaults()`, bound adapter).
