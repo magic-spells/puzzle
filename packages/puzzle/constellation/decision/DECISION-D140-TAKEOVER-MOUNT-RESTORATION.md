@@ -8,6 +8,20 @@ connections:
   - DOC-SPEC-BUILD
 verified_at: '2026-08-16T04:37:40.501Z'
 verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+notes:
+  - kind: state
+    text: >-
+      Unreproduced field report, 2026-09-02 (magicspells.io homepage, static mode): a non-routed
+      component's mounted() measured its own element as a 0×0 rect at 0,0 during the static
+      takeover, as if the subtree were still detached; the site worked around it with one-rAF
+      deferrals and ResizeObservers (reveal-boot.js, ConstellationField, AgencySection). Read
+      against the code 2026-09-05: static/index.js mounts into the real connected container by
+      contract ("mounted() hooks may focus or measure"), ssg/preload.js only runs preload()+render()
+      (no DOM), and viewManager mount() inserts each element into its parent BEFORE children mount
+      and before mounted() fires — so the ordering the report assumes does not exist at HEAD or in
+      v0.6.0. Not changed. If it recurs, get a minimal repro (which component, which page mode,
+      which framework version) before touching the mount path; a fonts/images-not-loaded or ancestor
+      display:none cause is as likely.
 ---
 
 A takeover mount no longer destroys the prerendered page it cannot replace: both

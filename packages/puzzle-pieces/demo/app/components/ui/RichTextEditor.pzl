@@ -272,7 +272,7 @@ export default class RichTextEditor extends PuzzleView {
 			stylePanelClass: STYLE_PANEL,
 			label: props.label,
 			labelId: `${this._fallbackId}-label`,
-			placeholder: props.placeholder,
+			placeholder: props.placeholder ?? null,
 			showPlaceholder: !!props.placeholder && empty,
 			disabled,
 			linkOpen: !!g.linkOpen,
