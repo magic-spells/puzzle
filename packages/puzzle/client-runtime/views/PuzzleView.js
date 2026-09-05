@@ -1125,7 +1125,13 @@ export class PuzzleView {
 		}
 
 		if (result && typeof result.then === 'function') {
-			return result.then((model) => this.#commit(token, model));
+			return result.then(
+				(model) => this.#commit(token, model),
+				(err) => {
+					if (token !== this.#runToken || this.#destroyed || this.#leaving) return;
+					throw err;
+				}
+			);
 		}
 		this.#commit(token, result);
 	}
@@ -1190,7 +1196,23 @@ export class PuzzleView {
 		// The held-eval channel: withTracking parks its success reconcile here instead
 		// of applying it, so the subscription swap lands with the commit (or is
 		// unwound by the discard) rather than at evaluation time.
-		const pending = {};
+		let decision;
+		let reconcile;
+		const pending = {
+			get reconcile() {
+				return (ok) => {
+					if (decision !== undefined) return;
+					decision = ok;
+					reconcile?.(ok);
+					reconcile = undefined;
+				};
+			},
+			set reconcile(callback) {
+				// A discard can precede evaluation's publication of its held lease.
+				if (decision !== undefined) callback?.(decision);
+				else reconcile = callback;
+			},
+		};
 
 		// Establish/retire #evalScope around EVERY invocation (withTracking may retry
 		// fn behind an in-flight async chain) and across the async tail.
