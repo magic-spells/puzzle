@@ -785,6 +785,58 @@ func TestWatchBuilderRebuildsImportedPublicAssetThroughSymlinkedRoot(t *testing.
 	}
 }
 
+func TestWatchBuilderAddsUsageThroughSymlinkedRoot(t *testing.T) {
+	real := writeDefinesFixture(t, definesFixture{})
+	link := filepath.Join(t.TempDir(), "app-root")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	t.Setenv("PUZZLE_RUNTIME", repoRoot(t))
+	b, err := NewWatchBuilder(link, WatchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial Rebuild: %v", err)
+	}
+	if b.defined != (plugin.Features{}) {
+		t.Fatalf("initial features = %+v, want all false", b.defined)
+	}
+
+	// A new, unimported template still contributes under the whole-project scan.
+	added := filepath.Join(real, "app", "views", "Extra.pzl")
+	write(t, added, `<puzzle-view>
+  <Portal><p>{ total | currency }</p></Portal>
+  <List><Snippet item>{ item }</Snippet></List>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import List from '../components/List.pzl';
+export default class Extra extends PuzzleView {}
+</script>
+`)
+	before := b.ctx
+	result, err := b.Rebuild([]string{filepath.Join(link, "app", "views", "Extra.pzl")})
+	if err != nil {
+		t.Fatalf("feature addition Rebuild: %v", err)
+	}
+	if !result.UsageScanned || !result.BundleBuilt {
+		t.Fatalf("feature addition metadata = %+v, want usage scan and bundle", result)
+	}
+	if b.ctx == before {
+		t.Error("feature addition kept the context with stale defines")
+	}
+	if want := (plugin.Features{Portal: true, Snippets: true}); b.defined != want {
+		t.Errorf("feature addition defines = %+v, want %+v", b.defined, want)
+	}
+	for _, marker := range []string{portalMarker, snippetsMarker} {
+		if !strings.Contains(readDistBundle(t, link), marker) {
+			t.Errorf("rebuilt bundle missing %q", marker)
+		}
+	}
+}
+
 // A project can start with no public tree and gain one mid-session; no changed
 // path touches a public directory in that batch, so the appearance itself is
 // what has to trigger the mirror.

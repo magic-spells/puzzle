@@ -7,13 +7,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/codegen"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 )
 
@@ -669,6 +672,54 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	for _, marker := range []string{snippetsMarker, snippetForwardingMarker} {
 		if !strings.Contains(snippetJS, marker) {
 			t.Errorf("bundle with <Snippet> should retain %q", marker)
+		}
+	}
+}
+
+func TestBuildUsageThroughSymlinkedRoot(t *testing.T) {
+	real := writeDefinesFixture(t, definesFixture{portal: true, snippets: true})
+	home := filepath.Join(real, "app", "views", "Home.pzl")
+	write(t, home, strings.ReplaceAll(readFile(t, home), "{ item.label }",
+		"{ item.label | upcase } { item.id | currency }")+"\n<style scoped>ul { color: red; }</style>\n")
+	link := filepath.Join(t.TempDir(), "app-root")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	// The link lives outside the checkout's runtime-discovery walk.
+	t.Setenv("PUZZLE_RUNTIME", repoRoot(t))
+	want := plugin.Usage{
+		HasPortal: true, HasSnippets: true,
+		Formatters: map[string]bool{"currency": true, "upcase": true},
+	}
+	var realDefines map[string]string
+	for _, root := range []string{real, link} {
+		pl := plugin.New(root)
+		usage, err := scanUsage(root, pl, nil)
+		if err != nil || !reflect.DeepEqual(usage, want) {
+			t.Errorf("root %q: usage = %+v, %v; want %+v", root, usage, err, want)
+		}
+		defines := bundleDefines(pl, bundleFlags{})
+		if defines["__PUZZLE_HAS_PORTAL__"] != "true" || defines["__PUZZLE_HAS_SNIPPETS__"] != "true" {
+			t.Errorf("root %q: feature defines = %v", root, defines)
+		}
+		if root == real {
+			realDefines = defines
+		} else if !reflect.DeepEqual(defines, realDefines) {
+			t.Errorf("symlinked defines = %v, real defines = %v", defines, realDefines)
+		}
+		if err := Build(root, Options{Development: false}); err != nil {
+			t.Fatalf("Build(%q): %v", root, err)
+		}
+		bundle := readFile(t, filepath.Join(root, "dist", "app.js"))
+		scopeAttr := "data-" + codegen.ScopeID("app/views/Home.pzl")
+		for _, marker := range []string{portalMarker, snippetsMarker, snippetForwardingMarker, scopeAttr} {
+			if !strings.Contains(bundle, marker) {
+				t.Errorf("root %q: production bundle missing %q", root, marker)
+			}
+		}
+		css := readFile(t, filepath.Join(root, "dist", "styles.css"))
+		if !strings.Contains(css, "@scope (["+scopeAttr+"])") {
+			t.Errorf("root %q: scoped CSS lost app-relative scope id: %s", root, css)
 		}
 	}
 }

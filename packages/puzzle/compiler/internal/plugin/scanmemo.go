@@ -81,7 +81,9 @@ func (s *UsageScanner) Scan(scanRoot string) (Usage, error) {
 	}
 
 	usage := Usage{Formatters: map[string]bool{}}
-	root := filepath.Clean(scanRoot)
+	// WalkDir does not follow a symlink at its root. Use the plugin's resolved
+	// spelling so real/link aliases share memo keys and app-relative names.
+	root := resolveSymlinks(filepath.Clean(scanRoot))
 	// Files seen this pass, so entries for deleted files are dropped rather than
 	// contributing their usage forever.
 	seen := make(map[string]bool, len(s.entries))
