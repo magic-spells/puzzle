@@ -1442,6 +1442,7 @@ class AdapterViewMethods {
 				},
 				(err) => {
 					channel.reconcile?.(false);
+					if (isStale()) return undefined;
 					throw err;
 				}
 			);
