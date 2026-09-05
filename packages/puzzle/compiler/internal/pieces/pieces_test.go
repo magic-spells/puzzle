@@ -938,6 +938,265 @@ func TestCycleSafeResolution(t *testing.T) {
 	}
 }
 
+// --- compound pieces (D167 component families) --------------------------------
+
+// compoundRegistry models a D167 family: one-class-per-file members plus an
+// index.js barrel, all under a directory named for the family. The directory in
+// `files` is the ONLY signal — there is no `family: true` manifest field.
+const compoundRegistry = `{
+  "version": 1,
+  "theme": "theme/pieces.css",
+  "pieces": [
+    {"name":"navigation-menu","description":"","files":["NavigationMenu/NavigationMenu.pzl","NavigationMenu/Item.pzl","NavigationMenu/Trigger.pzl","NavigationMenu/Content.pzl","NavigationMenu/Link.pzl","NavigationMenu/index.js"],"registryDependencies":[],"dependencies":["@magic-spells/dropdown-panel"],"targetDir":"app/components/ui"}
+  ]
+}`
+
+// compoundFiles is the family's content keyed by the path SUFFIX shared by the
+// registry path (ui/navigation-menu/<suffix>), the npm tarball path
+// (package/registry/ui/navigation-menu/<suffix>), and the app destination
+// (app/components/ui/<suffix>) — the whole point of a path-preserving copy.
+var compoundFiles = map[string]string{
+	"NavigationMenu/NavigationMenu.pzl": "ROOT\n",
+	"NavigationMenu/Item.pzl":           "ITEM\n",
+	"NavigationMenu/Trigger.pzl":        "TRIGGER\n",
+	"NavigationMenu/Content.pzl":        "CONTENT\n",
+	"NavigationMenu/Link.pzl":           "LINK\n",
+	"NavigationMenu/index.js":           "BARREL\n",
+}
+
+func compoundFixtures() []fixtureFile {
+	files := []fixtureFile{{"theme/pieces.css", "/* puzzle-pieces design tokens */\n"}}
+	for suffix, body := range compoundFiles {
+		files = append(files, fixtureFile{"ui/navigation-menu/" + suffix, body})
+	}
+	return files
+}
+
+// assertCompoundInstalled checks every member landed at its path-preserved
+// destination byte-for-byte, and that pieces.lock keys it by the same nested
+// app-root-relative slash path.
+func assertCompoundInstalled(t *testing.T, app string) {
+	t.Helper()
+	lock := readLockFile(t, app)
+	entry, ok := lock.Pieces["navigation-menu"]
+	if !ok {
+		t.Fatalf("lock missing navigation-menu entry: %+v", lock.Pieces)
+	}
+	if len(entry.Files) != len(compoundFiles) {
+		t.Errorf("lock records %d files, want %d: %+v", len(entry.Files), len(compoundFiles), entry.Files)
+	}
+	for suffix, body := range compoundFiles {
+		rel := "app/components/ui/" + suffix
+		got, err := os.ReadFile(filepath.Join(app, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Errorf("%s not written: %v", rel, err)
+			continue
+		}
+		if string(got) != body {
+			t.Errorf("%s = %q, want verbatim %q", rel, got, body)
+		}
+		if h := entry.Files[rel]; h != sha(body) {
+			t.Errorf("lock[%q] = %q, want %q", rel, h, sha(body))
+		}
+	}
+}
+
+// A compound piece's files carry a directory component, and the copy preserves
+// it: nothing is flattened to a basename, and the intermediate directory is
+// created.
+func TestAddCompoundPieceCopiesPathPreserving(t *testing.T) {
+	reg := buildRegistry(t, compoundRegistry, compoundFixtures()...)
+	app := newApp(t, true)
+
+	res, err := Add(Options{AppRoot: app, Names: []string{"navigation-menu"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	assertCompoundInstalled(t, app)
+
+	// Nothing landed flat next to the family directory.
+	if fileExists(filepath.Join(app, "app", "components", "ui", "Item.pzl")) {
+		t.Error("Item.pzl must not be flattened to the targetDir root")
+	}
+	// The summary counts the family's members as one unit, and its npm dep rides
+	// along like any other piece's.
+	out := render(res)
+	if !strings.Contains(out, "navigation-menu") || !strings.Contains(out, "6 files") {
+		t.Errorf("summary should report the family and its 6 files, got:\n%s", out)
+	}
+	if !strings.Contains(out, "@magic-spells/dropdown-panel") {
+		t.Errorf("summary should print the family's npm dep, got:\n%s", out)
+	}
+}
+
+// The npm tarball source reads package/registry/ui/<name>/<relative file>, so a
+// nested member resolves identically to the local-directory source.
+func TestAddCompoundPieceThroughNpmFetcher(t *testing.T) {
+	tarball := map[string]string{
+		"package/registry/registry.json":    compoundRegistry,
+		"package/registry/theme/pieces.css": "/* puzzle-pieces design tokens */\n",
+	}
+	for suffix, body := range compoundFiles {
+		tarball["package/registry/ui/navigation-menu/"+suffix] = body
+	}
+	srv := fakeNpm(t, map[string]map[string]string{"0.7.0": tarball})
+	defer srv.Close()
+
+	app := newApp(t, true)
+	if _, err := Add(Options{
+		AppRoot: app,
+		Names:   []string{"navigation-menu"},
+		Fetcher: newTestNpmFetcher(srv.URL, "0.7.0", ""),
+	}); err != nil {
+		t.Fatalf("Add through npm: %v", err)
+	}
+	assertCompoundInstalled(t, app)
+}
+
+// The overwrite pre-flight is per FILE and all-or-nothing: one existing nested
+// member blocks the whole family, and the refusal names its full app-relative
+// path, not just its basename.
+func TestAddCompoundPieceOverwritePreflightNamesNestedPath(t *testing.T) {
+	reg := buildRegistry(t, compoundRegistry, compoundFixtures()...)
+	app := newApp(t, true)
+
+	item := filepath.Join(app, "app", "components", "ui", "NavigationMenu", "Item.pzl")
+	if err := os.MkdirAll(filepath.Dir(item), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(item, []byte("LOCAL EDIT\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Add(Options{AppRoot: app, Names: []string{"navigation-menu"}, Fetcher: NewFetcher(reg)})
+	if err == nil {
+		t.Fatal("expected a refusal when a nested destination exists")
+	}
+	if !strings.Contains(err.Error(), "app/components/ui/NavigationMenu/Item.pzl") {
+		t.Errorf("refusal should name the full nested path, got: %v", err)
+	}
+	if got, _ := os.ReadFile(item); string(got) != "LOCAL EDIT\n" {
+		t.Errorf("conflicting nested file was modified: %q", got)
+	}
+	// All-or-nothing: no sibling member, no lock.
+	if fileExists(filepath.Join(app, "app", "components", "ui", "NavigationMenu", "Link.pzl")) {
+		t.Error("no sibling member should be written when the pre-flight refuses")
+	}
+	if fileExists(filepath.Join(app, LockFileName)) {
+		t.Error("pieces.lock should not be written on refusal")
+	}
+
+	// --overwrite replaces the customized member and installs the rest.
+	if _, err := Add(Options{AppRoot: app, Names: []string{"navigation-menu"}, Fetcher: NewFetcher(reg), Overwrite: true}); err != nil {
+		t.Fatalf("Add with --overwrite: %v", err)
+	}
+	assertCompoundInstalled(t, app)
+}
+
+// A compound piece composes with the rest of the resolver: it can pull a lib dep
+// and a sibling FLAT piece, and each still lands in its own place.
+func TestAddCompoundPieceWithLibAndFlatSibling(t *testing.T) {
+	regJSON := `{
+  "version": 1,
+  "theme": "theme/pieces.css",
+  "pieces": [
+    {"name":"navigation-menu","description":"","files":["NavigationMenu/NavigationMenu.pzl","NavigationMenu/index.js"],"registryDependencies":["button","lib/nav-math.js"],"dependencies":[],"targetDir":"app/components/ui"},
+    {"name":"button","description":"","files":["Button.pzl"],"registryDependencies":[],"dependencies":[],"targetDir":"app/components/ui"}
+  ]
+}`
+	reg := buildRegistry(t, regJSON,
+		fixtureFile{"ui/navigation-menu/NavigationMenu/NavigationMenu.pzl", "ROOT\n"},
+		fixtureFile{"ui/navigation-menu/NavigationMenu/index.js", "BARREL\n"},
+		fixtureFile{"ui/button/Button.pzl", "BUTTON\n"},
+		fixtureFile{"lib/nav-math.js", "NAVMATH\n"},
+		fixtureFile{"theme/pieces.css", "/* puzzle-pieces design tokens */\n"},
+	)
+	app := newApp(t, true)
+	if _, err := Add(Options{AppRoot: app, Names: []string{"navigation-menu"}, Fetcher: NewFetcher(reg)}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	lock := readLockFile(t, app)
+	for _, tc := range []struct{ unit, rel, body string }{
+		{"navigation-menu", "app/components/ui/NavigationMenu/NavigationMenu.pzl", "ROOT\n"},
+		{"navigation-menu", "app/components/ui/NavigationMenu/index.js", "BARREL\n"},
+		{"button", "app/components/ui/Button.pzl", "BUTTON\n"},
+		{"lib/nav-math.js", "app/lib/nav-math.js", "NAVMATH\n"},
+	} {
+		got, err := os.ReadFile(filepath.Join(app, filepath.FromSlash(tc.rel)))
+		if err != nil || string(got) != tc.body {
+			t.Errorf("%s = %q (err %v), want %q", tc.rel, got, err, tc.body)
+		}
+		if h := lock.Pieces[tc.unit].Files[tc.rel]; h != sha(tc.body) {
+			t.Errorf("lock[%s][%s] = %q, want %q", tc.unit, tc.rel, h, sha(tc.body))
+		}
+	}
+}
+
+// A `files` entry must be a CLEAN slash-separated relative path. A directory
+// component is legal (that is what makes a family installable), but anything the
+// copy would have to normalize — or that could escape targetDir — is refused by
+// name, before any write.
+func TestAddRejectsUnsanitizedFilePaths(t *testing.T) {
+	tests := []struct {
+		name   string
+		file   string
+		reason string
+	}{
+		{"parent segment", "../x.pzl", "parent-directory"},
+		{"absolute", "/abs.pzl", "absolute"},
+		{"leading dot slash", "./x.pzl", "'.' segments"},
+		{"backslash separator", `a\b.pzl`, "backslashes"},
+		{"doubled slash", "a//b.pzl", "empty path segments"},
+		{"trailing slash", "NavigationMenu/", "empty path segments"},
+		{"empty entry", "", "must not be empty"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := buildRegistry(t, pathRegistryJSON("app/components/ui", []string{tc.file}, nil))
+			app := newApp(t, true)
+			_, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+			if err == nil {
+				t.Fatalf("files entry %q should be rejected", tc.file)
+			}
+			for _, want := range []string{`piece "button"`, "files", tc.reason} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q should contain %q", err, want)
+				}
+			}
+			if fileExists(filepath.Join(app, LockFileName)) {
+				t.Error("an invalid files entry must not write pieces.lock")
+			}
+		})
+	}
+
+	// A clean nested path is the whole point of the rule set — it must not be
+	// caught by any of the checks above.
+	for _, ok := range []string{"NavigationMenu/Item.pzl", "NavigationMenu/index.js", "Button.pzl"} {
+		if err := validateManifestPath("navigation-menu", "files", ok); err != nil {
+			t.Errorf("clean entry %q should be accepted, got: %v", ok, err)
+		}
+	}
+}
+
+// A lib registryDependency gets the same cleanliness rules as a files entry.
+// (A backslash form like `lib\x.js` never reaches the check — it fails the
+// "lib/" prefix test and is read as a piece NAME, which is its own error.)
+func TestAddRejectsUnsanitizedLibDependency(t *testing.T) {
+	for _, dep := range []string{"lib/./x.js", "lib//x.js", "lib/"} {
+		reg := buildRegistry(t, pathRegistryJSON("app/components/ui", []string{"Button.pzl"}, []string{dep}))
+		app := newApp(t, true)
+		_, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+		if err == nil {
+			t.Errorf("registryDependency %q should be rejected", dep)
+			continue
+		}
+		if !strings.Contains(err.Error(), `piece "button"`) || !strings.Contains(err.Error(), "registryDependencies") {
+			t.Errorf("error for %q should name the piece and field, got: %v", dep, err)
+		}
+	}
+}
+
 // --- helpers ------------------------------------------------------------------
 
 func readLockFile(t *testing.T, app string) *Lock {

@@ -68,6 +68,12 @@ Rules that follow from this:
 ```
 
 - `files` — copied to `targetDir` (default `app/components/ui/`).
+- A `files` entry **may carry a directory** — that is how a compound piece (a D167 component
+  family: one-class-per-file members plus an `index.js` barrel, e.g.
+  `"NavigationMenu/Item.pzl"`, sourced from `registry/ui/<name>/NavigationMenu/…`) is
+  declared. The copy is **path-preserving** (`app/components/ui/NavigationMenu/Item.pzl`);
+  the directory is the only signal, there is no `family` field. Entries must be clean
+  relative slash paths — no `..`, no leading `./`, no backslashes, no doubled slashes.
 - `registryDependencies` — other registry files pulled in transitively: `lib/*.js` files go
   to `app/lib/`; sibling pieces (e.g. DatePicker → `calendar`) go to their own targetDir.
 - `dependencies` — **real npm packages, plain JS only.** `.pzl` never ships via npm, so it
@@ -264,6 +270,10 @@ with:
   file to its manifest `targetDir` (`app/components/ui/` for pieces, `app/lib/` for lib
   files). **Refuses to overwrite an existing target unless `--overwrite`** (all-or-nothing
   pre-flight). PRINTS — never auto-runs — npm installs for accumulated `dependencies`.
+- A `files` entry with a directory (a compound piece) is copied **path-preserving** under
+  `targetDir`, creating intermediate dirs; entries that aren't clean relative slash paths
+  are rejected by name before any write, and `pieces.lock` keys nested files by their full
+  app-relative path.
 - Theme is copied like a piece: `theme/pieces.css` is written verbatim to
   `app/styles/pieces.css` when the app has neither the tokens nor the file, and the
   one-line `@import './pieces.css';` wiring step is printed (styles.css is user-owned).
