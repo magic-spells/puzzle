@@ -12,6 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { prerender, prerenderToDir, injectStaticShell } from '../client-runtime/ssg/index.js';
 import { adapter } from '../client-runtime/datastore/adapter.js';
+import { hasReadState } from '../client-runtime/capabilities.js';
 import { Router } from '../client-runtime/router/router.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
@@ -1021,6 +1022,28 @@ const feedConfig = () => ({
 describe('static read-state island (D161)', () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
+	});
+
+	it('recognizes loaded-only read state and keeps an empty envelope empty', () => {
+		expect(hasReadState({ v: 1, complete: [], loaded: ['post'], absent: [] })).toBe(true);
+		expect(hasReadState({ v: 1, complete: [], loaded: [], absent: [] })).toBe(false);
+		expect(hasReadState(null)).toBe(false);
+	});
+
+	it('keeps static shell bytes unchanged when read state is empty or omitted', () => {
+		const shell = '<div id="app"></div>';
+		const page = { targetId: 'app', content: '<p>local</p>', slug: 'index', data: {} };
+		const expected =
+			'<div id="app" data-puzzle-static><p>local</p></div>' +
+			'<script type="application/json" data-puzzle-static-data>{}</script>' +
+			'<script type="module" src="/_puzzle/index.js"></script>';
+		expect(injectStaticShell(shell, page)).toBe(expected);
+		expect(
+			injectStaticShell(shell, {
+				...page,
+				readState: { v: 1, complete: [], loaded: [], absent: [] },
+			})
+		).toBe(expected);
 	});
 
 	it('settles tracked queries at build time and captures what the records cannot say', async () => {

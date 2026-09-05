@@ -241,7 +241,7 @@ function writeChainsFor(store) {
 // imports none of this file, so it must ship none of this state (D157).
 
 const readStateByStore = new WeakMap();
-// record → the highest read generation that has landed on it. Keyed by the
+// record → the highest read/removal generation that has landed on it. Keyed by the
 // record itself so the entry dies with it: no pruning, no serialization.
 const LOAD_GENERATIONS = new WeakMap();
 // Bounded so a page that walks user-supplied ids cannot grow the negative cache
@@ -256,7 +256,7 @@ function readStateFor(store) {
 		state = {
 			one: new Map(), // "type id" → in-flight single-record request
 			many: new Map(), // type → in-flight complete-collection request
-			absent: new Map(), // "type id" → true, insertion-ordered (LRU)
+			absent: new Map(), // "type id" → absence generation, insertion-ordered (LRU)
 			// Two facts, not one (D161). `loaded`: a no-options collection request
 			// finished, so a tracked findMany must not re-fault. `complete`: that
 			// response was EXHAUSTIVE, so a findOne miss is an authoritative "does
@@ -265,7 +265,7 @@ function readStateFor(store) {
 			// paginated first page is a perfectly good response. complete ⊆ loaded.
 			loaded: new Set(),
 			complete: new Set(),
-			seq: 0, // monotonic read-dispatch counter (see LOAD_GENERATIONS)
+			seq: 0, // monotonic read-dispatch/removal counter (see LOAD_GENERATIONS)
 		};
 		readStateByStore.set(store, state);
 	}
@@ -284,9 +284,9 @@ function identityKey(type, id) {
 	return typeof key === 'string' ? type + REC_SEP + key : null;
 }
 
-function markAbsent(state, key) {
+function markAbsent(state, key, gen = state.seq) {
 	state.absent.delete(key); // re-insert so the eviction order is true LRU
-	state.absent.set(key, true);
+	state.absent.set(key, gen);
 	if (state.absent.size > MAX_ABSENT) {
 		state.absent.delete(state.absent.keys().next().value);
 	}
@@ -294,7 +294,7 @@ function markAbsent(state, key) {
 
 function isAbsent(state, key) {
 	if (!state.absent.has(key)) return false;
-	markAbsent(state, key); // a consulted entry is a used entry
+	markAbsent(state, key, state.absent.get(key)); // touch without changing its generation
 	return true;
 }
 
@@ -363,7 +363,7 @@ export function hydrateReadState(handleOrStore, envelope) {
 	}
 	if (Array.isArray(envelope.absent)) {
 		for (const key of envelope.absent) {
-			if (typeof key === 'string' && key.includes(REC_SEP)) markAbsent(state, key);
+			if (typeof key === 'string' && key.includes(REC_SEP)) markAbsent(state, key, 0);
 		}
 	}
 	sweepAbsent(store);
@@ -429,7 +429,11 @@ class AdapterStoreMethods {
 
 	createRecord(type, data) {
 		const record = baseCreateRecord.call(this, type, data);
-		clearAbsent(this, type, record[this.modelFor(type).primaryKey()]);
+		const id = record[this.modelFor(type).primaryKey()];
+		const removedAt = readStateByStore.get(this)?.absent.get(identityKey(type, id));
+		// Preserve the removal's ordering when an explicit create clears absence.
+		if (removedAt !== undefined) LOAD_GENERATIONS.set(record, removedAt);
+		clearAbsent(this, type, id);
 		return record;
 	}
 
@@ -447,7 +451,10 @@ class AdapterStoreMethods {
 		// Key the identity BEFORE the base call — it detaches the record.
 		const key = identityKey(type, record[this.modelFor(type).primaryKey()]);
 		baseRemoveRecord.call(this, record);
-		if (key !== null) markAbsent(readStateFor(this), key);
+		if (key !== null) {
+			const state = readStateFor(this);
+			markAbsent(state, key, ++state.seq);
+		}
 	}
 
 	_hydrateAll(data, options) {
@@ -579,9 +586,9 @@ class AdapterStoreMethods {
 				);
 			}
 		}
-		const records = list.map((data) =>
-			this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])), gen)
-		);
+		const records = list
+			.map((data) => this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])), gen))
+			.filter((record) => record !== null);
 		// A no-options load is the whole collection as far as REQUESTING goes, so
 		// the tracked findMany stops faulting either way. It answers "is this
 		// identity absent?" for every id it omits only when the FRAMEWORK built the
@@ -655,6 +662,7 @@ class AdapterStoreMethods {
 			);
 		}
 		const record = this._upsert(type, data, revisionAtDispatch, gen);
+		if (record === null) return null; // removal superseded this read; keep absence intact
 		// _upsert clears the negative entry for the key the RESPONSE carried. On the
 		// permissive path those keys can differ, so clear the REQUESTED one too — a
 		// slug the server just resolved is not an absent identity. Redundant whenever
@@ -920,6 +928,10 @@ class AdapterStoreMethods {
 	_upsert(type, data, throughRevision, gen) {
 		const Model = this.modelFor(type);
 		const pk = Model.primaryKey();
+		if (gen !== undefined) {
+			const removedAt = readStateFor(this).absent.get(identityKey(type, data?.[pk]));
+			if (removedAt > gen) return null;
+		}
 		// The JSON hydration boundary for EVERY read path: loadOne/loadMany (and so
 		// D161's auto-fetch faults, which route through them), the public upsert(),
 		// and the static-island rehydrate all land here. Revive declared date()
