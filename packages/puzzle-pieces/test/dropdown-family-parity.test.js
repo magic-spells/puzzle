@@ -49,6 +49,33 @@ const FAMILIES = [
 			'index.js',
 		],
 	},
+	{
+		piece: 'dropdown-menu',
+		dir: 'DropdownMenu',
+		files: [
+			'DropdownMenu.pzl',
+			'Trigger.pzl',
+			'Content.pzl',
+			'Item.pzl',
+			'Link.pzl',
+			'Group.pzl',
+			'Label.pzl',
+			'Separator.pzl',
+			'Shortcut.pzl',
+			'Sub.pzl',
+			'index.js',
+		],
+	},
+	{
+		piece: 'context-menu',
+		dir: 'ContextMenu',
+		files: ['ContextMenu.pzl', 'Content.pzl', 'index.js'],
+	},
+	{
+		piece: 'split-button',
+		dir: 'SplitButton',
+		files: ['SplitButton.pzl', 'Action.pzl', 'Menu.pzl', 'index.js'],
+	},
 ];
 
 // Popconfirm is the one single-file piece in this batch: its panel is entirely

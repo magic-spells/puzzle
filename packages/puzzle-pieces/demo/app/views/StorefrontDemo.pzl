@@ -136,10 +136,14 @@
 
     <!-- Tabbed details -->
     <section class="mt-12">
-      <Tabs id="storeTabs" tabs={ detailTabs } value={ tab } @change={ setTab } />
+      <Tabs value={ tab } @change={ setTab }>
+        <Tabs.List>
+          {#for t in detailTabs}
+            <Tabs.Tab key={ t.value } value={ t.value }>{ t.label }</Tabs.Tab>
+          {/for}
+        </Tabs.List>
 
-      {#if tab === 'description'}
-        <div role="tabpanel" id="storeTabs-panel-description" aria-labelledby="storeTabs-tab-description" tabindex="0" class="pt-6">
+        <Tabs.Panel value="description" class="pt-6">
           <div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <div class="space-y-4 text-sm leading-relaxed text-body lg:col-span-2">
               <p>
@@ -177,15 +181,13 @@
               </Accordion>
             </div>
           </div>
-        </div>
-      {:else if tab === 'specs'}
-        <div role="tabpanel" id="storeTabs-panel-specs" aria-labelledby="storeTabs-tab-specs" tabindex="0" class="pt-6">
+        </Tabs.Panel>
+        <Tabs.Panel value="specs" class="pt-6">
           <div class="rounded-xl border border-border bg-surface p-6">
             <DescriptionList items={ specs } layout="inline" divider />
           </div>
-        </div>
-      {:else}
-        <div role="tabpanel" id="storeTabs-panel-reviews" aria-labelledby="storeTabs-tab-reviews" tabindex="0" class="pt-6">
+        </Tabs.Panel>
+        <Tabs.Panel value="reviews" class="pt-6">
           <div id="reviews" class="scroll-mt-20">
             <!-- Review summary -->
             <div class="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6 sm:flex-row sm:items-center sm:gap-8">
@@ -237,8 +239,8 @@
 
             <Pagination page={ reviewsPage } count={ reviewPages } @change={ setReviewsPage } class="mt-8 justify-center" />
           </div>
-        </div>
-      {/if}
+        </Tabs.Panel>
+      </Tabs>
     </section>
   </article>
 </puzzle-view>
@@ -254,7 +256,7 @@ import Badge from '../components/ui/Badge.pzl';
 import Select from '../components/ui/Select.pzl';
 import QuantityInput from '../components/ui/QuantityInput.pzl';
 import Button from '../components/ui/Button.pzl';
-import Tabs from '../components/ui/Tabs.pzl';
+import Tabs from '../components/ui/Tabs/index.js';
 import DescriptionList from '../components/ui/DescriptionList.pzl';
 import Accordion from '../components/ui/Accordion/index.js';
 import Pagination from '../components/ui/Pagination.pzl';

@@ -1,0 +1,216 @@
+<puzzle-view>
+  <split-panel-group
+    class={ rootClass }
+    style={ rootStyle }
+    direction={ direction }
+    snap={ snapAttr }
+    disabled={ disabled }
+    id={ id }><Children/></split-panel-group>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// SplitPanel — a resizable pane group. A FAMILY (D167) that WRAPS the
+// @magic-spells/split-panel web component, so the flex geometry, the pointer
+// and keyboard resizing, the min/max constraint folding, the snap points, the
+// localStorage persistence and the separator ARIA all live upstream.
+//
+//   import SplitPanel from '@/components/ui/SplitPanel';
+//
+//   <SplitPanel class="h-80" id="editor">
+//     <SplitPanel.Pane size={ 30 } min="180px">…sidebar…</SplitPanel.Pane>
+//     <SplitPanel.Divider/>
+//     <SplitPanel.Pane>…editor…</SplitPanel.Pane>
+//   </SplitPanel>
+//
+// BREAKING CHANGE in 0.7.0: the `first` / `second` named slots are gone. The
+// group takes any number of panes now, and every divider is AUTHORED.
+//
+// DIVIDERS ARE REQUIRED IN PIECE MARKUP. Upstream will generate a
+// <split-divider> for any adjacent pair that has none — but a generated divider
+// is a foreign node sitting BETWEEN keyed Puzzle siblings, and the patcher does
+// not know about it, so the next reorder moves or drops it. Authoring every
+// divider keeps Puzzle the owner of every child of the group. The root warns
+// once when the divider count is not panes − 1.
+//
+// SIZES ARE UNCONTROLLED BY DEFAULT, AND THAT IS THE RECOMMENDATION. Author
+// `size` on each Pane and give the group an `id` to persist committed sizes.
+// A live drag emits split-panel:resize on EVERY applied change; routing each
+// one through parent state and back is a full subtree re-render per frame that
+// fights the gesture. So @resize is ADVISORY — use it for a readout, never as
+// the source of `sizes` — and @resizeEnd is the commit hook.
+//
+// OPTIONAL CONTROLLED `sizes`. Passing it turns controlled mode on. It is
+// edge-triggered (shallow array compare) and applied with setSizes() under a
+// #syncing guard, because setSizes itself commits and dispatches
+// split-panel:resize-end — without the guard the piece would echo forever.
+//
+// NESTING. Both events bubble and are composed, so a nested group's events pass
+// straight through this element on their way up; the listeners drop anything
+// whose target is not this element.
+//
+// TOKEN BRIDGE. The component's stylesheet declares its divider colours as
+// custom properties with plain CSS defaults. The root maps them onto pieces.css
+// tokens inline — they are paint knobs, not layout, and a `style` on the host is
+// the only place they can be set without a <style> block.
+//
+// STYLESHEET. Required — the flex layout, the `--split-panel-size` binding and
+// the divider's gutter and hit target are all in it:
+//   @import "@magic-spells/split-panel/css" layer(components);
+//
+// The group fills its container, so give it (or a wrapper) an explicit height.
+//
+// TODO: switch to ^0.2.0 once published — this repo's demo pins the package by
+// file: path while 0.2.0 is unreleased. Consumers install ^0.2.0.
+//
+// Props
+//   direction   'horizontal' (default) | 'vertical'
+//   snap        true for the default 0/50/100 travel points, or a string /
+//               number array of 0–100 points; settles on pointer release
+//   disabled    locks every divider in the group
+//   id          persists committed sizes at split-panel:<id> in localStorage
+//   sizes       optional controlled percent shares, one per Pane
+//   class       merged onto <split-panel-group>
+//   @resize(sizes)     advisory, fires on every applied change during a gesture
+//   @resizeEnd(sizes)  the commit hook — release, keyboard step, or reset
+
+const ROOT = 'min-w-0 min-h-0';
+
+// pieces.css tokens for the paint knobs the component leaves open.
+const ROOT_STYLE = [
+  '--split-panel-divider-color: var(--color-border-strong)',
+  '--split-panel-divider-hover-color: var(--color-muted)',
+  '--split-panel-divider-active-color: var(--color-brand)',
+  '--split-panel-focus-ring-color: var(--color-ring)',
+].join('; ');
+
+export default class SplitPanel extends PuzzleView {
+  #live = false;
+  #syncing = false;
+  #controlled = false;
+  #warned = false;
+  #last;
+
+  #panes() {
+    if (!this.element) return [];
+    return [...this.element.querySelectorAll(':scope > split-panel')];
+  }
+
+  #dividers() {
+    if (!this.element) return [];
+    return [...this.element.querySelectorAll(':scope > split-divider')];
+  }
+
+  // A missing divider is generated upstream, and a generated node between keyed
+  // Puzzle siblings is exactly what the patcher cannot account for. Say so once.
+  #assertDividers() {
+    if (this.#warned) return;
+    const panes = this.#panes().length;
+    const dividers = this.#dividers().length;
+    if (panes === 0 || dividers === panes - 1) return;
+    this.#warned = true;
+    console.warn(
+      `[SplitPanel] ${panes} panes need ${Math.max(0, panes - 1)} SplitPanel.Divider ` +
+        `elements but found ${dividers}. Author every divider — upstream generates the ` +
+        'missing ones, and a generated node between keyed Puzzle children will be moved ' +
+        'or dropped on the next reorder.'
+    );
+  }
+
+  // setSizes() commits and dispatches split-panel:resize-end, so the guard is
+  // what stops the piece reporting a write it made and echoing forever.
+  #sync(sizes) {
+    if (!Array.isArray(sizes)) return;
+    const current = this.element.sizes;
+    if (Array.isArray(current) && same(round(sizes), round(current))) return;
+    this.#syncing = true;
+    try {
+      this.element.setSizes?.(sizes);
+    } finally {
+      this.#syncing = false;
+    }
+  }
+
+  #onResize = (event) => {
+    if (this.#syncing) return;
+    // bubbles + composed: a nested group's events pass through this element.
+    if (event.target !== this.element) return;
+    this.props.resize?.(event.detail?.sizes);
+  };
+
+  #onResizeEnd = (event) => {
+    if (this.#syncing) return;
+    if (event.target !== this.element) return;
+    // #last tracks props.sizes and nothing else — never a value we reported —
+    // so a parent that ignores @resizeEnd leaves no stale edge behind.
+    this.props.resizeEnd?.(event.detail?.sizes);
+  };
+
+  data(params, props) {
+    const snap = props.snap;
+    return {
+      rootClass: [ROOT, props.class].filter(Boolean).join(' '),
+      rootStyle: ROOT_STYLE,
+      direction: props.direction === 'vertical' ? 'vertical' : false,
+      // `false` is the compiler's omit sentinel; `true` renders a bare
+      // attribute, which is upstream's 0/50/100 default.
+      snapAttr: snap === true ? '' : Array.isArray(snap) ? snap.join(' ') : snap || false,
+      disabled: props.disabled ? true : false,
+      id: props.id || false,
+    };
+  }
+
+  mounted() {
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#controlled = this.props.sizes !== undefined;
+    this.#last = this.props.sizes;
+
+    // Bound before the upgrade: addEventListener works on an un-upgraded
+    // element, so no dispatch can be missed in the gap.
+    this.element.addEventListener('split-panel:resize', this.#onResize);
+    this.element.addEventListener('split-panel:resize-end', this.#onResizeEnd);
+
+    import('@magic-spells/split-panel')
+      .then(() => {
+        if (!this.#live) return;
+        this.#assertDividers();
+        if (this.#controlled) this.#sync(this.props.sizes);
+      })
+      .catch((error) => {
+        console.error(
+          '[SplitPanel] failed to load @magic-spells/split-panel — the panes will not resize.',
+          error
+        );
+      });
+  }
+
+  afterUpdate() {
+    if (!this.#live) return;
+    this.#assertDividers();
+    if (!this.#controlled) return;
+    const sizes = this.props.sizes;
+    // Edge-triggered: an unrelated re-render carrying the same array must not
+    // stomp a drag that is still settling.
+    if (same(sizes, this.#last)) return;
+    this.#last = sizes;
+    this.#sync(sizes);
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.element?.removeEventListener('split-panel:resize', this.#onResize);
+    this.element?.removeEventListener('split-panel:resize-end', this.#onResizeEnd);
+  }
+}
+
+function round(list) {
+  return list.map((value) => Math.round(Number(value) * 100) / 100);
+}
+
+function same(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return a === b;
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+</script>

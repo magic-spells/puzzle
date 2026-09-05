@@ -1,0 +1,83 @@
+<puzzle-view>
+  <a href={ href } data-value={ valueAttr } class={ rowClass } aria-disabled={ disabledAttr } @click={ onPress(event) }><Children/></a>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DropdownMenu.Link — a row that NAVIGATES. Item's twin, as a real <a>. A member
+// of the DropdownMenu family (D167); plain token-styled markup with no web
+// component underneath.
+//
+//   <DropdownMenu.Link href="/docs">Documentation</DropdownMenu.Link>
+//   <DropdownMenu.Link href="/help" @press={ track }>Help centre</DropdownMenu.Link>
+//
+// It is a separate member rather than an `href` prop on Item because a template
+// may declare only ONE children marker, so a two-branch <a>/<button> root cannot
+// compile. That constraint lands somewhere honest: a link is a link — middle
+// click, open in a new tab and "copy link address" all work, and screen readers
+// announce it as a link rather than a button.
+//
+// SPACE NAVIGATES, and that is menu mode's doing, not this file's. A plain <a>
+// ignores Space; inside a role="menu" the APG says it must activate, so the
+// component preventDefaults the scroll and click()s the link. The old port had a
+// Space branch that closed the menu WITHOUT navigating; deleting it was the
+// point of the rewrite, so do not reintroduce a keydown handler here.
+//
+// The component closes the chain for us on select, and skips the focus return
+// because the link takes focus with it. @press fires first and is a HOOK, not
+// the navigation — it cannot cancel the visit; use it for analytics.
+//
+// `disabled` on a link is aria-disabled (STRING form) plus the muted,
+// non-pressable treatment — there is no disabled attribute for an anchor — and
+// the press is swallowed. aria-disabled="true" is also how menu mode knows to
+// skip the row.
+//
+// Props
+//   href      the destination. The root's @select falls back to it when no `value`
+//             is given — upstream's precedence is data-value → value → href.
+//   value     rendered as data-value, so the root's @select reports it instead of
+//             the href
+//   variant   'default' | 'danger' — destructive tint
+//   disabled  greys the row out and swallows the press
+//   class     merged onto the row, after the chrome
+//   @press    (value) — a hook fired on activation, before navigation
+
+const ROW_BASE =
+  'flex w-full items-center gap-6 rounded-md px-2.5 py-1.5 text-sm cursor-pointer ' +
+  'no-underline transition-colors ' +
+  'aria-disabled:opacity-50 aria-disabled:pointer-events-none ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+const ROW_NORMAL = 'text-body hover:bg-surface-sunken hover:text-ink';
+const ROW_DANGER = 'text-danger hover:bg-danger-tint';
+
+export default class Link extends PuzzleView {
+  data(params, props) {
+    const disabled = !!props.disabled;
+
+    return {
+      href: props.href != null ? String(props.href) : '#',
+      valueAttr: props.value != null ? String(props.value) : false,
+      // aria-disabled takes the STRING form; false omits the attribute.
+      disabledAttr: disabled ? 'true' : false,
+      rowClass: [
+        ROW_BASE,
+        props.variant === 'danger' ? ROW_DANGER : ROW_NORMAL,
+        props.class,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+
+  events = {
+    onPress: (event) => {
+      if (this.props.disabled) {
+        event.preventDefault();
+        return;
+      }
+      this.props.press?.(this.props.value);
+    },
+  };
+}
+</script>

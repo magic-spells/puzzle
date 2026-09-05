@@ -1,0 +1,124 @@
+<puzzle-view>
+  <DropdownPanel
+    class={ rootClass }
+    menu={ true }
+    sub={ sub }
+    trigger={ triggerMode }
+    arrow={ arrowMode }
+    open={ openState }
+    effect={ effect }
+    @show={ onShow }
+    @hide={ onHide }
+    @select={ onSelect }><Children/></DropdownPanel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// DropdownMenu — a button that opens a real application menu. A FAMILY (D167)
+// composed over the shared DropdownPanel base, which wraps the
+// @magic-spells/dropdown-panel web component in MENU MODE:
+//
+//   import DropdownMenu from '@/components/ui/DropdownMenu';
+//
+//   <DropdownMenu @select={ onSelect }>
+//     <DropdownMenu.Trigger>Options</DropdownMenu.Trigger>
+//     <DropdownMenu.Content align="end">
+//       <DropdownMenu.Label>Account</DropdownMenu.Label>
+//       <DropdownMenu.Item value="profile" @press={ run }>
+//         Profile<DropdownMenu.Shortcut>⌘P</DropdownMenu.Shortcut>
+//       </DropdownMenu.Item>
+//       <DropdownMenu.Link href="/docs">Docs</DropdownMenu.Link>
+//       <DropdownMenu.Separator/>
+//       <DropdownMenu.Sub>
+//         <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+//         <DropdownMenu.Content opens="right">
+//           <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
+//         </DropdownMenu.Content>
+//       </DropdownMenu.Sub>
+//       <DropdownMenu.Item value="delete" variant="danger" @press={ run }>Delete</DropdownMenu.Item>
+//     </DropdownMenu.Content>
+//   </DropdownMenu>
+//
+// BREAKING CHANGE in 0.7.0: the `items[]` config array, the `label` /
+// `triggerClass` props and the slot="trigger" escape hatch are gone, along with
+// ~300 lines of ported machinery — roving tabindex, an outside-pointerdown
+// listener, the Arrow/Home/End switch, the id generators and every hand-authored
+// menu role. A nested config array is exactly the shape a compound family
+// replaces (DECISION-CONFIG-FIRST-API still governs flat leaf lists like
+// `options` and `steps`).
+//
+// ACCESSIBILITY — THIS ONE REALLY IS AN ARIA MENU, and that is the difference
+// from Menubar. Passing `menu` opts the component into application-menu
+// semantics, and it then OWNS them: role="menu" on the panel, role="menuitem"
+// on the rows, a roving tabindex with exactly one tab stop, ArrowUp/Down with
+// wrap, Home/End, typeahead, Enter/Space activation (Space clicks a link, which
+// Space alone would not follow), Tab to close, Escape one level at a time, and
+// ArrowRight/Left for submenus. Disabled rows, separators and labels are skipped
+// for free because they do not match its item selector. So: DO NOT author
+// role, tabindex, aria-haspopup, aria-expanded, aria-controls or
+// aria-activedescendant anywhere in this family. The one role the family writes
+// is Separator's role="separator", which is not a menu role.
+//
+// Requires @magic-spells/dropdown-panel >= 2.1.0 — menu mode is 2.1.0's.
+//
+// DIRECT-CHILDREN CONTRACT. Trigger, Content and Sub must be DIRECT children of
+// this component (it resolves them with a child selector). Do not wrap one in a
+// div, and do not put an {#if} or {#for} at that level around one — put the
+// condition inside the member, or branch the whole DropdownMenu. A {#for} INSIDE
+// a Content is fine; that is one level further down.
+//
+// Props
+//   trigger  'click' (default) | 'hover' | 'both'. A dropdown menu is a
+//            menu-BUTTON, not a hover menu — Menubar's 'both' is bar-specific.
+//   arrow    'none' (default) | 'flip' | 'static' — for a Trigger that carries
+//            the [data-dropdown-arrow] hook. Effects stylesheet only.
+//   open     optional-controlled and edge-triggered, forwarded to the base:
+//            leave it off and the component owns its own state.
+//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Effects sheet only.
+//   sub      internal — set by DropdownMenu.Sub so a nested root does not
+//            report @select twice. Do not pass it yourself.
+//   class    merged onto <dropdown-component>, after `inline-block relative`
+// Callbacks
+//   @show()                 this menu opened
+//   @hide()                 this menu closed
+//   @select(value, event)   a row was activated, anywhere in the chain —
+//            including inside a Sub, because a submenu choice closes the whole
+//            chain and focus returns to THIS trigger. Fires exactly once per
+//            activation. `value` is data-value, then value, then href, else
+//            null. Return false to cancel the close and keep the menu open.
+//
+// `relative` is load-bearing: the panel is absolutely positioned against this
+// host, and `inline-block` keeps the button-sized trigger from stretching.
+//
+// STYLESHEETS. Through DropdownPanel this piece needs the component's CSS in
+// your app's style entry:
+//   @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+//   @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */
+
+const ROOT = 'inline-block relative';
+
+export default class DropdownMenu extends PuzzleView {
+  data(params, props) {
+    return {
+      rootClass: [ROOT, props.class].filter(Boolean).join(' '),
+      // `false` is the compiler's omit sentinel — an unset prop renders no
+      // attribute, so the component's own default stands.
+      sub: props.sub ? true : false,
+      triggerMode: props.trigger || 'click',
+      arrowMode: props.arrow || 'none',
+      openState: props.open,
+      effect: props.effect,
+    };
+  }
+
+  events = {
+    onShow: () => this.props.show?.(),
+    onHide: () => this.props.hide?.(),
+    // Returning the handler's own result is what lets a consumer cancel the
+    // close by returning false — the base turns that into preventDefault().
+    onSelect: (value, event) => this.props.select?.(value, event),
+  };
+}
+</script>

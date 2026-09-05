@@ -4,99 +4,81 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Panel Stack</h1>
         <p class="mt-2 text-body">
-          Controlled nested-panel navigation for mobile menus, settings drill-downs, and
-          wizards. The parent owns the stack and keeps every panel mounted while the piece
-          coordinates delegated actions, motion, Escape, and focus restoration.
+          Nested-panel navigation — drill-down menus, settings flows, multi-step wizards. It is a
+          compound <strong class="font-medium text-ink">family</strong> that wraps the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/panel-stack</code>
+          web component, so the stack itself, the push and pop transitions, the inert handling,
+          focus restoration, the declarative triggers and the Escape composition all come from the
+          component rather than from a hand-rolled copy in this file.
         </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The root-first
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">stack</code>
+            array is gone, replaced by a single
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">current</code>
+            handle, and panels are real members. The
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">lib/panel-stack.js</code>
+            helpers —
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">panelClass()</code>
+            and
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">panelInert()</code>,
+            which you had to call on every parent-authored panel — are deleted outright. The
+            component's own per-state custom properties own all of it.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <div class="h-[360px] w-full max-w-sm rounded-2xl border border-border bg-surface shadow-lg">
-          <PanelStack stack={ menuStack } @change={ setMenuStack }>
-            <div
-              data-stack-panel="menu-root"
-              role="group"
-              aria-label="Main menu"
-              class="{ panelClasses(menuStack, 'menu-root') } bg-surface p-6"
-              inert={ panelIsInert(menuStack, 'menu-root') }>
-              <p class="text-xs font-medium uppercase tracking-wide text-muted">Store</p>
-              <h2 class="mt-1 text-xl font-semibold text-ink">Browse</h2>
-              <p class="mt-1 text-sm text-body">Move through a three-level menu without unmounting a panel.</p>
-              <div class="mt-6 space-y-2">
-                <button
-                  type="button"
-                  data-action-stack-push
-                  target="menu-shop"
-                  class="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken px-4 py-3 text-left text-sm font-medium text-ink transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring">
-                  Shop
-                  <span aria-hidden="true" class="text-muted">→</span>
-                </button>
-                <div class="rounded-lg border border-border px-4 py-3 text-sm text-muted">Orders</div>
-                <div class="rounded-lg border border-border px-4 py-3 text-sm text-muted">Account</div>
+        <div class="h-80 w-full max-w-sm overflow-hidden rounded-xl border border-border">
+          <PanelStack class="h-full">
+            <PanelStack.Panel handle="root" class="p-4">
+              <p class="mb-3 text-sm font-medium text-ink">Settings</p>
+              <div class="flex flex-col gap-1">
+                {#for row in menu}
+                  <button
+                    key={ row.handle }
+                    type="button"
+                    data-action-stack-push
+                    target={ row.handle }
+                    class={ rowClass }>
+                    <span>{ row.label }</span>
+                    <span class="text-muted">→</span>
+                  </button>
+                {/for}
               </div>
-            </div>
+            </PanelStack.Panel>
 
-            <div
-              data-stack-panel="menu-shop"
-              role="group"
-              aria-label="Shop menu"
-              class="{ panelClasses(menuStack, 'menu-shop') } bg-surface p-6"
-              inert={ panelIsInert(menuStack, 'menu-shop') }>
-              <button
-                type="button"
-                data-action-stack-pop
-                data-stack-focus
-                class="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-body transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring">
-                <span aria-hidden="true">←</span>
-                Back
-              </button>
-              <h2 class="mt-5 text-xl font-semibold text-ink">Shop</h2>
-              <p class="mt-1 text-sm text-body">Choose where to go next.</p>
-              <button
-                type="button"
-                data-action-stack-push
-                target="menu-categories"
-                class="mt-6 flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken px-4 py-3 text-left text-sm font-medium text-ink transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring">
-                Categories
-                <span aria-hidden="true" class="text-muted">→</span>
-              </button>
-            </div>
-
-            <div
-              data-stack-panel="menu-categories"
-              role="group"
-              aria-label="Categories menu"
-              class="{ panelClasses(menuStack, 'menu-categories') } bg-surface p-6"
-              inert={ panelIsInert(menuStack, 'menu-categories') }>
-              <button
-                type="button"
-                data-action-stack-pop
-                data-stack-focus
-                class="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-body transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring">
-                <span aria-hidden="true">←</span>
-                Back
-              </button>
-              <h2 class="mt-5 text-xl font-semibold text-ink">Categories</h2>
-              <div class="mt-5 grid grid-cols-2 gap-2 text-sm text-body">
-                <div class="rounded-lg bg-surface-sunken p-3">Furniture</div>
-                <div class="rounded-lg bg-surface-sunken p-3">Lighting</div>
-                <div class="rounded-lg bg-surface-sunken p-3">Textiles</div>
-                <div class="rounded-lg bg-surface-sunken p-3">Objects</div>
-              </div>
-            </div>
+            {#for row in menu}
+              <PanelStack.Panel key={ row.handle } handle={ row.handle } class="p-4">
+                <button type="button" data-action-stack-pop class={ backClass }>← Back</button>
+                <p class="mt-3 text-sm font-medium text-ink">{ row.label }</p>
+                <p class="mt-1 text-sm text-body">{ row.body }</p>
+              </PanelStack.Panel>
+            {/for}
           </PanelStack>
         </div>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
-        <p class="mb-3 text-sm text-body">
-          Copy the component and its state/class helper into your app:
-        </p>
+        <p class="mb-3 text-sm text-body">Copy the family into your app:</p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          It has one runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheet into your app's style entry. It is required: the absolute panel
+          positioning, the per-state transform and filter properties, the stack effect's inner
+          shadow, the reduced-motion opt-out and the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">:not(:defined)</code>
+          anti-flash guard are all in it.
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
-          Panels use transforms, so the stack and its panels cannot be morph roots.
         </p>
       </section>
 
@@ -104,102 +86,124 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          The stack fills its parent, so give it — or a wrapper — an explicit size. The
+          <strong class="font-medium text-ink">first</strong> panel is the root of the stack; an
+          authored <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">current</code>
+          naming a different one seeds the stack as [root, current] silently, so Back and Escape
+          still work.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="stack-effect" title="Stack effect" code={ codeStack }>
-          <div class="h-[340px] w-full max-w-sm rounded-2xl border border-border bg-surface-sunken shadow-lg">
-            <PanelStack stack={ settingsStack } effect="stack" @change={ setSettingsStack }>
-              <div
-                data-stack-panel="settings-root"
-                role="group"
-                aria-label="Settings"
-                class="{ panelClasses(settingsStack, 'settings-root', 'stack') } bg-surface p-6"
-                inert={ panelIsInert(settingsStack, 'settings-root') }>
-                <p class="text-xs font-medium uppercase tracking-wide text-muted">Workspace</p>
-                <h2 class="mt-1 text-xl font-semibold text-ink">Settings</h2>
-                <button
-                  type="button"
-                  data-action-stack-push
-                  target="settings-appearance"
-                  class="mt-6 flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken px-4 py-3 text-left text-sm font-medium text-ink transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring">
-                  Appearance
-                  <span aria-hidden="true" class="text-muted">→</span>
-                </button>
-              </div>
+        <ExampleBox id="triggers" title="Declarative triggers" code={ codeTriggers }>
+          <p class="mb-4 max-w-2xl text-sm text-body">
+            The push and pop buttons are the component's own markup contract, handled by a
+            delegated click listener. The piece adds nothing, and
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">pop()</code>
+            restores focus to the trigger that opened the panel it is leaving.
+          </p>
+          <CodeBlock code={ codeTriggerMarkup }/>
+        </ExampleBox>
 
-              <div
-                data-stack-panel="settings-appearance"
-                role="group"
-                aria-label="Appearance settings"
-                class="{ panelClasses(settingsStack, 'settings-appearance', 'stack') } bg-surface p-6"
-                inert={ panelIsInert(settingsStack, 'settings-appearance') }>
-                <button
-                  type="button"
-                  data-action-stack-pop
-                  data-stack-focus
-                  class="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-body transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring">
-                  <span aria-hidden="true">←</span>
-                  Back
+        <ExampleBox id="controlled" title="Controlled current" code={ codeControlled }>
+          <div class="flex w-full max-w-2xl flex-col gap-4">
+            <div class="h-72 w-full max-w-sm overflow-hidden rounded-xl border border-border">
+              <PanelStack class="h-full" current={ current } @change={ onChange }>
+                <PanelStack.Panel handle="root" class="p-4">
+                  <p class="text-sm font-medium text-ink">Root</p>
+                  <button type="button" data-action-stack-push target="details" class={ rowClass }>
+                    <span>Details</span><span class="text-muted">→</span>
+                  </button>
+                </PanelStack.Panel>
+                <PanelStack.Panel handle="details" class="p-4">
+                  <button type="button" data-action-stack-pop class={ backClass }>← Back</button>
+                  <p class="mt-3 text-sm font-medium text-ink">Details</p>
+                  <button type="button" data-action-stack-push target="more" class={ rowClass }>
+                    <span>Deeper</span><span class="text-muted">→</span>
+                  </button>
+                </PanelStack.Panel>
+                <PanelStack.Panel handle="more" class="p-4">
+                  <button type="button" data-action-stack-pop class={ backClass }>← Back</button>
+                  <p class="mt-3 text-sm font-medium text-ink">Deeper still</p>
+                </PanelStack.Panel>
+              </PanelStack>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              {#for row in controls}
+                <Button key={ row.handle } variant="outline" size="sm" @press={ goTo(row.handle) }>
+                  { row.label }
+                </Button>
+              {/for}
+              <span class="text-sm text-muted">current = { current } · { changeCount } changes</span>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="effect" title="Stack effect" code={ codeEffect }>
+          <div class="h-72 w-full max-w-sm overflow-hidden rounded-xl border border-border">
+            <PanelStack effect="stack" class="h-full">
+              <PanelStack.Panel handle="root" class="p-4">
+                <p class="text-sm font-medium text-ink">Library</p>
+                <button type="button" data-action-stack-push target="album" class={ rowClass }>
+                  <span>Aurora — Nightfall</span><span class="text-muted">→</span>
                 </button>
-                <h2 class="mt-5 text-xl font-semibold text-ink">Appearance</h2>
-                <p class="mt-1 text-sm text-body">The previous panel stays dimmed behind this one during motion.</p>
-                <div class="mt-6 rounded-lg border border-border bg-surface-sunken p-4 text-sm text-body">
-                  Theme follows your system setting.
-                </div>
-              </div>
+              </PanelStack.Panel>
+              <PanelStack.Panel handle="album" class="p-4">
+                <button type="button" data-action-stack-pop class={ backClass }>← Back</button>
+                <p class="mt-3 text-sm font-medium text-ink">Nightfall</p>
+                <p class="mt-1 text-sm text-body">
+                  The previous panel shrinks and darkens behind this one instead of sliding off.
+                </p>
+              </PanelStack.Panel>
             </PanelStack>
           </div>
         </ExampleBox>
 
-        <ExampleBox id="dialog" title="Inside a dialog" code={ codeDialog }>
-          <Button variant="outline" @press={ openPanelDialog }>Open preferences</Button>
-          <Dialog
-            open={ panelDialogOpen }
-            title="Preferences"
-            description="Drill in and use Escape to step back before closing the dialog."
-            @hide={ closePanelDialog }>
-            <div class="h-[300px] w-full rounded-xl border border-border bg-surface">
-              <PanelStack stack={ dialogStack } @change={ setDialogStack }>
-                <div
-                  data-stack-panel="dialog-root"
-                  role="group"
-                  aria-label="Preference categories"
-                  class="{ panelClasses(dialogStack, 'dialog-root') } bg-surface p-5"
-                  inert={ panelIsInert(dialogStack, 'dialog-root') }>
-                  <p class="text-sm text-body">At this root, Escape bubbles to the dialog and closes it.</p>
-                  <button
-                    type="button"
-                    data-action-stack-push
-                    target="dialog-notifications"
-                    class="mt-5 flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken px-4 py-3 text-left text-sm font-medium text-ink transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring">
-                    Notifications
-                    <span aria-hidden="true" class="text-muted">→</span>
-                  </button>
-                </div>
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
 
-                <div
-                  data-stack-panel="dialog-notifications"
-                  role="group"
-                  aria-label="Notification preferences"
-                  class="{ panelClasses(dialogStack, 'dialog-notifications') } bg-surface p-5"
-                  inert={ panelIsInert(dialogStack, 'dialog-notifications') }>
-                  <button
-                    type="button"
-                    data-action-stack-pop
-                    data-stack-focus
-                    class="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-body transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring">
-                    <span aria-hidden="true">←</span>
-                    Back
-                  </button>
-                  <h3 class="mt-5 text-lg font-semibold text-ink">Notifications</h3>
-                  <p class="mt-1 text-sm text-body">Here, Escape pops to Preferences and keeps the dialog open.</p>
-                </div>
-              </PanelStack>
-            </div>
-            <Button slot="footer" variant="ghost" @press={ closePanelDialog }>Close</Button>
-          </Dialog>
-        </ExampleBox>
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">PanelStack</h3>
+          <div class="text-sm">
+            {#for row in rootRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-48 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">PanelStack.Panel</h3>
+          <div class="text-sm">
+            {#for row in panelRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-48 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Markup contract</h3>
+          <div class="text-sm">
+            {#for row in markupRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-48 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <p class="mt-6 text-sm text-body">
+            Setting
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">current</code>
+            is resolved against the stack: the same handle is a no-op, the root resets, a handle
+            already in the ancestry pops one level at a time, and anything else pushes. An unknown
+            handle is ignored. A cancelled push — <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">preventDefault()</code>
+            on <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@push</code>
+            — is restored by the component; the piece never reverts anything itself. Panels are
+            positioned with transforms, so neither the root nor a panel may be a morph root.
+          </p>
+        </section>
       </div>
     </article>
 
@@ -209,119 +213,158 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import PanelStack from '@/components/ui/PanelStack.pzl';
+import PanelStack from '@/components/ui/PanelStack/index.js';
 import Button from '@/components/ui/Button.pzl';
-import Dialog from '@/components/ui/Dialog.pzl';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
-import { panelClass, panelInert } from '@/lib/panel-stack.js';
 
+// Docs page for the PanelStack family. Code samples live as template-literal
+// consts because literal tag names and {#…} tokens would be parsed as template
+// syntax in prose.
 const installCmd = 'puzzle add piece panel-stack';
-const usageImport = `import PanelStack from '@/components/ui/PanelStack.pzl';`;
-const usageMarkup = `<PanelStack stack={ stack } @change={ setStack }></PanelStack>`;
+// TODO: switch to ^0.2.0 once published — the demo pins the package by file:
+// path while 0.2.0 is unreleased. Consumers install the published range.
+const installDep = 'npm install @magic-spells/panel-stack@^0.2.0';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/panel-stack/css" layer(components); /* required */`;
 
-const codeHero = `import PanelStack from '@/components/ui/PanelStack.pzl';
-import { panelClass, panelInert } from '@/lib/panel-stack.js';
+const usageImport = `import PanelStack from '@/components/ui/PanelStack';`;
 
-<div class="h-[360px] rounded-2xl">
-  <PanelStack stack={ stack } @change={ setStack }>
-    <div data-stack-panel="root" role="group"
-         class="{ panelClass(stack, 'root') } bg-surface p-6"
-         inert={ panelInert(stack, 'root') }>
-      <button data-action-stack-push target="shop">Shop</button>
-    </div>
-
-    <div data-stack-panel="shop" role="group"
-         class="{ panelClass(stack, 'shop') } bg-surface p-6"
-         inert={ panelInert(stack, 'shop') }>
-      <button data-action-stack-pop data-stack-focus>Back</button>
-      <button data-action-stack-push target="categories">Categories</button>
-    </div>
-
-    <div data-stack-panel="categories" role="group"
-         class="{ panelClass(stack, 'categories') } bg-surface p-6"
-         inert={ panelInert(stack, 'categories') }>
-      <button data-action-stack-pop data-stack-focus>Back</button>
-    </div>
-  </PanelStack>
-</div>
-
-// The parent owns the array; declining to set it cancels a transition.
-created() { this.setData({ stack: ['root'] }); }
-events = { setStack: (nextStack) => this.setData('stack', nextStack) };`;
-
-const codeStack = `<PanelStack stack={ stack } effect="stack" @change={ setStack }>
-  <div data-stack-panel="root"
-       class="{ panelClass(stack, 'root', 'stack') } bg-surface"
-       inert={ panelInert(stack, 'root') }>
-    <button data-action-stack-push target="appearance">Appearance</button>
-  </div>
-  <div data-stack-panel="appearance"
-       class="{ panelClass(stack, 'appearance', 'stack') } bg-surface"
-       inert={ panelInert(stack, 'appearance') }>
-    <button data-action-stack-pop data-stack-focus>Back</button>
-  </div>
+const usageMarkup = `<PanelStack class="h-80" current={ panel } @change={ setPanel }>
+  <PanelStack.Panel handle="root">
+    <button data-action-stack-push target="shop">Shop</button>
+  </PanelStack.Panel>
+  <PanelStack.Panel handle="shop">
+    <button data-action-stack-pop>Back</button>
+  </PanelStack.Panel>
 </PanelStack>`;
 
-const codeDialog = `<Dialog open={ open } title="Preferences" @hide={ closeDialog }>
-  <div class="h-[300px] rounded-xl">
-    <PanelStack stack={ stack } @change={ setStack }>
-      <div data-stack-panel="root"
-           class="{ panelClass(stack, 'root') } bg-surface"
-           inert={ panelInert(stack, 'root') }>
-        <button data-action-stack-push target="notifications">Notifications</button>
-      </div>
-      <div data-stack-panel="notifications"
-           class="{ panelClass(stack, 'notifications') } bg-surface"
-           inert={ panelInert(stack, 'notifications') }>
-        <button data-action-stack-pop data-stack-focus>Back</button>
-      </div>
-    </PanelStack>
-  </div>
-</Dialog>
+const codeHero = `// Uncontrolled: the component owns the stack and the triggers drive
+// it. Every panel is a member; the first one is the root.
+<PanelStack class="h-full">
+  <PanelStack.Panel handle="root" class="p-4">
+    <button data-action-stack-push target="account">Account →</button>
+  </PanelStack.Panel>
+  <PanelStack.Panel handle="account" class="p-4">
+    <button data-action-stack-pop>← Back</button>
+  </PanelStack.Panel>
+</PanelStack>`;
 
-// Escape pops while depth > 1. At root it bubbles and closes the Dialog.`;
+const codeTriggers = `// Nothing to wire — the component's delegated click listener owns
+// both. pop() restores focus to the trigger that opened the panel
+// it is leaving, so keyboard users land back where they were.`;
+
+const codeTriggerMarkup = `<button data-action-stack-push target="shop">Open shop</button>
+<button data-action-stack-pop>Back</button>
+
+<!-- optional: send focus somewhere specific on entry -->
+<input data-stack-focus type="search" placeholder="Search"/>`;
+
+const codeControlled = `// Controlled and EDGE-triggered: only a change to \`current\` acts,
+// and it is applied imperatively. \`current\` is NEVER bound in the
+// template — the component reflects that attribute as its own state,
+// so a binding would fight the patcher every render. The piece renders
+// it once as a frozen seed and drives everything after that through
+// element.current under a syncing guard.
+<PanelStack current={ panel } @change={ setPanel }>…</PanelStack>
+
+// setPanel: (handle) => this.setData('panel', handle)`;
+
+const codeEffect = `<PanelStack effect="stack">…</PanelStack>`;
+
+const rootRows = [
+  { name: 'current', desc: 'Controlled: the handle that should be showing. Resolved against the stack — root resets, an ancestor pops per level, anything else pushes.' },
+  { name: 'defaultCurrent', desc: 'Uncontrolled seed, frozen into the attribute once. Seeds the stack as [root, current] so Back still works.' },
+  { name: 'effect', desc: "'slide' (default) | 'stack'." },
+  { name: 'class', desc: 'Merged onto the panel-stack host. Give it a size — the stack fills its parent.' },
+  { name: '@change(handle)', desc: 'Value-first, once per transition, derived from all three upstream events. A nested stack is filtered out by target.' },
+  { name: '@push(detail)', desc: 'Raw { fromHandle, toHandle }. Cancelable — preventDefault() blocks the push and the component restores itself.' },
+  { name: '@pop(detail)', desc: 'Raw { fromHandle, toHandle }.' },
+  { name: '@reset(detail)', desc: 'Raw { rootHandle }, when the stack collapses back to the root.' },
+];
+
+const panelRows = [
+  { name: 'handle', desc: 'Required; the identifier this panel is pushed and popped by. The first Panel is the root.' },
+  { name: 'class', desc: 'Merged onto stack-panel, after the background. Never write state, inert or aria-hidden — the component owns them.' },
+];
+
+const markupRows = [
+  { name: 'data-action-stack-push', desc: 'On any element inside the stack, with target="<handle>". Pushes that panel and remembers the trigger.' },
+  { name: 'data-action-stack-pop', desc: 'Pops one level and returns focus to the remembered trigger.' },
+  { name: 'data-stack-focus', desc: 'Marks the element a panel should focus on entry; otherwise its first focusable child.' },
+  { name: 'Escape', desc: 'Pops one level at depth > 1. At the root it bubbles untouched so a wrapping Dialog closes normally.' },
+];
+
+const MENU = [
+  { handle: 'account', label: 'Account', body: 'Your name, email and the address on file.' },
+  { handle: 'notifications', label: 'Notifications', body: 'What we email you about, and how often.' },
+  { handle: 'privacy', label: 'Privacy', body: 'Who can see your activity and what we keep.' },
+];
+
+const CONTROLS = [
+  { handle: 'root', label: 'Root' },
+  { handle: 'details', label: 'Details' },
+  { handle: 'more', label: 'Deeper' },
+];
+
+const ROW =
+  'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm ' +
+  'text-body transition-colors hover:bg-surface-sunken hover:text-ink outline-ring ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2';
+
+const BACK =
+  'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-body transition-colors ' +
+  'hover:bg-surface-sunken hover:text-ink outline-ring focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2';
 
 export default class PanelStackDoc extends PuzzleView {
   created() {
-    this.setData({
-      menuStack: ['menu-root'],
-      settingsStack: ['settings-root'],
-      panelDialogOpen: false,
-      dialogStack: ['dialog-root'],
-    });
+    this.setData({ current: 'root', changeCount: 0 });
   }
 
-  data(params, props) {
+  data() {
+    const state = this.getData();
     return {
-      ...this.getData(),
+      menu: MENU,
+      controls: CONTROLS,
+      rowClass: ROW,
+      backClass: BACK,
+      current: state.current,
+      changeCount: state.changeCount,
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
-      codeStack,
-      codeDialog,
-      panelClasses: panelClass,
-      panelIsInert: panelInert,
+      codeTriggers,
+      codeTriggerMarkup,
+      codeControlled,
+      codeEffect,
+      rootRows,
+      panelRows,
+      markupRows,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Stack effect', href: '#stack-effect' },
-        { label: 'Inside a dialog', href: '#dialog' },
+        { label: 'Declarative triggers', href: '#triggers' },
+        { label: 'Controlled current', href: '#controlled' },
+        { label: 'Stack effect', href: '#effect' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
-    setMenuStack: (nextStack) => this.setData('menuStack', nextStack),
-    setSettingsStack: (nextStack) => this.setData('settingsStack', nextStack),
-    setDialogStack: (nextStack) => this.setData('dialogStack', nextStack),
-    openPanelDialog: () => {
-      this.setData({ panelDialogOpen: true, dialogStack: ['dialog-root'] });
+    goTo: (handle) => {
+      this.setData('current', handle);
+      this.refresh();
     },
-    closePanelDialog: () => {
-      this.setData({ panelDialogOpen: false, dialogStack: ['dialog-root'] });
+    onChange: (handle) => {
+      this.setData({ current: handle, changeCount: this.getData().changeCount + 1 });
+      this.refresh();
     },
   };
 }

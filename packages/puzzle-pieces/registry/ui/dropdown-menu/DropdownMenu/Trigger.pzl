@@ -1,0 +1,81 @@
+<puzzle-view>
+  <DropdownPanel.Trigger class={ triggerClass }><Children>{ label }<span data-dropdown-arrow aria-hidden="true"></span></Children></DropdownPanel.Trigger>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// DropdownMenu.Trigger — the control that opens the menu, and the row that opens
+// a submenu. A member of the DropdownMenu family (D167); it composes
+// DropdownPanel.Trigger and adds the chrome, so it renders <dropdown-trigger> as
+// its single root with no wrapper — the direct-children contract holds.
+//
+//   <DropdownMenu.Trigger>Options</DropdownMenu.Trigger>
+//   <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+//   <DropdownMenu.Trigger variant="bare" class="p-1.5" label="Actions">
+//     <svg …/>
+//   </DropdownMenu.Trigger>
+//
+// FALLBACK BODY (D141). The paired <Children> below is the stock chrome: the `label`
+// text plus the [data-dropdown-arrow] hook the effects stylesheet draws a
+// chevron into. Put content between the tags and it REPLACES all of that — the
+// label prop then powers nothing, so a custom trigger must carry its own
+// accessible name (an <svg> plus an .sr-only span, or aria-label on this tag's
+// class-side markup). There is no is-slot-filled probe and none is needed:
+// filling the slot IS the opt-in.
+//
+// The arrow hook is closed tight with no whitespace, because the stylesheet's
+// `:empty` test is literal — a space inside it is content and the glyph never
+// draws. It is decorative, so aria-hidden takes the string form.
+//
+// DO NOT AUTHOR ROLE, TABINDEX OR ARIA-*. In menu mode the component writes
+// role="menuitem" on a nested submenu trigger, aria-haspopup="menu",
+// aria-expanded and the roving tabindex, and overwrites anything you put there.
+// Keep the content NON-INTERACTIVE — this element IS the control, and a button
+// inside a button is not a thing.
+//
+// To style the open state, target the host the component owns —
+// `dropdown-component[visible] > dropdown-trigger` in your app CSS. `visible` is
+// the component's own state and must never be bound from a template.
+//
+// Props
+//   variant  'button' (default) — a bordered surface pill, the classic
+//                       menu-button chrome
+//            'item'   — an in-panel submenu row inside a Sub, matching Item's box
+//            'bare'   — no chrome at all, for an icon trigger that brings its own
+//   label    the fallback body's text. Ignored once you fill the slot.
+//   class    merged onto <dropdown-trigger>, after the variant chrome
+
+const FOCUS =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+// The menu-button pill — today's flat-port TRIGGER recipe, verbatim.
+const BUTTON =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
+  'rounded-lg font-medium cursor-pointer transition-colors h-9 px-4 text-sm ' +
+  'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken ' +
+  FOCUS;
+
+// A submenu row: Item's box, with the chevron pushed to the trailing edge.
+const ITEM =
+  'flex w-full items-center justify-between gap-6 select-none cursor-pointer ' +
+  'rounded-md px-2.5 py-1.5 text-sm text-body transition-colors ' +
+  'hover:bg-surface-sunken hover:text-ink ' + FOCUS;
+
+// Chrome-free: layout, the pointer and the focus ring only.
+const BARE = 'inline-flex items-center select-none cursor-pointer ' + FOCUS;
+
+const VARIANT = { button: BUTTON, item: ITEM, bare: BARE };
+
+export default class Trigger extends PuzzleView {
+  data(params, props) {
+    return {
+      label: props.label != null ? String(props.label) : '',
+      triggerClass: [VARIANT[props.variant] || BUTTON, props.class]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+}
+</script>

@@ -1,8 +1,14 @@
 {
   "name": "context-menu",
-  "description": "Right-click context menu — dropdown-menu's grouped items, danger rows, and keyboard nav opened at the pointer position with viewport clamping",
-  "files": ["ContextMenu.pzl"],
-  "registryDependencies": [],
+  "description": "Right-click context menu — a compound family over the shared dropdown-panel base that opens at the pointer, clamped and flipped into the viewport, with dropdown-menu's rows re-exported and a touch long-press gesture",
+  "files": [
+    "ContextMenu/ContextMenu.pzl",
+    "ContextMenu/Content.pzl",
+    "ContextMenu/index.js"
+  ],
+  "registryDependencies": [
+    "dropdown-menu"
+  ],
   "dependencies": [],
   "targetDir": "app/components/ui"
 }

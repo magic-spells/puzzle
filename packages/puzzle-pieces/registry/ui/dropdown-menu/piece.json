@@ -1,8 +1,22 @@
 {
   "name": "dropdown-menu",
-  "description": "Click-toggle dropdown menu with grouped items, dividers, danger items, keyboard nav, and outside-click dismiss",
-  "files": ["DropdownMenu.pzl"],
-  "registryDependencies": [],
+  "description": "Menu-button dropdown — a compound family over the shared dropdown-panel base, with real role=\"menu\" semantics, typeahead, submenus, link rows, groups, labels, separators, shortcut hints, and disabled and danger items",
+  "files": [
+    "DropdownMenu/DropdownMenu.pzl",
+    "DropdownMenu/Trigger.pzl",
+    "DropdownMenu/Content.pzl",
+    "DropdownMenu/Item.pzl",
+    "DropdownMenu/Link.pzl",
+    "DropdownMenu/Group.pzl",
+    "DropdownMenu/Label.pzl",
+    "DropdownMenu/Separator.pzl",
+    "DropdownMenu/Shortcut.pzl",
+    "DropdownMenu/Sub.pzl",
+    "DropdownMenu/index.js"
+  ],
+  "registryDependencies": [
+    "dropdown-panel"
+  ],
   "dependencies": [],
   "targetDir": "app/components/ui"
 }

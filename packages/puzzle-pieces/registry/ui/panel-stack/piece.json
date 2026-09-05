@@ -1,8 +1,14 @@
 {
   "name": "panel-stack",
-  "description": "Controlled nested-panel navigation stack with delegated push/pop actions, fluid slide or stack transitions, Escape composition, and focus restoration",
-  "files": ["PanelStack.pzl"],
-  "registryDependencies": ["lib/panel-stack.js"],
-  "dependencies": [],
+  "description": "Nested-panel navigation family — drill-down menus, settings flows and wizards, with the stack, the slide or stack transitions, inert handling, focus restoration, declarative push/pop triggers and Escape composition coming from the panel-stack web component",
+  "files": [
+    "PanelStack/PanelStack.pzl",
+    "PanelStack/Panel.pzl",
+    "PanelStack/index.js"
+  ],
+  "registryDependencies": [],
+  "dependencies": [
+    "@magic-spells/panel-stack"
+  ],
   "targetDir": "app/components/ui"
 }

@@ -4,28 +4,66 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Split Panel</h1>
         <p class="mt-2 text-body">
-          Resizable two-pane layout with horizontal or vertical direction, constraints, snap points, nesting,
-          keyboard controls, and persistence
+          A resizable pane group — horizontal or vertical, any number of panes. It is a compound
+          <strong class="font-medium text-ink">family</strong> that wraps the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/split-panel</code>
+          web component, so the flex geometry, the pointer and keyboard resizing, the min/max
+          constraint folding, the snap points, the localStorage persistence and the separator ARIA
+          all come from the component rather than from a hand-rolled copy in this file.
         </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">first</code>
+            and <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">second</code>
+            slots are gone; the group takes any number of
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">SplitPanel.Pane</code>
+            children, and every divider between them is written out as a
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">SplitPanel.Divider</code>.
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">defaultSizes</code>,
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">min</code>,
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">max</code> and
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">storageKey</code>
+            moved: sizing is per-pane now, and persistence keys off the group's
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">id</code>.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <SplitPanel class="h-56 w-full max-w-3xl rounded-lg border border-border" defaultSizes={ [35, 65] }>
-          <div slot="first" class="flex h-full items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
+        <SplitPanel class="h-56 w-full max-w-3xl overflow-hidden rounded-lg border border-border">
+          <SplitPanel.Pane size={ 35 } class="flex items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
             Navigation
-          </div>
-          <div slot="second" class="flex h-full items-center justify-center bg-surface text-sm font-medium text-ink">
+          </SplitPanel.Pane>
+          <SplitPanel.Divider/>
+          <SplitPanel.Pane size={ 65 } class="flex items-center justify-center bg-surface text-sm font-medium text-ink">
             Content
-          </div>
+          </SplitPanel.Pane>
         </SplitPanel>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
-        <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
-        </p>
+        <p class="mb-3 text-sm text-body">Copy the family into your app:</p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          It has one runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheet into your app's style entry. It is required: the flex layout,
+          the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">--split-panel-size</code>
+          share the group writes on every pane, and the divider's gutter, hit target and cursors
+          all live there.
+        </p>
+        <CodeBlock code={ installCss }/>
+        <p class="mt-3 text-sm text-body">
+          The piece already bridges the sheet's divider colours to pieces.css tokens with an inline
+          style on the group host, so it matches the rest of the registry out of the box. Retune it
+          per instance by setting the same custom properties yourself:
+        </p>
+        <CodeBlock code={ installTokens } class="mt-3"/>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -35,111 +73,173 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          The group fills its container, so give it — or a wrapper — an explicit height. Write a
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">SplitPanel.Divider</code>
+          between every adjacent pair: the component would generate the missing ones, but a
+          generated element sitting between keyed Puzzle children is invisible to the patcher and
+          gets moved or dropped on the next reorder. The root warns in the console when the count
+          does not add up.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="vertical" title="Vertical" code={ codeVertical }>
-          <SplitPanel direction="vertical" class="h-72 w-full max-w-3xl rounded-lg border border-border" defaultSizes={ [40, 60] }>
-            <div slot="first" class="flex h-full items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
+          <SplitPanel direction="vertical" class="h-72 w-full max-w-3xl overflow-hidden rounded-lg border border-border">
+            <SplitPanel.Pane size={ 40 } class="flex items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
               Preview
-            </div>
-            <div slot="second" class="flex h-full items-center justify-center bg-surface text-sm font-medium text-ink">
+            </SplitPanel.Pane>
+            <SplitPanel.Divider/>
+            <SplitPanel.Pane size={ 60 } class="flex items-center justify-center bg-surface text-sm font-medium text-ink">
               Timeline
-            </div>
+            </SplitPanel.Pane>
           </SplitPanel>
         </ExampleBox>
 
         <ExampleBox id="constraints" title="Min / max constraints" code={ codeConstraints }>
-          <SplitPanel
-            class="h-56 w-full max-w-3xl rounded-lg border border-border"
-            defaultSizes={ [30, 70] }
-            min={ ['180px', null] }
-            max={ ['40%', null] }>
-            <div slot="first" class="flex h-full items-center justify-center bg-surface-sunken px-4 text-center text-sm font-medium text-ink">
-              Sidebar: 180px min, 40% max
-            </div>
-            <div slot="second" class="flex h-full items-center justify-center bg-surface text-sm font-medium text-ink">
-              Main content
-            </div>
+          <SplitPanel class="h-56 w-full max-w-3xl overflow-hidden rounded-lg border border-border">
+            <SplitPanel.Pane
+              size={ 30 }
+              min="180px"
+              max="40%"
+              class="flex items-center justify-center bg-surface-sunken px-4 text-center text-sm font-medium text-ink">
+              180px min, 40% max
+            </SplitPanel.Pane>
+            <SplitPanel.Divider/>
+            <SplitPanel.Pane class="flex items-center justify-center bg-surface text-sm font-medium text-ink">
+              Fills the rest
+            </SplitPanel.Pane>
           </SplitPanel>
         </ExampleBox>
 
-        <ExampleBox id="fade" title="Fade on collapse" code={ codeFade }>
-          <div class="w-full max-w-3xl space-y-3">
-            <p class="text-sm text-muted">
-              A pane with a max exposes --split-panel-visible (0 at its minimum, 1 at its maximum) —
-              style slotted content with it. Drag the divider toward the left edge and the sidebar
-              content fades out before the pane snaps closed.
-            </p>
-            <SplitPanel class="h-56 rounded-lg border border-border" defaultSizes={ [45, 55] } max={ ['45%', null] } snap={ [0, 100] }>
-              <div slot="first" class="relative h-full overflow-hidden bg-surface-sunken">
-                <div
-                  class="flex h-full min-w-[200px] origin-left flex-col justify-center gap-1.5 px-6 transition-[opacity,transform,filter] duration-50"
-                  style="opacity:var(--split-panel-visible);transform:scale(calc(0.97 + 0.03 * var(--split-panel-visible)));filter:blur(calc(3px * (1 - var(--split-panel-visible))))">
-                  <p class="text-sm font-medium text-ink">Sidebar</p>
-                  <p class="text-sm text-muted">Fades with the pane</p>
-                </div>
-                <div
-                  class="pointer-events-none absolute inset-0 bg-black transition-opacity duration-50"
-                  style="opacity:calc((1 - var(--split-panel-visible)) * 0.45)"></div>
-              </div>
-              <div slot="second" class="flex h-full items-center justify-center bg-surface text-sm font-medium text-ink">
-                Content
-              </div>
-            </SplitPanel>
-          </div>
+        <ExampleBox id="three" title="Three panes" code={ codeThree }>
+          <SplitPanel class="h-56 w-full max-w-3xl overflow-hidden rounded-lg border border-border">
+            <SplitPanel.Pane size={ 25 } min="120px" class="flex items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
+              Files
+            </SplitPanel.Pane>
+            <SplitPanel.Divider/>
+            <SplitPanel.Pane size={ 50 } class="flex items-center justify-center bg-surface text-sm font-medium text-ink">
+              Editor
+            </SplitPanel.Pane>
+            <SplitPanel.Divider/>
+            <SplitPanel.Pane size={ 25 } min="120px" class="flex items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
+              Inspector
+            </SplitPanel.Pane>
+          </SplitPanel>
         </ExampleBox>
 
-        <ExampleBox id="snap" title="Snap" code={ codeSnap }>
-          <div class="w-full max-w-3xl space-y-3">
-            <div class="flex items-center justify-between text-sm text-muted">
-              <span>Collapse left · Center · Collapse right</span>
-              <span class="font-mono text-ink">{ snapFirst } / { snapSecond }</span>
-            </div>
-            <SplitPanel class="h-56 rounded-lg border border-border" snap @resize={ setSnapSizes }>
-              <div slot="first" class="flex h-full items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
-                Left
-              </div>
-              <div slot="second" class="flex h-full items-center justify-center bg-surface text-sm font-medium text-ink">
-                Right
-              </div>
-            </SplitPanel>
-          </div>
+        <ExampleBox id="snap" title="Snap points" code={ codeSnap }>
+          <SplitPanel snap class="h-56 w-full max-w-3xl overflow-hidden rounded-lg border border-border">
+            <SplitPanel.Pane size={ 50 } class="flex items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
+              Drag me and let go
+            </SplitPanel.Pane>
+            <SplitPanel.Divider/>
+            <SplitPanel.Pane size={ 50 } class="flex items-center justify-center bg-surface text-sm font-medium text-ink">
+              Settles on 0 / 50 / 100
+            </SplitPanel.Pane>
+          </SplitPanel>
         </ExampleBox>
 
-        <ExampleBox id="nested" title="Nested" code={ codeNested }>
-          <SplitPanel class="h-72 w-full max-w-3xl rounded-lg border border-border" defaultSizes={ [30, 70] }>
-            <div slot="first" class="flex h-full items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
+        <ExampleBox id="nested" title="Nested groups" code={ codeNested }>
+          <SplitPanel class="h-72 w-full max-w-3xl overflow-hidden rounded-lg border border-border">
+            <SplitPanel.Pane size={ 30 } class="flex items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
               Sidebar
-            </div>
-            <div slot="second" class="h-full min-w-0">
-              <SplitPanel direction="vertical" class="h-full" defaultSizes={ [55, 45] }>
-                <div slot="first" class="flex h-full items-center justify-center bg-surface text-sm font-medium text-ink">
+            </SplitPanel.Pane>
+            <SplitPanel.Divider/>
+            <SplitPanel.Pane size={ 70 }>
+              <SplitPanel direction="vertical" class="h-full">
+                <SplitPanel.Pane size={ 60 } class="flex items-center justify-center bg-surface text-sm font-medium text-ink">
                   Editor
-                </div>
-                <div slot="second" class="flex h-full items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
+                </SplitPanel.Pane>
+                <SplitPanel.Divider/>
+                <SplitPanel.Pane size={ 40 } class="flex items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
                   Console
-                </div>
+                </SplitPanel.Pane>
               </SplitPanel>
-            </div>
+            </SplitPanel.Pane>
           </SplitPanel>
         </ExampleBox>
 
-        <ExampleBox id="persistence" title="Persistence" code={ codePersistence }>
-          <div class="w-full max-w-3xl space-y-3">
-            <p class="text-sm text-muted">
-              Drag the divider, then reload this page. The committed ratio is restored from local storage.
-            </p>
-            <SplitPanel class="h-56 rounded-lg border border-border" storageKey="docs-workspace">
-              <div slot="first" class="flex h-full items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
-                Files
-              </div>
-              <div slot="second" class="flex h-full items-center justify-center bg-surface text-sm font-medium text-ink">
-                Workspace
-              </div>
+        <ExampleBox id="events" title="Reporting sizes" code={ codeEvents }>
+          <div class="flex w-full max-w-3xl flex-col gap-3">
+            <SplitPanel class="h-56 w-full overflow-hidden rounded-lg border border-border" @resize={ onResize } @resizeEnd={ onResizeEnd }>
+              <SplitPanel.Pane size={ 45 } class="flex items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
+                Drag the divider
+              </SplitPanel.Pane>
+              <SplitPanel.Divider/>
+              <SplitPanel.Pane size={ 55 } class="flex items-center justify-center bg-surface text-sm font-medium text-ink">
+                Watch the readout
+              </SplitPanel.Pane>
             </SplitPanel>
+            <p class="text-sm text-muted">live { liveLabel } · committed { commitLabel } ({ commitCount } commits)</p>
           </div>
         </ExampleBox>
+
+        <ExampleBox id="disabled" title="Locked divider" code={ codeDisabled }>
+          <SplitPanel class="h-56 w-full max-w-3xl overflow-hidden rounded-lg border border-border">
+            <SplitPanel.Pane size={ 40 } class="flex items-center justify-center bg-surface-sunken text-sm font-medium text-ink">
+              Fixed
+            </SplitPanel.Pane>
+            <SplitPanel.Divider disabled/>
+            <SplitPanel.Pane size={ 60 } class="flex items-center justify-center bg-surface text-sm font-medium text-ink">
+              Also fixed
+            </SplitPanel.Pane>
+          </SplitPanel>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">SplitPanel</h3>
+          <div class="text-sm">
+            {#for row in rootRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">SplitPanel.Pane</h3>
+          <div class="text-sm">
+            {#for row in paneRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">SplitPanel.Divider</h3>
+          <div class="text-sm">
+            {#for row in dividerRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Keyboard</h3>
+          <div class="text-sm">
+            {#for row in keyRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <p class="mt-6 text-sm text-body">
+            Leave sizes uncontrolled unless you have a reason not to. A drag emits
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@resize</code>
+            on every applied change, so routing each one through parent state and back is a full
+            subtree re-render per frame that fights the live gesture. Treat
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@resize</code>
+            as advisory — readouts, not state — and commit on
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@resizeEnd</code>.
+          </p>
+        </section>
       </div>
     </article>
 
@@ -149,128 +249,174 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import SplitPanel from '@/components/ui/SplitPanel.pzl';
+import SplitPanel from '@/components/ui/SplitPanel/index.js';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
+// Docs page for the SplitPanel family. Code samples live as template-literal
+// consts because literal tag names and {#…} tokens would be parsed as template
+// syntax in prose.
 const installCmd = 'puzzle add piece split-panel';
-const usageImport = `import SplitPanel from '@/components/ui/SplitPanel.pzl';`;
-const usageMarkup = `<SplitPanel defaultSizes={ [35, 65] }>
-  <div slot="first">Navigation</div>
-  <main slot="second">Content</main>
+// TODO: switch to ^0.2.0 once published — the demo pins the package by file:
+// path while 0.2.0 is unreleased. Consumers install the published range.
+const installDep = 'npm install @magic-spells/split-panel@^0.2.0';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/split-panel/css" layer(components); /* required */`;
+
+const installTokens = `<SplitPanel style="--split-panel-gap: 0.75rem;
+                    --split-panel-divider-color: var(--color-border);
+                    --split-panel-divider-line: 0.25rem">
+  …
 </SplitPanel>`;
 
-const codeHero = `<SplitPanel class="h-56" defaultSizes={ [35, 65] }>
-  <div slot="first">Navigation</div>
-  <main slot="second">Content</main>
+const usageImport = `import SplitPanel from '@/components/ui/SplitPanel';`;
+
+const usageMarkup = `<SplitPanel class="h-80" id="editor">
+  <SplitPanel.Pane size={ 30 } min="180px">…sidebar…</SplitPanel.Pane>
+  <SplitPanel.Divider/>
+  <SplitPanel.Pane>…editor…</SplitPanel.Pane>
 </SplitPanel>`;
 
-const codeVertical = `<SplitPanel direction="vertical" class="h-72" defaultSizes={ [40, 60] }>
-  <div slot="first">Preview</div>
-  <div slot="second">Timeline</div>
+const codeHero = `// Every divider is authored. The group owns the sizes from there
+// on; 'size' is the seed, and 'id' persists what the user settles on.
+<SplitPanel class="h-56 rounded-lg border border-border">
+  <SplitPanel.Pane size={ 35 } class="…">Navigation</SplitPanel.Pane>
+  <SplitPanel.Divider/>
+  <SplitPanel.Pane size={ 65 } class="…">Content</SplitPanel.Pane>
 </SplitPanel>`;
 
-const codeConstraints = `<SplitPanel
-  class="h-56"
-  defaultSizes={ [30, 70] }
-  min={ ['180px', null] }
-  max={ ['40%', null] }>
-  <aside slot="first">Sidebar</aside>
-  <main slot="second">Main content</main>
+const codeVertical = `<SplitPanel direction="vertical" class="h-72">
+  <SplitPanel.Pane size={ 40 }>Preview</SplitPanel.Pane>
+  <SplitPanel.Divider/>
+  <SplitPanel.Pane size={ 60 }>Timeline</SplitPanel.Pane>
 </SplitPanel>`;
 
-const codeFade = `<SplitPanel class="h-56" defaultSizes={ [45, 55] } max={ ['45%', null] } snap={ [0, 100] }>
-  <aside slot="first" class="relative overflow-hidden">
-    <nav
-      class="min-w-[200px] origin-left transition-[opacity,transform,filter] duration-50"
-      style="
-        opacity: var(--split-panel-visible);
-        transform: scale(calc(0.97 + 0.03 * var(--split-panel-visible)));
-        filter: blur(calc(3px * (1 - var(--split-panel-visible))));
-      ">
-      Fades, scales, and blurs as the pane approaches its minimum
-    </nav>
+const codeConstraints = `// Constraints are per pane and take px, a bare number of px, or %.
+// The group folds both neighbours' opposing bounds into one range.
+<SplitPanel.Pane size={ 30 } min="180px" max="40%">…</SplitPanel.Pane>`;
 
-    <!-- darkening overlay: 0 open, up to 45% black as it collapses -->
-    <div
-      class="pointer-events-none absolute inset-0 bg-black transition-opacity duration-50"
-      style="opacity: calc((1 - var(--split-panel-visible)) * 0.45)"></div>
-  </aside>
-  <main slot="second">Content</main>
-</SplitPanel>
-
-// panes with a max receive --split-panel-visible: 0 at the pane's effective
-// min, 1 at its max. It inherits to descendants, so drive opacity, transform,
-// filter, an overlay — anything. A min-width keeps content from reflowing as
-// it clips away.`;
-
-const codeSnap = `<SplitPanel class="h-56" snap @resize={ setSizes } @resizeEnd={ saveSizes }>
-  <div slot="first">Left</div>
-  <div slot="second">Right</div>
-</SplitPanel>
-
-// bare snap settles to 0 / 50 / 100% of the divider's constrained travel
-events = {
-  setSizes: (sizes) => this.setData('sizes', sizes),
-  saveSizes: (sizes) => persist(sizes),
-};`;
-
-const codeNested = `<SplitPanel class="h-72" defaultSizes={ [30, 70] }>
-  <aside slot="first">Sidebar</aside>
-  <div slot="second">
-    <SplitPanel direction="vertical" class="h-full" defaultSizes={ [55, 45] }>
-      <main slot="first">Editor</main>
-      <section slot="second">Console</section>
-    </SplitPanel>
-  </div>
+const codeThree = `// Any number of panes — one divider between each adjacent pair.
+<SplitPanel class="h-56">
+  <SplitPanel.Pane size={ 25 } min="120px">Files</SplitPanel.Pane>
+  <SplitPanel.Divider/>
+  <SplitPanel.Pane size={ 50 }>Editor</SplitPanel.Pane>
+  <SplitPanel.Divider/>
+  <SplitPanel.Pane size={ 25 } min="120px">Inspector</SplitPanel.Pane>
 </SplitPanel>`;
 
-const codePersistence = `<SplitPanel class="h-56" storageKey="workspace">
-  <aside slot="first">Files</aside>
-  <main slot="second">Workspace</main>
-</SplitPanel>
+const codeSnap = `// Bare 'snap' settles on 0 / 50 / 100 percent of the divider's
+// travel. Pass points of your own as a string or an array.
+<SplitPanel snap>…</SplitPanel>
+<SplitPanel snap={ [0, 33, 66, 100] }>…</SplitPanel>`;
 
-// committed sizes persist under localStorage key "split-panel:workspace"`;
+const codeNested = `// A nested group lives inside a Pane. Both event types bubble and
+// are composed, so the outer root filters them by target — the inner
+// group's resizes never reach it.
+<SplitPanel.Pane size={ 70 }>
+  <SplitPanel direction="vertical" class="h-full">…</SplitPanel>
+</SplitPanel.Pane>`;
+
+const codeEvents = `// @resize is ADVISORY — it fires on every applied change during a
+// gesture. Never feed it back into 'sizes'. @resizeEnd is the commit
+// hook: release, keyboard step, or a double-click reset.
+<SplitPanel @resize={ onResize } @resizeEnd={ onResizeEnd }>…</SplitPanel>
+
+// onResize:    (sizes) => this.setData('live', sizes)
+// onResizeEnd: (sizes) => save(sizes)`;
+
+const codeDisabled = `// 'disabled' on one divider locks that pair; on the group it locks
+// every divider. A locked divider keeps its gutter but hides the handle.
+<SplitPanel.Divider disabled/>`;
+
+const rootRows = [
+  { name: 'direction', desc: "'horizontal' (default) | 'vertical'." },
+  { name: 'snap', desc: 'Bare true for 0 / 50 / 100 percent of travel, or a string or array of your own points. Settles on release.' },
+  { name: 'disabled', desc: 'Locks every divider in the group.' },
+  { name: 'id', desc: 'Persists committed sizes at split-panel:<id> in localStorage and restores them on load.' },
+  { name: 'sizes', desc: 'Optional controlled percent shares, one per pane. Edge-triggered and applied with setSizes(). Do not drive it from @resize.' },
+  { name: 'class', desc: 'Merged onto the split-panel-group host. Give it a height — the group fills its container.' },
+  { name: '@resize(sizes)', desc: 'Advisory; fires on every applied change during a gesture. Use it for a readout.' },
+  { name: '@resizeEnd(sizes)', desc: 'The commit hook — pointer release, a keyboard step, or a double-click reset.' },
+];
+
+const paneRows = [
+  { name: 'size', desc: "Authored share: 30, '30%', or '250px'. A seed, not a live binding — the group owns sizes after mount." },
+  { name: 'min', desc: "Minimum extent: a number of px, '240px', or '25%'." },
+  { name: 'max', desc: 'Maximum extent, same units. A pane with a max also gets --split-panel-visible (0 at min, 1 at max).' },
+  { name: 'class', desc: 'Rendered on split-panel. Must be a direct child of SplitPanel.' },
+];
+
+const dividerRows = [
+  { name: 'disabled', desc: 'Locks this one divider. It keeps its gutter but hides the handle.' },
+  { name: 'class', desc: 'Rendered on split-divider. No children — the handle is drawn with pseudo-elements.' },
+];
+
+const keyRows = [
+  { name: 'Arrow keys', desc: '1% per press along the group’s axis; hold Shift for 10%.' },
+  { name: 'Home / End', desc: 'Jump to the pair’s minimum or maximum.' },
+  { name: 'Enter', desc: 'Reset the pair to its authored ratio — the same as a double-click.' },
+];
 
 export default class SplitPanelDoc extends PuzzleView {
   created() {
-    this.setData({ snapSizes: [50, 50] });
+    this.setData({ live: null, commit: null, commitCount: 0 });
   }
 
-  data(params, props) {
-    const snapSizes = this.getData().snapSizes || [50, 50];
+  data() {
+    const state = this.getData();
     return {
-      snapFirst: Math.round(snapSizes[0]),
-      snapSecond: Math.round(snapSizes[1]),
+      liveLabel: format(state.live),
+      commitLabel: format(state.commit),
+      commitCount: state.commitCount,
       installCmd,
+      installDep,
+      installCss,
+      installTokens,
       usageImport,
       usageMarkup,
       codeHero,
       codeVertical,
       codeConstraints,
-      codeFade,
+      codeThree,
       codeSnap,
       codeNested,
-      codePersistence,
+      codeEvents,
+      codeDisabled,
+      rootRows,
+      paneRows,
+      dividerRows,
+      keyRows,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Vertical', href: '#vertical' },
-        { label: 'Min / max constraints', href: '#constraints' },
-        { label: 'Fade on collapse', href: '#fade' },
-        { label: 'Snap', href: '#snap' },
-        { label: 'Nested', href: '#nested' },
-        { label: 'Persistence', href: '#persistence' },
+        { label: 'Constraints', href: '#constraints' },
+        { label: 'Three panes', href: '#three' },
+        { label: 'Snap points', href: '#snap' },
+        { label: 'Nested groups', href: '#nested' },
+        { label: 'Reporting sizes', href: '#events' },
+        { label: 'Locked divider', href: '#disabled' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
-    setSnapSizes: (sizes) => {
-      this.setData('snapSizes', sizes);
+    onResize: (sizes) => {
+      this.setData('live', sizes);
+      this.refresh();
+    },
+    onResizeEnd: (sizes) => {
+      this.setData({ commit: sizes, commitCount: this.getData().commitCount + 1 });
       this.refresh();
     },
   };
+}
+
+function format(sizes) {
+  if (!Array.isArray(sizes)) return '—';
+  return sizes.map((value) => `${Math.round(value)}%`).join(' / ');
 }
 </script>

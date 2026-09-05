@@ -71,11 +71,15 @@
                 </button>
               </Tooltip>
 
-              <SplitButton
-                label="Send money"
-                actions={ sendActions }
-                @press={ openTransfer }
-                @select={ onSendAction }/>
+              <SplitButton>
+                <SplitButton.Action @press={ openTransfer }>Send money</SplitButton.Action>
+                <SplitButton.Menu label="More transfer options" @select={ onSendAction }>
+                  <SplitButton.Item value="request">Request money</SplitButton.Item>
+                  <SplitButton.Item value="wire">Wire transfer</SplitButton.Item>
+                  <SplitButton.Separator/>
+                  <SplitButton.Item value="schedule">Schedule transfer</SplitButton.Item>
+                </SplitButton.Menu>
+              </SplitButton>
             </div>
           </div>
 
@@ -91,16 +95,15 @@
             </section>
 
             <!-- TABS -->
-            <Tabs id="bank-tabs" variant="pills" tabs={ tabItems } value={ tab } @change={ setTab }/>
+            <Tabs variant="pills" value={ tab } @change={ setTab }>
+              <Tabs.List>
+                {#for t in tabItems}
+                  <Tabs.Tab key={ t.value } value={ t.value }>{ t.label }</Tabs.Tab>
+                {/for}
+              </Tabs.List>
 
             <!-- OVERVIEW PANEL -->
-            {#if tab === 'overview'}
-              <section
-                id="bank-tabs-panel-overview"
-                role="tabpanel"
-                aria-labelledby="bank-tabs-tab-overview"
-                tabindex="0"
-                class="grid grid-cols-1 gap-6 outline-none lg:grid-cols-3">
+            <Tabs.Panel value="overview" class="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
                 <div class="space-y-6 lg:col-span-2">
                   <div class="rounded-xl border border-border bg-surface p-6">
@@ -183,17 +186,10 @@
                     <ProgressRing value={ 68 } size="lg" label="Reserve goal"/>
                   </div>
                 </div>
-              </section>
-            {/if}
+            </Tabs.Panel>
 
             <!-- TRANSACTIONS PANEL -->
-            {#if tab === 'transactions'}
-              <section
-                id="bank-tabs-panel-transactions"
-                role="tabpanel"
-                aria-labelledby="bank-tabs-tab-transactions"
-                tabindex="0"
-                class="space-y-4 outline-none">
+            <Tabs.Panel value="transactions" class="space-y-4">
                 <div class="flex flex-wrap items-end justify-between gap-4">
                   <div class="w-full max-w-xs">
                     <DateRangePicker
@@ -222,17 +218,10 @@
                   empty="No transactions in this range."
                   @sortChange={ setSort }
                   @pageChange={ setPage }/>
-              </section>
-            {/if}
+            </Tabs.Panel>
 
             <!-- CARDS PANEL -->
-            {#if tab === 'cards'}
-              <section
-                id="bank-tabs-panel-cards"
-                role="tabpanel"
-                aria-labelledby="bank-tabs-tab-cards"
-                tabindex="0"
-                class="grid grid-cols-1 gap-6 outline-none sm:grid-cols-2">
+            <Tabs.Panel value="cards" class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 {#for c in cards}
                   <div class="rounded-xl border border-border bg-surface p-6" key={ c.key }>
                     <div class="mb-5 flex items-start justify-between gap-3">
@@ -266,8 +255,8 @@
                     </div>
                   </div>
                 {/for}
-              </section>
-            {/if}
+            </Tabs.Panel>
+          </Tabs>
           </div>
         </div>
       </div>
@@ -324,14 +313,14 @@ import Badge from '../components/ui/Badge.pzl';
 import Avatar from '../components/ui/Avatar.pzl';
 import AvatarGroup from '../components/ui/AvatarGroup.pzl';
 import ProgressRing from '../components/ui/ProgressRing.pzl';
-import SplitButton from '../components/ui/SplitButton.pzl';
+import SplitButton from '../components/ui/SplitButton/index.js';
 import Dialog from '../components/ui/Dialog.pzl';
 import Select from '../components/ui/Select.pzl';
 import NumberField from '../components/ui/NumberField.pzl';
 import Field from '../components/ui/Field.pzl';
 import CopyButton from '../components/ui/CopyButton.pzl';
 import DescriptionList from '../components/ui/DescriptionList.pzl';
-import Tabs from '../components/ui/Tabs.pzl';
+import Tabs from '../components/ui/Tabs/index.js';
 import Button from '../components/ui/Button.pzl';
 import Separator from '../components/ui/Separator.pzl';
 import Tooltip from '../components/ui/Tooltip.pzl';
@@ -407,13 +396,6 @@ const RECIPIENT_OPTIONS = [
   { value: 'gusto', label: 'Gusto (Payroll)' },
   { value: 'wework', label: 'WeWork' },
   { value: 'northwind', label: 'Northwind Traders' },
-];
-
-const SEND_ACTIONS = [
-  { label: 'Request money', value: 'request' },
-  { label: 'Wire transfer', value: 'wire' },
-  { divider: true },
-  { label: 'Schedule transfer', value: 'schedule' },
 ];
 
 const TAB_ITEMS = [
@@ -577,7 +559,6 @@ export default class BankingDemo extends PuzzleView {
       accountOptions: ACCOUNT_OPTIONS,
       activeAccount: s.activeAccount,
       teamAvatars: TEAM_AVATARS,
-      sendActions: SEND_ACTIONS,
 
       // tabs
       tabItems: TAB_ITEMS,

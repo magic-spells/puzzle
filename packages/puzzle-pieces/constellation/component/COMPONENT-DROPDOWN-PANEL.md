@@ -44,6 +44,36 @@ notes:
       must be a family, and why Menubar.Item (button) and Menubar.Link (anchor) are separate members
       rather than one component branching on href. Items close the whole open chain themselves
       (hide() on each ancestor dropdown-component) because upstream only closes on an OUTSIDE press.
+  - kind: state
+    text: >-
+      2026-09-05 (feat/menu-families): the base gained four additive things for the last three
+      consumers — dropdown-menu, context-menu, split-button, now COMPONENT-DROPDOWN-MENU /
+      -CONTEXT-MENU / -SPLIT-BUTTON. (1) `menu` prop → `menu` attribute, opting the component into
+      application-menu mode (role=menu/menuitem, roving tabindex, typeahead, Enter/Space incl. Space
+      clicking a link, Tab-to-close, ArrowRight/Left submenus). (2) `'contextmenu'` added to the
+      `trigger` allow-list: right-click / 500 ms long-press anywhere in the component, panel fixed
+      at the pointer, clamped and flipped, and NO <dropdown-trigger> required. (3) `@select(value,
+      event)` from `dropdown-panel:select` — and it is the ONE event NOT filtered by `#mine`,
+      deliberately: a submenu choice closes the whole chain and returns focus to the ROOT trigger,
+      so the root is what owes the parent a report. The new `sub` prop silences a nested root
+      instead, so exactly one instance per chain reports, exactly once per activation. Returning
+      `false` from the handler → `preventDefault()`, which cancels the close. (4) `showAt(x, y)`
+      passthrough on the root class, guarded on `#ready` (a coordinate is not state, so there is no
+      attribute to leave the intent on). Panel gained `flip` → `flip` attribute (opt-in upward
+      opening; the component sets `flipped`, its own sheet styles it). Panel's existing `left-auto
+      right-0` ALIGN_END utility recipe was left alone even though 2.1.0 now ships an equivalent
+      `align` attribute — five shipped families depend on the recipe and the two are equivalent.
+      RE-EXPORT EXCEPTION: context-menu and split-button re-export dropdown-menu's ROW members
+      (Trigger, Item, Link, Group, Label, Separator, Shortcut, Sub) instead of forking them. The
+      "compose, do not re-export" rule above is about the BASE — it exists so a family has somewhere
+      of its own to hang chrome and so a consumer can edit one family's Trigger without forking the
+      base every other piece shares. Neither applies to a row: a context-menu row IS a dropdown-menu
+      row, and in a copy-in registry the re-export is BETTER — dropdown-menu is copied in anyway as
+      the registry dependency, so the consumer edits one Item.pzl and every menu follows. Each keeps
+      its own root and Content, which genuinely differ. PIN: demo/package.json points
+      @magic-spells/dropdown-panel at `file:../../../../../open-sourcery/dropdown-panel` (the 2.1.0
+      working tree, branch feat/menu-mode) because ^2.0.0 has no menu mode — return it to `^2.1.0`
+      when 2.1.0 publishes. Piece headers and docs already tell consumers to install ^2.1.0.
 ---
 
 The registry's shared base for every trigger-and-panel overlay. A D167 family —

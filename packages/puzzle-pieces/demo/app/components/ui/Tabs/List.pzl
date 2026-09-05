@@ -1,0 +1,38 @@
+<puzzle-view>
+  <tab-list class={ listClass }><Children/></tab-list>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Tabs.List — the tablist strip. Renders the real <tab-list>; the parent
+// <tab-group> writes role="tablist" on it, so this piece authors no ARIA.
+//
+// The list must be a DIRECT child of <Tabs>, and the buttons direct children of
+// this list: upstream resolves them with `:scope > tab-list > tab-button`.
+//
+// Both variants live here and switch on the root's `data-variant` stamp — a
+// descendant attribute selector, because Puzzle has no cross-component context
+// to hand the variant down as a prop. Underline is the unconditional default;
+// the pills rules outrank it on specificity.
+//
+// Props
+//   class  merged onto <tab-list>, after the chrome
+
+const LIST =
+  'items-stretch gap-4 border-b border-border ' +
+  '[tab-group[data-variant=pills]_&]:inline-flex ' +
+  '[tab-group[data-variant=pills]_&]:w-fit ' +
+  '[tab-group[data-variant=pills]_&]:items-center ' +
+  '[tab-group[data-variant=pills]_&]:gap-1 ' +
+  '[tab-group[data-variant=pills]_&]:rounded-lg ' +
+  '[tab-group[data-variant=pills]_&]:border-b-0 ' +
+  '[tab-group[data-variant=pills]_&]:bg-surface-sunken ' +
+  '[tab-group[data-variant=pills]_&]:p-1';
+
+export default class TabsList extends PuzzleView {
+  data(params, props) {
+    return { listClass: [LIST, props.class].filter(Boolean).join(' ') };
+  }
+}
+</script>

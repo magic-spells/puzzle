@@ -4,26 +4,81 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Context Menu</h1>
         <p class="mt-2 text-body">
-          A right-click menu built on Dropdown Menu's guts — the same grouped items, danger
-          rows, and keyboard navigation — but summoned at the pointer instead of toggled by a
-          button. Config-first: pass an items array and handle @select.
+          A right-click menu that opens at the pointer. It is a compound
+          <strong class="font-medium text-ink">family</strong> composed over the shared
+          <a class="text-brand underline underline-offset-2" href="#/components/dropdown-panel">Dropdown Panel</a>
+          base, running the web component in <span class="font-medium text-ink">menu mode</span> with
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">trigger="contextmenu"</code>.
+          The pointer placement, the viewport clamp, the touch long-press, the scroll dismissal and
+          the whole keyboard model are the component's.
         </p>
+        <p class="mt-3 text-body">
+          Rows are <a class="text-brand underline underline-offset-2" href="#/components/dropdown-menu">Dropdown Menu</a>'s,
+          re-exported rather than duplicated — a context-menu row is a dropdown-menu row, and in a
+          copy-in registry that means you edit one Item.pzl and both menus follow. Only the root
+          and the panel differ, and they differ for real: a pointer trigger with no button, and a
+          panel the component places and clamps at the pointer instead of aligning to a trigger.
+        </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">items</code>
+            config array is gone. Rows are markup now, and
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+            is deliberately not a prop — a context menu without coordinates is meaningless, and the
+            coordinates exist only at the instant of the gesture.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <ContextMenu items={ fileItems } @select={ onSelect }>
-          <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface text-center text-sm text-muted">
-            Right-click anywhere<br/>in this box
-          </div>
-        </ContextMenu>
+        <div class="flex w-full flex-col items-start gap-4">
+          <ContextMenu @select={ onSelect }>
+            <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface text-center text-sm text-muted">
+              Right-click anywhere<br/>in this box
+            </div>
+            <ContextMenu.Content>
+              <ContextMenu.Label>File</ContextMenu.Label>
+              <ContextMenu.Item value="open" @press={ run }>Open<ContextMenu.Shortcut>⌘O</ContextMenu.Shortcut></ContextMenu.Item>
+              <ContextMenu.Item value="rename" @press={ run }>Rename</ContextMenu.Item>
+              <ContextMenu.Item value="duplicate" disabled={ true } @press={ run }>Duplicate</ContextMenu.Item>
+              <ContextMenu.Separator/>
+              <ContextMenu.Sub>
+                <ContextMenu.Trigger variant="item">Share with</ContextMenu.Trigger>
+                <ContextMenu.Content opens="right">
+                  <ContextMenu.Item value="share-link" @press={ run }>Copy link</ContextMenu.Item>
+                  <ContextMenu.Item value="share-email" @press={ run }>Email…</ContextMenu.Item>
+                </ContextMenu.Content>
+              </ContextMenu.Sub>
+              <ContextMenu.Separator/>
+              <ContextMenu.Item value="delete" variant="danger" @press={ run }>Delete</ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu>
+
+          <p class="text-sm text-muted">Last selection: <span class="font-medium text-ink">{ selected }</span></p>
+        </div>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
         <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
+          Copy the family into your app. It pulls
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">dropdown-menu</code>
+          — whose rows it re-exports — and the shared
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">dropdown-panel</code>
+          base along with it:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          That base has a runtime dependency — the web component it wraps. Menu mode and the
+          pointer trigger are 2.1.0's, so the range matters:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheets into your app's style entry. The first is required; the
+          second adds the entrance effects:
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -33,49 +88,64 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          There is no trigger element. The <span class="font-medium text-ink">surface</span> is
+          everything you put inside the root apart from the Content — a right-click or a 500 ms
+          touch long-press anywhere in it opens the panel at the pointer, clamped to an 8px margin
+          and flipped left or up rather than clipped.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          A right-click menu is an enhancement, never the only route to an action: there is no
+          keyboard gesture for it and no discoverability. Put the same choices in a Dropdown Menu
+          or a toolbar as well.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="groups" title="Groups and danger items" code={ codeGroups }>
-          <ContextMenu items={ editItems } @select={ onSelect }>
-            <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface text-center text-sm text-muted">
-              Right-click for a grouped menu
-            </div>
-          </ContextMenu>
-        </ExampleBox>
-
         <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
-          <ContextMenu disabled={ true } items={ fileItems } @select={ onSelect }>
-            <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface text-center text-sm text-muted">
-              Menu disabled — the native browser menu shows instead
+          <ContextMenu disabled={ true } @select={ onSelect }>
+            <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface p-4 text-center text-sm text-muted">
+              Menu disabled — the browser's own menu comes back
             </div>
+            <ContextMenu.Content>
+              <ContextMenu.Item value="never" @press={ run }>Never shown</ContextMenu.Item>
+            </ContextMenu.Content>
           </ContextMenu>
         </ExampleBox>
 
         <section id="keyboard" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
           <p class="mb-3 text-sm text-body">
-            Opening focuses the first enabled item; from there the menu owns these keys:
+            Opening focuses the first row. From there it is menu mode's model, identical to
+            Dropdown Menu's, and none of it lives in this piece:
           </p>
-          <ul class="mb-4 space-y-1.5 text-sm text-body">
-            <li><span class="font-medium text-ink">Up / Down arrows</span> — move between enabled items (wrapping, skipping groups and dividers)</li>
-            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last item</li>
-            <li><span class="font-medium text-ink">Enter / Space</span> — choose the focused item</li>
-            <li><span class="font-medium text-ink">Escape</span> — close the menu</li>
-          </ul>
-          <p class="mb-3 text-sm text-muted">
-            The menu also closes on an outside click, any scroll, or a right-click elsewhere.
-            Touch long-press is not implemented in v1 — most browsers still synthesize a
-            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">contextmenu</code>
-            event on long-press, which opens the menu.
-          </p>
-          <ExampleBox code={ codeKeyboard }>
-            <ContextMenu items={ fileItems } @select={ onSelect }>
-              <div class="flex h-40 w-72 select-none items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface text-center text-sm text-muted">
-                Right-click, then use the arrow keys
+          <div class="text-sm">
+            {#for row in keyRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
               </div>
-            </ContextMenu>
-          </ExampleBox>
+            {/for}
+          </div>
+        </section>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          {#for group in reference}
+            <div key={ group.title }>
+              <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">{ group.title }</h3>
+              <p class="mb-2 text-sm text-muted">{ group.summary }</p>
+              <div class="text-sm">
+                {#for row in group.rows}
+                  <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                    <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                    <span class="text-body">{ row.desc }</span>
+                  </div>
+                {/for}
+              </div>
+            </div>
+          {/for}
         </section>
       </div>
     </article>
@@ -86,98 +156,149 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import ContextMenu from '@/components/ui/ContextMenu.pzl';
+import ContextMenu from '@/components/ui/ContextMenu/index.js';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
-import { toast } from '@/components/ui/toast.js';
 
+// Docs page for the ContextMenu family. Code samples live as template-literal
+// consts because literal tag names and {#…} tokens would be parsed as template
+// syntax in prose.
 const installCmd = 'puzzle add piece context-menu';
-const usageImport = `import ContextMenu from '@/components/ui/ContextMenu.pzl';`;
-const usageMarkup = `<ContextMenu items={ fileItems } @select={ onSelect }></ContextMenu>`;
+const installDep = 'npm install @magic-spells/dropdown-panel@^2.1.0';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+@import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */`;
 
-const codeHero = `<ContextMenu items={ fileItems } @select={ onSelect }>
-  <div class="…">Right-click anywhere in this box</div>
-</ContextMenu>
+const usageImport = `import ContextMenu from '@/components/ui/ContextMenu';`;
 
-// items: interactive rows, { group } headings, { divider } separators
-fileItems: [
-  { label: 'Open', value: 'open' },
-  { label: 'Rename', value: 'rename' },
-  { label: 'Duplicate', value: 'duplicate' },
+const usageMarkup = `<ContextMenu @select={ onSelect }>
+  <div class="h-40 w-72 rounded-xl border-2 border-dashed border-border">
+    Right-click anywhere in here
+  </div>
+
+  <ContextMenu.Content>
+    <ContextMenu.Item value="open" @press={ run }>Open</ContextMenu.Item>
+    <ContextMenu.Separator />
+    <ContextMenu.Item value="delete" variant="danger" @press={ run }>
+      Delete
+    </ContextMenu.Item>
+  </ContextMenu.Content>
+</ContextMenu>`;
+
+const codeHero = `// The surface is everything but the Content. A right-click opens the
+// panel at the pointer; a choice — including one inside the submenu —
+// reports once at the root, closes the chain, and hands focus back to
+// whatever was focused before the menu opened — the body, for a
+// menu opened with the mouse.
+<ContextMenu @select={ onSelect }>
+  <div class="h-40 w-72 rounded-xl border-2 border-dashed border-border">
+    Right-click anywhere in this box
+  </div>
+
+  <ContextMenu.Content>
+    <ContextMenu.Label>File</ContextMenu.Label>
+    <ContextMenu.Item value="open" @press={ run }>Open<ContextMenu.Shortcut>⌘O</ContextMenu.Shortcut></ContextMenu.Item>
+    <ContextMenu.Item value="duplicate" disabled={ true } @press={ run }>Duplicate</ContextMenu.Item>
+    <ContextMenu.Separator />
+    <ContextMenu.Sub>
+      <ContextMenu.Trigger variant="item">Share with</ContextMenu.Trigger>
+      <ContextMenu.Content opens="right">
+        <ContextMenu.Item value="share-link" @press={ run }>Copy link</ContextMenu.Item>
+      </ContextMenu.Content>
+    </ContextMenu.Sub>
+    <ContextMenu.Item value="delete" variant="danger" @press={ run }>Delete</ContextMenu.Item>
+  </ContextMenu.Content>
+</ContextMenu>`;
+
+const codeDisabled = `// disabled leaves the component with no trigger mode at all, so
+// nothing is wired up and the browser's own menu comes back.
+<ContextMenu disabled={ true } @select={ onSelect }>
+  <div class="…">Menu disabled</div>
+  <ContextMenu.Content>…</ContextMenu.Content>
+</ContextMenu>`;
+
+const keyRows = [
+  { name: 'ArrowDown / ArrowUp', desc: 'Move row focus, wrapping at the ends and skipping disabled rows, separators and labels.' },
+  { name: 'Home / End', desc: 'First / last row.' },
+  { name: 'a–z', desc: 'Typeahead: jump to the next row whose text starts with what you type. The buffer clears after 500 ms.' },
+  { name: 'Enter / Space', desc: 'Activate the focused row. Space clicks a Link too, which Space alone would never follow.' },
+  { name: 'ArrowRight / ArrowLeft', desc: "Open a Sub's panel and focus its first row; ArrowLeft closes it again." },
+  { name: 'Escape', desc: 'Close one level. Closing the last one restores focus to whatever was focused before the menu opened — the body, for a mouse-opened menu, since a right-click moves no focus; the previously focused element after a keyboard or long-press open.' },
+  { name: 'Tab', desc: 'Closes the menu and moves on.' },
 ];
 
-events = {
-  onSelect: (value, event) => console.log('picked', value),
-};`;
-
-const codeGroups = `<ContextMenu items={ editItems } @select={ onSelect }>
-  <div class="…">Right-click for a grouped menu</div>
-</ContextMenu>
-
-// { group: 'Heading' } is a non-interactive label; { divider: true } draws a
-// hairline; danger: true paints the row in the danger token.
-editItems: [
-  { group: 'Edit' },
-  { label: 'Cut', value: 'cut' },
-  { label: 'Copy', value: 'copy' },
-  { label: 'Paste', value: 'paste' },
-  { divider: true },
-  { label: 'Delete', value: 'delete', danger: true },
-];`;
-
-const codeDisabled = `// disabled short-circuits the contextmenu handler: the piece never opens
-// and the browser's own right-click menu is shown instead.
-<ContextMenu disabled={ true } items={ fileItems } @select={ onSelect }>
-  <div class="…">Menu disabled</div>
-</ContextMenu>`;
-
-const codeKeyboard = `// Opening focuses the first enabled item; arrows move (wrapping, skipping
-// groups/dividers), Enter/Space choose, Escape closes. It also closes on an
-// outside click, any scroll, or a right-click elsewhere.
-<ContextMenu items={ fileItems } @select={ onSelect }>
-  <div class="…">Right-click, then use the arrow keys</div>
-</ContextMenu>`;
+const reference = [
+  {
+    title: 'ContextMenu',
+    summary: 'The root, and the right-clickable surface. Everything inside it except the Content is the surface.',
+    rows: [
+      { name: 'disabled', desc: "The menu is inert and the browser's own context menu comes back. It works by setting no trigger mode at all, so expect one \"requires <dropdown-trigger>\" console warning per disabled instance." },
+      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+      { name: 'class', desc: 'Merged onto the host, after `inline-block`.' },
+      { name: 'open', desc: 'NOT a prop, on purpose — the coordinates only exist at the moment of the gesture. To summon one yourself, call showAt(x, y) on a DropdownPanel.' },
+      { name: '@show / @hide', desc: 'Report-only: the menu opened or closed.' },
+      { name: '@select', desc: 'Value-first: select(value, event). Fires once per activation, submenus included. Return false to cancel the close.' },
+    ],
+  },
+  {
+    title: 'ContextMenu.Content',
+    summary: 'The panel. Placed at the pointer and clamped by the component, so there is no align to give it.',
+    rows: [
+      { name: 'flip', desc: "Default true, and inert on the root panel — the component places and flips a pointer-positioned panel itself. It matters for a .Sub's downward panel inside a context menu. Pass flip={ false } to opt out." },
+      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'." },
+      { name: 'class', desc: 'Merged onto the panel, after the padding. Never overflow-hidden — it clips a Sub.' },
+    ],
+  },
+  {
+    title: 'Rows — Item · Link · Group · Label · Separator · Shortcut · Sub · Trigger',
+    summary: "Re-exported from the DropdownMenu family, so ContextMenu.Item and DropdownMenu.Item are the same component. See the Dropdown Menu reference for their props; Trigger comes along for a Sub's row.",
+    rows: [
+      { name: 'value', desc: 'Item and Link: passed to @press and reported by the root @select.' },
+      { name: 'variant', desc: "'default' | 'danger'." },
+      { name: 'disabled', desc: 'Greys the row out and takes it out of the keyboard walk.' },
+      { name: '@press', desc: 'Value-first per-row hook, alongside the root @select.' },
+    ],
+  },
+];
 
 export default class ContextMenuDoc extends PuzzleView {
-  data(params, props) {
+  created() {
+    this.setData({ selected: 'nothing yet' });
+  }
+
+  data() {
     return {
-      ...this.getData(),
+      selected: this.getData().selected,
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
-      codeGroups,
       codeDisabled,
-      codeKeyboard,
-      fileItems: [
-        { label: 'Open', value: 'open' },
-        { label: 'Rename', value: 'rename' },
-        { label: 'Duplicate', value: 'duplicate' },
-        { divider: true },
-        { label: 'Delete', value: 'delete', danger: true },
-      ],
-      editItems: [
-        { group: 'Edit' },
-        { label: 'Cut', value: 'cut' },
-        { label: 'Copy', value: 'copy' },
-        { label: 'Paste', value: 'paste', disabled: true },
-        { divider: true },
-        { group: 'Danger zone' },
-        { label: 'Delete', value: 'delete', danger: true },
-      ],
+      keyRows,
+      reference,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Groups and danger items', href: '#groups' },
         { label: 'Disabled', href: '#disabled' },
         { label: 'Keyboard', href: '#keyboard' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
-    onSelect: (value) => toast({ message: 'Menu: ' + value }),
+    run: (value) => {
+      this.setData('selected', String(value));
+      this.refresh();
+    },
+    onSelect: (value) => {
+      this.setData('selected', String(value));
+      this.refresh();
+    },
   };
 }
 </script>

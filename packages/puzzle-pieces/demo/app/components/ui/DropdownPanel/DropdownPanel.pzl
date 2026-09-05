@@ -2,6 +2,7 @@
   <dropdown-component
     class={ rootClass }
     style={ rootStyle }
+    menu={ menuAttr }
     trigger={ triggerAttr }
     open-delay={ openDelayAttr }
     close-delay={ closeDelayAttr }
@@ -73,11 +74,40 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // events pass straight through this one on their way up, and reporting those as
 // ours would tell the parent the wrong panel moved.
 //
+//   @select(value, event)   menu mode only: a row was activated
+//
+// SELECT IS FILTERED THE OTHER WAY ROUND, AND THAT IS DELIBERATE. A choice made
+// in a submenu closes the WHOLE chain and returns focus to the ROOT trigger —
+// upstream walks up to the outermost `dropdown-component[menu]` to do it — so
+// the root is the element that owes the parent a report. `dropdown-panel:select`
+// therefore is NOT target-filtered: every one that reaches this element is
+// forwarded, submenus included. What keeps it from firing twice is the `sub`
+// prop: a nested root passes `sub` and stays quiet, so exactly one instance per
+// chain reports, exactly once per activation.
+//
+// `value` is upstream's precedence — `data-value`, then the `value` attribute,
+// then `href`, else null. The event is cancelable: return `false` from the
+// handler and the chain stays OPEN (how a checkbox menu keeps itself up).
+//
 // Props (each attribute prop renders NO attribute when unset, so the
 // component's own default applies)
-//   trigger         'hover' | 'click' | 'both' (default). `hover` falls back to
-//                   click where (hover: hover) does not match, so a menu is
-//                   never unopenable on a phone.
+//   trigger         'hover' | 'click' | 'both' (default) | 'contextmenu'.
+//                   `hover` falls back to click where (hover: hover) does not
+//                   match, so a menu is never unopenable on a phone.
+//                   'contextmenu' opens the panel AT THE POINTER on right-click
+//                   or a 500 ms touch long-press anywhere inside the component,
+//                   clamped and flipped to stay on screen — and needs no
+//                   <dropdown-trigger> at all. See ContextMenu.
+//   menu            true → application-menu semantics from the component:
+//                   role="menu" / role="menuitem", a roving tabindex, typeahead,
+//                   Enter/Space activation (Space clicks a link too), Tab to
+//                   close, ArrowRight/Left for submenus, and a
+//                   dropdown-panel:select on every activation. Opt-in, read once
+//                   at setup, and the whole reason DropdownMenu / ContextMenu /
+//                   SplitButton own no keyboard code. Requires
+//                   @magic-spells/dropdown-panel >= 2.1.0.
+//   sub             true → this root is a NESTED menu inside another one, so it
+//                   does NOT report @select. See the @select note below.
 //   arrow           'flip' (default) | 'static' | 'none' — how the drawn
 //                   trigger arrow behaves. Effects stylesheet only.
 //   arrowShape      'chevron' (default) | 'triangle'. Effects stylesheet only,
@@ -165,6 +195,15 @@ export default class DropdownPanel extends PuzzleView {
     this.props.hide?.();
   };
 
+  // NOT #mine-filtered, and NOT an oversight — see the SELECT note above. A
+  // nested root is silenced by `sub` instead, so one chain reports once.
+  #onSelect = (event) => {
+    if (this.props.sub) return;
+    const result = this.props.select?.(event.detail?.value ?? null, event);
+    // A handler that returns false cancels the close, leaving the menu open.
+    if (result === false) event.preventDefault();
+  };
+
   data(params, props) {
     const declarations = [];
     if (props.effectDuration) declarations.push(`--dp-effect-duration:${props.effectDuration}`);
@@ -173,7 +212,8 @@ export default class DropdownPanel extends PuzzleView {
     return {
       rootClass: props.class || false,
       rootStyle: declarations.length ? declarations.join(';') : false,
-      triggerAttr: oneOf(props.trigger, ['hover', 'click', 'both']),
+      menuAttr: props.menu ? true : false,
+      triggerAttr: oneOf(props.trigger, ['hover', 'click', 'both', 'contextmenu']),
       openDelayAttr: ms(props.openDelay),
       closeDelayAttr: ms(props.closeDelay),
       arrowAttr: oneOf(props.arrow, ['flip', 'static', 'none']),
@@ -192,6 +232,7 @@ export default class DropdownPanel extends PuzzleView {
     // un-upgraded element, so no dispatch can be missed in the gap.
     this.element.addEventListener('dropdown-panel:show', this.#onShow);
     this.element.addEventListener('dropdown-panel:hide', this.#onHide);
+    this.element.addEventListener('dropdown-panel:select', this.#onSelect);
 
     // A dropdown that mounted already open records the intent on the attribute;
     // the component reads it the moment it upgrades, so nothing is lost.
@@ -231,10 +272,22 @@ export default class DropdownPanel extends PuzzleView {
     else this.element.removeAttribute('visible');
   }
 
+  // Opens the panel pinned to a point in VIEWPORT coordinates, clamped and
+  // flipped to stay on screen — what trigger="contextmenu" does for you, exposed
+  // for the app that wants to summon a menu from its own gesture. A no-op before
+  // the component has upgraded, because there is no attribute to leave the
+  // intent on: a coordinate is not state, it is an event. ContextMenu does not
+  // use this; documented so you can.
+  showAt(x, y) {
+    if (!this.#ready) return;
+    this.element?.showAt?.(x, y);
+  }
+
   destroyed() {
     this.#live = false;
     this.element?.removeEventListener('dropdown-panel:show', this.#onShow);
     this.element?.removeEventListener('dropdown-panel:hide', this.#onHide);
+    this.element?.removeEventListener('dropdown-panel:select', this.#onSelect);
     // Unbind FIRST: this close is a teardown, not a user dismissal, and must not
     // call back into a parent being torn down with us. restoreFocus is off for
     // the same reason — nothing here asked for focus.

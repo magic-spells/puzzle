@@ -37,11 +37,14 @@
 
       <div class="min-w-0 flex-1 p-6">
         <Breadcrumb items={ crumbs } class="mb-4" />
-        <div class="mb-6 overflow-x-auto">
-          <Tabs variant="pills" tabs={ sectionTabs } value={ section } @change={ setSection } />
-        </div>
+        <Tabs variant="pills" value={ section } @change={ setSection }>
+          <Tabs.List class="mb-6">
+            {#for t in sectionTabs}
+              <Tabs.Tab key={ t.value } value={ t.value }>{ t.label }</Tabs.Tab>
+            {/for}
+          </Tabs.List>
 
-        {#if section === 'home'}
+          <Tabs.Panel value="home">
           <div class="space-y-6">
             <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {#for m in metrics}
@@ -71,9 +74,9 @@
               </section>
             </div>
           </div>
-        {/if}
+          </Tabs.Panel>
 
-        {#if section === 'orders'}
+          <Tabs.Panel value="orders">
           <div class="space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -93,16 +96,23 @@
               </Empty>
             {/if}
           </div>
-        {/if}
+          </Tabs.Panel>
 
-        {#if section === 'products'}
+          <Tabs.Panel value="products">
           <div class="space-y-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 class="text-lg font-semibold text-ink">Products</h2>
                 <p class="text-sm text-muted">{ shownCount } of { totalProducts } products</p>
               </div>
-              <SplitButton label="Add product" @press={ addPrimary } @select={ addSelect } actions={ addActions } />
+              <SplitButton>
+                <SplitButton.Action @press={ addPrimary }>Add product</SplitButton.Action>
+                <SplitButton.Menu label="More ways to add a product" @select={ addSelect }>
+                  {#for a in addActions}
+                    <SplitButton.Item key={ a.value } value={ a.value }>{ a.label }</SplitButton.Item>
+                  {/for}
+                </SplitButton.Menu>
+              </SplitButton>
             </div>
 
             <div class="flex flex-wrap items-end gap-3">
@@ -170,7 +180,14 @@
                       </div>
                       <Badge variant={ p.badgeVariant }>{ p.status }</Badge>
                       <span class="text-sm tabular-nums text-ink">${ p.price }</span>
-                      <DropdownMenu label="Manage" align="end" items={ p.menu } @select={ onRowMenu } />
+                      <DropdownMenu @select={ onRowMenu }>
+                        <DropdownMenu.Trigger>Manage</DropdownMenu.Trigger>
+                        <DropdownMenu.Content align="end">
+                          {#for a in p.menu}
+                            <DropdownMenu.Item key={ a.value } value={ a.value } variant={ a.variant }>{ a.label }</DropdownMenu.Item>
+                          {/for}
+                        </DropdownMenu.Content>
+                      </DropdownMenu>
                       <Popconfirm
                         title="Delete this product?"
                         description="This removes it from your store and cannot be undone."
@@ -188,9 +205,9 @@
               {/if}
             </section>
           </div>
-        {/if}
+          </Tabs.Panel>
 
-        {#if section === 'collections'}
+          <Tabs.Panel value="collections">
           <div class="space-y-5">
             <div>
               <h2 class="text-lg font-semibold text-ink">Collections</h2>
@@ -211,7 +228,14 @@
                       <Badge variant={ c.badgeVariant }>{ c.status }</Badge>
                     </div>
                     <div class="mt-3 flex items-center justify-between gap-2">
-                      <DropdownMenu label="Manage" align="start" items={ c.menu } @select={ onCollectionMenu } />
+                      <DropdownMenu @select={ onCollectionMenu }>
+                        <DropdownMenu.Trigger>Manage</DropdownMenu.Trigger>
+                        <DropdownMenu.Content>
+                          {#for a in c.menu}
+                            <DropdownMenu.Item key={ a.value } value={ a.value } variant={ a.variant }>{ a.label }</DropdownMenu.Item>
+                          {/for}
+                        </DropdownMenu.Content>
+                      </DropdownMenu>
                       <Popconfirm
                         title="Archive this collection?"
                         description="Products stay in your catalog, but the collection is hidden from your store."
@@ -238,9 +262,9 @@
               </div>
             {/if}
           </div>
-        {/if}
+          </Tabs.Panel>
 
-        {#if section === 'customers'}
+          <Tabs.Panel value="customers">
           <div class="space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -260,9 +284,9 @@
               </Empty>
             {/if}
           </div>
-        {/if}
+          </Tabs.Panel>
 
-        {#if section === 'settings'}
+          <Tabs.Panel value="settings">
           <div class="space-y-6">
             <div>
               <h2 class="text-lg font-semibold text-ink">Settings</h2>
@@ -319,7 +343,8 @@
               <Button @press={ saveSettings }>Save settings</Button>
             </div>
           </div>
-        {/if}
+          </Tabs.Panel>
+        </Tabs>
       </div>
     </div>
   </article>
@@ -328,24 +353,25 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Sidebar from '../components/ui/Sidebar.pzl';
-import Tabs from '../components/ui/Tabs.pzl';
+import Tabs from '../components/ui/Tabs/index.js';
 import DataTable from '../components/ui/DataTable.pzl';
 import Toolbar from '../components/ui/Toolbar.pzl';
 import SearchField from '../components/ui/SearchField.pzl';
 import Select from '../components/ui/Select.pzl';
-import SplitButton from '../components/ui/SplitButton.pzl';
+import SplitButton from '../components/ui/SplitButton/index.js';
 import Badge from '../components/ui/Badge.pzl';
 import AspectRatio from '../components/ui/AspectRatio.pzl';
 import Checkbox from '../components/ui/Checkbox.pzl';
 import Empty from '../components/ui/Empty.pzl';
 import Breadcrumb from '../components/ui/Breadcrumb.pzl';
-import DropdownMenu from '../components/ui/DropdownMenu.pzl';
+import DropdownMenu from '../components/ui/DropdownMenu/index.js';
 import Popconfirm from '../components/ui/Popconfirm.pzl';
 import Field from '../components/ui/Field.pzl';
 import Switch from '../components/ui/Switch.pzl';
 import NumberField from '../components/ui/NumberField.pzl';
 import TagsInput from '../components/ui/TagsInput.pzl';
 import Textarea from '../components/ui/Textarea.pzl';
+import Dropzone from '../components/ui/Dropzone.pzl';
 import DescriptionList from '../components/ui/DescriptionList.pzl';
 import Button from '../components/ui/Button.pzl';
 import DemoHeader from '../components/docs/DemoHeader.pzl';
@@ -419,10 +445,11 @@ const METRICS = [
   { label: 'Customers', value: '1,204', delta: '+38 new', variant: 'brand' },
 ];
 
+// Flat rows: a {#for} body needs a single element root, so a divider entry has
+// no shape to take here. Write a Separator into the markup when you want one.
 const ADD_ACTIONS = [
   { label: 'Import from CSV', value: 'import' },
   { label: 'Export products', value: 'export' },
-  { divider: true },
   { label: 'Bulk edit prices', value: 'bulk-edit' },
 ];
 
@@ -604,8 +631,7 @@ export default class AdminDemo extends PuzzleView {
         menu: [
           { label: 'Edit product', value: 'edit:' + p.id },
           { label: 'Duplicate', value: 'dup:' + p.id },
-          { divider: true },
-          { label: 'Archive', value: 'arch:' + p.id, danger: true },
+          { label: 'Archive', value: 'arch:' + p.id, variant: 'danger' },
         ],
       }));
 

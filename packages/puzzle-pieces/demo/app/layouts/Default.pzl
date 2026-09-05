@@ -9,19 +9,23 @@
       <div class="flex items-center gap-4">
         <SearchDialog/>
         <span class="hidden text-xs text-muted sm:inline">{ pieceCount } pieces · v0.7.0</span>
-        <DropdownMenu
-          align="end"
-          items={ schemeItems }
-          triggerClass="h-auto! rounded-md! border-0! bg-transparent! p-1.5! text-muted! hover:border-transparent! hover:bg-surface-sunken! hover:text-ink! outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          @select={ setScheme }>
-          <span slot="trigger" class="flex items-center" aria-label="Color scheme">
+        <DropdownMenu @select={ setScheme }>
+          <DropdownMenu.Trigger
+            variant="bare"
+            class="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-sunken hover:text-ink">
+            <span class="sr-only">Color scheme</span>
             <svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="13.5" cy="6.5" r="2.5" />
               <circle cx="17.5" cy="11.5" r="2.5" />
               <circle cx="8.5" cy="7.5" r="2.5" />
               <path d="M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.2a2 2 0 0 1-1.8-2.8l.4-.9A2.4 2.4 0 0 0 14.2 3H12z" />
             </svg>
-          </span>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end">
+            {#for scheme in schemeItems}
+              <DropdownMenu.Item key={ scheme.value } value={ scheme.value }>{ scheme.label }</DropdownMenu.Item>
+            {/for}
+          </DropdownMenu.Content>
         </DropdownMenu>
         <button
           type="button"
@@ -91,7 +95,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import Toaster from '../components/ui/Toaster.pzl';
 import Collapsible from '../components/ui/Collapsible/index.js';
-import DropdownMenu from '../components/ui/DropdownMenu.pzl';
+import DropdownMenu from '../components/ui/DropdownMenu/index.js';
 import SideNav from '../components/docs/SideNav.pzl';
 import SearchDialog from '../components/docs/SearchDialog.pzl';
 import { COMPONENTS } from '../docs/nav.js';

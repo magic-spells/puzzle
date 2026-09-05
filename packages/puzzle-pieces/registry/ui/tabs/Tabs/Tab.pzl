@@ -1,0 +1,55 @@
+<puzzle-view>
+  <tab-button data-value={ value } disabled={ disabled } class={ tabClass }><Children/></tab-button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Tabs.Tab — one tab button. Renders the real <tab-button>; the parent
+// <tab-group> owns its id, role, tabindex, aria-controls, aria-selected and
+// aria-disabled, so this piece authors none of them.
+//
+// `value` is this piece's own handle, carried as `data-value` — upstream works
+// in indexes, and the root maps between the two. It is REQUIRED: a button with
+// no data-value is invisible to the root's lookup.
+//
+// SELECTED STATE IS PURE CSS. The component writes aria-selected on every
+// change, so the active look hangs off Tailwind's `aria-selected:` variant —
+// no JS branch, and nothing to keep in step.
+//
+// `disabled` IS AN ATTRIBUTE, NOT A FORM-CONTROL STATE. <tab-button> is a
+// custom element, so Tailwind's `disabled:` variant (which compiles to
+// `:disabled`) will never match it. The styling uses `[&[disabled]]:` instead.
+//
+// Props
+//   value     required; the handle this tab reports through @change
+//   disabled  skipped by clicks and by arrow-key roving, upstream
+//   class     merged onto <tab-button>, after the chrome
+
+const TAB =
+  'inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium transition-colors ' +
+  'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  '[&[disabled]]:opacity-50 [&[disabled]]:cursor-not-allowed [&[disabled]]:pointer-events-none ' +
+  // underline (default)
+  'px-1 pb-2 -mb-px border-b-2 border-transparent text-body hover:text-ink ' +
+  'aria-selected:text-brand aria-selected:border-brand ' +
+  // pills — a descendant attribute selector, so it outranks the lines above
+  '[tab-group[data-variant=pills]_&]:mb-0 ' +
+  '[tab-group[data-variant=pills]_&]:rounded-md ' +
+  '[tab-group[data-variant=pills]_&]:border-b-0 ' +
+  '[tab-group[data-variant=pills]_&]:px-3 ' +
+  '[tab-group[data-variant=pills]_&]:py-1.5 ' +
+  '[tab-group[data-variant=pills]_&]:aria-selected:bg-surface ' +
+  '[tab-group[data-variant=pills]_&]:aria-selected:text-ink ' +
+  '[tab-group[data-variant=pills]_&]:aria-selected:shadow-sm';
+
+export default class TabsTab extends PuzzleView {
+  data(params, props) {
+    return {
+      value: props.value == null ? undefined : String(props.value),
+      disabled: props.disabled ? true : false,
+      tabClass: [TAB, props.class].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>

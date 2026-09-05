@@ -3,6 +3,7 @@
     class={ panelClass }
     wide={ wideAttr }
     opens={ opensAttr }
+    flip={ flipAttr }
     effect={ effectAttr }><Children/></dropdown-panel>
 </puzzle-view>
 
@@ -50,10 +51,18 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects
 //            stylesheet; a no-op without it. Degrades to a plain fade under
 //            prefers-reduced-motion.
+//   flip     true → opt-in collision handling: a panel that would run past the
+//            bottom of the viewport opens UPWARD instead, when there is room
+//            above. Measured once per open by the component, which sets the
+//            `flipped` attribute its own stylesheet styles. Off by default
+//            because a menu that jumps is worse than one that scrolls the page.
+//            Requires @magic-spells/dropdown-panel >= 2.1.0.
 //   align    'start' (default) | 'end'. `end` is the README's own right-align
 //            recipe (left: auto; right: 0) as two utilities, so a panel near
 //            the right edge hugs it instead of overflowing. Pure CSS — there is
-//            no measuring pass and nothing to re-run on resize.
+//            no measuring pass and nothing to re-run on resize. Kept as the two
+//            utilities rather than the 2.1.0 `align` attribute: five shipped
+//            families already depend on this recipe and the two are equivalent.
 //   class    merged onto <dropdown-panel>, after the stock chrome, so your
 //            utilities win.
 
@@ -82,6 +91,7 @@ export default class Panel extends PuzzleView {
       // A boolean attribute on a custom element: presence is the whole signal,
       // and the component reads it with hasAttribute().
       wideAttr: props.wide ? true : false,
+      flipAttr: props.flip ? true : false,
       opensAttr: opens,
       effectAttr: oneOf(props.effect, ['fade', 'slide', 'scale', 'blur', 'swing']),
     };

@@ -1,0 +1,36 @@
+<puzzle-view>
+  <stack-panel handle={ handle } class={ panelClass }><Children/></stack-panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// PanelStack.Panel — one panel in the stack. Renders the real <stack-panel>;
+// the parent <panel-stack> owns its `state` attribute (current | previous |
+// next), its `inert` and its role="group", and it overrides focus() to delegate
+// to [data-stack-focus] or the first focusable child. This piece authors none of
+// that — never write `state`, `inert` or an aria-hidden here.
+//
+// A Panel must be a DIRECT child of PanelStack, and the FIRST one is the root of
+// the stack.
+//
+// The one class this host carries is a background: the component's own
+// stylesheet paints a placeholder colour on <stack-panel>, and a token utility
+// in the utilities layer is what replaces it. Panels are absolutely positioned
+// and overlap, so a transparent panel would show the one behind it.
+//
+// Props
+//   handle  required; the identifier this panel is pushed and popped by
+//   class   merged onto <stack-panel>, after the background
+
+const PANEL = 'bg-surface';
+
+export default class PanelStackPanel extends PuzzleView {
+  data(params, props) {
+    return {
+      handle: props.handle == null ? undefined : String(props.handle),
+      panelClass: [PANEL, props.class].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>

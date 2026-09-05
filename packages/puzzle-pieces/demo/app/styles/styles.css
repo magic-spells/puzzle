@@ -62,6 +62,34 @@
 @import "@magic-spells/collapsible-content/css" layer(components);
 
 /*
+ * The Tabs family wraps @magic-spells/tab-group. This sheet is REQUIRED for one
+ * rule above all: `tab-panel[hidden] { display: none }` is what actually hides
+ * an inactive panel — without it every panel renders at once. It also sets the
+ * strip's flex/overflow and the tab cursor. `layer(components)` for the usual
+ * reason (plain element selectors), and it is load-bearing here: the pieces put
+ * padding and colour utilities straight on <tab-list> and <tab-button>.
+ */
+@import "@magic-spells/tab-group/css" layer(components);
+
+/*
+ * The SplitPanel family wraps @magic-spells/split-panel. REQUIRED: the flex
+ * layout, the `--split-panel-size` flex-grow binding the group writes on every
+ * pane, the divider's gutter, hit target and cursors, and the dragging/ready
+ * state rules all live here. The piece bridges the sheet's divider colour
+ * custom properties to pieces.css tokens on the group host.
+ */
+@import "@magic-spells/split-panel/css" layer(components);
+
+/*
+ * The PanelStack family wraps @magic-spells/panel-stack. REQUIRED: the absolute
+ * panel positioning, the per-state transform/filter custom properties, the
+ * stack effect's inner shadow and the reduced-motion opt-out are all in here,
+ * and so is the :not(:defined) guard that stops every panel flashing at once
+ * before the upgrade lands.
+ */
+@import "@magic-spells/panel-stack/css" layer(components);
+
+/*
  * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
  * and JS so the utility classes they use are generated. Paths are relative to
  * this stylesheet (app/styles/), so "../" is the app root.
