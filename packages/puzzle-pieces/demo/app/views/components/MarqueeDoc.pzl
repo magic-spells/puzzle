@@ -6,10 +6,11 @@
         <p class="mt-2 text-body">
           A continuously scrolling ticker of content — logos, announcements, testimonials. The
           items are the component's <strong class="font-medium text-ink">default-slot children</strong>;
-          the piece clones them to loop seamlessly. It pauses on hover, supports drag-to-scroll, and
+          they are cloned to loop seamlessly. It pauses on hover, supports drag-to-scrub, and
           honors <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">prefers-reduced-motion</code>
-          (no auto-scroll). It runs a plain <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">requestAnimationFrame</code>
-          loop — no CSS keyframes, nothing added to your theme.
+          (no auto-scroll). The piece <strong class="font-medium text-ink">wraps</strong> the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/scrolling-content</code>
+          web component rather than reimplementing it.
         </p>
       </header>
 
@@ -30,9 +31,18 @@
           Copy the piece into your app — it compiles with your build and the code is yours:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          It has one runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheet into your app's style entry. It is required: the host's
+          overflow, the track's max-content sizing that the clone measurement is derived from,
+          the gap variable, the drag cursors and the edge-fade mask all live there.
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
-          Requires the pieces.css tokens merged into your app styles (see Introduction). No extra
-          keyframes or theme changes are needed — the scroll runs entirely in JS.
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
       </section>
 
@@ -86,12 +96,49 @@
           </div>
         </ExampleBox>
 
+        <ExampleBox id="fade" title="Edge fade" code={ codeFade }>
+          <Marquee fade class="w-full rounded-xl border border-border bg-surface py-4">
+            <span class="px-4 text-lg font-semibold text-ink">Dissolves</span>
+            <span class="px-4 text-lg font-semibold text-ink">Instead</span>
+            <span class="px-4 text-lg font-semibold text-ink">Of</span>
+            <span class="px-4 text-lg font-semibold text-ink">Clipping</span>
+            <span class="px-4 text-lg font-semibold text-ink">At</span>
+            <span class="px-4 text-lg font-semibold text-ink">The</span>
+            <span class="px-4 text-lg font-semibold text-ink">Edges</span>
+          </Marquee>
+        </ExampleBox>
+
+        <ExampleBox id="gap" title="Gap" code={ codeGap }>
+          <Marquee gap={ 16 } class="w-full rounded-xl border border-border bg-surface py-4">
+            <span class="text-sm font-medium text-body">Wide spacing</span>
+            <span class="text-sm font-medium text-body">Between items</span>
+            <span class="text-sm font-medium text-body">And between copies</span>
+          </Marquee>
+        </ExampleBox>
+
+        <ExampleBox id="live" title="Live content" code={ codeLive }>
+          <div class="w-full space-y-3">
+            <Marquee class="w-full rounded-xl bg-brand py-2.5 text-brand-ink">
+              <span class="px-6 text-sm font-medium">{ promo }</span>
+              <span class="px-6 text-sm font-medium">Every clone rebuilds on the next frame</span>
+            </Marquee>
+            <button
+              type="button"
+              class="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink outline-ring hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2"
+              @click={ nextPromo }>
+              Change the message
+            </button>
+          </div>
+        </ExampleBox>
+
         <section id="behavior" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Behavior</h2>
           <ul class="space-y-1.5 text-sm text-body">
             <li><span class="font-medium text-ink">Seamless loop</span> — the slotted content is measured and cloned enough times to overfill the viewport; the track wraps by exactly one copy's width so there is never a gap</li>
             <li><span class="font-medium text-ink">Pause on hover</span> — the scroll stops while the pointer is over the marquee (mouse only); disable with <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ 'pauseOnHover={ false }' }</code></li>
-            <li><span class="font-medium text-ink">Drag to scroll</span> — press and drag along the scroll axis to move the ticker by hand; touch drags the marquee while still letting the page scroll on the cross axis</li>
+            <li><span class="font-medium text-ink">Drag to scrub</span> — press and drag horizontally to move the ticker by hand; touch drags the marquee while still letting the page scroll vertically. Opt out with <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ 'drag={ false }' }</code></li>
+            <li><span class="font-medium text-ink">Clones are inert</span> — every filler copy carries <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">data-clone</code>, <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-hidden</code> and <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">inert</code>, with ids stripped, so a cloned link is never a focus stop</li>
+            <li><span class="font-medium text-ink">Edits rebuild the clones</span> — change the slotted content and every copy is rebuilt on the next frame, automatically</li>
             <li><span class="font-medium text-ink">Reduced motion</span> — under <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">prefers-reduced-motion</code> the auto-scroll never starts; the content renders static and the duplicate copies are <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-hidden</code> so assistive tech reads the sequence once</li>
           </ul>
         </section>
@@ -111,6 +158,9 @@ import Toc from '@/components/docs/Toc.pzl';
 
 // Docs page for Marquee — follows the CarouselDoc / ScrollAreaDoc exemplar shape.
 const installCmd = 'puzzle add piece marquee';
+const installDep = 'npm install @magic-spells/scrolling-content';
+const installCss = `/* app/styles/styles.css */
+@import "@magic-spells/scrolling-content/css" layer(components);`;
 const usageImport = `import Marquee from '@/components/ui/Marquee.pzl';`;
 const usageMarkup = `<Marquee class="w-full rounded-xl border border-border bg-surface py-4"></Marquee>`;
 
@@ -122,8 +172,8 @@ const codeHero = `// Items are the default-slot children — the piece clones th
   <span class="px-4 text-lg font-semibold text-ink">Umbrella</span>
 </Marquee>`;
 
-const codeDirection = `// direction: 'left' (default) | 'right' | 'up' | 'down'.
-// up/down switch the track to a vertical column.
+const codeDirection = `// direction: 'left' (default) | 'right'. The marquee is horizontal —
+// there is no vertical mode.
 <Marquee direction="right" class="w-full ...">
   <span>One</span>
   <span>Two</span>
@@ -147,10 +197,43 @@ const codeSpeed = `// speed is pixels per second (default 40; larger = faster).
 <Marquee speed={ 20 } class="w-full ...">…slow…</Marquee>
 <Marquee speed={ 90 } class="w-full ...">…fast…</Marquee>`;
 
+const codeFade = `// bare \`fade\` uses the 4rem default; fade="6rem" sets the width.
+<Marquee fade class="w-full ...">
+  <span>Dissolves</span>
+  <span>Instead</span>
+  <span>Of clipping</span>
+</Marquee>`;
+
+const codeGap = `// gap is a Tailwind spacing STEP (default 4 → 1rem), applied between
+// items and between loop copies alike.
+<Marquee gap={ 16 } class="w-full ...">
+  <span>Wide spacing</span>
+  <span>Between items</span>
+</Marquee>`;
+
+const codeLive = `// Edit the slotted content and every clone is rebuilt on the next frame —
+// no rebuild() call, no key, nothing to remember.
+<Marquee class="w-full rounded-xl bg-brand py-2.5 text-brand-ink">
+  <span class="px-6 text-sm font-medium">{ promo }</span>
+</Marquee>`;
+
+const PROMOS = [
+  'Free shipping on orders over $50',
+  'New winter collection now live',
+  'Members get 20% off this week',
+];
+
 export default class MarqueeDoc extends PuzzleView {
+  created() {
+    this.setData({ promoIndex: 0 });
+  }
+
   data(params, props) {
     return {
+      promo: PROMOS[this.getData().promoIndex % PROMOS.length],
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
@@ -158,6 +241,9 @@ export default class MarqueeDoc extends PuzzleView {
       codeAnnouncement,
       codePause,
       codeSpeed,
+      codeFade,
+      codeGap,
+      codeLive,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
@@ -165,9 +251,19 @@ export default class MarqueeDoc extends PuzzleView {
         { label: 'Announcement bar', href: '#announcement' },
         { label: 'Pause on hover', href: '#pause' },
         { label: 'Speed', href: '#speed' },
+        { label: 'Edge fade', href: '#fade' },
+        { label: 'Gap', href: '#gap' },
+        { label: 'Live content', href: '#live' },
         { label: 'Behavior', href: '#behavior' },
       ],
     };
   }
+
+  events = {
+    nextPromo: () => {
+      this.setData('promoIndex', this.getData().promoIndex + 1);
+      this.refresh();
+    },
+  };
 }
 </script>

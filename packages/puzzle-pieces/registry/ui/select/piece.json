@@ -1,8 +1,8 @@
 {
   "name": "select",
-  "description": "Listbox-pattern select with typeahead, keyboard nav, group labels, dividers, optional trigger↔panel morph, and snippet-customizable option content",
-  "files": ["Select.pzl"],
+  "description": "Listbox-pattern select as a compound family — options, group labels and dividers as real children, with typeahead, roving keyboard focus, disabled options, an optional-controlled panel and a replaceable trigger slot; wraps the @magic-spells/select-dropdown web component rather than porting it",
+  "files": ["Select/Select.pzl", "Select/Option.pzl", "Select/Label.pzl", "Select/Divider.pzl", "Select/index.js"],
   "registryDependencies": [],
-  "dependencies": ["@magic-spells/morph-engine"],
+  "dependencies": ["@magic-spells/select-dropdown"],
   "targetDir": "app/components/ui"
 }

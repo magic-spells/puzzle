@@ -4,31 +4,48 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Select</h1>
         <p class="mt-2 text-body">
-          A listbox-pattern select rendered from an
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">options</code>
-          array, with typeahead, full keyboard navigation, group headings, dividers, and an opt-in trigger-to-panel
-          morph. State is controlled through a
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
-          callback.
+          A listbox-pattern select: a trigger showing the current choice and an overlay panel of options, with
+          typeahead, roving keyboard focus, group labels and dividers. Options are
+          <strong class="font-medium text-ink">real children</strong>, not an array prop. The family
+          <strong class="font-medium text-ink">wraps</strong> the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@magic-spells/select-dropdown</code>
+          web component rather than reimplementing it.
         </p>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <div class="w-64">
-          <Select options={ fruitOptions } value={ fruit } @change={ setFruit } />
+        <div class="flex w-full items-center gap-6">
+          <div class="w-64">
+            <Select value={ country } placeholder="Pick a country" @change={ setCountry }>
+              <Select.Option value="us">United States</Select.Option>
+              <Select.Option value="ca">Canada</Select.Option>
+              <Select.Option value="mx">Mexico</Select.Option>
+              <Select.Option value="br">Brazil</Select.Option>
+            </Select>
+          </div>
+          <p class="text-sm text-muted">Value: { country || '—' }</p>
         </div>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
-        <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
-        </p>
+        <p class="mb-3 text-sm text-body">Copy the family into your app:</p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          It has one runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheet into your app's style entry. It is required, not cosmetic: the
+          panel's at-rest
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">opacity: 0</code>
+          and the rule that reverses it are the whole show/hide mechanism, and the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">:not(:defined)</code>
+          guard is what keeps the un-upgraded option list out of a prerendered page.
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
-          The morph-engine install is only needed when you use the
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">morph</code>
-          prop. Requires the pieces.css tokens merged into your app styles (see Introduction).
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
       </section>
 
@@ -36,52 +53,145 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
-        <CodeBlock code={ optionSnippet } class="mt-3"/>
+        <p class="mt-3 text-sm text-muted">
+          One barrel import, dotted invocation. The members are thin — restyle them in your own app
+          without touching the root, which is where the state contract lives.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="groups" title="Groups and dividers" code={ codeGroups }>
-          <div class="w-64">
-            <Select options={ foodOptions } value={ food } @change={ setFood } />
-          </div>
-        </ExampleBox>
-
-        <ExampleBox id="morph" title="Morph" code={ codeMorph }>
-          <div class="w-64">
-            <Select options={ colorOptions } value={ color } morph={ true } @change={ setColor } />
-          </div>
-        </ExampleBox>
-
-        <ExampleBox id="position" title="Position" code={ codePosition }>
-          <div class="flex w-64 flex-col gap-4">
-            <Select options={ fruitOptions } value={ fruit } position="center" @change={ setFruit } />
-            <Select options={ fruitOptions } value={ fruit } position="up" @change={ setFruit } />
-          </div>
-        </ExampleBox>
-
-        <ExampleBox id="indicator" title="Indicator" code={ codeIndicator }>
-          <div class="flex w-64 flex-col gap-4">
-            <Select options={ fruitOptions } value={ fruit } @change={ setFruit } />
-            <Select options={ fruitOptions } value={ fruit } indicator="chevrons" @change={ setFruit } />
-            <Select options={ fruitOptions } value={ fruit } indicator="caret" @change={ setFruit } />
-          </div>
-        </ExampleBox>
-
-        <section id="keyboard" class="scroll-mt-20">
-          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
-          <p class="mb-3 text-sm text-body">Once open, the listbox owns these keys:</p>
-          <ul class="mb-4 space-y-1.5 text-sm text-body">
-            <li><span class="font-medium text-ink">Type a letter</span> — typeahead jumps to the next matching option</li>
-            <li><span class="font-medium text-ink">Up / Down arrows</span> — move the active option</li>
-            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last option</li>
-            <li><span class="font-medium text-ink">Enter / Space</span> — select the active option</li>
-            <li><span class="font-medium text-ink">Escape</span> — close and return focus to the trigger</li>
-          </ul>
-          <ExampleBox code={ codeKeyboard }>
+          <div class="flex w-full items-center gap-6">
             <div class="w-64">
-              <Select options={ fruitOptions } value={ fruit } @change={ setFruit } />
+              <Select value={ city } placeholder="Pick a city" @change={ setCity }>
+                <Select.Label>North America</Select.Label>
+                <Select.Option value="nyc">New York</Select.Option>
+                <Select.Option value="yyz">Toronto</Select.Option>
+                <Select.Divider/>
+                <Select.Label>Europe</Select.Label>
+                <Select.Option value="lon">London</Select.Option>
+                <Select.Option value="ber">Berlin</Select.Option>
+                <Select.Option value="lis">Lisbon</Select.Option>
+              </Select>
             </div>
-          </ExampleBox>
+            <p class="text-sm text-muted">Value: { city || '—' }</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled-option" title="Disabled option" code={ codeDisabledOption }>
+          <div class="flex w-full items-center gap-6">
+            <div class="w-64">
+              <Select value={ plan } placeholder="Choose a plan" @change={ setPlan }>
+                <Select.Option value="free">Free</Select.Option>
+                <Select.Option value="pro">Pro</Select.Option>
+                <Select.Option value="team" disabled>Team (invite only)</Select.Option>
+                <Select.Option value="enterprise">Enterprise</Select.Option>
+              </Select>
+            </div>
+            <p class="text-sm text-muted">Arrow keys skip it entirely</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled select" code={ codeDisabled }>
+          <div class="w-64">
+            <Select value="us" disabled>
+              <Select.Option value="us">United States</Select.Option>
+              <Select.Option value="ca">Canada</Select.Option>
+            </Select>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="trigger" title="Custom trigger" code={ codeTrigger }>
+          <div class="flex w-full items-center gap-6">
+            <div class="w-64">
+              <Select value={ sort } @change={ setSort }>
+                <span slot="trigger" class="flex w-full items-center gap-2">
+                  <svg class="size-4 shrink-0 text-muted" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M6 5h8M6 10h8M6 15h4" stroke-linecap="round" />
+                  </svg>
+                  <span class="select-label-text min-w-0 flex-1 truncate text-left">Sort by</span>
+                </span>
+                <Select.Option value="new">Newest first</Select.Option>
+                <Select.Option value="old">Oldest first</Select.Option>
+                <Select.Option value="az">A to Z</Select.Option>
+              </Select>
+            </div>
+            <p class="text-sm text-muted">Value: { sort || '—' }</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="open" title="Controlled open" code={ codeOpen }>
+          <div class="flex w-full items-center gap-6">
+            <div class="w-64">
+              <Select
+                value={ size }
+                placeholder="Pick a size"
+                open={ sizeOpen }
+                @change={ setSize }
+                @show={ onSizeShow }
+                @hide={ onSizeHide }>
+                <Select.Option value="s">Small</Select.Option>
+                <Select.Option value="m">Medium</Select.Option>
+                <Select.Option value="l">Large</Select.Option>
+              </Select>
+            </div>
+            <button
+              type="button"
+              class="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink outline-ring hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2"
+              @click={ toggleSize }>
+              { sizeOpen ? 'Close' : 'Open' } from outside
+            </button>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="dynamic" title="Dynamic options" code={ codeDynamic }>
+          <div class="w-full space-y-3">
+            <div class="w-64">
+              <Select value={ fruit } placeholder="Pick one" @change={ setFruit }>
+                {#for row in fruits}
+                  <Select.Option key={ row.value } value={ row.value }>{ row.label }</Select.Option>
+                {/for}
+              </Select>
+            </div>
+            <div class="flex items-center gap-3">
+              <button
+                type="button"
+                class="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink outline-ring hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2"
+                @click={ swapFruits }>
+                Swap the list
+              </button>
+              <p class="text-sm text-muted">Value: { fruit || '—' }</p>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <section id="behavior" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Behavior</h2>
+          <ul class="space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Controlled</span> — the parent owns <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">value</code> and stores what <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@change</code> reports; the callback is value-first and fires on a user pick only, never on a programmatic set</li>
+            <li><span class="font-medium text-ink">Keyboard</span> — Enter/Space or arrow keys open the panel, arrows and typeahead move through the options, Home/End jump to the first/last enabled one, Escape closes, Tab closes and moves on. Focus is real DOM focus on the option (a roving tabindex)</li>
+            <li><span class="font-medium text-ink">Sticky value</span> — the last applied value is re-asserted whenever the option list changes, so a re-rendered <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '{#for}' }</code> keeps the selection. If the selected value is gone from the new list the control clears back to the placeholder</li>
+            <li><span class="font-medium text-ink">The trigger slot wins over the stock chrome</span> — a <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">slot="trigger"</code> element replaces the label and the chevron entirely, so it must carry its own accessible name. Give the element you want the selected label written into the <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">select-label-text</code> class. Keep it non-interactive: the trigger itself is the control</li>
+            <li><span class="font-medium text-ink">Optional-controlled open</span> — omit <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code> and the component owns its own state. Pass it and only a CHANGE acts; store what <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@show</code> and <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@hide</code> report so the next change is a fresh edge</li>
+            <li><span class="font-medium text-ink">Forms</span> — pass <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">name</code> and the family renders a hidden input the component keeps in sync, so the control submits and a form reset restores the markup default</li>
+          </ul>
+        </section>
+
+        <section id="migration" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Migrating from 0.6</h2>
+          <p class="mb-3 text-sm text-body">
+            Select was a single component taking an <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">options</code>
+            array, with an <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">optionSnippet</code>
+            for custom rows. It is a family now, and options are children:
+          </p>
+          <CodeBlock code={ codeMigration }/>
+          <p class="mt-3 text-sm text-muted">
+            The <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">morph</code>,
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">position</code>,
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">indicator</code> and
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">size</code> props are gone —
+            the component has one placement mode and one caret.
+          </p>
         </section>
       </div>
     </article>
@@ -92,123 +202,173 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import Select from '@/components/ui/Select.pzl';
+import Select from '@/components/ui/Select';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
 const installCmd = 'puzzle add piece select';
-const usageImport = `import Select from '@/components/ui/Select.pzl';`;
-const usageMarkup = `<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
-const optionSnippet = `// The option element, ARIA, and handlers stay owned by Select.
-// Declare the full option shape; Puzzle diagnoses shape mismatches in development.
-<Select options={ people } value={ person } @change={ setPerson }>
-  <Snippet fits="option" item active selected disabled>
-    <img class="size-6 rounded-full" src={ item.avatar } alt="" />
-    <span class="truncate">{ item.name }</span>
-  </Snippet>
+const installDep = 'npm install @magic-spells/select-dropdown';
+const installCss = `/* app/styles/styles.css */
+@import "@magic-spells/select-dropdown/css" layer(components);`;
+
+const usageImport = `import Select from '@/components/ui/Select';`;
+
+const usageMarkup = `<Select value={ country } placeholder="Pick a country" @change={ setCountry }>
+  <Select.Label>North America</Select.Label>
+  <Select.Option value="us">United States</Select.Option>
+  <Select.Option value="ca">Canada</Select.Option>
+  <Select.Divider/>
+  <Select.Option value="mx" disabled>Mexico (sold out)</Select.Option>
 </Select>`;
 
-const codeHero = `const fruitOptions = [
+const codeHero = `<Select value={ country } placeholder="Pick a country" @change={ setCountry }>
+  <Select.Option value="us">United States</Select.Option>
+  <Select.Option value="ca">Canada</Select.Option>
+  <Select.Option value="mx">Mexico</Select.Option>
+</Select>
+
+// parent
+events = {
+  setCountry: (v) => this.setData('country', v),
+};`;
+
+const codeGroups = `// Select.Label is role="presentation"; Select.Divider is role="separator".
+<Select value={ city } placeholder="Pick a city" @change={ setCity }>
+  <Select.Label>North America</Select.Label>
+  <Select.Option value="nyc">New York</Select.Option>
+  <Select.Option value="yyz">Toronto</Select.Option>
+  <Select.Divider/>
+  <Select.Label>Europe</Select.Label>
+  <Select.Option value="lon">London</Select.Option>
+</Select>`;
+
+const codeDisabledOption = `// not selectable, not focusable, skipped by arrows and typeahead
+<Select.Option value="team" disabled>Team (invite only)</Select.Option>`;
+
+const codeDisabled = `// the panel refuses to open and the trigger leaves the tab order
+<Select value="us" disabled>
+  <Select.Option value="us">United States</Select.Option>
+</Select>`;
+
+const codeTrigger = `// A slot="trigger" element REPLACES the stock label + chevron entirely.
+// Give the element you want the selected label written into the
+// select-label-text class, and keep the content non-interactive.
+<Select value={ sort } @change={ setSort }>
+  <span slot="trigger" class="flex w-full items-center gap-2">
+    <svg class="size-4 shrink-0 text-muted">…</svg>
+    <span class="select-label-text min-w-0 flex-1 truncate text-left">Sort by</span>
+  </span>
+  <Select.Option value="new">Newest first</Select.Option>
+</Select>`;
+
+const codeOpen = `// optional-controlled: omit open and the component owns it.
+<Select value={ size } open={ sizeOpen } @change={ setSize }
+        @show={ onSizeShow } @hide={ onSizeHide }>
+  <Select.Option value="s">Small</Select.Option>
+</Select>
+
+// parent
+events = {
+  onSizeShow: () => this.setData('sizeOpen', true),
+  onSizeHide: () => this.setData('sizeOpen', false),
+};`;
+
+const codeDynamic = `// The component re-asserts the selected value across a list swap, so a
+// {#for} can be rebuilt freely. Do it between interactions, not from the
+// @change handler while the panel is still open.
+<Select value={ fruit } @change={ setFruit }>
+  {#for row in fruits}
+    <Select.Option key={ row.value } value={ row.value }>{ row.label }</Select.Option>
+  {/for}
+</Select>`;
+
+const codeMigration = `// 0.6
+<Select options={ countries } value={ country } @change={ setCountry } />
+
+// 0.7
+<Select value={ country } @change={ setCountry }>
+  {#for row in countries}
+    <Select.Option key={ row.value } value={ row.value }>{ row.label }</Select.Option>
+  {/for}
+</Select>`;
+
+const FRUITS_A = [
   { value: 'apple', label: 'Apple' },
-  { value: 'banana', label: 'Banana' },
-  { value: 'cherry', label: 'Cherry' },
+  { value: 'pear', label: 'Pear' },
+  { value: 'plum', label: 'Plum' },
 ];
 
-<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
-
-const codeGroups = `const foodOptions = [
-  { group: 'Savory' },
-  { value: 'pizza', label: 'Pizza' },
-  { value: 'tacos', label: 'Tacos' },
-  { divider: true },
-  { group: 'Sweet' },
-  { value: 'cake', label: 'Cake' },
-  { value: 'sorbet', label: 'Sorbet', disabled: true },
+const FRUITS_B = [
+  { value: 'apple', label: 'Apple' },
+  { value: 'fig', label: 'Fig' },
+  { value: 'kiwi', label: 'Kiwi' },
+  { value: 'plum', label: 'Plum' },
 ];
-
-<Select options={ foodOptions } value={ food } @change={ setFood } />`;
-
-const codeMorph = `// requires: npm install @magic-spells/morph-engine
-// A morph select opens centered: the selected option sits right over the
-// trigger (macOS-style), so clicking the same spot again closes it.
-<Select options={ colorOptions } value={ color } morph={ true } @change={ setColor } />`;
-
-const codePosition = `// position: 'down' | 'up' | 'center'
-// unset — morph selects center; plain selects flip to whichever side has room
-<Select options={ fruitOptions } value={ fruit } position="center" @change={ setFruit } />
-<Select options={ fruitOptions } value={ fruit } position="up" @change={ setFruit } />`;
-
-const codeIndicator = `// indicator: 'triangle' (default) | 'chevrons' | 'caret'
-// 'chevrons' shows the classic up/down selection-list arrows (never rotates).
-<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />
-<Select options={ fruitOptions } value={ fruit } indicator="chevrons" @change={ setFruit } />
-<Select options={ fruitOptions } value={ fruit } indicator="caret" @change={ setFruit } />`;
-
-const codeKeyboard = `<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
 
 export default class SelectDoc extends PuzzleView {
   created() {
-    this.setData({ fruit: '', food: 'pizza', color: 'blue' });
+    this.setData({
+      country: '',
+      city: '',
+      plan: '',
+      sort: '',
+      size: '',
+      sizeOpen: false,
+      fruit: 'plum',
+      swapped: false,
+    });
   }
 
   data(params, props) {
+    const state = this.getData();
     return {
-      ...this.getData(),
+      ...state,
+      fruits: state.swapped ? FRUITS_B : FRUITS_A,
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
-      optionSnippet,
       codeHero,
       codeGroups,
-      codeMorph,
-      codePosition,
-      codeIndicator,
-      codeKeyboard,
-      fruitOptions: [
-        { value: 'apple', label: 'Apple' },
-        { value: 'banana', label: 'Banana' },
-        { value: 'cherry', label: 'Cherry' },
-      ],
-      foodOptions: [
-        { group: 'Savory' },
-        { value: 'pizza', label: 'Pizza' },
-        { value: 'tacos', label: 'Tacos' },
-        { divider: true },
-        { group: 'Sweet' },
-        { value: 'cake', label: 'Cake' },
-        { value: 'sorbet', label: 'Sorbet', disabled: true },
-      ],
-      colorOptions: [
-        { value: 'red', label: 'Red' },
-        { value: 'blue', label: 'Blue' },
-        { value: 'green', label: 'Green' },
-      ],
+      codeDisabledOption,
+      codeDisabled,
+      codeTrigger,
+      codeOpen,
+      codeDynamic,
+      codeMigration,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Groups and dividers', href: '#groups' },
-        { label: 'Morph', href: '#morph' },
-        { label: 'Position', href: '#position' },
-        { label: 'Indicator', href: '#indicator' },
-        { label: 'Keyboard', href: '#keyboard' },
+        { label: 'Disabled option', href: '#disabled-option' },
+        { label: 'Disabled select', href: '#disabled' },
+        { label: 'Custom trigger', href: '#trigger' },
+        { label: 'Controlled open', href: '#open' },
+        { label: 'Dynamic options', href: '#dynamic' },
+        { label: 'Behavior', href: '#behavior' },
+        { label: 'Migrating from 0.6', href: '#migration' },
       ],
     };
   }
 
+  #set(key, value) {
+    this.setData(key, value);
+    this.refresh();
+  }
+
   events = {
-    setFruit: (v) => {
-      this.setData('fruit', v);
-      this.refresh();
-    },
-    setFood: (v) => {
-      this.setData('food', v);
-      this.refresh();
-    },
-    setColor: (v) => {
-      this.setData('color', v);
-      this.refresh();
-    },
+    setCountry: (v) => this.#set('country', v),
+    setCity: (v) => this.#set('city', v),
+    setPlan: (v) => this.#set('plan', v),
+    setSort: (v) => this.#set('sort', v),
+    setSize: (v) => this.#set('size', v),
+    onSizeShow: () => this.#set('sizeOpen', true),
+    onSizeHide: () => this.#set('sizeOpen', false),
+    toggleSize: () => this.#set('sizeOpen', !this.getData().sizeOpen),
+    setFruit: (v) => this.#set('fruit', v),
+    swapFruits: () => this.#set('swapped', !this.getData().swapped),
   };
 }
 </script>
