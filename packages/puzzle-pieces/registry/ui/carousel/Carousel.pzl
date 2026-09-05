@@ -412,6 +412,10 @@ export default class Carousel extends PuzzleView {
     onDot: (index) => this._commit(index, { scroll: true }),
 
     onKey: (event) => {
+      // Slotted slide content owns its own editing keys — never steal them.
+      if (event.defaultPrevented) return;
+      const t = event.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
       switch (event.key) {
         case 'ArrowLeft':
           event.preventDefault();

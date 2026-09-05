@@ -731,6 +731,8 @@ export default class Combobox extends PuzzleView {
     },
 
     onKey: (event) => {
+      // IME composition confirm must not act.
+      if (event.isComposing) return;
       const open = this._effectiveOpen();
       const { options } = this.getData();
       switch (event.key) {

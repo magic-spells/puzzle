@@ -154,6 +154,8 @@ export default class ContextMenu extends PuzzleView {
     this._pendingFocus = first >= 0 ? first : null;
     this._needsClamp = true;
     this.setData({ open: true, activeIndex: first, panelX: x, panelY: y });
+    // panelStyle is derived in data() — setData alone leaves it stale at the previous position
+    this.refresh();
     if (!this._docBound) {
       document.addEventListener('pointerdown', this._onDocPointerDown);
       document.addEventListener('contextmenu', this._onDocContextMenu);

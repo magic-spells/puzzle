@@ -136,7 +136,8 @@ export default class VirtualList extends PuzzleView {
     const overscan = props.overscan == null || !Number.isFinite(rawOverscan)
       ? DEFAULT_OVERSCAN
       : Math.max(0, Math.floor(rawOverscan));
-    const visibleCount = Math.max(1, Math.ceil(viewportHeight / rowHeight));
+    // +1: a viewport that starts mid-row spans one more row than ceil() alone.
+    const visibleCount = Math.max(1, Math.ceil(viewportHeight / rowHeight) + 1);
     const windowCount = visibleCount + overscan * 2;
     const maxStart = Math.max(0, items.length - windowCount);
     const start = clamp(this._windowStart, 0, maxStart);

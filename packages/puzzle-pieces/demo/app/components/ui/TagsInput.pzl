@@ -257,6 +257,8 @@ export default class TagsInput extends PuzzleView {
     },
 
     onKey: (event) => {
+      // IME composition confirm must not act.
+      if (event.isComposing) return;
       const delimiters = this._delimiters(this.props);
       if (delimiters.includes(event.key)) {
         event.preventDefault();

@@ -550,6 +550,9 @@ export default class EmojiPicker extends PuzzleView {
   }
 
   _onClosed() {
+    // Controlled close skips the engine's hide path, so an in-flight morph would leave the
+    // trigger `visibility:hidden` forever; stop() is a no-op on an idle engine.
+    this._morph?.stop();
     document.removeEventListener('pointerdown', this._onDocPointer);
     this.setData({ placement: 'bottom', morphTop: 0, query: '', activeIndex: 0 });
     if (this._pendingRestoreFocus) {

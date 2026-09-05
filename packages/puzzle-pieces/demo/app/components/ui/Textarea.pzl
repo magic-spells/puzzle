@@ -6,6 +6,7 @@
     <textarea
       id={ id }
       class={ inputClass }
+      value={ value }
       rows={ rows }
       placeholder={ placeholder }
       name={ name }

@@ -844,8 +844,14 @@ export default class Calendar extends PuzzleView {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        this.setData({ view: 'days' });
-        this._pendingFocus = { type: 'day', iso: this.getData().focusedIso };
+        // The months view can page viewYear away from focusedIso; restore the day grid
+        // to the focused date's month, or it renders a month with no tab stop at all.
+        const backIso = this.getData().focusedIso;
+        const backTo = parseISODate(backIso);
+        this.setData(
+          backTo ? { view: 'days', viewYear: backTo.year, viewMonth: backTo.month } : { view: 'days' }
+        );
+        this._pendingFocus = { type: 'day', iso: backIso };
         this.refresh();
         return;
       }

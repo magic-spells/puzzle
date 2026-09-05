@@ -171,7 +171,7 @@ import { parseISODate, toDate, compareDates } from '../../lib/date-math.js';
 //     spans, icons, dots, badges.
 //
 // CALLBACKS
-//   @change(range, event)   value-first { start, end }. Fires on EACH committed endpoint:
+//   @change(range)          value-first { start, end }. Fires on EACH committed endpoint:
 //                           the first click emits { start, end:'' } (new range begun); the
 //                           second emits the completed { start, end } (swapped so start ≤
 //                           end). A third click begins a fresh range. Presets emit their

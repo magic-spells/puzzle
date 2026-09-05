@@ -9,8 +9,11 @@
  *
  * `step` is either a positive number or the STRING `'any'` (continuous) — never
  * do arithmetic on it without checking, `'any' * 2` is NaN. `dec` is the decimal
- * precision implied by the step and min, used to round float drift out of
- * computed values (0.1 + 0.2 must not surface as 0.30000000000000004).
+ * precision implied by the step, min AND max, used to round float drift out of
+ * computed values (0.1 + 0.2 must not surface as 0.30000000000000004). `max`
+ * counts because a bound off the step grid (max 2.5 with step 1) is a legal
+ * value the clamp can return — rounding it to the step's precision would push
+ * it back past the bound.
  *
  * The percent helpers are the bridge to CSS: a value becomes a 0–100 percent
  * that the piece drops straight into a `left:`/`width:` style string.
@@ -51,7 +54,9 @@ export function configFrom(props) {
 	const stepAny = props.step === 'any';
 	const stepNum = Number(props.step);
 	const step = stepAny ? 'any' : Number.isFinite(stepNum) && stepNum > 0 ? stepNum : 1;
-	const dec = stepAny ? 2 : Math.max(decimalsOf(props.step), decimalsOf(props.min));
+	const dec = stepAny
+		? 2
+		: Math.max(decimalsOf(props.step), decimalsOf(props.min), decimalsOf(props.max));
 	return { min, max, step, dec };
 }
 
