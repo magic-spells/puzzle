@@ -1,0 +1,46 @@
+<puzzle-view>
+  <collapsible-component data-value={ itemValue } class={ itemClass }><Children/></collapsible-component>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Accordion.Item — one row of the accordion. A member of the Accordion family
+// (D167). It renders the bare <collapsible-component> element as its single root.
+//
+//   <Accordion.Item value="shipping">
+//     <Accordion.Trigger>Shipping</Accordion.Trigger>
+//     <Accordion.Content>…</Accordion.Content>
+//   </Accordion.Item>
+//
+// THIS IS THE ONE MEMBER THAT DOES NOT COMPOSE THE COLLAPSIBLE FAMILY, and the
+// reason is structural. <Collapsible> renders a non-exclusive <collapsible-group>
+// around its component precisely so that a standalone collapsible nested inside an
+// accordion is shielded from that accordion's exclusivity — a component joins its
+// NEAREST group ancestor. An Item wrapped that way would shield itself from its own
+// accordion, and the group would have no members left to coordinate. So Item
+// renders the raw element; Trigger and Content still compose Collapsible's.
+//
+// `value` IS REQUIRED for a controlled accordion. It lands on `data-value`, which is
+// how the root identifies its direct members, reads the group's state back off the
+// DOM and drives show()/hide(). An Item without one still works as a plain
+// disclosure, but the root will never report or set it.
+//
+// SINGLE ELEMENT ROOT — which is what makes this the right thing to put directly
+// inside a {#for} over a list of rows.
+//
+// Props
+//   value  the id this row reports and answers to
+//   class  merged onto <collapsible-component>
+
+export default class Item extends PuzzleView {
+  data(params, props) {
+    return {
+      // `false` is the compiler's omit sentinel: no value, no data-value, and the
+      // root's member query skips the row entirely.
+      itemValue: props.value === undefined || props.value === null ? false : String(props.value),
+      itemClass: props.class || false,
+    };
+  }
+}
+</script>

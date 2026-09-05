@@ -167,7 +167,14 @@
 
             <div>
               <h3 class="mb-3 text-sm font-medium text-ink">Shipping, returns & care</h3>
-              <Accordion items={ faqItems } value={ faqOpen } @change={ setFaq } />
+              <Accordion value={ faqOpen } @change={ setFaq }>
+                {#for faq in faqItems}
+                  <Accordion.Item key={ faq.id } value={ faq.id }>
+                    <Accordion.Trigger>{ faq.title }</Accordion.Trigger>
+                    <Accordion.Content>{ faq.content }</Accordion.Content>
+                  </Accordion.Item>
+                {/for}
+              </Accordion>
             </div>
           </div>
         </div>
@@ -249,7 +256,7 @@ import QuantityInput from '../components/ui/QuantityInput.pzl';
 import Button from '../components/ui/Button.pzl';
 import Tabs from '../components/ui/Tabs.pzl';
 import DescriptionList from '../components/ui/DescriptionList.pzl';
-import Accordion from '../components/ui/Accordion.pzl';
+import Accordion from '../components/ui/Accordion/index.js';
 import Pagination from '../components/ui/Pagination.pzl';
 import Avatar from '../components/ui/Avatar.pzl';
 import Separator from '../components/ui/Separator.pzl';

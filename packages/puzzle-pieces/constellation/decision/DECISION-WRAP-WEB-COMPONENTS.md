@@ -67,6 +67,18 @@ notes:
       bridge. NavigationMenu is the first consumer and composes those members (not re-export),
       replacing its `items[].children[]` config array — a breaking change taken inside unreleased
       0.7.0. Eight more menu-style pieces follow.
+  - kind: state
+    text: >-
+      0.7.0: `collapsible` and `accordion` converted from ports to wrappers over
+      @magic-spells/collapsible-content 1.2.0, as the families Collapsible·Trigger·Content and
+      Accordion·Item·Trigger·Content (see COMPONENT-COLLAPSIBLE). Deleted from this repo: the Web
+      Animations height model, the speed→duration math, the `_openMap` / `_seeded` bookkeeping, the
+      matchMedia reduced-motion checks, and every hand-written aria-expanded / aria-controls /
+      aria-labelledby / role=region / aria-hidden / inert. Accordion's Rule B violation — a config
+      `items` array whose `content` could only be plain text, because Puzzle has no per-row slots —
+      is retired with it: panel bodies are arbitrary markup now. Upstream additions that made the
+      conversion possible (observed `open` on the content, `<collapsible-group exclusive>`, a
+      bubbling `collapsible:toggle`, `show()/hide()/toggle()`) went upstream first, not into a fork.
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work

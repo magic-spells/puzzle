@@ -4,34 +4,67 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Collapsible</h1>
         <p class="mt-2 text-body">
-          An animated disclosure whose body height eases 0 to measured over a
-          <strong class="font-medium text-ink">speed-based</strong> duration. Closed, it carries
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">inert</code>
-          and aria-hidden, so its content leaves the tab order. The parent owns
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">open</code>.
+          An animated disclosure: a button that expands and collapses a region. It is a compound
+          <strong class="font-medium text-ink">family</strong> that wraps the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/collapsible-content</code>
+          web component, so the height measurement, the distance-derived duration, the
+          mid-animation reversal, every ARIA attribute and the reduced-motion branch come from the
+          component rather than from a hand-rolled copy in this file.
         </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">label</code>
+            prop and the single slot are gone. A disclosure needs two content channels — the
+            trigger row and the panel body — and a piece gets exactly one, so the shape became
+            members. <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">speed</code>
+            moved onto Collapsible.Content, and the Web Animations height model was deleted
+            outright.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <div class="w-full max-w-md rounded-xl border border-border bg-surface p-4">
-          <Collapsible label="Shipping and returns" open={ heroOpen } @change={ setHeroOpen }>
-            <div class="space-y-2">
-              <p>Free standard shipping on orders over 50 dollars. Expedited options are shown at checkout.</p>
-              <ul class="list-disc space-y-1 pl-5 text-muted">
-                <li>Delivered in 3–5 business days</li>
-                <li>Returns accepted within 30 days</li>
+        <div class="w-full max-w-xl divide-y divide-border py-2">
+          <Collapsible>
+            <Collapsible.Trigger>Shipping and returns</Collapsible.Trigger>
+            <Collapsible.Content>
+              <p>
+                Free carbon-neutral 2-day shipping over $75, and 30 days to change your mind. The
+                body is real markup — this paragraph, the list below, or any other component.
+              </p>
+              <ul class="mt-2 list-disc pl-5">
+                <li>Same-day dispatch before 2pm ET</li>
+                <li>Return shipping is on us</li>
               </ul>
-            </div>
+            </Collapsible.Content>
+          </Collapsible>
+
+          <Collapsible>
+            <Collapsible.Trigger>Warranty</Collapsible.Trigger>
+            <Collapsible.Content>
+              Two years against manufacturing defects, extended to three if you register within a
+              month.
+            </Collapsible.Content>
           </Collapsible>
         </div>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
-        <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
-        </p>
+        <p class="mb-3 text-sm text-body">Copy the family into your app:</p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          It has one runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheet into your app's style entry. It is required: the height
+          transition the whole animation runs on lives there, along with
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">overflow: hidden</code>,
+          the button reset and the reduced-motion opt-out.
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -41,34 +74,117 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          The root renders a non-exclusive
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">collapsible-group</code>
+          around the component, and that wrapper is load-bearing: a component joins its nearest
+          group ancestor, so without it a standalone Collapsible dropped inside an
+          <a class="text-brand underline underline-offset-2" href="#/components/accordion">Accordion</a>
+          item would be closed by that accordion's exclusivity. Its own plain group shields it.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="exclusivity" title="Composed exclusivity" code={ codeExclusivity }>
-          <div class="w-full max-w-md">
-            <p class="mb-3 text-xs font-medium text-muted">
-              Rich content AND one-open-at-a-time: Collapsibles sharing a parent-owned open id.
-            </p>
-            <div class="divide-y divide-border border-y border-border">
-              {#for item in richFaq}
-                <Collapsible label={ item.label } open={ groupId === item.id } @change={ toggleGroup(item.id) }>
-                  <p>{ item.body }</p>
-                </Collapsible>
-              {/for}
+        <ExampleBox id="default-open" title="Starting expanded" code={ codeDefaultOpen }>
+          <div class="w-full max-w-xl py-2">
+            <Collapsible>
+              <Collapsible.Trigger>What is in the box</Collapsible.Trigger>
+              <Collapsible.Content defaultOpen>
+                Headphones, a braided USB-C cable, a 3.5 mm cable and a hard travel case.
+              </Collapsible.Content>
+            </Collapsible>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="controlled" title="Controlled open" code={ codeControlled }>
+          <div class="flex w-full max-w-xl flex-col gap-4 py-2">
+            <Collapsible open={ open } @change={ onChange }>
+              <Collapsible.Trigger>Driven from outside</Collapsible.Trigger>
+              <Collapsible.Content>
+                The parent owns this panel's state. Toggling it from the button below is a fresh
+                edge; toggling it from the trigger reports through @change.
+              </Collapsible.Content>
+            </Collapsible>
+            <div class="flex items-center gap-3">
+              <Button variant="outline" size="sm" @press={ toggle }>Toggle from outside</Button>
+              <span class="text-sm text-muted">open = { openLabel }</span>
             </div>
           </div>
         </ExampleBox>
-      </div>
 
-      <section class="mt-8 max-w-3xl">
-        <p class="text-sm text-body">
-          No Accordion component is needed for exclusivity — track one open id in the parent and
-          pass each Collapsible a derived boolean. This keeps rich slot markup per panel while
-          still closing the others. When your panels are plain text, reach for
-          <strong class="font-medium text-ink">Accordion</strong> instead: it renders the whole
-          set from one config array.
-        </p>
-      </section>
+        <ExampleBox id="speed" title="Animation pace" code={ codeSpeed }>
+          <div class="w-full max-w-xl divide-y divide-border py-2">
+            <Collapsible>
+              <Collapsible.Trigger>Brisk (speed 2000)</Collapsible.Trigger>
+              <Collapsible.Content speed={ 2000 }>
+                Duration is derived from the distance travelled at this px/sec pace, then clamped —
+                short panels never feel instant and tall ones never crawl.
+              </Collapsible.Content>
+            </Collapsible>
+            <Collapsible>
+              <Collapsible.Trigger>Languid (speed 300)</Collapsible.Trigger>
+              <Collapsible.Content speed={ 300 } easing="cubic-bezier(.2,.8,.2,1)">
+                The same panel at a slower pace, with a custom easing forwarded as
+                --collapsible-easing.
+              </Collapsible.Content>
+            </Collapsible>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled trigger" code={ codeDisabled }>
+          <div class="w-full max-w-xl py-2">
+            <Collapsible>
+              <Collapsible.Trigger disabled>Not available yet</Collapsible.Trigger>
+              <Collapsible.Content>
+                A disabled trigger is a real disabled button, so the component's own click listener
+                never fires.
+              </Collapsible.Content>
+            </Collapsible>
+          </div>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Collapsible</h3>
+          <div class="text-sm">
+            {#for row in rootRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Collapsible.Trigger</h3>
+          <div class="text-sm">
+            {#for row in triggerRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Collapsible.Content</h3>
+          <div class="text-sm">
+            {#for row in contentRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <p class="mt-6 text-sm text-body">
+            A rejected toggle is <span class="font-medium text-ink">not</span> reverted. The
+            component self-manages and then reports; a parent that ignores @change leaves the panel
+            visually open while its own state says closed, and the next real change to
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+            puts it right. Reverting would fight the animation.
+          </p>
+        </section>
+      </div>
     </article>
 
     <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
@@ -77,81 +193,136 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import Collapsible from '@/components/ui/Collapsible.pzl';
+import Collapsible from '@/components/ui/Collapsible/index.js';
+import Button from '@/components/ui/Button.pzl';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
-// Docs page for Collapsible — follows the ButtonDoc exemplar shape.
+// Docs page for the Collapsible family. Code samples live as template-literal
+// consts because literal tag names and {#…} tokens would be parsed as template
+// syntax in prose.
 const installCmd = 'puzzle add piece collapsible';
-const usageImport = `import Collapsible from '@/components/ui/Collapsible.pzl';`;
-const usageMarkup = `<Collapsible label="Shipping and returns" open={ open } @change={ setOpen }></Collapsible>`;
+// TODO: switch to ^1.2.0 once published — the demo pins the package by file:
+// path while 1.2.0 is unreleased. Consumers install the published range.
+const installDep = 'npm install @magic-spells/collapsible-content@^1.2.0';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/collapsible-content/css" layer(components); /* required */`;
 
-const codeHero = `<Collapsible label="Shipping and returns" open={ open } @change={ setOpen }>
-  <div class="space-y-2">
-    <p>Free standard shipping on orders over 50 dollars.</p>
-    <ul class="list-disc pl-5">
-      <li>Delivered in 3–5 business days</li>
-      <li>Returns accepted within 30 days</li>
-    </ul>
-  </div>
+const usageImport = `import Collapsible from '@/components/ui/Collapsible';`;
+
+const usageMarkup = `<Collapsible>
+  <Collapsible.Trigger>Shipping and returns</Collapsible.Trigger>
+  <Collapsible.Content>
+    <p>Real markup — this is not a text prop.</p>
+  </Collapsible.Content>
+</Collapsible>`;
+
+const codeHero = `// Two channels: the trigger row and the panel body. The body takes
+// anything — paragraphs, lists, other pieces.
+<Collapsible>
+  <Collapsible.Trigger>Shipping and returns</Collapsible.Trigger>
+  <Collapsible.Content>
+    <p>…</p>
+    <ul class="mt-2 list-disc pl-5"><li>…</li></ul>
+  </Collapsible.Content>
+</Collapsible>`;
+
+const codeDefaultOpen = `// defaultOpen is read ONCE, on the first render. The 'open'
+// attribute is never bound after that: the element observes it and
+// its own setter writes it back, so a live binding would fight the
+// patcher every render. Drive it through the root instead.
+<Collapsible>
+  <Collapsible.Trigger>What is in the box</Collapsible.Trigger>
+  <Collapsible.Content defaultOpen>…</Collapsible.Content>
+</Collapsible>`;
+
+const codeControlled = `// Optional-controlled and EDGE-triggered: only a change acts. The
+// user can still toggle the panel, which reports through @change —
+// store that value so the next change is a fresh edge.
+<Collapsible open={ open } @change={ onChange }>
+  <Collapsible.Trigger>Driven from outside</Collapsible.Trigger>
+  <Collapsible.Content>…</Collapsible.Content>
 </Collapsible>
 
-// parent — owns the open boolean, flips it from @change
-events = { setOpen: (open) => this.setData('open', open) };`;
+// onChange: (open) => this.setData('open', open)`;
 
-const codeExclusivity = `const richFaq = [
-  { id: 'r1', label: 'When should I reach for Accordion?', body: '…' },
-  { id: 'r2', label: 'And when Collapsible?', body: '…' },
-  { id: 'r3', label: 'Can I have both?', body: '…' },
+const codeSpeed = `// Duration is derived from |Δheight| / speed, clamped between
+// minDuration and maxDuration. Never set --collapsible-duration
+// yourself — the component computes it per animation.
+<Collapsible.Content speed={ 2000 }>…</Collapsible.Content>
+<Collapsible.Content speed={ 300 } easing="cubic-bezier(.2,.8,.2,1)">…</Collapsible.Content>`;
+
+const codeDisabled = `<Collapsible>
+  <Collapsible.Trigger disabled>Not available yet</Collapsible.Trigger>
+  <Collapsible.Content>…</Collapsible.Content>
+</Collapsible>`;
+
+const rootRows = [
+  { name: 'open', desc: 'Optional-controlled and edge-triggered. Omit it and the component owns its own state, which is the normal case.' },
+  { name: 'class', desc: 'Merged onto the collapsible-group host.' },
+  { name: '@change(open)', desc: "Value-first; fired when THIS collapsible toggles. A nested one's bubbling event is filtered out by target." },
 ];
 
-// One parent-owned open id → rich content AND one-open-at-a-time.
-<div class="divide-y divide-border border-y border-border">
-  {#for item in richFaq}
-    <Collapsible label={ item.label }
-                 open={ openId === item.id }
-                 @change={ toggleGroup(item.id) }>
-      <p>{ item.body }</p>
-    </Collapsible>
-  {/for}
-</div>
+const triggerRows = [
+  { name: 'disabled', desc: "Renders the disabled attribute on the real button, so the component's click listener never fires." },
+  { name: 'class', desc: 'Merged onto the button, after the chrome. The chevron flips on aria-expanded — pure CSS, no prop.' },
+];
 
-// parent — clicking the open one closes it, otherwise switches
-events = {
-  toggleGroup: (id) =>
-    this.setData('openId', this.getData().openId === id ? null : id),
-};`;
+const contentRows = [
+  { name: 'defaultOpen', desc: 'Start expanded. Initial only — the open attribute is frozen after the first render.' },
+  { name: 'speed', desc: 'px/sec pace feeding the derived duration (component default 900).' },
+  { name: 'minDuration', desc: 'Seconds; floor for the derived duration (default 0.25).' },
+  { name: 'maxDuration', desc: 'Seconds; ceiling for it (default 0.8).' },
+  { name: 'easing', desc: 'CSS timing function, forwarded as --collapsible-easing.' },
+  { name: 'class', desc: 'Merged onto the panel, after the padding. Never overflow-hidden, a height utility or a transition.' },
+];
 
 export default class CollapsibleDoc extends PuzzleView {
   created() {
-    this.setData({ heroOpen: false, groupId: 'r1' });
+    this.setData({ open: false });
   }
 
-  data(params, props) {
+  data() {
+    const open = !!this.getData().open;
     return {
-      ...this.getData(),
+      open,
+      openLabel: open ? 'true' : 'false',
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
-      codeExclusivity,
-      richFaq: [
-        { id: 'r1', label: 'When should I reach for Accordion?', body: 'When a set of plain-text panels should coordinate — opening one closes the rest.' },
-        { id: 'r2', label: 'And when Collapsible?', body: 'For one-off disclosures, or when the panel body needs real markup — Collapsible takes rich slot content.' },
-        { id: 'r3', label: 'Can I have both?', body: 'This group is Collapsibles composed with a parent-owned open id — rich content AND exclusivity.' },
-      ],
+      codeDefaultOpen,
+      codeControlled,
+      codeSpeed,
+      codeDisabled,
+      rootRows,
+      triggerRows,
+      contentRows,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Composed exclusivity', href: '#exclusivity' },
+        { label: 'Starting expanded', href: '#default-open' },
+        { label: 'Controlled open', href: '#controlled' },
+        { label: 'Animation pace', href: '#speed' },
+        { label: 'Disabled trigger', href: '#disabled' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
-    setHeroOpen: (open) => this.setData('heroOpen', open),
-    toggleGroup: (id) => this.setData('groupId', this.getData().groupId === id ? null : id),
+    toggle: () => {
+      this.setData('open', !this.getData().open);
+      this.refresh();
+    },
+    onChange: (open) => {
+      this.setData('open', open);
+      this.refresh();
+    },
   };
 }
 </script>

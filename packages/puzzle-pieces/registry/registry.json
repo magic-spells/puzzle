@@ -26,11 +26,17 @@
   "pieces": [
     {
       "name": "accordion",
-      "description": "Config-first WAI-ARIA accordion group over Collapsible's speed-based open/close animation, single or multiple open",
+      "description": "Coordinated disclosure family — single or multiple open, with exclusivity, height animation and every ARIA attribute coming from the collapsible-content web component; panel bodies take arbitrary markup",
       "files": [
-        "Accordion.pzl"
+        "Accordion/Accordion.pzl",
+        "Accordion/Item.pzl",
+        "Accordion/Trigger.pzl",
+        "Accordion/Content.pzl",
+        "Accordion/index.js"
       ],
-      "registryDependencies": [],
+      "registryDependencies": [
+        "collapsible"
+      ],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },
@@ -254,12 +260,17 @@
     },
     {
       "name": "collapsible",
-      "description": "Animated disclosure with speed-based duration and inert/aria-hidden discipline",
+      "description": "Animated disclosure family — a button and a height-animating region with the full ARIA wiring, distance-derived duration and reduced-motion behaviour; wraps the @magic-spells/collapsible-content web component rather than porting it",
       "files": [
-        "Collapsible.pzl"
+        "Collapsible/Collapsible.pzl",
+        "Collapsible/Trigger.pzl",
+        "Collapsible/Content.pzl",
+        "Collapsible/index.js"
       ],
       "registryDependencies": [],
-      "dependencies": [],
+      "dependencies": [
+        "@magic-spells/collapsible-content"
+      ],
       "targetDir": "app/components/ui"
     },
     {
