@@ -67,12 +67,15 @@ notes:
     text: >-
       Guard-redirect continuations join the failed-POP URL invariant. A redirect re-enters #navigate
       for the target while the original pop's address bar is still live, so its own pre-commit
-      failures owe the same replaceState repair as the five direct sites — but `this.#state === cur`
-      is not the right ownership test there, because the redirect chain is not the committed state.
-      The continuation carries a chain token and repairs only while that token still owns the
-      location: a redirect superseded mid-flight (a newer navigation, or a further redirect)
-      restores nothing and leaves the winner's URL alone, exactly the posture the sibling sites get
-      from the state identity check.
+      failures owe the same replaceState repair as the five direct sites. Neither sibling test works
+      alone there: the re-entrant #navigate bumps #token by construction, so a `token ===
+      this.#token` compare would disable every legitimate repair, and `this.#state === cur` is
+      equally satisfied by a NEWER pop still in its load phase. The chain therefore carries a
+      mutable ownership box, created by the frame that starts the chain and re-stamped by every
+      re-entry of that SAME chain (a nested guard→A→B redirect stays one logical navigation), held
+      by identity across the await; the continuation repairs only when the box's token is still the
+      router's current token AND the committed state is still `cur`. A chain superseded by a newer
+      navigation restores nothing and leaves the winner's URL alone.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

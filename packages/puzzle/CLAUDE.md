@@ -150,7 +150,7 @@ enforced, not merely advised.
   CHANGELOG). Production sizes after that round — README banner matches:
   hello-world **21.5 KB gzip**, todos **24.5 KB gzip** (the size scripts only
   check the banner; the README line is edited by hand). Cards truthed
-  through D160; the next free decision number is D168. `@magic-spells/puzzle-pieces`
+  through D167; the next free decision number is D168. `@magic-spells/puzzle-pieces`
   `0.6.0` is live on npm (`latest`) — the version-locked pieces resolution is
   verified end-to-end. Note `PUZZLE_PIECES_REGISTRY` is set in Cory's shell
   profile pointing at the pieces registry — now

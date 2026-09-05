@@ -347,8 +347,10 @@ one is *not* a compile error; it silently builds a different product.
   after a **successful no-options** collection load (an empty array counts), so
   `loadMany(type, options)` — including `{}` — stays partial and accumulating;
   absent identities go in a never-persisted 1000-entry LRU and clear the moment
-  the identity arrives by any path (create, upsert, load, hydration, save
-  reconcile, primary-key adoption); removing a record by any path — a confirmed
+  the identity arrives again by any path (create, upsert, load, hydration, save
+  reconcile, primary-key adoption), except a response from a read that was
+  already in flight when the record was removed, which is dropped instead (see
+  Fixed); removing a record by any path — a confirmed
   `record.delete()` or a local `record.destroy()` — records that identity absent,
   so an optimistic delete cannot fault the row straight back in; and explicit
   `store.loadOne` bypasses
@@ -458,17 +460,20 @@ one is *not* a compile error; it silently builds a different product.
 
 - **A delete no longer loses to a read that was already in flight.** A record
   removed by an acknowledged `delete()` or a local `destroy()` stamps its
-  absence with the current dispatch sequence, so a load that was dispatched
-  BEFORE the removal and landed after it is discarded whole — it no longer
-  clears the absence, re-allocates the record, or notifies subscribers. A read
-  dispatched after the removal is the app asking again and merges as before;
-  requests and wire format are unchanged.
+  absence one step ahead of every read already dispatched, so a response for
+  that record from a load dispatched BEFORE the removal is dropped when it
+  lands — it no longer clears the absence, re-allocates the record, or notifies
+  subscribers (a collection load keeps its other rows). A read dispatched after
+  the removal is the app asking again and merges as before; requests and wire
+  format are unchanged.
 
 - **Static pages no longer refetch a collection the build already loaded.** The
-  read-state transfer counted only exhaustive and absent entries, so a type the
-  build had merely LOADED — the collection came from an authored, possibly
-  paginated `loadMany` — was omitted from the page's island and re-requested on
-  arrival. Loaded-only types now transfer too, matching the documented envelope.
+  page emitted its read-state island only when the build had recorded an
+  exhaustive collection or a missing record, so a page whose build state was
+  just LOADED types — collections from an authored, possibly paginated
+  `loadMany` — shipped no island at all and re-requested them on arrival.
+  Loaded-only state now carries the island, matching the documented envelope; a
+  build that read nothing still emits nothing.
 
 - **A guard redirect on a back/forward navigation restores the address bar when
   it fails.** The redirect continuation was the one pre-commit failure path with
@@ -479,10 +484,12 @@ one is *not* a compile error; it silently builds a different product.
 
 - **A build run from a symlinked project directory no longer compiles out
   features the app uses.** The usage scan that sets the `__PUZZLE_HAS_*` flags
-  compared scanned paths against an unresolved project root, so under a symlink
-  it matched nothing and concluded the app used no Portals, no snippets, and no
-  built-in formatters — dropping that runtime from the bundle. The scan resolves
-  the root first, so a symlinked checkout builds byte-for-byte like a real one.
+  walked the project root exactly as given, and a directory walk does not
+  descend a symlink, so a root whose final component is a link yielded no files
+  and the build concluded the app used no Portals, no snippets, and no built-in
+  formatters — dropping that runtime from the bundle, and losing the app-relative
+  names scoped CSS is keyed on. The scan resolves the root first, so a symlinked
+  checkout produces the same defines and the same output as the real path.
 
 - **Hide hooks no longer fire on a component that was never shown.** Routing
   hook-only components through the animated removal path (new in this release)

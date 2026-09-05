@@ -41,7 +41,6 @@ save responses do".
 
 ## Decision
 
-
 Exact D125 parity — the protected window is the request's OWN flight, per
 field, not open-ended dirtiness:
 
@@ -77,12 +76,15 @@ the identity or collection exists. Save reconciliation and the public
 their precedence against reads is unchanged and undefined.
 
 REMOVALS are ordered on the same counter, and that is the one case where a
-stale response proves nothing: [[DECISION-D161-AUTO-FETCHING-FINDS]] stamps
-the absence recorded by a `delete()`/`destroy()` with the dispatch sequence of
-the moment, so a read dispatched before the removal is discarded whole when it
-lands — including the `clearAbsent` and collection marks a merely-out-of-order
-read still performs. That rule lives on D161 with the rest of the absence
-cache; this card owns only the generation counter both use.
+stale response proves nothing about the identity:
+[[DECISION-D161-AUTO-FETCHING-FINDS]] stamps the absence recorded by a
+`delete()`/`destroy()` one step ahead of every read already dispatched, so a
+response for that identity from a read dispatched before the removal is dropped
+when it lands — including the `clearAbsent` a merely-out-of-order read still
+performs. What the removal does not retract is what the response proves about
+the COLLECTION: a stale `loadMany` keeps its other rows and still marks the type
+loaded. That rule lives on D161 with the rest of the absence cache; this card
+owns only the generation counter both use.
 
 Amends the §8 read path (D21/D137) with the §22/D125 merge gate. The
 [[DECISION-D161-AUTO-FETCHING-FINDS]] implicit fault path runs these same
