@@ -4,7 +4,6 @@
 export const GETTING_STARTED = [
 	{ title: 'Introduction', path: '/' },
 	{ title: 'Components', path: '/components' },
-	{ title: 'Demos', path: '/demos' },
 	{ title: 'Theming', path: '/theming' },
 ];
 
