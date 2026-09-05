@@ -24,6 +24,36 @@ notes:
       matched the runtime, and the card was rewritten to state what the code actually does. Verified
       at this sha with the framework suite green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      `puzzle add piece` installs COMPOUND pieces (0.7.0, alongside D167 component families). A
+      piece manifest whose `files` entries carry a directory — e.g. "NavigationMenu/Item.pzl",
+      "NavigationMenu/index.js", sourced from registry/ui/<name>/NavigationMenu/… — is a family: the
+      members are copied PATH-PRESERVING under the manifest's targetDir
+      (app/components/ui/NavigationMenu/Item.pzl), intermediate directories created. The directory
+      in `files` is the ONLY signal: no `family: true` manifest field, and registry.json's schema
+      `version: 1` is not bumped (the CLI is lockstep with the registry's major.minor, so no old CLI
+      ever reads a compound manifest).
+
+
+      Path preservation already worked before this change — planWrites joined targetDir with the
+      manifest entry as-is, and all three sources (dirFetcher, httpFetcher, npm tarball at
+      package/registry/ui/<name>/<rel>) key by the same registry-relative slash path. What changed
+      is validateManifestPath, which was only rejecting absolute and `..` paths: a manifest path
+      must now be a CLEAN slash-separated relative path — no backslashes, no `.` segments (so no
+      leading `./`), no empty segments (doubled or trailing `/`), not empty. The rules apply to
+      `files`, `targetDir`, the registry `theme`, and `lib/` registryDependencies alike; the error
+      names the piece, the field, and the entry, and fires before any write. Rejecting instead of
+      silently path.Clean-ing keeps the manifest entry, the destination path, and the pieces.lock
+      key one and the same string — a lock key that no longer matches the manifest is exactly what a
+      future diff/update cannot recover from.
+
+
+      pieces.lock and the overwrite pre-flight needed no change: both were already per-file and
+      keyed by the full app-root-relative slash path, so a nested member locks as
+      app/components/ui/NavigationMenu/Item.pzl and a conflict on one member refuses the whole
+      family by that full path. RenderSummary is unchanged too — it prints one ✓ line per unit with
+      a file count, no file list and no import hints, so a family reads as one unit with N files.
 ---
 
 The frozen v1 contract for the toolchain: the CLI surface, dev HMR and build-error reporting, the `hybrid`/`static` output modes, update notification and `puzzle upgrade`, interactive `puzzle init`, the `/testing` utilities, the `--fixtures` switch, and the DevTools bridge. See [[DOC-SPEC]] for the section index and the rest of the contract.

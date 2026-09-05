@@ -265,18 +265,41 @@ func planWrites(opts *Options, resolvedPieces []Piece, libs []string) ([]planned
 	return units, nil
 }
 
-// validateManifestPath rejects registry-controlled paths that are absolute or
-// contain a parent-directory segment. Backslashes are normalized for the check
-// so a manifest cannot be safe on POSIX but escape when the CLI runs on Windows.
+// validateManifestPath requires a registry-controlled path to be a CLEAN,
+// slash-separated relative path. A `files` entry may carry directory segments —
+// that is how a compound piece (a D167 component family: one-class-per-file
+// members plus an index.js barrel, e.g. "NavigationMenu/Item.pzl") declares the
+// subdirectory it is copied into, path-preserving, under targetDir. What it may
+// NOT be is anything the copy would have to normalize or that could escape: an
+// absolute path, a `..` segment, a `.`/`./` segment, a backslash separator, or an
+// empty segment from a doubled or trailing slash. Rejecting those instead of
+// silently cleaning them keeps the manifest entry, the destination path, and the
+// pieces.lock key one and the same string — a lock key that no longer matches
+// the manifest is exactly what a future diff/update cannot recover from.
+// Backslashes are checked on the raw value (never normalized away) so a manifest
+// cannot be safe on POSIX but escape when the CLI runs on Windows.
 func validateManifestPath(piece, field, value string) error {
-	normalized := strings.ReplaceAll(value, `\`, "/")
-	isDriveAbs := len(normalized) >= 3 && normalized[1] == ':' && normalized[2] == '/'
-	if path.IsAbs(normalized) || filepath.IsAbs(value) || isDriveAbs {
-		return fmt.Errorf("piece %q has invalid %s %q: absolute paths are not allowed", piece, field, value)
+	invalid := func(reason string) error {
+		return fmt.Errorf("piece %q has invalid %s %q: %s", piece, field, value, reason)
 	}
-	for _, segment := range strings.Split(normalized, "/") {
-		if segment == ".." {
-			return fmt.Errorf("piece %q has invalid %s %q: parent-directory '..' segments are not allowed", piece, field, value)
+	if value == "" {
+		return invalid("must not be empty")
+	}
+	if strings.Contains(value, `\`) {
+		return invalid(`backslashes are not allowed — use '/' separators`)
+	}
+	isDriveAbs := len(value) >= 3 && value[1] == ':' && value[2] == '/'
+	if path.IsAbs(value) || filepath.IsAbs(value) || isDriveAbs {
+		return invalid("absolute paths are not allowed")
+	}
+	for _, segment := range strings.Split(value, "/") {
+		switch segment {
+		case "..":
+			return invalid("parent-directory '..' segments are not allowed")
+		case ".":
+			return invalid("'.' segments are not allowed — write the path relative, without a leading './'")
+		case "":
+			return invalid("empty path segments are not allowed — check for a doubled or trailing '/'")
 		}
 	}
 	return nil

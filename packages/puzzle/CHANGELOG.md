@@ -180,6 +180,17 @@ one is *not* a compile error; it silently builds a different product.
   `--force` rewrites the family's own files and leaves everything else in the
   directory alone. Without `--family`, `generate component` is unchanged.
 
+- **`puzzle add piece` installs compound pieces.** A piece manifest whose
+  `files` entries carry a directory (`"NavigationMenu/Item.pzl"`) is a D167
+  family: the members are copied **path-preserving** under the manifest's
+  `targetDir`, intermediate directories are created, and `pieces.lock` keys each
+  member by its full app-relative path. The directory in `files` is the only
+  signal — no new manifest field, no registry schema bump. Manifest paths are
+  now validated as clean relative slash paths (no `..`, absolute, `./`,
+  backslash, or empty segments), rejected by piece and entry name before
+  anything is written; the overwrite pre-flight stays all-or-nothing and names
+  the full nested path of a conflict.
+
 - **`puzzle check` type-checks `.pzl` files with the app's own TypeScript
   installation (D165).** The command emits virtual files under
   `.puzzle/check/src/`, runs the app's own
