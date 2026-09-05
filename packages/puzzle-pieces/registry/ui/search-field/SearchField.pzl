@@ -61,7 +61,7 @@ export default class SearchField extends PuzzleView {
       id: props.id || (this._fallbackId ??= `pp-search-${++uid}`),
       value,
       placeholder: props.placeholder || 'Search…',
-      name: props.name,
+      name: props.name ?? null,
       disabled: !!props.disabled,
       hasValue: String(value).length > 0,
       rootClass: props.class || '',
