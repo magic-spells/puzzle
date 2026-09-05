@@ -801,6 +801,8 @@ export default class MultiSelect extends PuzzleView {
     },
 
     onKey: (event) => {
+      // IME composition confirm must not act.
+      if (event.isComposing) return;
       const open = this._effectiveOpen();
       const { options, query } = this.getData();
       switch (event.key) {

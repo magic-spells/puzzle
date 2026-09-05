@@ -124,12 +124,15 @@ export default class Accordion extends PuzzleView {
   // positional zip is enough — no id escaping needed.
   mounted() {
     this._openMap = {};
+    this._seeded = new WeakSet();
     const rows = this.getData().rows;
     const panels = this.panelEls();
     rows.forEach((row, i) => {
       this._openMap[row.id] = row.open;
       const panel = panels[i];
-      if (panel) panel.style.height = row.open ? 'auto' : '0px';
+      if (!panel) return;
+      this._seeded.add(panel);
+      panel.style.height = row.open ? 'auto' : '0px';
     });
   }
 
@@ -138,9 +141,17 @@ export default class Accordion extends PuzzleView {
   afterUpdate() {
     const rows = this.getData().rows;
     const panels = this.panelEls();
+    if (!this._seeded) this._seeded = new WeakSet();
     rows.forEach((row, i) => {
       const panel = panels[i];
       if (!panel) return;
+      // A panel node this instance has never seen (a row added, or removed and
+      // restored) carries no inline height yet — seed its resting height before
+      // the _openMap short-circuit, or a closed panel paints fully open.
+      if (!this._seeded.has(panel)) {
+        this._seeded.add(panel);
+        panel.style.height = row.open ? 'auto' : '0px';
+      }
       if (this._openMap[row.id] === row.open) return;
       this._openMap[row.id] = row.open;
       this.animatePanel(panel, row.open);

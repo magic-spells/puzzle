@@ -99,7 +99,7 @@ export default class Tabs extends PuzzleView {
     // Roving tabindex lands on the selected tab; if `value` matches no tab (or
     // is unset), the first non-disabled tab stays reachable so the strip keeps
     // a Tab stop. aria-selected still tracks the real `value` only.
-    const selected = tabs.some((t) => t.value === value);
+    const selected = tabs.some((t) => t.value === value && !t.disabled);
     const rovingValue = selected
       ? value
       : (tabs.find((t) => !t.disabled) || {}).value;

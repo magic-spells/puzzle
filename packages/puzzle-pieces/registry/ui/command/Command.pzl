@@ -35,7 +35,7 @@
         @input={ onInput(event) }
         @keydown:down:prevent={ moveDown }
         @keydown:up:prevent={ moveUp }
-        @keydown:enter:prevent={ onEnter(event) } />
+        @keydown:enter={ onEnter(event) } />
     </div>
 
     <div class="max-h-72 overflow-y-auto p-1" id={ listId } role="listbox">
@@ -403,6 +403,9 @@ export default class Command extends PuzzleView {
     moveUp: () => this._move(-1),
 
     onEnter: (event) => {
+      // IME composition confirm must not act.
+      if (event.isComposing) return;
+      event.preventDefault();
       const { options, activeIndex } = this.getData();
       const opt = options[activeIndex];
       if (!opt || opt.disabled) return;

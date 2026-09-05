@@ -511,6 +511,14 @@ export default class TimePicker extends PuzzleView {
   }
 
   _onOpened() {
+    // Seed on the effective closed→open edge: a parent-initiated open never runs
+    // _requestOpen(), so without this the columns would derive from a stale 00:00 draft.
+    // refresh() re-runs data() so the columns / aria-activedescendant / scroll target
+    // re-derive. _syncOpenEffects() flips _wasOpen *before* calling here, so the
+    // afterUpdate() this refresh triggers finds no edge and cannot re-enter.
+    this._seedActive();
+    this.refresh();
+
     document.addEventListener('pointerdown', this._onDocPointer);
 
     requestAnimationFrame(() => {

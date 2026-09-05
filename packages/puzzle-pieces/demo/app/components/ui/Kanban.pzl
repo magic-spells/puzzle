@@ -654,11 +654,13 @@ export default class Kanban extends PuzzleView {
     const card = cards[i];
     const destCol = cols.find((c) => c.id === destColId);
     const destLen = (destCol.cards || []).length + (destColId === colId ? 0 : 1);
-    this._refocusGrabbed = cardId;
     this.setData({
       announce: `Moved ${card.title} to ${destCol.title}, position ${index + 1} of ${destLen}.`,
     });
     this.refresh();
+    // set after the announcement refresh: refresh runs afterUpdate synchronously, which
+    // consumes the marker — it has to survive until the parent's re-render
+    this._refocusGrabbed = cardId;
     this._emitMove(cardId, destColId, index, event);
   }
 

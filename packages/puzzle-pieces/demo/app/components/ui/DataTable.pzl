@@ -430,8 +430,18 @@ export default class DataTable extends PuzzleView {
   }
 
   // The `indeterminate` state is a DOM property with no HTML attribute, so it can't
-  // ride the template — set it on the header checkbox after every render.
+  // ride the template — it is written on mount and after every render. afterUpdate()
+  // does not fire for the initial mount, so rows preselected at mount would otherwise
+  // paint an unchecked header box until the first re-render.
+  mounted() {
+    this._syncSelectAll();
+  }
+
   afterUpdate() {
+    this._syncSelectAll();
+  }
+
+  _syncSelectAll() {
     const box = this.element && this.element.querySelector('[data-select-all]');
     if (box) box.indeterminate = !!this.getData().headerIndeterminate;
   }

@@ -75,6 +75,8 @@ export default class SearchField extends PuzzleView {
       if (typeof change === 'function') change(event.target.value, event);
     },
     handleSubmit: (event) => {
+      // IME composition confirm must not act.
+      if (event.isComposing) return;
       const { submit } = this.props;
       if (typeof submit === 'function') submit(event.target.value, event);
     },
