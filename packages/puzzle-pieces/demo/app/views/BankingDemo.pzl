@@ -71,11 +71,15 @@
                 </button>
               </Tooltip>
 
-              <SplitButton
-                label="Send money"
-                actions={ sendActions }
-                @press={ openTransfer }
-                @select={ onSendAction }/>
+              <SplitButton>
+                <SplitButton.Action @press={ openTransfer }>Send money</SplitButton.Action>
+                <SplitButton.Menu label="More transfer options" @select={ onSendAction }>
+                  <SplitButton.Item value="request">Request money</SplitButton.Item>
+                  <SplitButton.Item value="wire">Wire transfer</SplitButton.Item>
+                  <SplitButton.Separator/>
+                  <SplitButton.Item value="schedule">Schedule transfer</SplitButton.Item>
+                </SplitButton.Menu>
+              </SplitButton>
             </div>
           </div>
 
@@ -309,7 +313,7 @@ import Badge from '../components/ui/Badge.pzl';
 import Avatar from '../components/ui/Avatar.pzl';
 import AvatarGroup from '../components/ui/AvatarGroup.pzl';
 import ProgressRing from '../components/ui/ProgressRing.pzl';
-import SplitButton from '../components/ui/SplitButton.pzl';
+import SplitButton from '../components/ui/SplitButton/index.js';
 import Dialog from '../components/ui/Dialog.pzl';
 import Select from '../components/ui/Select.pzl';
 import NumberField from '../components/ui/NumberField.pzl';
@@ -392,13 +396,6 @@ const RECIPIENT_OPTIONS = [
   { value: 'gusto', label: 'Gusto (Payroll)' },
   { value: 'wework', label: 'WeWork' },
   { value: 'northwind', label: 'Northwind Traders' },
-];
-
-const SEND_ACTIONS = [
-  { label: 'Request money', value: 'request' },
-  { label: 'Wire transfer', value: 'wire' },
-  { divider: true },
-  { label: 'Schedule transfer', value: 'schedule' },
 ];
 
 const TAB_ITEMS = [
@@ -562,7 +559,6 @@ export default class BankingDemo extends PuzzleView {
       accountOptions: ACCOUNT_OPTIONS,
       activeAccount: s.activeAccount,
       teamAvatars: TEAM_AVATARS,
-      sendActions: SEND_ACTIONS,
 
       // tabs
       tabItems: TAB_ITEMS,

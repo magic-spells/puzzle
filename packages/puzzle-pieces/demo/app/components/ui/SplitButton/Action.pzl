@@ -1,0 +1,79 @@
+<puzzle-view>
+  <button type="button" class={ actionClass } disabled={ disabled } @click={ onPress(event) }><Children/></button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// SplitButton.Action — the primary half. A member of the SplitButton family
+// (D167); a plain <button> wearing Button's own recipes.
+//
+//   <SplitButton.Action variant="primary" size="md" @press={ save }>Save</SplitButton.Action>
+//
+// It rounds the LEFT end only, so it fuses with the Menu half beside it.
+// `variant` and `size` must match the Menu's — there is no context to share
+// them through.
+//
+// Props
+//   variant   'primary' (default) | 'secondary' | 'outline' | 'ghost' | 'destructive'
+//   size      'sm' | 'md' (default) | 'lg'
+//   disabled  greys it out and swallows the press. Disable the Menu half too.
+//   class     merged onto the button, after the chrome
+//   @press    (event) — the primary action. It never opens the menu.
+
+// Shared base for both fused halves. `relative` + focus-visible:z-10 lift the
+// focused half's outline above its neighbour; per the focus-flash rule the
+// outline COLOR is set unconditionally (outline-ring) and only the width and
+// offset are revealed under focus-visible.
+const BUTTON_BASE =
+  'relative inline-flex items-center justify-center whitespace-nowrap select-none ' +
+  'font-medium cursor-pointer transition-colors ' +
+  'focus-visible:z-10 ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+
+// Variant recipes lifted verbatim from Button.pzl.
+const VARIANT = {
+  primary: 'bg-brand text-brand-ink hover:bg-brand-dark',
+  secondary: 'bg-surface-sunken text-ink hover:bg-border',
+  outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
+  ghost: 'text-body hover:bg-surface-sunken hover:text-ink',
+  destructive: 'bg-danger text-danger-ink hover:bg-danger-dark',
+};
+
+// Height, split from Button's SIZE so the caret can reuse it without the
+// primary's horizontal padding.
+const HEIGHT = { sm: 'h-8', md: 'h-9', lg: 'h-10' };
+const PRIMARY_PAD = { sm: 'px-3 text-sm', md: 'px-4 text-sm', lg: 'px-5 text-base' };
+
+export default class Action extends PuzzleView {
+  data(params, props) {
+    const variant = VARIANT[props.variant] ? props.variant : 'primary';
+    const size = HEIGHT[props.size] ? props.size : 'md';
+
+    return {
+      disabled: !!props.disabled,
+      actionClass: [
+        BUTTON_BASE,
+        VARIANT[variant],
+        HEIGHT[size],
+        PRIMARY_PAD[size],
+        'rounded-l-lg rounded-r-none',
+        props.class,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+
+  events = {
+    onPress: (event) => {
+      if (this.props.disabled) {
+        event.preventDefault();
+        return;
+      }
+      this.props.press?.(event);
+    },
+  };
+}
+</script>

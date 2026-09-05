@@ -4,22 +4,86 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Dropdown Menu</h1>
         <p class="mt-2 text-body">
-          A click-toggle menu of actions — grouped, divided, keyboard-navigable, and
-          dismissed by an outside click or Escape. Config-first: pass an items array
-          and handle @select.
+          A button that opens an application menu. It is a compound
+          <strong class="font-medium text-ink">family</strong> composed over the shared
+          <a class="text-brand underline underline-offset-2" href="#/components/dropdown-panel">Dropdown Panel</a>
+          base, running the web component in <span class="font-medium text-ink">menu mode</span> — so
+          the roving tabindex, typeahead, submenu arrows, outside-press dismissal and focus return
+          come from the component rather than from 300 lines of ported machinery.
         </p>
+        <p class="mt-3 text-body">
+          This one really is an ARIA
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">role="menu"</code>,
+          which is the opposite of
+          <a class="text-brand underline underline-offset-2" href="#/components/menubar">Menubar</a>'s
+          disclosure stance. The difference is that the component now implements the model those
+          roles promise: one tab stop, arrows with wrap, Home/End, typeahead, Enter and Space
+          activation, Tab to close, and Escape one level at a time. So the piece authors no roles
+          at all — it would only be overwriting them.
+        </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">items</code>
+            config array and the
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">label</code> /
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">triggerClass</code>
+            props are gone, along with the
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">slot="trigger"</code>
+            escape hatch. Rows are markup now, and submenus — which v1 did not have at all — are a
+            <span class="font-medium text-ink">Sub</span>.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <DropdownMenu label="Account" items={ menuItems } @select={ onSelect } />
+        <div class="flex w-full max-w-2xl flex-col items-start gap-4 pb-56">
+          <DropdownMenu @select={ onSelect }>
+            <DropdownMenu.Trigger>Options</DropdownMenu.Trigger>
+            <DropdownMenu.Content>
+              <DropdownMenu.Label>Account</DropdownMenu.Label>
+              <DropdownMenu.Item value="profile" @press={ run }>Profile<DropdownMenu.Shortcut>⌘P</DropdownMenu.Shortcut></DropdownMenu.Item>
+              <DropdownMenu.Item value="settings" @press={ run }>Settings<DropdownMenu.Shortcut>⌘,</DropdownMenu.Shortcut></DropdownMenu.Item>
+              <DropdownMenu.Item value="billing" disabled={ true } @press={ run }>Billing</DropdownMenu.Item>
+              <DropdownMenu.Separator/>
+              <DropdownMenu.Group label="Export">
+                <DropdownMenu.Sub>
+                  <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+                  <DropdownMenu.Content opens="right">
+                    <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
+                    <DropdownMenu.Item value="csv" @press={ run }>CSV</DropdownMenu.Item>
+                    <DropdownMenu.Item value="json" @press={ run }>JSON</DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Sub>
+              </DropdownMenu.Group>
+              <DropdownMenu.Separator/>
+              <DropdownMenu.Link href="#/components/dropdown-panel">Dropdown Panel docs</DropdownMenu.Link>
+              <DropdownMenu.Item value="delete" variant="danger" @press={ run }>Delete account</DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
+
+          <p class="text-sm text-muted">Last selection: <span class="font-medium text-ink">{ selected }</span></p>
+        </div>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
         <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
+          Copy the family into your app. It pulls the shared
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">dropdown-panel</code>
+          base along with it:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          That base has a runtime dependency — the web component it wraps. Menu mode is 2.1.0's, so
+          the range matters:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheets into your app's style entry. The first is required; the
+          second adds the entrance effects and the drawn trigger arrow:
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -29,16 +93,81 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          Trigger, Content and Sub must be <span class="font-medium text-ink">direct children</span>
+          of the root — the component resolves them with a child selector. A loop
+          <span class="font-medium text-ink">inside</span> a Content is fine; it is one level
+          further down.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Two callbacks, both firing on the same activation:
+          <span class="font-medium text-ink">@press</span> on the row is the local hook, and
+          <span class="font-medium text-ink">@select</span> on the root sees every row including a
+          submenu's — a choice in a Sub closes the whole chain and returns focus to the root
+          trigger, so the root is what reports it. Return false from @select to cancel the close.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="groups" title="Groups and dividers" code={ codeGroups }>
-          <DropdownMenu label="Insert" items={ groupItems } @select={ onSelect } />
+        <ExampleBox id="trigger" title="Trigger variants" code={ codeTrigger }>
+          <div class="flex flex-wrap items-center gap-4 pb-56">
+            <DropdownMenu @select={ onSelect }>
+              <DropdownMenu.Trigger>Button</DropdownMenu.Trigger>
+              <DropdownMenu.Content>
+                <DropdownMenu.Item value="one" @press={ run }>Stock chrome</DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
+
+            <DropdownMenu @select={ onSelect }>
+              <DropdownMenu.Trigger variant="bare" class="rounded-md p-1.5 text-muted hover:bg-surface-sunken hover:text-ink">
+                <span class="sr-only">More actions</span>
+                <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="5" cy="12" r="1.5"/>
+                  <circle cx="12" cy="12" r="1.5"/>
+                  <circle cx="19" cy="12" r="1.5"/>
+                </svg>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end">
+                <DropdownMenu.Item value="two" @press={ run }>Custom trigger</DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </div>
         </ExampleBox>
 
-        <ExampleBox id="danger" title="Danger items" code={ codeDanger }>
-          <DropdownMenu align="end" label="Edit" items={ dangerItems } @select={ onSelect } />
-        </ExampleBox>
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">
+            All of it lives in the web component's menu mode; this family adds no key handling of
+            its own, and authors no role, tabindex or aria-* attribute.
+          </p>
+          <div class="text-sm">
+            {#for row in keyRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+        </section>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          {#for group in reference}
+            <div key={ group.title }>
+              <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">{ group.title }</h3>
+              <p class="mb-2 text-sm text-muted">{ group.summary }</p>
+              <div class="text-sm">
+                {#for row in group.rows}
+                  <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                    <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                    <span class="text-body">{ row.desc }</span>
+                  </div>
+                {/for}
+              </div>
+            </div>
+          {/for}
+        </section>
       </div>
     </article>
 
@@ -48,105 +177,193 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import DropdownMenu from '@/components/ui/DropdownMenu.pzl';
+import DropdownMenu from '@/components/ui/DropdownMenu/index.js';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
-import { toast } from '@/components/ui/toast.js';
 
+// Docs page for the DropdownMenu family. Code samples live as template-literal
+// consts because literal tag names and {#…} tokens would be parsed as template
+// syntax in prose.
 const installCmd = 'puzzle add piece dropdown-menu';
-const usageImport = `import DropdownMenu from '@/components/ui/DropdownMenu.pzl';`;
-const usageMarkup = `<DropdownMenu label="Account" items={ menuItems } @select={ onSelect } />`;
+const installDep = 'npm install @magic-spells/dropdown-panel@^2.1.0';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+@import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */`;
 
-const codeHero = `<DropdownMenu label="Account" items={ menuItems } @select={ onSelect } />
+const usageImport = `import DropdownMenu from '@/components/ui/DropdownMenu';`;
 
-// items: interactive rows, { group } headings, { divider } separators
-data() {
-  return {
-    menuItems: [
-      { group: 'Account' },
-      { label: 'Profile', value: 'profile' },
-      { label: 'Settings', value: 'settings' },
-      { divider: true },
-      { group: 'Danger zone' },
-      { label: 'Delete account', value: 'delete', danger: true },
+const usageMarkup = `<DropdownMenu @select={ onSelect }>
+  <DropdownMenu.Trigger>Options</DropdownMenu.Trigger>
+  <DropdownMenu.Content align="end">
+    <DropdownMenu.Label>Account</DropdownMenu.Label>
+    <DropdownMenu.Item value="profile" @press={ run }>
+      Profile<DropdownMenu.Shortcut>⌘P</DropdownMenu.Shortcut>
+    </DropdownMenu.Item>
+    <DropdownMenu.Link href="/docs">Documentation</DropdownMenu.Link>
+    <DropdownMenu.Separator />
+    <DropdownMenu.Item value="delete" variant="danger" @press={ run }>
+      Delete account
+    </DropdownMenu.Item>
+  </DropdownMenu.Content>
+</DropdownMenu>`;
+
+const codeHero = `// One menu-button: a label, a disabled row, a group holding a
+// submenu, a link row and a destructive row. Choosing anything —
+// including inside the submenu — reports once at the root and
+// closes the whole chain.
+<DropdownMenu @select={ onSelect }>
+  <DropdownMenu.Trigger>Options</DropdownMenu.Trigger>
+  <DropdownMenu.Content>
+    <DropdownMenu.Label>Account</DropdownMenu.Label>
+    <DropdownMenu.Item value="profile" @press={ run }>Profile<DropdownMenu.Shortcut>⌘P</DropdownMenu.Shortcut></DropdownMenu.Item>
+    <DropdownMenu.Item value="billing" disabled={ true } @press={ run }>Billing</DropdownMenu.Item>
+    <DropdownMenu.Separator />
+    <DropdownMenu.Group label="Export">
+      <DropdownMenu.Sub>
+        <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+        <DropdownMenu.Content opens="right">
+          <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Sub>
+    </DropdownMenu.Group>
+    <DropdownMenu.Link href="/docs">Dropdown Panel docs</DropdownMenu.Link>
+    <DropdownMenu.Item value="delete" variant="danger" @press={ run }>Delete account</DropdownMenu.Item>
+  </DropdownMenu.Content>
+</DropdownMenu>`;
+
+const codeTrigger = `// 'button' is the default chrome. Fill the trigger's body and it
+// REPLACES the stock label + chevron entirely (D141), so a custom
+// trigger must carry its own accessible name.
+<DropdownMenu.Trigger>Button</DropdownMenu.Trigger>
+
+<DropdownMenu.Trigger variant="bare" class="rounded-md p-1.5">
+  <span class="sr-only">More actions</span>
+  <svg …/>
+</DropdownMenu.Trigger>`;
+
+const keyRows = [
+  { name: 'Enter / Space', desc: 'On the trigger: open the menu and focus the first row. On a row: activate it — Space clicks a Link too, which Space alone would never follow.' },
+  { name: 'ArrowDown / ArrowUp', desc: 'On a closed trigger: open and focus the first (or last) row. Inside an open menu: move row focus, wrapping at the ends and skipping disabled rows, separators and labels.' },
+  { name: 'Home / End', desc: 'First / last row.' },
+  { name: 'a–z', desc: 'Typeahead: jump to the next row whose text starts with what you type. The buffer clears after 500 ms, and repeating one letter cycles the rows starting with it.' },
+  { name: 'ArrowRight / ArrowLeft', desc: "Open a Sub's panel and focus its first row; ArrowLeft closes it again and returns focus to its trigger, with the parent still open." },
+  { name: 'Escape', desc: 'Close one level and focus its trigger. Only the innermost open menu answers.' },
+  { name: 'Tab', desc: 'Closes the menu and moves on. This is the menu pattern parting company with a plain disclosure, and it only happens because the piece opted into menu mode.' },
+];
+
+const reference = [
+  {
+    title: 'DropdownMenu',
+    summary: 'The root: the host the panel positions against, and the one place @select reports.',
+    rows: [
+      { name: 'trigger', desc: "'click' (default) | 'hover' | 'both'. A dropdown menu is a menu-button, not a hover menu." },
+      { name: 'arrow', desc: "'none' (default) | 'flip' | 'static' — for a trigger carrying the arrow hook. Effects stylesheet only." },
+      { name: 'open', desc: 'Optional-controlled and edge-triggered, forwarded to the base.' },
+      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+      { name: 'class', desc: 'Merged onto the host, after the load-bearing `inline-block relative`.' },
+      { name: '@show / @hide', desc: "Fired when THIS menu opens or closes; a Sub's are filtered out." },
+      { name: '@select', desc: 'Value-first: select(value, event). Fires once per activation, submenus included. Return false to cancel the close.' },
     ],
-  };
-}
-
-events = {
-  onSelect: (value) => console.log('picked', value),
-};`;
-
-const codeGroups = `<DropdownMenu label="Insert" items={ groupItems } @select={ onSelect } />
-
-// { group: 'Heading' } is a non-interactive label; { divider: true }
-// draws a hairline. Both hold their index but are skipped by keyboard nav.
-groupItems: [
-  { group: 'Blocks' },
-  { label: 'Paragraph', value: 'paragraph' },
-  { label: 'Heading', value: 'heading' },
-  { divider: true },
-  { group: 'Media' },
-  { label: 'Image', value: 'image' },
-  { label: 'Video', value: 'video' },
-];`;
-
-const codeDanger = `<DropdownMenu align="end" label="Edit" items={ dangerItems } @select={ onSelect } />
-
-// danger: true paints the row in the danger token with a danger-tint hover
-dangerItems: [
-  { label: 'Duplicate', value: 'duplicate' },
-  { label: 'Archive', value: 'archive' },
-  { divider: true },
-  { label: 'Delete', value: 'delete', danger: true },
-];`;
+  },
+  {
+    title: 'DropdownMenu.Trigger',
+    summary: 'The control. Keep its content non-interactive — this element IS the button.',
+    rows: [
+      { name: 'variant', desc: "'button' (default) — a bordered pill; 'item' — a submenu row inside a Sub; 'bare' — no chrome, bring your own." },
+      { name: 'label', desc: 'The fallback body text. Ignored the moment you put content between the tags — a filled body replaces the stock chrome entirely, so a custom trigger needs its own accessible name.' },
+      { name: 'class', desc: 'Merged onto the trigger, after the variant chrome.' },
+    ],
+  },
+  {
+    title: 'DropdownMenu.Content',
+    summary: 'The panel. The component stamps role="menu" on it and collects its rows as menuitems.',
+    rows: [
+      { name: 'align', desc: "'start' (default) | 'end' for a menu near the right edge." },
+      { name: 'opens', desc: "'down' (default) | 'right' for a Sub's panel." },
+      { name: 'flip', desc: 'Opt in to opening upward when the panel would run past the bottom of the viewport.' },
+      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+      { name: 'class', desc: 'Merged onto the panel, after the padding. Never overflow-hidden — it clips a Sub.' },
+    ],
+  },
+  {
+    title: 'DropdownMenu.Item',
+    summary: 'An action row — a real button. Activating it closes the chain; nothing in the piece does that, the select contract does.',
+    rows: [
+      { name: 'value', desc: 'Passed to @press, and read back by the root @select as the row value.' },
+      { name: 'variant', desc: "'default' | 'danger' for a destructive tint." },
+      { name: 'disabled', desc: 'Greys the row out, swallows the press, and takes it out of the arrow walk and typeahead.' },
+      { name: 'class', desc: 'Merged onto the row, after the chrome.' },
+      { name: '@press', desc: 'Value-first: press(value). Named apart from `value` — a callback whose name equals a prop name collides in the same props object.' },
+    ],
+  },
+  {
+    title: 'DropdownMenu.Link',
+    summary: "Item's twin as a real <a>, for a row that navigates. Space activates it, which is menu mode's doing.",
+    rows: [
+      { name: 'href', desc: 'The destination. Reported as the row value when there is no `value`.' },
+      { name: 'value', desc: 'Passed to @press.' },
+      { name: 'variant', desc: "'default' | 'danger'." },
+      { name: 'disabled', desc: 'aria-disabled plus the muted treatment; the press is swallowed and the row leaves the keyboard walk.' },
+      { name: '@press', desc: 'A hook fired before navigation — it cannot cancel the visit.' },
+    ],
+  },
+  {
+    title: 'DropdownMenu.Sub',
+    summary: 'A submenu: the nested host a Trigger + Content pair need. An Item is a <button> and cannot contain one.',
+    rows: [
+      { name: 'trigger', desc: "'both' (default) | 'hover' | 'click'. Hover or ArrowRight opens it." },
+      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'." },
+      { name: 'class', desc: 'Merged onto the host, after the load-bearing `block`.' },
+    ],
+  },
+  {
+    title: 'DropdownMenu.Group · Label · Separator · Shortcut',
+    summary: 'A role="group" cluster with an aria-label, a non-interactive heading, a hairline with role="separator", and the <kbd> hint an Item pushes to its trailing edge. None of them match the item selector, so the arrows step over all four.',
+    rows: [
+      { name: 'label', desc: "Group only: the cluster's accessible name." },
+      { name: 'class', desc: 'Each takes a class merged onto its element.' },
+    ],
+  },
+];
 
 export default class DropdownMenuDoc extends PuzzleView {
-  data(params, props) {
+  created() {
+    this.setData({ selected: 'nothing yet' });
+  }
+
+  data() {
     return {
-      ...this.getData(),
+      selected: this.getData().selected,
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
-      codeGroups,
-      codeDanger,
-      menuItems: [
-        { group: 'Account' },
-        { label: 'Profile', value: 'profile' },
-        { label: 'Settings', value: 'settings' },
-        { label: 'Billing', value: 'billing' },
-        { divider: true },
-        { group: 'Danger zone' },
-        { label: 'Delete account', value: 'delete', danger: true },
-      ],
-      groupItems: [
-        { group: 'Blocks' },
-        { label: 'Paragraph', value: 'paragraph' },
-        { label: 'Heading', value: 'heading' },
-        { divider: true },
-        { group: 'Media' },
-        { label: 'Image', value: 'image' },
-        { label: 'Video', value: 'video' },
-      ],
-      dangerItems: [
-        { label: 'Duplicate', value: 'duplicate' },
-        { label: 'Archive', value: 'archive' },
-        { divider: true },
-        { label: 'Delete', value: 'delete', danger: true },
-      ],
+      codeTrigger,
+      keyRows,
+      reference,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Groups and dividers', href: '#groups' },
-        { label: 'Danger items', href: '#danger' },
+        { label: 'Trigger variants', href: '#trigger' },
+        { label: 'Keyboard', href: '#keyboard' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
-    onSelect: (value) => toast({ message: 'Menu: ' + value }),
+    run: (value) => {
+      this.setData('selected', String(value));
+      this.refresh();
+    },
+    onSelect: (value) => {
+      this.setData('selected', String(value));
+      this.refresh();
+    },
   };
 }
 </script>

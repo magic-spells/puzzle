@@ -89,26 +89,38 @@
                   </span>
                 </Popconfirm>
 
-                <DropdownMenu
-                  align="end"
-                  items={ boardActions }
-                  triggerClass="inline-flex items-center justify-center rounded-lg border border-border bg-surface px-2.5 py-1.5 text-body hover:bg-surface-sunken hover:text-ink"
-                  @select={ onBoardAction }>
-                  <span slot="trigger" class="flex items-center">
+                <DropdownMenu @select={ onBoardAction }>
+                  <DropdownMenu.Trigger
+                    variant="bare"
+                    class="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-body hover:bg-surface-sunken hover:text-ink">
                     <span class="sr-only">Board actions</span>
                     <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <circle cx="5" cy="12" r="1.5"/>
                       <circle cx="12" cy="12" r="1.5"/>
                       <circle cx="19" cy="12" r="1.5"/>
                     </svg>
-                  </span>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content align="end">
+                    <DropdownMenu.Item value="rename">Rename board</DropdownMenu.Item>
+                    <DropdownMenu.Item value="duplicate">Duplicate board</DropdownMenu.Item>
+                    <DropdownMenu.Label>Export</DropdownMenu.Label>
+                    <DropdownMenu.Item value="csv">Export as CSV</DropdownMenu.Item>
+                    <DropdownMenu.Item value="json">Export as JSON</DropdownMenu.Item>
+                    <DropdownMenu.Separator/>
+                    <DropdownMenu.Item value="archive" variant="danger">Archive board</DropdownMenu.Item>
+                  </DropdownMenu.Content>
                 </DropdownMenu>
 
-                <SplitButton
-                  label="New issue"
-                  actions={ newIssueActions }
-                  @press={ newIssue }
-                  @select={ onNewIssueType }/>
+                <SplitButton>
+                  <SplitButton.Action @press={ newIssue }>New issue</SplitButton.Action>
+                  <SplitButton.Menu label="More new-issue types" @select={ onNewIssueType }>
+                    <SplitButton.Item value="bug">Bug report</SplitButton.Item>
+                    <SplitButton.Item value="feature">Feature request</SplitButton.Item>
+                    <SplitButton.Item value="chore">Chore</SplitButton.Item>
+                    <SplitButton.Separator/>
+                    <SplitButton.Item value="template">From template…</SplitButton.Item>
+                  </SplitButton.Menu>
+                </SplitButton>
               </div>
             </div>
 
@@ -261,8 +273,8 @@ import StatCard from '../components/ui/StatCard.pzl';
 import Progress from '../components/ui/Progress.pzl';
 import Meter from '../components/ui/Meter.pzl';
 import Timeline from '../components/ui/Timeline.pzl';
-import SplitButton from '../components/ui/SplitButton.pzl';
-import DropdownMenu from '../components/ui/DropdownMenu.pzl';
+import SplitButton from '../components/ui/SplitButton/index.js';
+import DropdownMenu from '../components/ui/DropdownMenu/index.js';
 import Popconfirm from '../components/ui/Popconfirm.pzl';
 import Separator from '../components/ui/Separator.pzl';
 import Tooltip from '../components/ui/Tooltip.pzl';
@@ -353,24 +365,6 @@ const TEAM_AVATARS = [
   { name: 'Katherine Johnson' },
   { name: 'Linus Torvalds' },
   { name: 'Radia Perlman' },
-];
-
-const NEW_ISSUE_ACTIONS = [
-  { label: 'Bug report', value: 'bug' },
-  { label: 'Feature request', value: 'feature' },
-  { label: 'Chore', value: 'chore' },
-  { divider: true },
-  { label: 'From template…', value: 'template' },
-];
-
-const BOARD_ACTIONS = [
-  { label: 'Rename board', value: 'rename' },
-  { label: 'Duplicate board', value: 'duplicate' },
-  { group: 'Export' },
-  { label: 'Export as CSV', value: 'csv' },
-  { label: 'Export as JSON', value: 'json' },
-  { divider: true },
-  { label: 'Archive board', value: 'archive', danger: true },
 ];
 
 // Board seed — the single-array shape Kanban expects (cards live inside their
@@ -514,8 +508,6 @@ export default class ProjectDemo extends PuzzleView {
       tabItems: TAB_ITEMS,
       tab: s.tab,
       teamAvatars: TEAM_AVATARS,
-      newIssueActions: NEW_ISSUE_ACTIONS,
-      boardActions: BOARD_ACTIONS,
       headerMeta: `Product · ${totalCount} issues · ${completion}% complete`,
 
       // board

@@ -1,0 +1,58 @@
+<puzzle-view>
+  <div class={ rootClass }><Children/></div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// SplitButton — a primary action button fused to a caret that opens a menu of
+// secondary actions: the classic "Save ▾" pattern. A FAMILY (D167); the menu
+// half is a DropdownMenu, so the whole keyboard model, the outside-press
+// dismissal and the ARIA come from the @magic-spells/dropdown-panel web
+// component in menu mode.
+//
+//   import SplitButton from '@/components/ui/SplitButton';
+//
+//   <SplitButton>
+//     <SplitButton.Action variant="primary" size="md" @press={ save }>Save</SplitButton.Action>
+//     <SplitButton.Menu variant="primary" size="md" label="More save actions" @select={ run }>
+//       <SplitButton.Item value="save-as" @press={ run }>Save as…</SplitButton.Item>
+//       <SplitButton.Separator/>
+//       <SplitButton.Item value="discard" variant="danger" @press={ run }>Discard</SplitButton.Item>
+//     </SplitButton.Menu>
+//   </SplitButton>
+//
+// BREAKING CHANGE in 0.7.0: the `label` and `actions[]` props are gone, along
+// with ~250 lines of ported menu machinery. The two halves are written out as
+// members now.
+//
+// VARIANT AND SIZE ARE REPEATED ON BOTH HALVES, and that is a consequence of the
+// design, not an oversight: Puzzle has no cross-component context, so a root
+// cannot hand `variant` down to members it never sees. Pass the same pair to
+// Action and Menu — mismatch them and the fused pill will look wrong, which is
+// the honest failure mode.
+//
+// This root is pure layout: `relative` anchors the menu's panel, and
+// `inline-flex` is what fuses the two halves into one pill. Each member carries
+// its own rounding (Action rounds the left, Menu the right) and both rise to
+// z-10 on focus so the focus outline draws above its neighbour instead of under
+// it.
+//
+// ROWS ARE DROPDOWN-MENU'S, re-exported rather than duplicated — see index.js.
+//
+// Props
+//   class  merged onto the wrapper, after the layout
+//
+// STYLESHEETS. Through DropdownMenu → DropdownPanel this piece needs the
+// component's CSS in your app's style entry:
+//   @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+//   @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */
+
+const ROOT = 'relative inline-flex';
+
+export default class SplitButton extends PuzzleView {
+  data(params, props) {
+    return { rootClass: [ROOT, props.class].filter(Boolean).join(' ') };
+  }
+}
+</script>

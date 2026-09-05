@@ -295,11 +295,15 @@
     },
     {
       "name": "context-menu",
-      "description": "Right-click context menu — dropdown-menu's grouped items, danger rows, and keyboard nav opened at the pointer position with viewport clamping",
+      "description": "Right-click context menu — a compound family over the shared dropdown-panel base that opens at the pointer, clamped and flipped into the viewport, with dropdown-menu's rows re-exported and a touch long-press gesture",
       "files": [
-        "ContextMenu.pzl"
+        "ContextMenu/ContextMenu.pzl",
+        "ContextMenu/Content.pzl",
+        "ContextMenu/index.js"
       ],
-      "registryDependencies": [],
+      "registryDependencies": [
+        "dropdown-menu"
+      ],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },
@@ -377,11 +381,23 @@
     },
     {
       "name": "dropdown-menu",
-      "description": "Click-toggle dropdown menu with grouped items, dividers, danger items, keyboard nav, and outside-click dismiss",
+      "description": "Menu-button dropdown — a compound family over the shared dropdown-panel base, with real role=\"menu\" semantics, typeahead, submenus, link rows, groups, labels, separators, shortcut hints, and disabled and danger items",
       "files": [
-        "DropdownMenu.pzl"
+        "DropdownMenu/DropdownMenu.pzl",
+        "DropdownMenu/Trigger.pzl",
+        "DropdownMenu/Content.pzl",
+        "DropdownMenu/Item.pzl",
+        "DropdownMenu/Link.pzl",
+        "DropdownMenu/Group.pzl",
+        "DropdownMenu/Label.pzl",
+        "DropdownMenu/Separator.pzl",
+        "DropdownMenu/Shortcut.pzl",
+        "DropdownMenu/Sub.pzl",
+        "DropdownMenu/index.js"
       ],
-      "registryDependencies": [],
+      "registryDependencies": [
+        "dropdown-panel"
+      ],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },
@@ -949,11 +965,16 @@
     },
     {
       "name": "split-button",
-      "description": "Primary action button fused to a dropdown caret that opens a menu of secondary actions — the classic Save ▾ pattern, with Button's variants/sizes and value-first @press/@select callbacks",
+      "description": "Primary action button fused to a dropdown caret that opens a menu of secondary actions — the classic Save ▾ pattern, as a compound family over dropdown-menu with Button's variants and sizes",
       "files": [
-        "SplitButton.pzl"
+        "SplitButton/SplitButton.pzl",
+        "SplitButton/Action.pzl",
+        "SplitButton/Menu.pzl",
+        "SplitButton/index.js"
       ],
-      "registryDependencies": [],
+      "registryDependencies": [
+        "dropdown-menu"
+      ],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },

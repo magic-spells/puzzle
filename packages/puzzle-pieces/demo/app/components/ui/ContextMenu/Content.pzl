@@ -1,0 +1,55 @@
+<puzzle-view>
+  <DropdownMenu.Content
+    class={ contentClass }
+    opens={ opens }
+    flip={ flip }
+    effect={ effect }><Children/></DropdownMenu.Content>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownMenu from '../DropdownMenu/index.js';
+
+// ContextMenu.Content — the panel the right-click opens. A member of the
+// ContextMenu family (D167); it composes DropdownMenu.Content, so it renders
+// <dropdown-panel> as its single root with no wrapper — the direct-children
+// contract holds.
+//
+//   <ContextMenu.Content>
+//     <ContextMenu.Item value="open" @press={ run }>Open</ContextMenu.Item>
+//   </ContextMenu.Content>
+//
+// NO `align` PROP, unlike DropdownMenu.Content. A pointer-placed panel has no
+// trigger edge to align to — the component pins it to the click point and
+// clamps it into the viewport, which is the whole job align would have done.
+//
+// `flip` DOES NOTHING ON THE ROOT PANEL, and defaults on anyway. The component's
+// pointer path places and flips this panel itself — it never runs the opt-in
+// `flip` measurement — so the attribute is inert here. Where it earns its keep is
+// a `.Sub`'s DOWNWARD panel inside a context menu, which is positioned the
+// ordinary way and can run off the bottom. The default is on so that case works
+// without thinking about it; pass flip={ false } to opt out. It defaults OFF on
+// an opens="right" panel, where flipping means bottom: 100% and would throw the
+// panel above its own row.
+//
+// NEVER overflow-hidden: it clips a Sub's panel at this one's edge.
+//
+// Props
+//   opens   'down' (default) | 'right' for a Sub's panel
+//   flip    default true on a downward panel — open upward when there is no room
+//           below; default false on opens="right". Inert on the ROOT panel, which
+//           the component places and flips itself; it matters for a .Sub's panel.
+//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class   merged onto <dropdown-panel>, after the padding
+
+export default class Content extends PuzzleView {
+  data(params, props) {
+    return {
+      contentClass: props.class || false,
+      opens: props.opens,
+      flip: props.flip === undefined ? props.opens !== 'right' : !!props.flip,
+      effect: props.effect,
+    };
+  }
+}
+</script>

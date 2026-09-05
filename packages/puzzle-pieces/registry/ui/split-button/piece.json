@@ -1,8 +1,15 @@
 {
   "name": "split-button",
-  "description": "Primary action button fused to a dropdown caret that opens a menu of secondary actions — the classic Save ▾ pattern, with Button's variants/sizes and value-first @press/@select callbacks",
-  "files": ["SplitButton.pzl"],
-  "registryDependencies": [],
+  "description": "Primary action button fused to a dropdown caret that opens a menu of secondary actions — the classic Save ▾ pattern, as a compound family over dropdown-menu with Button's variants and sizes",
+  "files": [
+    "SplitButton/SplitButton.pzl",
+    "SplitButton/Action.pzl",
+    "SplitButton/Menu.pzl",
+    "SplitButton/index.js"
+  ],
+  "registryDependencies": [
+    "dropdown-menu"
+  ],
   "dependencies": [],
   "targetDir": "app/components/ui"
 }

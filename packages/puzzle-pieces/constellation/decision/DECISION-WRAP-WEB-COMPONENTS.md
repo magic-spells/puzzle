@@ -88,6 +88,22 @@ notes:
       component to wrap. Deleted with them: SplitPanel's 708-line geometry/snap/localStorage port
       and registry/lib/panel-stack.js, whose panelClass()/panelInert() class sets the components'
       own per-state CSS custom properties replace.
+  - kind: state
+    text: >-
+      2026-09-05 (feat/menu-families): the last three ports over dropdown-panel converted —
+      dropdown-menu, context-menu and split-button are now D167 families over the shared base, and
+      ~1,010 lines of flat port became ~10 thin members plus three barrels. What made it possible
+      was upstream work, not local cleverness: @magic-spells/dropdown-panel 2.1.0 added an opt-in
+      `menu` attribute (application-menu semantics), `trigger="contextmenu"` with `showAt(x, y)`,
+      `dropdown-panel:select`, `focusItem(i)`, and `align`/`flip` on the panel. That is the rule
+      working as intended — the piece wanted roving tabindex, typeahead, pointer clamping and
+      Space-activates-a-link, and every one of them went upstream instead of into a fork. Two Astra
+      review rows were RETIRED by the conversion rather than patched: F4 (ContextMenu opening at
+      stale 0,0 coordinates) and F16 (Space on an href row closing without navigating) — the
+      coordinate math and the Space branch are both upstream's now. Where the plan and the as-built
+      upstream disagreed, upstream won; there were no substantive disagreements, only the panel
+      `align` attribute, which the base ignores in favour of the existing utility recipe five
+      shipped families already depend on.
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work

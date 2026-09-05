@@ -55,6 +55,30 @@ const MENUBAR_FILES = [
 	'Menubar/index.js',
 ];
 const POPCONFIRM_FILES = ['Popconfirm.pzl'];
+const DROPDOWN_MENU_FILES = [
+	'DropdownMenu/DropdownMenu.pzl',
+	'DropdownMenu/Trigger.pzl',
+	'DropdownMenu/Content.pzl',
+	'DropdownMenu/Item.pzl',
+	'DropdownMenu/Link.pzl',
+	'DropdownMenu/Group.pzl',
+	'DropdownMenu/Label.pzl',
+	'DropdownMenu/Separator.pzl',
+	'DropdownMenu/Shortcut.pzl',
+	'DropdownMenu/Sub.pzl',
+	'DropdownMenu/index.js',
+];
+const CONTEXT_MENU_FILES = [
+	'ContextMenu/ContextMenu.pzl',
+	'ContextMenu/Content.pzl',
+	'ContextMenu/index.js',
+];
+const SPLIT_BUTTON_FILES = [
+	'SplitButton/SplitButton.pzl',
+	'SplitButton/Action.pzl',
+	'SplitButton/Menu.pzl',
+	'SplitButton/index.js',
+];
 
 const PIECES = [
 	{
@@ -101,6 +125,30 @@ const PIECES = [
 		registryDependencies: ['dropdown-panel'],
 		dependencies: [],
 	},
+	{
+		piece: 'dropdown-menu',
+		manifest: '../registry/ui/dropdown-menu/piece.json',
+		files: DROPDOWN_MENU_FILES,
+		registryDependencies: ['dropdown-panel'],
+		dependencies: [],
+	},
+	{
+		// context-menu and split-button re-export dropdown-menu's ROW members
+		// rather than forking nine identical files, so dropdown-menu — and
+		// through it dropdown-panel — is the registry dependency.
+		piece: 'context-menu',
+		manifest: '../registry/ui/context-menu/piece.json',
+		files: CONTEXT_MENU_FILES,
+		registryDependencies: ['dropdown-menu'],
+		dependencies: [],
+	},
+	{
+		piece: 'split-button',
+		manifest: '../registry/ui/split-button/piece.json',
+		files: SPLIT_BUTTON_FILES,
+		registryDependencies: ['dropdown-menu'],
+		dependencies: [],
+	},
 ];
 
 // Every consumer file in the batch, paired with the piece it belongs to, for the
@@ -111,6 +159,16 @@ const CONSUMER_FILES = [
 	...HOVER_CARD_FILES.map((file) => ['hover-card', file]),
 	...POPCONFIRM_FILES.map((file) => ['popconfirm', file]),
 	...MENUBAR_FILES.map((file) => ['menubar', file]),
+	...DROPDOWN_MENU_FILES.map((file) => ['dropdown-menu', file]),
+	...CONTEXT_MENU_FILES.map((file) => ['context-menu', file]),
+	...SPLIT_BUTTON_FILES.map((file) => ['split-button', file]),
+];
+
+// The three menu families, whose whole point is that they reimplement NOTHING.
+const MENU_FAMILY_FILES = [
+	...DROPDOWN_MENU_FILES.map((file) => ['dropdown-menu', file]),
+	...CONTEXT_MENU_FILES.map((file) => ['context-menu', file]),
+	...SPLIT_BUTTON_FILES.map((file) => ['split-button', file]),
 ];
 
 for (const entry of PIECES) {
@@ -294,4 +352,118 @@ test('menubar claims no ARIA menu roles', async () => {
 			);
 		}
 	}
+});
+
+test('the menu families reimplement none of what menu mode provides', async () => {
+	// The 0.7.0 rewrite deleted ~900 lines of ported machinery across these three
+	// pieces: roving tabindex, an outside-pointerdown listener, the Arrow/Home/End
+	// switch, the Space-on-a-link branch, the pointer clamp, and every
+	// hand-authored menu role. This is the cheapest net against any of it coming
+	// back — the component owns all of it, and a piece that duplicates it fights it.
+	// Authoring these is only ever visible in the TEMPLATE; the header comments
+	// explain in prose why the family does not write them.
+	const BANNED_MARKUP = ['tabindex=', 'role="menu', 'aria-expanded', 'aria-haspopup'];
+	// These would be ported machinery wherever they appeared.
+	const BANNED_ANYWHERE = ['document.addEventListener', '_pendingFocus'];
+	for (const [piece, file] of MENU_FAMILY_FILES) {
+		const source = await readText(`../registry/ui/${piece}/${file}`);
+		const scriptAt = source.indexOf('<script>');
+		const template = scriptAt === -1 ? '' : source.slice(0, scriptAt);
+		for (const needle of BANNED_MARKUP) {
+			assert.equal(
+				template.includes(needle),
+				false,
+				`${piece}/${file} authors \`${needle}\` — menu mode owns that, see DropdownMenu.pzl`
+			);
+		}
+		for (const needle of BANNED_ANYWHERE) {
+			assert.equal(
+				source.includes(needle),
+				false,
+				`${piece}/${file} contains \`${needle}\` — menu mode owns that, see DropdownMenu.pzl`
+			);
+		}
+	}
+});
+
+test('the menu families compose the base from the right relative depth', async () => {
+	// Every copy lands side by side under app/components/ui/, so a member one
+	// directory down reaches its siblings with '../<Family>/index.js'.
+	const base = [
+		['dropdown-menu', ['DropdownMenu/DropdownMenu.pzl', 'DropdownMenu/Trigger.pzl', 'DropdownMenu/Content.pzl']],
+		['context-menu', ['ContextMenu/ContextMenu.pzl']],
+	];
+	for (const [piece, files] of base) {
+		for (const file of files) {
+			const source = await readText(`../registry/ui/${piece}/${file}`);
+			assert.match(source, /import DropdownPanel from '\.\.\/DropdownPanel\/index\.js';/, file);
+		}
+	}
+	for (const [piece, file] of [
+		['context-menu', 'ContextMenu/Content.pzl'],
+		['split-button', 'SplitButton/Menu.pzl'],
+	]) {
+		const source = await readText(`../registry/ui/${piece}/${file}`);
+		assert.match(source, /from '\.\.\/DropdownMenu\/index\.js';/, file);
+	}
+	// Sub imports the root FILE, not the barrel — the barrel imports Sub, and a
+	// cycle through it would leave one of them undefined at evaluation time.
+	const sub = await readText('../registry/ui/dropdown-menu/DropdownMenu/Sub.pzl');
+	assert.match(sub, /import DropdownMenu from '\.\/DropdownMenu\.pzl';/);
+});
+
+test('the menu family barrels export the D167 Object.assign shape', async () => {
+	const dropdown = await readText('../registry/ui/dropdown-menu/DropdownMenu/index.js');
+	assert.match(dropdown, /export default Object\.assign\(DropdownMenu, \{/);
+	for (const member of [
+		'Trigger',
+		'Content',
+		'Item',
+		'Link',
+		'Group',
+		'Label',
+		'Separator',
+		'Shortcut',
+		'Sub',
+	]) {
+		assert.ok(dropdown.includes(`import ${member} from './${member}.pzl';`), member);
+	}
+
+	// The row members are RE-EXPORTED, not duplicated: a context-menu row IS a
+	// dropdown-menu row, and dropdown-menu is copied into the consumer app anyway
+	// as the registry dependency, so one edit serves both menus.
+	for (const [piece, dir, own] of [
+		['context-menu', 'ContextMenu', ['Content']],
+		['split-button', 'SplitButton', ['Action', 'Menu']],
+	]) {
+		const barrel = await readText(`../registry/ui/${piece}/${dir}/index.js`);
+		assert.match(barrel, /from '\.\.\/DropdownMenu\/index\.js';/, `${piece} re-exports the rows`);
+		for (const member of own) {
+			assert.ok(barrel.includes(`import ${member} from './${member}.pzl';`), `${piece}/${member}`);
+		}
+		for (const member of ['Item', 'Link', 'Separator']) {
+			assert.equal(
+				barrel.includes(`from './${member}.pzl'`),
+				false,
+				`${piece} must not fork ${member}`
+			);
+		}
+	}
+});
+
+test('the base forwards select without a target filter, and sub silences it', async () => {
+	// select is the one event that is NOT #mine-filtered: a submenu choice closes
+	// the whole chain and returns focus to the ROOT trigger, so the root is what
+	// owes the parent a report. `sub` is what stops the nested roots reporting too.
+	const source = await readText(
+		'../registry/ui/dropdown-panel/DropdownPanel/DropdownPanel.pzl'
+	);
+	assert.match(source, /#onSelect = \(event\) => \{\s*\n\s*if \(this\.props\.sub\) return;/);
+	assert.equal(
+		/#onSelect[\s\S]{0,200}#mine\(event\)/.test(source),
+		false,
+		'select must NOT be target-filtered — the root reports a submenu\'s select too'
+	);
+	const sub = await readText('../registry/ui/dropdown-menu/DropdownMenu/Sub.pzl');
+	assert.match(sub, /sub=\{ true \}/, 'Sub must pass `sub` or the chain reports twice');
 });
