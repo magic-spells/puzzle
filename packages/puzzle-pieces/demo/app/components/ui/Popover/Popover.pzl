@@ -1,0 +1,86 @@
+<puzzle-view>
+  <DropdownPanel
+    class={ rootClass }
+    trigger="click"
+    arrow="none"
+    open={ openState }
+    effect={ effect }
+    @show={ onShow() }
+    @hide={ onHide() }><Children/></DropdownPanel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// Popover — a click-toggled floating panel with arbitrary content. A FAMILY
+// (D167) composed over the shared DropdownPanel base, which wraps the
+// @magic-spells/dropdown-panel web component:
+//
+//   import Popover from '@/components/ui/Popover';
+//
+//   <Popover>
+//     <Popover.Trigger>Options</Popover.Trigger>
+//     <Popover.Content align="end">
+//       …rich panel content…
+//     </Popover.Content>
+//   </Popover>
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. Press-to-toggle, outside-pointerdown
+// dismissal, Escape closing and refocusing the trigger, the arrow-key model and
+// one-open-at-a-time arbitration are the web component's. This family is markup
+// and tokens.
+//
+// BREAKING CHANGE in 0.7.0: the piece used to be a single component with a
+// `label` prop and a named "trigger" slot. It is written as markup now, for a
+// hard reason as well as a stylistic one: a named slot is a compile error
+// anywhere inside a component invocation (only the bare <Children/> forwards
+// through a component), so a piece whose root is <DropdownPanel> has exactly ONE
+// content channel. A trigger AND a panel need two — hence two members.
+//
+// Also gone, on purpose:
+//   * `side="top"` and the rAF flip-if-no-space measurement. Panels open
+//     downward; a panel near the right edge takes align="end" on Content, and
+//     one that should span a bar takes `wide`. Both are pure CSS, with nothing
+//     to re-run on resize.
+//   * the document pointerdown listener, the Escape handler and the hand-written
+//     aria-haspopup / aria-expanded / aria-controls — all upstream now.
+//   * `id`. The component generates and wires its own.
+//
+// open — OPTIONAL-CONTROLLED and EDGE-TRIGGERED through the base. Omit it and
+// the component owns its state, which is the normal case. Pass it and only a
+// CHANGE acts; the user can still dismiss the panel, which reports through
+// @hide, and the parent's job is to flip `open` back to false there so the next
+// open is a fresh edge.
+//
+// FOCUS IS NOT TRAPPED — this is a popover, not a modal, and opening does not
+// steal focus. The panel follows its trigger in DOM order, so tabbing into it is
+// natural, and a closed panel is `inert` so its contents are skipped.
+//
+// STYLESHEETS. Through DropdownPanel this piece needs the component's CSS in
+// your app's style entry:
+//   @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+//   @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */
+//
+// Props
+//   open    optional-controlled, edge-triggered
+//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class   merged onto <dropdown-component>
+//   @show / @hide  fired when THIS popover opens or closes. A nested dropdown's
+//           events are filtered out by the base — see DropdownPanel.pzl.
+
+export default class Popover extends PuzzleView {
+  data(params, props) {
+    return {
+      rootClass: props.class || false,
+      openState: props.open,
+      effect: props.effect,
+    };
+  }
+
+  events = {
+    onShow: () => this.props.show?.(),
+    onHide: () => this.props.hide?.(),
+  };
+}
+</script>

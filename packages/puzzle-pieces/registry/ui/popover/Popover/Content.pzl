@@ -1,0 +1,53 @@
+<puzzle-view>
+  <DropdownPanel.Panel
+    class={ contentClass }
+    align={ align }
+    wide={ wide }
+    opens={ opens }
+    effect={ effect }><Children/></DropdownPanel.Panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// Popover.Content — the floating panel. A member of the Popover family (D167);
+// it composes DropdownPanel.Panel and adds the popover's roomier padding, so it
+// renders <dropdown-panel> as its single root with no wrapper — the
+// direct-children contract holds.
+//
+//   <Popover.Content align="end" class="w-72">
+//     <p class="text-sm text-body">…</p>
+//   </Popover.Content>
+//
+// PLACEMENT IS PURE CSS. There is no measuring pass and no auto-flip — that JS
+// is gone with the wrap. A panel near the right edge takes align="end"; one that
+// should span a bar takes `wide` (and that bar needs `position: relative`).
+//
+// Never overflow-hidden, here or above it: it clips a nested dropdown and the
+// drawn arrow.
+//
+// Props (forwarded to DropdownPanel.Panel unless noted)
+//   align   'start' (default) | 'end'
+//   wide    full-width panel spanning the nearest positioned ancestor
+//   opens   'down' (default) | 'right' for a nested submenu
+//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class   merged onto <dropdown-panel>, after the padding
+
+// The base Panel already carries the card chrome (border, surface, shadow,
+// rounding, min-w-48, z-40). A popover holds prose rather than menu rows, so it
+// trades the menu padding for a roomier box and a sensible max width.
+const CONTENT = 'w-max max-w-xs p-4 text-sm';
+
+export default class Content extends PuzzleView {
+  data(params, props) {
+    return {
+      contentClass: [CONTENT, props.class].filter(Boolean).join(' '),
+      align: props.align,
+      wide: props.wide ? true : false,
+      opens: props.opens,
+      effect: props.effect,
+    };
+  }
+}
+</script>

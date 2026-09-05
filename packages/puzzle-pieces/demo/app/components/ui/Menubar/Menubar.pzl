@@ -1,0 +1,70 @@
+<puzzle-view>
+  <nav aria-label={ barLabel } class={ rootClass }><Children/></nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Menubar — a desktop-application-style horizontal menu bar (File / Edit / View
+// / Help). A FAMILY (D167) composed over the shared DropdownPanel base, which
+// wraps the @magic-spells/dropdown-panel web component:
+//
+//   import Menubar from '@/components/ui/Menubar';
+//
+//   <Menubar label="Main menu">
+//     <Menubar.Menu>
+//       <Menubar.Trigger>File</Menubar.Trigger>
+//       <Menubar.Content>
+//         <Menubar.Item value="new" @press={ run }>New file<Menubar.Shortcut>⌘N</Menubar.Shortcut></Menubar.Item>
+//         <Menubar.Separator/>
+//         <Menubar.Label>Recent</Menubar.Label>
+//         <Menubar.Item value="reopen" @press={ run }>Reopen tab</Menubar.Item>
+//       </Menubar.Content>
+//     </Menubar.Menu>
+//   </Menubar>
+//
+// BREAKING CHANGE in 0.7.0: the `menus[].items[]` config array and the `@select`
+// callback are gone, along with 495 lines of ported machinery — hover switching,
+// roving tabindex, an outside-click listener and a rAF right-edge clamp. The bar
+// is written as markup now; nested config arrays are exactly the shape a
+// compound family replaces (see DECISION-CONFIG-FIRST-API — config-first is
+// still the rule for flat leaf lists like `options` and `steps`).
+//
+// ACCESSIBILITY — THIS IS A DISCLOSURE BAR, NOT AN ARIA MENUBAR, and that is
+// deliberate. The old piece wrote role="menubar" / role="menuitem" and owed the
+// desktop keyboard model those roles promise. The web component underneath is
+// disclosure-style by design and does not implement bar-level roving, so
+// claiming the roles would be a lie a screen-reader user pays for. Instead:
+//   * the bar is a plain <nav> with an aria-label;
+//   * each trigger is a real control the component wires with aria-expanded;
+//   * TAB moves between the triggers — there is no Left/Right roving across the
+//     bar. Inside an open menu the component's own model applies: Up/Down between
+//     items, Home/End, Escape to close one level and refocus its trigger, and
+//     Right/Left for an opens="right" submenu.
+// If you need true menubar semantics, that belongs upstream, not in a fork here.
+//
+// The <nav> is `relative`, which is load-bearing for any `wide` panel: a wide
+// panel's host goes position: static, so it spans the nearest POSITIONED
+// ancestor — this element.
+//
+// STYLESHEETS. Through DropdownPanel this piece needs the component's CSS in your
+// app's style entry:
+//   @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+//   @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */
+//
+// Props
+//   label  aria-label for the <nav> (default "Menu bar")
+//   class  merged onto <nav>, after the bar chrome
+
+const BAR =
+  'relative inline-flex items-center gap-0.5 rounded-lg border border-border bg-surface p-1';
+
+export default class Menubar extends PuzzleView {
+  data(params, props) {
+    return {
+      barLabel: props.label != null ? String(props.label) : 'Menu bar',
+      rootClass: [BAR, props.class].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>

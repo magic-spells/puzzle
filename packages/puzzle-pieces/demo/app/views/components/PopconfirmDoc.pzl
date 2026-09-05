@@ -4,29 +4,79 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Popconfirm</h1>
         <p class="mt-2 text-body">
-          A lightweight inline confirmation popover anchored to its trigger, for low-stakes
-          confirmations that don't warrant a full modal. It opens next to the trigger on click;
-          an outside click or Escape cancels it, and it flips sides when the requested edge runs
-          out of room. Reach for Alert Dialog when the choice is consequential enough to demand a
-          focus-trapping modal.
+          A lightweight inline confirmation bubble anchored to its trigger, for low-stakes
+          confirmations that do not warrant a modal. It wraps the shared
+          <a class="text-brand underline underline-offset-2" href="#/components/dropdown-panel">Dropdown Panel</a>
+          base, so press-to-toggle, outside-press and Escape dismissal, focus return and
+          one-open-at-a-time are the web component's. Reach for
+          <a class="text-brand underline underline-offset-2" href="#/components/alert-dialog">Alert Dialog</a>
+          when the action deserves a focus-trapping modal.
         </p>
+        <p class="mt-3 text-body">
+          Unlike its Popover and Hover Card cousins this stays a
+          <strong class="font-medium text-ink">single component</strong>: the panel is entirely
+          prescribed — a title, an optional description and two buttons — so the one content
+          channel a piece gets goes to the trigger.
+        </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking changes in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">message</code>
+            is now <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">title</code>;
+            the trigger slot is now plain children;
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">placement</code>
+            is gone (bubbles open downward — use
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">align</code>
+            for the horizontal edge). And dismissal is no longer cancel: Escape and an outside
+            press close the bubble without firing
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">@cancel</code>,
+            which now means the Cancel button was pressed. Listen to
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">@hide</code>
+            if you need every close.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }>
-          <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
-            Delete item
-          </button>
-        </Popconfirm>
-        <p class="mt-4 text-sm text-muted">Deleted { deleteCount } time{ deleteCount === 1 ? '' : 's' } this session.</p>
+        <div class="flex w-full max-w-xl flex-wrap items-center justify-center gap-4 pb-32 pt-8">
+          <Popconfirm
+            title="Delete this item?"
+            confirmLabel="Delete"
+            variant="danger"
+            @confirm={ onConfirm('deleted') }
+            @cancel={ onCancel }>
+            <span class={ dangerTrigger }>Delete</span>
+          </Popconfirm>
+
+          <Popconfirm
+            title="Publish these changes?"
+            description="Everyone on the team sees them immediately."
+            confirmLabel="Publish"
+            label="Publish"
+            @confirm={ onConfirm('published') }
+            @cancel={ onCancel }/>
+        </div>
       </ExampleBox>
+
+      <p class="mt-3 text-sm text-muted">Last action: <span class="font-medium text-ink">{ status }</span></p>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
         <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
+          Copy the piece into your app. It pulls the shared
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">dropdown-panel</code>
+          base along with it:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          That base has a runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheets into your app's style entry. The first is required; the
+          second adds the entrance effects and the drawn trigger arrow:
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -36,58 +86,52 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          The children are the trigger, and the stock secondary button is their
+          <span class="font-medium text-ink">fallback</span>: pass none and
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">label</code>
+          renders that button; pass your own and they replace it entirely, so a custom trigger
+          must carry its own accessible name. Keep that content non-interactive — the trigger
+          element is the control, so a nested button would be a second tab stop.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="danger" title="Danger variant" code={ codeDanger }>
-          <div class="flex flex-wrap items-center justify-center gap-4">
-            <Popconfirm
-              message="Delete this file?"
-              description="This permanently removes the file and cannot be undone."
-              confirmLabel="Delete"
-              variant="danger"
-              @confirm={ onDelete }>
-              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg bg-danger px-4 text-sm font-medium text-danger-ink hover:bg-danger-dark outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
-                Delete file
-              </button>
-            </Popconfirm>
-          </div>
-        </ExampleBox>
-
-        <ExampleBox id="placement" title="Placement" code={ codePlacement }>
-          <div class="flex flex-wrap items-center justify-center gap-4">
-            <Popconfirm message="Confirm this action?" placement="top" align="start">
-              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Top start</button>
-            </Popconfirm>
-            <Popconfirm message="Confirm this action?" placement="top" align="center">
-              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Top center</button>
-            </Popconfirm>
-            <Popconfirm message="Confirm this action?" placement="bottom" align="end">
-              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">Bottom end</button>
-            </Popconfirm>
-          </div>
-        </ExampleBox>
-
-        <ExampleBox id="controlled" title="Controlled open" code={ codeControlled }>
-          <div class="flex flex-col items-center gap-4 text-sm text-body">
-            <Popconfirm
-              message="Publish these changes?"
-              confirmLabel="Publish"
-              open={ confirmOpen }
-              @show={ onShow }
-              @hide={ onHide }
-              @confirm={ onPublish }>
-              <button slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
-                Publish
-              </button>
-            </Popconfirm>
-            <p>
-              The parent owns <span class="font-medium text-ink">open</span> — it is currently
-              <span class="font-medium text-ink">{ confirmOpen ? 'open' : 'closed' }</span>.
-              { published ? ' Changes published.' : '' }
+        <ExampleBox id="rows" title="In a row of records" code={ codeRows }>
+          <div class="w-full max-w-xl pb-40">
+            <ul class="divide-y divide-border rounded-xl border border-border bg-surface">
+              {#for row in records}
+                <li key={ row.id } class="flex items-center justify-between gap-4 p-3">
+                  <span class="text-sm text-ink">{ row.name }</span>
+                  <Popconfirm
+                    title={ row.question }
+                    description="This cannot be undone."
+                    confirmLabel="Delete"
+                    variant="danger"
+                    align="end"
+                    @confirm={ onConfirm(row.id) }>
+                    <span class={ dangerTrigger }>Delete</span>
+                  </Popconfirm>
+                </li>
+              {/for}
+            </ul>
+            <p class="mt-3 text-sm text-muted">
+              align="end" keeps each bubble inside the card — pure CSS, no measuring pass.
             </p>
           </div>
         </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+          <div class="text-sm">
+            {#for row in propRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+        </section>
       </div>
     </article>
 
@@ -102,97 +146,108 @@ import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
+// Docs page for Popconfirm. Code samples live as template-literal consts
+// because literal tag names and {#…} tokens would be parsed as template syntax
+// in prose.
 const installCmd = 'puzzle add piece popconfirm';
-const usageImport = `import Popconfirm from '@/components/ui/Popconfirm.pzl';`;
-const usageMarkup = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }></Popconfirm>`;
+const installDep = 'npm install @magic-spells/dropdown-panel';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+@import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */`;
 
-const codeHero = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }>
-  <button slot="trigger" class="…">Delete item</button>
+const usageImport = `import Popconfirm from '@/components/ui/Popconfirm';`;
+
+const usageMarkup = `<Popconfirm title="Delete this item?" confirmLabel="Delete" variant="danger" @confirm={ remove }>
+  <span class="…">Delete</span>
 </Popconfirm>
 
-// The consumer supplies their OWN button in the "trigger" slot; clicking it
-// opens the confirm bubble. @confirm fires and closes; @cancel (or Escape /
-// an outside click) dismisses without confirming.
-events = {
-  onDelete: () => this.doDelete(),
-};`;
+// No children? The stock secondary button renders from the label prop:
+<Popconfirm title="Publish these changes?" label="Publish" @confirm={ publish } />`;
 
-const codeDanger = `// variant="danger" tints the confirm button destructive. Pair it with a
-// description line for the "cannot be undone" reassurance.
+const codeHero = `// Your own trigger, or the stock one from the label prop.
+<Popconfirm title="Delete this item?" confirmLabel="Delete" variant="danger" @confirm={ remove }>
+  <span class="…">Delete</span>
+</Popconfirm>
+
 <Popconfirm
-  message="Delete this file?"
-  description="This permanently removes the file and cannot be undone."
+  title="Publish these changes?"
+  description="Everyone on the team sees them immediately."
+  confirmLabel="Publish"
+  label="Publish"
+  @confirm={ publish }
+  @cancel={ dismiss } />`;
+
+const codeRows = `// One bubble per record, hugging the right edge of the card.
+<Popconfirm
+  title={ row.question }
+  description="This cannot be undone."
   confirmLabel="Delete"
   variant="danger"
-  @confirm={ onDelete }>
-  <button slot="trigger" class="…">Delete file</button>
+  align="end"
+  @confirm={ onConfirm(row.id) }>
+  <span class="…">Delete</span>
 </Popconfirm>`;
 
-const codePlacement = `<Popconfirm message="Confirm this action?" placement="top" align="start">…</Popconfirm>
-<Popconfirm message="Confirm this action?" placement="bottom" align="end">…</Popconfirm>
+const propRows = [
+  { name: 'title', desc: 'The question. (Was `message` before 0.7.0.)' },
+  { name: 'description', desc: 'A second line under the question.' },
+  { name: 'label', desc: 'Text for the STOCK trigger — the fallback only. Call-site children win over it.' },
+  { name: 'confirmLabel', desc: 'Defaults to "Confirm".' },
+  { name: 'cancelLabel', desc: 'Defaults to "Cancel".' },
+  { name: 'variant', desc: "'danger' tints the confirm button destructive." },
+  { name: 'align', desc: "'start' (default) | 'end' — which edge the bubble hangs from." },
+  { name: 'open', desc: 'Optional-controlled and edge-triggered. Omit it and the component owns its own state.' },
+  { name: 'class', desc: 'Merged onto the panel.' },
+  { name: 'triggerClass', desc: 'Merged onto the trigger element.' },
+  { name: '@confirm', desc: 'The Confirm button was pressed; the bubble then closes and focus returns to the trigger.' },
+  { name: '@cancel', desc: 'The Cancel button was pressed. Escape and outside presses do NOT fire this.' },
+  { name: '@show / @hide', desc: 'Every open and close, dismissals included.' },
+];
 
-// placement — "top" (default) or "bottom"; flips automatically when the
-//              requested edge lacks room for the measured bubble.
-// align     — "center" (default), "start", or "end" along the trigger's edge.`;
+const DANGER_TRIGGER =
+  'inline-flex h-9 cursor-pointer items-center rounded-lg px-3 text-sm font-medium text-danger ' +
+  'transition-colors hover:bg-danger-tint outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
 
-const codeControlled = `// open is optional-controlled: pass it and the parent owns the state. The
-// bubble fires @show / @hide so a controlled parent can stay in sync, and
-// @confirm / @cancel for the action itself.
-<Popconfirm
-  message="Publish these changes?"
-  confirmLabel="Publish"
-  open={ confirmOpen }
-  @show={ onShow }
-  @hide={ onHide }
-  @confirm={ onPublish }>
-  <button slot="trigger" class="…">Publish</button>
-</Popconfirm>
-
-events = {
-  onShow: () => this.setData('confirmOpen', true),
-  onHide: () => this.setData('confirmOpen', false),
-};`;
+const RECORDS = [
+  { id: 'invoice-118', name: 'Invoice #118', question: 'Delete invoice #118?' },
+  { id: 'invoice-119', name: 'Invoice #119', question: 'Delete invoice #119?' },
+];
 
 export default class PopconfirmDoc extends PuzzleView {
   created() {
-    this.setData({ deleteCount: 0, confirmOpen: false, published: false });
+    this.setData({ status: 'nothing yet' });
   }
 
-  data(params, props) {
+  data() {
     return {
-      ...this.getData(),
+      status: this.getData().status,
+      dangerTrigger: DANGER_TRIGGER,
+      records: RECORDS,
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
-      codeDanger,
-      codePlacement,
-      codeControlled,
+      codeRows,
+      propRows,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Danger variant', href: '#danger' },
-        { label: 'Placement', href: '#placement' },
-        { label: 'Controlled open', href: '#controlled' },
+        { label: 'In a row of records', href: '#rows' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
-    onDelete: () => {
-      this.setData('deleteCount', this.getData().deleteCount + 1);
+    onConfirm: (what) => {
+      this.setData('status', `confirmed ${what}`);
       this.refresh();
     },
-    onShow: () => {
-      this.setData('confirmOpen', true);
-      this.refresh();
-    },
-    onHide: () => {
-      this.setData('confirmOpen', false);
-      this.refresh();
-    },
-    onPublish: () => {
-      this.setData('published', true);
+    onCancel: () => {
+      this.setData('status', 'cancelled');
       this.refresh();
     },
   };

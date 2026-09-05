@@ -74,22 +74,19 @@
                 <Separator orientation="vertical" class="hidden h-6 sm:block"/>
 
                 <Popconfirm
-                  message="Archive Aurora 2.0?"
+                  title="Archive Aurora 2.0?"
                   description="The board is hidden from the sidebar. You can restore it from project settings."
                   confirmLabel="Archive"
                   variant="danger"
-                  placement="bottom"
                   align="end"
                   @confirm={ archiveProject }>
-                  <button
-                    slot="trigger"
-                    type="button"
+                  <span
                     class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-body transition-colors hover:bg-surface-sunken hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
                     <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M3 7h18M5 7l1 13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-13M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
                     </svg>
                     Archive
-                  </button>
+                  </span>
                 </Popconfirm>
 
                 <DropdownMenu
@@ -219,22 +216,19 @@
                             <span class="hidden w-24 shrink-0 text-xs text-muted sm:block">{ row.assignee }</span>
                             <Avatar name={ row.assignee } size="sm"/>
                             <Popconfirm
-                              message="Delete this issue?"
+                              title="Delete this issue?"
                               description="This removes the card from the board and cannot be undone."
                               confirmLabel="Delete"
                               variant="danger"
-                              placement="bottom"
                               align="end"
                               @confirm={ removeIssue(row.id) }>
-                              <button
-                                slot="trigger"
-                                type="button"
-                                class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-danger-tint hover:text-danger outline-ring focus-visible:outline-2 focus-visible:outline-offset-2"
-                                aria-label={ row.deleteLabel }>
+                              <span
+                                class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-danger-tint hover:text-danger outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+                                <span class="sr-only">{ row.deleteLabel }</span>
                                 <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                   <path d="M3 7h18M5 7l1 13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-13M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
                                 </svg>
-                              </button>
+                              </span>
                             </Popconfirm>
                           </li>
                         {/for}

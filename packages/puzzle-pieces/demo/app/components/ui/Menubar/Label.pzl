@@ -1,0 +1,26 @@
+<puzzle-view>
+  <div class={ labelClass }><Children/></div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Menubar.Label — a non-interactive heading over a group of items. A member of
+// the Menubar family (D167); plain markup.
+//
+//   <Menubar.Label>Recent</Menubar.Label>
+//
+// It is not focusable and carries no role, so the component's Up/Down model
+// skips it for free — nothing here has to teach it to.
+//
+// Props
+//   class  merged onto the heading
+
+const LABEL = 'px-2.5 pt-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted';
+
+export default class Label extends PuzzleView {
+  data(params, props) {
+    return { labelClass: [LABEL, props.class].filter(Boolean).join(' ') };
+  }
+}
+</script>

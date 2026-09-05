@@ -13,6 +13,10 @@ props:
     type: string
   - name: effectEasing
     type: string
+  - name: openDelay
+    type: number
+  - name: closeDelay
+    type: number
   - name: open
     type: boolean
   - name: class
@@ -21,14 +25,34 @@ connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
   - DOC-REGISTRY
+notes:
+  - kind: state
+    text: >-
+      2026-09-05: four more consumers landed on the base — popover, hover-card and menubar as D167
+      families (Popover · .Trigger · .Content; HoverCard · .Trigger · .Content; Menubar · .Menu ·
+      .Trigger · .Content · .Item · .Link · .Separator · .Label · .Shortcut), and popconfirm as a
+      single file. ~1,250 lines of ported overlay machinery deleted (timers, document listeners,
+      Escape handlers, rAF flip/clamp measurement, roving tabindex, aria mirroring). Menubar drops
+      role="menubar"/"menuitem" deliberately: upstream is a disclosure with no bar-level roving, so
+      the roles would promise a keyboard model that is not there (Tab moves between triggers). The
+      base root gained openDelay/closeDelay props → open-delay/close-delay attributes, honoured by
+      @magic-spells/dropdown-panel >= 2.1.0 and inert on 2.0.0 (HoverCard defaults 600/300); the
+      demo runs 2.0.0, so delays are inert there today. COMPILER CONSTRAINT that shaped all four: a
+      named <Slot name> is a compile error anywhere inside a component invocation
+      (parser/slot.go:200) and a template may declare only one default marker, so a piece whose root
+      is <DropdownPanel> has exactly ONE content channel — that is why a trigger-plus-panel piece
+      must be a family, and why Menubar.Item (button) and Menubar.Link (anchor) are separate members
+      rather than one component branching on href. Items close the whole open chain themselves
+      (hide() on each ancestor dropdown-component) because upstream only closes on an OUTSIDE press.
 ---
 
 The registry's shared base for every trigger-and-panel overlay. A D167 family —
 `registry/ui/dropdown-panel/DropdownPanel/{DropdownPanel,Trigger,Panel}.pzl` plus an
 `index.js` barrel (`Object.assign(DropdownPanel, { Trigger, Panel })`) — wrapping
-`@magic-spells/dropdown-panel` 2.0.0. NavigationMenu is the first consumer; eight more
-menu-style pieces (popover, hover-card, popconfirm, menubar, dropdown-menu, context-menu,
-split-button, accordion) are expected to follow.
+`@magic-spells/dropdown-panel` 2.x (the demo pins `^2.0.0`; `openDelay`/`closeDelay` need
+≥ 2.1.0). Consumers today: navigation-menu, popover, hover-card, popconfirm, menubar.
+Still to follow once upstream gains a menu mode and pointer placement: dropdown-menu,
+context-menu, split-button.
 
 Consumers **compose** the members, they do not re-export them: a re-exported class has
 nowhere to hang piece-specific token chrome, and in a copy-in registry the consumer must be
@@ -69,3 +93,11 @@ able to edit `NavigationMenu/Trigger.pzl` without forking the shared base.
   none, so the design-system bridge is Tailwind on the members' hosts, and the two timing
   knobs go through an inline `style` (runtime values — Tailwind cannot generate classes for
   strings it never sees in source).
+- **One content channel per component root.** A named `<Slot name>` is a compile error inside
+  a component invocation and a template gets one default marker, so a piece rooted at
+  `<DropdownPanel>` can route only one body. Trigger-plus-panel pieces are therefore families
+  (Popover, HoverCard); a single-file wrapper works only when the panel is prop-driven
+  (Popconfirm, whose `<Children/>` is the trigger).
+- **The trigger element is upstream's `role="button"` `dropdown-trigger`.** Call-site trigger
+  content must be non-interactive — a nested `<button>` or `<a>` inside it is invalid and
+  double-focusable. Icon-only triggers need an `sr-only` name.

@@ -464,11 +464,16 @@
     },
     {
       "name": "hover-card",
-      "description": "Hover/focus-triggered floating card for link previews and user cards — open/close delays, hover-persistent panel, auto-flip placement, optional-controlled open",
+      "description": "Hover-triggered preview card for link previews and user cards — a compound family over the shared dropdown-panel base, with open/close delays, the package's hover bridge keeping the card hoverable, and optional-controlled open",
       "files": [
-        "HoverCard.pzl"
+        "HoverCard/HoverCard.pzl",
+        "HoverCard/Trigger.pzl",
+        "HoverCard/Content.pzl",
+        "HoverCard/index.js"
       ],
-      "registryDependencies": [],
+      "registryDependencies": [
+        "dropdown-panel"
+      ],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },
@@ -591,11 +596,22 @@
     },
     {
       "name": "menubar",
-      "description": "Desktop-app-style horizontal menu bar — top labels open dropdowns with keyboard-shortcut hints, separators, disabled and danger items, hover-switching, and full menubar keyboard nav",
+      "description": "Desktop-app-style horizontal menu bar — a compound family over the shared dropdown-panel base, with hover-switching menus, nested submenus, shortcut hints, separators, labels, link rows, and disabled and danger items",
       "files": [
-        "Menubar.pzl"
+        "Menubar/Menubar.pzl",
+        "Menubar/Menu.pzl",
+        "Menubar/Trigger.pzl",
+        "Menubar/Content.pzl",
+        "Menubar/Item.pzl",
+        "Menubar/Link.pzl",
+        "Menubar/Separator.pzl",
+        "Menubar/Label.pzl",
+        "Menubar/Shortcut.pzl",
+        "Menubar/index.js"
       ],
-      "registryDependencies": [],
+      "registryDependencies": [
+        "dropdown-panel"
+      ],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },
@@ -692,21 +708,28 @@
     },
     {
       "name": "popconfirm",
-      "description": "Inline confirmation popover anchored to a trigger — message, optional description, confirm/cancel actions, danger variant, auto-flip placement, optional-controlled open",
+      "description": "Inline confirmation bubble anchored to a trigger — title, optional description, confirm/cancel actions and a danger variant, over the shared dropdown-panel base; wraps the @magic-spells/dropdown-panel web component rather than porting it",
       "files": [
         "Popconfirm.pzl"
       ],
-      "registryDependencies": [],
+      "registryDependencies": [
+        "dropdown-panel"
+      ],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },
     {
       "name": "popover",
-      "description": "Click-toggled floating panel with slot trigger, auto-flip, and outside-click dismiss",
+      "description": "Click-toggled floating panel with arbitrary content — a compound family over the shared dropdown-panel base, with press-to-toggle latching, outside-press and Escape dismissal, focus return, and CSS-only end alignment",
       "files": [
-        "Popover.pzl"
+        "Popover/Popover.pzl",
+        "Popover/Trigger.pzl",
+        "Popover/Content.pzl",
+        "Popover/index.js"
       ],
-      "registryDependencies": [],
+      "registryDependencies": [
+        "dropdown-panel"
+      ],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },

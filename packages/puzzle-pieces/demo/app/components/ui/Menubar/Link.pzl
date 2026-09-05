@@ -1,0 +1,82 @@
+<puzzle-view>
+  <a href={ href } class={ rowClass } aria-disabled={ disabledAttr } @click={ onPress(event) }><Children/></a>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Menubar.Link — a row that NAVIGATES. Item's twin, as a real <a>. A member of
+// the Menubar family (D167); plain token-styled markup with no web component
+// underneath.
+//
+//   <Menubar.Link href="/docs">Documentation</Menubar.Link>
+//   <Menubar.Link href="/help" @press={ track }>Help centre</Menubar.Link>
+//
+// It is a separate member rather than an `href` prop on Item because a template
+// may declare only ONE children marker, so a two-branch <a>/<button> root cannot
+// compile. That constraint lands somewhere honest: a link is a link — middle
+// click, open in a new tab and "copy link address" all work, and screen readers
+// announce it as a link rather than a button.
+//
+// Like Item, activating a row closes the whole bar (innermost dropdown first) so
+// a submenu and its parent collapse together. @press fires first and is a HOOK,
+// not the navigation — it cannot cancel the visit; use it for analytics.
+//
+// `disabled` on a link is aria-disabled plus the muted, non-pressable treatment
+// (there is no disabled attribute for an anchor), and the press is swallowed.
+//
+// Props
+//   href      the destination
+//   value     passed to @press
+//   variant   'default' | 'danger' — destructive tint
+//   disabled  greys the row out and swallows the press
+//   class     merged onto the row, after the chrome
+//   @press    (value) — fired on activation, before the menus close
+
+const ROW_BASE =
+  'flex w-full items-center gap-6 rounded-md px-2.5 py-1.5 text-sm cursor-pointer ' +
+  'no-underline transition-colors ' +
+  'aria-disabled:opacity-50 aria-disabled:pointer-events-none ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+const ROW_NORMAL = 'text-body hover:bg-surface-sunken hover:text-ink';
+const ROW_DANGER = 'text-danger hover:bg-danger-tint';
+
+export default class Link extends PuzzleView {
+  // Collapse the whole open chain, innermost first — see Item.pzl.
+  #closeAll(event) {
+    let node = event?.currentTarget?.closest?.('dropdown-component');
+    while (node) {
+      node.hide?.();
+      node = node.parentElement?.closest?.('dropdown-component');
+    }
+  }
+
+  data(params, props) {
+    const disabled = !!props.disabled;
+
+    return {
+      href: props.href != null ? String(props.href) : '#',
+      // aria-disabled takes the STRING form; false omits the attribute.
+      disabledAttr: disabled ? 'true' : false,
+      rowClass: [
+        ROW_BASE,
+        props.variant === 'danger' ? ROW_DANGER : ROW_NORMAL,
+        props.class,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+
+  events = {
+    onPress: (event) => {
+      if (this.props.disabled) {
+        event.preventDefault();
+        return;
+      }
+      this.props.press?.(this.props.value);
+      this.#closeAll(event);
+    },
+  };
+}
+</script>

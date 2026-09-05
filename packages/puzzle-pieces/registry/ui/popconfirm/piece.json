@@ -1,8 +1,12 @@
 {
   "name": "popconfirm",
-  "description": "Inline confirmation popover anchored to a trigger — message, optional description, confirm/cancel actions, danger variant, auto-flip placement, optional-controlled open",
-  "files": ["Popconfirm.pzl"],
-  "registryDependencies": [],
+  "description": "Inline confirmation bubble anchored to a trigger — title, optional description, confirm/cancel actions and a danger variant, over the shared dropdown-panel base; wraps the @magic-spells/dropdown-panel web component rather than porting it",
+  "files": [
+    "Popconfirm.pzl"
+  ],
+  "registryDependencies": [
+    "dropdown-panel"
+  ],
   "dependencies": [],
   "targetDir": "app/components/ui"
 }

@@ -3,6 +3,8 @@
     class={ rootClass }
     style={ rootStyle }
     trigger={ triggerAttr }
+    open-delay={ openDelayAttr }
+    close-delay={ closeDelayAttr }
     arrow={ arrowAttr }
     arrow-shape={ arrowShapeAttr }>
     <Children/>
@@ -80,6 +82,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                   trigger arrow behaves. Effects stylesheet only.
 //   arrowShape      'chevron' (default) | 'triangle'. Effects stylesheet only,
 //                   and drawn only when the [data-dropdown-arrow] hook is empty.
+//   openDelay       ms of hover intent before a hover-opened panel shows
+//   closeDelay       ms of grace after the pointer leaves before it hides.
+//                   Both are HOVER-ONLY, and both are honoured by
+//                   @magic-spells/dropdown-panel >= 2.1.0 and IGNORED by 2.0.0
+//                   (an unknown attribute is inert — a piece that sets them
+//                   still works on 2.0.0, just without the delay).
 //   effectDuration  CSS time for the entrance effect and the arrow flip
 //   effectEasing    CSS easing for the same
 //   open            optional-controlled, edge-triggered as above
@@ -129,6 +137,13 @@ function oneOf(value, allowed) {
   return allowed.includes(value) ? value : false;
 }
 
+// Same sentinel for the millisecond attributes: unset (or nonsense) renders no
+// attribute, so the component's own default stands.
+function ms(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? String(Math.round(n)) : false;
+}
+
 export default class DropdownPanel extends PuzzleView {
   #live = false;
   #ready = false;
@@ -159,6 +174,8 @@ export default class DropdownPanel extends PuzzleView {
       rootClass: props.class || false,
       rootStyle: declarations.length ? declarations.join(';') : false,
       triggerAttr: oneOf(props.trigger, ['hover', 'click', 'both']),
+      openDelayAttr: ms(props.openDelay),
+      closeDelayAttr: ms(props.closeDelay),
       arrowAttr: oneOf(props.arrow, ['flip', 'static', 'none']),
       arrowShapeAttr: oneOf(props.arrowShape, ['chevron', 'triangle']),
     };

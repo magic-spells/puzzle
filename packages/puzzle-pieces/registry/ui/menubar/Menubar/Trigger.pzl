@@ -1,0 +1,56 @@
+<puzzle-view>
+  <DropdownPanel.Trigger class={ triggerClass }><Children/></DropdownPanel.Trigger>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// Menubar.Trigger — a top label in the bar, or the row that opens a submenu. A
+// member of the Menubar family (D167); it composes DropdownPanel.Trigger and adds
+// the menubar chrome, so it renders <dropdown-trigger> as its single root with no
+// wrapper — the direct-children contract holds.
+//
+//   <Menubar.Trigger>File</Menubar.Trigger>
+//   <Menubar.Trigger variant="item">Export as</Menubar.Trigger>
+//
+// To style the OPEN state, target the host the component owns —
+// `dropdown-component[visible] > dropdown-trigger` in your app CSS. The piece
+// deliberately does not write an open class of its own: `visible` is the
+// component's state and must never be bound from a template.
+//
+// role, tabindex, aria-haspopup, aria-expanded and aria-controls are written by
+// the component. Do not author them. Keep the content NON-INTERACTIVE — this
+// element IS the control.
+//
+// Props
+//   variant  'bar' (default) — a top label in the bar
+//            'item' — an in-panel submenu row, matching Item's box, with the
+//                     chevron hook pushed to the trailing edge
+//   arrow    variant="item" only: true (default) renders the
+//            [data-dropdown-arrow] hook the effects stylesheet draws into
+//   class    merged onto <dropdown-trigger>, after the variant chrome
+
+const FOCUS =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const BAR =
+  'inline-flex items-center whitespace-nowrap select-none cursor-pointer ' +
+  'rounded-md px-3 py-1.5 text-sm font-medium text-body transition-colors ' +
+  'hover:bg-surface-sunken hover:text-ink ' + FOCUS;
+
+const ITEM =
+  'flex w-full items-center justify-between gap-6 select-none cursor-pointer ' +
+  'rounded-md px-2.5 py-1.5 text-sm text-body transition-colors ' +
+  'hover:bg-surface-sunken hover:text-ink ' + FOCUS;
+
+export default class Trigger extends PuzzleView {
+  data(params, props) {
+    return {
+      triggerClass: [props.variant === 'item' ? ITEM : BAR, props.class]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+}
+</script>

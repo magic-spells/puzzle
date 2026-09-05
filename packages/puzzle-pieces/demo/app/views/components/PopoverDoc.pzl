@@ -4,30 +4,73 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Popover</h1>
         <p class="mt-2 text-body">
-          A click-toggled floating panel holding arbitrary content. It is not modal and
-          does not trap focus; an outside click or Escape closes it, and it flips sides
-          when the requested edge runs out of room.
+          A click-toggled floating panel with arbitrary content. It is a compound
+          <strong class="font-medium text-ink">family</strong> composed over the shared
+          <a class="text-brand underline underline-offset-2" href="#/components/dropdown-panel">Dropdown Panel</a>
+          base, so press-to-toggle latching, outside-press dismissal, Escape closing and
+          returning focus to the trigger, and one-open-at-a-time arbitration come from the web
+          component rather than from a hand-rolled copy in this file.
         </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">label</code>
+            prop, the trigger slot and
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">side="top"</code>
+            are gone. Write the popover as markup instead — a named slot cannot compile inside a
+            component invocation, so a piece whose root is the dropdown component has exactly one
+            content channel, and a trigger plus a panel needs two. The auto-flip measuring pass is
+            replaced by <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">align="end"</code>,
+            which is pure CSS.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <Popover align="start">
-          <span slot="trigger" class="inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken">
-            Show details
-          </span>
-          <div class="space-y-2">
-            <p class="font-medium text-ink">Dimensions</p>
-            <p>A popover holds any content — text, controls, a small form. It is not modal and does not trap focus.</p>
-          </div>
-        </Popover>
+        <div class="flex w-full max-w-xl items-center justify-center gap-6 py-8">
+          <Popover>
+            <Popover.Trigger variant="button">Filters</Popover.Trigger>
+            <Popover.Content class="w-64">
+              <p class="text-sm font-medium text-ink">Filter issues</p>
+              <p class="mt-1 text-sm text-muted">Narrow the board down to what you are working on.</p>
+              <div class="mt-3 flex flex-col gap-2">
+                {#for row in filters}
+                  <label key={ row.id } class="flex items-center gap-2 text-sm text-body">
+                    <input type="checkbox" class="size-4 accent-[var(--color-brand)]"/>
+                    { row.label }
+                  </label>
+                {/for}
+              </div>
+            </Popover.Content>
+          </Popover>
+
+          <Popover>
+            <Popover.Trigger>What is this?</Popover.Trigger>
+            <Popover.Content>
+              A popover holds interactive, must-reach content. Focus is not trapped, so tabbing
+              moves into the panel and back out.
+            </Popover.Content>
+          </Popover>
+        </div>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
         <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
+          Copy the family into your app. It pulls the shared
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">dropdown-panel</code>
+          base along with it:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          That base has a runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheets into your app's style entry. The first is required; the
+          second adds the entrance effects and the drawn trigger arrow:
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -37,25 +80,80 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          Keep the trigger's content <span class="font-medium text-ink">non-interactive</span>. The
+          dropdown trigger element itself is the control — the component gives it
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">role="button"</code>,
+          a tab stop and the aria wiring at upgrade — so a nested button or link would be a second
+          tab stop. Spans, text and SVGs.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="placement" title="Placement" code={ codePlacement }>
-          <div class="flex flex-wrap items-center justify-center gap-4">
-            <Popover side="bottom" align="start">
-              <span slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken">Bottom start</span>
-              <p>Opens below, left-aligned to the trigger.</p>
-            </Popover>
-            <Popover side="bottom" align="center">
-              <span slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken">Bottom center</span>
-              <p>Opens below, centered on the trigger.</p>
-            </Popover>
-            <Popover side="top" align="end">
-              <span slot="trigger" class="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken">Top end</span>
-              <p>Opens above, right-aligned to the trigger.</p>
+        <ExampleBox id="align" title="Right alignment" code={ codeAlign }>
+          <div class="flex w-full max-w-xl justify-end py-8">
+            <Popover>
+              <Popover.Trigger variant="button">Account</Popover.Trigger>
+              <Popover.Content align="end" class="w-56">
+                <p class="text-sm font-medium text-ink">Ada Lovelace</p>
+                <p class="text-sm text-muted">ada@example.com</p>
+                <div class="mt-3 border-t border-border pt-3 text-sm text-body">
+                  Aligned to the right edge with two utilities instead of a measuring pass.
+                </div>
+              </Popover.Content>
             </Popover>
           </div>
         </ExampleBox>
+
+        <ExampleBox id="controlled" title="Controlled open" code={ codeControlled }>
+          <div class="flex w-full max-w-xl flex-col items-center gap-4 py-8">
+            <Popover open={ open } @show={ onShow } @hide={ onHide }>
+              <Popover.Trigger variant="button">Details</Popover.Trigger>
+              <Popover.Content class="w-64">
+                <p class="text-sm text-body">
+                  The parent owns this panel's state and re-syncs it from @hide when the user
+                  dismisses it.
+                </p>
+              </Popover.Content>
+            </Popover>
+            <p class="text-sm text-muted">open = { openLabel }</p>
+            <Button variant="outline" size="sm" @press={ toggle }>Toggle from outside</Button>
+          </div>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Popover</h3>
+          <div class="text-sm">
+            {#for row in rootRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Popover.Trigger</h3>
+          <div class="text-sm">
+            {#for row in triggerRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Popover.Content</h3>
+          <div class="text-sm">
+            {#for row in contentRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+        </section>
       </div>
     </article>
 
@@ -65,46 +163,129 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import Popover from '@/components/ui/Popover.pzl';
+import Popover from '@/components/ui/Popover/index.js';
+import Button from '@/components/ui/Button.pzl';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
+// Docs page for the Popover family. Code samples live as template-literal
+// consts because literal tag names and {#…} tokens would be parsed as template
+// syntax in prose.
 const installCmd = 'puzzle add piece popover';
-const usageImport = `import Popover from '@/components/ui/Popover.pzl';`;
-const usageMarkup = `<Popover align="start"></Popover>`;
+const installDep = 'npm install @magic-spells/dropdown-panel';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+@import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */`;
 
-const codeHero = `<Popover align="start">
-  <span slot="trigger" class="…">Show details</span>
-  <div class="space-y-2">
-    <p class="font-medium text-ink">Dimensions</p>
-    <p>A popover holds any content — text, controls, a small form.</p>
-  </div>
+const usageImport = `import Popover from '@/components/ui/Popover';`;
+
+const usageMarkup = `<Popover>
+  <Popover.Trigger variant="button">Filters</Popover.Trigger>
+  <Popover.Content class="w-64">
+    <p class="text-sm text-body">…anything you like…</p>
+  </Popover.Content>
 </Popover>`;
 
-const codePlacement = `<Popover side="bottom" align="start">…</Popover>
-<Popover side="bottom" align="center">…</Popover>
-<Popover side="top" align="end">…</Popover>
+const codeHero = `// The trigger has two shapes; the panel is whatever you put in it.
+<Popover>
+  <Popover.Trigger variant="button">Filters</Popover.Trigger>
+  <Popover.Content class="w-64">…</Popover.Content>
+</Popover>
 
-// side  — "bottom" (default) or "top"; flips automatically when the
-//          requested edge lacks room for the measured panel.
-// align — "start" (default), "center", or "end" along the trigger's edge.`;
+<Popover>
+  <Popover.Trigger>What is this?</Popover.Trigger>
+  <Popover.Content>…</Popover.Content>
+</Popover>`;
+
+const codeAlign = `// align="end" hugs the right edge — left: auto; right: 0, the
+// package's own recipe, as two utilities. There is no measuring
+// pass and nothing to re-run on resize.
+<Popover>
+  <Popover.Trigger variant="button">Account</Popover.Trigger>
+  <Popover.Content align="end" class="w-56">…</Popover.Content>
+</Popover>`;
+
+const codeControlled = `// Optional-controlled and EDGE-triggered: only a change acts. The
+// user can still dismiss the panel, which reports through @hide —
+// flip your state back there so the next open is a fresh edge.
+<Popover open={ open } @show={ onShow } @hide={ onHide }>
+  <Popover.Trigger variant="button">Details</Popover.Trigger>
+  <Popover.Content class="w-64">…</Popover.Content>
+</Popover>`;
+
+const rootRows = [
+  { name: 'open', desc: 'Optional-controlled and edge-triggered. Omit it and the component owns its own state, which is the normal case.' },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+  { name: 'class', desc: 'Merged onto the dropdown component host.' },
+  { name: '@show / @hide', desc: "Fired when THIS popover opens or closes; a nested dropdown's events are filtered out by the base." },
+];
+
+const triggerRows = [
+  { name: 'variant', desc: "'link' (default) for quiet inline text, 'button' for a bordered secondary button box." },
+  { name: 'class', desc: 'Merged onto the trigger, after the variant chrome.' },
+];
+
+const contentRows = [
+  { name: 'align', desc: "'start' (default) | 'end'. end is left-auto right-0 — pure CSS, no measuring." },
+  { name: 'wide', desc: 'A full-width panel spanning the nearest positioned ancestor.' },
+  { name: 'opens', desc: "'down' (default) | 'right' for a nested submenu." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+  { name: 'class', desc: 'Merged onto the panel, after the padding. Never overflow-hidden.' },
+];
+
+const FILTERS = [
+  { id: 'open', label: 'Open issues' },
+  { id: 'mine', label: 'Assigned to me' },
+  { id: 'stale', label: 'No activity in 30 days' },
+];
 
 export default class PopoverDoc extends PuzzleView {
-  data(params, props) {
+  created() {
+    this.setData({ open: false });
+  }
+
+  data() {
+    const open = !!this.getData().open;
     return {
-      ...this.getData(),
+      open,
+      openLabel: open ? 'true' : 'false',
+      filters: FILTERS,
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
-      codePlacement,
+      codeAlign,
+      codeControlled,
+      rootRows,
+      triggerRows,
+      contentRows,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Placement', href: '#placement' },
+        { label: 'Right alignment', href: '#align' },
+        { label: 'Controlled open', href: '#controlled' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
+
+  events = {
+    toggle: () => {
+      this.setData('open', !this.getData().open);
+      this.refresh();
+    },
+    onShow: () => {
+      this.setData('open', true);
+      this.refresh();
+    },
+    onHide: () => {
+      this.setData('open', false);
+      this.refresh();
+    },
+  };
 }
 </script>
