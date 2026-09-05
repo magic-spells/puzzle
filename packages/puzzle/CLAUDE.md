@@ -148,9 +148,9 @@ enforced, not merely advised.
   and landed the small fixes (`mock` allowlist, `/testing` alias, falsy
   `create()` throw + branded `RouterMode`, SVG anchor clicks, D158 write-guard
   CHANGELOG). Production sizes after that round — README banner matches:
-  hello-world **19.6 KB gzip**, todos **22.7 KB gzip** (the size scripts only
+  hello-world **21.8 KB gzip**, todos **24.8 KB gzip** (the size scripts only
   check the banner; the README line is edited by hand). Cards truthed
-  through D160; the next free decision number is D161. `@magic-spells/puzzle-pieces`
+  through D167; the next free decision number is D168. `@magic-spells/puzzle-pieces`
   `0.6.0` is live on npm (`latest`) — the version-locked pieces resolution is
   verified end-to-end. Note `PUZZLE_PIECES_REGISTRY` is set in Cory's shell
   profile pointing at the pieces registry — now

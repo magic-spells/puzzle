@@ -347,8 +347,10 @@ one is *not* a compile error; it silently builds a different product.
   after a **successful no-options** collection load (an empty array counts), so
   `loadMany(type, options)` — including `{}` — stays partial and accumulating;
   absent identities go in a never-persisted 1000-entry LRU and clear the moment
-  the identity arrives by any path (create, upsert, load, hydration, save
-  reconcile, primary-key adoption); removing a record by any path — a confirmed
+  the identity arrives again by any path (create, upsert, load, hydration, save
+  reconcile, primary-key adoption), except a response from a read that was
+  already in flight when the record was removed, which is dropped instead (see
+  Fixed); removing a record by any path — a confirmed
   `record.delete()` or a local `record.destroy()` — records that identity absent,
   so an optimistic delete cannot fault the row straight back in; and explicit
   `store.loadOne` bypasses
@@ -440,6 +442,54 @@ one is *not* a compile error; it silently builds a different product.
   release pipeline asserts the whole train.
 
 ### Fixed
+
+- **A superseded run's failure no longer reaches `onError` or the error view.**
+  A refresh whose token had moved, or whose view was destroyed or leaving, had
+  its RESULT discarded but not its REJECTION, so a navigation the app had
+  already left behind could still report a failure and replace a live position
+  with the error view; the settle loop had the same asymmetry between its
+  success and rejection arms. Staleness now governs both outcomes with one
+  predicate, and the error funnel only ever sees failures of the run that is
+  actually on screen.
+
+- **A navigation discarded before an ancestor's `data()` finished no longer
+  holds its store subscriptions open.** The prepared run's decision is recorded
+  the moment the router commits or discards, even when the async evaluation is
+  still running, so a lease published afterwards is released (or adopted) in the
+  same turn instead of waiting for a reconcile callback that will never arrive.
+
+- **A delete no longer loses to a read that was already in flight.** A record
+  removed by an acknowledged `delete()` or a local `destroy()` stamps its
+  absence one step ahead of every read already dispatched, so a response for
+  that record from a load dispatched BEFORE the removal is dropped when it
+  lands — it no longer clears the absence, re-allocates the record, or notifies
+  subscribers (a collection load keeps its other rows). A read dispatched after
+  the removal is the app asking again and merges as before; requests and wire
+  format are unchanged.
+
+- **Static pages no longer refetch a collection the build already loaded.** The
+  page emitted its read-state island only when the build had recorded an
+  exhaustive collection or a missing record, so a page whose build state was
+  just LOADED types — collections from an authored, possibly paginated
+  `loadMany` — shipped no island at all and re-requested them on arrival.
+  Loaded-only state now carries the island, matching the documented envelope; a
+  build that read nothing still emits nothing.
+
+- **A guard redirect on a back/forward navigation restores the address bar when
+  it fails.** The redirect continuation was the one pre-commit failure path with
+  no pop-URL repair, so a redirected pop whose target then failed left the
+  browser on the popped entry over an unchanged tree. It now repairs like its
+  siblings — and only while the redirect chain still owns the location, so a
+  redirect superseded mid-flight leaves the winner's URL alone.
+
+- **A build run from a symlinked project directory no longer compiles out
+  features the app uses.** The usage scan that sets the `__PUZZLE_HAS_*` flags
+  walked the project root exactly as given, and a directory walk does not
+  descend a symlink, so a root whose final component is a link yielded no files
+  and the build concluded the app used no Portals, no snippets, and no built-in
+  formatters — dropping that runtime from the bundle, and losing the app-relative
+  names scoped CSS is keyed on. The scan resolves the root first, so a symlinked
+  checkout produces the same defines and the same output as the real path.
 
 - **Hide hooks no longer fire on a component that was never shown.** Routing
   hook-only components through the animated removal path (new in this release)

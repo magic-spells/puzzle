@@ -66,6 +66,7 @@ hole.
 ## The funnel (`client-runtime/errors.js`)
 
 
+
 Every framework-contained app error reports through `reportError(ctx, error,
 info, ...consoleArgs)`. `new PuzzleApp({ onError })` registers the hook;
 without one, the funnel replays the exact `console.error` call the catch site
@@ -84,6 +85,15 @@ The funnel normalizes the shape rather than trusting call sites: `view` and
 app-level phases — reported from `PuzzleApp` with no instance in hand — always
 arrive as `view: null`. That is why `info` can be documented as a fixed triple
 in [[DOC-SPEC-VIEW]] §60 even though the call sites pass partial objects.
+
+**It only ever receives current-run failures.** Supersession is decided by one
+predicate covering both outcomes of a run: `PuzzleView.refresh` applies the
+same token/destroyed/leaving check to a rejection that it applies to a
+fulfillment, and D161's settle loop consults `isStale()` on its rejection arm
+exactly as on its success arm. A failure belonging to work the runtime has
+already decided to discard therefore never reports here and never replaces a
+position with the error view — an app's `onError` and its `errorView` describe
+the run that is actually on screen, not one the navigation left behind.
 
 A throwing (or rejecting async) `onError` is contained at the funnel with its
 own `console.error` and never re-enters the funnel. The handler lives in a

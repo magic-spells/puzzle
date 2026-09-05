@@ -5,7 +5,7 @@ A SPA-first JavaScript framework with single-file components, reactive data bind
 **[▶ Live demo](https://puzzle-music-demo.vercel.app/)** — the [music example app](examples/music) built with Puzzle.
 
 - **~200 ms production builds** — compile, bundle, Tailwind, and minify, end to end (todos example, Apple Silicon)
-- **Small apps, honestly measured** — a minimal app is 21.5 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 24.5 KB gzip. Regenerated every release by `npm run measure:size`
+- **Small apps, honestly measured** — a minimal app is 21.8 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 24.8 KB gzip. Regenerated every release by `npm run measure:size`
 - **Zero JavaScript toolchain** — the CLI is one prebuilt Go binary; no Babel, no bundler config, no postinstall scripts
 
 ## Quick start
@@ -530,6 +530,17 @@ do not grow: esbuild's ESM splitting has no chunk-loader runtime. The build's
 size banner also names your largest dependencies and, in production builds,
 flags any single one over 200 KB (the threshold assumes minified bytes, so dev
 builds never warn).
+
+Splitting adds one deployment rule: chunk filenames are content-hashed, so a
+new deploy writes new ones, and a tab still holding the previous `app.js` will
+ask for the chunk names that entry graph was built with. Keep the previous
+`dist/chunks/` files available for a support window after a deploy, or deploy
+immutably (each build to its own directory, with the old one still served). If a
+lazy chunk does 404, the failure is contained the way any other pre-commit route
+failure is: nothing commits, the page the user is on stays put, and the loader
+rejection reports through `onError` as the `navigation` phase. A rejected import
+is never cached, so the next attempt loads again — and once the client reloads,
+it asks for the chunk names the current build wrote.
 
 On an interactive terminal, `build` and `dev` also use a cached, non-blocking
 daily check to mention newer Puzzle releases. Set `PUZZLE_NO_UPDATE_CHECK=1` to

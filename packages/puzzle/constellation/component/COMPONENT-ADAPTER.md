@@ -180,9 +180,13 @@ store (a click handler, a timer) is nobody's tracked read and stays silent.
   every started fault promise carries a rejection observer** — a data pass that
   throws or is superseded can never leave an unhandled rejection or a stuck
   in-flight key.
-- **Removing a record records it absent.** `record.destroy()` and a confirmed
-  `record.delete()` both go through `removeRecord`, which marks the identity
-  absent — any load/create that returns it clears the entry.
+- **Removing a record records it absent, and the absence is newer than every
+  read already in flight.** `record.destroy()` and a confirmed `record.delete()`
+  both go through `removeRecord`, which marks the identity absent and stamps the
+  entry one step ahead of the read-dispatch counter. A load or create that comes
+  after clears it; a response for that identity from a read dispatched before it
+  is dropped in `_upsert` before any side effect, and a record created there
+  inherits the stamp so the older response cannot merge into it either.
 - **A `loadOne` response must be the record asked for, but only on the
   automatic fault path**: there, a pk that differs from the requested id under
   `recordKey` normalization rejects before mutation, so an implicit fault can

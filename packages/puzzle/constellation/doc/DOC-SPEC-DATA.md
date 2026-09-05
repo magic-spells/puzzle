@@ -165,7 +165,7 @@ await store.request('todo', `/${todo.id}/archive`, { method: 'POST' }); // custo
 ```
 
 - **`record.save()`** — validates first (§20): invalid rejects with `PuzzleValidationError`, no request made. POST for a never-synced record, PUT for a synced one (synced = came from `loadMany`/`loadOne`/an upsert, or was saved successfully; **since §35 storage hydration restores the record's real persisted provenance** — a locally-created, never-saved record still POSTs after a reload — with markerless old-format blobs defaulting to synced). A 2xx JSON-object response merges via the exempt upsert path, **per-field since D125** — a field whose local value changed after the request was dispatched keeps the local value, while every other field (including server-computed ones the client never touched) merges as before; 204/empty keeps local state. On a **first** save whose response carries a different primary key the store re-keys atomically (the one sanctioned pk change); on an update-save a differing response pk warns and is ignored. A failed save keeps the dirty local state and rejects — retry by calling again. **Reconciliation guards (§35):** a record destroyed (or replaced at its key) while its request was in flight resolves detached — the response is never merged and the record is never re-inserted (local destruction wins); a first-save response whose assigned pk already belongs to a *different* record rejects with a plain `Error` (the HTTP call succeeded; local reconciliation refused), leaving both records untouched. **In-flight edit guard (D125):** per-field mutation revisions gate the merge above, so a save response never overwrites a keystroke made during its own round trip — the queued follow-up save then sends the newer value rather than re-sending the stale one. Pk adoption stays unconditional (identity is not a user-editable field), and `_synced` still flips to true: it records server provenance and selects POST vs PUT, so clearing it would make the queued save POST a duplicate.
-- **`record.delete()`** — confirmed delete: dispatch the delete transport first, local remove (normal notify path) once it resolves; a rejection leaves the record in the store. **404 tolerance is a property of the endpoint-generated transport, not a framework-level rule:** the generated `DELETE endpoint/:id` treats a 404 as already-gone and resolves, because it owns that HTTP conversation. An author-supplied `delete` function that returns a non-OK `Response` — 404 included — is status-checked like every other verb and rejects with `PuzzleAdapterError`; an author who wants idempotent-on-404 semantics implements them inside their own transport (swallow the 404 and return). `record.destroy()` remains local-only, unchanged. **Since D132:** a **never-synced** record's `delete()` is a local removal with **no request** — the server has no row, so the old unconditional DELETE could only 404 or strand the record behind a 4xx (the missing-verb rejection is checked first, so an endpoint-less model still reports that rather than quietly acting like `destroy()`); a `delete()` whose record is already `_deleted` (or store-less) when its turn comes resolves idempotently with no request, so two concurrent `delete()`s issue exactly one DELETE. A confirmed delete and a local `destroy()` both record a §61 negative entry — removal proves absence regardless of path — and either clears on any load/create that returns the identity.
+- **`record.delete()`** — confirmed delete: dispatch the delete transport first, local remove (normal notify path) once it resolves; a rejection leaves the record in the store. **404 tolerance is a property of the endpoint-generated transport, not a framework-level rule:** the generated `DELETE endpoint/:id` treats a 404 as already-gone and resolves, because it owns that HTTP conversation. An author-supplied `delete` function that returns a non-OK `Response` — 404 included — is status-checked like every other verb and rejects with `PuzzleAdapterError`; an author who wants idempotent-on-404 semantics implements them inside their own transport (swallow the 404 and return). `record.destroy()` remains local-only, unchanged. **Since D132:** a **never-synced** record's `delete()` is a local removal with **no request** — the server has no row, so the old unconditional DELETE could only 404 or strand the record behind a 4xx (the missing-verb rejection is checked first, so an endpoint-less model still reports that rather than quietly acting like `destroy()`); a `delete()` whose record is already `_deleted` (or store-less) when its turn comes resolves idempotently with no request, so two concurrent `delete()`s issue exactly one DELETE. A confirmed delete and a local `destroy()` both record a §61 negative entry — removal proves absence regardless of path — stamped one step ahead of every read already dispatched: a load or create that comes AFTER the removal clears it, while a response for that identity whose read was dispatched BEFORE it is dropped when it lands (§61).
 - **Write serialization (D132):** ALL of a record's server writes — `save()` **and** `delete()` — run through one per-record in-flight chain (formerly the save-only chain). Each link reads the record's state when it *reaches the front*, never when it was enqueued: a delete fired during a first save waits and builds its URL from the **adopted server pk** (previously the concurrent DELETE either left a server orphan or missed the re-keyed record and resolved having deleted nothing), and a queued save that finds its record removed rejects with the same message `record.save()` gives at call time instead of resurrecting the row. Rejections stay isolated across verbs exactly as within save-save chaining: the prior link's failure is swallowed for chaining only, and every caller observes its own promise.
 - **`store.request(type, path, { method, body, headers })`** — the custom-endpoint escape hatch: prefixes `apiURL + adapter.endpoint`, JSON in/out, normalized errors. Idiom: wrap it in model instance methods.
 - **Errors:** every adapter failure rejects with `PuzzleAdapterError` (`.status`, `.statusText`, `.body` when parseable) — exported from `@magic-spells/puzzle/adapter`. Generated reads normalize through the same shape (D158) — the §61 negative cache keys off `status === 404`; only the post-2xx local guards (write-response shape, pk collision) stay plain `Error`s, because the HTTP conversation succeeded.
@@ -350,7 +350,10 @@ data(params) {
   documented residues: the view's OWN
   deferred code holding its OWN handle during its own suspension (a `setTimeout`
   inside `data()`) is attributed to that evaluation and does fault — same view,
-  same data; and SUBSCRIPTION attribution stays ambient, so a foreign read
+  same data; because that fault joins the open evaluation's request batch, a
+  5xx on it fails that refresh even though `data()` itself never queried the
+  type (read through the app's raw `store` from deferred code to keep it out of
+  the batch); and SUBSCRIPTION attribution stays ambient, so a foreign read
   during a suspension can add one subscription key to the suspended view, which
   that view's next evaluation reconciles away (benign and self-healing).
 - **Fetch eligibility:** a tracked miss faults only when §22's dispatch
@@ -361,9 +364,7 @@ data(params) {
   model methods) never fetch — handlers read local and call `refresh()`.
 - **Caches, per Store, adapter-owned:** in-flight dedup by `recordKey`
   identity (same-pass duplicates and concurrent views share one request); a
-  1000-entry negative LRU recording normalized 404s (never persisted; cleared
-  when the identity arrives by any path; removing a record by any path —
-  confirmed `delete()` or local `destroy()` — records absence; explicit
+  1000-entry negative LRU recording normalized 404s (never persisted; explicit
   `loadOne` bypasses it as the refresh escape hatch and also clears the
   requested id's entry on success); and TWO collection sets. A successful
   no-options collection load marks the type LOADED, so a tracked `findMany`
@@ -374,6 +375,20 @@ data(params) {
   An authored `loadMany`, model-level or from an `adapter.defaults()` dialect,
   is opaque: a paginated first page is a valid response and says nothing about
   the ids it omits, so a later miss still fetches. Exhaustive implies loaded.
+- **Absence outranks reads that predate it.** Removing a record by any path —
+  an acknowledged `delete()` or a local `destroy()` — records absence, and the
+  entry is stamped one step ahead of every read already dispatched (the same
+  monotonic counter D138's load ordering uses). A response for that identity
+  whose read was dispatched BEFORE the removal is dropped when it lands: no
+  merge, no absence clearing, no record allocation, no notify — it describes a
+  row the app has since removed. The drop is per identity, not per response: a
+  collection load keeps its other rows and still marks the type loaded. A read
+  dispatched AFTER the removal is the app asking again, so it clears absence and
+  merges normally; so does creating a record at that identity, which inherits
+  the removal's stamp so the older response cannot merge into the new record
+  either. A hydrated absence (a static page's envelope) carries the lowest stamp
+  and blocks nothing. Nothing about the wire format changes — the ordering is
+  local bookkeeping.
 - **Failures:** only a normalized 404 becomes `null` + a negative entry.
   Network errors, 5xx, 401/403, and shape errors reject the run into the
   ordinary navigation-failure / `errorView` path and poison no caches.
@@ -390,7 +405,10 @@ data(params) {
   A change any other writer makes during that committing pass is still
   delivered. A destroyed/leaving/superseded
   view stops its loop without aborting shared requests, and a destroyed view's
-  still-suspended evaluation can no longer fault at all.
+  still-suspended evaluation can no longer fault at all. Staleness governs both
+  outcomes symmetrically: a pass that is no longer current is dropped whether it
+  fulfilled or rejected, so a superseded batch's failure reaches neither the
+  view nor §60's funnel.
 - **Output modes:** a prerender read must be answerable from the build
   machine. An absolute `apiURL` drives the same loop for real; a model with no
   `endpoint` and no read verb never faults, so its data comes from seeding the
@@ -398,12 +416,14 @@ data(params) {
   diagnostic naming the route and both remedies. §49's hook runs in the build
   context. Static pages transfer read state in a second data island
   (`data-puzzle-static-read`, `{ v: 1, complete, loaded, absent }`) hydrated
-  after records so `mountStatic` repeats none of the build's loads or 404s;
-  `complete` keeps its exhaustive meaning, and an envelope without `loaded` (one
-  written before 0.7.0) reads its `complete` list as both. A kernel that never
-  learned about `loaded` therefore still answers every id correctly — it only
-  re-loads the collection once for a type whose authored `loadMany` was never
-  exhaustive. Hybrid
+  after records so `mountStatic` repeats none of the build's loads or 404s —
+  a type the build merely LOADED transfers on that strength alone, exhaustive
+  or not, and loaded-only state is enough for the page to carry the island at
+  all. `complete` keeps its exhaustive meaning, and an envelope without
+  `loaded` (one written before 0.7.0) reads its `complete` list as both. A
+  kernel that never learned about `loaded` therefore still answers every id
+  correctly — it only re-loads the collection once for a type whose authored
+  `loadMany` was never exhaustive. Hybrid
   transfers nothing — takeover re-runs `data()` fresh. The dev HMR snapshot
   carries read state; in-flight promises never transfer anywhere.
 - **`data()` must tolerate multiple runs per navigation** — already true under
