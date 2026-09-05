@@ -4,32 +4,62 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Tabs</h1>
         <p class="mt-2 text-body">
-          An accessible ARIA tablist with roving tabindex and arrow-key nav. It renders the
-          strip only — panels stay
-          <strong class="font-medium text-ink">parent-owned</strong>: the parent tracks the active
-          value and shows the matching panel itself, wired together by id.
+          A tablist and its panels. It is a compound
+          <strong class="font-medium text-ink">family</strong> that wraps the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/tab-group</code>
+          web component, so the roving tabindex, the arrow/Home/End keyboard model, the
+          disabled-tab skipping, panel visibility and every role, id and aria attribute come from
+          the component rather than from a hand-rolled copy in this file.
         </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">tabs</code>
+            config array is gone, and so is the parent-owned-panels doctrine it forced. The old
+            piece rendered only the strip and made you wire
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">role="tabpanel"</code>
+            ids by hand; panels are real members now and their bodies take arbitrary markup.
+          </p>
+        </div>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <div class="w-full max-w-md space-y-4">
-          <Tabs id="acct" tabs={ acctTabs } value={ tabHero } @change={ setTabHero }/>
-          {#if tabHero === 'account'}
-            <div role="tabpanel" id="acct-panel-account" aria-labelledby="acct-tab-account" tabindex="0" class="text-sm text-body">Manage your account details and profile here.</div>
-          {:else if tabHero === 'password'}
-            <div role="tabpanel" id="acct-panel-password" aria-labelledby="acct-tab-password" tabindex="0" class="text-sm text-body">Change your password and security settings.</div>
-          {:else}
-            <div role="tabpanel" id="acct-panel-members" aria-labelledby="acct-tab-members" tabindex="0" class="text-sm text-body">Invite teammates and manage their roles.</div>
-          {/if}
+        <div class="w-full max-w-2xl py-2">
+          <Tabs value={ hero } @change={ setHero }>
+            <Tabs.List>
+              <Tabs.Tab value="account">Account</Tabs.Tab>
+              <Tabs.Tab value="password">Password</Tabs.Tab>
+              <Tabs.Tab value="team">Team</Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value="account" class="pt-4 text-sm text-body">
+              Update your display name and the address we send receipts to. The body is real
+              markup — this paragraph, a form, or any other piece.
+            </Tabs.Panel>
+            <Tabs.Panel value="password" class="pt-4 text-sm text-body">
+              Change your password. We will sign every other session out when you do.
+            </Tabs.Panel>
+            <Tabs.Panel value="team" class="pt-4 text-sm text-body">
+              Invite teammates and choose what each of them can see.
+            </Tabs.Panel>
+          </Tabs>
         </div>
       </ExampleBox>
 
       <section id="installation" class="mt-12 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
-        <p class="mb-3 text-sm text-body">
-          Copy the piece into your app — it compiles with your build and the code is yours:
-        </p>
+        <p class="mb-3 text-sm text-body">Copy the family into your app:</p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          It has one runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheet into your app's style entry. It is required, and for one rule
+          above all:
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">tab-panel[hidden]</code>
+          is what actually hides an inactive panel. Without it every panel renders at once.
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -39,32 +69,183 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          Tabs and panels pair by <strong class="font-medium text-ink">position</strong>, not by
+          value: upstream matches the nth
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">tab-button</code>
+          to the nth
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">tab-panel</code>.
+          Render one panel per tab in the same order — the root warns in the console if the two
+          sequences diverge. If both come from a loop, drive both from the same array so the
+          counts can never disagree mid-patch.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="pills" title="Pill variant" code={ codePills }>
-          <div class="w-full max-w-md space-y-4">
-            <Tabs id="proj" variant="pills" tabs={ projTabs } value={ tabPill } @change={ setTabPill }/>
-            {#if tabPill === 'overview'}
-              <div role="tabpanel" id="proj-panel-overview" aria-labelledby="proj-tab-overview" tabindex="0" class="text-sm text-body">A high-level overview of the project.</div>
-            {:else if tabPill === 'activity'}
-              <div role="tabpanel" id="proj-panel-activity" aria-labelledby="proj-tab-activity" tabindex="0" class="text-sm text-body">Recent activity and changes.</div>
-            {:else}
-              <div role="tabpanel" id="proj-panel-settings" aria-labelledby="proj-tab-settings" tabindex="0" class="text-sm text-body">Project settings.</div>
-            {/if}
+          <div class="w-full max-w-2xl py-2">
+            <Tabs variant="pills" defaultValue="week">
+              <Tabs.List>
+                <Tabs.Tab value="day">Day</Tabs.Tab>
+                <Tabs.Tab value="week">Week</Tabs.Tab>
+                <Tabs.Tab value="month">Month</Tabs.Tab>
+              </Tabs.List>
+              <Tabs.Panel value="day" class="pt-4 text-sm text-body">1,284 sessions today.</Tabs.Panel>
+              <Tabs.Panel value="week" class="pt-4 text-sm text-body">9,120 sessions this week.</Tabs.Panel>
+              <Tabs.Panel value="month" class="pt-4 text-sm text-body">38,447 sessions this month.</Tabs.Panel>
+            </Tabs>
           </div>
         </ExampleBox>
 
         <ExampleBox id="disabled" title="Disabled tab" code={ codeDisabled }>
-          <div class="w-full max-w-md space-y-4">
-            <Tabs id="stat" tabs={ statTabs } value={ tabDis } @change={ setTabDis }/>
-            {#if tabDis === 'active'}
-              <div role="tabpanel" id="stat-panel-active" aria-labelledby="stat-tab-active" tabindex="0" class="text-sm text-body">Everything currently in play.</div>
-            {:else}
-              <div role="tabpanel" id="stat-panel-archived" aria-labelledby="stat-tab-archived" tabindex="0" class="text-sm text-body">Older items kept for reference.</div>
-            {/if}
+          <div class="w-full max-w-2xl py-2">
+            <Tabs defaultValue="general">
+              <Tabs.List>
+                <Tabs.Tab value="general">General</Tabs.Tab>
+                <Tabs.Tab value="billing" disabled>Billing</Tabs.Tab>
+                <Tabs.Tab value="advanced">Advanced</Tabs.Tab>
+              </Tabs.List>
+              <Tabs.Panel value="general" class="pt-4 text-sm text-body">
+                Arrow keys skip Billing entirely — it is not clickable and not reachable.
+              </Tabs.Panel>
+              <Tabs.Panel value="billing" class="pt-4 text-sm text-body">Unreachable.</Tabs.Panel>
+              <Tabs.Panel value="advanced" class="pt-4 text-sm text-body">
+                Danger zone. Nothing here is reversible.
+              </Tabs.Panel>
+            </Tabs>
           </div>
         </ExampleBox>
+
+        <ExampleBox id="controlled" title="Controlled value" code={ codeControlled }>
+          <div class="flex w-full max-w-2xl flex-col gap-4 py-2">
+            <Tabs value={ controlled } @change={ setControlled }>
+              <Tabs.List>
+                <Tabs.Tab value="one">One</Tabs.Tab>
+                <Tabs.Tab value="two">Two</Tabs.Tab>
+                <Tabs.Tab value="three">Three</Tabs.Tab>
+              </Tabs.List>
+              <Tabs.Panel value="one" class="pt-4 text-sm text-body">First panel.</Tabs.Panel>
+              <Tabs.Panel value="two" class="pt-4 text-sm text-body">Second panel.</Tabs.Panel>
+              <Tabs.Panel value="three" class="pt-4 text-sm text-body">Third panel.</Tabs.Panel>
+            </Tabs>
+            <div class="flex flex-wrap items-center gap-3">
+              <Button variant="outline" size="sm" @press={ cycle }>Advance from outside</Button>
+              <span class="text-sm text-muted">value = { controlled }</span>
+            </div>
+            <p class="text-sm text-muted">
+              Focus this input first, then press the button: activating a tab programmatically
+              never moves focus, so the caret stays here.
+            </p>
+            <input
+              type="text"
+              placeholder="Focus stays here"
+              class="w-56 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2"/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="dynamic" title="Tabs from a loop" code={ codeDynamic }>
+          <div class="flex w-full max-w-2xl flex-col gap-4 py-2">
+            <Tabs value={ docValue } @change={ setDocValue }>
+              <Tabs.List>
+                {#for doc in docs}
+                  <Tabs.Tab key={ doc.id } value={ doc.id }>{ doc.title }</Tabs.Tab>
+                {/for}
+              </Tabs.List>
+              {#for doc in docs}
+                <Tabs.Panel key={ doc.id } value={ doc.id } class="pt-4 text-sm text-body">
+                  { doc.body }
+                </Tabs.Panel>
+              {/for}
+            </Tabs>
+            <div class="flex items-center gap-3">
+              <Button variant="outline" size="sm" @press={ addDoc }>Insert a tab</Button>
+              <Button variant="ghost" size="sm" @press={ resetDocs }>Reset</Button>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="nested" title="Nested tabs" code={ codeNested }>
+          <div class="w-full max-w-2xl py-2">
+            <Tabs defaultValue="outer-a">
+              <Tabs.List>
+                <Tabs.Tab value="outer-a">Overview</Tabs.Tab>
+                <Tabs.Tab value="outer-b">Details</Tabs.Tab>
+              </Tabs.List>
+              <Tabs.Panel value="outer-a" class="pt-4">
+                <Tabs variant="pills" defaultValue="inner-b">
+                  <Tabs.List>
+                    <Tabs.Tab value="inner-a">Inner one</Tabs.Tab>
+                    <Tabs.Tab value="inner-b">Inner two</Tabs.Tab>
+                  </Tabs.List>
+                  <Tabs.Panel value="inner-a" class="pt-4 text-sm text-body">
+                    The inner group's tabchange is filtered out of the outer root by target.
+                  </Tabs.Panel>
+                  <Tabs.Panel value="inner-b" class="pt-4 text-sm text-body">
+                    And the outer group's lookup is scoped, so it never sees these buttons.
+                  </Tabs.Panel>
+                </Tabs>
+              </Tabs.Panel>
+              <Tabs.Panel value="outer-b" class="pt-4 text-sm text-body">
+                Nothing nested here.
+              </Tabs.Panel>
+            </Tabs>
+          </div>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Tabs</h3>
+          <div class="text-sm">
+            {#for row in rootRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Tabs.List</h3>
+          <div class="text-sm">
+            {#for row in listRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Tabs.Tab</h3>
+          <div class="text-sm">
+            {#for row in tabRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Tabs.Panel</h3>
+          <div class="text-sm">
+            {#for row in panelRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <p class="mt-6 text-sm text-body">
+            The variant is stamped as
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">data-variant</code>
+            on the root and read by the members through a descendant selector, because Puzzle has
+            no cross-component context to pass it down as a prop. One consequence: a nested Tabs
+            with a <em>different</em> variant collides, since the match has equal specificity at
+            both depths. Give the inner members their own
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">class</code>
+            to escape it.
+          </p>
+        </section>
       </div>
     </article>
 
@@ -74,94 +255,199 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import Tabs from '@/components/ui/Tabs.pzl';
+import Tabs from '@/components/ui/Tabs/index.js';
+import Button from '@/components/ui/Button.pzl';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
-// Docs page for Tabs — follows the ButtonDoc exemplar shape.
+// Docs page for the Tabs family. Code samples live as template-literal consts
+// because literal tag names and {#…} tokens would be parsed as template syntax
+// in prose.
 const installCmd = 'puzzle add piece tabs';
-const usageImport = `import Tabs from '@/components/ui/Tabs.pzl';`;
-const usageMarkup = `<Tabs id="acct" tabs={ tabs } value={ tab } @change={ setTab }/>`;
+// TODO: switch to ^1.2.0 once published — the demo pins the package by file:
+// path while 1.2.0 is unreleased. Consumers install the published range.
+const installDep = 'npm install @magic-spells/tab-group@^1.2.0';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/tab-group/css" layer(components); /* required */`;
 
-const codeHero = `const tabs = [
-  { value: 'account', label: 'Account' },
-  { value: 'password', label: 'Password' },
-  { value: 'members', label: 'Members' },
+const usageImport = `import Tabs from '@/components/ui/Tabs';`;
+
+const usageMarkup = `<Tabs value={ tab } @change={ setTab }>
+  <Tabs.List>
+    <Tabs.Tab value="account">Account</Tabs.Tab>
+    <Tabs.Tab value="password">Password</Tabs.Tab>
+  </Tabs.List>
+  <Tabs.Panel value="account">…real markup…</Tabs.Panel>
+  <Tabs.Panel value="password">…real markup…</Tabs.Panel>
+</Tabs>`;
+
+const codeHero = `// The panel body takes anything — paragraphs, forms, other pieces.
+// The tab strip's roving tabindex, arrow keys and every aria
+// attribute come from the web component.
+<Tabs value={ tab } @change={ setTab }>
+  <Tabs.List>
+    <Tabs.Tab value="account">Account</Tabs.Tab>
+    <Tabs.Tab value="password">Password</Tabs.Tab>
+    <Tabs.Tab value="team">Team</Tabs.Tab>
+  </Tabs.List>
+  <Tabs.Panel value="account" class="pt-4">…</Tabs.Panel>
+  <Tabs.Panel value="password" class="pt-4">…</Tabs.Panel>
+  <Tabs.Panel value="team" class="pt-4">…</Tabs.Panel>
+</Tabs>`;
+
+const codePills = `// defaultValue seeds an UNCONTROLLED group: the component owns
+// the selection from there on and reports through @change.
+<Tabs variant="pills" defaultValue="week">
+  <Tabs.List>…</Tabs.List>
+  …
+</Tabs>`;
+
+const codeDisabled = `// disabled is an attribute on a custom element, so the styling uses
+// [&[disabled]]: — Tailwind's disabled: variant compiles to :disabled
+// and would never match. Arrow-key roving skips it upstream.
+<Tabs.Tab value="billing" disabled>Billing</Tabs.Tab>`;
+
+const codeControlled = `// Controlled and EDGE-triggered: only a change to \`value\` acts.
+// Activating a tab programmatically never moves focus (tab-group 1.2.0
+// routes the setter through _select with focus: false), so driving the
+// group from a button elsewhere leaves the caret where the user put it.
+<Tabs value={ tab } @change={ setTab }>…</Tabs>
+
+// setTab: (value) => this.setData('tab', value)`;
+
+const codeDynamic = `// Drive BOTH loops from the same array. Puzzle applies both patches
+// in one commit, so the counts can never diverge mid-patch — and the
+// root re-syncs \`value\` whenever the tab SET changes, because a row
+// inserted mid-list shifts every index after it.
+<Tabs value={ value } @change={ setValue }>
+  <Tabs.List>
+    {#for doc in docs}
+      <Tabs.Tab key={ doc.id } value={ doc.id }>{ doc.title }</Tabs.Tab>
+    {/for}
+  </Tabs.List>
+  {#for doc in docs}
+    <Tabs.Panel key={ doc.id } value={ doc.id }>{ doc.body }</Tabs.Panel>
+  {/for}
+</Tabs>`;
+
+const codeNested = `// The root's lookup is ':scope > tab-list > tab-button', and its
+// tabchange listener drops any event whose target is not its own
+// element — so a nested group and its parent never see each other.
+<Tabs defaultValue="outer-a">
+  <Tabs.List>…</Tabs.List>
+  <Tabs.Panel value="outer-a">
+    <Tabs variant="pills" defaultValue="inner-b">…</Tabs>
+  </Tabs.Panel>
+</Tabs>`;
+
+const rootRows = [
+  { name: 'value', desc: 'Controlled: the active tab’s value string. Edge-triggered, and re-applied when the tab set changes.' },
+  { name: 'defaultValue', desc: 'Uncontrolled seed, applied once at mount — before the upgrade, so the first paint has no flash.' },
+  { name: 'variant', desc: "'underline' (default) | 'pills'. Stamped as data-variant for the members to read." },
+  { name: 'class', desc: 'Merged onto the tab-group host.' },
+  { name: '@change(value)', desc: "Value-first, once per activation. A nested group’s bubbling tabchange is filtered out by target." },
 ];
 
-// Tabs renders the strip; the parent owns the active value and the panels.
-<Tabs id="acct" tabs={ tabs } value={ tab } @change={ setTab }/>
-{#if tab === 'account'}
-  <div role="tabpanel" id="acct-panel-account"
-       aria-labelledby="acct-tab-account" tabindex="0">…</div>
-{:else if tab === 'password'}
-  <div role="tabpanel" id="acct-panel-password"
-       aria-labelledby="acct-tab-password" tabindex="0">…</div>
-{/if}
-
-// parent
-events = { setTab: (v) => this.setData('tab', v) };`;
-
-const codePills = `const tabs = [
-  { value: 'overview', label: 'Overview' },
-  { value: 'activity', label: 'Activity' },
-  { value: 'settings', label: 'Settings' },
+const listRows = [
+  { name: 'class', desc: 'Merged onto tab-list, after the chrome. Must be a direct child of Tabs, with the tabs as its direct children.' },
 ];
 
-<Tabs id="proj" variant="pills" tabs={ tabs } value={ tab } @change={ setTab }/>`;
-
-const codeDisabled = `const tabs = [
-  { value: 'active', label: 'Active' },
-  { value: 'archived', label: 'Archived' },
-  { value: 'deleted', label: 'Deleted', disabled: true },
+const tabRows = [
+  { name: 'value', desc: 'Required. Carried as data-value; the root maps it to the index upstream works in.' },
+  { name: 'disabled', desc: 'Not clickable and skipped by arrow-key roving. Driving `value` to a disabled tab is refused, with a console warning.' },
+  { name: 'class', desc: 'Merged onto tab-button, after the chrome. The selected look hangs off the component’s own aria-selected.' },
 ];
 
-// A disabled tab is skipped by arrow-key nav and can't be activated.
-<Tabs id="stat" tabs={ tabs } value={ tab } @change={ setTab }/>`;
+const panelRows = [
+  { name: 'value', desc: 'Required, and must match the Tabs.Tab at the same position — upstream pairs them positionally.' },
+  { name: 'class', desc: 'Rendered on tab-panel. Never a display utility: it would outrank tab-panel[hidden] and leave every panel visible.' },
+];
+
+const SEED = [
+  { id: 'brief', title: 'Brief', body: 'The one-page summary everyone actually reads.' },
+  { id: 'specs', title: 'Specs', body: 'Numbers, tolerances and the things that break.' },
+];
+
+let added = 0;
 
 export default class TabsDoc extends PuzzleView {
   created() {
-    this.setData({ tabHero: 'account', tabPill: 'overview', tabDis: 'active' });
+    this.setData({
+      hero: 'account',
+      controlled: 'one',
+      docValue: 'brief',
+      docs: SEED.map((doc) => ({ ...doc })),
+    });
   }
 
-  data(params, props) {
+  data() {
+    const state = this.getData();
     return {
-      ...this.getData(),
+      hero: state.hero,
+      controlled: state.controlled,
+      docValue: state.docValue,
+      docs: state.docs,
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       codeHero,
       codePills,
       codeDisabled,
-      acctTabs: [
-        { value: 'account', label: 'Account' },
-        { value: 'password', label: 'Password' },
-        { value: 'members', label: 'Members' },
-      ],
-      projTabs: [
-        { value: 'overview', label: 'Overview' },
-        { value: 'activity', label: 'Activity' },
-        { value: 'settings', label: 'Settings' },
-      ],
-      statTabs: [
-        { value: 'active', label: 'Active' },
-        { value: 'archived', label: 'Archived' },
-        { value: 'deleted', label: 'Deleted', disabled: true },
-      ],
+      codeControlled,
+      codeDynamic,
+      codeNested,
+      rootRows,
+      listRows,
+      tabRows,
+      panelRows,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Pill variant', href: '#pills' },
         { label: 'Disabled tab', href: '#disabled' },
+        { label: 'Controlled value', href: '#controlled' },
+        { label: 'Tabs from a loop', href: '#dynamic' },
+        { label: 'Nested tabs', href: '#nested' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
-    setTabHero: (v) => this.setData('tabHero', v),
-    setTabPill: (v) => this.setData('tabPill', v),
-    setTabDis: (v) => this.setData('tabDis', v),
+    setHero: (value) => {
+      this.setData('hero', value);
+      this.refresh();
+    },
+    setControlled: (value) => {
+      this.setData('controlled', value);
+      this.refresh();
+    },
+    cycle: () => {
+      const order = ['one', 'two', 'three'];
+      const next = order[(order.indexOf(this.getData().controlled) + 1) % order.length];
+      this.setData('controlled', next);
+      this.refresh();
+    },
+    setDocValue: (value) => {
+      this.setData('docValue', value);
+      this.refresh();
+    },
+    addDoc: () => {
+      added += 1;
+      const id = `note-${added}`;
+      const docs = [...this.getData().docs];
+      docs.splice(1, 0, { id, title: `Note ${added}`, body: `Inserted mid-list as ${id}.` });
+      this.setData('docs', docs);
+      this.refresh();
+    },
+    resetDocs: () => {
+      this.setData({ docs: SEED.map((doc) => ({ ...doc })), docValue: 'brief' });
+      this.refresh();
+    },
   };
 }
 </script>

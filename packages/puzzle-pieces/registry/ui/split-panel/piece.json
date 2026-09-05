@@ -1,8 +1,15 @@
 {
   "name": "split-panel",
-  "description": "Resizable two-pane layout with horizontal or vertical direction, constraints, snap points, nesting, keyboard controls, and persistence",
-  "files": ["SplitPanel.pzl"],
+  "description": "Resizable pane group family — horizontal or vertical, any number of panes, with the drag and keyboard resizing, min/max constraints, snap points, nesting and localStorage persistence coming from the split-panel web component",
+  "files": [
+    "SplitPanel/SplitPanel.pzl",
+    "SplitPanel/Pane.pzl",
+    "SplitPanel/Divider.pzl",
+    "SplitPanel/index.js"
+  ],
   "registryDependencies": [],
-  "dependencies": [],
+  "dependencies": [
+    "@magic-spells/split-panel"
+  ],
   "targetDir": "app/components/ui"
 }

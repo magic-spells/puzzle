@@ -79,6 +79,15 @@ notes:
       is retired with it: panel bodies are arbitrary markup now. Upstream additions that made the
       conversion possible (observed `open` on the content, `<collapsible-group exclusive>`, a
       bubbling `collapsible:toggle`, `show()/hide()/toggle()`) went upstream first, not into a fork.
+  - kind: state
+    text: >-
+      0.7.0: tabs, split-panel and panel-stack converted from ports to D167 families over
+      @magic-spells/tab-group 1.2.0, split-panel 0.2.0 and panel-stack 0.2.0 (COMPONENT-TABS,
+      COMPONENT-SPLIT-PANEL, COMPONENT-PANEL-STACK). These were the last three big ports in the
+      registry — every remaining port is either a token-styled form control (Calendar) or has no web
+      component to wrap. Deleted with them: SplitPanel's 708-line geometry/snap/localStorage port
+      and registry/lib/panel-stack.js, whose panelClass()/panelInert() class sets the components'
+      own per-state CSS custom properties replace.
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work

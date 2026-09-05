@@ -51,7 +51,7 @@
         <div class="flex min-w-0 flex-1 flex-col">
 
           <!-- PROJECT HEADER -->
-          <div class="rounded-tr-2xl border-b border-border bg-surface px-6 py-4">
+          <div class="rounded-tr-2xl bg-surface px-6 pt-4">
             <Breadcrumb items={ crumbs }/>
 
             <div class="mt-3 flex flex-wrap items-center gap-3">
@@ -112,22 +112,17 @@
               </div>
             </div>
 
-            <div class="mt-4">
-              <Tabs id="proj-tabs" variant="underline" tabs={ tabItems } value={ tab } @change={ setTab }/>
-            </div>
           </div>
+          <Tabs variant="underline" class="min-w-0 flex-1" value={ tab } @change={ setTab }>
+            <Tabs.List class="border-b border-border bg-surface px-6">
+              {#for t in tabItems}
+                <Tabs.Tab key={ t.value } value={ t.value }>{ t.label }</Tabs.Tab>
+              {/for}
+            </Tabs.List>
 
-          <!-- CONTENT -->
-          <div class="flex-1 space-y-6 p-6">
 
             <!-- BOARD TAB -->
-            {#if tab === 'board'}
-              <section
-                id="proj-tabs-panel-board"
-                role="tabpanel"
-                aria-labelledby="proj-tabs-tab-board"
-                tabindex="0"
-                class="space-y-6 outline-none">
+            <Tabs.Panel value="board" class="space-y-6 p-6">
 
                 <!-- METRICS STRIP (live — recomputed from the board on every move) -->
                 <div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
@@ -186,17 +181,10 @@
 
                 <!-- THE KANBAN BOARD (centerpiece) -->
                 <Kanban columns={ columns } label="Aurora 2.0 board" @move={ moveCard }/>
-              </section>
-            {/if}
+            </Tabs.Panel>
 
             <!-- LIST TAB -->
-            {#if tab === 'list'}
-              <section
-                id="proj-tabs-panel-list"
-                role="tabpanel"
-                aria-labelledby="proj-tabs-tab-list"
-                tabindex="0"
-                class="space-y-6 outline-none">
+            <Tabs.Panel value="list" class="space-y-6 p-6">
                 {#for group in listGroups}
                   <div class="rounded-xl border border-border bg-surface" key={ group.id }>
                     <div class="flex items-center gap-2 border-b border-border px-5 py-3">
@@ -236,17 +224,10 @@
                     {/if}
                   </div>
                 {/for}
-              </section>
-            {/if}
+            </Tabs.Panel>
 
             <!-- ACTIVITY TAB -->
-            {#if tab === 'activity'}
-              <section
-                id="proj-tabs-panel-activity"
-                role="tabpanel"
-                aria-labelledby="proj-tabs-tab-activity"
-                tabindex="0"
-                class="outline-none">
+            <Tabs.Panel value="activity" class="p-6">
                 <div class="rounded-xl border border-border bg-surface p-6">
                   <div class="mb-5 flex items-center justify-between gap-3">
                     <div>
@@ -257,9 +238,8 @@
                   </div>
                   <Timeline items={ activity } label="Aurora 2.0 activity"/>
                 </div>
-              </section>
-            {/if}
-          </div>
+            </Tabs.Panel>
+          </Tabs>
         </div>
       </div>
     </div>
@@ -271,7 +251,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import Sidebar from '../components/ui/Sidebar.pzl';
 import Tree from '../components/ui/Tree.pzl';
 import Breadcrumb from '../components/ui/Breadcrumb.pzl';
-import Tabs from '../components/ui/Tabs.pzl';
+import Tabs from '../components/ui/Tabs/index.js';
 import Toolbar from '../components/ui/Toolbar.pzl';
 import Kanban from '../components/ui/Kanban.pzl';
 import Badge from '../components/ui/Badge.pzl';

@@ -685,14 +685,16 @@
     },
     {
       "name": "panel-stack",
-      "description": "Controlled nested-panel navigation stack with delegated push/pop actions, fluid slide or stack transitions, Escape composition, and focus restoration",
+      "description": "Nested-panel navigation family — drill-down menus, settings flows and wizards, with the stack, the slide or stack transitions, inert handling, focus restoration, declarative push/pop triggers and Escape composition coming from the panel-stack web component",
       "files": [
-        "PanelStack.pzl"
+        "PanelStack/PanelStack.pzl",
+        "PanelStack/Panel.pzl",
+        "PanelStack/index.js"
       ],
-      "registryDependencies": [
-        "lib/panel-stack.js"
+      "registryDependencies": [],
+      "dependencies": [
+        "@magic-spells/panel-stack"
       ],
-      "dependencies": [],
       "targetDir": "app/components/ui"
     },
     {
@@ -957,12 +959,17 @@
     },
     {
       "name": "split-panel",
-      "description": "Resizable two-pane layout with horizontal or vertical direction, constraints, snap points, nesting, keyboard controls, and persistence",
+      "description": "Resizable pane group family — horizontal or vertical, any number of panes, with the drag and keyboard resizing, min/max constraints, snap points, nesting and localStorage persistence coming from the split-panel web component",
       "files": [
-        "SplitPanel.pzl"
+        "SplitPanel/SplitPanel.pzl",
+        "SplitPanel/Pane.pzl",
+        "SplitPanel/Divider.pzl",
+        "SplitPanel/index.js"
       ],
       "registryDependencies": [],
-      "dependencies": [],
+      "dependencies": [
+        "@magic-spells/split-panel"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -1009,12 +1016,18 @@
     },
     {
       "name": "tabs",
-      "description": "Accessible tablist — underline or pill variant; panels stay parent-owned",
+      "description": "Accessible tablist family — underline or pill variant, with the roving tabindex, arrow/Home/End keyboard model, disabled-tab skipping and every ARIA attribute coming from the tab-group web component; panels are real members whose bodies take arbitrary markup",
       "files": [
-        "Tabs.pzl"
+        "Tabs/Tabs.pzl",
+        "Tabs/List.pzl",
+        "Tabs/Tab.pzl",
+        "Tabs/Panel.pzl",
+        "Tabs/index.js"
       ],
       "registryDependencies": [],
-      "dependencies": [],
+      "dependencies": [
+        "@magic-spells/tab-group"
+      ],
       "targetDir": "app/components/ui"
     },
     {

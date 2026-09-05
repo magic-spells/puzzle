@@ -1,0 +1,32 @@
+<puzzle-view>
+  <split-divider disabled={ disabled } class={ dividerClass }></split-divider>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// SplitPanel.Divider — the drag handle between two panes. Renders the real
+// <split-divider>, which the group ADOPTS: it writes role="separator",
+// aria-orientation, aria-valuemin/max/now, aria-disabled, the tabindex and a
+// default aria-label, and it draws the gutter line and the enlarged hit target
+// from its own stylesheet. This piece authors none of that.
+//
+// Author one between every adjacent pair. Upstream would generate the missing
+// ones, but a generated node between keyed Puzzle children is invisible to the
+// patcher and gets moved or dropped on the next reorder — see SplitPanel.pzl.
+//
+// It has no children: the handle is drawn with ::before / ::after.
+//
+// Props
+//   disabled  locks this one divider (the group's own `disabled` locks them all)
+//   class     merged onto <split-divider>
+
+export default class SplitPanelDivider extends PuzzleView {
+  data(params, props) {
+    return {
+      disabled: props.disabled ? true : false,
+      dividerClass: props.class || false,
+    };
+  }
+}
+</script>

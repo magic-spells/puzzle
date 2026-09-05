@@ -1,0 +1,40 @@
+<puzzle-view>
+  <tab-panel data-value={ value } class={ panelClass }><Children/></tab-panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Tabs.Panel — one tab body. Renders the real <tab-panel>; the parent
+// <tab-group> owns its id, role="tabpanel", aria-labelledby and — critically —
+// its `hidden` property.
+//
+// NEVER PUT A DISPLAY UTILITY ON THIS HOST. The component's stylesheet hides an
+// inactive panel with `tab-panel[hidden] { display: none }` in
+// layer(components); a `block` or `flex` utility sits in the utilities layer and
+// would outrank it, leaving every panel permanently visible. Put the layout on
+// an element inside instead. Never render `hidden` here either — it is the
+// component's to write.
+//
+// PANELS PAIR WITH TABS BY POSITION. Keep one Panel per Tab, in the same order;
+// `value` is what this piece reads back, not what upstream matches on. The root
+// warns when the two sequences diverge.
+//
+// The host carries NO chrome of its own — not even padding. Any default here
+// would collide with a consumer's own `p-*`/`text-*` utility, and which one wins
+// is decided by Tailwind's generated order rather than by the merge order in
+// this file. Style the panel entirely from the call site.
+//
+// Props
+//   value  required; must match the Tabs.Tab at the same position
+//   class  rendered on <tab-panel>
+
+export default class TabsPanel extends PuzzleView {
+  data(params, props) {
+    return {
+      value: props.value == null ? undefined : String(props.value),
+      panelClass: props.class || false,
+    };
+  }
+}
+</script>

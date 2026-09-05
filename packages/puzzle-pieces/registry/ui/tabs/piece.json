@@ -1,8 +1,16 @@
 {
   "name": "tabs",
-  "description": "Accessible tablist — underline or pill variant; panels stay parent-owned",
-  "files": ["Tabs.pzl"],
+  "description": "Accessible tablist family — underline or pill variant, with the roving tabindex, arrow/Home/End keyboard model, disabled-tab skipping and every ARIA attribute coming from the tab-group web component; panels are real members whose bodies take arbitrary markup",
+  "files": [
+    "Tabs/Tabs.pzl",
+    "Tabs/List.pzl",
+    "Tabs/Tab.pzl",
+    "Tabs/Panel.pzl",
+    "Tabs/index.js"
+  ],
   "registryDependencies": [],
-  "dependencies": [],
+  "dependencies": [
+    "@magic-spells/tab-group"
+  ],
   "targetDir": "app/components/ui"
 }
