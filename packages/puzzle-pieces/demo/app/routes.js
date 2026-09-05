@@ -1,14 +1,7 @@
 import DefaultLayout from './layouts/Default.pzl';
 import Introduction from './views/Introduction.pzl';
 import ComponentsIndex from './views/ComponentsIndex.pzl';
-import Demos from './views/Demos.pzl';
 import Theming from './views/Theming.pzl';
-import AdminDemo from './views/AdminDemo.pzl';
-import AnalyticsDemo from './views/AnalyticsDemo.pzl';
-import BankingDemo from './views/BankingDemo.pzl';
-import ChatDemo from './views/ChatDemo.pzl';
-import ProjectDemo from './views/ProjectDemo.pzl';
-import StorefrontDemo from './views/StorefrontDemo.pzl';
 import AccordionDoc from './views/components/AccordionDoc.pzl';
 import AlertDoc from './views/components/AlertDoc.pzl';
 import AlertDialogDoc from './views/components/AlertDialogDoc.pzl';
@@ -123,60 +116,11 @@ export default [
 		meta: { title: 'Components — Puzzle Pieces' },
 	},
 	{
-		path: '/demos',
-		name: 'demos',
-		view: Demos,
-		layout: DefaultLayout,
-		meta: { title: 'Demos — Puzzle Pieces' },
-	},
-	{
 		path: '/theming',
 		name: 'theming',
 		view: Theming,
 		layout: DefaultLayout,
 		meta: { title: 'Theming & tokens — Puzzle Pieces' },
-	},
-	{
-		path: '/examples/analytics',
-		name: 'analytics-demo',
-		view: AnalyticsDemo,
-		layout: DefaultLayout,
-		meta: { title: 'Analytics Demo — Puzzle Pieces' },
-	},
-	{
-		path: '/examples/chat',
-		name: 'chat-demo',
-		view: ChatDemo,
-		layout: DefaultLayout,
-		meta: { title: 'Chat Demo — Puzzle Pieces' },
-	},
-	{
-		path: '/examples/banking',
-		name: 'banking-demo',
-		view: BankingDemo,
-		layout: DefaultLayout,
-		meta: { title: 'Banking Dashboard — Puzzle Pieces' },
-	},
-	{
-		path: '/examples/admin',
-		name: 'admin-demo',
-		view: AdminDemo,
-		layout: DefaultLayout,
-		meta: { title: 'Admin Dashboard — Puzzle Pieces' },
-	},
-	{
-		path: '/examples/project',
-		name: 'project-demo',
-		view: ProjectDemo,
-		layout: DefaultLayout,
-		meta: { title: 'Project Board — Puzzle Pieces' },
-	},
-	{
-		path: '/examples/storefront',
-		name: 'storefront-demo',
-		view: StorefrontDemo,
-		layout: DefaultLayout,
-		meta: { title: 'Storefront — Puzzle Pieces' },
 	},
 	{
 		path: '/components/accordion',

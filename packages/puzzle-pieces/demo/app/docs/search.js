@@ -13,7 +13,6 @@
 // without touching its UI.
 
 import { GETTING_STARTED, SECTIONS } from './nav.js';
-import { DEMOS } from './demos.js';
 
 // Points per term, highest signal first. A title hit should always outrank a
 // description hit no matter how many times the term appears in the prose.
@@ -64,17 +63,6 @@ function buildIndex() {
 				name: item.name || '',
 			});
 		}
-	}
-
-	for (const demo of DEMOS) {
-		entries.push({
-			title: demo.title,
-			path: demo.path,
-			kind: 'Demo',
-			section: 'Demos',
-			description: demo.description || '',
-			name: '',
-		});
 	}
 
 	// Precompute the lowercase fields once — search() runs on every keystroke.
