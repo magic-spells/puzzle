@@ -3,6 +3,7 @@ package plugin
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -84,6 +85,67 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class V extends PuzzleView {}
 </script>
 `
+
+func TestUsageScannerSymlinkedRoot(t *testing.T) {
+	real := t.TempDir()
+	name := filepath.Join("app", "views", "Home.pzl")
+	writePZL(t, filepath.Join(real, name), `<puzzle-view>
+  <Portal><p>{ total | currency }</p></Portal>
+  <List><Snippet item>{ item | upcase }</Snippet></List>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import List from '../components/List.pzl';
+export default class Home extends PuzzleView {}
+</script>
+`)
+	link := filepath.Join(t.TempDir(), "app-root")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	resolved, err := filepath.EvalSymlinks(real)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalPath := filepath.Join(resolved, name)
+	want := Usage{
+		HasPortal: true, HasSnippets: true,
+		Formatters: map[string]bool{"currency": true, "upcase": true},
+	}
+	s := NewUsageScanner()
+	for _, root := range []string{real, link, real} {
+		cold, err := ScanUsage(root)
+		if err != nil || !reflect.DeepEqual(cold, want) {
+			t.Errorf("ScanUsage(%q) = %+v, %v; want %+v", root, cold, err, want)
+		}
+		warm, err := s.Scan(root)
+		if err != nil || !reflect.DeepEqual(warm, want) {
+			t.Errorf("memoized Scan(%q) = %+v, %v; want %+v", root, warm, err, want)
+		}
+		if _, ok := s.entries[canonicalPath]; !ok || len(s.entries) != 1 {
+			t.Errorf("Scan(%q) memo keys = %v, want only %q", root, s.entries, canonicalPath)
+		}
+		// The walked path must keep the plugin's app-relative spelling (D59).
+		if got := New(root).relName(canonicalPath); got != filepath.ToSlash(name) {
+			t.Errorf("root %q: relName = %q, want %q", root, got, filepath.ToSlash(name))
+		}
+	}
+
+	// Edits and deletions through either alias must retire the old contribution.
+	writePZL(t, filepath.Join(link, name), plainView)
+	if got, err := s.Scan(real); err != nil || !reflect.DeepEqual(got, Usage{Formatters: map[string]bool{}}) {
+		t.Fatalf("scan after edit = %+v, %v; want no usage", got, err)
+	}
+	if err := os.Remove(filepath.Join(real, name)); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.Scan(link); err != nil || !reflect.DeepEqual(got, Usage{Formatters: map[string]bool{}}) {
+		t.Fatalf("scan after deletion = %+v, %v; want no usage", got, err)
+	}
+	if len(s.entries) != 0 {
+		t.Fatalf("deleted file left memo entries: %v", s.entries)
+	}
+}
 
 // TestUsageScannerMatchesColdScan is the equivalence statement: whatever the
 // tree looks like, an incremental Scan must answer exactly what a cold
