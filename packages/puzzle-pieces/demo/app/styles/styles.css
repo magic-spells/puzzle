@@ -38,6 +38,19 @@
 @import "@magic-spells/bottom-sheet/css" layer(components);
 
 /*
+ * The dropdown-panel family (the shared DropdownPanel base and every menu piece
+ * built on it, NavigationMenu first) wraps @magic-spells/dropdown-panel. The
+ * core sheet is REQUIRED — it is where the panel positioning, the open/closed
+ * state and the hover bridge live, and it is also what keeps a closed panel at
+ * opacity 0 before the JS lands. The effects sheet is optional: it adds the
+ * five entrance effects and draws the trigger arrow, and without it `effect`,
+ * `arrow` and `arrow-shape` are simply no-ops. Same `layer(components)`
+ * reasoning as above — both sheets are plain element selectors.
+ */
+@import "@magic-spells/dropdown-panel/css" layer(components);
+@import "@magic-spells/dropdown-panel/css/effects" layer(components);
+
+/*
  * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
  * and JS so the utility classes they use are generated. Paths are relative to
  * this stylesheet (app/styles/), so "../" is the app root.

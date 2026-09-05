@@ -1,8 +1,17 @@
 {
   "name": "navigation-menu",
-  "description": "Horizontal site navigation with hover/click flyout panels of link cards — disclosure-pattern semantics, delayed hover intent, viewport-clamped panels, active-route underline",
-  "files": ["NavigationMenu.pzl"],
-  "registryDependencies": [],
+  "description": "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels, and per-link active state",
+  "files": [
+    "NavigationMenu/NavigationMenu.pzl",
+    "NavigationMenu/Item.pzl",
+    "NavigationMenu/Trigger.pzl",
+    "NavigationMenu/Content.pzl",
+    "NavigationMenu/Link.pzl",
+    "NavigationMenu/index.js"
+  ],
+  "registryDependencies": [
+    "dropdown-panel"
+  ],
   "dependencies": [],
   "targetDir": "app/components/ui"
 }

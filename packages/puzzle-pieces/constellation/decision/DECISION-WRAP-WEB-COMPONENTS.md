@@ -60,6 +60,13 @@ notes:
       overlay (upstream, fixed on main), and a Puzzle gap reported by the phase-3 agent — named-slot
       FALLBACK bodies render once and are never patched (needs a minimal repro in ../puzzle). Site
       sync (../magic-spells-puzzle-site) in progress.
+  - kind: state
+    text: >-
+      2026-09-04: `dropdown-panel` 2.0.0 wrapped as the shared base family `DropdownPanel` ·
+      `.Trigger` · `.Panel`, carrying the single `mounted()` dynamic import and the effects-timing
+      bridge. NavigationMenu is the first consumer and composes those members (not re-export),
+      replacing its `items[].children[]` config array — a breaking change taken inside unreleased
+      0.7.0. Eight more menu-style pieces follow.
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work

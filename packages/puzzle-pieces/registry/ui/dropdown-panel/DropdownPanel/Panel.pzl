@@ -1,0 +1,90 @@
+<puzzle-view>
+  <dropdown-panel
+    class={ panelClass }
+    wide={ wideAttr }
+    opens={ opensAttr }
+    effect={ effectAttr }><Children/></dropdown-panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DropdownPanel.Panel — the floating surface. A member of the DropdownPanel
+// family (D167); see DropdownPanel.pzl for the whole story.
+//
+//   <DropdownPanel.Panel align="end" effect="slide">
+//     <a href="/one" class="block rounded-md px-3 py-2 text-sm text-body hover:bg-surface-sunken">One</a>
+//   </DropdownPanel.Panel>
+//
+// It must be a DIRECT child of <DropdownPanel>. This member renders
+// <dropdown-panel> as its single root and adds no wrapper, so that holds.
+//
+// ALL CHROME IS TAILWIND ON THE HOST — there is no <style> block and no custom
+// property to set, because the component's own stylesheet declares no colours
+// at all. It contributes position, opacity, pointer-events, z-index and an
+// opacity transition; everything you can see below is ours. Restyle it by
+// passing `class`, or edit CARD in this file — it is your copy.
+//
+// NEVER overflow-hidden, here or anywhere up the chain. It clips a nested
+// submenu at the parent panel's edge, and clips the drawn arrow.
+//
+// TRANSITION LONGHANDS ONLY. The stylesheet declares transition-property,
+// -duration and -timing-function separately on purpose. A `transition:`
+// shorthand from your side resets every longhand it does not name, including
+// the package's own opacity fade, and the panel snaps away mid-animation
+// instead of fading. Override one longhand at a time, or restate them all.
+// If you animate anything yourself, remember the open state is the attribute
+// selector dropdown-panel[aria-hidden='false'] — and that aria-hidden and
+// inert are DERIVED OUTPUT written by the component, never authored here.
+//
+// Props (each attribute prop renders NO attribute when unset)
+//   wide     true → a full-width mega panel. The host goes position: static, so
+//            the panel spans the nearest POSITIONED ANCESTOR instead of the
+//            trigger — give the bar you want it to span `position: relative`
+//            (NavigationMenu's <nav> already does). With no positioned ancestor
+//            it resolves top: 100% against the initial containing block and
+//            lands a viewport-height below the fold.
+//   opens    'down' (default) | 'right'. `right` puts the panel beside its
+//            trigger (top: 0; left: 100%) and rotates the hover bridge onto the
+//            horizontal axis — this is what a nested submenu wants.
+//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects
+//            stylesheet; a no-op without it. Degrades to a plain fade under
+//            prefers-reduced-motion.
+//   align    'start' (default) | 'end'. `end` is the README's own right-align
+//            recipe (left: auto; right: 0) as two utilities, so a panel near
+//            the right edge hugs it instead of overflowing. Pure CSS — there is
+//            no measuring pass and nothing to re-run on resize.
+//   class    merged onto <dropdown-panel>, after the stock chrome, so your
+//            utilities win.
+
+function oneOf(value, allowed) {
+  return allowed.includes(value) ? value : false;
+}
+
+// Stock chrome, in semantic tokens. min-w-48 keeps a short menu from collapsing
+// to its trigger's width; z-40 sits above page content and below the app's
+// overlays. No overflow rule at all — see above.
+const CARD =
+  'rounded-lg border border-border bg-surface p-2 shadow-md min-w-48 z-40 text-body';
+
+// The right-align recipe. `left-auto right-0` is meaningless on a wide panel
+// (it is width: 100% already) and on opens="right" (whose left is the point),
+// so it is only ever applied to a plain downward popover.
+const ALIGN_END = 'left-auto right-0';
+
+export default class Panel extends PuzzleView {
+  data(params, props) {
+    const opens = oneOf(props.opens, ['down', 'right']);
+    const alignEnd = props.align === 'end' && !props.wide && opens !== 'right';
+
+    return {
+      panelClass: [CARD, alignEnd ? ALIGN_END : '', props.class].filter(Boolean).join(' '),
+      // A boolean attribute on a custom element: presence is the whole signal,
+      // and the component reads it with hasAttribute().
+      wideAttr: props.wide ? true : false,
+      opensAttr: opens,
+      effectAttr: oneOf(props.effect, ['fade', 'slide', 'scale', 'blur', 'swing']),
+    };
+  }
+}
+</script>

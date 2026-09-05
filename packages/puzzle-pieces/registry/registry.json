@@ -375,6 +375,21 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "dropdown-panel",
+      "description": "Shared base family for trigger↔panel overlays — hover/click disclosure with CSS-positioned panels, nested submenus, full-width mega panels, one-open-at-a-time arbitration, and the full arrow/Escape keyboard model; wraps the @magic-spells/dropdown-panel web component rather than porting it",
+      "files": [
+        "DropdownPanel/DropdownPanel.pzl",
+        "DropdownPanel/Trigger.pzl",
+        "DropdownPanel/Panel.pzl",
+        "DropdownPanel/index.js"
+      ],
+      "registryDependencies": [],
+      "dependencies": [
+        "@magic-spells/dropdown-panel"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "dropzone",
       "description": "File upload dropzone — drag-drop + click-to-browse over a hidden file input, dragover styling, removable file list, and accept/size validation",
       "files": [
@@ -606,11 +621,18 @@
     },
     {
       "name": "navigation-menu",
-      "description": "Horizontal site navigation with hover/click flyout panels of link cards — disclosure-pattern semantics, delayed hover intent, viewport-clamped panels, active-route underline",
+      "description": "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels, and per-link active state",
       "files": [
-        "NavigationMenu.pzl"
+        "NavigationMenu/NavigationMenu.pzl",
+        "NavigationMenu/Item.pzl",
+        "NavigationMenu/Trigger.pzl",
+        "NavigationMenu/Content.pzl",
+        "NavigationMenu/Link.pzl",
+        "NavigationMenu/index.js"
       ],
-      "registryDependencies": [],
+      "registryDependencies": [
+        "dropdown-panel"
+      ],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },

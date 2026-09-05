@@ -25,11 +25,14 @@ Many React component libraries lean on **compound components** — `<Select>` + 
 
 ## Decision
 
+
 Every piece uses a **config-first API**: data in as props, structure described by config objects, behavior out via value-first callbacks. `<Select options={…} value={…} @change={…}/>`, not a `<SelectTrigger>`+`<SelectContent>` family. Controlled-component discipline is the default: the parent owns `value`/`open`, props in / callbacks out, callbacks value-first (`this.props.change(value)`).
 
 Presentational structure is caller-customizable without giving away behavioral ownership. Static regions use named slots; repeated regions use Puzzle's args-bearing marker + caller `<Snippet>` contract. The component keeps the semantic/interactive wrapper, focus model, ARIA, and event handlers, hands only documented render values to the snippet, and keeps its stock markup in the marker fallback so callers that supply no snippet render unchanged.
 
 The picker family standardizes one repeated region: `option` hands the original authored entry as `item` plus booleans `active`, `selected`, and `disabled`. `active` is the keyboard/pointer-highlighted row; `selected` is persistent controlled-value membership (therefore false for Command, which has no persistent selection, and for MultiSelect dropdown rows, because selected entries are hidden); `disabled` mirrors the entry flag. Combobox, Select, MultiSelect, and Command retain each option element's id, role, aria state, and handlers around the snippet output. MultiSelect chips remain component-owned: they are selected-value controls with removal semantics, and a selected value can exist without a resolvable option entry.
+
+**Amendment (2026-09-04): config-first is the rule for PORTED pieces.** A WRAPPED piece whose web component coordinates SIBLING elements through the DOM — `dropdown-component` > `dropdown-trigger` + `dropdown-panel` — is a compound FAMILY instead: a directory of one-class-per-file members plus an `index.js` barrel (framework decision D167 in `packages/puzzle`), invoked `<NavigationMenu><NavigationMenu.Item>…`. The context objection above does not apply, because the coordination lives in the custom element rather than in Puzzle — the members are thin attribute bindings with no shared state to thread. Nested-config props (`items[].children[]`) are the anti-pattern this replaces. Flat leaf lists (`options`, `steps`, `columns`) stay config-first.
 
 The one sanctioned controlled-state relaxation is a **wrapped** overlay ([[DECISION-WRAP-WEB-COMPONENTS]]): the web component may close itself and report it via `@hide({ result })`, and the parent re-syncs `open` after the fact — the config-first shape (props in, callbacks out) is unchanged; only who flips `open` first differs.
 
