@@ -9,7 +9,7 @@
 // network. Also: the router stub throws, and hydration is skipped when the island is
 // absent/empty.
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { prerender } from '../client-runtime/ssg/index.js';
+import { prerender, injectStaticShell } from '../client-runtime/ssg/index.js';
 import { mountStatic } from '../client-runtime/static/index.js';
 import { adapter, serializeReadState } from '../client-runtime/datastore/adapter.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
@@ -876,6 +876,71 @@ describe('static kernel — read-state island (D161)', () => {
 			loaded: ['note'],
 			absent: ['note gone'],
 		});
+	});
+
+	it.each([
+		{ label: 'one record', records: [{ id: 'p1', title: 'build-time post' }] },
+		{ label: 'an empty collection', records: [] },
+	])('transfers authored loadMany state for $label without refetching at mount', async ({ records }) => {
+		const loadMany = vi
+			.fn()
+			.mockResolvedValueOnce(records)
+			.mockRejectedValue(new Error('no runtime endpoint'));
+		class Post extends PuzzleModel {
+			static schema = { id: Puzzle.string().primary(), title: Puzzle.string() };
+			static adapter = { loadMany };
+		}
+		class Posts extends PuzzleView {
+			created() {
+				lastStore = this.ctx.store;
+			}
+			data() {
+				return { posts: this.ctx.store.findMany('post') };
+			}
+			render() {
+				return h('ul', {},
+					this.getData().posts.map((post) => h('li', { key: post.id }, [text(post.title)]))
+				);
+			}
+		}
+		stamp(Posts, 'app/views/Posts.pzl');
+		const { pages } = await prerender(
+			{
+				target: '#app',
+				models: { post: Post },
+				adapter,
+				routes: [{ path: '/', view: Posts }],
+			},
+			{ mode: 'static' }
+		);
+		const page = pages[0];
+		const readState = { v: 1, complete: [], loaded: ['post'], absent: [] };
+		expect(page.readState).toEqual(readState);
+		expect(loadMany).toHaveBeenCalledTimes(1);
+		document.body.innerHTML = injectStaticShell('<div id="app"></div>', {
+			targetId: 'app',
+			content: page.html,
+			slug: 'index',
+			data: page.data,
+			readState: page.readState,
+		});
+		const island = document.querySelector('[data-puzzle-static-read]');
+		expect(island).not.toBeNull();
+		expect(JSON.parse(island.textContent)).toEqual(readState);
+
+		await mountStatic({
+			target: '#app',
+			views: [Posts],
+			route: page.route,
+			models: { post: Post },
+			adapter,
+		});
+
+		expect(document.querySelector('#app').innerHTML).toBe(page.html);
+		expect(lastStore.findMany('post').map((post) => post.toJSON())).toEqual(records);
+		expect(serializeReadState(lastStore)).toEqual(readState);
+		expect(loadMany).toHaveBeenCalledTimes(1);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it('faults normally with no envelope — an adapter page without one behaves as before', async () => {

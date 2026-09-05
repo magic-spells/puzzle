@@ -65,5 +65,7 @@ export function hydrateReadState(store, envelope) {
  * omitted from the wire so an adapter-less page stays byte-identical.
  */
 export function hasReadState(envelope) {
-	return Boolean(envelope && (envelope.complete?.length || envelope.absent?.length));
+	return Boolean(
+		envelope && (envelope.complete?.length || envelope.loaded?.length || envelope.absent?.length)
+	);
 }
