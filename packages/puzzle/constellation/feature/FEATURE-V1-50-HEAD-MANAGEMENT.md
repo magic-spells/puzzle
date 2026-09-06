@@ -45,11 +45,13 @@ surface).
 
 ## Scope
 
-- In (runtime): `client-runtime/head.js` — `resolveHead(chain)` plus the
-  one-line `syncTitle`. The router's title site resolves the whole head and
-  assigns `document.title` from it, and does nothing else with the head
-  (memory mode stays a document no-op; title-only apps byte-identical;
-  no title resolved anywhere leaves `document.title` alone).
+- In (runtime): `client-runtime/head.js` — `resolveHeadField(chain, field)`
+  plus the one-line `syncTitle(title)`. The router's title site resolves the
+  `title` field alone and assigns `document.title` from it, and does nothing
+  else with the head (memory mode stays a document no-op; title-only apps
+  byte-identical; no title resolved anywhere leaves `document.title` alone).
+  `resolveHead(chain)` and `HEAD_FIELDS` remain exported for the SSG and
+  tree-shake out of app bundles.
 - In (SSG): `renderRoute` resolves `head` (page keeps `title` for
   compatibility); `injectShell`/`injectStaticShell` replace same-identity
   managed tags, remove non-resolving ones, and insert the rest before

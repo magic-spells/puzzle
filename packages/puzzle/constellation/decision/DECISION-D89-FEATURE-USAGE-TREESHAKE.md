@@ -63,6 +63,22 @@ notes:
       +72 B gzip and todos +54 B over the pre-change baseline (was +195 / +177), and production
       bundles contain no trace of the long string. tests/snippet-tag-escape.test.js pins both
       shapes, the production one by setting the define false.
+  - kind: state
+    text: >-
+      Two 0.7.0 size-cleanup amendments. (1) `head.js` core is now `resolveHeadField` (browser: the
+      router resolves `title` alone) plus `resolveHead`/`HEAD_FIELDS` (SSG only, tree-shaken from
+      app bundles) and the one-line `syncTitle(title)`. (2) The dev/prod message split
+      `metadataTagError` established now also covers the three `new Router()` route-table config
+      errors: the `modesImport` how-to suffix, the "wrap dynamic imports with lazy(() =>
+      import(...))" tail, and the "(it does not scan files outside the project root, node_modules,
+      or build output)" explanation are built only behind the inline `__PUZZLE_DEV__` probe;
+      production keeps the diagnosis. The presence-asserted phrase `lazy() support was compiled out`
+      is present verbatim in both forms, so the Go build assertion is unchanged. Same era: the last
+      ungated warn-once diagnostics (animate.js `warnOnce`, PuzzleView `warnOnceForSpec`, ViewNode
+      `warnNullKey`, viewManager `warnDuplicateKey` + its per-patch `seenNewKeys` bookkeeping, the
+      store relationship-setter warning) gained the inline probe, and the Store's dev-only schema
+      assertions moved from class methods to a module function so esbuild can drop them — class
+      members are never removed by DCE.
 name: 'D89 — pay-for-what-you-use runtime: feature-usage scan drives DCE defines'
 ---
 

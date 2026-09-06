@@ -302,6 +302,23 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Changed
 
+- **Runtime size cleanups.** Five behavior-preserving cleanups take the
+  production bundles from 21.9 KB to 20.8 KB gzip (hello-world) and from
+  24.8 KB to 23.8 KB (todos), about 4.8%. The last ungated warn-once
+  diagnostics (animation specs, scroll-trigger options, null and duplicate list
+  keys, the relationship setter) now sit behind the `__PUZZLE_DEV__` probe, so
+  their message strings, once-state, and the per-patch duplicate-key
+  bookkeeping tree-shake out of production; the Store's dev-only schema
+  assertions moved from class methods, which esbuild never removes, into one
+  module function; three `new Router()` config errors keep their diagnosis in
+  production and build their how-to-fix tails only in development; six copies
+  of the fire-and-forget refresh try/catch in `PuzzleView` collapsed into one
+  `#refreshContained`; and the browser resolves only `title` per navigation
+  instead of walking the chain for all four head fields, which stay SSG-only.
+  Development output is unchanged. The one visible difference: under
+  `build.dropConsole: false`, those five warnings no longer print in a
+  production build, the posture every other runtime diagnostic already had.
+
 - **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing
   (D161).** Reading server data no longer needs any loading code. Inside a
   view's `data()`, a find that misses returns its local value and queues a

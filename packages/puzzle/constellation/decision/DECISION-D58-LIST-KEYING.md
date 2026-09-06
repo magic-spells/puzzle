@@ -18,6 +18,12 @@ notes:
       override suppression, warn-once null path); goldens + hand-written fixture updated
       fixture-first; Go +6 codegen tests, vitest +4 incl. custom-pk reorder-by-move; 540 vitest +
       all Go green.
+  - kind: state
+    text: >-
+      The null-key and duplicate-key warnings are dev-only since the 0.7.0 size cleanups: both call
+      sites sit behind the inline `__PUZZLE_DEV__` probe, so the warnings and their module-level
+      once-state tree-shake out of production; in development they still warn at most once per
+      session, exactly as described above.
 ---
 
 # D58 — List keying: pk-aware auto-key, explicit key override, null-key warning

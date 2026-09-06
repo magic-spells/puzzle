@@ -170,7 +170,7 @@ export class ViewNode {
 		if (item instanceof PuzzleModel) return item[item.constructor.primaryKey()];
 		const key = item?.id;
 		if (key == null) {
-			warnNullKey(item);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnNullKey(item);
 			return null;
 		}
 		return key;

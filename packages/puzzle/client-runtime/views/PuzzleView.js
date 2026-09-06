@@ -508,21 +508,7 @@ export class PuzzleView {
 			// data() throw and an async rejection must enter D145 here. Leaving either
 			// bare escapes the event path; the phase stays 'bind' because this refresh is
 			// the second half of the write, not an ambient refresh delivery.
-			try {
-				this.refresh()?.catch((err) =>
-					this.#handleViewFailure(
-						'[puzzle] data() failed after a bound write:',
-						err,
-						'bind'
-					)
-				);
-			} catch (err) {
-				this.#handleViewFailure(
-					'[puzzle] data() failed after a bound write:',
-					err,
-					'bind'
-				);
-			}
+			this.#refreshContained('[puzzle] data() failed after a bound write:', 'bind');
 		} else if (typeof target.update === 'function' && typeof target._type === 'string') {
 			try {
 				// The store's batched flush drives the re-render and the persistence write.
@@ -575,21 +561,7 @@ export class PuzzleView {
 					ambiguous: false,
 				});
 			}
-			try {
-				this.refresh()?.catch((err) =>
-					this.#handleViewFailure(
-						'[puzzle] data() failed after a bound write:',
-						err,
-						'bind'
-					)
-				);
-			} catch (err) {
-				this.#handleViewFailure(
-					'[puzzle] data() failed after a bound write:',
-					err,
-					'bind'
-				);
-			}
+			this.#refreshContained('[puzzle] data() failed after a bound write:', 'bind');
 		}
 	}
 
@@ -992,25 +964,11 @@ export class PuzzleView {
 		}
 		if (props !== undefined) {
 			// Fire-and-forget: a data() failure is logged rather than escaping into
-			// the parent's patch path (mount's skeleton-path style). A rejecting
-			// ASYNC data() comes back through refresh()'s promise (.catch); a SYNC
-			// throw comes straight back OUT of refresh() — withTracking rethrows sync
-			// errors so the router/mount callers still see them — so the try/catch
-			// catches it here too. refresh() returns undefined on the sync path (or
-			// when destroyed) — hence the optional chain.
-			try {
-				this.refresh({ props })?.catch((err) =>
-					this.#handleBackgroundRefreshFailure(
-						'[puzzle] data() failed during a parent prop update:',
-						err
-					)
-				);
-			} catch (err) {
-				this.#handleBackgroundRefreshFailure(
-					'[puzzle] data() failed during a parent prop update:',
-					err
-				);
-			}
+			// the parent's patch path (mount's skeleton-path style). #refreshContained
+			// takes both arms — a rejecting async data() and a sync throw.
+			this.#refreshContained('[puzzle] data() failed during a parent prop update:', 'refresh', {
+				props,
+			});
 		} else if (this.#mounted && (hadSlots || this.#children.length > 0)) {
 			// The #mounted gate: a slot-only re-render must NEVER run the real
 			// template before this view's first data() has committed. A non-skeleton
@@ -1335,19 +1293,10 @@ export class PuzzleView {
 					// Fire-and-forget, contained exactly like the store-change path: a
 					// data() failure here must not escape into the router's synchronous
 					// commit window (where it would strand the swap half-applied).
-					try {
-						this.refresh()?.catch((err) =>
-							this.#handleBackgroundRefreshFailure(
-								'[puzzle] data() failed during a prepared-commit re-derive:',
-								err
-							)
-						);
-					} catch (err) {
-						this.#handleBackgroundRefreshFailure(
-							'[puzzle] data() failed during a prepared-commit re-derive:',
-							err
-						);
-					}
+					this.#refreshContained(
+						'[puzzle] data() failed during a prepared-commit re-derive:',
+						'refresh'
+					);
 				} else {
 					// Contained exactly like the re-derive arm above, and for the same
 					// reason: this runs inside the router's SYNCHRONOUS commit window,
@@ -1410,33 +1359,33 @@ export class PuzzleView {
 		}
 		// Fire-and-forget: a data() failure on the store-change path is logged
 		// rather than escaping into Store.flush() (where an uncaught throw would
-		// abort delivery to every later subscriber). A rejecting ASYNC data() comes
-		// back through refresh()'s promise (.catch); a SYNC throw comes straight
-		// back OUT of refresh() — withTracking rethrows sync errors so router/mount
-		// still see them — so the try/catch catches it here too. refresh() returns
-		// undefined on the sync path (or when destroyed) — hence the optional chain.
-		// refresh()'s own return is unchanged: mount()/preload() await it and must
-		// keep seeing rejections.
+		// abort delivery to every later subscriber). #refreshContained takes both
+		// arms — a rejecting async data() and a sync throw. refresh()'s own return is
+		// unchanged: mount()/preload() await it and must keep seeing rejections.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfMarkCause(this, 'store');
+		}
+		this.#refreshContained('[puzzle] data() failed during a store-change refresh:', 'refresh');
+	}
+
+	/**
+	 * Run a fire-and-forget refresh with its failure contained in the D145 funnel
+	 * under `phase`. A rejecting ASYNC data() comes back through refresh()'s
+	 * promise (.catch); a SYNC throw comes straight back OUT of refresh() —
+	 * withTracking rethrows sync errors so router/mount callers still see them — so
+	 * the try/catch takes that arm. refresh() returns undefined on the sync path
+	 * (or when destroyed), hence the optional chain.
+	 */
+	#refreshContained(message, phase, args) {
 		try {
-			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-				devperfMarkCause(this, 'store');
-			}
-			this.refresh()?.catch((err) =>
-				this.#handleBackgroundRefreshFailure(
-					'[puzzle] data() failed during a store-change refresh:',
-					err
-				)
-			);
+			this.refresh(args)?.catch((err) => this.#handleViewFailure(message, err, phase));
 		} catch (err) {
-			this.#handleBackgroundRefreshFailure(
-				'[puzzle] data() failed during a store-change refresh:',
-				err
-			);
+			this.#handleViewFailure(message, err, phase);
 		}
 	}
 
 	/**
-	 * Contain a fire-and-forget refresh failure. Normally logging is enough, but
+	 * Report a view failure into the D145 funnel. Normally logging is enough, but
 	 * an anchor-race mount whose superseding first render failed can never reach
 	 * #completeMount(). Recover through the same instance-owned placeholder
 	 * contract mountComponent uses so the next parent patch creates a fresh view.
@@ -1444,10 +1393,6 @@ export class PuzzleView {
 	 * Router-preloaded views never set #pendingMountHook: preload() resolves before
 	 * their synchronous mount, so Router ownership remains untouched.
 	 */
-	#handleBackgroundRefreshFailure(message, err) {
-		this.#handleViewFailure(message, err, 'refresh');
-	}
-
 	#handleViewFailure(message, err, phase) {
 		const info = reportError(
 			this.ctx,
@@ -1661,7 +1606,10 @@ export class PuzzleView {
 			// A `triggerAnchor` is meaningless without `trigger: 'visible'` (trigger
 			// absent/'mount'/unknown). Warn once here — where trigger resolves — so a
 			// spec carrying only `triggerAnchor` doesn't silently arm anything (D73).
-			if (spec.triggerAnchor !== undefined) {
+			if (
+				(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
+				spec.triggerAnchor !== undefined
+			) {
 				warnOnceForSpec(
 					spec,
 					`animation in.triggerAnchor is ignored without trigger: 'visible'`
@@ -1684,10 +1632,11 @@ export class PuzzleView {
 		const t = spec.trigger;
 		if (t === undefined || t === 'mount') return 'mount';
 		if (t === 'visible') return 'visible';
-		warnOnceForSpec(
-			spec,
-			`unknown animation in.trigger ${JSON.stringify(t)} (expected 'mount' or 'visible'); using 'mount'`
-		);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			warnOnceForSpec(
+				spec,
+				`unknown animation in.trigger ${JSON.stringify(t)} (expected 'mount' or 'visible'); using 'mount'`
+			);
 		return 'mount';
 	}
 
@@ -1707,10 +1656,11 @@ export class PuzzleView {
 		if (typeof raw === 'string' && /^\d+(\.\d+)?(px|%)$/.test(raw)) {
 			return `0px 0px -${raw} 0px`;
 		}
-		warnOnceForSpec(
-			spec,
-			`invalid triggerOffset ${JSON.stringify(raw)} (expected a number or "<n>px"/"<n>%"); ignoring`
-		);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			warnOnceForSpec(
+				spec,
+				`invalid triggerOffset ${JSON.stringify(raw)} (expected a number or "<n>px"/"<n>%"); ignoring`
+			);
 		return '0px 0px 0px 0px';
 	}
 
@@ -1734,10 +1684,11 @@ export class PuzzleView {
 		const sel = spec.triggerAnchor;
 		if (sel === undefined) return el;
 		if (typeof sel !== 'string' || sel.trim() === '') {
-			warnOnceForSpec(
-				spec,
-				`invalid triggerAnchor ${JSON.stringify(sel)} (expected a non-empty CSS selector string); observing the element itself`
-			);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				warnOnceForSpec(
+					spec,
+					`invalid triggerAnchor ${JSON.stringify(sel)} (expected a non-empty CSS selector string); observing the element itself`
+				);
 			return el;
 		}
 		let anchor = null;
@@ -1748,10 +1699,11 @@ export class PuzzleView {
 			anchor = null;
 		}
 		if (!anchor) {
-			warnOnceForSpec(
-				spec,
-				`no ancestor matches triggerAnchor ${JSON.stringify(sel)}; observing the element itself`
-			);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				warnOnceForSpec(
+					spec,
+					`no ancestor matches triggerAnchor ${JSON.stringify(sel)}; observing the element itself`
+				);
 			return el;
 		}
 		return anchor;
@@ -1996,6 +1948,7 @@ export class PuzzleView {
 			// unchanged (D73).
 			const out = this.animations?.out;
 			if (
+				(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
 				out &&
 				typeof out === 'object' &&
 				(out.trigger !== undefined || out.triggerOffset !== undefined || out.triggerAnchor !== undefined)
@@ -2063,19 +2016,10 @@ export class PuzzleView {
 		// view this bracket exists to wake.
 		this.#fireRestoreHook(() => this.viewWillShow());
 		if (!this.#destroyed) this.#fireRestoreHook(() => this.viewDidShow());
-		try {
-			this.refresh()?.catch((err) =>
-				this.#handleBackgroundRefreshFailure(
-					'[puzzle] data() failed while restoring a stalled outgoing view:',
-					err
-				)
-			);
-		} catch (err) {
-			this.#handleBackgroundRefreshFailure(
-				'[puzzle] data() failed while restoring a stalled outgoing view:',
-				err
-			);
-		}
+		this.#refreshContained(
+			'[puzzle] data() failed while restoring a stalled outgoing view:',
+			'refresh'
+		);
 	}
 
 	/**

@@ -1329,9 +1329,10 @@ function warnUnkeyedOutAnimation() {
 
 // Two siblings with the SAME tag and SAME key silently collapse (the per-tag Map
 // keeps only the last), which surfaces as mystifying DOM churn — the older sibling
-// never matches and gets unmounted. There is no dev/prod flag in the runtime, so
-// warn at most once per session (a bounded global, like animate.js's malformed-spec
-// warning).
+// never matches and gets unmounted. Dev-only (the call site is behind the
+// __PUZZLE_DEV__ probe, so production tree-shakes this and its state away), and
+// warns at most once per session — a bounded global, like animate.js's
+// malformed-spec warning.
 let warnedDuplicateKey = false;
 function warnDuplicateKey(key) {
 	if (warnedDuplicateKey) return;
@@ -1396,7 +1397,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 	const matched = new Set();
 	let oldUnkeyed = oldChildren.filter((c) => c.key == null);
 	let unkeyedIdx = 0;
-	const seenNewKeys = new Map(); // tag -> Set<rawKey>
+	let seenNewKeys = null; // dev-only duplicate-key detection: tag -> Set<rawKey>
 	// FLIP fast path (D85): one property check per new child during the pairing
 	// map we already run. Lists without any `flip` attr never call into flip.js
 	// — zero measurements, zero extra passes.
@@ -1421,10 +1422,13 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 	const pairs = newChildren.map((newChild) => {
 		if (!hasFlip && 'flip' in newChild.attrs) hasFlip = true;
 		if (newChild.key != null) {
-			let seen = seenNewKeys.get(newChild.tag);
-			if (!seen) seenNewKeys.set(newChild.tag, (seen = new Set()));
-			if (seen.has(newChild.key)) warnDuplicateKey(newChild.key);
-			else seen.add(newChild.key);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				seenNewKeys ??= new Map();
+				let seen = seenNewKeys.get(newChild.tag);
+				if (!seen) seenNewKeys.set(newChild.tag, (seen = new Set()));
+				if (seen.has(newChild.key)) warnDuplicateKey(newChild.key);
+				else seen.add(newChild.key);
+			}
 			const byKey = oldKeyed.get(newChild.tag);
 			const match = byKey ? byKey.get(newChild.key) : undefined;
 			if (match) matched.add(match);

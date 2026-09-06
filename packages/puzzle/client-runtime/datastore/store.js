@@ -57,6 +57,45 @@ const RELS_INSTALLED = Symbol('puzzleRelationshipsInstalled');
  */
 export const HANDLE_CTX = Symbol('puzzleStoreHandleCtx');
 
+/**
+ * Dev-only registration guards, run once from the constructor.
+ *
+ * A module-level function and NOT a `Store` method ON PURPOSE — the same reason
+ * router.js keeps its dev-only warnings module-level: the constructor's call sits
+ * behind the `__PUZZLE_DEV__` probe, so production DCE drops the call and this
+ * goes unreferenced and tree-shakes (taking model.js's `assertSchemaNames` and
+ * these message literals with it). A class method — private `#` ones included —
+ * is kept by esbuild whether or not anything references it.
+ *
+ * 1. `_serializeAll` writes each record's provenance flag as a literal `__synced`
+ *    key beside the fields, and `_hydrateAll` strips that key back off. A model
+ *    that DECLARES a `__synced` field therefore loses its value on every
+ *    persist/hydrate round-trip — silently, and only after a reload. Nobody names
+ *    a field this, so the answer is a loud throw at construction rather than an
+ *    envelope the wire shape would have to carry.
+ * 2. A schema entry may not be named after a model method. Dev-only like every
+ *    other authoring diagnostic here: the schema is static, so the throw fires the
+ *    first time the app is opened in dev, and production keeps the runtime
+ *    protection either way (assignSkipping drops a colliding key on every write
+ *    path, in every build).
+ *
+ * The two loops stay separate and in this order: the reserved-field throw wins
+ * over a method-name collision in the same model set.
+ */
+function assertModelSchemas(models) {
+	for (const [type, Model] of Object.entries(models)) {
+		if (typeof Model.normalizedSchema !== 'function') continue;
+		if ('__synced' in Model.normalizedSchema()) {
+			throw new Error(
+				`[puzzle] model '${type}' declares a "__synced" field — that name is reserved by persistence; rename it`
+			);
+		}
+	}
+	for (const [type, Model] of Object.entries(models)) {
+		assertSchemaNames(Model, type);
+	}
+}
+
 export class Store {
 	/**
 	 * @param {object} models   type name → model class (from PuzzleApp config)
@@ -113,8 +152,7 @@ export class Store {
 		// named after a model method is caught rather than quietly replacing that
 		// method with a getter.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			this._assertNoReservedFields();
-			this._assertNoMethodFields();
+			assertModelSchemas(this.models);
 		}
 		this._installRelationships();
 
@@ -133,38 +171,6 @@ export class Store {
 			? this.models[type]
 			: null;
 		return own || PuzzleModel;
-	}
-
-	/**
-	 * Dev-only registration guard: `_serializeAll` writes each record's provenance
-	 * flag as a literal `__synced` key beside the fields, and `_hydrateAll` strips
-	 * that key back off. A model that DECLARES a `__synced` field therefore loses
-	 * its value on every persist/hydrate round-trip — silently, and only after a
-	 * reload. Nobody names a field this, so the answer is a loud throw at
-	 * construction rather than an envelope the wire shape would have to carry.
-	 */
-	_assertNoReservedFields() {
-		for (const [type, Model] of Object.entries(this.models)) {
-			if (typeof Model.normalizedSchema !== 'function') continue;
-			if ('__synced' in Model.normalizedSchema()) {
-				throw new Error(
-					`[puzzle] model '${type}' declares a "__synced" field — that name is reserved by persistence; rename it`
-				);
-			}
-		}
-	}
-
-	/**
-	 * Registration-time schema check: a schema entry may not be named after a
-	 * model method. Development-only, like every other authoring diagnostic here:
-	 * the schema is static, so the throw fires the first time the app is opened in
-	 * dev, and production keeps the runtime protection either way (assignSkipping
-	 * drops a colliding key on every write path, in every build).
-	 */
-	_assertNoMethodFields() {
-		for (const [type, Model] of Object.entries(this.models)) {
-			assertSchemaNames(Model, type);
-		}
 	}
 
 	// ---- relationships (constellation/doc/DOC-SPEC.md §21, D49) ---------------
@@ -237,7 +243,7 @@ export class Store {
 				// Reserved name: an embedded server payload (`{ author: {...} }`)
 				// must not throw under Object.assign in strict mode (the exempt read
 				// path), so this is a warn-once no-op pointing at the FK field.
-				if (!warned) {
+				if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && !warned) {
 					warned = true;
 					console.warn(
 						`[puzzle] "${name}" is a relationship on model "${type}" — assignments are ignored; set "${fkKey}" instead`

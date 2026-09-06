@@ -24,6 +24,13 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      Since the 0.7.0 size cleanups the browser resolves only the `title` field: `#syncHead` is
+      `syncTitle(resolveHeadField(entry.chain, 'title'))` — one chain walk per navigation instead of
+      four — and `syncTitle` takes the resolved value, not the head object. `resolveHead` and
+      `HEAD_FIELDS` stay exported for the SSG injector (`ssg/index.js`) and tree-shake out of every
+      app bundle. `syncTitle` is still ungated and still runs on every navigation in every mode.
 ---
 
 `syncTags` is gone from the browser. Managed head tags (`og:*`, `twitter:*`,
