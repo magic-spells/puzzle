@@ -328,17 +328,19 @@ export class Router {
 	// cleared alongside the path in #navigate, #commitState, #recoverFailedNavigation
 	// and stop().
 	#pendingNavPromise = null;
-	// Guard redirects re-enter the normal pipeline through replace(), so every
-	// destination gets its own inherited guard chain and the denied URL never
-	// commits. A bad pair/cycle could otherwise recurse forever without reaching
+	// Guard redirects re-enter the normal pipeline through push()/replace() — the
+	// redirect inherits the denied navigation's verb — so every destination gets its
+	// own inherited guard chain and the denied URL never commits (and never enters
+	// history: a push writes no entry until commit). A bad pair/cycle could
+	// otherwise recurse forever without reaching
 	// #commitState; count guard-owned redirects and reset at the START of each
 	// externally-initiated navigation — NOT only at commit, because a redirect to the
-	// already-current path is a same-path replace() no-op that never commits, so a
+	// already-current path is a same-path no-op that never commits, so a
 	// commit-only reset would let the count accumulate across INDEPENDENT user
 	// navigations and spuriously trip the limit (D87).
 	#guardRedirectCount = 0;
 	// True only for the synchronous entry of a #navigate that is a guard-redirect
-	// re-entry (set around the replace() call in #navigate's redirect branch, consumed
+	// re-entry (set around the push()/replace() call in #navigate's redirect branch, consumed
 	// at #navigate's token bump). Distinguishes those re-entries from externally-
 	// initiated navigations so the #guardRedirectCount reset skips them.
 	#guardRedirecting = false;
@@ -1011,7 +1013,7 @@ export class Router {
 			if (verdict === false) return false;
 			if (typeof verdict === 'string') {
 				// Ten redirects may run without a commit; the eleventh is the cycle
-				// boundary. Same-path replace remains its normal no-op, but still
+				// boundary. A same-path re-entry remains its normal no-op, but still
 				// counts because the guard initiated it and no commit reset occurred.
 				if (this.#guardRedirectCount >= 10) {
 					const err = new Error(
@@ -1122,7 +1124,7 @@ export class Router {
 		// This navigation is now REAL (matched) and owns the token: record its target
 		// so a same-key push() arriving mid-flight no-ops instead of superseding (the
 		// double-click guard in push()), and reset the guard-redirect budget UNLESS
-		// this #navigate is itself a guard redirect re-entering via replace() — that
+		// this #navigate is itself a guard redirect re-entering via push()/replace() — that
 		// re-entry continues one logical navigation and must keep the count (D87). The
 		// flag is consumed here so it only tags the immediately-following re-entry.
 		//
@@ -1222,14 +1224,24 @@ export class Router {
 				return;
 			}
 			if (typeof guardVerdict === 'string') {
-				// Re-enter through the public replace() seam: same-path no-op,
+				// Re-enter through the public push()/replace() seam: same-path no-op,
 				// commit-window behavior, matching, guards, and D61 atomicity all stay
 				// centralized. Await it so awaiting the denied navigation observes the
-				// final redirect commit. If replace was a same-path/unmatched no-op, no
-				// newer token owns cleanup, so restore a transition we superseded.
-				// Mark the re-entry so replace()'s #navigate keeps the redirect budget
-				// (Fix 2); clear unconditionally after the await in case replace() was a
-				// no-op that never re-entered #navigate to consume the flag.
+				// final redirect commit. If the re-entry was a same-path/unmatched no-op,
+				// no newer token owns cleanup, so restore a transition we superseded.
+				// Mark the re-entry so the inner #navigate keeps the redirect budget
+				// (Fix 2); clear unconditionally after the await in case the re-entry was
+				// a no-op that never reached #navigate to consume the flag.
+				//
+				// The redirect INHERITS the denied navigation's verb. The denied URL never
+				// enters history either way — a push writes no entry until commit (D61) —
+				// but a push redirect must mint its OWN entry for the destination:
+				// replaceState there would overwrite the entry the user was standing on,
+				// erasing the origin page from history (Back from '/login' would skip it,
+				// and the documented post-login replace(redirect) would then leave the
+				// site). A pop or nav #0 redirect still replaces: the browser already sits
+				// on the denied URL, so the destination takes that entry over (D87's
+				// documented collapse).
 				//
 				// The chain's ownership box (#guardChain): a nested redirect continues the
 				// box it re-entered on, an externally-initiated one starts a fresh box.
@@ -1240,7 +1252,7 @@ export class Router {
 				this.#guardRedirecting = true;
 				let redirected;
 				try {
-					redirected = await this.replace(guardVerdict);
+					redirected = await (push ? this.push(guardVerdict) : this.replace(guardVerdict));
 				} finally {
 					this.#guardRedirecting = false;
 				}
@@ -2514,13 +2526,19 @@ export class Router {
 	 * Only the GATE — the target is resolved post-mount in #applyFocus. The
 	 * initial-navigation skip is #resolveScroll's precedent verbatim: the browser
 	 * owns first paint, moving focus there would fight normal page-load behavior
-	 * (and break the hybrid-output takeover, which IS nav #0). push, replace and
-	 * pop all pass: browsers never restore focus for a client-side history move, so
-	 * back/forward needs focus management just as much as a forward push.
+	 * (and break the hybrid-output takeover, which IS nav #0). Once something has
+	 * committed, push, replace and pop all pass: browsers never restore focus for a
+	 * client-side history move, so back/forward needs focus management just as much
+	 * as a forward push.
 	 */
 	#resolveFocus({ to, from, push, pop, replace }) {
 		if (!this.#focusEnabled()) return null;
-		if (!push && !pop && !replace) return null; // initial navigation
+		// Navigation #0 — nothing has committed, so `from` is null. This also covers a
+		// guard redirect on nav #0, which re-enters as a REPLACE and would otherwise
+		// steal focus and announce on first paint (SPEC §51 / D93: the browser owns
+		// first paint). The `push` term keeps a user push that supersedes a slow nav #0
+		// focusing normally.
+		if (!from && !push) return null;
 		return { to, from };
 	}
 

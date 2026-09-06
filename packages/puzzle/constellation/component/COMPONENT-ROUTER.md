@@ -76,6 +76,17 @@ notes:
       by identity across the await; the continuation repairs only when the box's token is still the
       router's current token AND the committed state is still `cur`. A chain superseded by a newer
       navigation restores nothing and leaves the winner's URL alone.
+  - kind: state
+    text: >-
+      Guard redirects inherit the denied navigation's verb (D87 amendment, 0.7.0 final review): a
+      string verdict re-enters #navigate through `push()` when the denied navigation was a push, and
+      through `replace()` for a pop or navigation #0. The denied URL still never enters history (a
+      push writes no entry until commit), but a push redirect now mints the destination's own entry
+      so Back returns to the page the user was on — before this, `replaceState` overwrote the origin
+      entry and the documented post-login `replace(redirect)` left Back exiting the site. The
+      failed-POP URL-repair path after a redirect only ever fires for the pop (replace) case. Pinned
+      by `tests/router.test.js` (push redirect + pop redirect siblings) and
+      `tests/router-memory.test.js`.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

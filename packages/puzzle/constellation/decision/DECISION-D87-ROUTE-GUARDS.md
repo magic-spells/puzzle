@@ -61,6 +61,7 @@ through it) made a single insertion point possible.
 
 ## Decision
 
+
 **One new route field, one new pipeline phase:**
 
 - `guard` is a top-level route field (sibling of `layout`/`transitionMode`/
@@ -77,20 +78,25 @@ through it) made a single insertion point possible.
   await so a superseded guarded navigation abandons silently.
 - **Verdicts are return values, not throws:** `undefined`/`true` allow,
   `false` blocks (stay put), a string path redirects — and the ROUTER performs
-  the redirect via the public `replace()` seam (denied URLs never enter
-  history; the destination's own guards run through the normal pipeline).
-  A thrown guard follows the data()-failure posture: log, stay put. The
-  shared post-failure cleanup (stalled-transition + pending-memory-index
-  recovery) is one helper used by both paths.
+  the redirect via the public `push()`/`replace()` seam, **inheriting the
+  denied navigation's verb**: a push redirect is a `push()` that mints the
+  destination's own entry, so Back still reaches the page the user was on; a
+  pop or navigation-#0 redirect is a `replace()` that takes over the entry the
+  browser already moved to. Denied URLs never enter history either way (a push
+  writes no entry until commit, D61); the destination's own guards run through
+  the normal pipeline. A thrown guard follows the data()-failure posture: log,
+  stay put. The shared post-failure cleanup (stalled-transition +
+  pending-memory-index recovery) is one helper used by both paths.
 - **Loop safety:** at most ten guard-owned redirects per logical navigation;
   the next is treated as a cycle (console.error, stay put). The counter resets
   on a successful commit AND at the start of every externally-initiated
-  navigation — a guard redirect re-entering through `replace()` is flagged as a
-  continuation and keeps the count, everything else starts from zero. Resetting
-  only at commit would let the count accumulate across INDEPENDENT user
-  navigations, because a redirect to the already-committed path is the D83
-  same-path no-op and never commits. A real A↔B cycle never commits either, so
-  the cap still catches it; the query-param deny idiom commits on `/login`.
+  navigation — a guard redirect re-entering through `push()`/`replace()` is
+  flagged as a continuation and keeps the count, everything else starts from
+  zero. Resetting only at commit would let the count accumulate across
+  INDEPENDENT user navigations, because a redirect to the already-committed
+  path is the D83 same-path no-op and never commits. A real A↔B cycle never
+  commits either, so the cap still catches it; the query-param deny idiom
+  commits on `/login`.
 - **Output modes — warnings only, no enforcement** (Cory: the developer's
   call; guards are UX, not a secrecy boundary — prerendered files are public
   bytes and servers must authorize independently). Hybrid prerender warns per
@@ -118,6 +124,7 @@ through it) made a single insertion point possible.
 
 ## Alternatives rejected
 
+
 - **Global `beforeEach` hook + `meta.requiresAuth` flags (Vue's shape)** —
   policy lives away from the route tree, needs a matched-chain scan in user
   code, and adds a second registration surface; the route field keeps the
@@ -130,6 +137,15 @@ through it) made a single insertion point possible.
   avoid exception-as-control-flow; the router performing the redirect keeps
   D61 atomicity centralized (Angular's "return a UrlTree, never `navigate()`
   imperatively" rule, same reasoning).
+- **Redirecting through `replace()` whatever the denied verb** (the v1.53
+  shape, amended in the 0.7.0 final review) — the goal, keeping the denied
+  URL out of history, is already guaranteed for a push by D61 (pushState
+  fires only at commit), so the replace bought nothing there and cost the
+  origin entry: `replaceState` overwrote the page the user was on, Back from
+  `/login` skipped it, and after the documented post-login `replace(redirect)`
+  Back from the protected page left the site. Inheriting the verb keeps the
+  pop and navigation-#0 collapse (the browser already sits on the denied URL)
+  and gives a push redirect the destination's own entry.
 - **`auth` as the field name** — names the dominant use case, not the
   mechanism; misleads for role/paywall/onboarding gates and implies framework
   session machinery that deliberately does not exist. Release surface already
