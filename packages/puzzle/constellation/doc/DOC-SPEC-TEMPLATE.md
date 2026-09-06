@@ -15,6 +15,18 @@ notes:
       Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
       census); §N numbers unchanged
     sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+  - kind: state
+    text: >-
+      Text whitespace rule (§6, recorded on [[DECISION-D168-TEXT-RUN-WHITESPACE]] in the 0.7.0 final
+      review): template text collapses whitespace runs to one space and drops an edge space that
+      held a newline — source indentation at element boundaries. That strip is an element-boundary
+      rule only: inside one coalesced text run (text↔interpolation, interpolation↔interpolation
+      across a whitespace-only newline node) a stripped edge that borders another run member gets
+      exactly one space back, so `{ user.first }\n  { user.last }` renders "John Doe" as it does in
+      HTML, Vue and Svelte. `{ a }{ b }` with nothing between stays adjacent; run edges still strip;
+      the `<b>{ name }</b>\n(text)` element-boundary case is deliberately unchanged. Also: `{#for i
+      in 1...5}` is a positioned compile error steering to `{#for 1...5, i}` — the range form always
+      binds its counter after the range.
 ---
 
 The frozen v1 contract for templates: the `@event` handler convention and its modifiers, the template grammar, DOM islands, inline SVG, composition markers and named slots, list keying, cached handlers, and compiler accessibility warnings. See [[DOC-SPEC]] for the section index and the rest of the contract.
@@ -126,6 +138,7 @@ The declarative "this subtree's DOM is owned by someone else" primitive. Shipped
 
 ## 18. Inline SVG assets: `{#svg}` (v1.14)
 
+
 The Shopify-snippet ergonomic for icons: one SVG file on disk, referenced by name from any template, inlined at **compile time**. Shipped in v1.14 (D46); a parser + codegen + (small) runtime amendment. The motivating case is the global icon set — cart, account, open/close — simple shapes carrying `currentColor`, recolored by hover states on the parent `<button>`.
 
 ```html
@@ -138,7 +151,7 @@ The Shopify-snippet ergonomic for icons: one SVG file on disk, referenced by nam
 
 **Resolution.** Paths resolve from the conventional **`app/assets/`** folder only — `'icons/cart.svg'` means `app/assets/icons/cart.svg`. Absolute, `./`, `../`, and directory-escaping paths are compile errors (portable src strings; relative-to-`.pzl` resolution can be added later without breaking anything). `app/assets/` is **compile-time only** — never copied to `dist/` (contrast `app/public/`, which is copied verbatim and never inlined). Missing file, missing `app/assets/` dir, or a malformed file are positioned compile errors (in the `.pzl` for path problems; in the `.svg` for file problems). Under `puzzle dev`, inlined files are registered as esbuild watch files: editing only the `.svg` rebuilds, and creating a previously-missing file recovers the build.
 
-**Inlining semantics — the file is inert.** The compiler strips an optional XML prolog/DOCTYPE, requires a single `<svg …>` root (nested `<svg>` inside is fine — depth-counted), tokenizes **only the root open tag** to lift its attributes onto a vnode, and embeds everything inside as a **verbatim string**. File contents are never template-parsed: `{ expr }`, `{#blocks}`, components, and event handlers inside the file do nothing (literal `{` is fine — it's just text). At runtime the root `<svg>` is a real vnode (the differ places/removes it; created via the SVG-namespace path) whose string children are seeded once via `innerHTML` and then **island-owned (D44)**: never reconciled, zero diff cost per patch regardless of file size. The escape hatch is explicit: want a reactive or animated SVG? Paste the markup into the template directly — arbitrary SVG in templates has always compiled (no element whitelist, automatic `createElementNS` namespace propagation).
+**Inlining semantics — the file is inert.** The compiler strips an optional XML prolog/DOCTYPE, requires a single `<svg …>` root (nested `<svg>` inside is fine — depth-counted), tokenizes **only the root open tag** to lift its attributes onto a vnode, and embeds everything inside as a **verbatim string**. File contents are never template-parsed: `{ expr }`, `{#blocks}`, components, and event handlers inside the file do nothing (literal `{` is fine — it's just text). At runtime the root `<svg>` is a real vnode (the differ places/removes it; created via the SVG-namespace path) whose string children are seeded once via `innerHTML` and then **island-owned (D44)**: never reconciled, zero diff cost per patch regardless of file size. String-versus-array children are part of node identity, like the island flip: a `{#svg}` seed and authored `<svg>` markup sharing one conditional position are a replacement boundary in both directions, never a patch. The escape hatch is explicit: want a reactive or animated SVG? Paste the markup into the template directly — arbitrary SVG in templates has always compiled (no element whitelist, automatic `createElementNS` namespace propagation), `<text>` included: it shares the runtime's reserved text-node tag and is told apart by the absence of a `value` attr on the vnode (the text-node marker always carries one).
 
 **Styling contract.** No per-use attributes on the tag — `{#svg 'path' class="…"}` was rejected as an incoherent mix of Liquid-tag and HTML-attribute syntax (Shopify's own `{% render %}` takes none). Style the icon the Shopify way: `currentColor` (and `width="100%" height="100%"` or a `viewBox`) in the file; color/hover classes on the parent; sizing via a wrapper `<span class="size-5">`, a `[&_svg]:size-5` child selector, or in-file dimensions. Liquid-style params (`{#svg 'path', class: '…'}`) remain a reserved, backwards-compatible future extension.
 
