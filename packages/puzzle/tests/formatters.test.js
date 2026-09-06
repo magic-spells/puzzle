@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { FormatterRegistry, makeFormatterRegistry } from '../client-runtime/formatters.js';
 import fullBuiltins from '../client-runtime/formatters/builtins-all.js';
 import builtinNames from '../client-runtime/formatters/builtins.json';
+import { CalendarDate } from '../client-runtime/dates.js';
 
 const f = new FormatterRegistry().getAll();
 
@@ -300,6 +301,28 @@ describe('FormatterRegistry', () => {
 		it('keyed sort on a numeric field stays numeric', () => {
 			const items = [{ price: 2 }, { price: 10 }, { price: 1 }];
 			expect(f.sort(items, 'price').map(i => i.price)).toEqual([1, 2, 10]);
+		});
+
+		it('keyed sort on a Date field is chronological', () => {
+			// String comparison would order these by WEEKDAY name (Sun/Mon/Tue/Wed).
+			const items = [
+				{ at: new Date(2024, 11, 31) },
+				{ at: new Date(2026, 0, 5) },
+				{ at: new CalendarDate(2025, 5, 15) },
+				{ at: new Date(2026, 2, 1) },
+			];
+			expect(f.sort(items, 'at').map(i => i.at.getFullYear())).toEqual([2024, 2025, 2026, 2026]);
+			expect(f.sort(items, 'at').map(i => i.at.getMonth())).toEqual([11, 5, 0, 2]);
+
+			// An Invalid Date is NaN once timed, so it rides the numeric rule to the end.
+			const withInvalid = [
+				{ at: new Date('nope') },
+				{ at: new Date(2026, 0, 5) },
+				{ at: new Date(2024, 11, 31) },
+			];
+			const years = f.sort(withInvalid, 'at').map(i => i.at.getFullYear());
+			expect(years.slice(0, 2)).toEqual([2024, 2026]);
+			expect(Number.isNaN(years[2])).toBe(true);
 		});
 
 		it('does not mutate the input array', () => {

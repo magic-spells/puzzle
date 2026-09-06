@@ -81,7 +81,7 @@ kernel builds the same registry against its per-page router. `link` delegates to
 through). The tree-shake scanner ignores the name (not on the allowlist), the
 same handling as any custom formatter.
 
-All built-ins fail soft on nullish or invalid display input. Numeric precision normalizes to an integer in the `toFixed` range; date/locale/time-zone failures fall back to a string; sort copies before comparing and treats numeric arrays numerically. `raw`/`noescape` only skip formatter escaping—they do not inject HTML into text vnodes. `reverse` iterates strings by code POINT (`[...v]`, since 0.3.0), not UTF-16 code unit — `split('')` tore surrogate pairs, so emoji/astral text reversed into lone-surrogate garbage; a user-visible output change for such strings.
+All built-ins fail soft on nullish or invalid display input. Numeric precision normalizes to an integer in the `toFixed` range; date/locale/time-zone failures fall back to a string; sort copies before comparing, treats numeric arrays numerically and Date keys (CalendarDate included) chronologically by timestamp — NaN and Invalid Dates sort last, every other type pair still compares as strings (before the Date branch a `date()` field sorted by its weekday-first string form). `raw`/`noescape` only skip formatter escaping—they do not inject HTML into text vnodes. `reverse` iterates strings by code POINT (`[...v]`, since 0.3.0), not UTF-16 code unit — `split('')` tore surrogate pairs, so emoji/astral text reversed into lone-surrogate garbage; a user-visible output change for such strings.
 
 Those value-level runtime formatters are unrelated to D150's
 `{#raw}…{/raw}` source block, which disables brace lexing before any formatter

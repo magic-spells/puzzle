@@ -41,6 +41,7 @@ save responses do".
 
 ## Decision
 
+
 Exact D125 parity — the protected window is the request's OWN flight, per
 field, not open-ended dirtiness:
 
@@ -71,9 +72,18 @@ monotonic dispatch generation from the store's read state and hands it to
 landed on each record, and a response whose generation is lower is dropped for
 that record — no merge, no `_notify`, `_synced` untouched. `clearAbsent` and
 the collection-complete mark still run, because a stale response still proves
-the identity or collection exists. Save reconciliation and the public
-`upsert()` pass no generation and are deliberately outside this ordering:
-their precedence against reads is unchanged and undefined.
+the identity or collection exists. The public `upsert()` passes no generation
+and is deliberately outside this ordering: its precedence against reads is
+unchanged and undefined. Save reconciliation IS ordered, through a different
+seam: `_saveRecordNow` takes a dispatch generation from the same counter beside
+its revision snapshot and stamps the record on each success path — never
+lowering an existing stamp, so a read that landed after the save keeps its
+precedence — so a read dispatched before the save cannot roll back the body
+the server acknowledged, and the next `save()` cannot PUT the rolled-back row
+back. It never routes through `_upsert`, so it passes no `gen` there. (Before
+the stamp, an edit → slow `loadMany` → fast PUT sequence reverted the
+acknowledged field on screen with `_synced` still true, and the following save
+wrote the stale value to the server.)
 
 REMOVALS are ordered on the same counter, and that is the one case where a
 stale response proves nothing about the identity:
