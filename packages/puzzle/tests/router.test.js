@@ -299,7 +299,7 @@ describe('Router — route guards (D87)', () => {
 		pushSpy.mockRestore();
 	});
 
-	it('redirects through replace(), so the denied URL never becomes a history entry', async () => {
+	it('redirects a push AS a push: the denied URL never becomes an entry, the origin stays behind it', async () => {
 		const { router, el } = await boot(guardedRoutes(() => '/login'));
 		const length = history.length;
 		const pushSpy = vi.spyOn(history, 'pushState');
@@ -310,12 +310,58 @@ describe('Router — route guards (D87)', () => {
 		expect(router.current.path).toBe('/login');
 		expect(location.pathname).toBe('/login');
 		expect(el.querySelector('.home')).not.toBeNull();
-		expect(history.length).toBe(length);
-		expect(pushSpy).not.toHaveBeenCalled();
-		expect(replaceSpy).toHaveBeenCalledTimes(1);
-		expect(replaceSpy.mock.calls[0][2]).toBe('/login');
+		// The denied '/private' still never enters history — a push writes no entry
+		// until commit (D61) — but the redirect inherits the push verb, so the
+		// DESTINATION mints its own entry instead of overwriting the origin's.
+		expect(pushSpy).toHaveBeenCalledTimes(1);
+		expect(pushSpy.mock.calls[0][2]).toBe('/login');
+		expect(replaceSpy).not.toHaveBeenCalled();
+		expect(history.length).toBe(length + 1);
 		pushSpy.mockRestore();
 		replaceSpy.mockRestore();
+
+		// Back therefore lands on the page the user was standing on, not past it.
+		history.back();
+		await delay(20);
+		expect(location.pathname).toBe('/');
+		expect(router.current.path).toBe('/');
+	});
+
+	it('redirects a POP through replace(), so the denied URL never becomes an entry', async () => {
+		let redirect = false;
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/private',
+				name: 'private',
+				view: AboutView,
+				layout: DefaultLayout,
+				guard() {
+					return redirect ? '/login' : undefined;
+				},
+			},
+			{ path: '/login', name: 'login', view: HomeView, layout: DefaultLayout },
+			{ path: '/after', name: 'after', view: HomeView, layout: DefaultLayout },
+		];
+		const { router } = await boot(routes);
+		await router.push('/private'); // allowed for now — puts /private in the stack
+		await router.push('/after');
+		redirect = true;
+
+		// The browser has ALREADY moved to /private before the guard runs, so the
+		// redirect must take that entry over (D87's documented collapse) — a push
+		// here would leave the denied /private entry sitting in the stack.
+		const length = history.length;
+		const pushSpy = vi.spyOn(history, 'pushState');
+
+		history.back();
+		await delay(30);
+
+		expect(router.current.path).toBe('/login');
+		expect(location.pathname).toBe('/login');
+		expect(pushSpy).not.toHaveBeenCalled();
+		expect(history.length).toBe(length);
+		pushSpy.mockRestore();
 	});
 
 	it('composes parent auth then child admin guards in root→leaf order', async () => {

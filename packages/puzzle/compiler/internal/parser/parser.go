@@ -1114,6 +1114,12 @@ func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) 
 		if from == "" || to == "" {
 			return nil, errAt(file, pos, "malformed range in {#for %s}", rest)
 		}
+		// `{#for i in 1...5}` parses as a range whose from-bound is "i in 1" and
+		// compiles to a green build that throws `Cannot use 'in' operator` on the
+		// first render. Steer to the documented form instead.
+		if item, low, ok := splitForIn(from); ok && isBareIdent(item) {
+			return nil, errAt(file, pos, "{#for} range loops bind the counter after the range — write {#for %s...%s, %s}", low, to, item)
+		}
 		return &For{IsRange: true, RangeFrom: from, RangeTo: to, Counter: counter, Pos: pos}, nil
 	}
 	item, coll, ok := splitForIn(rest)

@@ -25,6 +25,13 @@
 // ("</h2>\n      <form>") drops entirely. Consecutive Text/Interpolation
 // siblings coalesce into ONE text vnode whose value is the `+`-concatenation of
 // quoted literals and shared display-coercion calls.
+//
+// Stripping is an ELEMENT-boundary rule, so it applies only at the edges of such
+// a run. Inside one run, a stripped edge that borders another run member (an
+// interpolation, or a text segment across a dropped whitespace-only node) gets
+// exactly one space back — a newline between "new" and "{ n }" separates words,
+// as it does in HTML, Vue and Svelte. `{ a }{ b }` with no whitespace between
+// them stays adjacent.
 package codegen
 
 import (
@@ -1463,21 +1470,29 @@ func (c *compiler) processChildren(children []parser.Node, scope map[string]bool
 // object literal (SPEC §6).
 func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (string, bool, error) {
 	type seg struct {
-		js     string
-		static bool
+		js         string // non-static segments
+		text       string // static segments, quoted at join time
+		static     bool
+		padL, padR bool // a space was stripped at this edge
+		gap        bool // emit a standalone ' ' before this segment
 	}
 	var segs []seg
 	for _, n := range run {
 		switch t := n.(type) {
 		case *parser.Text:
 			if t.Raw {
-				segs = append(segs, seg{js: jsString(t.Value), static: true})
+				segs = append(segs, seg{text: t.Value, static: true})
 				continue
 			}
-			s, keep := processText(t.Value)
-			if keep {
-				segs = append(segs, seg{js: jsString(s), static: true})
+			s, keep, padL, padR := processText(t.Value)
+			if !keep {
+				// A dropped whitespace-only node still separates its neighbours.
+				if padR && len(segs) > 0 {
+					segs[len(segs)-1].padR = true
+				}
+				continue
 			}
+			segs = append(segs, seg{text: s, static: true, padL: padL, padR: padR})
 		case *parser.Interpolation:
 			if startsWithObjectLiteral(t.Expr) {
 				return "", false, c.cgErr(t.Pos, objectLiteralMsg)
@@ -1489,12 +1504,31 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 	if len(segs) == 0 {
 		return "", false, nil
 	}
-	if len(segs) == 1 {
-		return segs[0].js, true, nil
+	// Restore exactly one space at every run-INTERNAL boundary whose whitespace
+	// was stripped as indentation. Run edges keep the strip.
+	for i := 1; i < len(segs); i++ {
+		if !segs[i-1].padR && !segs[i].padL {
+			continue
+		}
+		switch {
+		case segs[i-1].static:
+			segs[i-1].text += " "
+		case segs[i].static:
+			segs[i].text = " " + segs[i].text
+		default:
+			segs[i].gap = true
+		}
 	}
-	parts := make([]string, len(segs))
-	for i, s := range segs {
-		parts[i] = s.js
+	parts := make([]string, 0, len(segs)+1)
+	for _, s := range segs {
+		if s.gap {
+			parts = append(parts, "' '")
+		}
+		if s.static {
+			parts = append(parts, jsString(s.text))
+		} else {
+			parts = append(parts, s.js)
+		}
 	}
 	return strings.Join(parts, " + "), true, nil
 }
@@ -1555,26 +1589,29 @@ var wsRun = regexp.MustCompile(`[ \t\r\n]+`)
 
 // processText applies the whitespace policy to one Text node's value. See the
 // package doc for the exact rule. Returns ("", false) when the node is dropped.
-func processText(raw string) (string, bool) {
+// padL/padR report that a leading/trailing space WAS stripped, so a run-internal
+// boundary at that edge still separates words (see the package doc). A dropped
+// whitespace-only node reports both.
+func processText(raw string) (s string, keep, padL, padR bool) {
 	if strings.TrimSpace(raw) == "" {
 		if strings.ContainsAny(raw, "\n\r") {
-			return "", false
+			return "", false, true, true
 		}
-		return " ", true
+		return " ", true, false, false
 	}
 	leadingNL := leadingWSHasNewline(raw)
 	trailingNL := trailingWSHasNewline(raw)
-	s := wsRun.ReplaceAllString(raw, " ")
-	if leadingNL {
-		s = strings.TrimPrefix(s, " ")
+	s = wsRun.ReplaceAllString(raw, " ")
+	if leadingNL && strings.HasPrefix(s, " ") {
+		s, padL = s[1:], true
 	}
-	if trailingNL {
-		s = strings.TrimSuffix(s, " ")
+	if trailingNL && strings.HasSuffix(s, " ") {
+		s, padR = s[:len(s)-1], true
 	}
 	if s == "" {
-		return "", false
+		return "", false, padL, padR
 	}
-	return s, true
+	return s, true, padL, padR
 }
 
 func leadingWSHasNewline(s string) bool {

@@ -258,6 +258,20 @@ func TestParseForCounter(t *testing.T) {
 			wantItem: "x",
 			wantColl: "[1, 2, 3]",
 		},
+		{
+			// A spread's "..." is not top-level, so this stays an item-form loop
+			// and never reaches the range branch's steering error.
+			name:     "spread inside a collection literal is not a range",
+			content:  "{#for x in [...items]}<div>x</div>{/for}",
+			wantItem: "x",
+			wantColl: "[...items]",
+		},
+		{
+			name:     "slice call is not a range",
+			content:  "{#for x in items.slice(0, 3)}<div>x</div>{/for}",
+			wantItem: "x",
+			wantColl: "items.slice(0, 3)",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -434,6 +448,21 @@ func TestParseForItemIdentifier(t *testing.T) {
 		}
 		if f.Item != "$foo" || f.Collection != "items" || f.IsRange {
 			t.Errorf("for header wrong: %+v", f)
+		}
+	})
+
+	// `{#for i in 1...5}` used to parse as a range with the from-bound "i in 1",
+	// producing a green build that threw `Cannot use 'in' operator` on the first
+	// render with no template location. It is now a positioned steering error.
+	t.Run("item form on a range is a positioned steering error", func(t *testing.T) {
+		src := "<puzzle-view>{#for i in 1...5}<div>x</div>{/for}</puzzle-view>\n<script></script>"
+		_, err := Parse([]byte(src), "test.pzl")
+		if err == nil {
+			t.Fatal("expected an error for {#for i in 1...5}")
+		}
+		want := "test.pzl:1:14: {#for} range loops bind the counter after the range — write {#for 1...5, i}"
+		if err.Error() != want {
+			t.Errorf("error: got %q, want %q", err.Error(), want)
 		}
 	})
 

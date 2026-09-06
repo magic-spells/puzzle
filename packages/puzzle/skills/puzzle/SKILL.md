@@ -117,7 +117,8 @@ helpers — the project term is *formatter*, never *filter*),
 `{#if}/{:else if}/{:else}/{/if}`, `{#unless}`, `{#for item in items, i}`
 (trailing `, name` binds the index), `{#case}/{:when}`, `{#raw}…{/raw}` (brace
 grammar off inside — literal braces compile as-is, HTML still parses; no
-nesting, and attribute-value use is a compile error),
+nesting, and attribute-value use is a compile error; a single literal brace
+anywhere, attribute values included, is `\{` / `\}` — e.g. `pattern="[0-9]\{5\}"`),
 `@event={ handler }` with modifiers, component imports used as capitalized tags
 (dotted family members too — `<Frame.Wrapper>`).
 `<script lang="ts">` for TypeScript (build remains transpile-only; run
@@ -288,7 +289,10 @@ Form controls bind themselves — write NO input handler:
   once to lock the whole layout subtree; a child may add its own stricter
   guard (they run root→leaf, first failure wins). Verdicts: `undefined`/`true`
   allow; `false` blocks (stay put, nothing commits); a path string redirects
-  via `replace()` semantics (denied URL never enters history). Guards run
+  (the denied URL never enters history, and the redirect inherits the denied
+  navigation's verb — a push redirect mints one entry for the destination, so
+  Back still reaches the page the user came from; pop and nav #0 redirects
+  replace the entry the browser already sits on). Guards run
   before views construct or `data()` runs, on every navigation including
   params-only and nav #0 (`from === null` there); async guards are awaited.
   Restore sessions in the app-config `beforeMount(app)` hook (awaited before

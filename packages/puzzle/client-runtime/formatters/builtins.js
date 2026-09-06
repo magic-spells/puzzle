@@ -152,12 +152,19 @@ export function reverse(v) {
 	return v;
 }
 
-// Comparator shared by keyed/keyless sort. Two numbers compare NUMERICALLY (so
-// [2,10,1] → [1,2,10], not the lexicographic [1,10,2] a bare Array.sort gives),
-// with NaN pushed to the end (NaN vs NaN is equal). Any other type pair — or a
+// Comparator shared by keyed/keyless sort. Two Dates (CalendarDate included, it
+// extends Date) compare CHRONOLOGICALLY by timestamp — not by the weekday-first
+// string form — and an Invalid Date times out to NaN, so it rides the numeric
+// NaN rule below to the end. Two numbers compare NUMERICALLY (so [2,10,1] →
+// [1,2,10], not the lexicographic [1,10,2] a bare Array.sort gives), with NaN
+// pushed to the end (NaN vs NaN is equal). Any other type pair — or a
 // number/non-number mix — falls back to string comparison, preserving the prior
 // keyless default() behavior for non-numeric data.
 function compareValues(a, b) {
+	if (a instanceof Date && b instanceof Date) {
+		a = a.getTime();
+		b = b.getTime();
+	}
 	if (typeof a === 'number' && typeof b === 'number') {
 		if (Number.isNaN(a)) return Number.isNaN(b) ? 0 : 1;
 		if (Number.isNaN(b)) return -1;

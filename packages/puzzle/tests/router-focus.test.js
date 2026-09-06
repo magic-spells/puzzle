@@ -411,6 +411,31 @@ describe('Router focus — skip cases (D93)', () => {
 		expect(el.querySelector('puzzle-view.home').hasAttribute('tabindex')).toBe(false);
 	});
 
+	it('does not move focus when a guard redirects navigation #0', async () => {
+		// The redirect re-enters as a REPLACE, but nothing has committed yet, so this
+		// is still navigation #0: the browser owns first paint (SPEC §51 / D93).
+		history.replaceState({}, '', '/private');
+		const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+		const routes = [
+			...ROUTES,
+			{
+				path: '/private',
+				name: 'private',
+				view: AboutView,
+				meta: { title: 'Private Page' },
+				guard: () => '/',
+			},
+		];
+
+		const { router, el } = await boot(routes);
+
+		expect(router.current.path).toBe('/');
+		expect(focusSpy).not.toHaveBeenCalled();
+		expect(document.activeElement).toBe(document.body);
+		expect(el.querySelector('puzzle-view.home').hasAttribute('tabindex')).toBe(false);
+		expect(liveRegion().textContent).toBe('');
+	});
+
 	it('DOES move focus on pop (back/forward)', async () => {
 		const { router, el } = await boot();
 		const homeState = history.state;

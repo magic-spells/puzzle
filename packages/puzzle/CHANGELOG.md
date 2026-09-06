@@ -454,6 +454,89 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **An authored SVG `<text>` element renders.** The runtime reserved the tag
+  string `text` for its text-node marker, and the compiler emits every element
+  under its own tag name, so `<svg><text x="2" y="30">{ label }</text></svg>`
+  mounted, patched, and prerendered as an empty text node — the element, its
+  attributes, and its label all vanished, with only a misleading "undefined
+  template value" warning in development. A text node is now `text` WITH a
+  `value` attr (the shape the compiler always emits for an interpolation); an
+  SVG `<text>` has none, so it takes the element path in the SVG namespace.
+  Chart pieces that positioned axis labels as HTML overlays to route around
+  this can use SVG `<text>` again.
+
+- **A `{#svg}` icon and hand-written `<svg>` markup can share a conditional
+  position.** An inlined `{#svg}` vnode carries its markup as string children;
+  an authored `<svg>` carries an array. The patcher paired them as one node,
+  so toggling from the file icon to the markup threw inside child
+  reconciliation and routed the whole view through the error-view path, and
+  the reverse direction overwrote the authored subtree without releasing its
+  refs or `outside` listeners. String-versus-array children is now part of
+  node identity, like the `island` flip: the two replace each other cleanly
+  in both directions.
+
+- **A guard redirect keeps the page you came from in history** (D87
+  amendment). A string verdict always re-entered through `replace()`, whatever
+  the denied navigation was — and for a push, which had written no history
+  entry yet, `replaceState` overwrote the entry the user was ON. Clicking
+  "Account" while logged out erased the page you clicked from, Back from
+  `/login` skipped it, and after the documented post-login `replace(redirect)`
+  Back from the protected page left the site. The redirect now inherits the
+  denied navigation's verb: a push redirect is a `push()` that mints the
+  destination's own entry, while a pop or first-load redirect still replaces
+  the entry the browser already sits on. The denied URL never enters history
+  either way.
+
+- **A guard redirect on first load no longer moves focus or announces.** The
+  navigation-#0 focus skip keyed off the verb flags, but a redirect re-enters
+  as a `replace()` before anything has committed, so a bookmarked guarded URL
+  opened while logged out landed with focus already inside the login view
+  (`tabindex="-1"` and the ring suppression stamped on first paint) and a
+  duplicate route announcement over the page-load one. The gate is now
+  "nothing committed yet", which is what navigation #0 means.
+
+- **An acknowledged save can no longer be rolled back by an older read.** Reads
+  are ordered by a dispatch generation (D138), but save reconciliation stamped
+  nothing, so an edit → slow `loadMany` → fast PUT sequence let the stale GET
+  land last, revert the acknowledged field on screen with the record still
+  marked synced — and the next `save()` wrote the stale value back to the
+  server. A save now takes a generation beside its revision snapshot and stamps
+  the record on every success path (never lowering a stamp a later read set),
+  so a read dispatched before the save is dropped for that record when it lands.
+
+- **`sort` orders Date keys chronologically.** The comparator handled
+  number/number and fell back to string comparison for everything else, so a
+  `date()` field — revived to a `Date` on every read path — sorted by its
+  weekday-first string form (`Fri` before `Mon`, year last). Two Dates now
+  compare by timestamp; an Invalid Date times out to `NaN` and sorts last.
+
+- **Text and interpolations that wrap onto separate lines keep the space
+  between them.** The whitespace policy strips an edge space that held a
+  newline as source indentation, but that strip also ran at the boundary
+  BETWEEN members of one text run, so
+  `<p>{ user.first }\n  { user.last }</p>` rendered "JohnDoe" and
+  `you have { n } new\n  { unit }` rendered "newmessages" — the Stays example's
+  listing summary shipped as "4 guests ·2 bedrooms". Inside one run, a stripped
+  edge that borders another run member now gets exactly one space back, as it
+  does in HTML, Vue and Svelte; run edges (element-boundary indentation) still
+  strip, `{ a }{ b }` stays adjacent, and no golden file changed. Compiled
+  across every template in the repo, only that one Stays view differs.
+
+- **`{#for i in 1...5}` is a positioned compile error.** The range check ran
+  before the `item in items` split, so the header parsed as a range whose lower
+  bound was the text `i in 1` and compiled green into JavaScript that threw
+  `Cannot use 'in' operator` on the first render, with nothing pointing at the
+  template. The parser now steers to the documented form,
+  `{#for 1...5, i}`; spread and call collections (`[...items]`,
+  `items.slice(0, 3)`) parse as before.
+
+- **The `\{` / `\}` brace escape is documented.** It has always worked in
+  text and attribute values, but the docs only named `{#raw}` — which is not
+  allowed inside an attribute — so `pattern="[0-9]{5}"` silently compiled
+  `{5}` as an interpolation and validated against `[0-9]5` with no documented
+  way out. The template-syntax reference and the agent skill now show
+  `pattern="[0-9]\{5\}"`.
+
 - **A superseded run's failure no longer reaches `onError` or the error view.**
   A refresh whose token had moved, or whose view was destroyed or leaving, had
   its RESULT discarded but not its REJECTION, so a navigation the app had

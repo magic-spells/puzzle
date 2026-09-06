@@ -921,9 +921,11 @@ class AdapterStoreMethods {
 	 * @param {number} [throughRevision] D138 load-response revision boundary.
 	 * Public callers use upsert(), which deliberately leaves this undefined.
 	 * @param {number} [gen] D138 read-dispatch generation. Only loadOne/loadMany
-	 * (and so the auto-fetch faults routed through them) pass it; save
-	 * reconciliation, the public upsert(), and the rehydrate sweep do not
-	 * participate in read ordering and deliberately leave it undefined.
+	 * (and so the auto-fetch faults routed through them) pass it; the public
+	 * upsert() and the rehydrate sweep do not participate in read ordering and
+	 * deliberately leave it undefined. Save reconciliation does not land here at
+	 * all — it stamps the record's generation directly (see _saveRecordNow), so
+	 * an older in-flight read cannot roll back an acknowledged write.
 	 */
 	_upsert(type, data, throughRevision, gen) {
 		const Model = this.modelFor(type);
@@ -1118,6 +1120,13 @@ class AdapterStoreMethods {
 		// update() advances the edited fields beyond this boundary, so the response
 		// can still contribute untouched server fields without overwriting them.
 		const requestRevision = recordMutationRevision(record);
+		// A save is ordered by dispatch like every read (D138): a read dispatched
+		// BEFORE this save cannot roll back the body the server acknowledged. Stamp
+		// on the success paths only, and never lower an existing stamp — a read
+		// dispatched after this save may already have landed.
+		const gen = ++readStateFor(this).seq;
+		const stamp = () =>
+			LOAD_GENERATIONS.set(record, Math.max(LOAD_GENERATIONS.get(record) ?? 0, gen));
 		// Same JSON hydration boundary as _upsert: the echoed row is JSON, so its
 		// declared date() fields are revived before any merge below. Non-object
 		// bodies pass through untouched for the shape guards that follow.
@@ -1175,6 +1184,7 @@ class AdapterStoreMethods {
 				map.set(recordKey(record[pk]), record);
 				clearAbsent(this, type, record[pk]); // the adopted identity is present now
 				record._synced = true;
+				stamp();
 				this._notify(type, oldId); // old key: subscribers of the gone id
 				this._notify(type, record[pk]); // new key + collection
 				this._persist();
@@ -1202,6 +1212,7 @@ class AdapterStoreMethods {
 			// Keeping it true also makes a queued follow-up PUT instead of POSTing a
 			// duplicate after a successful first save.
 			record._synced = true;
+			stamp();
 			this._notify(type, record[pk]);
 			this._persist();
 			return record;
@@ -1209,6 +1220,7 @@ class AdapterStoreMethods {
 
 		// 204 / empty body: keep local state, mark synced.
 		record._synced = true;
+		stamp();
 		this._persist();
 		return record;
 	}

@@ -414,13 +414,14 @@ Guards re-run on **every** matched navigation — pushes, link clicks, back/forw
 
 ### The guard function and its verdicts
 
+
 `guard({ to, from, ctx })` — `to`/`from` are frozen route snapshots (the `router.current` shape: `path`, `pathname`, `query`, `hash`, `route`, `params`, `chain`); `ctx` is the same three-service context views get (`store`, `router`, `formatters`).
 
 | Return | Effect |
 | ------ | ------ |
 | `undefined` / `true` | Allow — the next guard in the chain runs, then the normal load-then-commit pipeline. |
 | `false` | Block — stay put. Nothing commits: no URL, history, title, tree, or scroll change. |
-| a path string | Redirect — the **router** performs it with `replace()` semantics, so the denied URL never becomes a history entry. The destination's own guards run normally. |
+| a path string | Redirect — the **router** performs it with the verb of the navigation it denied: a link click or `push()` redirects with `push()` (one new entry, for the destination — Back still returns to the page you came from), a back/forward or first-load redirect with `replace()` (it takes over the entry the browser already moved to). Either way the denied URL never becomes a history entry. The destination's own guards run normally. |
 
 Guards may be `async`; the router awaits each one before proceeding, and a navigation superseded during the await abandons silently. A guard that **throws** is treated like a failed `data()`: the error is logged and the app stays put. Redirect loops are capped (ten guard redirects without a commit log an error and stay put); a guard redirect to the path you're already on is the normal same-path no-op.
 

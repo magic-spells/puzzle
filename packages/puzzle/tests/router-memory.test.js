@@ -176,20 +176,22 @@ describe('Router memory mode — route guards (D87)', () => {
 		{ path: '/login', name: 'login', view: TodosView, layout: DefaultLayout },
 	];
 
-	it('guard redirects replace the current stack entry; the denied path is never added', async () => {
+	it('a push redirect appends the destination entry; the denied path is never added', async () => {
 		const { router, el } = await bootMemory(routes(() => '/login'));
 
 		await router.push('/private');
 
 		expect(router.current.path).toBe('/login');
 		expect(el.querySelector('.todos')).not.toBeNull();
-		// Initial '/' was replaced in place. If either '/' or '/private' had been
-		// added/retained, back() would move away from login.
+		// The redirect inherits the push verb, so the stack is [/, /login] @1: the
+		// denied '/private' was never appended, and the origin entry is still behind
+		// the destination.
 		await router.back();
-		expect(router.current.path).toBe('/login');
+		expect(router.current.path).toBe('/');
+		expect(el.querySelector('.home')).not.toBeNull();
 	});
 
-	it('a guard redirect to the current committed path is the normal replace no-op', async () => {
+	it('a guard redirect to the current committed path is the normal same-path no-op', async () => {
 		const { router, el } = await bootMemory(routes(() => '/'));
 
 		await router.push('/private');

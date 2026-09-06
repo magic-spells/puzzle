@@ -193,3 +193,58 @@ describe('D138 local-edit protection is unaffected', () => {
 		expect(post.published).toBe(true); // untouched — merged
 	});
 });
+
+/**
+ * Stub global fetch so the generated REST update transport (D158) runs for
+ * real: every call is recorded with its parsed body, and the response echoes
+ * the row the request sent, the way a server acknowledging a PUT does.
+ */
+function restFetch() {
+	const calls = [];
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (input, init = {}) => {
+			const body = init.body ? JSON.parse(init.body) : null;
+			calls.push({ url: String(input), method: init.method, body });
+			return {
+				ok: true,
+				status: 200,
+				statusText: 'OK',
+				text: async () => JSON.stringify(body),
+				json: async () => body,
+			};
+		})
+	);
+	return calls;
+}
+
+describe('a save participates in read ordering', () => {
+	it('an older in-flight read cannot roll back an acknowledged save', async () => {
+		const g = gate();
+		const store = makeStore(g);
+		const calls = restFetch();
+
+		const post = store.upsert('post', { id: 'p1', title: 'old', published: false });
+		expect(post._synced).toBe(true);
+		post.update({ title: 'new' });
+
+		// Dispatched AFTER the edit, so its revision snapshot already covers the
+		// edit — the D125 local-edit shield does not protect this record.
+		const loading = store.loadMany('post');
+		expect(g.calls).toHaveLength(1);
+
+		await post.save(); // PUT acknowledges title: 'new'
+		expect(post.title).toBe('new');
+
+		g.calls[0].resolve([{ id: 'p1', title: 'old' }]); // the slow GET lands last
+		await loading;
+
+		expect(post.title).toBe('new'); // the acknowledged write stands
+		expect(store.findOne('post', 'p1').title).toBe('new');
+
+		await post.save();
+		const last = calls[calls.length - 1];
+		expect(last.method).toBe('PUT');
+		expect(last.body.title).toBe('new'); // never PUTs the rolled-back row back
+	});
+});

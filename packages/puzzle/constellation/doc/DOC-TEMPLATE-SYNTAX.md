@@ -9,6 +9,15 @@ connections:
   - DOC-PUZZLE-FILE
   - DOC-EVENTS
   - DOC-USER-GUIDE
+notes:
+  - kind: state
+    text: >-
+      Loops: the item and range forms don't mix — `{#for i in 1...5}` is a positioned compile error
+      steering to `{#for 1...5, i}` (the range form always binds its counter after the range).
+      Before the 0.7.0 final review it parsed as a range whose lower bound was the text `i in 1` and
+      compiled green into JavaScript that threw on first render. Text whitespace: a line break
+      between a word and `{ expr }`, or between two interpolations, renders as one space (D168);
+      element-boundary indentation is still dropped.
 ---
 
 # Puzzle Template Syntax (v1)
@@ -592,6 +601,12 @@ Raw blocks do not nest; the first closer wins. The closer tolerates whitespace
 ignored. A literal `{/raw}` cannot appear in the body. Raw blocks are allowed at
 text positions, not inside attribute values; an unterminated block reports the
 opening position and the missing `{/raw}`.
+
+For a single literal brace — anywhere, attribute values included — escape it:
+`\{` and `\}` compile to the literal characters. The HTML form idiom is the case
+that needs it: in `pattern="[0-9]{5}"` the `{5}` is an interpolation, so the
+browser validates against `[0-9]5` with no compile error; write
+`pattern="[0-9]\{5\}"` (and `\{2,4\}` for a range quantifier).
 
 Prerendering preserves the same `textContent` as client rendering. Normal
 elements use ordinary HTML entity escaping. `<script>` and `<style>` use their
