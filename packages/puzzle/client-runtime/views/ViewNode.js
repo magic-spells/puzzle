@@ -11,8 +11,9 @@
  *   ])
  *
  * Three node kinds share this shape:
- * - Element/text — `tag` is a string ('text' is a text node, its content is
- *   attrs.value); any other string is an HTML element name.
+ * - Element/text — `tag` is a string. `'text'` WITH a `value` attr is a text
+ *   node, its content is attrs.value; `'text'` without one is the authored SVG
+ *   `<text>` element, and any other string is an HTML/SVG element name.
  * - Component — `tag` is a PuzzleView subclass (a function); `attrs` are the
  *   child's props and `children` are its slot content (call-site markup).
  *   The ViewManager instantiates the class rather than creating an element
@@ -133,8 +134,12 @@ export class ViewNode {
 		}
 	}
 
+	// A text node is `tag === 'text'` CARRYING a `value` attr — the shape codegen
+	// always emits for an interpolation (`in`, not `!== undefined`: interpolating
+	// undefined is still a text node). The attr test disambiguates the authored
+	// SVG `<text>` ELEMENT, which compiles to the same tag but has no `value`.
 	get isText() {
-		return this.tag === 'text';
+		return this.tag === 'text' && 'value' in this.attrs;
 	}
 
 	/** A component vnode when `tag` is a class rather than an element name. */

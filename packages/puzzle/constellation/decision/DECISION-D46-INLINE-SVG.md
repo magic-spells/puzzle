@@ -13,9 +13,19 @@ verified_at: '2026-07-11T04:53:45.732Z'
 notes:
   - kind: verified
     text: >-
-      Verified: full Go suite + 365 vitest green; end-to-end puzzle init/build/dev
-      exercised ({#svg} inlined vnode in bundle, .svg-edit live reload, missing-file recovery
-      covered by build/watch tests).
+      Verified: full Go suite + 365 vitest green; end-to-end puzzle init/build/dev exercised ({#svg}
+      inlined vnode in bundle, .svg-edit live reload, missing-file recovery covered by build/watch
+      tests).
+  - kind: gotcha
+    text: >-
+      A resolved `{#svg}` vnode (string children) and an authored `<svg>` (array children) sharing
+      one conditional position are a replacement boundary, not a patch — `sameNode` compares child
+      ownership since the 0.7.0 final review. Before that, toggling from the seed to the markup
+      branch threw inside `patchChildren` and routed the view through the error-view path, and the
+      reverse direction overwrote the authored subtree via innerHTML without releasing its refs or
+      `outside` listeners. Authored SVG `<text>` elements also render now (the runtime disambiguates
+      them from the text-node marker by the absence of a `value` attr), so the HTML-overlay
+      workaround the pieces chart components carry for axis labels is no longer needed.
 code_refs:
   - client-runtime/views/viewManager.js
   - client-runtime/ssg/serialize.js

@@ -171,6 +171,43 @@ describe('ViewManager — inline SVG (string children)', () => {
 		});
 	});
 
+	// A `{#svg}` seed and an authored <svg> at the SAME position — the two branches
+	// of one `{#if}`, arity-padded to the same index — share a tag but not their
+	// child OWNERSHIP: string children are innerHTML-seeded and island-owned, array
+	// children are reconciled. sameNode treats the flip as a replacement boundary in
+	// both directions (patching string→array used to throw in patchChildren; the
+	// other direction overwrote via innerHTML without releasing the array side).
+	it('replaces (never patches) when a position flips between a seed and authored markup', () => {
+		const { container, vm } = setup();
+		const ref = vi.fn();
+
+		// Authored markup first, with an element ref on the array side.
+		vm.render(h('svg', { class: 'a' }, [h('circle', { cx: '1', cy: '1', r: '1', ref })]));
+		const authored = container.firstChild;
+		expect(authored.querySelector('circle')).not.toBeNull();
+		expect(ref).toHaveBeenCalledTimes(1);
+		expect(ref.mock.calls[0][0]).not.toBeNull();
+
+		// Flip to the seed: replacement, and the array side's ref is released.
+		expect(() => vm.render(svg({ class: 'b' }, '<path d="M1 1h14"></path>'))).not.toThrow();
+		const seeded = container.firstChild;
+		expect(seeded).not.toBe(authored);
+		expect(seeded.innerHTML).toBe('<path d="M1 1h14"></path>');
+		expect(seeded.getAttribute('class')).toBe('b');
+		expect(ref).toHaveBeenCalledTimes(2);
+		expect(ref.mock.calls[1][0]).toBeNull();
+
+		// And back: string → array is the direction that used to throw.
+		expect(() =>
+			vm.render(h('svg', { class: 'c' }, [h('circle', { cx: '2', cy: '2', r: '2' })]))
+		).not.toThrow();
+		const back = container.firstChild;
+		expect(back).not.toBe(seeded);
+		expect(back.querySelector('path')).toBeNull();
+		expect(back.querySelector('circle').getAttribute('cx')).toBe('2');
+		expect(back.getAttribute('class')).toBe('c');
+	});
+
 	it('unmounts cleanly and a remount re-seeds from the string', () => {
 		const { container, vm } = setup();
 		// Toggle the inline SVG in and out of a keyed list to force unmount/remount.

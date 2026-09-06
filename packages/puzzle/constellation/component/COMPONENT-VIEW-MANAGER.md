@@ -65,6 +65,20 @@ notes:
       destroy() — the 0.6.0 timing, and the timing every non-animating removal already had. Keep the
       gate first in the condition: it is the cheap check and it is the one that preserves
       synchronous teardown.
+  - kind: gotcha
+    text: >-
+      `isText` is `tag === 'text' && 'value' in attrs`, not the bare tag test: an authored SVG
+      `<text>` element compiles to the same `'text'` tag (codegen has no reservation) and used to be
+      silently mounted, patched and serialized as an empty text node — every element, attr and child
+      dropped, with only an "undefined template value" warning. The `value` attr is the
+      discriminator because the text-node marker always carries it and SVG `<text>` never does
+      (`in`, not `!== undefined`, so interpolating `undefined` stays a text node). `sameNode`
+      identity now also includes `isText` and child ownership (`typeof children === 'string'`): a
+      `{#svg}` seed and authored `<svg>` markup at the same position are a replacement in both
+      directions (string→array used to throw `oldChildren.some is not a function` inside
+      patchChildren and mark the tree unknown; array→string overwrote via innerHTML without
+      releasing refs/outside listeners), exactly like the `island` flip. Pinned by
+      `tests/svg-text-element.test.js` and the seed↔markup case in `tests/inline-svg.test.js`.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

@@ -987,10 +987,22 @@ function sameNode(a, b) {
 	// corrupt further. Making the flip a REPLACEMENT unmounts and remounts cleanly in
 	// both directions. Components and text vnodes never carry `island` (it is rejected
 	// on components), so neither side of this test moves for them.
+	//
+	// Two more ownership flips, for the same reason. A `{#svg}` SEED carries STRING
+	// children (innerHTML-owned, never reconciled) while authored markup carries an
+	// array, so a position flipping between them is a replacement boundary in both
+	// directions — patching string→array reaches patchChildren with a string and
+	// throws, and array→string would overwrite via innerHTML without releasing the
+	// array side's refs and `outside` listeners. And the tag `'text'` is shared by a
+	// text-node vnode and the authored SVG `<text>` element (ViewNode.isText tells
+	// them apart by the `value` attr): a flip pairs a DOM text node with an element
+	// patch, so that too is a replacement.
 	return (
 		a.tag === b.tag &&
 		(a.key === b.key || (a.key !== a.key && b.key !== b.key)) &&
-		('island' in a.attrs) === ('island' in b.attrs)
+		('island' in a.attrs) === ('island' in b.attrs) &&
+		(typeof a.children === 'string') === (typeof b.children === 'string') &&
+		a.isText === b.isText
 	);
 }
 
