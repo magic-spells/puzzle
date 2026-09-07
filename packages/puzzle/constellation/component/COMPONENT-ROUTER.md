@@ -87,6 +87,16 @@ notes:
       failed-POP URL-repair path after a redirect only ever fires for the pop (replace) case. Pinned
       by `tests/router.test.js` (push redirect + pop redirect siblings) and
       `tests/router-memory.test.js`.
+  - kind: state
+    text: >-
+      0.7.0 size cleanups: `#syncHead` is now `syncTitle(resolveHeadField(entry.chain, 'title'))` —
+      one field, one chain walk, because D111 made the other three head fields build-time only;
+      `resolveHead`/`HEAD_FIELDS` remain the SSG's entry point and tree-shake out of app bundles
+      (the body's `syncTitle(resolveHead(entry.chain))` wording is the pre-cleanup shape). The three
+      route-table constructor errors (`modesImport`, the loader-function and compiled-out-marker
+      throws in `validateRouteView`) keep their diagnosis in production and build their how-to-fix
+      tails only behind the inline `__PUZZLE_DEV__` probe, the `metadataTagError` split; `lazy()
+      support was compiled out` stays verbatim in both forms.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

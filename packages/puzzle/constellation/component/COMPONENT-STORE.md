@@ -72,6 +72,16 @@ notes:
       probe is built inside the `__PUZZLE_DEV__` gate so production allocates neither.
       `_pendingKeys` is a Map now, so anything sampling it (client-runtime/testing/settled.js,
       devperf) must iterate `.keys()`. Function subscribers still receive no argument.
+  - kind: state
+    text: >-
+      0.7.0 size cleanups: the constructor's dev-only registration guards (reserved `__synced`
+      field, method-name schema entries via model.js `assertSchemaNames`) live in one module-level
+      `assertModelSchemas(models)`, called from the `__PUZZLE_DEV__`-gated constructor line, and NOT
+      in `Store` methods — esbuild never removes class members, so the former
+      `_assertNoReservedFields` / `_assertNoMethodFields` methods shipped their bodies and the two
+      longest message literals in every production bundle. Throw order is unchanged (reserved field
+      first). The relationship-setter warn-once carries the same probe. Production behavior is
+      identical: the runtime `assignSkipping` protection is what guards payloads there.
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

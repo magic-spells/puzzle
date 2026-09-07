@@ -59,7 +59,7 @@ const specExtraWarnings = new WeakMap();
 export function playAnimation(el, spec, { reducedMotion = false, release = false, paused = false } = {}) {
 	// Malformed spec → warn once, instant-finish. Rendering must never break.
 	if (!isValidSpec(spec)) {
-		warnOnce(spec);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnOnce(spec);
 		return instantFinish();
 	}
 

@@ -152,7 +152,7 @@
  * `transitionMode` is resolvable at three tiers, most specific first —
  * (1) a `transitionMode` field on a route/child-route definition, nearest-defined
  * walking the DESTINATION chain leaf → root (#resolveTransitionMode, the same
- * walk #syncHead's resolveHead uses per meta head field); (2) a `transitionMode` field on the
+ * walk #syncHead's resolveHeadField uses for meta.title); (2) a `transitionMode` field on the
  * incoming animator's VIEW or LAYOUT class (colocated with `animations` — layouts
  * qualify too, they are PuzzleView subclasses); (3) this constructor's
  * `transitionMode` option as the app-level default. Resolution is
@@ -275,7 +275,7 @@
  */
 
 import { ViewNode } from '../views/ViewNode.js';
-import { resolveHead, syncTitle } from '../head.js';
+import { resolveHeadField, syncTitle } from '../head.js';
 import {
 	findShadowedPaths,
 	isDynamicSegment,
@@ -497,8 +497,14 @@ export class Router {
 		// path-mode app stops shipping code it never runs. Fail fast and name the
 		// import — silently ignoring 'hash' would route the whole app wrong.
 		if (mode != null) {
+			// The how-to-fix tail is dev-only (the metadataTagError split in
+			// views/ViewNode.js): a `new Router()` misconfiguration is caught the
+			// first time the app runs, so production keeps only the diagnosis and
+			// the ~189-char fix-it prose is DCE'd out of the bundle.
 			const modesImport =
-				" — path routing is the default (omit it); for hash or memory routing import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes' and pass e.g. routerMode: hashRouter()";
+				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
+					? " — path routing is the default (omit it); for hash or memory routing import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes' and pass e.g. routerMode: hashRouter()"
+					: '';
 			if (typeof mode !== 'object' || typeof mode.create !== 'function') {
 				// 'object' is the only typeof here that takes 'an' (strings are named
 				// outright, and number/boolean/function/symbol/bigint all take 'a').
@@ -2820,10 +2826,13 @@ export class Router {
 	}
 
 	/**
-	 * Title sync (D84, v1.50 — subsumes the pre-D84 #setTitle): resolve the
-	 * reserved meta fields from the destination chain — head.js resolveHead, the
-	 * same nearest-defined leaf→root walk #setTitle performed for meta.title
-	 * alone — and assign document.title. Runs inside #commitLocation, so D61
+	 * Title sync (D84, v1.50 — subsumes the pre-D84 #setTitle): resolve `title`
+	 * from the destination chain — head.js resolveHeadField, the same
+	 * nearest-defined leaf→root walk #setTitle performed for meta.title alone —
+	 * and assign document.title. ONLY `title` is resolved here: the other three
+	 * reserved fields are build-time only (D111 below), so the browser walks the
+	 * chain once, not four times, and resolveHead/HEAD_FIELDS stay behind in the
+	 * SSG's half of head.js. Runs inside #commitLocation, so D61
 	 * atomicity covers it exactly as it covered the title: a failed or superseded
 	 * navigation never touches it. Title semantics stay byte-compatible: only a
 	 * non-null resolved title assigns document.title (see resolveHead's asymmetry
@@ -2842,7 +2851,7 @@ export class Router {
 		// rename the host page's tab or edit the host <head> — document-level side
 		// effects like the URL.
 		if (this.#mode?.urlless) return;
-		syncTitle(resolveHead(entry.chain));
+		syncTitle(resolveHeadField(entry.chain, 'title'));
 	}
 
 	#handlePopState() {
@@ -3160,18 +3169,28 @@ function validateRouteView(value, label) {
 	if ((typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) && isLazyView(value)) {
 		return;
 	}
+	// Both throws keep their DIAGNOSIS in production and drop only the
+	// how-to-fix tail behind __PUZZLE_DEV__ (the metadataTagError split in
+	// views/ViewNode.js) — a route-table shape error fires on the first run in
+	// dev, never for the first time in a shipped app. The D89 phrase
+	// "lazy() support was compiled out" stays in BOTH forms: it is the
+	// presence assertion the Go build tests make against the bundle.
 	if (typeof value === 'function') {
 		throw new Error(
-			`[puzzle] ${label} must be a PuzzleView class, not a loader function — ` +
-				"wrap dynamic imports with lazy(() => import('./views/Page.pzl'))"
+			`[puzzle] ${label} must be a PuzzleView class, not a loader function` +
+				(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
+					? " — wrap dynamic imports with lazy(() => import('./views/Page.pzl'))"
+					: '')
 		);
 	}
 	throw new Error(
 		`[puzzle] ${label} must be a PuzzleView class or lazy() marker (got ${describeValue(value)})` +
 			(typeof __PUZZLE_HAS_LAZY__ !== 'undefined' && !__PUZZLE_HAS_LAZY__
-				? ' — lazy() support was compiled out because the build scan found no lazy() ' +
-					'in project source (it does not scan files outside the project root, ' +
-					'node_modules, or build output)'
+				? ' — lazy() support was compiled out' +
+					(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
+						? ' because the build scan found no lazy() in project source (it does not ' +
+							'scan files outside the project root, node_modules, or build output)'
+						: '')
 				: '')
 	);
 }

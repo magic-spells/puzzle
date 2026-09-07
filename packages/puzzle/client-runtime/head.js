@@ -51,13 +51,18 @@ export const HEAD_FIELDS = ['title', 'description', 'canonical', 'socialImage'];
 export function resolveHead(chain) {
 	const out = {};
 	for (const field of HEAD_FIELDS) {
-		out[field] = resolveField(chain, field);
+		out[field] = resolveHeadField(chain, field);
 	}
 	return out;
 }
 
-/** Nearest-defined `meta[field]` leaf→root; `undefined` keeps walking, `null` stops it (suppression). */
-function resolveField(chain, field) {
+/**
+ * Nearest-defined `meta[field]` leaf→root; `undefined` keeps walking, `null` stops it (suppression).
+ * Exported because the browser router resolves ONE field (`title`) per
+ * navigation — resolveHead and HEAD_FIELDS are the SSG's entry point and
+ * tree-shake out of app bundles.
+ */
+export function resolveHeadField(chain, field) {
 	// Uniform for ALL reserved fields (title included): `undefined`/absent keeps
 	// climbing toward the root (inherit), an explicit `null` is a DEFINED value
 	// that TERMINATES the walk and suppresses any inherited value (D84 §45). A
@@ -73,8 +78,8 @@ function resolveField(chain, field) {
 }
 
 /**
- * Browser-only: sync `document.title` to a resolved head. This is the ONLY head
- * work the runtime performs — every routed app assigns its tab title, and the
+ * Browser-only: sync `document.title` to a resolved title (resolveHeadField
+ * chain, 'title'). This is the ONLY head work the runtime performs — every routed app assigns its tab title, and the
  * managed og:/twitter:/description/canonical tags are emitted exclusively at
  * build time by the SSG injector (see headTags.js).
  *
@@ -83,8 +88,8 @@ function resolveField(chain, field) {
  * assignment mechanism is the pre-D84 #setTitle; only the null posture is now
  * uniform suppression rather than title-inherits — see resolveHead).
  *
- * @param {{ title: string|null }} resolved
+ * @param {string|null} title the resolved `title` field
  */
-export function syncTitle(resolved) {
-	if (resolved.title != null) document.title = String(resolved.title);
+export function syncTitle(title) {
+	if (title != null) document.title = String(title);
 }

@@ -127,14 +127,18 @@ resolution rules and identity-marked managed tags.**
 ## Delivery: managed tags are build-time only
 
 The feature is split across two modules on a real seam. `head.js` holds the
-pure resolver (`resolveHead`/`resolveField`, the uniform null-suppression walk
-above) plus the one-line `syncTitle`, and is the only half the browser runs.
-`headTags.js` owns the `MANAGED_TAGS` table, and its sole consumer is the SSG
-string injector (`ssg/index.js`), which reads it under Node at prerender time
+pure resolver (`resolveHead`/`resolveHeadField`, the uniform null-suppression
+walk above) plus the one-line `syncTitle(title)`, and is the only half the
+browser runs. `headTags.js` owns the `MANAGED_TAGS` table, and its sole
+consumer is the SSG string injector (`ssg/index.js`), which reads it under Node
+at prerender time
 ([[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]], [[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
 The router's `#syncHead` therefore does exactly
-`syncTitle(resolveHead(entry.chain))` and nothing more, and no browser bundle
-in any output mode contains `headTags.js` — plain tree-shaking, no build gate.
+`syncTitle(resolveHeadField(entry.chain, 'title'))` and nothing more — only
+`title` is resolved in the browser, one chain walk per navigation, so
+`resolveHead` and `HEAD_FIELDS` are reachable only from the SSG and drop out of
+app bundles — and no browser bundle in any output mode contains `headTags.js`:
+plain tree-shaking, no build gate.
 
 The reason there is one delivery path rather than two: crawlers and unfurlers
 GET each URL fresh and never client-navigate, so the tags baked into a page are

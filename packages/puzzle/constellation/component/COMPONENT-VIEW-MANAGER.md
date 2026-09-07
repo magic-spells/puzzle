@@ -79,6 +79,15 @@ notes:
       patchChildren and mark the tree unknown; array→string overwrote via innerHTML without
       releasing refs/outside listeners), exactly like the `island` flip. Pinned by
       `tests/svg-text-element.test.js` and the seed↔markup case in `tests/inline-svg.test.js`.
+  - kind: state
+    text: >-
+      0.7.0 size cleanups: the duplicate-key detector in `patchKeyedChildren` (`seenNewKeys:
+      Map<tag, Set<rawKey>>` + `warnDuplicateKey`) is dev-only — lazily allocated behind the inline
+      `__PUZZLE_DEV__` probe, so a production keyed patch allocates neither the Map nor its Sets and
+      the helper plus its once-state tree-shake away (before this, `Drop: console` stripped the warn
+      call but the bookkeeping ran on every keyed patch with no reader). `ViewNode.keyOf`'s
+      `warnNullKey` and animate.js's `warnOnce` / PuzzleView's six `warnOnceForSpec` sites carry the
+      same probe. `oldKeyed` is unchanged and still production.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
