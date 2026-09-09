@@ -122,6 +122,22 @@ notes:
       an event-ordering problem — rAF does not fire in a hidden tab, so a parent-driven `open`
       stalls; fix the ordering upstream (select-dropdown 0.3.0 defers its own outside-click
       listener) and call `show()`/`hide()` synchronously.
+  - kind: state
+    text: >-
+      2026-09-08/09: every upstream component the 0.7.0 wrappers depend on is now PUBLISHED —
+      collapsible-content 1.2.0, dropdown-panel 2.1.0, panel-stack 0.2.0, quantity-input 1.1.0,
+      scrolling-content 2.1.0, select-dropdown 0.3.0, split-panel 0.2.0, tab-group 1.2.0.
+      demo/package.json now installs all eight from npm as caret ranges instead of
+      `file:../../../../../open-sourcery/<name>` machine-local paths (one of which,
+      select-dropdown-wt, pointed at a deleted worktree). That closes this card's own gotcha "the
+      demo pins some wrappers to file:../../<repo>, so a green demo build does not prove the npm
+      tarball works": the demo build now IS the npm-tarball smoke test — `npm ci && npm run build`
+      in demo/ resolves the published tarballs and their `/css` export subpaths, and the built
+      bundle carries the version-gating markers (collapsible-group, dropdown-panel open-delay,
+      select-dropdown:change, panel-stack:push/pop). The only remaining working-tree link in the
+      demo is `@magic-spells/puzzle: file:../../puzzle`, which is deliberate. Practical effect: CI
+      and any fresh clone can build the demo; a wrapper can no longer go green against an
+      unpublished local checkout.
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work

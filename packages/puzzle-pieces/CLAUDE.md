@@ -102,7 +102,10 @@ The PATCH digit is the registry's own: a piece bugfix publishes as e.g. 0.6.1
 Only major.minor moves in lockstep with the framework.
 
 The demo's `@magic-spells/puzzle` dependency is `file:../../puzzle` — the monorepo working
-tree — so there is no framework range to bump at release.
+tree — so there is no framework range to bump at release. It is the **only** working-tree
+link: every `@magic-spells/*` web component the wrapper pieces need installs from npm at
+its published version (caret range), so `npm ci` in `demo/` works on any machine and the
+demo build exercises the same tarballs a consumer gets.
 
 `registry/registry.json`'s `"version": 1` is the manifest SCHEMA version read by the `add`
 CLI — it is unrelated and must not be bumped along with the release.
