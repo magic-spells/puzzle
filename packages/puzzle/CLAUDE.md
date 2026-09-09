@@ -58,8 +58,10 @@ enforced, not merely advised.
 - Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
   `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
   (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), `0.4.0`
-  (2026-07-28), and **`0.5.0` (2026-08-07, the current `latest`)** are live on
-  npm (all five packages, MIT, manual publish via
+  (2026-07-28), `0.5.0` (2026-08-07), `0.6.0` (2026-08-15), and **`0.7.0`
+  (2026-09-09, the current `latest`)** are live on
+  npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
+  manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
   shipped in `0.3.0` — minor, not patch: two new export subpaths (`./testing`,
   `./fixtures`) plus breaking changes in D110/D111/D112. **`0.3.0` is published
@@ -108,11 +110,10 @@ enforced, not merely advised.
   (wrap `<Portal>` in a root element; documented in D144), and the D76 change
   that points `puzzle upgrade` at the running CLI rather than the cwd. Cards
   truthed through D149.
-- **`0.6.0` (2026-08-15, published and `verify:published`-clean — the current
-  `latest`;** registry metadata pins all four platform packages, a temp-dir
+- **`0.6.0` (2026-08-15, published and `verify:published`-clean;** registry
+  metadata pins all four platform packages, a temp-dir
   install runs `puzzle version 0.6.0`, and a fresh-app `puzzle add piece`
-  resolves `npm:@magic-spells/puzzle-pieces@0.6.0`; the `main` merge and tag
-  are pending — Cory does both): D150 `{#raw}` static raw template
+  resolves `npm:@magic-spells/puzzle-pieces@0.6.0`): D150 `{#raw}` static raw template
   block; the pieces npm transport (a D32 amendment, not a new card — default
   registry is `npm:@magic-spells/puzzle-pieces` resolved to the CLI's
   major.minor, older-only fallback with a printed notice, `--pieces-version`
@@ -155,8 +156,15 @@ enforced, not merely advised.
   profile pointing at the pieces registry — now
   `packages/puzzle-pieces/registry` in this monorepo; unset it when smoke-testing
   the npm transport.
-- **`0.7.0` (in progress on `release/0.7.0`, NOT yet published — Cory tags and
-  publishes):** D161 auto-fetching finds (BREAKING — a tracked
+- **`0.7.0` (2026-09-09, published and `verify:published`-clean — the current
+  `latest`;** registry metadata pins all five platform packages including the
+  NEW `@magic-spells/puzzle-win32-x64` — the first Windows release — a temp-dir
+  install runs `puzzle version 0.7.0`, and a fresh-app `puzzle add piece`
+  resolves `npm:@magic-spells/puzzle-pieces@0.7.0`. A fresh-app smoke went
+  further: `puzzle init` + `add piece accordion` +
+  `@magic-spells/collapsible-content` 1.2.0 builds with the component bundled.
+  Tagged `v0.7.0`, `release/0.7.0` merged to `main` via PR #130, GitHub release
+  notes posted): D161 auto-fetching finds (BREAKING — a tracked
   `findOne`/`findMany` inside `data()` fetches what the store is missing and the
   view settles across fetch rounds; `store.loadAll` and the `loadAll` adapter
   verb are `loadMany` and every old spelling throws; generated read failures are
@@ -183,8 +191,32 @@ enforced, not merely advised.
   funnel in `PuzzleView`, and title-only head sync per navigation (the other
   three head fields stay SSG-only) — take production sizes to hello-world
   **20.8 KB gzip**, todos **23.8 KB gzip**; the README banner matches (the size
-  scripts only check the banner; the README line is edited by hand). Cards
-  truthed through D168; the next free decision number is D169.
+  scripts only check the banner; the README line is edited by hand). The sizes
+  are unchanged by the four late fixes that landed after the review round: the
+  router guard self-redirect hang and D168 completed at control-flow boundaries
+  (PR #127), the Tailwind stderr diagnostic (#128), and the pieces demo's npm
+  dependencies (#129). Cards truthed through D168; the next free decision
+  number is **D170** (D169 is the 0.7.1 registry version floors).
+  **Publish prerequisite, learned the hard way:** eight upstream web components
+  had to be published to npm *before* 0.7.0 could ship, because the D167
+  families were built against unpublished local versions and the pieces
+  registry declares bare dependency names that resolve to npm `latest` —
+  collapsible-content 1.2.0, dropdown-panel 2.1.0, tab-group 1.2.0,
+  select-dropdown 0.3.0, split-panel 0.2.0, panel-stack 0.2.0,
+  scrolling-content 2.1.0, and quantity-input 1.1.0. The pieces demo now
+  installs them from npm rather than local `file:` paths (PR #129). A registry
+  version-floor mechanism closes the gap as D169 (0.7.1); until it lands,
+  treat "every web component a piece depends on is published at the version the
+  piece was built against" as a hard release gate.
+- **`0.7.1` (in progress on `release/0.7.1`, NOT yet published — Cory tags and
+  publishes):** four items — post-release release-state truthing (this file,
+  `plan.md`, and the release cards recording 0.7.0 as shipped); the user
+  guide's Quick Start switching to `npm install -g @magic-spells/puzzle` +
+  `puzzle init` (the unpublished `create-puzzle-app` wrapper is retired per
+  D77, and `puzzle init` is the only onboarding path); **D169** registry
+  version floors, so a piece can declare the minimum version of each web
+  component it needs instead of trusting npm `latest`; and a D76 amendment to
+  the update notice.
 - Product line: v1 through v1.80 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
@@ -285,11 +317,17 @@ that versions in lockstep with the framework is a sibling under `packages/`:
 
 Each package keeps its own npm install and lockfile — there are deliberately
 no npm workspaces (editing any package's dependencies means regenerating its
-lockfile, or `npm ci` hard-fails). The editor grammars
-(puzzle-vscode/sublime/zed) stay in separate repos — their distribution
-channels are repo-shaped — so when the template grammar changes, sweep them
-as part of the release checklist. The absorbed puzzle-pieces and
-puzzle-devtools repos are archived on GitHub, never deleted.
+lockfile, or `npm ci` hard-fails). The three editor grammars
+(puzzle-vscode/sublime/zed) stay in separate repos and are **not part of the
+npm release train**: each is **dev-install only** — cloned and linked into the
+editor by hand, never published to a marketplace — and each is **versioned
+independently** of the framework (all three are stamped `0.3.0` on their own
+`release/0.3.0` branches; puzzle-sublime is tagged `v0.3.0`). Because they
+carry their own copy of the template grammar, sweep all three whenever the
+grammar changes; the 0.7.0 sweep added dotted tags, `<Snippet>`, and the
+`\{` / `\}` brace escape in text and attribute values, and merged to `main` in
+each repo. The absorbed puzzle-pieces and puzzle-devtools repos are archived on
+GitHub, never deleted.
 
 ## Architecture at a glance
 

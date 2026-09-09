@@ -19,17 +19,37 @@ Complete guide to building applications with the Puzzle Framework - from project
 
 ## Quick Start
 
-> **`puzzle init` scaffolds a new app today** (v1.4, D32 — see [[DOC-SPEC]] §13):
-> `puzzle init my-app --template default` (or `--template todos`). The
-> `npx @magic-spells/create-puzzle-app` wrapper shown below is a thin convenience
-> over it and is **not yet published to npm** — until it is, use `puzzle init`,
-> or work inside an in-repo reference app (`examples/todos/` or `examples/blog/`)
-> and run `puzzle dev`.
+
+Install the `puzzle` CLI once — a prebuilt Go binary, no JavaScript toolchain
+needed:
 
 ```bash
-npx @magic-spells/create-puzzle-app my-app
+npm install -g @magic-spells/puzzle
+```
+
+Then scaffold and run a new app:
+
+```bash
+puzzle init my-app
 cd my-app
-npm run dev
+npm install
+
+puzzle dev     # develop with live reload
+puzzle build   # build for production
+```
+
+> `puzzle init` (v1.4, D32 — see [[DOC-SPEC]] §13) is the **only** onboarding
+> path; `--template default` or `--template todos` picks the starter. There is
+> no `npx` wrapper: [[DECISION-D77-INIT-PROMPTS]] rejected a separate
+> `create-puzzle-app` package, and the local draft was deleted 2026-09-09.
+> To work against the framework's own reference apps instead, use
+> `examples/todos/` or `examples/blog/` and run `puzzle dev` inside one.
+
+To add Puzzle to an existing project, one dev dependency gives you both the
+client runtime and the CLI:
+
+```bash
+npm install -D @magic-spells/puzzle
 ```
 
 ---

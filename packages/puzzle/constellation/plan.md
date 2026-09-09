@@ -85,12 +85,37 @@ decision cards explain why the contract has its current shape.
   with `@event:outside` logical containment, Portal slide-over vs native
   `<dialog>` modal); its dogfooding pass produced the Portal
   component-root steering error (wrapper idiom documented in D144).
-- **`0.6.0` is PUBLISHED** (2026-08-15, the current `latest`):
+- **`0.6.0` is PUBLISHED** (2026-08-15):
   [[DECISION-D150-RAW-TEMPLATE-BLOCK]] adds the static
   `{#raw}…{/raw}` lex-off block for author-written braces while preserving
   ordinary HTML parsing and the existing parent-aware SSG RAWTEXT policy;
   the pieces npm transport; the D151–D156 build/dev performance round; the
   errorView amendment; and D157–D160 (below).
+- **`0.7.0` is PUBLISHED** (2026-09-09, the current `latest`,
+  `verify:published`-clean, tagged `v0.7.0`, merged to `main` via PR #130):
+  [[RELEASE-V0-7-0]] carries the full theme and outcome. Registry metadata
+  pins all five platform packages, including the NEW
+  `@magic-spells/puzzle-win32-x64` — the **first Windows release**; a temp-dir
+  install runs `puzzle version 0.7.0` and a fresh-app `add piece` resolves
+  `npm:@magic-spells/puzzle-pieces@0.7.0`. A fresh-app smoke (`puzzle init` +
+  `add piece accordion` + `@magic-spells/collapsible-content` 1.2.0) builds
+  with the component bundled. **The publish had a prerequisite nothing
+  checked:** eight upstream web components had to go out first, because the
+  D167 families were built against unpublished local versions and a piece
+  manifest declares bare dependency names that npm resolves to `latest` —
+  collapsible-content 1.2.0, dropdown-panel 2.1.0, tab-group 1.2.0,
+  select-dropdown 0.3.0, split-panel 0.2.0, panel-stack 0.2.0,
+  scrolling-content 2.1.0, quantity-input 1.1.0. The pieces demo now installs
+  them from npm (PR #129), and registry version floors close the gap as D169 in
+  0.7.1. Four late fixes landed after the review round without moving the size
+  figures: the router guard self-redirect hang and D168 completed at
+  control-flow boundaries (PR #127), the Tailwind stderr diagnostic (#128), and
+  the pieces demo's npm dependencies (#129).
+- **`0.7.1` is IN PROGRESS** on `release/0.7.1` ([[RELEASE-V0-7-1]]): a patch
+  release with no new framework surface — post-release release-state truthing,
+  the user guide's Quick Start moving to `npm install -g @magic-spells/puzzle`
+  + `puzzle init` (the `create-puzzle-app` wrapper is retired per D77), D169
+  registry version floors, and a D76 amendment to the update notice.
 - **0.6 errorView amendment (v1.71, breaking):**
   [[DECISION-D145-ERROR-BOUNDARIES]] rewritten — error fallback UI is one
   app-level `errorView` compiled view with `{ error, info, retry }` props;
@@ -113,9 +138,9 @@ decision cards explain why the contract has its current shape.
   `dist/chunks/` behind `build: { splitting: true }` — default off, forced off
   in static mode, pruned across dev rebuilds — and add a per-dependency
   composition report to the build size banner.
-- **Current 0.7 data work (v1.76):** [[DECISION-D161-AUTO-FETCHING-FINDS]] —
+- **0.7.0 data work (v1.76):** [[DECISION-D161-AUTO-FETCHING-FINDS]] —
   tracked finds fault in missing data; the settle loop commits complete passes.
-- **Current 0.7 routing work (v1.77):** [[DECISION-D163-LAZY-ROUTE-VIEWS]] is
+- **0.7.0 routing work (v1.77):** [[DECISION-D163-LAZY-ROUTE-VIEWS]] is
   D160's phase 2 — `lazy(loader)` marks a route `view`/`layout` as on-demand,
   resolved after guards pass and before construction, in parallel across the
   matched chain. Fulfillment memoizes for the app's lifetime and rejection
@@ -124,7 +149,7 @@ decision cards explain why the contract has its current shape.
   `examples/blog` splits its `/settings` section behind `build.splitting`.
   The resolver rides the D89 gate (`__PUZZLE_HAS_LAZY__`), which is why the
   usage scan now reads the app's `.js`/`.ts` modules as well as its templates.
-- **Current 0.7 tooling work (v1.78):** [[DECISION-D165-PUZZLE-CHECK]] adds
+- **0.7.0 tooling work (v1.78):** [[DECISION-D165-PUZZLE-CHECK]] adds
   `puzzle check` — the first type checking Puzzle has ever had for `.pzl`
   script bodies and template expressions. It emits virtual files under
   `.puzzle/check/`, runs the app's OWN `tsc` as a subprocess, and remaps
@@ -132,7 +157,7 @@ decision cards explain why the contract has its current shape.
   Hard constraint honored by design: nothing is built on TypeScript 6-era
   compiler APIs (no Volar, no language service), so the CLI protocol is the
   whole interface — verified against tsc 4.9, 5.7, and 7.0.
-- **Current 0.7 composition work (v1.79):** [[DECISION-D166-SNIPPETS]] ships
+- **0.7.0 composition work (v1.79):** [[DECISION-D166-SNIPPETS]] ships
   snippets, the last item on the SPEC's deferred composition list. A caller
   declares `<Snippet fits="row" user group>…</Snippet>` inside a component
   invocation (bare attributes are parameter declarations) and the component
@@ -142,7 +167,7 @@ decision cards explain why the contract has its current shape.
   Known limitation at ship: a snippet does not yet forward through a wrapper
   component's `<Children/>` into a nested component (D71 carries plain content
   only).
-- **Current 0.7 component work (v1.80):**
+- **0.7.0 component work (v1.80):**
   [[DECISION-D167-COMPONENT-FAMILIES]] — a component tag is validated as a
   member path `Ident('.'Ident)*` and a dotted tag (`<Frame.Wrapper>`) emits
   that member expression verbatim, resolved lexically like any component. A
@@ -167,10 +192,12 @@ decision cards explain why the contract has its current shape.
 - **Monorepo (0.7.0):** [[DECISION-D162-MONOREPO-PACKAGES]] — the repo root is
   a private shell; the framework lives at `packages/puzzle` beside
   puzzle-pieces, puzzle-devtools, puzzle-eslint, and puzzle-prettier, all
-  carrying the framework version; grammars stay in their own repos; absorbed
-  repos are archived, never deleted.
+  carrying the framework version; grammars stay in their own repos, dev-install
+  only and independently versioned (all three stamped `0.3.0`); absorbed repos
+  are archived, never deleted.
 - **Playground compiler Phase 1:** [[FEATURE-PLAYGROUND-WASM-COMPILER]] / [[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]] adds the esbuild-free parser+codegen WASM module, its synchronous JS globals, the pinned worker envelope, filesystem-free asset diagnostics, and size/dependency/smoke gates. The worker and UI remain later phases.
-- The next free decision number is D169.
+- The next free decision number is D170 (D169 is 0.7.1's registry version
+  floors, written by a separate lane).
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
@@ -357,6 +384,7 @@ makes an open-ended `is={}` real design work, not sugar.)
 
 ### Contracts and release truth
 
+
 - [[DOC-SPEC]] — frozen public contract; every amendment requires a decision.
   Now the section index over six domain cards; `§N` numbers never move.
   - [[DOC-SPEC-ANATOMY]] — naming, config, `.pzl` anatomy, real-JS scripts,
@@ -373,6 +401,9 @@ makes an open-ended `is={}` real design work, not sugar.)
     errors, `/testing`, `--fixtures`, the DevTools bridge.
 - [[DOC-RELEASE-SURFACE]] — complete, compact shipped-surface inventory.
 - [[DOC-BUILD-PLAN]] — v1 implementation plan and release-phase status.
+- Release milestones — theme, outcome, and upgrade notes per version:
+  [[RELEASE-V0-6-0]], [[RELEASE-V0-7-0]] (the published `latest`), and
+  [[RELEASE-V0-7-1]] (in progress).
 
 ### Runtime components
 

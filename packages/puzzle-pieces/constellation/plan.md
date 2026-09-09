@@ -69,14 +69,35 @@ component where possible, a native rebuild otherwise) — follows from it. See
 
 ## Current state
 
+
 All 97 pieces are built, compile-verified against the real compiler, and demo-verified.
 The [[FEATURE-ADD-CLI]] shipped in the Puzzle Go CLI (`puzzle add piece`).
 [[RELEASE-V0-1-0]] records the first publish (2026-07-22, the repo going public); since
 then the registry itself ships as the npm package `@magic-spells/puzzle-pieces`, which
 `puzzle add piece` resolves by default and which is **version-locked to the framework's
 major.minor** — so this package's version must equal the framework's exactly, and the
-matching pieces release must publish at or before the CLI release. `0.6.0` is the current
-`latest` on npm; the tree is stamped `0.7.0` and unpublished.
+matching pieces release must publish at or before the CLI release.
+
+**`0.7.0` is live on npm and is the current `latest`,** published 2026-09-09 alongside
+framework 0.7.0. The version-locked transport is verified end to end: the framework's
+`verify:published` asserts `@magic-spells/puzzle-pieces` exists at the EXACT framework
+version, then scaffolds an app with the installed CLI and confirms `add piece` resolves
+`npm:@magic-spells/puzzle-pieces@0.7.0` — with `PUZZLE_PIECES_REGISTRY` deleted from the
+child env, so local registry files cannot satisfy the check, and with the
+compatibility-fallback notice treated as a failure. A fresh-app smoke went further:
+`puzzle init`, then `add piece accordion`, then `@magic-spells/collapsible-content`
+1.2.0, builds with the web component bundled.
+
+**Publishing lesson from that release, still unfixed in the registry format:** a
+`piece.json` declares its web-component dependencies by **bare name**, so npm resolves
+them to `latest`. The 0.7.0 families were authored against unpublished local versions,
+which meant eight upstream components had to be published by hand before the release
+could go out at all — collapsible-content 1.2.0, dropdown-panel 2.1.0, tab-group 1.2.0,
+select-dropdown 0.3.0, split-panel 0.2.0, panel-stack 0.2.0, scrolling-content 2.1.0,
+quantity-input 1.1.0 — and the demo's own `file:` paths swapped to npm. Until registry
+version floors land as D169 in framework 0.7.1, treat "every web component a piece
+depends on is published at the version the piece was built against" as a hard release
+gate. See [[DECISION-WRAP-WEB-COMPONENTS]].
 
 This package lives at `packages/puzzle-pieces` inside the `magic-spells/puzzle`
 monorepo (framework decision D162), with its own npm install and lockfile — there are
