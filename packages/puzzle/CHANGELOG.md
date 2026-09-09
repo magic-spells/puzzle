@@ -223,7 +223,13 @@ one is *not* a compile error; it silently builds a different product.
   invocation nested inside the body. Nest by extracting: move that invocation
   and its snippet into their own component, whose template declares the marker
   at top level. (`<Portal>` relocates DOM rather than declaring a composition
-  position, so it stays legal there.) `__PUZZLE_HAS_SNIPPETS__` leaves non-users
+  position, so it stays legal there.) Snippets forward through wrappers by the
+  same implicit rule D71 already applies to plain content: a bare `<Children/>`
+  inside a nested component invocation carries the caller's snippets along with
+  the default content, transitively through a wrapper chain, so a
+  `<Snippet fits="day">` handed to `DatePicker` reaches `Calendar`'s `day`
+  marker uninvoked. An args-bearing marker stamps locally and never forwards; a
+  wrapper may do both. `__PUZZLE_HAS_SNIPPETS__` leaves non-users
   at zero bytes and costs users about 48–60 B gzip (roughly 50 B).
 
 - **The playground has a parser-and-codegen WebAssembly compiler core (D164).**
@@ -304,7 +310,9 @@ one is *not* a compile error; it silently builds a different product.
 
 - **Runtime size cleanups.** Five behavior-preserving cleanups take the
   production bundles from 21.9 KB to 20.8 KB gzip (hello-world) and from
-  24.8 KB to 23.8 KB (todos), about 4.8%. The last ungated warn-once
+  24.8 KB to 23.8 KB (todos), about 4.8% — so 0.7.0 lands at 20.8/23.8 against
+  0.6.0's 19.6/22.7, the settle loop and this release's other features net of
+  the cleanups. The last ungated warn-once
   diagnostics (animation specs, scroll-trigger options, null and duplicate list
   keys, the relationship setter) now sit behind the `__PUZZLE_DEV__` probe, so
   their message strings, once-state, and the per-patch duplicate-key
@@ -503,6 +511,16 @@ one is *not* a compile error; it silently builds a different product.
   destination's own entry, while a pop or first-load redirect still replaces
   the entry the browser already sits on. The denied URL never enters history
   either way.
+
+- **A guard whose verdict is the path it denies no longer hangs the
+  navigation.** Because a push redirect now re-enters through `push()`, a
+  verdict equal to the path being denied — the inherited-guard mistake, where a
+  guard on the parent bounces to `/login` and `/login` is a child that inherits
+  it — hit `push()`'s in-flight double-click guard and was handed the denied
+  navigation's own promise, so the redirect awaited itself and `router.push()`
+  never settled. A guard re-entry is now exempt from that guard, so the
+  self-redirect supersedes normally and trips the redirect-limit error at ten —
+  loud and diagnosable instead of silent.
 
 - **A guard redirect on first load no longer moves focus or announces.** The
   navigation-#0 focus skip keyed off the verb flags, but a redirect re-enters

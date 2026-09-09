@@ -6,8 +6,24 @@ connections:
   - DOC-SPEC-TEMPLATE
   - DOC-TEMPLATE-SYNTAX
   - FILE-CODEGEN
+notes:
+  - kind: gotcha
+    text: >-
+      The restored space stops at the text run, so a control-flow boundary still eats it — a known
+      limit, decision pending. `{#if}`/`{#for}`/`{#case}` nodes break the coalesced run, so a
+      stripped edge that borders one is a RUN EDGE and keeps the strip. `<p>\n  you have {n} new\n 
+      {#if x}message{/if}\n</p>` still compiles to `'new'` followed by the conditional and renders
+      "newmessage" — the same class of bug D168 set out to fix, one node type over. Confirmed by
+      compiling the case, not inferred. This is not a regression (both halves were wrong before
+      D168), but D168 made the behavior INCONSISTENT: `{a}\n{b}` now gets its space and
+      `{a}\n{#if}…{/if}` does not, which is harder to explain than the old uniform strip. Two ways
+      out when it is worth deciding: extend the pad so a stripped edge adjacent to a control-flow
+      sibling also restores one space (needs processChildren to carry the pad across the run break,
+      and would move goldens), or document the limit and tell authors to put the conditional on the
+      same line. Real-world reachable — text followed by a conditional word on the next line is
+      ordinary markup.
+    sha: b821e2c
 ---
-
 
 # D168 — text-run whitespace: one space at run-internal boundaries
 

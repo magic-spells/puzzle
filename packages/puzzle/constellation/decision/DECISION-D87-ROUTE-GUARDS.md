@@ -29,6 +29,23 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: gotcha
+    text: >-
+      Verb inheritance made a SELF-redirect deadlock, and `push()` needs an explicit exemption for
+      it. When the verdict is the very path being denied — the inherited-guard mistake, where a
+      guard on the parent bounces to '/login' and '/login' is a child that inherits it — the
+      redirect re-enters through `push()` while the denied navigation still owns `#pendingNavPath`.
+      `push()`'s in-flight double-click guard then matches and hands the redirect that navigation's
+      OWN `#pendingNavPromise`, so `#navigate`'s redirect branch awaits itself and the navigation
+      never settles: `await router.push(…)` hangs forever, the redirect never happens, and
+      `#pendingNavPath` stays set. `replace()` has no such guard, which is why the pre-inheritance
+      shape reached the redirect-limit cycle error instead. Fix: `push()` skips the in-flight
+      same-key guard while `#guardRedirecting` is set (it is set only around the redirect re-entry),
+      so the self-redirect supersedes normally and trips the limit at ten — loud and diagnosable.
+      Pinned by "a guard redirecting to the path it denies trips the limit instead of hanging" in
+      tests/router.test.js, which races the push against a timeout so a regression fails fast rather
+      than hanging the suite.
+    sha: b821e2c
 ---
 
 # D87 — route guards: the inherited `guard` route field (v1.53)

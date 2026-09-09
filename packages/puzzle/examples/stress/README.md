@@ -580,7 +580,7 @@ contract is broken, and `validate()` fails), or `shellDidMutate` reading 0 —
 which would mean the churn never ran and the zero above measured nothing.
 
 No components live inside an island here, and none may: the compiler rejects a
-component, `<children/>` or `<slot>` anywhere in an island subtree.
+component, `<Children/>` or `<Slot/>` anywhere in an island subtree.
 
 ## Scenario 8 — `formatters`
 

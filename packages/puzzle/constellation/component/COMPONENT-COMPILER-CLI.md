@@ -39,6 +39,19 @@ notes:
       prints the `@` alias form, anything else the project-relative path. Family stubs are
       composition-shaped (`<Children/>` + caller `class` override), unlike the plain component stub,
       because nested members would otherwise render nothing; non-family output stays byte-identical.
+  - kind: state
+    text: >-
+      0.7.0: `puzzle add piece` installs COMPOUND pieces (D167 families). A manifest `files` entry
+      carrying a `/` — `"NavigationMenu/index.js"` — is copied path-preserving under the piece's
+      target dir, so a family lands as a directory rather than being flattened. The nested path in
+      `files` is the ONLY signal: no `family: true` field and no registry-schema bump. The installer
+      also validates every manifest path strictly BEFORE any write — no `.`/`..` segments, no empty
+      segments, no absolute or drive-letter paths, for `files`, `targetDir`, `theme` and `lib/`
+      registryDependencies — naming the piece, field and entry; it rejects rather than cleans, so
+      the manifest entry, the destination and the `pieces.lock` key stay the same string. Overwrite
+      pre-flight and RenderSummary are unchanged (one ✓ line per unit with a file count, so a family
+      reads as one unit with N files). Contract detail lives on DOC-SPEC-BUILD; implementation is
+      compiler/internal/pieces/pieces.go.
 ---
 
 # Compiler CLI

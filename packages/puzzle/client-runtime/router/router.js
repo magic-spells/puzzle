@@ -831,7 +831,21 @@ export class Router {
 		// OLD route was still committed and the new DOM did not exist yet. Sharing
 		// the first navigation's promise gives both callers the same settlement —
 		// commit, failure, or supersession alike.
-		if (this.#pendingNavPath != null && key === sameNavKey(this.#pendingNavPath)) {
+		//
+		// A GUARD REDIRECT is exempt (D87). Since the redirect inherits the denied
+		// verb, a verdict equal to the path being denied re-enters here through
+		// push() while that very navigation still owns #pendingNavPath — so this
+		// guard would hand the redirect the denied navigation's OWN promise, and the
+		// `await` inside #navigate's redirect branch would wait on itself forever.
+		// (A guard on '/login' that redirects to '/login' — the inherited-guard
+		// mistake — is the reachable case.) #guardRedirecting is set only around
+		// that re-entry, so skipping the guard there lets the redirect supersede
+		// normally and trip the redirect-limit cycle error instead of hanging.
+		if (
+			!this.#guardRedirecting &&
+			this.#pendingNavPath != null &&
+			key === sameNavKey(this.#pendingNavPath)
+		) {
 			return this.#pendingNavPromise ?? Promise.resolve();
 		}
 		const nav = this.#navigate(path, { push: true });
