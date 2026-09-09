@@ -150,7 +150,7 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
-## 0.7.0 — Unreleased
+## 0.7.0 — 2026-09-09
 
 ### Added
 
