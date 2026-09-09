@@ -25,6 +25,18 @@ notes:
       Config loading and the Tailwind build/dev split re-truthed against config.go and
       styles/watch.go.
     sha: c809db6680eb9355961897756f54e97f1164b88f
+  - kind: gotcha
+    text: >-
+      The "fails loudly" diagnostic must never report only the FIRST stderr line: Tailwind v4 opens
+      stderr with its version banner ("≈ tailwindcss v4.3.3"), so a first-line summary showed four
+      identical banners under a headline claiming the CLI could not be run — while the CLI had in
+      fact run fine and exited non-zero. CI trigger: a dangling `file:` dependency makes Tailwind
+      emit `Error: Can't resolve '@magic-spells/<pkg>/css'`, exactly the line that was being hidden.
+      `NpxRunner.Run` now reports each attempt as its exec error plus the tail of that attempt's
+      stderr (last 20 non-blank lines, indented, with an omitted-lines marker; CRLF normalized for
+      the Windows job), and the headline says no run succeeded. The `puzzle dev` warm-watch path is
+      unaffected — it streams the child's stderr straight to the terminal. `RunOptions.CLIs` is a
+      test-only seam mirroring `WatchOptions.CLI`; nothing in config or the build path populates it.
 ---
 
 # D26 — Tailwind pipeline: node-read config, one-shot-per-build CLI, unified composition

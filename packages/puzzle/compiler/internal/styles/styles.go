@@ -64,6 +64,10 @@ type RunOptions struct {
 	Input string
 	// Production adds --minify to the CLI invocation.
 	Production bool
+	// CLIs overrides the resolved Tailwind CLI candidates. Tests inject fakes
+	// here so the failure diagnostics can be exercised without a real Tailwind
+	// (and without falling through to npx). Empty means "resolve normally".
+	CLIs []ResolvedCLI
 }
 
 // Compose builds the final dist/styles.css contents: the Tailwind layer first,
@@ -110,8 +114,13 @@ func (NpxRunner) Run(opts RunOptions) (string, error) {
 	tmp.Close()
 	defer os.Remove(tmpPath)
 
+	clis := opts.CLIs
+	if len(clis) == 0 {
+		clis = resolveCLIs(opts.AppRoot)
+	}
+
 	var failures []string
-	for _, c := range resolveCLIs(opts.AppRoot) {
+	for _, c := range clis {
 		args := append([]string{}, c.Args...)
 		if opts.Input != "" {
 			args = append(args, "-i", opts.Input)
@@ -127,7 +136,7 @@ func (NpxRunner) Run(opts RunOptions) (string, error) {
 		cmd.Stderr = &stderr
 
 		if err := cmd.Run(); err != nil {
-			failures = append(failures, fmt.Sprintf("  %s: %s", c.Name, firstLine(stderr.String(), err)))
+			failures = append(failures, describeFailure(c.Name, stderr.String(), err))
 			continue
 		}
 
@@ -139,23 +148,60 @@ func (NpxRunner) Run(opts RunOptions) (string, error) {
 	}
 
 	return "", fmt.Errorf(
-		"Tailwind pipeline is declared in puzzle.config.js but the Tailwind CLI could not be run.\n"+
-			"Install Tailwind (`npm install tailwindcss @tailwindcss/cli`) or remove the pipeline.\n"+
+		"Tailwind pipeline is declared in puzzle.config.js but no Tailwind CLI run succeeded.\n"+
+			"Fix the errors below, install Tailwind (`npm install tailwindcss @tailwindcss/cli`),\n"+
+			"or remove the pipeline from puzzle.config.js.\n"+
 			"Attempts:\n%s",
 		strings.Join(failures, "\n"),
 	)
 }
 
-// firstLine returns the first non-empty line of a CLI's stderr, or the process
-// error when stderr is empty (e.g. npx not found). It keeps toolchain-missing
-// messages compact.
-func firstLine(stderr string, runErr error) string {
-	for _, line := range strings.Split(stderr, "\n") {
-		if s := strings.TrimSpace(line); s != "" {
-			return s
+// stderrTailLines caps how much of a failing CLI's stderr is echoed into the
+// build error: enough for Tailwind's multi-line resolver/parse diagnostics,
+// short enough that four failed attempts stay readable.
+const stderrTailLines = 20
+
+// describeFailure renders one failed CLI attempt. When the process ran and
+// exited non-zero its stderr is the actual diagnosis (an unresolvable @import,
+// a CSS parse error), so the tail of it is echoed verbatim under the attempt
+// line — reporting only "could not be run" there hides the real cause behind a
+// version banner. When the process never started, or wrote nothing, the exec
+// error is all there is to report.
+func describeFailure(name, stderr string, runErr error) string {
+	head := fmt.Sprintf("  %s: %s", name, runErr)
+	tail := tailLines(stderr, stderrTailLines)
+	if tail == "" {
+		return head
+	}
+	return head + "\n" + indentLines(tail, "    ")
+}
+
+// tailLines returns at most the last n non-blank-trimmed lines of s, with
+// surrounding blank lines dropped and a marker when earlier lines were cut.
+func tailLines(s string, n int) string {
+	var lines []string
+	for _, line := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, strings.TrimRight(line, " \t\r"))
 		}
 	}
-	return runErr.Error()
+	if len(lines) == 0 {
+		return ""
+	}
+	if len(lines) > n {
+		cut := len(lines) - n
+		lines = append([]string{fmt.Sprintf("… %d earlier stderr line(s) omitted", cut)}, lines[cut:]...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// indentLines prefixes every line of s with prefix.
+func indentLines(s, prefix string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 // DefaultInput returns the app's Tailwind input CSS path if the conventional
