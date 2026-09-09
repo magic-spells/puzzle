@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -44,6 +45,17 @@ func TestCheckPassiveUsesFreshCache(t *testing.T) {
 	CacheDir = t.TempDir()
 	t.Cleanup(func() { CacheDir = oldDir })
 
+	// A fresh cache answers alone: the registry must not be contacted at all,
+	// which is what keeps the notice free on the overwhelming majority of runs.
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"version":"9.9.9"}`))
+	}))
+	defer srv.Close()
+	t.Setenv("PUZZLE_REGISTRY", srv.URL)
+
 	if err := WriteCache("0.2.0", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +65,85 @@ func TestCheckPassiveUsesFreshCache(t *testing.T) {
 	}
 	if latest, available := CheckPassive("0.2.0"); available || latest != "" {
 		t.Fatalf("up-to-date CheckPassive = %q, %v; want empty, false", latest, available)
+	}
+	if got := hits.Load(); got != 0 {
+		t.Fatalf("registry hits = %d, want 0 — a fresh cache must not fetch", got)
+	}
+}
+
+// A stale cache is refreshed in the foreground, so a release published since
+// the last check is reported on this run rather than the next one.
+func TestCheckPassiveRefreshesStaleCacheInline(t *testing.T) {
+	oldDir := CacheDir
+	CacheDir = t.TempDir()
+	t.Cleanup(func() { CacheDir = oldDir })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"version":"0.3.0"}`))
+	}))
+	defer srv.Close()
+	t.Setenv("PUZZLE_REGISTRY", srv.URL)
+
+	if err := WriteCache("0.2.0", time.Now().Add(-2*cacheTTL)); err != nil {
+		t.Fatal(err)
+	}
+	latest, available := CheckPassive("0.1.0")
+	if !available || latest != "0.3.0" {
+		t.Fatalf("CheckPassive = %q, %v; want 0.3.0, true", latest, available)
+	}
+	cached, err := ReadCache()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cached.Latest != "0.3.0" {
+		t.Fatalf("cache latest = %q, want 0.3.0", cached.Latest)
+	}
+	if cached.Stale(time.Now()) {
+		t.Fatal("cache should have been rewritten fresh")
+	}
+}
+
+// A registry slower than the foreground cap must not hold the command: the
+// stale answer returns immediately and the fire-and-forget refresh lands later.
+func TestCheckPassiveSlowRegistryFallsBackToAsync(t *testing.T) {
+	oldDir := CacheDir
+	CacheDir = t.TempDir()
+	t.Cleanup(func() { CacheDir = oldDir })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(3 * syncTimeout)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"version":"0.3.0"}`))
+	}))
+	defer srv.Close()
+	t.Setenv("PUZZLE_REGISTRY", srv.URL)
+
+	if err := WriteCache("0.2.0", time.Now().Add(-2*cacheTTL)); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	latest, available := CheckPassive("0.1.0")
+	elapsed := time.Since(start)
+
+	if !available || latest != "0.2.0" {
+		t.Fatalf("CheckPassive = %q, %v; want the stale 0.2.0, true", latest, available)
+	}
+	if budget := syncTimeout + 400*time.Millisecond; elapsed > budget {
+		t.Fatalf("CheckPassive took %s, want under %s", elapsed, budget)
+	}
+
+	// The background refresh gets the slow answer and writes it for a later run.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		cached, err := ReadCache()
+		if err == nil && cached.Latest == "0.3.0" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("async refresh never wrote 0.3.0 (cache = %#v, err = %v)", cached, err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
@@ -72,11 +163,14 @@ func TestCacheReadWriteAndStaleness(t *testing.T) {
 	if cached.Latest != "0.2.0" || !cached.CheckedAt.Equal(checkedAt) {
 		t.Fatalf("cache = %#v, want latest 0.2.0 at %s", cached, checkedAt)
 	}
-	if cached.Stale(checkedAt.Add(23*time.Hour + 59*time.Minute)) {
-		t.Fatal("cache should remain fresh before 24 hours")
+	if cached.Stale(checkedAt.Add(cacheTTL - time.Minute)) {
+		t.Fatalf("cache should remain fresh before %s", cacheTTL)
 	}
-	if !cached.Stale(checkedAt.Add(24 * time.Hour)) {
-		t.Fatal("cache should be stale at 24 hours")
+	if !cached.Stale(checkedAt.Add(cacheTTL)) {
+		t.Fatalf("cache should be stale at %s", cacheTTL)
+	}
+	if cacheTTL != 6*time.Hour {
+		t.Fatalf("cacheTTL = %s, want 6h", cacheTTL)
 	}
 	if got, want := filepath.Base(mustCachePath(t)), cacheFileName; got != want {
 		t.Fatalf("cache filename = %q, want %q", got, want)

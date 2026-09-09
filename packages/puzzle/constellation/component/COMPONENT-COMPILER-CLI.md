@@ -52,6 +52,17 @@ notes:
       pre-flight and RenderSummary are unchanged (one ✓ line per unit with a file count, so a family
       reads as one unit with N files). Contract detail lives on DOC-SPEC-BUILD; implementation is
       compiler/internal/pieces/pieces.go.
+  - kind: state
+    text: >-
+      2026-09-09 — the passive update notice is no longer cache-only, so the body's "24h cache,
+      background refresh" phrasing is stale. Current design (D76, amended): `internal/update` keeps
+      a **6h** cache under the user cache dir; a cache inside the TTL answers with no request at
+      all, and a missing or stale one is refreshed in the **foreground under a 500 ms cap** and
+      printed in the SAME run. Over the cap or on error the old fire-and-forget refresh (3s) takes
+      over and the stale answer returns immediately. TTY-only, skipped under `CI` /
+      `PUZZLE_NO_UPDATE_CHECK`, registry overridable via `PUZZLE_REGISTRY` — all unchanged. Fold
+      this into the body on the next pass over this card (it has no `##` sections, so it needs a
+      full-body write).
 ---
 
 # Compiler CLI

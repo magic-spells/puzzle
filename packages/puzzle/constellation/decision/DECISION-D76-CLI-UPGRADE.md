@@ -30,6 +30,18 @@ notes:
       `platformBinaryName()`. Still unhandled on Windows: the `node_modules/.bin/puzzle` fallback
       candidate is a shell script npm pairs with a `.cmd`, so exec'ing it fails and the candidate is
       simply skipped; the hoisted platform binary is tried first, so the common layouts still work.
+  - kind: decision
+    text: >-
+      2026-09-09 — the passive notice was amended from cache-only to same-run. The original design
+      shipped 0.1.0 as pure update-notifier: print from cache, refresh in the background for next
+      time. In practice that meant a user only ever heard about a release after the 24h TTL expired
+      AND they ran a command twice, which is not a notification. Now the TTL is 6h and a cold or
+      stale cache is refreshed in the foreground under a 500 ms cap before printing; over the cap or
+      on any error the old fire-and-forget refresh takes over and the stale answer returns
+      immediately, so no command can be delayed further than the cap. The gates (CI /
+      PUZZLE_NO_UPDATE_CHECK / non-TTY stdout) are unchanged and still evaluated before anything
+      reaches the registry, and `puzzle upgrade` — which calls FetchLatest/WriteCache directly with
+      its own 5s budget — is untouched.
 code_refs:
   - compiler/cmd/puzzle/main.go
   - compiler/cmd/puzzle/upgrade.go
@@ -47,9 +59,10 @@ The CLI ships as a Go binary inside npm platform packages (§35): users install 
 
 ## Decision
 
-**Notify passively, upgrade explicitly, and let the package manager do the installing.**
+**Notify on the run that asks, upgrade explicitly, and let the package manager do the installing.**
 
-- The passive check is cache-first (update-notifier pattern): the notice always prints from the local cache, and a stale cache refreshes in a fire-and-forget goroutine. No command ever waits on the network, offline use is silent, and CI / piped output / `PUZZLE_NO_UPDATE_CHECK=1` skip the whole path including the fetch.
+- The passive check is cache-backed but not cache-only. A cache younger than **6 hours** answers by itself — the common case, and free. When it is missing or stale the CLI fetches in the **foreground under a 500 ms cap**, writes the cache, and prints the notice **in the same run**, so a release published since the last check is seen the first time the user runs `puzzle dev` rather than on some later invocation. Past the cap — or on any error — the fire-and-forget refresh (3 s) takes over for a later run and the command answers from whatever the stale cache held. A slow or unreachable registry therefore costs half a second at most, offline use stays silent, and CI / piped output / `PUZZLE_NO_UPDATE_CHECK=1` still skip the whole path including the fetch.
+- The cap is safe where the notice is printed. `puzzle build` prints it after the summary, immediately before exit. `puzzle dev` prints it from `OnReady`, which fires *after* the ready banner and with the listener already accepting in its own goroutine — the bounded fetch delays neither the banner nor the first request.
 - `puzzle upgrade` never touches its own files. It detects the install context and shells out to the exact command a careful user would have typed. package.json, the lockfile, and the exact-pinned platform binary packages therefore stay consistent by construction.
 - **The install context is a property of the running executable, not of the current directory.** `puzzle upgrade` upgrades the CLI you invoked — resolved from `os.Executable()` — and nothing else. A project you happen to be standing in is never upgraded as a side effect; bumping a project's dependency is `npm install`'s job, and the CLI does not duplicate it. See [[DOC-SPEC-BUILD]] §41 for the resolution rules (pnpm-global, project, global, manual).
 - The result is verified, not assumed: the installed package's version must equal the fetched target or the command fails. Because the checked, upgraded, and reported install are the same one, that confirmation is meaningful — it cannot pass by reading a package the command never wrote.
@@ -60,9 +73,10 @@ The CLI ships as a Go binary inside npm platform packages (§35): users install 
 - **Deriving the install context from cwd** (walk up to the first `package.json` listing the package): plausible, since inside a Puzzle project the CLI usually *is* the project's local one — but only usually. Type `puzzle` in a project and hit a global shim and the two diverge: the command compares the global binary's version against the registry, runs the package manager against the project, and confirms success by reading the project's package.json. It can then report an upgrade for a package it never wrote, while the CLI that was actually stale stays stale and re-offers the same upgrade forever. Keying off the executable makes that class of mismatch unrepresentable.
 - **Upgrading both the CLI and the surrounding project's dependency**: two installs with independent lifecycles and one confirmation step between them. The project dependency is npm's to manage.
 - **Update logic in the `bin/puzzle.js` shim**: keeps the Go binary pure, but the shim is deliberately a dumb forwarder (§35) and Node-side logic there would run on every invocation for every user, TTY or not.
-- **Blocking version check on every run**: adds registry latency to every build and fails ugly offline. The cache-first pattern costs at most one stale day.
+- **A purely passive, cache-only notice** (the original update-notifier pattern): the notice prints only from cache and a stale cache refreshes in the background for *next* time. Nothing ever waits on the network, which is the appeal — but it makes the notice arrive two conditions late. After a release a user had to wait out the TTL *and then run the command twice* before anything was said, and a `puzzle dev` left running for days never re-checked at all. The point of the notice is to be seen; a bounded foreground fetch buys that for a worst case of 500 ms on the ~one run in six hours that misses the cache, with the fire-and-forget refresh still there as the fallback whenever the cap is hit.
+- **An unbounded blocking version check on every run**: adds full registry latency to every build and fails ugly offline. The cap plus the 6h cache keeps the cost bounded and rare instead.
 - **A `latest` dist-tag install** instead of the exact fetched version: races the registry between check and install; the exact version makes the confirmation step meaningful.
 
 ## Consequences
 
-Purely additive CLI surface; runtime, compiler, and template grammar are untouched. New `compiler/internal/update` package (registry fetch, 24h cache, minimal semver — stdlib only, no new Go dependencies); `compiler/cmd/puzzle/upgrade.go` (context detection, package-manager exec, confirmation); an `OnReady` hook on `dev.Options` so the notice lands after the ready banner; `ui.IsTerminal` helper. The passive path is the CLI's first background network call — gated to interactive TTY sessions and disableable, which is the privacy/CI posture the notice ships with. Tests cover semver ordering, cache staleness, registry fetch (httptest via `PUZZLE_REGISTRY`), lockfile/dep-field detection over fixture trees, and end-to-end upgrades against stub `npm`/`pnpm` binaries on PATH.
+Purely additive CLI surface; runtime, compiler, and template grammar are untouched. New `compiler/internal/update` package (registry fetch, a 6h cache with a bounded foreground refresh and an async fallback, minimal semver — stdlib only, no new Go dependencies); `compiler/cmd/puzzle/upgrade.go` (context detection, package-manager exec, confirmation); an `OnReady` hook on `dev.Options` so the notice lands after the ready banner; `ui.IsTerminal` helper. The passive path is the CLI's only unprompted network call — gated to interactive TTY sessions and disableable, which is the privacy/CI posture the notice ships with; the gates are evaluated before `CheckPassive`, so a gated invocation still touches nothing. Tests cover semver ordering, cache staleness, the fresh-cache path making no request at all, the stale-cache same-run refresh, the over-the-cap fallback (bounded elapsed time plus an eventual async cache write), registry fetch (httptest via `PUZZLE_REGISTRY`), lockfile/dep-field detection over fixture trees, and end-to-end upgrades against stub `npm`/`pnpm` binaries on PATH.

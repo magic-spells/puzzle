@@ -16,7 +16,15 @@ import (
 const (
 	defaultRegistry = "https://registry.npmjs.org"
 	cacheFileName   = "update-check.json"
-	cacheTTL        = 24 * time.Hour
+	cacheTTL        = 6 * time.Hour
+
+	// syncTimeout caps the foreground fetch CheckPassive runs when the cache is
+	// cold. Short enough that a slow or unreachable registry is a rounding error
+	// on a build, long enough that a healthy registry answers inside it.
+	syncTimeout = 500 * time.Millisecond
+	// asyncTimeout is the fire-and-forget refresh's budget. It can afford to be
+	// generous — nothing is waiting on it.
+	asyncTimeout = 3 * time.Second
 )
 
 // CacheDir overrides the directory containing update-check.json. When empty,
@@ -202,7 +210,7 @@ func WriteCache(latest string, checkedAt time.Time) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// Stale reports whether the cached check is at least 24 hours old.
+// Stale reports whether the cached check is at least cacheTTL old.
 func (c Cache) Stale(now time.Time) bool {
 	return !now.Before(c.CheckedAt.Add(cacheTTL))
 }
@@ -219,27 +227,44 @@ func cachePath() (string, error) {
 	return filepath.Join(dir, cacheFileName), nil
 }
 
-// CheckPassive returns a newer cached version, when one exists, and refreshes
-// stale cache data in the background. It never blocks on or reports registry
-// errors.
+// CheckPassive returns a newer published version when one exists.
+//
+// A fresh cache answers on its own. A missing or stale cache is refreshed in
+// the foreground first, under a short cap, so a release published since the
+// last check is reported on THIS run rather than the next one. If that fetch
+// does not answer inside the cap — or fails — the command is not made to wait:
+// the fire-and-forget refresh takes over for a later run, and the answer comes
+// from whatever the stale cache held. Registry errors are never surfaced.
 func CheckPassive(current string) (string, bool) {
 	now := time.Now()
 	cached, err := ReadCache()
-	available := ""
-	if err == nil {
-		if cmp, compareErr := Compare(cached.Latest, current); compareErr == nil && cmp > 0 {
-			available = cached.Latest
-		}
+	if err == nil && !cached.Stale(now) {
+		return newerThan(cached.Latest, current)
 	}
-	if err != nil || cached.Stale(now) {
-		refreshAsync()
+
+	if latest, fetchErr := FetchLatest(syncTimeout); fetchErr == nil {
+		_ = WriteCache(latest, time.Now())
+		return newerThan(latest, current)
 	}
-	return available, available != ""
+
+	refreshAsync()
+	if err != nil {
+		return "", false
+	}
+	return newerThan(cached.Latest, current)
+}
+
+// newerThan reports latest when it is strictly newer than current.
+func newerThan(latest, current string) (string, bool) {
+	if cmp, err := Compare(latest, current); err == nil && cmp > 0 {
+		return latest, true
+	}
+	return "", false
 }
 
 func refreshAsync() {
 	go func() {
-		latest, fetchErr := FetchLatest(3 * time.Second)
+		latest, fetchErr := FetchLatest(asyncTimeout)
 		if fetchErr == nil {
 			_ = WriteCache(latest, time.Now())
 		}
