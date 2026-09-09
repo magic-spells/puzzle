@@ -3,6 +3,7 @@ package update
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -111,8 +112,20 @@ func TestCheckPassiveSlowRegistryFallsBackToAsync(t *testing.T) {
 	CacheDir = t.TempDir()
 	t.Cleanup(func() { CacheDir = oldDir })
 
+	// Only the foreground request stalls, and it stalls far past the cap so a
+	// slow CI runner cannot accidentally beat it. The background retry that
+	// follows answers at once, so the fallback can be observed without waiting
+	// out a second stall — and abandoning the stall on client cancellation
+	// keeps srv.Close from blocking on it.
+	var seen atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(3 * syncTimeout)
+		if seen.Add(1) == 1 {
+			select {
+			case <-time.After(10 * syncTimeout):
+			case <-r.Context().Done():
+				return
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"version":"0.3.0"}`))
 	}))
@@ -129,7 +142,7 @@ func TestCheckPassiveSlowRegistryFallsBackToAsync(t *testing.T) {
 	if !available || latest != "0.2.0" {
 		t.Fatalf("CheckPassive = %q, %v; want the stale 0.2.0, true", latest, available)
 	}
-	if budget := syncTimeout + 400*time.Millisecond; elapsed > budget {
+	if budget := 2 * syncTimeout; elapsed > budget {
 		t.Fatalf("CheckPassive took %s, want under %s", elapsed, budget)
 	}
 
@@ -144,6 +157,113 @@ func TestCheckPassiveSlowRegistryFallsBackToAsync(t *testing.T) {
 			t.Fatalf("async refresh never wrote 0.3.0 (cache = %#v, err = %v)", cached, err)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// A failed foreground fetch is remembered, and for failureBackoff afterwards
+// no fetch is attempted at all. Without this a blackholing network charges
+// every single `puzzle build` the full cap: the failure writes no cache, so
+// nothing ever goes un-stale, and `build` exits before the async retry lands.
+func TestCheckPassiveBacksOffAfterFailedFetch(t *testing.T) {
+	oldDir := CacheDir
+	CacheDir = t.TempDir()
+	t.Cleanup(func() { CacheDir = oldDir })
+
+	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusInternalServerError)
+	}))
+	defer broken.Close()
+	t.Setenv("PUZZLE_REGISTRY", broken.URL)
+
+	if err := WriteCache("0.2.0", time.Now().Add(-2*cacheTTL)); err != nil {
+		t.Fatal(err)
+	}
+	if latest, available := CheckPassive("0.1.0"); !available || latest != "0.2.0" {
+		t.Fatalf("CheckPassive = %q, %v; want the stale 0.2.0, true", latest, available)
+	}
+	disk, err := readCacheFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disk.FailedAt == "" {
+		t.Fatal("a failed foreground fetch must record failed_at")
+	}
+	if disk.Latest != "0.2.0" {
+		t.Fatalf("cache latest = %q, want the recorded 0.2.0 left alone", disk.Latest)
+	}
+
+	// A healthy registry that the backoff window must not reach. It is a second
+	// server so the first call's background retry cannot touch this counter.
+	var hits atomic.Int64
+	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"version":"0.3.0"}`))
+	}))
+	defer live.Close()
+	t.Setenv("PUZZLE_REGISTRY", live.URL)
+
+	start := time.Now()
+	latest, available := CheckPassive("0.1.0")
+	elapsed := time.Since(start)
+	if !available || latest != "0.2.0" {
+		t.Fatalf("CheckPassive = %q, %v; want the stale 0.2.0, true", latest, available)
+	}
+	if got := hits.Load(); got != 0 {
+		t.Fatalf("registry hits = %d, want 0 — the backoff window must not fetch", got)
+	}
+	if budget := syncTimeout / 2; elapsed > budget {
+		t.Fatalf("CheckPassive took %s, want well under the %s cap", elapsed, syncTimeout)
+	}
+
+	// Past the window the check retries, and the success clears the stamp.
+	if err := writeFailure(time.Now().Add(-failureBackoff - time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if latest, available := CheckPassive("0.1.0"); !available || latest != "0.3.0" {
+		t.Fatalf("CheckPassive after the backoff = %q, %v; want 0.3.0, true", latest, available)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("registry hits = %d, want 1 — the expired backoff must retry once", got)
+	}
+	disk, err = readCacheFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disk.FailedAt != "" {
+		t.Fatalf("failed_at = %q, want cleared by the successful fetch", disk.FailedAt)
+	}
+}
+
+// The cache file predates failed_at, so a file written without it must still
+// load — and suppress nothing.
+func TestReadCacheAcceptsFileWithoutFailedAt(t *testing.T) {
+	oldDir := CacheDir
+	CacheDir = t.TempDir()
+	t.Cleanup(func() { CacheDir = oldDir })
+
+	path := mustCachePath(t)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"checked_at":"` + time.Now().UTC().Format(time.RFC3339) + `","latest":"0.2.0"}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cached, err := ReadCache()
+	if err != nil {
+		t.Fatalf("old-format cache must still load: %v", err)
+	}
+	if cached.Latest != "0.2.0" {
+		t.Fatalf("cache latest = %q, want 0.2.0", cached.Latest)
+	}
+	disk, err := readCacheFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, backing := disk.backoffUntil(); backing {
+		t.Fatal("a file with no failed_at must not suppress fetches")
 	}
 }
 

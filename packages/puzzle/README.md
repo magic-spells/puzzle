@@ -574,9 +574,12 @@ On an interactive terminal, `build` and `dev` also mention newer Puzzle releases
 The answer is cached for six hours; when that cache is cold the CLI checks the
 registry before printing, capped at half a second, so a release published since
 your last check shows up on that run rather than the next one. Past the cap it
-gives up, refreshes in the background instead, and never delays the command
-further. Set `PUZZLE_NO_UPDATE_CHECK=1` to disable it; the check is skipped
-automatically when `CI` is set or output is not a terminal.
+gives up and refreshes in the background instead, never delaying the command
+further — though a short-lived `build` exits before that background refresh
+lands, so there the notice appears on a later run. A failed check is not
+retried for fifteen minutes, so an unreachable registry costs the cap once
+rather than on every command. Set `PUZZLE_NO_UPDATE_CHECK=1` to disable it; the
+check is skipped automatically when `CI` is set or output is not a terminal.
 
 `puzzle preview` serves a build you already produced, with no watcher, no live
 reload, and no `dev.proxy` — the artifact is checked exactly as it sits on disk.

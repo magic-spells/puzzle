@@ -25,6 +25,11 @@ const (
 	// asyncTimeout is the fire-and-forget refresh's budget. It can afford to be
 	// generous — nothing is waiting on it.
 	asyncTimeout = 3 * time.Second
+	// failureBackoff is how long a failed foreground fetch suppresses the next
+	// one. Without it a blackholing network — packets dropped rather than
+	// refused — costs EVERY command the full syncTimeout, since a fetch that
+	// never answers also never writes a cache to go stale.
+	failureBackoff = 15 * time.Minute
 )
 
 // CacheDir overrides the directory containing update-check.json. When empty,
@@ -37,9 +42,12 @@ type Cache struct {
 	Latest    string
 }
 
+// cacheFile is the on-disk shape. failed_at is optional and was added after
+// the first release, so a file written without it still loads.
 type cacheFile struct {
 	CheckedAt string `json:"checked_at"`
 	Latest    string `json:"latest"`
+	FailedAt  string `json:"failed_at,omitempty"`
 }
 
 // FetchLatest fetches the latest published @magic-spells/puzzle version.
@@ -166,26 +174,55 @@ func comparePrerelease(a, b string) int {
 
 // ReadCache reads the cached registry result.
 func ReadCache() (Cache, error) {
-	path, err := cachePath()
+	disk, err := readCacheFile()
 	if err != nil {
 		return Cache{}, err
+	}
+	return disk.result()
+}
+
+// readCacheFile reads the raw cache file without validating the recorded
+// check, so a file holding only a failure stamp still yields that stamp.
+func readCacheFile() (cacheFile, error) {
+	path, err := cachePath()
+	if err != nil {
+		return cacheFile{}, err
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Cache{}, err
+		return cacheFile{}, err
 	}
 	var disk cacheFile
 	if err := json.Unmarshal(data, &disk); err != nil {
-		return Cache{}, err
+		return cacheFile{}, err
 	}
-	checkedAt, err := time.Parse(time.RFC3339, disk.CheckedAt)
+	return disk, nil
+}
+
+// result validates the recorded check. A file carrying only a failure stamp
+// has no answer to give and reports an error, exactly like no file at all.
+func (f cacheFile) result() (Cache, error) {
+	checkedAt, err := time.Parse(time.RFC3339, f.CheckedAt)
 	if err != nil {
 		return Cache{}, err
 	}
-	if _, err := parseVersion(disk.Latest); err != nil {
+	if _, err := parseVersion(f.Latest); err != nil {
 		return Cache{}, err
 	}
-	return Cache{CheckedAt: checkedAt, Latest: disk.Latest}, nil
+	return Cache{CheckedAt: checkedAt, Latest: f.Latest}, nil
+}
+
+// backoffUntil reports when the recorded failure stops suppressing fetches. An
+// absent or unparseable stamp suppresses nothing.
+func (f cacheFile) backoffUntil() (time.Time, bool) {
+	if f.FailedAt == "" {
+		return time.Time{}, false
+	}
+	failedAt, err := time.Parse(time.RFC3339, f.FailedAt)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return failedAt.Add(failureBackoff), true
 }
 
 // WriteCache records a successful registry check.
@@ -200,10 +237,33 @@ func WriteCache(latest string, checkedAt time.Time) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	// No FailedAt: a successful check clears any recorded failure.
 	data, err := json.Marshal(cacheFile{
 		CheckedAt: checkedAt.UTC().Format(time.RFC3339),
 		Latest:    latest,
 	})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+// writeFailure records a failed foreground check. The recorded answer is left
+// exactly as it was — only the failure stamp moves — so a stale-but-usable
+// latest keeps answering while the backoff runs.
+func writeFailure(at time.Time) error {
+	path, err := cachePath()
+	if err != nil {
+		return err
+	}
+	// A missing or corrupt file yields the zero value, which is what we want:
+	// a stamp with no answer behind it.
+	disk, _ := readCacheFile()
+	disk.FailedAt = at.UTC().Format(time.RFC3339)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(disk)
 	if err != nil {
 		return err
 	}
@@ -235,11 +295,29 @@ func cachePath() (string, error) {
 // does not answer inside the cap — or fails — the command is not made to wait:
 // the fire-and-forget refresh takes over for a later run, and the answer comes
 // from whatever the stale cache held. Registry errors are never surfaced.
+//
+// A failure is recorded, and for failureBackoff afterwards no fetch is
+// attempted at all. Otherwise a network that drops packets rather than
+// refusing them would charge every command the full cap forever: the fetch
+// writes no cache when it fails, so nothing would ever go un-stale, and the
+// async fallback never lands for a short-lived `build` that exits first.
 func CheckPassive(current string) (string, bool) {
 	now := time.Now()
-	cached, err := ReadCache()
-	if err == nil && !cached.Stale(now) {
+	disk, _ := readCacheFile()
+	cached, cacheErr := disk.result()
+	if cacheErr == nil && !cached.Stale(now) {
 		return newerThan(cached.Latest, current)
+	}
+
+	answer := func() (string, bool) {
+		if cacheErr != nil {
+			return "", false
+		}
+		return newerThan(cached.Latest, current)
+	}
+
+	if until, backing := disk.backoffUntil(); backing && now.Before(until) {
+		return answer()
 	}
 
 	if latest, fetchErr := FetchLatest(syncTimeout); fetchErr == nil {
@@ -247,11 +325,11 @@ func CheckPassive(current string) (string, bool) {
 		return newerThan(latest, current)
 	}
 
+	// Stamp before starting the refresh: a refresh that succeeds writes a
+	// clean cache, and that write must be the later one so it clears the stamp.
+	_ = writeFailure(time.Now())
 	refreshAsync()
-	if err != nil {
-		return "", false
-	}
-	return newerThan(cached.Latest, current)
+	return answer()
 }
 
 // newerThan reports latest when it is strictly newer than current.
