@@ -1,0 +1,8 @@
+{
+  "name": "multi-select",
+  "description": "Filterable tag / multi-value combobox with removable chips, ranked filtering, and snippet-customizable option content",
+  "files": ["MultiSelect.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

@@ -1,0 +1,437 @@
+<puzzle-view>
+  <figure class={ rootClass } aria-label={ label }>
+    {#if showLegend}
+      <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {#for item in legend}
+          <div class="flex items-center gap-1.5" key={ item.key }>
+            <span class="size-2 shrink-0 rounded-[2px] { item.swatchClass }"></span>
+            <span class="text-sm text-body">{ item.label }</span>
+          </div>
+        {/for}
+      </div>
+    {/if}
+
+    <div class="relative" data-chart-plot>
+      <svg
+        class="block"
+        width={ width }
+        height={ height }
+        aria-hidden="true"
+        @pointermove={ onMove(event) }
+        @pointerleave={ onLeave(event) }>
+        <rect x="0" y="0" width={ width } height={ height } fill="transparent" pointer-events="all"/>
+
+        {#if showGrid}
+          <g>
+            {#for g in gridLines}
+              <line x1={ plotLeft } y1={ g.y } x2={ plotRight } y2={ g.y } class="stroke-border" stroke-width="1" key={ g.key }/>
+            {/for}
+          </g>
+        {/if}
+
+        <g>
+          {#for a in areas}
+            <path d={ a.path } class={ a.fillClass } stroke="none" key={ a.key }/>
+          {/for}
+        </g>
+
+        {#if showTooltip}
+          <line x1={ crosshairX } y1={ plotTop } x2={ crosshairX } y2={ plotBottom } class="stroke-border" stroke-width="1"/>
+        {/if}
+
+        <g>
+          {#for s in seriesPaths}
+            <path
+              d={ s.path }
+              class="fill-none { s.strokeClass }"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              key={ s.key }/>
+          {/for}
+        </g>
+
+        {#if showTooltip}
+          <g>
+            {#for m in markers}
+              <circle cx={ m.cx } cy={ m.cy } r="3.5" class="stroke-surface { m.fillClass }" stroke-width="2" key={ m.key }/>
+            {/for}
+          </g>
+        {/if}
+      </svg>
+
+      <!-- Axis labels live as HTML overlays, NOT SVG <text>: the Puzzle compiler
+           emits ViewNode('text', …) for its internal text-node marker, so an SVG
+           <text> element collides with it and is silently dropped. Coordinates
+           map 1:1 because the SVG has no viewBox scaling. -->
+      {#if showGrid}
+        <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+          {#for g in gridLines}
+            <span class="absolute -translate-y-1/2 text-xs tabular-nums text-muted" style={ g.style } key={ g.key }>{ g.label }</span>
+          {/for}
+        </div>
+      {/if}
+      <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+        {#for x in xLabels}
+          <span class="absolute -translate-x-1/2 text-xs text-muted" style={ x.style } key={ x.key }>{ x.label }</span>
+        {/for}
+      </div>
+
+      {#if showTooltip}
+        <div
+          class="pointer-events-none absolute z-10 min-w-[8rem] -translate-y-1/2 rounded-md border border-border bg-surface px-3 py-2 text-xs shadow-md"
+          style={ tooltipStyle }>
+          <div class="mb-1 text-muted">{ tooltipX }</div>
+          {#for row in tooltipRows}
+            <div class="flex items-center gap-2" key={ row.key }>
+              <span class="size-2 shrink-0 rounded-full { row.swatchClass }"></span>
+              <span class="text-body">{ row.label }</span>
+              <span class="ml-auto font-medium text-ink">{ row.value }</span>
+            </div>
+          {/for}
+        </div>
+      {/if}
+    </div>
+
+    <table class="sr-only">
+      <caption>{ label }</caption>
+      <thead>
+        <tr>
+          <th scope="col">{ xHeader }</th>
+          {#for h in tableHead}
+            <th scope="col" key={ h.key }>{ h.label }</th>
+          {/for}
+        </tr>
+      </thead>
+      <tbody>
+        {#for r in tableRows}
+          <tr key={ r.key }>
+            <th scope="row">{ r.x }</th>
+            {#for c in r.cells}
+              <td key={ c.key }>{ c.value }</td>
+            {/for}
+          </tr>
+        {/for}
+      </tbody>
+    </table>
+  </figure>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { extent, niceDomain, linearScale, bandScale, linePath, areaPath, stackSeries, formatTick } from '../../lib/chart-math.js';
+
+// AreaChart — the LineChart's filled sibling. Same config-first, controlled,
+// responsive shape (data rows + a series schema, ResizeObserver-measured width,
+// nearest-x hover crosshair + tooltip, sr-only table twin), plus area fills and a
+// `stacked` mode.
+//
+//   <AreaChart data={ data } xKey="month"
+//     series={ [{ key: 'visits', label: 'Visits' }] } />
+//   <AreaChart data={ data } xKey="month" stacked
+//     series={ [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }, { key: 'c', label: 'C' }] } />
+//
+// RENDERING (from the dataviz method): each series draws a low-opacity fill wash
+// (fill-chart-N/15, or /25 in stacked mode) AND a full-strength 2px edge line
+// along its top — the band edge IS the line rule. Unstacked = overlapping
+// translucent areas sharing the y=0 baseline; stacked = cumulative bands via
+// stackSeries, drawn bottom-to-top with per-series geometry. The tooltip always
+// shows each series' OWN value, never the cumulative total. Colors are assigned
+// in fixed slot order by series position (series[0] → chart-1, …); max 8 series.
+//
+// SINGLE-POINT DATA: a lone row (or a value marooned between gaps) has no
+// horizontal extent, so its FILL is a zero-width shape and paints nothing — in
+// stacked bands and unstacked areas alike. That is by design; visibility comes
+// from the edge line, where chart-math's linePath closes a one-point run with a
+// zero-length segment that the round stroke-linecap renders as a dot.
+//
+// PROPS — identical to LineChart (data, xKey, series, height=288, label,
+// formatValue, showGrid, showLegend, class) plus:
+//   stacked  bool  cumulative stacked bands (default false = overlapping areas).
+//
+// See LineChart.pzl for the full prop/chrome contract; the two pieces are twins.
+
+const DEFAULT_WIDTH = 640;
+
+// Fixed slot arrays — LITERAL class strings so Tailwind's source scan sees them.
+const STROKE = [
+  'stroke-chart-1', 'stroke-chart-2', 'stroke-chart-3', 'stroke-chart-4',
+  'stroke-chart-5', 'stroke-chart-6', 'stroke-chart-7', 'stroke-chart-8',
+];
+const FILL = [
+  'fill-chart-1', 'fill-chart-2', 'fill-chart-3', 'fill-chart-4',
+  'fill-chart-5', 'fill-chart-6', 'fill-chart-7', 'fill-chart-8',
+];
+const SWATCH = [
+  'bg-chart-1', 'bg-chart-2', 'bg-chart-3', 'bg-chart-4',
+  'bg-chart-5', 'bg-chart-6', 'bg-chart-7', 'bg-chart-8',
+];
+// Wash opacities: a lighter /15 for overlapping (unstacked) areas so stacked
+// pairs stay readable where they cross; /25 for stacked bands (no overlap).
+const AREA = [
+  'fill-chart-1/15', 'fill-chart-2/15', 'fill-chart-3/15', 'fill-chart-4/15',
+  'fill-chart-5/15', 'fill-chart-6/15', 'fill-chart-7/15', 'fill-chart-8/15',
+];
+const AREA_STACKED = [
+  'fill-chart-1/25', 'fill-chart-2/25', 'fill-chart-3/25', 'fill-chart-4/25',
+  'fill-chart-5/25', 'fill-chart-6/25', 'fill-chart-7/25', 'fill-chart-8/25',
+];
+
+const MARGIN_TOP = 8;
+const MARGIN_RIGHT = 12;
+const MARGIN_BOTTOM = 28;
+
+function num(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Closed band between a top edge and a bottom edge (both [x,y][], same x order).
+// chart-math's areaPath only takes a scalar baseline y0, which can't express a
+// stacked band's variable lower edge — so the stacked case builds the path here
+// (forward along the top, back along the bottom, close).
+function bandArea(top, bottom) {
+  if (!top.length) return '';
+  let d = '';
+  top.forEach((p, i) => { d += `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`; });
+  for (let i = bottom.length - 1; i >= 0; i--) d += `L${bottom[i][0]},${bottom[i][1]}`;
+  return `${d}Z`;
+}
+
+export default class AreaChart extends PuzzleView {
+  created() {
+    this._cxs = [];
+    this._width = DEFAULT_WIDTH;
+    this._ro = null;
+    this.setData({ measuredWidth: 0, hover: null });
+  }
+
+  mounted() {
+    if (typeof ResizeObserver === 'undefined' || !this.element) return;
+    this._ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0]?.contentRect?.width || this.element.clientWidth || 0);
+      if (w > 0 && w !== this.getData().measuredWidth) {
+        this.setData({ measuredWidth: w });
+        this.refresh();
+      }
+    });
+    this._ro.observe(this.element);
+  }
+
+  destroyed() {
+    this._ro?.disconnect();
+    this._ro = null;
+  }
+
+  data(params, props) {
+    const rows = Array.isArray(props.data) ? props.data : [];
+    const xKey = props.xKey;
+    const fmt = typeof props.formatValue === 'function' ? props.formatValue : formatTick;
+    const stacked = !!props.stacked;
+
+    const series = (Array.isArray(props.series) ? props.series : []).slice(0, 8).map((s, i) => ({
+      key: s.key,
+      label: s.label != null ? String(s.label) : String(s.key ?? ''),
+      strokeClass: STROKE[i],
+      fillClass: FILL[i],
+      swatchClass: SWATCH[i],
+      areaClass: (stacked ? AREA_STACKED : AREA)[i],
+    }));
+
+    const measured = this.getData().measuredWidth;
+    const width = measured > 0 ? measured : DEFAULT_WIDTH;
+    const height = Number(props.height) > 0 ? Number(props.height) : 288;
+    this._width = width;
+
+    const label = props.label || (series.length ? series.map((s) => s.label).join(', ') : 'Chart');
+    const showLegend =
+      series.length >= 2 && (props.showLegend === undefined ? true : !!props.showLegend);
+    const showGrid = props.showGrid !== false;
+
+    // Stacked cumulative bands (data units), computed before the domain so the
+    // domain can span the top of the stack.
+    const keys = series.map((s) => s.key);
+    const stacks = stacked && keys.length ? stackSeries(rows, keys) : null;
+
+    // Y domain — stacked spans [0, max cumulative top]; unstacked spans every
+    // value, always including 0.
+    let domain;
+    if (stacked) {
+      let maxTop = 0;
+      const topKey = keys[keys.length - 1];
+      if (topKey) for (let i = 0; i < rows.length; i++) maxTop = Math.max(maxTop, stacks[topKey][i][1]);
+      domain = niceDomain(0, Math.max(0, maxTop), 5);
+    } else {
+      const values = [];
+      for (const row of rows) for (const s of series) {
+        const v = num(row[s.key]);
+        if (v != null) values.push(v);
+      }
+      const [dmin, dmax] = values.length ? extent(values) : [0, 1];
+      domain = niceDomain(Math.min(0, dmin), Math.max(0, dmax), 5);
+    }
+
+    const tickLabels = domain.ticks.map((t) => formatTick(t));
+    const maxTickChars = tickLabels.reduce((m, s) => Math.max(m, s.length), 1);
+    const marginLeft = Math.max(32, maxTickChars * 7 + 10);
+
+    const plotLeft = marginLeft;
+    const plotRight = width - MARGIN_RIGHT;
+    const plotTop = MARGIN_TOP;
+    const plotBottom = height - MARGIN_BOTTOM;
+    const innerWidth = Math.max(0, plotRight - plotLeft);
+
+    const yScale = linearScale(domain.min, domain.max, plotBottom, plotTop);
+    const band = bandScale(rows.length, plotLeft, plotRight);
+    const cx = (i) => band.position(i) + band.bandwidth / 2;
+    this._cxs = rows.map((_, i) => cx(i));
+
+    const gridLines = showGrid
+      ? domain.ticks.map((t, i) => ({
+          key: `g-${i}`,
+          y: yScale(t),
+          label: formatTick(t),
+          style: `left:0px;top:${Math.round(yScale(t))}px;`,
+        }))
+      : [];
+
+    // Areas + edge lines.
+    const areas = [];
+    const seriesPaths = [];
+    if (stacked) {
+      series.forEach((s) => {
+        const pair = stacks[s.key];
+        const topPts = rows.map((_, i) => [this._cxs[i], yScale(pair[i][1])]);
+        const botPts = rows.map((_, i) => [this._cxs[i], yScale(pair[i][0])]);
+        areas.push({ key: s.key, path: bandArea(topPts, botPts), fillClass: s.areaClass });
+        seriesPaths.push({ key: s.key, path: linePath(topPts), strokeClass: s.strokeClass });
+      });
+    } else {
+      const baselineY = yScale(0);
+      series.forEach((s) => {
+        const pts = rows.map((row, i) => {
+          const v = num(row[s.key]);
+          return v == null ? null : [this._cxs[i], yScale(v)];
+        });
+        areas.push({ key: s.key, path: areaPath(pts, baselineY), fillClass: s.areaClass });
+        seriesPaths.push({ key: s.key, path: linePath(pts), strokeClass: s.strokeClass });
+      });
+    }
+
+    // X labels — thinned to avoid crowding.
+    const maxLabelChars = rows.reduce((m, r) => Math.max(m, String(r[xKey] ?? '').length), 1);
+    const approxLabelW = maxLabelChars * 6.5 + 10;
+    const maxLabels = Math.max(1, Math.floor(innerWidth / approxLabelW));
+    const step = Math.max(1, Math.ceil(rows.length / maxLabels));
+    const xLabels = [];
+    rows.forEach((row, i) => {
+      if (i % step !== 0) return;
+      xLabels.push({
+        key: `x-${i}`,
+        x: this._cxs[i],
+        label: String(row[xKey] ?? ''),
+        style: `left:${Math.round(this._cxs[i])}px;top:${height - 22}px;`,
+      });
+    });
+
+    // Hover model — tooltip always shows each series' OWN value.
+    const hover = this.getData().hover;
+    const ai = hover && rows.length ? Math.max(0, Math.min(rows.length - 1, hover.index)) : -1;
+    const showTooltip = hover != null && ai >= 0;
+
+    let crosshairX = 0;
+    let markers = [];
+    let tooltipRows = [];
+    let tooltipX = '';
+    let tooltipStyle = '';
+    if (showTooltip) {
+      crosshairX = this._cxs[ai];
+      markers = series
+        .map((s) => {
+          const v = num(rows[ai][s.key]);
+          if (v == null && !stacked) return null;
+          const cyv = stacked ? yScale(stacks[s.key][ai][1]) : yScale(v);
+          return { key: s.key, cx: this._cxs[ai], cy: cyv, fillClass: s.fillClass };
+        })
+        .filter(Boolean);
+      tooltipRows = series.map((s) => {
+        const v = num(rows[ai][s.key]);
+        return { key: s.key, label: s.label, value: v == null ? '—' : fmt(v), swatchClass: s.swatchClass };
+      });
+      tooltipX = String(rows[ai][xKey] ?? '');
+      const flip = hover.x > width * 0.6;
+      tooltipStyle =
+        (flip ? `right:${Math.round(width - hover.x + 12)}px;` : `left:${Math.round(hover.x + 12)}px;`) +
+        `top:${Math.round(hover.y)}px;`;
+    }
+
+    const tableRows = rows.map((row, i) => ({
+      key: `tr-${i}`,
+      x: String(row[xKey] ?? ''),
+      cells: series.map((s) => {
+        const v = num(row[s.key]);
+        return { key: `${s.key}-${i}`, value: v == null ? '' : fmt(v) };
+      }),
+    }));
+
+    return {
+      rootClass: ['relative m-0 block w-full', props.class || ''].join(' '),
+      label,
+      width,
+      height,
+      showLegend,
+      legend: series.map((s) => ({ key: s.key, label: s.label, swatchClass: s.swatchClass })),
+      showGrid,
+      gridLines,
+      plotLeft,
+      plotRight,
+      plotTop,
+      plotBottom,
+      areas,
+      seriesPaths,
+      xLabels,
+      showTooltip,
+      crosshairX,
+      markers,
+      tooltipRows,
+      tooltipX,
+      tooltipStyle,
+      xHeader: String(xKey ?? ''),
+      tableHead: series.map((s) => ({ key: s.key, label: s.label })),
+      tableRows,
+    };
+  }
+
+  events = {
+    onMove: (event) => {
+      const xs = this._cxs;
+      if (!xs || !xs.length) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const lx = event.clientX - rect.left;
+      const ly = event.clientY - rect.top;
+      let best = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < xs.length; i++) {
+        const d = Math.abs(xs[i] - lx);
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      }
+      const h = this.getData().hover;
+      if (!h || h.index !== best || h.x !== lx || h.y !== ly) {
+        this.setData({ hover: { index: best, x: lx, y: ly } });
+        this.refresh();
+      }
+    },
+
+    onLeave: () => {
+      if (this.getData().hover != null) {
+        this.setData({ hover: null });
+        this.refresh();
+      }
+    },
+  };
+}
+</script>

@@ -1,0 +1,79 @@
+/*
+ * puzzle-pieces design tokens (Tailwind v4 @theme).
+ * Scheme: Warm — warm greys and ivory with a clay-orange accent.
+ *
+ * Merge this into your app's `app/styles/styles.css`, after `@import "tailwindcss";`.
+ * Every puzzle-pieces component styles itself exclusively through the semantic
+ * utilities these tokens generate (bg-surface, text-ink, border-border, bg-brand,
+ * text-danger, …) — restyle your whole UI by editing the values here.
+ *
+ * Dark mode: every token is a `light-dark(light, dark)` pair, resolved by the
+ * element's `color-scheme`. With no attribute set, `:root` declares
+ * `color-scheme: light dark` and the OS preference decides. A manual switcher
+ * only has to set `data-theme="light"` / `data-theme="dark"` on <html> — the
+ * rules below flip `color-scheme`, which also keeps native UI (form controls,
+ * scrollbars, <dialog> backdrops) in step. For a light-only app, change the
+ * `:root` rule to `color-scheme: light`.
+ */
+
+:root {
+  color-scheme: light dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@theme {
+  /* Text — darkest to faintest. */
+  --color-ink: light-dark(#191919, #F0EFEA);   /* headings, control labels, strong text */
+  --color-body: light-dark(#40403E, #BDBBB2);  /* default body text */
+  --color-muted: light-dark(#666663, #91918D); /* secondary text, placeholders, hints */
+  --color-faint: light-dark(#C9C8C2, #4A4945); /* disabled text, separators */
+
+  /* Surfaces. */
+  --color-page: light-dark(#FAFAF7, #1F1E1D);           /* app background */
+  --color-surface: light-dark(#FFFFFF, #262624);        /* cards, inputs, panels, popovers */
+  --color-surface-sunken: light-dark(#F0F0EB, #30302E); /* wells, secondary-button bg, track fills */
+
+  /* Brand — the one accent everything keys off. */
+  --color-brand: light-dark(#CC785C, #CC785C);
+  --color-brand-dark: light-dark(#B5654A, #D98B70); /* hover/active */
+  --color-brand-tint: light-dark(#F6ECE6, #3A2E28); /* selected rows, ghost hover, soft chips */
+  --color-brand-ink: light-dark(#FFFFFF, #FFFFFF);  /* text/icons on solid brand */
+
+  /* Danger — destructive actions and invalid states. */
+  --color-danger: light-dark(#BF4D43, #E5766A);
+  --color-danger-dark: light-dark(#A83E35, #EF8D82); /* hover/active */
+  --color-danger-tint: light-dark(#FAEEEC, #2E1B18); /* soft error backgrounds */
+  --color-danger-ink: #ffffff;                       /* text/icons on solid danger */
+
+  /* Success — positive deltas, "up is good" indicators (counterpart to danger). */
+  --color-success: light-dark(#006300, #0ca30c);
+  --color-success-tint: light-dark(#ebf7eb, #122616); /* soft positive backgrounds */
+
+  /* Warning — caution band between success and danger (meters, gauges, alerts). */
+  --color-warning: light-dark(#b45309, #f59e0b);
+  --color-warning-tint: light-dark(#fff8eb, #2a1c07); /* soft caution backgrounds */
+
+  /* Charts — categorical series palette, assigned in fixed slot order (1→8), never cycled.
+     Validated for colorblind safety + lightness/chroma bands in both modes
+     (dataviz six-checks validator, 2026-07-17). Light slots 3/4/5 sit below 3:1
+     contrast on white by design — chart pieces mitigate with legends, tooltips,
+     and their built-in accessible table views. */
+  --color-chart-1: light-dark(#2a78d6, #3987e5);
+  --color-chart-2: #008300;
+  --color-chart-3: light-dark(#e87ba4, #d55181);
+  --color-chart-4: light-dark(#eda100, #c98500);
+  --color-chart-5: light-dark(#1baf7a, #199e70);
+  --color-chart-6: light-dark(#eb6834, #d95926);
+  --color-chart-7: light-dark(#4a3aa7, #9085e9);
+  --color-chart-8: light-dark(#e34948, #e66767);
+
+  /* Lines & focus. */
+  --color-border: light-dark(#E5E4DF, #3A3936);        /* default hairlines */
+  --color-border-strong: light-dark(#CFCEC5, #4C4B47); /* hover borders, pressed outlines */
+  --color-ring: light-dark(#61AAF2, #61AAF2);          /* focus rings (usually = brand) */
+}

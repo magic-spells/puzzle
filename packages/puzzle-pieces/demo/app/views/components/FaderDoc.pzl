@@ -1,0 +1,281 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Fader</h1>
+        <p class="mt-2 text-body">
+          A tall filled parameter row, the kind a DAW, Blender, or After Effects puts next to every numeric setting: an
+          inline label on the left, a right-aligned readout on the right, faint interior ticks, and a thin bar handle.
+          Same semantics as a slider — it just reads as a flat dial you turn up rather than a scale you pick a point on.
+          Press anywhere in the row to jump the value, then drag.
+        </p>
+        <p class="mt-3 text-body">
+          It is controlled — the parent owns the value and reads it back from
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@input</code>
+          (live during drag) and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          (on commit). Arrow keys, PageUp / PageDown, and Home / End work on the focused row. Fader is single-value
+          only: need two thumbs?
+          Use the <a href="#/components/slider" class="text-brand hover:underline">Slider</a>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-sm space-y-1.5">
+          <Fader label="Rest" value={ rest } min={ 0 } max={ 100 } unit="%" @input={ setRest } @change={ setRest }/>
+          <Fader label="Arc" value={ arc } min={ 0 } max={ 360 } unit="°" @input={ setArc } @change={ setArc }/>
+          <Fader label="Feather" value={ feather } min={ 0 } max={ 20 } step={ 0.5 } unit="px" @input={ setFeather } @change={ setFeather }/>
+          <Fader label="Radius" value={ radius } min={ 0 } max={ 64 } unit="px" @input={ setRadius } @change={ setRadius }/>
+          <Fader label="Aspect" value={ aspect } min={ 0.25 } max={ 4 } step={ 0.05 } formatValue={ ratio } @input={ setAspect } @change={ setAspect }/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Pulls in the shared value math at app/lib/slider-math.js. Requires the pieces.css tokens merged into your app
+          styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="steps" title="Steps" code={ codeSteps }>
+          <div class="w-full max-w-sm space-y-4">
+            <Fader label="Quality" value={ stepped } min={ 0 } max={ 100 } step={ 10 } ticks={ true } tickStep={ 10 } unit="%" @input={ setStepped } @change={ setStepped }/>
+            <Fader label="Blend" value={ fine } min={ 0 } max={ 100 } step="any" formatValue={ oneDp } @input={ setFine } @change={ setFine }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="vertical" title="Vertical" code={ codeVertical }>
+          <div class="flex items-end gap-4">
+            <Fader orientation="vertical" label="Low" value={ low } min={ -24 } max={ 24 } unit=" dB" @input={ setLow } @change={ setLow }/>
+            <Fader orientation="vertical" label="Mid" value={ mid } min={ -24 } max={ 24 } unit=" dB" @input={ setMid } @change={ setMid }/>
+            <Fader orientation="vertical" label="High" value={ high } min={ -24 } max={ 24 } unit=" dB" @input={ setHigh } @change={ setHigh }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="ticks" title="Ticks" code={ codeTicks }>
+          <div class="w-full max-w-sm space-y-4">
+            <Fader label="Density" value={ density } ticks={ true } @input={ setDensity } @change={ setDensity }/>
+            <Fader label="Threshold" value={ threshold } ticks={ thresholdTicks } @input={ setThreshold } @change={ setThreshold }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="formatting" title="Formatting" code={ codeFormatting }>
+          <div class="w-full max-w-sm space-y-4">
+            <Fader label="Corner radius" value={ corner } min={ 0 } max={ 64 } unit="px" @input={ setCorner } @change={ setCorner }/>
+            <Fader label="Gain" value={ gain } min={ -60 } max={ 12 } formatValue={ gainText } @input={ setGain } @change={ setGain }/>
+            <Fader label="Mix" value={ mix } showValue={ false } @input={ setMix } @change={ setMix }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled } tall={ false }>
+          <div class="w-full max-w-sm">
+            <Fader label="Locked" value={ 40 } unit="%" disabled/>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Fader from '@/components/ui/Fader.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Module-level so their identity is stable across renders — Fader caches its
+// resolved tick list by identity, and a fresh array literal every frame would
+// rebuild it on every pointermove.
+const thresholdTicks = [0, 25, 50, 75, { value: 90, class: 'bg-danger' }];
+const ratio = (v) => v + ':1';
+const gainText = (v) => (v <= -60 ? 'Off' : v + ' dB');
+const oneDp = (v) => v.toFixed(1);
+
+const installCmd = 'puzzle add piece fader';
+const usageImport = `import Fader from '@/components/ui/Fader.pzl';`;
+const usageMarkup = `<Fader label="Feather" value={ feather } min={ 0 } max={ 20 } step={ 0.5 } unit="px"
+  @input={ setFeather } @change={ setFeather } />`;
+
+const codeHero = `<Fader label="Rest" value={ rest } min={ 0 } max={ 100 } unit="%" @input={ setRest } @change={ setRest } />
+<Fader label="Arc" value={ arc } min={ 0 } max={ 360 } unit="°" @input={ setArc } @change={ setArc } />
+<Fader label="Feather" value={ feather } min={ 0 } max={ 20 } step={ 0.5 } unit="px"
+  @input={ setFeather } @change={ setFeather } />
+
+// parent — @input fires live during drag, @change on release
+events = {
+  setRest: (v) => this.setData('rest', v),
+};`;
+
+const codeSteps = `// a numeric step quantizes to a detent. Matching tickStep to step puts a mark on
+// every reachable value, which is how you get a fader that visibly snaps.
+<Fader label="Quality" value={ stepped } min={ 0 } max={ 100 } step={ 10 }
+  ticks={ true } tickStep={ 10 } unit="%" @change={ setStepped } />
+
+// step="any" is continuous — format the readout so it does not run to 15 decimals
+const oneDp = (v) => v.toFixed(1);
+
+<Fader label="Blend" value={ fine } min={ 0 } max={ 100 } step="any" formatValue={ oneDp }
+  @change={ setFine } />`;
+
+const codeVertical = `// orientation="vertical" flips every bit of geometry: the fill grows upward,
+// the readout sits above the strip and the label below. h-40 w-14 by default —
+// override through class.
+<Fader orientation="vertical" label="Low" value={ low } min={ -24 } max={ 24 } unit=" dB"
+  @input={ setLow } @change={ setLow } />
+
+// A vertical fader owns the vertical touch axis (touch-action: none), so a touch
+// that starts on it will not scroll the page. Put vertical faders in a fixed
+// panel or channel strip, not mid-way down a long scrolling page.`;
+
+const codeTicks = `// ticks={ true } generates a grid, auto-coarsened so a 0-100 step-1 fader gets
+// 21 marks instead of 101
+<Fader label="Density" value={ density } ticks={ true } @change={ setDensity } />
+
+// or list them — plain numbers and per-tick objects can be mixed freely.
+// A tick class REPLACES the default colour, so use one semantic token.
+const thresholdTicks = [0, 25, 50, 75, { value: 90, class: 'bg-danger' }];
+
+<Fader label="Threshold" value={ threshold } ticks={ thresholdTicks } @change={ setThreshold } />`;
+
+const codeFormatting = `// unit is appended verbatim — pass a leading space when you want one
+<Fader label="Corner radius" value={ corner } min={ 0 } max={ 64 } unit="px" @change={ setCorner } />
+
+// formatValue takes over the readout entirely, which is how you get
+// value-specific text like "Off" at the bottom of the range
+const gainText = (v) => (v <= -60 ? 'Off' : v + ' dB');
+
+<Fader label="Gain" value={ gain } min={ -60 } max={ 12 } formatValue={ gainText } @change={ setGain } />
+
+// showValue={ false } drops the readout and leaves the label alone
+<Fader label="Mix" value={ mix } showValue={ false } @change={ setMix } />`;
+
+const codeDisabled = `<Fader label="Locked" value={ 40 } unit="%" disabled />`;
+
+export default class FaderDoc extends PuzzleView {
+  created() {
+    this.setData({
+      rest: 40,
+      arc: 128,
+      feather: 6.5,
+      radius: 18,
+      aspect: 1.6,
+      stepped: 40,
+      fine: 33,
+      low: 6,
+      mid: -3,
+      high: 2,
+      density: 55,
+      threshold: 72,
+      corner: 24,
+      gain: -6,
+      mix: 65,
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      thresholdTicks,
+      ratio,
+      gainText,
+      oneDp,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeSteps,
+      codeVertical,
+      codeTicks,
+      codeFormatting,
+      codeDisabled,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Steps', href: '#steps' },
+        { label: 'Vertical', href: '#vertical' },
+        { label: 'Ticks', href: '#ticks' },
+        { label: 'Formatting', href: '#formatting' },
+        { label: 'Disabled', href: '#disabled' },
+      ],
+    };
+  }
+
+  events = {
+    setRest: (v) => {
+      this.setData('rest', v);
+      this.refresh();
+    },
+    setArc: (v) => {
+      this.setData('arc', v);
+      this.refresh();
+    },
+    setFeather: (v) => {
+      this.setData('feather', v);
+      this.refresh();
+    },
+    setRadius: (v) => {
+      this.setData('radius', v);
+      this.refresh();
+    },
+    setAspect: (v) => {
+      this.setData('aspect', v);
+      this.refresh();
+    },
+    setStepped: (v) => {
+      this.setData('stepped', v);
+      this.refresh();
+    },
+    setFine: (v) => {
+      this.setData('fine', v);
+      this.refresh();
+    },
+    setLow: (v) => {
+      this.setData('low', v);
+      this.refresh();
+    },
+    setMid: (v) => {
+      this.setData('mid', v);
+      this.refresh();
+    },
+    setHigh: (v) => {
+      this.setData('high', v);
+      this.refresh();
+    },
+    setDensity: (v) => {
+      this.setData('density', v);
+      this.refresh();
+    },
+    setThreshold: (v) => {
+      this.setData('threshold', v);
+      this.refresh();
+    },
+    setCorner: (v) => {
+      this.setData('corner', v);
+      this.refresh();
+    },
+    setGain: (v) => {
+      this.setData('gain', v);
+      this.refresh();
+    },
+    setMix: (v) => {
+      this.setData('mix', v);
+      this.refresh();
+    },
+  };
+}
+</script>

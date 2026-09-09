@@ -1,0 +1,193 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Markdown</h1>
+        <p class="mt-2 text-body">
+          Renders a markdown string as semantic HTML — a marked-lexer token walker building DOM
+          with createElement/createTextNode, so markdown can never inject markup; CommonMark plus
+          GFM tables, task lists, and strikethrough.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-2xl self-start">
+          <Markdown value={ sampleMd }/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it pulls in lib/markdown-doc.js and needs marked for
+          tokenizing:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <CodeBlock code={ installNpm } class="mt-3"/>
+        <p class="mt-3 text-sm text-muted">
+          The <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">^17</code> pin is deliberate:
+          @tiptap/markdown — the dependency behind the Markdown Editor piece — pins marked ^17,
+          so installing ^18 here would give an app that uses both pieces two copies of the
+          parser in its bundle.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          The <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code> prop is a plain markdown string the parent owns; an
+          empty or whitespace-only string renders nothing.
+          Pass <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">newTab</code> to open scheme-bearing (external) links in a new
+          tab with rel=noopener noreferrer — relative links are left alone.
+          Any <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">class</code> is appended to the root, so width and prose
+          constraints are yours to set.
+        </p>
+        <CodeBlock code={ usageNewTab } class="mt-3"/>
+        <p class="mt-3 text-sm text-muted">
+          Content renders client-side only. The walker builds DOM inside
+          an <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">island</code> after mount,
+          so on prerendered (static or hybrid) pages the markdown appears after
+          takeover rather than in the baked markup — worth weighing for content you need indexed.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <section id="supported-syntax" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Supported syntax</h2>
+          <p class="mb-3 text-sm text-body">
+            CommonMark — headings, paragraphs, emphasis, inline code, links, images, blockquotes,
+            fenced code with a language, ordered and unordered lists with nesting, and horizontal
+            rules — plus the GFM additions marked's lexer handles: tables with per-column
+            alignment, task lists, and strikethrough. Character entities in prose are decoded
+            through a small named table (the walker writes text nodes, so the browser never gets
+            a chance to decode them for us).
+          </p>
+          <p class="mb-3 text-sm text-body">
+            Raw HTML inside the markdown renders as literal visible text, by design. There is no
+            escape hatch that turns a string into markup — that is the whole point of the piece.
+          </p>
+          <p class="mb-3 text-sm text-body">The example above renders this markdown:</p>
+          <CodeBlock code={ sampleMd }/>
+        </section>
+
+        <section id="security" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Security</h2>
+          <p class="mb-3 text-sm text-body">
+            Untrusted markdown — comments, product descriptions, anything a user typed — is the
+            expected input. Every node is built with document.createElement and
+            document.createTextNode; the piece never assigns innerHTML, so no amount of markdown
+            can produce an element the walker did not decide to create.
+          </p>
+          <ul class="mb-3 list-disc space-y-1.5 pl-5 text-sm text-body">
+            <li>
+              Link hrefs run through safeUrl: javascript:, data:, and vbscript: URLs (including
+              tab/newline-obfuscated spellings) collapse to #.
+            </li>
+            <li>
+              Image srcs run through safeImageUrl, which is stricter — relative, http, https, and
+              data:image/ only; a rejected or empty source renders no image at all.
+            </li>
+            <li>
+              Code-fence language tags become a language-* class, so they are filtered to a plain
+              identifier before they reach a class attribute.
+            </li>
+            <li>
+              Entities are decoded by a fixed named table plus validated numeric code points —
+              never by round-tripping through innerHTML.
+            </li>
+            <li>Raw HTML tokens are emitted as text, so an injected tag shows up as text.</li>
+          </ul>
+          <p class="text-sm text-muted">
+            Titles and alt text are inert attribute values; ordered-list start and task-item
+            checked state are numeric and boolean.
+          </p>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Markdown from '@/components/ui/Markdown.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Markdown — follows the ButtonDoc exemplar shape. Every markdown
+// and code sample lives here as a template-literal const: the compiler parses
+// template prose, so raw `#`, backticks, and angle brackets must never sit
+// inline in the markup above.
+const installCmd = 'puzzle add piece markdown';
+const installNpm = 'npm install marked@^17';
+const usageImport = `import Markdown from '@/components/ui/Markdown.pzl';`;
+const usageMarkup = `<Markdown value={ article.body } />`;
+const usageNewTab = `<Markdown value={ comment.body } newTab={ true } class="max-w-prose" />`;
+const codeHero = `<Markdown value={ sampleMd } />`;
+
+// Small inline SVG so the image row needs no network asset — data:image/ is one
+// of the schemes safeImageUrl allows through.
+const BADGE =
+	'data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc5NicgaGVpZ2h0PSczMic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9JzMyJyByeD0nNicgZmlsbD0nc2xhdGVibHVlJy8+PGNpcmNsZSBjeD0nMTYnIGN5PScxNicgcj0nNycgZmlsbD0nd2hpdGUnLz48L3N2Zz4=';
+
+const SAMPLE_MD = `# Release notes
+
+Ships **today** with *smaller* output and ~~three~~ zero runtime deps.
+Read the [full changelog](https://example.com/changelog), or run \`npm outdated\`.
+Entities decode in prose: &amp; &mdash; &hellip;
+
+> Markdown in, semantic HTML out. Nothing is ever assigned to innerHTML.
+
+\`\`\`js
+const tokens = Lexer.lex(md, { gfm: true });
+\`\`\`
+
+## What landed
+
+- Tables with per-column alignment
+- Task lists
+  - Nested bullets keep their own list
+- Strikethrough
+
+1. Tokenize with marked
+2. Walk the tokens
+3. Build DOM nodes
+
+- [x] GFM tables
+- [x] Task lists
+- [ ] Footnotes
+
+| Feature | Status | Size |
+| :------ | :----: | ---: |
+| Tables  | Done   | 1 kB |
+| Lists   | Done   | 2 kB |
+
+---
+
+![Puzzle Pieces badge](${BADGE})
+`;
+
+export default class MarkdownDoc extends PuzzleView {
+	data(params, props) {
+		return {
+			sampleMd: SAMPLE_MD,
+			installCmd,
+			installNpm,
+			usageImport,
+			usageMarkup,
+			usageNewTab,
+			codeHero,
+			toc: [
+				{ label: 'Installation', href: '#installation' },
+				{ label: 'Usage', href: '#usage' },
+				{ label: 'Supported syntax', href: '#supported-syntax' },
+				{ label: 'Security', href: '#security' },
+			],
+		};
+	}
+}
+</script>

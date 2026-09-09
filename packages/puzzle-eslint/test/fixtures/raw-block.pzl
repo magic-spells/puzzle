@@ -1,0 +1,34 @@
+<puzzle-view class="raw-demo">
+  <h2>{ title }</h2>
+
+  <!-- Brace-heavy JSON: every brace in a {#raw} body is inert, so none of this
+       may be mistaken for an interpolation or a block directive (D150). -->
+  <div data-carousel>
+    {#raw}{ "loop": true, "slides": [{ "id": 1 }, { "id": 2 }], "labels": { "next": "}" } }{/raw}
+  </div>
+
+  <!-- Template grammar inside a raw body is literal text, closers included. -->
+  <pre>{#raw json}{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}{/raw }</pre>
+
+  <!-- Raw blocks do not nest: the first tolerant closer wins, and ordinary
+       template lexing resumes right after it. -->
+  <p>{#raw}outer {#raw} inner{/ raw } { count } tail</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class RawDemo extends PuzzleView {
+	data() {
+		let i = 4;
+		// A postfix update followed by a division: `/ 2` must stay division, not a
+		// regex literal that would swallow the section's </script>.
+		const half = i++ / 2;
+		return { title: 'raw', count: half };
+	}
+}
+</script>
+
+<style scoped>
+	pre { color: red; }
+</style>

@@ -1,0 +1,81 @@
+<puzzle-view>
+  <nav aria-label={ navLabel } class={ rootClass }>
+    <ul class={ listClass }><Children/></ul>
+  </nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// NavigationMenu — a horizontal site-header bar with hover/click flyout panels.
+// A FAMILY (D167) composed over the shared DropdownPanel base, which wraps the
+// @magic-spells/dropdown-panel web component:
+//
+//   import NavigationMenu from '@/components/ui/NavigationMenu';
+//
+//   <NavigationMenu label="Main">
+//     <li><NavigationMenu.Link variant="bar" href="/pricing" label="Pricing"/></li>
+//
+//     <NavigationMenu.Item>
+//       <NavigationMenu.Trigger>Products</NavigationMenu.Trigger>
+//       <NavigationMenu.Content columns={ 2 }>
+//         <NavigationMenu.Link href="/a" label="Analytics" description="…"/>
+//         <NavigationMenu.Link href="/b" label="Billing" description="…"/>
+//       </NavigationMenu.Content>
+//     </NavigationMenu.Item>
+//   </NavigationMenu>
+//
+// BREAKING CHANGE in 0.7.0: the old `items` / `activePath` config props are
+// gone. This piece used to render the whole bar from a nested
+// `items[].children[]` array and hand-roll hover intent, an outside-click
+// listener, arrow-key handling and a rAF viewport clamp. All four now live in
+// the web component, and nested config arrays are exactly the shape a compound
+// family replaces (see DECISION-CONFIG-FIRST-API — config-first is still the
+// rule for flat leaf lists like `options` and `steps`).
+//
+// WHAT'S DIFFERENT FROM THE OLD PIECE, on purpose:
+//   * Hover intent, latch-on-click, one-open-at-a-time, outside-pointerdown
+//     dismissal, Escape closing one level and refocusing its trigger,
+//     ArrowDown/Up entering a panel, Home/End, and → / ← for submenus are all
+//     upstream now. Nothing here schedules a timer or listens on the document.
+//   * The rAF right-edge clamp is GONE. Use `wide` on Content for a mega panel
+//     that spans the bar, or align="end" for a panel that hugs the right edge.
+//     Both are pure CSS.
+//   * Active routes are per-Link (`current`), not a bar-wide `activePath`.
+//
+// Children are the bar's <li>s. Every NavigationMenu.Item renders one and is a
+// dropdown; a plain top-level link is a bare <li> you write yourself around a
+// NavigationMenu.Link variant="bar".
+//
+// The <nav> is `relative` and that is LOAD-BEARING: a `wide` mega panel's host
+// goes position: static so the panel spans the nearest POSITIONED ANCESTOR.
+// This element is it. Remove the class and every wide panel drops a
+// viewport-height below the fold.
+//
+// Accessibility — the DISCLOSURE pattern, not menubar/menuitem roles, following
+// APG guidance for site navigation: those roles promise a desktop-app keyboard
+// model that links to pages do not deliver. Each trigger is a real button, each
+// item is a real link, every link is a natural Tab stop. The component writes
+// aria-expanded / aria-controls itself; never author them here.
+//
+// STYLESHEETS. Through DropdownPanel this piece needs the component's CSS in
+// your app's style entry — the required core sheet plus the optional effects
+// sheet if you want the drawn trigger arrow (the stock Trigger has the hook):
+//   @import "@magic-spells/dropdown-panel/css" layer(components);
+//   @import "@magic-spells/dropdown-panel/css/effects" layer(components);
+//
+// Props
+//   label   aria-label for the <nav> (default "Main")
+//   class   merged onto <nav>, after `relative`
+//   gap     Tailwind gap utility for the bar (default "gap-1")
+
+export default class NavigationMenu extends PuzzleView {
+  data(params, props) {
+    return {
+      navLabel: props.label != null ? String(props.label) : 'Main',
+      rootClass: ['relative', props.class].filter(Boolean).join(' '),
+      listClass: ['flex items-center', props.gap || 'gap-1'].join(' '),
+    };
+  }
+}
+</script>

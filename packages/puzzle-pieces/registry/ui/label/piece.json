@@ -1,0 +1,8 @@
+{
+  "name": "label",
+  "description": "Accessible <label> for a form control, with a `for` target and slot content",
+  "files": ["Label.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

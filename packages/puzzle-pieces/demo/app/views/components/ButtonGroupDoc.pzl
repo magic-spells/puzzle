@@ -1,0 +1,184 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Button Group</h1>
+        <p class="mt-2 text-body">
+          A joined row of action buttons — a segmented toolbar cluster rendered from an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">items</code>
+          array. Unlike Toggle Group there is no pressed state; each button just fires
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@press(value)</code>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <ButtonGroup label="Text formatting" items={ formatItems } @press={ act }/>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="variants" title="Variants" code={ codeVariants }>
+          <div class="flex flex-col items-center gap-4">
+            <ButtonGroup variant="outline" items={ actionItems } @press={ act }/>
+            <ButtonGroup variant="secondary" items={ actionItems } @press={ act }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes }>
+          <div class="flex flex-col items-center gap-4">
+            <ButtonGroup size="sm" items={ actionItems } @press={ act }/>
+            <ButtonGroup size="md" items={ actionItems } @press={ act }/>
+            <ButtonGroup size="lg" items={ actionItems } @press={ act }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="icon-only" title="Icon-only" code={ codeIconOnly }>
+          <ButtonGroup label="Text alignment" items={ alignItems } @press={ act }/>
+        </ExampleBox>
+      </div>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <p class="mb-3 text-sm text-body">
+          The wrapper is a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="group"</code>
+          with an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-label</code>
+          (default <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">"Actions"</code>) from the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code> prop,
+          so the cluster is announced as one named toolbar.
+        </p>
+        <p class="mb-3 text-sm text-body">
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code> is
+          <strong class="font-medium text-ink">always required</strong> on every item — it is the button's accessible name.
+          For an icon-only button set
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">iconOnly: true</code>:
+          the label renders
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">sr-only</code>
+          and is mirrored onto the button's
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">title</code>, so the control keeps
+          both a visible affordance and a screen-reader name. The rendered
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<svg>' }</code> is
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-hidden</code>.
+        </p>
+        <p class="text-sm text-muted">
+          Each button is <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">relative</code> and rises to
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">z-10</code> on focus so its
+          focus outline draws above the overlapping neighbors instead of being clipped by their borders.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ButtonGroup from '@/components/ui/ButtonGroup.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+// Docs page for ButtonGroup — follows the ButtonDoc exemplar shape.
+const installCmd = 'puzzle add piece button-group';
+const usageImport = `import ButtonGroup from '@/components/ui/ButtonGroup.pzl';`;
+const usageMarkup = `<ButtonGroup label="Text formatting" @press={ format } items={[ { value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true }, { value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true }, { value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true }, ]}/>`;
+
+// SVG path `d` strings (24×24, stroke-current), one per icon.
+const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
+const ITALIC = 'M19 4h-9 M14 20H5 M15 4 9 20';
+const UNDERLINE = 'M6 4v6a6 6 0 0 0 12 0V4 M4 20h16';
+const ALIGN_LEFT = 'M21 6H3 M15 12H3 M17 18H3';
+const ALIGN_CENTER = 'M21 6H3 M17 12H7 M19 18H5';
+const ALIGN_RIGHT = 'M21 6H3 M21 12H9 M21 18H7';
+
+const formatItems = [
+  { value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true },
+  { value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true },
+  { value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true },
+];
+
+const alignItems = [
+  { value: 'left', label: 'Align left', icon: ALIGN_LEFT, iconOnly: true },
+  { value: 'center', label: 'Align center', icon: ALIGN_CENTER, iconOnly: true },
+  { value: 'right', label: 'Align right', icon: ALIGN_RIGHT, iconOnly: true },
+];
+
+const actionItems = [
+  { value: 'copy', label: 'Copy' },
+  { value: 'cut', label: 'Cut' },
+  { value: 'paste', label: 'Paste' },
+];
+
+const codeHero = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
+const ITALIC = 'M19 4h-9 M14 20H5 M15 4 9 20';
+const UNDERLINE = 'M6 4v6a6 6 0 0 0 12 0V4 M4 20h16';
+
+<ButtonGroup label="Text formatting" @press={ format } items={[
+  { value: 'bold',      label: 'Bold',      icon: BOLD,      iconOnly: true },
+  { value: 'italic',    label: 'Italic',    icon: ITALIC,    iconOnly: true },
+  { value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true },
+]}/>`;
+
+const codeVariants = `// items = [{ value: 'copy', label: 'Copy' }, { value: 'cut', label: 'Cut' }, { value: 'paste', label: 'Paste' }]
+<ButtonGroup variant="outline" items={ items } @press={ run } />
+<ButtonGroup variant="secondary" items={ items } @press={ run } />`;
+
+const codeSizes = `<ButtonGroup size="sm" items={ items } @press={ run } />
+<ButtonGroup size="md" items={ items } @press={ run } />
+<ButtonGroup size="lg" items={ items } @press={ run } />`;
+
+const codeIconOnly = `// iconOnly hides the label text (kept sr-only) and mirrors it onto title.
+<ButtonGroup label="Text alignment" @press={ align } items={[
+  { value: 'left',   label: 'Align left',   icon: ALIGN_LEFT,   iconOnly: true },
+  { value: 'center', label: 'Align center', icon: ALIGN_CENTER, iconOnly: true },
+  { value: 'right',  label: 'Align right',  icon: ALIGN_RIGHT,  iconOnly: true },
+]}/>`;
+
+export default class ButtonGroupDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      formatItems,
+      alignItems,
+      actionItems,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeVariants,
+      codeSizes,
+      codeIconOnly,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Variants', href: '#variants' },
+        { label: 'Sizes', href: '#sizes' },
+        { label: 'Icon-only', href: '#icon-only' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    act: (value) => toast({ message: `Pressed “${value}”.`, variant: 'success' }),
+  };
+}
+</script>

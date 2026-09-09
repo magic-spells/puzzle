@@ -1,0 +1,8 @@
+{
+  "name": "markdown",
+  "description": "Renders a markdown string as semantic HTML — a marked-lexer token walker building DOM with createElement/createTextNode, so markdown can never inject markup; CommonMark plus GFM tables, task lists, and strikethrough",
+  "files": ["Markdown.pzl"],
+  "registryDependencies": ["lib/markdown-doc.js"],
+  "dependencies": ["marked"],
+  "targetDir": "app/components/ui"
+}

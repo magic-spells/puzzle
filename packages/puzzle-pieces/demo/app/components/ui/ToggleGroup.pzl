@@ -1,0 +1,132 @@
+<puzzle-view>
+  <div class={ rootClass } role="group" aria-label={ ariaLabel }>
+    {#for item in items}
+      <button
+        type="button"
+        key={ item.value }
+        class={ item.class }
+        aria-pressed={ item.pressedAttr }
+        disabled={ item.disabled }
+        @click={ toggle(item.value, event) }>
+        { item.label }
+      </button>
+    {/for}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ToggleGroup — a joined row of pressed-state buttons (text-alignment picker,
+// view switcher). Config-first: the whole strip renders from an `items` array.
+// This is a PRESSED-BUTTONS pattern, NOT a radio group — even in single mode you
+// can deselect the active item (click it again → ''). Each button carries
+// aria-pressed; there is no roving/selected radio semantics.
+//
+// ICON STORY: Puzzle can't take a raw inline-SVG string through a prop (a
+// component only inlines SVG via the compile-time {#svg} block, which needs a
+// literal file path — not per-item data). So `items[].icon` is NOT rendered.
+// `label` is REQUIRED and is what shows. For an "icon-only" group today, pass a
+// short/single-character or emoji label (e.g. '≡', 'B', '★', '🔇'); it stays a
+// real accessible name. A future icon-slot story would need a slots-in-a-loop
+// primitive Puzzle doesn't have yet.
+//
+//   // single-select (with deselect), '' = nothing selected
+//   <ToggleGroup items={ aligns } value={ align } @change={ setAlign }
+//                label="Text alignment"/>
+//
+//   // multiple-select, value is an array
+//   <ToggleGroup type="multiple" items={ marks } value={ marks$ }
+//                @change={ setMarks } label="Text formatting"/>
+//
+//   // aligns = [{ value:'left', label:'Left' }, { value:'center', label:'Center' }]
+//   // marks  = [{ value:'bold', label:'B' }, { value:'italic', label:'I', disabled:true }]
+//
+// Props:
+//   items   [{ value, label, disabled? }] — label required (a11y name); icon ignored
+//   type    'single' (default) | 'multiple'
+//   value   single: the selected value string ('' = none) · multiple: array of values
+//   label   → aria-label on the role="group" container (omit and it's absent)
+//   class   appended last to the container
+// Callback:
+//   @change(value, event)  value-first, typeof-guarded. single → the new value,
+//                          or '' when the active item is deselected. multiple →
+//                          the new array of selected values (items-order preserved,
+//                          newly added appended).
+//
+// A {#for} body must be a single element, so each item's pressed flag and full
+// class string are precomputed in data(); the template just reads them. The
+// button recipes match Toggle.pzl (bg-faint text-ink pressed, ghost unpressed)
+// minus the per-button rounding/border — the container owns the pill shape
+// (rounded-lg + overflow-hidden) and the hairline separators (divide-x).
+const ROOT =
+  'inline-flex items-center rounded-lg border border-border overflow-hidden ' +
+  'divide-x divide-border';
+
+const ITEM_BASE =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
+  'h-9 px-4 text-sm font-medium cursor-pointer transition-colors ' +
+  // Negative offset keeps the focus ring inside the clipped (overflow-hidden)
+  // container instead of getting cropped away.
+  'focus-visible:outline-2 focus-visible:-outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+
+const OFF = 'bg-surface text-body hover:bg-surface-sunken hover:text-ink';
+const ON = 'bg-faint text-ink hover:bg-faint';
+
+export default class ToggleGroup extends PuzzleView {
+  data(params, props) {
+    const type = props.type === 'multiple' ? 'multiple' : 'single';
+    const groupDisabled = !!props.disabled;
+    const value = props.value;
+    const selectedArr = Array.isArray(value) ? value : [];
+
+    const items = (props.items || []).map((it) => {
+      const pressed =
+        type === 'multiple'
+          ? selectedArr.includes(it.value)
+          : it.value === value;
+      const disabled = groupDisabled || !!it.disabled;
+      return {
+        value: it.value,
+        label: it.label,
+        disabled,
+        pressed,
+        pressedAttr: pressed ? 'true' : 'false',
+        class: [ITEM_BASE, pressed ? ON : OFF].join(' '),
+      };
+    });
+
+    return {
+      type,
+      value,
+      disabled: groupDisabled,
+      items,
+      rootClass: [ROOT, props.class || ''].join(' '),
+      ariaLabel: props.label || false,
+    };
+  }
+
+  events = {
+    toggle: (val, event) => {
+      const { type, value, items } = this.getData();
+      const item = items.find((i) => i.value === val);
+      if (!item || item.disabled) return;
+
+      let next;
+      if (type === 'multiple') {
+        const cur = Array.isArray(value) ? value : [];
+        next = cur.includes(val)
+          ? cur.filter((v) => v !== val)
+          : [...cur, val];
+      } else {
+        // single-select with deselect: clicking the active item clears it.
+        next = value === val ? '' : val;
+      }
+
+      const { change } = this.props;
+      if (typeof change === 'function') change(next, event);
+    },
+  };
+}
+</script>

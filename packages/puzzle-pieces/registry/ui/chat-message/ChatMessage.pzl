@@ -1,0 +1,144 @@
+<puzzle-view>
+  <div class={ rowClass }>
+    {#if showMeta}
+      <span class={ avatarClass } style={ avatarStyle } aria-hidden="true">
+        {#if showImg}
+          <img class="size-full object-cover" src={ avatarSrc } alt="" />
+        {:else if hasName}
+          { initials }
+        {:else}
+          <svg class="w-1/2 h-1/2" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z" />
+          </svg>
+        {/if}
+      </span>
+    {:else}
+      <span class="w-8 shrink-0" aria-hidden="true"></span>
+    {/if}
+
+    <div class={ colClass }>
+      {#if showMeta}
+        <div class="mb-1 flex items-baseline gap-2">
+          <span class="text-sm font-medium text-ink">{ author }</span>
+          {#if time}
+            <time class="text-xs text-muted">{ time }</time>
+          {/if}
+        </div>
+      {/if}
+
+      <div class={ bubbleClass }><div class="text-sm leading-relaxed whitespace-pre-wrap"><Slot/></div></div>
+
+      <div class={ attachClass }><Slot name="attachments"/></div>
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ChatMessage — one message row in a chat log: avatar, author/time meta, and a
+// styled bubble holding the message body, with an optional attachments row below.
+// A conversation is a documented list at the app level (role="list"/role="log"
+// belongs on the container, e.g. ChatScroller), so this piece is plain divs.
+//
+// CONTROLLED / CONFIG-FIRST. The parent owns all data; this piece only renders.
+// The default slot is the message body (text-sm, leading-relaxed, pre-wrap so
+// author-entered newlines survive). The named `attachments` slot sits below the
+// bubble for ChatAttachment chips and collapses (empty:hidden) when unused.
+//
+//   <ChatMessage author="Ada Lovelace" time="9:41 AM" avatarName="Ada Lovelace">
+//     Hey! Are we still on for the review at 3?
+//   </ChatMessage>
+//
+//   <ChatMessage align="end" variant="sent" author="You" time="9:42 AM" avatarName="You">
+//     Yep — see you then.
+//   </ChatMessage>
+//
+// Props:
+//   author     display name shown in the meta line
+//   time       PREFORMATTED time string (this piece never formats dates) — the
+//              consumer passes "9:41 AM", "2h ago", etc.; rendered in a <time>
+//   align      'start' (default) | 'end' — 'end' mirrors the row (flex-row-reverse)
+//              for the current user's own messages
+//   variant    'received' (default → bg-surface-sunken text-ink bubble) |
+//              'sent' (→ bg-brand text-brand-ink)
+//   avatarSrc  avatar image URL; when set the disc shows the image
+//   avatarName name used for the initials fallback (and its deterministic color)
+//              when there's no image — ported inline from Avatar.pzl below
+//   showMeta   default true. false = a compact FOLLOW-UP message (consecutive
+//              messages from the same author): no avatar, no author/time line,
+//              tighter top spacing, fully-rounded bubble only. A width-matched
+//              spacer keeps the bubble aligned under the avatar column.
+//   class      appended to the root row
+//
+// The bubble squares the ONE corner facing the avatar (rounded-tl-sm at start,
+// rounded-tr-sm at end) on meta rows only, so a message group reads as a single
+// speech shape with rounded follow-ups beneath it.
+
+// initials() + hue() ported inline from Avatar.pzl (which ported them from
+// pyramid's format.js): first letters of the first and last words, uppercased;
+// a single word gives its first two. The disc color is derived from the name
+// (hue = summed char codes % 360) applied as an inline hsl() background — the
+// one sanctioned dynamic-color exception to the no-hex rule.
+function initials(label) {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+const AVATAR_BASE =
+  'inline-flex items-center justify-center shrink-0 overflow-hidden rounded-full ' +
+  'select-none size-8 text-xs';
+
+const BUBBLE_BASE = 'w-fit max-w-[75%] rounded-2xl px-4 py-2.5';
+
+const VARIANT = {
+  received: 'bg-surface-sunken text-ink',
+  sent: 'bg-brand text-brand-ink',
+};
+
+export default class ChatMessage extends PuzzleView {
+  data(params, props) {
+    const end = props.align === 'end';
+    const showMeta = props.showMeta !== false;
+    const avatarSrc = props.avatarSrc || '';
+    const name = props.avatarName || '';
+    const hasName = name.trim().length > 0;
+    const showImg = !!avatarSrc;
+
+    const hue = hasName
+      ? [...name].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 360
+      : 0;
+    const tone = hasName ? 'text-white font-medium' : 'bg-surface-sunken text-muted';
+
+    // Square the corner toward the avatar, meta rows only. Follow-ups stay fully
+    // rounded so they nest cleanly under the first bubble.
+    const corner = showMeta ? (end ? 'rounded-tr-sm' : 'rounded-tl-sm') : '';
+
+    return {
+      showMeta,
+      showImg,
+      hasName,
+      avatarSrc,
+      author: props.author || '',
+      time: props.time || '',
+      initials: hasName ? initials(name) : '',
+      avatarStyle: hasName && !showImg ? `background:hsl(${hue} 45% 45%)` : '',
+      avatarClass: [AVATAR_BASE, showImg ? '' : tone].join(' '),
+      rowClass: [
+        'flex gap-2.5',
+        end ? 'flex-row-reverse' : '',
+        showMeta ? 'mt-3' : 'mt-0.5',
+        props.class || '',
+      ].join(' '),
+      colClass: ['flex min-w-0 flex-1 flex-col', end ? 'items-end' : 'items-start'].join(' '),
+      bubbleClass: [BUBBLE_BASE, VARIANT[props.variant] || VARIANT.received, corner].join(' '),
+      attachClass: [
+        'mt-1.5 flex flex-wrap gap-2 empty:hidden',
+        end ? 'justify-end' : '',
+      ].join(' '),
+    };
+  }
+}
+</script>

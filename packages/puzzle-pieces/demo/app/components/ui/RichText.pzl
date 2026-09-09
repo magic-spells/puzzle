@@ -1,0 +1,196 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <div island ref="host"></div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { RICH_TEXT_CLASSES as C, isEmpty, safeLinkUrl } from '../../lib/rich-text-doc.js';
+
+// RichText — renders a stored rich text document (the RichTextEditor's
+// Shopify-style JSON tree, see lib/rich-text-doc.js for the format) as
+// semantic HTML. Zero npm dependencies: a document.createElement tree-walker
+// building text via createTextNode, so stored content can never inject markup.
+// Typography comes from the shared RICH_TEXT_CLASSES map — the same classes
+// the editor applies — so what was edited is what renders.
+// Re-render checks are by value (a JSON key), but prop delivery is by identity:
+// pass a NEW doc object on change; mutating one in place will not re-render.
+//
+//   <RichText doc={ article.body } />
+//   <RichText doc={ doc } class="max-w-prose" />
+//
+// Props:
+//   doc    the document tree ({ type:'root', children:[…] }); null/empty
+//          renders nothing
+//   class  appended to the root
+//
+// The walk happens in mounted()/afterUpdate() inside an `island` (built DOM
+// lives outside the vdom), which means content renders CLIENT-SIDE ONLY —
+// prerendered (static/hybrid) pages show it after takeover, not in the baked
+// markup. Link safety: javascript: URLs are neutralized; target="_blank"
+// links get rel="noopener noreferrer".
+
+function textWithBreaks(value) {
+	const frag = document.createDocumentFragment();
+	String(value ?? '')
+		.split('\n')
+		.forEach((part, i) => {
+			if (i > 0) frag.appendChild(document.createElement('br'));
+			if (part) frag.appendChild(document.createTextNode(part));
+		});
+	return frag;
+}
+
+function wrap(tag, child) {
+	const el = document.createElement(tag);
+	el.appendChild(child);
+	return el;
+}
+
+function textDom(t) {
+	let node = textWithBreaks(t.value);
+	if (t.bold) node = wrap('strong', node);
+	if (t.italic) node = wrap('em', node);
+	if (t.underline) node = wrap('u', node);
+	if (t.strike) node = wrap('s', node);
+	return node;
+}
+
+function inlineDom(nodes) {
+	const frag = document.createDocumentFragment();
+	for (const n of nodes || []) {
+		if (n.type === 'text') {
+			frag.appendChild(textDom(n));
+		} else if (n.type === 'link') {
+			const a = document.createElement('a');
+			// Stored link URLs are untrusted; safeLinkUrl is the same policy the
+			// editor enforces through Tiptap (see lib/rich-text-doc.js).
+			a.href = safeLinkUrl(n.url) ?? '#';
+			if (n.title) a.title = n.title;
+			if (n.target) {
+				a.target = n.target;
+				a.rel = 'noopener noreferrer';
+			}
+			a.className = C.link;
+			a.appendChild(inlineDom(n.children));
+			frag.appendChild(a);
+		}
+	}
+	return frag;
+}
+
+// Inline text-align is deliberate — the sanctioned bend of the Tailwind-only
+// rule. Tiptap's TextAlign extension emits exactly this inline style, so
+// matching it keeps the editor and the renderer pixel-identical.
+function alignStyle(el, node) {
+	if (node.align === 'center' || node.align === 'right') {
+		el.style.textAlign = node.align;
+	}
+}
+
+function blockDom(node) {
+	switch (node.type) {
+		case 'paragraph': {
+			const p = document.createElement('p');
+			p.className = C.paragraph;
+			alignStyle(p, node);
+			const inline = inlineDom(node.children);
+			// ProseMirror keeps empty paragraphs open with a <br>; match it so
+			// blank lines survive the round trip visually.
+			p.appendChild(inline.childNodes.length ? inline : document.createElement('br'));
+			return p;
+		}
+		case 'heading': {
+			const level = Math.min(6, Math.max(1, Math.round(node.level) || 2));
+			const h = document.createElement(`h${level}`);
+			// The block-style dropdown produces levels 1-4; anything deeper reuses
+			// the h4 treatment rather than inventing unstyled sizes.
+			h.className =
+				level === 1
+					? C.heading1
+					: level === 2
+						? C.heading2
+						: level === 3
+							? C.heading3
+							: C.heading4;
+			alignStyle(h, node);
+			h.appendChild(inlineDom(node.children));
+			return h;
+		}
+		case 'list': {
+			const list = document.createElement(node.listType === 'ordered' ? 'ol' : 'ul');
+			list.className = `${C.list} ${node.listType === 'ordered' ? C.orderedList : C.bulletList}`;
+			for (const item of node.children || []) {
+				const li = document.createElement('li');
+				li.className = C.listItem;
+				// A list-item mixes inline content and nested lists; preserve their order.
+				let inlineNodes = [];
+				for (const child of item.children || []) {
+					if (child.type === 'list') {
+						if (inlineNodes.length) li.appendChild(inlineDom(inlineNodes));
+						li.appendChild(blockDom(child));
+						inlineNodes = [];
+					} else {
+						inlineNodes.push(child);
+					}
+				}
+				if (inlineNodes.length) li.appendChild(inlineDom(inlineNodes));
+				list.appendChild(li);
+			}
+			return list;
+		}
+		case 'blockquote': {
+			const bq = document.createElement('blockquote');
+			bq.className = C.blockquote;
+			for (const child of node.children || []) bq.appendChild(blockDom(child));
+			return bq;
+		}
+		case 'code-block': {
+			const pre = document.createElement('pre');
+			pre.className = C.codeBlock;
+			const code = document.createElement('code');
+			code.textContent = (node.children || []).map((t) => t.value || '').join('');
+			pre.appendChild(code);
+			return pre;
+		}
+		default: {
+			// Unknown block types render nothing rather than guessing.
+			return document.createDocumentFragment();
+		}
+	}
+}
+
+export default class RichText extends PuzzleView {
+	data(params, props) {
+		return {
+			rootClass: props.class || '',
+		};
+	}
+
+	_render() {
+		const host = this.refs.host;
+		if (!host) return;
+		const doc = this.props.doc;
+		const key = JSON.stringify(doc ?? null);
+		if (key === this._renderedKey) return;
+		host.textContent = '';
+		if (isEmpty(doc)) {
+			this._renderedKey = key;
+			return;
+		}
+		const frag = document.createDocumentFragment();
+		for (const block of doc.children) frag.appendChild(blockDom(block));
+		host.appendChild(frag);
+		this._renderedKey = key;
+	}
+
+	mounted() {
+		this._render();
+	}
+
+	afterUpdate() {
+		this._render();
+	}
+}
+</script>

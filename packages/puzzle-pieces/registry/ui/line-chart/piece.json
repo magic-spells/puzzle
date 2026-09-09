@@ -1,0 +1,8 @@
+{
+  "name": "line-chart",
+  "description": "Responsive, config-first multi-series line chart with a nearest-x hover crosshair, tooltip, legend, and an sr-only data table",
+  "files": ["LineChart.pzl"],
+  "registryDependencies": ["lib/chart-math.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

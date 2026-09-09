@@ -1,0 +1,205 @@
+<puzzle-view>
+  <panel-stack class={ rootClass } effect={ effect } current={ initialCurrent }><Children/></panel-stack>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// PanelStack — nested-panel navigation: drill-down menus, settings flows,
+// multi-step wizards. A FAMILY (D167) that WRAPS the
+// @magic-spells/panel-stack web component, so the stack itself, the push/pop
+// transitions, the inert handling, focus restoration, the delegated triggers
+// and the Escape composition all live upstream.
+//
+//   import PanelStack from '@/components/ui/PanelStack';
+//
+//   <PanelStack class="h-80" current={ panel } @change={ setPanel }>
+//     <PanelStack.Panel handle="root">
+//       <button data-action-stack-push target="shop">Shop</button>
+//     </PanelStack.Panel>
+//     <PanelStack.Panel handle="shop">
+//       <button data-action-stack-pop>Back</button>
+//     </PanelStack.Panel>
+//   </PanelStack>
+//
+// BREAKING CHANGE in 0.7.0: the root-first `stack` ARRAY is gone, replaced by a
+// single `current` handle, and the panels are real members. The old piece
+// shipped a lib/panel-stack.js of panelClass() / panelInert() helpers you had to
+// call on every parent-authored panel; that file is deleted, and the component's
+// own per-state custom properties own all of it.
+//
+// THE FIRST PANEL IS THE ROOT. Upstream takes the first <stack-panel> child as
+// the bottom of the stack; an authored `current` naming a different panel seeds
+// the stack as [root, current] silently, so pop() and Escape still go back.
+//
+// CONTROLLED `current`, DRIVEN IMPERATIVELY. Two things follow.
+//
+//   1. The template renders `current` ONCE, as a FROZEN seed — the component
+//      observes AND reflects that attribute, so a live binding would fight the
+//      patcher every render. `#initialCurrent` is captured on the first data()
+//      call and never recomputed.
+//   2. Every later change is edge-triggered in afterUpdate() and applied as
+//      `element.current = next` under a #syncing guard, because the write
+//      dispatches push/pop/reset synchronously and would otherwise echo.
+//
+// Upstream resolves a `current` write against the stack: already current is a
+// no-op, the root RESETS, a handle already in the ancestry POPS one level at a
+// time (one panel-stack:pop each), anything else PUSHES. An unknown handle is
+// ignored and the attribute restored; this piece additionally warns once when no
+// member matches.
+//
+// A CANCELLED PUSH IS NOT REVERTED BY US. preventDefault() on @push cancels the
+// navigation and upstream restores the attribute itself — the piece changes
+// nothing, and #last tracks props.current and nothing else, so an ignored
+// @change leaves no stale edge behind.
+//
+// TRIGGERS STAY DECLARATIVE. `<button data-action-stack-push target="shop">` and
+// `<button data-action-stack-pop>` are handled by the component's own delegated
+// click listener, and pop() restores focus to the trigger that opened the panel
+// it is leaving. The piece adds nothing.
+//
+// ESCAPE. At depth > 1 the component pops one level and claims the event; at the
+// root it lets the keydown bubble, so a wrapping Dialog or Sheet closes normally.
+//
+// MORPH. Panels are positioned with transforms, so neither this root nor a panel
+// may be a morph root.
+//
+// STYLESHEET. Required — the absolute panel positioning, the per-state
+// transform/filter properties, the stack effect's inner shadow, the
+// reduced-motion opt-out and the :not(:defined) anti-flash guard are all in it:
+//   @import "@magic-spells/panel-stack/css" layer(components);
+//
+// The stack fills its parent, so give it (or a wrapper) an explicit size.
+//
+// TODO: switch to ^0.2.0 once published — this repo's demo pins the package by
+// file: path while 0.2.0 is unreleased. Consumers install ^0.2.0.
+//
+// Props
+//   current         controlled: the handle of the panel that should be showing
+//   defaultCurrent  uncontrolled seed, frozen into the attribute once
+//   effect          'slide' (default) | 'stack'
+//   class           merged onto <panel-stack>
+//   @change(handle) value-first, once per settled transition (panel-stack:change)
+//   @push(detail)   raw { fromHandle, toHandle }; preventDefault() cancels
+//   @pop(detail)    raw { fromHandle, toHandle }
+//   @reset(detail)  raw { rootHandle }
+
+const ROOT = 'block';
+
+export default class PanelStack extends PuzzleView {
+  #live = false;
+  #syncing = false;
+  #controlled = false;
+  #warned = false;
+  #initialCurrent;
+  #last;
+
+  #handles() {
+    if (!this.element) return [];
+    return [...this.element.querySelectorAll(':scope > stack-panel[handle]')].map((panel) =>
+      panel.getAttribute('handle')
+    );
+  }
+
+  #sync(handle) {
+    if (handle == null) return;
+    if (!this.#handles().includes(String(handle))) {
+      if (!this.#warned) {
+        this.#warned = true;
+        console.warn(
+          `[PanelStack] no PanelStack.Panel has handle "${handle}" — the stack is unchanged.`
+        );
+      }
+      return;
+    }
+    this.#warned = false;
+    if (this.element.currentHandle === String(handle)) return;
+    this.#syncing = true;
+    try {
+      this.element.current = handle;
+    } finally {
+      this.#syncing = false;
+    }
+  }
+
+  // The raw push / pop / reset callbacks, reported synchronously — a
+  // preventDefault() on @push has to be able to cancel the navigation.
+  // #syncing first, then the target check: every panel-stack event bubbles and
+  // is composed, so a nested stack's events pass straight through this element
+  // on their way up.
+  #report = (name) => (event) => {
+    if (this.#syncing) return;
+    if (event.target !== this.element) return;
+    this.props[name]?.(event.detail);
+  };
+
+  #onPush = this.#report('push');
+  #onPop = this.#report('pop');
+  #onReset = this.#report('reset');
+
+  // @change comes from panel-stack:change, which upstream emits from its reflect
+  // funnel AFTER the stack has settled — push and pop both fire BEFORE it moves,
+  // so reporting from those would hand the parent the OLD handle and its next
+  // render would push a second time. The change event is de-duped upstream and
+  // silent at init, so this is one report per real transition, whatever caused
+  // it (a trigger, Escape, a controlled write, or the DOM-driven ancestor
+  // fallback when the current panel is removed). A cancelled push settles
+  // nowhere new and so reports nothing.
+  #onChange = (event) => {
+    if (this.#syncing) return;
+    if (event.target !== this.element) return;
+    this.props.change?.(event.detail?.handle);
+  };
+
+  data(params, props) {
+    // Frozen on the FIRST call and never recomputed: the component reflects
+    // `current` as its own state, so re-rendering the attribute every commit
+    // would fight it. Every later change goes through #sync().
+    this.#initialCurrent ??= props.current ?? props.defaultCurrent ?? false;
+    return {
+      rootClass: [ROOT, props.class].filter(Boolean).join(' '),
+      effect: props.effect === 'stack' ? 'stack' : false,
+      initialCurrent: this.#initialCurrent,
+    };
+  }
+
+  mounted() {
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#controlled = this.props.current !== undefined;
+    this.#last = this.props.current;
+
+    // Bound before the upgrade: addEventListener works on an un-upgraded
+    // element, so no dispatch can be missed in the gap.
+    this.element.addEventListener('panel-stack:push', this.#onPush);
+    this.element.addEventListener('panel-stack:pop', this.#onPop);
+    this.element.addEventListener('panel-stack:reset', this.#onReset);
+    this.element.addEventListener('panel-stack:change', this.#onChange);
+
+    import('@magic-spells/panel-stack').catch((error) => {
+      console.error(
+        '[PanelStack] failed to load @magic-spells/panel-stack — the panels will not move.',
+        error
+      );
+    });
+  }
+
+  afterUpdate() {
+    if (!this.#live || !this.#controlled) return;
+    const current = this.props.current;
+    // Edge-triggered, never level-triggered: an unrelated re-render carrying the
+    // same handle must not re-push a panel the user just popped.
+    if (current === this.#last) return;
+    this.#last = current;
+    this.#sync(current);
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.element?.removeEventListener('panel-stack:push', this.#onPush);
+    this.element?.removeEventListener('panel-stack:pop', this.#onPop);
+    this.element?.removeEventListener('panel-stack:reset', this.#onReset);
+    this.element?.removeEventListener('panel-stack:change', this.#onChange);
+  }
+}
+</script>

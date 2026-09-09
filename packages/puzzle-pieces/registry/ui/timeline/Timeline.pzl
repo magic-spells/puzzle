@@ -1,0 +1,164 @@
+<puzzle-view>
+  <ol class={ listClass } aria-label={ label }>
+    {#for item in items}
+      <li class={ item.rowClass }>
+        {#if !item.isLast}
+          <span aria-hidden="true" class="absolute left-3 top-3 bottom-0 w-px -translate-x-1/2 bg-border"></span>
+        {/if}
+
+        <div class="relative z-10 flex w-6 shrink-0 justify-center">
+          {#if item.hasIcon}
+            <span class={ item.iconClass }>
+              <svg
+                class="size-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true">
+                <path d={ item.icon } />
+              </svg>
+            </span>
+          {:else if item.hasNumber}
+            <span class={ item.numberClass }>{ item.number }</span>
+          {:else}
+            <span class="grid size-6 place-items-center">
+              <span class={ item.dotClass }></span>
+            </span>
+          {/if}
+        </div>
+
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span class="text-sm font-medium text-ink">{ item.title }</span>
+            {#if item.time}
+              <time class="text-xs text-muted">{ item.time }</time>
+            {/if}
+          </div>
+          {#if item.description}
+            <p class="mt-1 text-sm text-body">{ item.description }</p>
+          {/if}
+        </div>
+      </li>
+    {/for}
+  </ol>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Timeline — a vertical event feed rendered entirely from an `items` array. A
+// dot/connector rail runs down a fixed left gutter; each event shows a title, an
+// optional preformatted `time`, an optional description, and an optional status
+// color on its dot. Purely PRESENTATIONAL and CONFIG-FIRST (like Breadcrumb /
+// ChatMessage): the parent owns the data, this piece only renders. No callbacks.
+//
+//   <Timeline items={ events }/>
+//   <Timeline items={ events } class="max-w-md" label="Order history"/>
+//   <Timeline items={ steps } numbered/>
+//
+// numbered: auto-numbers every item 1..n in its marker (step lists). A per-item
+//   `number` overrides the auto value; marker precedence is icon > number > dot,
+//   so a single step can still show a checkmark while its siblings show digits.
+//
+// items: [{ title, time?, description?, status?, icon?, number? }]
+//   title        the event heading (text-ink font-medium)
+//   time         PREFORMATTED time string — this piece never formats dates; the
+//                consumer passes "9:41 AM", "2h ago", "Mar 4", … rendered in <time>
+//   description  optional secondary line (text-sm text-body)
+//   status       'default' | 'brand' | 'success' | 'danger' | 'muted' — tints the
+//                dot (and, when an icon is present, the icon marker's border/glyph)
+//   icon         optional 24×24 stroke-current SVG path `d` string (Sidebar/Tree
+//                convention). When set, the dot becomes a ringed icon marker.
+//   number       optional step number. When set (or when `numbered` is on), the
+//                dot becomes a ringed digit marker sharing the icon marker's box.
+//
+// The connector is an absolute w-px hairline (bg-border) pinned to the gutter,
+// running from each dot down to the next; the LAST item drops it (precomputed
+// `isLast`, Breadcrumb's trick). The dot marker sits in a z-10 gutter node so it
+// covers the line's start, keeping the rail visually behind every dot.
+
+const DOT_BASE = 'size-2.5 rounded-full';
+
+// Plain-disc fill per status.
+const STATUS_DOT = {
+  default: 'bg-border-strong',
+  brand: 'bg-brand',
+  success: 'bg-success',
+  danger: 'bg-danger',
+  muted: 'bg-muted',
+};
+
+// Icon-marker ring color per status.
+const STATUS_BORDER = {
+  default: 'border-border',
+  brand: 'border-brand',
+  success: 'border-success',
+  danger: 'border-danger',
+  muted: 'border-border',
+};
+
+// Icon-marker glyph color per status.
+const STATUS_TEXT = {
+  default: 'text-muted',
+  brand: 'text-brand',
+  success: 'text-success',
+  danger: 'text-danger',
+  muted: 'text-muted',
+};
+
+const ICON_BASE = 'grid size-6 place-items-center rounded-full border bg-surface';
+
+// Number markers reuse the icon marker's ringed box, swapping the glyph for a digit.
+const NUMBER_BASE = ICON_BASE + ' text-xs font-medium tabular-nums leading-none';
+
+export default class Timeline extends PuzzleView {
+  data(params, props) {
+    const src = props.items || [];
+    const last = src.length - 1;
+    const numbered = !!props.numbered;
+
+    const items = src.map((it, i) => {
+      const status = it.status || 'default';
+      // Explicit per-item number wins; `numbered` fills the rest with 1..n. Guard
+      // on null/'' rather than truthiness so a literal 0 is still a valid marker.
+      const hasOwnNumber = it.number !== undefined && it.number !== null && it.number !== '';
+      const number = hasOwnNumber ? it.number : numbered ? i + 1 : '';
+      return {
+        title: it.title || '',
+        time: it.time || '',
+        description: it.description || '',
+        icon: it.icon || '',
+        hasIcon: !!it.icon,
+        number,
+        hasNumber: number !== '',
+        isLast: i === last,
+        dotClass: [DOT_BASE, STATUS_DOT[status] || STATUS_DOT.default].join(' '),
+        iconClass: [
+          ICON_BASE,
+          STATUS_BORDER[status] || STATUS_BORDER.default,
+          STATUS_TEXT[status] || STATUS_TEXT.default,
+        ].join(' '),
+        // A digit is content, not decoration — an unstatused number stays text-ink
+        // so it reads at full contrast, unlike the muted default icon glyph.
+        numberClass: [
+          NUMBER_BASE,
+          STATUS_BORDER[status] || STATUS_BORDER.default,
+          status === 'default' ? 'text-ink' : STATUS_TEXT[status] || STATUS_TEXT.default,
+        ].join(' '),
+        // relative anchors the absolute connector; pb (unless last) spaces rows
+        // and gives the connector its length down to the next dot.
+        rowClass: ['relative flex gap-4', i === last ? '' : 'pb-8'].join(' '),
+      };
+    });
+
+    return {
+      items,
+      label: props.label || 'Timeline',
+      listClass: ['relative', props.class || ''].join(' '),
+    };
+  }
+}
+</script>

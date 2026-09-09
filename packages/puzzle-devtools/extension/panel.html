@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Puzzle</title>
+		<link rel="stylesheet" href="panel/styles.css" />
+		<!--
+			Classic script, parsed synchronously BEFORE the module bundle below, so
+			window.__PUZZLE_DEVTOOLS_PANEL__ and <html data-theme> are both in place
+			when the Puzzle app constructs. Do not add defer/type=module here.
+		-->
+		<script src="panel-glue.js"></script>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script type="module" src="panel/app.js"></script>
+	</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "meter",
+  "description": "Semantic gauge (role=meter) showing a value within low/optimum/high bands with sentiment color, a label, and a formatted value",
+  "files": ["Meter.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

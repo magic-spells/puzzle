@@ -1,0 +1,8 @@
+{
+  "name": "emoji-picker-simple",
+  "description": "Lightweight emoji picker popover — bottom category tabs instead of search (skips the keyword data file), one category rendered at a time, keyboard grid nav, optional-controlled open, and optional morph",
+  "files": ["EmojiPickerSimple.pzl"],
+  "registryDependencies": ["lib/emoji-data.js"],
+  "dependencies": ["@magic-spells/morph-engine"],
+  "targetDir": "app/components/ui"
+}

@@ -1,0 +1,206 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Meter</h1>
+        <p class="mt-2 text-body">
+          A semantic gauge (
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="meter"</code>
+          ) for a measured value within a range, colored by sentiment against
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">low</code>/<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">high</code>
+          thresholds. Distinct from
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Progress</code>
+          , which reports task completion rather than a measurement.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-md space-y-5">
+          <Meter
+            value={ disk }
+            low={ 60 }
+            high={ 85 }
+            optimum={ 0 }
+            label="Disk usage"
+            valueText={ diskText }/>
+          <div class="flex justify-center gap-3">
+            <Button variant="outline" @press={ bump }>+10%</Button>
+            <Button variant="ghost" @press={ reset }>Reset</Button>
+          </div>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction), including
+          the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">--color-warning</code>
+          sentiment token used for the caution band.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="bands" title="Bands" code={ codeBands }>
+          <div class="w-full max-w-md space-y-5">
+            <Meter value={ 20 } low={ 60 } high={ 85 } optimum={ 0 } label="Success band" valueText="20% — plenty of room"/>
+            <Meter value={ 72 } low={ 60 } high={ 85 } optimum={ 0 } label="Warning band" valueText="72% — getting full"/>
+            <Meter value={ 95 } low={ 60 } high={ 85 } optimum={ 0 } label="Danger band" valueText="95% — nearly full"/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="custom-range" title="Custom range" code={ codeCustomRange }>
+          <div class="w-full max-w-md">
+            <Meter
+              value={ 26 }
+              min={ 0 }
+              max={ 32 }
+              low={ 24 }
+              high={ 28 }
+              optimum={ 0 }
+              label="Memory"
+              valueText="26 GB / 32 GB"/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="value-text" title="Formatted value text" code={ codeValueText }>
+          <div class="w-full max-w-md">
+            <Meter
+              value={ 7.2 }
+              min={ 0 }
+              max={ 10 }
+              low={ 7 }
+              high={ 9 }
+              optimum={ 0 }
+              label="Battery pack"
+              valueText="7.2 kWh / 10 kWh"/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes }>
+          <div class="w-full max-w-md space-y-5">
+            <Meter value={ 40 } low={ 60 } high={ 85 } optimum={ 0 } size="sm" label="Small"/>
+            <Meter value={ 40 } low={ 60 } high={ 85 } optimum={ 0 } size="md" label="Medium"/>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Meter from '@/components/ui/Meter.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Meter — follows the Progress exemplar shape (header → hero
+// ExampleBox → Installation → titled example sections → Toc). The hero is a
+// disk-usage gauge: `low`/`high` mark the caution/full thresholds and
+// `optimum={ 0 }` declares "lower is better" explicitly (Meter defaults to
+// this when `optimum` is omitted, since resource-usage gauges are the most
+// common case — the hero spells it out for teaching purposes).
+const installCmd = 'puzzle add piece meter';
+const usageImport = `import Meter from '@/components/ui/Meter.pzl';`;
+const usageMarkup = `<Meter value={ disk } low={ 60 } high={ 85 } optimum={ 0 } label="Disk usage" valueText={ \`\${disk}% used\` }/>`;
+
+const codeHero = `<Meter
+  value={ disk }
+  low={ 60 }
+  high={ 85 }
+  optimum={ 0 }
+  label="Disk usage"
+  valueText={ \`\${disk}% used\` }/>
+
+// parent
+events = {
+  bump: () => this.setData({ disk: Math.min(100, this.getData().disk + 10) }),
+  reset: () => this.setData({ disk: 30 }),
+};`;
+
+const codeBands = `// low/high split the range into three bands; optimum={ 0 } means
+// "lower is better" (the low band is success, the high band is danger).
+<Meter value={ 20 } low={ 60 } high={ 85 } optimum={ 0 } label="Success band" />
+<Meter value={ 72 } low={ 60 } high={ 85 } optimum={ 0 } label="Warning band" />
+<Meter value={ 95 } low={ 60 } high={ 85 } optimum={ 0 } label="Danger band" />`;
+
+const codeCustomRange = `// min/max aren't limited to 0–100 — any measured range works.
+<Meter
+  value={ 26 }
+  min={ 0 }
+  max={ 32 }
+  low={ 24 }
+  high={ 28 }
+  optimum={ 0 }
+  label="Memory"
+  valueText="26 GB / 32 GB" />`;
+
+const codeValueText = `// Meter never formats numbers itself — pass a preformatted valueText.
+<Meter
+  value={ 7.2 }
+  min={ 0 }
+  max={ 10 }
+  low={ 7 }
+  high={ 9 }
+  optimum={ 0 }
+  label="Battery pack"
+  valueText="7.2 kWh / 10 kWh" />`;
+
+const codeSizes = `<Meter value={ 40 } low={ 60 } high={ 85 } optimum={ 0 } size="sm" label="Small" />
+<Meter value={ 40 } low={ 60 } high={ 85 } optimum={ 0 } size="md" label="Medium" />`;
+
+export default class MeterDoc extends PuzzleView {
+  created() {
+    this.setData({ disk: 72 });
+  }
+
+  data(params, props) {
+    const disk = this.getData().disk;
+    return {
+      ...this.getData(),
+      diskText: `${disk}% used`,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeBands,
+      codeCustomRange,
+      codeValueText,
+      codeSizes,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Bands', href: '#bands' },
+        { label: 'Custom range', href: '#custom-range' },
+        { label: 'Formatted value text', href: '#value-text' },
+        { label: 'Sizes', href: '#sizes' },
+      ],
+    };
+  }
+
+  events = {
+    bump: () => {
+      this.setData({ disk: Math.min(100, this.getData().disk + 10) });
+      this.refresh();
+    },
+    reset: () => {
+      this.setData({ disk: 30 });
+      this.refresh();
+    },
+  };
+}
+</script>

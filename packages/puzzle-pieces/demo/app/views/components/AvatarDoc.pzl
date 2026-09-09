@@ -1,0 +1,108 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Avatar</h1>
+        <p class="mt-2 text-body">
+          An image with a graceful fallback. A valid image renders directly; if it
+          fails to load it falls back to the name's initials on a colored disc, and
+          with no name at all it shows a neutral person glyph.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero } tall={ false }>
+        <div class="flex items-center gap-4">
+          <Avatar src="https://i.pravatar.cc/80?img=13" name="Ada Lovelace" size="lg" />
+          <Avatar name="Grace Hopper" size="lg" />
+          <Avatar size="lg" />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="fallback-colors" title="Fallback colors" code={ codeColors } tall={ false }>
+          <div class="flex flex-wrap items-center justify-center gap-2">
+            {#for person in people}
+              <Avatar name={ person } size="lg" />
+            {/for}
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes } tall={ false }>
+          <div class="flex items-center gap-4">
+            <Avatar name="Ada Lovelace" size="sm" />
+            <Avatar name="Ada Lovelace" size="md" />
+            <Avatar name="Ada Lovelace" size="lg" />
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Avatar from '@/components/ui/Avatar.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Avatar — follows the Button exemplar shape (header → hero
+// ExampleBox → Installation → titled example sections → Toc).
+const installCmd = 'puzzle add piece avatar';
+const usageImport = `import Avatar from '@/components/ui/Avatar.pzl';`;
+const usageMarkup = `<Avatar src={ user.photo } name="Ada Lovelace" size="lg" />`;
+
+const codeHero = `<Avatar src={ user.photo } name="Ada Lovelace" size="lg" />
+<Avatar name="Grace Hopper" size="lg" />
+<Avatar size="lg" />`;
+
+const codeColors = `// The disc color is derived from the name — the hue is the
+// summed char codes mod 360 — so a given name always maps to
+// the same color, no palette prop needed.
+<Avatar name="Ada Lovelace" />
+<Avatar name="Grace Hopper" />
+<Avatar name="Alan Turing" />`;
+
+const codeSizes = `<Avatar name="Ada Lovelace" size="sm" />
+<Avatar name="Ada Lovelace" size="md" />
+<Avatar name="Ada Lovelace" size="lg" />`;
+
+export default class AvatarDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeColors,
+      codeSizes,
+      people: ['Ada Lovelace', 'Grace Hopper', 'Alan Turing', 'Katherine Johnson', 'Linus Torvalds', 'Barbara Liskov'],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Fallback colors', href: '#fallback-colors' },
+        { label: 'Sizes', href: '#sizes' },
+      ],
+    };
+  }
+}
+</script>

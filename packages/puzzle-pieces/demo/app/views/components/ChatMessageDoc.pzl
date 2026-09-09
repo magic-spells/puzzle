@@ -1,0 +1,152 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Chat Message</h1>
+        <p class="mt-2 text-body">
+          One message row — avatar with an initials fallback, an author/time meta line, and a
+          sent/received bubble. Group consecutive messages from the same author with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ 'showMeta={ false }' }</code>
+          for a compact follow-up, and drop ChatAttachment chips into the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">attachments</code>
+          slot.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-xl">
+          <ChatMessage author="Ada Lovelace" time="9:41 AM" avatarName="Ada Lovelace">Are we still on for the design review at 3?</ChatMessage>
+          <ChatMessage showMeta={ false } avatarName="Ada Lovelace">I pushed the latest mockups just now.</ChatMessage>
+          <ChatMessage align="end" variant="sent" author="You" time="9:42 AM" avatarName="You">Yep — see you then. Taking a look now.</ChatMessage>
+          <ChatMessage align="end" variant="sent" showMeta={ false } avatarName="You">These look great 🎉</ChatMessage>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Purely presentational: the parent owns the message data and passes a
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">time</code>
+          string already formatted — the piece never touches dates. Wrap a list of rows in
+          Chat Scroller for a full conversation view.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="alignment" title="Alignment" code={ codeAlignment }>
+          <div class="w-full max-w-xl">
+            <ChatMessage author="Ada Lovelace" time="9:41 AM" avatarName="Ada Lovelace">Received messages sit at the start.</ChatMessage>
+            <ChatMessage align="end" variant="sent" author="You" time="9:42 AM" avatarName="You">Your own messages mirror to the end.</ChatMessage>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="compact" title="Compact follow-ups" code={ codeCompact }>
+          <div class="w-full max-w-xl">
+            <ChatMessage author="Grace Hopper" time="11:02 AM" avatarName="Grace Hopper">First message in a burst shows the full meta.</ChatMessage>
+            <ChatMessage showMeta={ false } avatarName="Grace Hopper">A follow-up drops the avatar and author…</ChatMessage>
+            <ChatMessage showMeta={ false } avatarName="Grace Hopper">…and tightens up so the group reads as one.</ChatMessage>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="attachments" title="Attachments" code={ codeAttachments }>
+          <div class="w-full max-w-xl">
+            <ChatMessage author="Ada Lovelace" time="9:44 AM" avatarName="Ada Lovelace">Here are the files from the review.<ChatAttachment
+              slot="attachments" name="review-notes.pdf" size="2.4 MB"/><ChatAttachment
+              slot="attachments" name="hero-mockup.png" size="840 KB"/></ChatMessage>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ChatMessage from '@/components/ui/ChatMessage.pzl';
+import ChatAttachment from '@/components/ui/ChatAttachment.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece chat-message';
+const usageImport = `import ChatMessage from '@/components/ui/ChatMessage.pzl';`;
+const usageMarkup = `<ChatMessage author="Ada Lovelace" time="9:41 AM" avatarName="Ada Lovelace"></ChatMessage>`;
+
+const codeHero = `<!-- A message group: a meta row, a compact follow-up, then the reply. -->
+<ChatMessage author="Ada Lovelace" time="9:41 AM" avatarName="Ada Lovelace">
+  Are we still on for the design review at 3?
+</ChatMessage>
+<ChatMessage showMeta={ false } avatarName="Ada Lovelace">
+  I pushed the latest mockups just now.
+</ChatMessage>
+
+<ChatMessage align="end" variant="sent" author="You" time="9:42 AM" avatarName="You">
+  Yep — see you then. Taking a look now.
+</ChatMessage>
+<ChatMessage align="end" variant="sent" showMeta={ false } avatarName="You">
+  These look great 🎉
+</ChatMessage>`;
+
+const codeAlignment = `<!-- 'received' (default) keeps the row at the start; 'sent' + align="end"
+     mirrors it for the current user. -->
+<ChatMessage author="Ada Lovelace" time="9:41 AM" avatarName="Ada Lovelace">
+  Received messages sit at the start.
+</ChatMessage>
+<ChatMessage align="end" variant="sent" author="You" time="9:42 AM" avatarName="You">
+  Your own messages mirror to the end.
+</ChatMessage>`;
+
+const codeCompact = `<!-- showMeta={ false } is the consecutive-message case: no avatar,
+     no author/time, tighter spacing, fully-rounded bubble. -->
+<ChatMessage author="Grace Hopper" time="11:02 AM" avatarName="Grace Hopper">
+  First message in a burst shows the full meta.
+</ChatMessage>
+<ChatMessage showMeta={ false } avatarName="Grace Hopper">
+  A follow-up drops the avatar and author…
+</ChatMessage>
+<ChatMessage showMeta={ false } avatarName="Grace Hopper">
+  …and tightens up so the group reads as one.
+</ChatMessage>`;
+
+const codeAttachments = `<!-- Chips slotted into "attachments" render below the bubble in a
+     wrapping row. Import ChatAttachment alongside ChatMessage. -->
+<ChatMessage author="Ada Lovelace" time="9:44 AM" avatarName="Ada Lovelace">
+  Here are the files from the review.
+  <ChatAttachment slot="attachments" name="review-notes.pdf" size="2.4 MB"/>
+  <ChatAttachment slot="attachments" name="hero-mockup.png" size="840 KB"/>
+</ChatMessage>`;
+
+export default class ChatMessageDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeAlignment,
+      codeCompact,
+      codeAttachments,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Alignment', href: '#alignment' },
+        { label: 'Compact follow-ups', href: '#compact' },
+        { label: 'Attachments', href: '#attachments' },
+      ],
+    };
+  }
+}
+</script>

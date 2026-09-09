@@ -1,0 +1,8 @@
+{
+  "name": "tooltip",
+  "description": "Hover/focus text hint with delay and four placements",
+  "files": ["Tooltip.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

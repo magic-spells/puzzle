@@ -1,0 +1,8 @@
+{
+  "name": "avatar",
+  "description": "Image avatar with initials fallback on a deterministic color, or a neutral person glyph",
+  "files": ["Avatar.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

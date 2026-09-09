@@ -1,0 +1,12 @@
+<puzzle-view class="counter">
+  <button @click={ inc(event) }>{ count }</button>
+</puzzle-view>
+
+<script>
+import {PuzzleView} from '@magic-spells/puzzle'
+export default class Counter extends PuzzleView{
+created(){this.setData({count:0})}
+data(){return {count:this.getData().count}}
+events={inc:()=>{this.setData('count',this.getData().count+1)}}
+}
+</script>

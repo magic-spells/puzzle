@@ -1,0 +1,104 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Label</h1>
+        <p class="mt-2 text-body">
+          An accessible native label element for a form control. Point its
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">for</code>
+          at the control's id so a click focuses it and screen readers announce the pairing.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-sm space-y-1.5">
+          <Label for="label-demo">Email address</Label>
+          <input
+            id="label-demo"
+            type="email"
+            placeholder="you@example.com"
+            class="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="with-pieces" title="With form pieces" code={ codeWithPieces }>
+          <div class="w-full max-w-sm space-y-1.5">
+            <Label for="label-search">Search</Label>
+            <SearchField id="label-search" value={ query } placeholder="Filter results…" @change={ setQuery } />
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Label from '@/components/ui/Label.pzl';
+import SearchField from '@/components/ui/SearchField.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Label — follows the ButtonDoc exemplar shape.
+const installCmd = 'puzzle add piece label';
+const usageImport = `import Label from '@/components/ui/Label.pzl';`;
+const usageMarkup = `<Label for="email">Email address</Label>`;
+
+const codeHero = `<Label for="email">Email address</Label>
+<input id="email" type="email" placeholder="you@example.com" />`;
+
+const codeWithPieces = `<Label for="site-search">Search</Label>
+<SearchField id="site-search" value={ query } @change={ setQuery } />
+
+// parent
+events = {
+  setQuery: (v) => this.setData('query', v),
+};`;
+
+export default class LabelDoc extends PuzzleView {
+  created() {
+    this.setData({ query: '' });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeWithPieces,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'With form pieces', href: '#with-pieces' },
+      ],
+    };
+  }
+
+  events = {
+    setQuery: (v) => this.setData('query', v),
+  };
+}
+</script>

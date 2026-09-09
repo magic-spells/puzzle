@@ -1,0 +1,192 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Bar Chart</h1>
+        <p class="mt-2 text-body">
+          A config-first categorical bar chart. Hand it row objects, an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">xKey</code>,
+          and a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">series</code>
+          list — it renders responsive SVG bars with a legend, per-bar hover tooltips, and an accessible
+          data table. One series draws a plain bar chart; multiple series render grouped, or stacked with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">stacked</code>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full">
+          <BarChart data={ salesData } xKey="month" series={ salesSeries } label="Monthly sales" />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece and its math helper into your app — they compile with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Bars are true SVG paths with 4px-rounded tops and a flat baseline; colors are assigned in fixed
+          slot order (first series → chart-1). The chart is presentational — own the data in the parent and
+          feed it in. Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="grouped" title="Grouped" code={ codeGrouped }>
+          <div class="w-full">
+            <BarChart data={ compareData } xKey="quarter" series={ compareSeries } label="Revenue by quarter, year over year" />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="stacked" title="Stacked" code={ codeStacked }>
+          <div class="w-full">
+            <BarChart data={ revenueData } xKey="month" series={ revenueSeries } stacked={ true } label="Revenue by segment" />
+          </div>
+        </ExampleBox>
+
+        <section id="accessibility" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+          <p class="mb-3 text-sm text-body">
+            The root is a
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<figure>' }</code>
+            with an
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-label</code>
+            from the
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>
+            prop, and the decorative SVG is marked
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-hidden="true"</code>.
+            Every value is also emitted as a visually hidden
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '<table>' }</code>
+            after the plot, so the data is reachable by screen readers and never gated behind a hover tooltip.
+            Colors carry series identity, but the legend and table carry it too — nothing depends on color alone.
+          </p>
+          <p class="text-sm text-muted">
+            Always pass a descriptive
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>
+            — it names both the figure and the data table.
+          </p>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import BarChart from '@/components/ui/BarChart.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece bar-chart';
+const usageImport = `import BarChart from '@/components/ui/BarChart.pzl';`;
+const usageMarkup = `<BarChart data={ salesData } xKey="month" series={ [{ key: 'sales', label: 'Sales' }] } label="Monthly sales" />`;
+
+const codeHero = `const salesData = [
+  { month: 'Jan', sales: 4200 },
+  { month: 'Feb', sales: 5100 },
+  { month: 'Mar', sales: 4800 },
+  { month: 'Apr', sales: 6300 },
+  { month: 'May', sales: 7100 },
+  { month: 'Jun', sales: 6800 },
+  { month: 'Jul', sales: 8200 },
+  { month: 'Aug', sales: 7600 },
+];
+
+// A single series needs no legend — the label says what is plotted.
+<BarChart data={ salesData } xKey="month" series={ [{ key: 'sales', label: 'Sales' }] } label="Monthly sales" />`;
+
+const codeGrouped = `const compareData = [
+  { quarter: 'Q1', current: 3200, previous: 2400 },
+  { quarter: 'Q2', current: 4100, previous: 3300 },
+  { quarter: 'Q3', current: 3800, previous: 4000 },
+  { quarter: 'Q4', current: 5200, previous: 4300 },
+];
+const series = [
+  { key: 'current', label: '2026' },
+  { key: 'previous', label: '2025' },
+];
+
+// Two or more series render grouped by default; the legend appears automatically.
+<BarChart data={ compareData } xKey="quarter" series={ series } label="Revenue by quarter" />`;
+
+const codeStacked = `const revenueData = [
+  { month: 'Jan', product: 3200, services: 1800, other: 900 },
+  { month: 'Feb', product: 3600, services: 2100, other: 1100 },
+  { month: 'Mar', product: 4100, services: 2400, other: 1000 },
+  { month: 'Apr', product: 4800, services: 2600, other: 1300 },
+  { month: 'May', product: 5200, services: 3000, other: 1500 },
+];
+const series = [
+  { key: 'product', label: 'Product' },
+  { key: 'services', label: 'Services' },
+  { key: 'other', label: 'Other' },
+];
+
+// A 2px surface gap separates each segment; only the top of the stack is rounded.
+<BarChart data={ revenueData } xKey="month" series={ series } stacked label="Revenue by segment" />`;
+
+export default class BarChartDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeGrouped,
+      codeStacked,
+      salesData: [
+        { month: 'Jan', sales: 4200 },
+        { month: 'Feb', sales: 5100 },
+        { month: 'Mar', sales: 4800 },
+        { month: 'Apr', sales: 6300 },
+        { month: 'May', sales: 7100 },
+        { month: 'Jun', sales: 6800 },
+        { month: 'Jul', sales: 8200 },
+        { month: 'Aug', sales: 7600 },
+      ],
+      salesSeries: [{ key: 'sales', label: 'Sales' }],
+      compareData: [
+        { quarter: 'Q1', current: 3200, previous: 2400 },
+        { quarter: 'Q2', current: 4100, previous: 3300 },
+        { quarter: 'Q3', current: 3800, previous: 4000 },
+        { quarter: 'Q4', current: 5200, previous: 4300 },
+      ],
+      compareSeries: [
+        { key: 'current', label: '2026' },
+        { key: 'previous', label: '2025' },
+      ],
+      revenueData: [
+        { month: 'Jan', product: 3200, services: 1800, other: 900 },
+        { month: 'Feb', product: 3600, services: 2100, other: 1100 },
+        { month: 'Mar', product: 4100, services: 2400, other: 1000 },
+        { month: 'Apr', product: 4800, services: 2600, other: 1300 },
+        { month: 'May', product: 5200, services: 3000, other: 1500 },
+      ],
+      revenueSeries: [
+        { key: 'product', label: 'Product' },
+        { key: 'services', label: 'Services' },
+        { key: 'other', label: 'Other' },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Grouped', href: '#grouped' },
+        { label: 'Stacked', href: '#stacked' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+}
+</script>

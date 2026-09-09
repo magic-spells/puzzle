@@ -1,0 +1,56 @@
+<puzzle-view>
+  <DropdownPanel.Trigger class={ triggerClass }><Children/></DropdownPanel.Trigger>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// Popover.Trigger — the control that toggles the panel. A member of the Popover
+// family (D167); it composes DropdownPanel.Trigger and adds the stock chrome, so
+// it renders <dropdown-trigger> as its single root with no wrapper — the
+// direct-children contract holds.
+//
+//   <Popover.Trigger>Options</Popover.Trigger>
+//   <Popover.Trigger variant="button">Filters</Popover.Trigger>
+//
+// PUT NON-INTERACTIVE CONTENT IN HERE. <dropdown-trigger> IS the control: the
+// component gives it role="button", tabindex="0", aria-haspopup, aria-expanded
+// and aria-controls at upgrade, and overwrites anything you author. A <button>
+// or <a> inside would be a second tab stop and a nested control — use spans and
+// SVGs. (The 0.7.0 rewrite changed this: the old piece owned a real <button>.)
+//
+// A dropdown arrow, if you want one, is a real child element and never a
+// ::before on the trigger — that pseudo-element is the package's hover bridge:
+//   Options<span data-dropdown-arrow aria-hidden="true"></span>
+// Closed tight, because the effects stylesheet draws it with :empty.
+//
+// Props
+//   variant  'link' (default) — quiet inline text chrome
+//            'button' — a bordered secondary button box
+//   class    merged onto <dropdown-trigger>, after the variant chrome
+
+// The outline COLOR is set unconditionally (outline-ring) so transition-colors
+// does not flash it in from the default on every focus.
+const FOCUS =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const LINK =
+  'inline-flex items-center gap-1 select-none cursor-pointer text-sm text-body ' +
+  'transition-colors hover:text-ink ' + FOCUS;
+
+const BUTTON =
+  'inline-flex h-9 items-center gap-2 whitespace-nowrap select-none cursor-pointer ' +
+  'rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink ' +
+  'transition-colors hover:bg-surface-sunken ' + FOCUS;
+
+export default class Trigger extends PuzzleView {
+  data(params, props) {
+    return {
+      triggerClass: [props.variant === 'button' ? BUTTON : LINK, props.class]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+}
+</script>

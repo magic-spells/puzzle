@@ -1,0 +1,38 @@
+<puzzle-view>
+  <div role="group" aria-label={ groupLabel } class={ groupClass }><Children/></div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DropdownMenu.Group — a labelled cluster of rows. A member of the DropdownMenu
+// family (D167); plain markup.
+//
+//   <DropdownMenu.Group label="Export">
+//     <DropdownMenu.Item value="csv" @press={ run }>CSV</DropdownMenu.Item>
+//     <DropdownMenu.Item value="json" @press={ run }>JSON</DropdownMenu.Item>
+//   </DropdownMenu.Group>
+//
+// role="group" is the ONE menu-adjacent role the family authors, and it is the
+// role ARIA asks for inside a role="menu" — it is not a menu role, it names a
+// real division. The group itself is not focusable and does not match the
+// component's item selector, so the arrow walk passes through it to the rows
+// inside and never lands on it.
+//
+// Use Label instead when you want a visible heading with no grouping semantics;
+// use both together (a Label inside a Group) when you want the heading text to
+// double as the group's name — pass the same string as `label`.
+//
+// Props
+//   label  the group's accessible name. Omit it and the attribute is omitted.
+//   class  merged onto the group
+
+export default class Group extends PuzzleView {
+  data(params, props) {
+    return {
+      groupLabel: props.label != null ? String(props.label) : false,
+      groupClass: props.class || false,
+    };
+  }
+}
+</script>

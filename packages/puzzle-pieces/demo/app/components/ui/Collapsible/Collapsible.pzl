@@ -1,0 +1,187 @@
+<puzzle-view>
+  <collapsible-group class={ rootClass }><collapsible-component><Children/></collapsible-component></collapsible-group>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Collapsible — an animated disclosure: a button that expands and collapses a
+// region, with the height animation, the ARIA wiring and the reduced-motion
+// behaviour all living upstream.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real
+// <collapsible-group> / <collapsible-component> / <collapsible-content> custom
+// elements from @magic-spells/collapsible-content and puts tokens on them. The
+// height measurement, the distance-derived duration, the mid-animation reversal,
+// aria-expanded / aria-controls / aria-labelledby / role="region" / aria-hidden /
+// inert, and the prefers-reduced-motion branch are the component's. This family
+// is markup and Tailwind.
+//
+// THIS IS A FAMILY (D167). Import the barrel once and invoke with dot notation:
+//
+//   import Collapsible from '@/components/ui/Collapsible';
+//
+//   <Collapsible>
+//     <Collapsible.Trigger>Shipping and returns</Collapsible.Trigger>
+//     <Collapsible.Content>
+//       <p>Anything can live in here — this is real markup, not a text prop.</p>
+//     </Collapsible.Content>
+//   </Collapsible>
+//
+// BREAKING CHANGE in 0.7.0: the old piece was a single component with a `label`
+// prop and one slot. A disclosure needs TWO content channels — the trigger row
+// (icon, badge, count) and the panel body — and a piece gets exactly one, so the
+// shape had to become members. `speed` moved onto Collapsible.Content, and the
+// hand-rolled Web Animations height model is gone entirely.
+//
+// THE NON-EXCLUSIVE <collapsible-group> ROOT IS LOAD-BEARING. Upstream joins a
+// groupless <collapsible-component> to its NEAREST <collapsible-group> ancestor,
+// and an exclusive group closes every member but the one just opened. A bare
+// <collapsible-component> root would therefore be slammed shut whenever a
+// standalone Collapsible happened to sit inside an Accordion item. Its own plain
+// (non-exclusive) group shields it: the component joins that one instead, and no
+// exclusivity applies. Do not remove the wrapper element.
+//
+// STRUCTURE. The component resolves its parts with querySelector('button') and
+// querySelector('collapsible-content'), so Collapsible.Trigger must render a real
+// <button> and Collapsible.Content a real <collapsible-content>, both inside this
+// component. Puzzle components add no wrapper element, so the members satisfy that
+// as written. Do not put a second <button> inside a Collapsible — the first one
+// wins and the other is dead weight.
+//
+// open — OPTIONAL-CONTROLLED and EDGE-TRIGGERED. Omit it and the component owns
+// its own state, which is the normal case (put `defaultOpen` on Content to start
+// expanded). Pass it and only a CHANGE acts: true → show(), false → hide(). The
+// user can still toggle the panel, which reports through @change; the parent's
+// job is to store that value so the next change is a fresh edge.
+//
+// THE `open` ATTRIBUTE IS NEVER BOUND FROM A TEMPLATE. <collapsible-content>
+// OBSERVES `open` and its `collapsed` setter writes it back, so a live binding
+// would fight the patcher every render — the same rule dropdown-panel's `visible`
+// has. Content renders it exactly once, frozen on the first data() call, purely so
+// a prerendered page paints in the right state and connectedCallback seeds the
+// height without animating. Every later change goes through show()/hide() here.
+//
+// A REJECTED TOGGLE IS NOT REVERTED. This is the wrapped-overlay contract
+// (D-WRAP): the component self-manages, then reports. A parent that ignores
+// @change leaves the panel visually open while its own state says closed; the next
+// actual change to `open` re-syncs it. Reverting would fight the animation and
+// double-fire collapsible:toggle, so it is deliberately not done. The mechanism is
+// that #last tracks props.open and NOTHING ELSE — never the value we reported — so
+// a rejected toggle leaves no pending edge for a later unrelated render to act on.
+//
+// STYLESHEET. This piece needs the component's CSS, which is not part of the
+// copied files. Add it once to your app's style entry:
+//   @import "@magic-spells/collapsible-content/css" layer(components);
+// It carries display:block, overflow:hidden, the height transition and the
+// reduced-motion opt-out — the piece does not animate without it. The layer is
+// not optional cosmetics: the sheet uses plain element selectors, so an unlayered
+// import would outrank every Tailwind utility on these elements.
+//
+// TODO: switch to ^1.2.0 once published — this repo's demo pins the package by
+// file: path while 1.2.0 is unreleased. Consumers install ^1.2.0.
+//
+// Props
+//   open     optional-controlled, edge-triggered as above
+//   class    merged onto <collapsible-group>
+//   @change(open)  value-first; fired when THIS collapsible toggles. A NESTED
+//                  collapsible's bubbling event is filtered out by target.
+
+export default class Collapsible extends PuzzleView {
+  #live = false;
+  #ready = false;
+  #syncing = false;
+  #controlled = false;
+  #last = false;
+
+  // The component child this instance owns. collapsible:toggle BUBBLES and is
+  // composed, so a nested Collapsible's event travels straight through this
+  // element on its way up — reporting that as ours would name the wrong panel.
+  #item() {
+    return this.element ? this.element.querySelector('collapsible-component') : null;
+  }
+
+  #onToggle = (event) => {
+    if (this.#syncing) return;
+    if (event.target !== this.#item()) return;
+    // #last is NEVER set from what we report — it tracks props.open only. An
+    // accepted change comes back through afterUpdate and applies as a no-op (the
+    // DOM already matches); a REJECTED one leaves #last where it was, so no later
+    // unrelated render can quietly revert the panel. See the contract above.
+    this.props.change?.(!!event.detail?.open);
+  };
+
+  // Writes the state without letting our own listener report it back. show()/hide()
+  // run synchronously, so a plain flag covers the whole dispatch.
+  #apply(open) {
+    const item = this.#item();
+    if (!item) return;
+    if (!!item.open === open) return; // already there — no redundant animation
+    this.#syncing = true;
+    try {
+      if (this.#ready && typeof item.show === 'function') {
+        open ? item.show() : item.hide();
+      } else {
+        // Not upgraded yet: leave the intent on the attribute. connectedCallback
+        // reads it and seeds the height with no animation.
+        const content = item.querySelector('collapsible-content');
+        if (!content) return;
+        if (open) content.setAttribute('open', '');
+        else content.removeAttribute('open');
+      }
+    } finally {
+      this.#syncing = false;
+    }
+  }
+
+  data(params, props) {
+    return {
+      rootClass: props.class || false,
+    };
+  }
+
+  mounted() {
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#controlled = this.props.open !== undefined;
+    this.#last = !!this.props.open;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this.element.addEventListener('collapsible:toggle', this.#onToggle);
+
+    // A controlled collapsible seeds its opening state on the attribute so the
+    // component picks it up the moment it upgrades — no mount-time animation.
+    if (this.#controlled) this.#apply(this.#last);
+
+    import('@magic-spells/collapsible-content')
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+      })
+      .catch((error) => {
+        console.error(
+          '[Collapsible] failed to load @magic-spells/collapsible-content — the ' +
+            'panel will not expand.',
+          error
+        );
+      });
+  }
+
+  afterUpdate() {
+    if (!this.#live || !this.#controlled) return;
+    // Edge-triggered, never level-triggered: a re-render carrying the same `open`
+    // is not a request, so an unrelated update can never re-open a panel the user
+    // just closed while the parent's state still says open.
+    const open = !!this.props.open;
+    if (open === this.#last) return;
+    this.#last = open;
+    this.#apply(open);
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.element?.removeEventListener('collapsible:toggle', this.#onToggle);
+  }
+}
+</script>

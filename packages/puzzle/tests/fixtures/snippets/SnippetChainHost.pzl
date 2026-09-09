@@ -1,0 +1,29 @@
+<puzzle-view class="snippets-chain-host">
+  <WrapperChain users={ users } group={ group }>
+    <Snippet fits="heading" group>
+      chain-heading:{ group.title }
+    </Snippet>
+
+    <Snippet fits="row" user group>
+      <span class="chain-person">chain-row:{ group.title }:{ user.name }</span>
+    </Snippet>
+
+    <Snippet group>
+      <span class="chain-default">chain-default:{ group.title }</span>
+    </Snippet>
+  </WrapperChain>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import WrapperChain from './WrapperChain.compiled.js';
+
+export default class SnippetChainHost extends PuzzleView {
+  data() {
+    return {
+      users: [{ id: 1, name: 'Ada' }, { id: 2, name: 'Grace' }],
+      group: { title: 'Core' },
+    };
+  }
+}
+</script>

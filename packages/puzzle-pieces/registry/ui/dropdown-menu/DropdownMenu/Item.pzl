@@ -1,0 +1,89 @@
+<puzzle-view>
+  <button type="button" data-value={ valueAttr } class={ rowClass } disabled={ disabled } @click={ onPress(event) }><Children/></button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DropdownMenu.Item — one action row inside a Content. A member of the
+// DropdownMenu family (D167); plain token-styled markup with no web component
+// underneath.
+//
+//   <DropdownMenu.Item value="new" @press={ run }>New file<DropdownMenu.Shortcut>⌘N</DropdownMenu.Shortcut></DropdownMenu.Item>
+//   <DropdownMenu.Item value="delete" variant="danger" @press={ run }>Delete</DropdownMenu.Item>
+//
+// A REAL <button>, so Enter and Space activate natively and menu mode's item
+// selector finds it. NO role and NO tabindex are authored here: the component
+// stamps role="menuitem" and owns the roving tabindex. `disabled` is the native
+// attribute, which is also how the component knows to skip the row in the arrow
+// walk and in typeahead.
+//
+// NOTHING HERE CLOSES THE MENU. Activating a row fires the component's
+// `dropdown-panel:select`, and that contract closes the whole chain — a submenu
+// and every parent together — and returns focus to the ROOT trigger. The old
+// port's closest('dropdown-component') walk is gone with it, and must not come
+// back: two closers means two closes.
+//
+// TWO CALLBACKS, TWO JOBS. `@press(value)` on the row is the local hook, handy
+// when the rows are written out by hand. `@select(value)` on the DropdownMenu
+// root is the one that sees every row including a submenu's, which is what a
+// {#for} of rows usually wants. Use either; they both fire.
+//
+// A ROW THAT NAVIGATES IS DropdownMenu.Link, not this with an href — one
+// template may declare only ONE children marker, so a two-branch <a>/<button>
+// root cannot compile.
+//
+// `value` REACHES THE ROOT'S @select AS `data-value`, not as a `value` attribute.
+// Upstream's precedence is data-value → the value attribute → href, and data-value
+// is the one that is inert on every element: a bare `value=` is the attribute the
+// compiler's implicit two-way binding watches for, and on a <button> it would also
+// be a form-submission value nobody asked for. `false` omits it entirely.
+//
+// The callback is value-first and named apart from the `value` prop: a callback
+// whose @event name equals a prop name collides in the same props object and the
+// last one silently wins.
+//
+// Props
+//   value     passed to @press, and rendered as `data-value` — which is what the
+//             root's @select reports (upstream's precedence is data-value →
+//             the `value` attribute → href, and this piece renders only the first)
+//   variant   'default' | 'danger' — destructive tint
+//   disabled  greys the row out, swallows the press, and takes it out of the
+//             keyboard walk
+//   class     merged onto the row, after the chrome
+//   @press    (value) — fired on activation
+
+const ROW_BASE =
+  'flex w-full items-center gap-6 rounded-md px-2.5 py-1.5 text-sm cursor-pointer ' +
+  'no-underline transition-colors ' +
+  'disabled:opacity-50 disabled:pointer-events-none ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+const ROW_NORMAL = 'text-body hover:bg-surface-sunken hover:text-ink';
+const ROW_DANGER = 'text-danger hover:bg-danger-tint';
+
+export default class Item extends PuzzleView {
+  data(params, props) {
+    return {
+      disabled: !!props.disabled,
+      valueAttr: props.value != null ? String(props.value) : false,
+      rowClass: [
+        ROW_BASE,
+        props.variant === 'danger' ? ROW_DANGER : ROW_NORMAL,
+        props.class,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+
+  events = {
+    onPress: (event) => {
+      if (this.props.disabled) {
+        event.preventDefault();
+        return;
+      }
+      this.props.press?.(this.props.value);
+    },
+  };
+}
+</script>

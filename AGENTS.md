@@ -1,6 +1,7 @@
 # Agent instructions
 
-**Read [CLAUDE.md](./CLAUDE.md) before doing anything in this repo.** It is the
+**Read [CLAUDE.md](./CLAUDE.md) before doing anything in this repo** — and
+[packages/puzzle/CLAUDE.md](./packages/puzzle/CLAUDE.md) before framework work. It is the
 single source of truth for agent guidance here — full project knowledge base,
 architecture, the v1→v1.33 changelog, and working conventions. This file exists
 so tools that look for AGENTS.md (Cursor, Codex/GPT, etc.) find their way there;

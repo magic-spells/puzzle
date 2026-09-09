@@ -1,0 +1,8 @@
+{
+  "name": "stat-card",
+  "description": "KPI tile: label, preformatted value, optional signed delta with sentiment coloring, and an optional trend Sparkline",
+  "files": ["StatCard.pzl"],
+  "registryDependencies": ["sparkline"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

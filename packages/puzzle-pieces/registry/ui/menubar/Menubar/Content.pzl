@@ -1,0 +1,52 @@
+<puzzle-view>
+  <DropdownPanel.Panel
+    class={ contentClass }
+    align={ align }
+    opens={ opens }
+    wide={ wide }
+    effect={ effect }><Children/></DropdownPanel.Panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// Menubar.Content — the panel one menu drops. A member of the Menubar family
+// (D167); it composes DropdownPanel.Panel and adds the menu's tighter padding, so
+// it renders <dropdown-panel> as its single root with no wrapper — the
+// direct-children contract holds.
+//
+//   <Menubar.Content>
+//     <Menubar.Item value="new" @press={ run }>New file</Menubar.Item>
+//   </Menubar.Content>
+//
+// A submenu's Content takes opens="right", which puts it beside its trigger and
+// rotates the hover bridge onto the horizontal axis.
+//
+// Never overflow-hidden, here or above it: it clips a nested submenu at this
+// panel's edge. The old rAF right-edge clamp is gone with the wrap — a menu near
+// the right edge takes align="end" instead, which is pure CSS.
+//
+// Props (forwarded to DropdownPanel.Panel unless noted)
+//   align   'start' (default) | 'end'
+//   opens   'down' (default) | 'right' for a submenu
+//   wide    a full-width panel spanning the <nav>
+//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class   merged onto <dropdown-panel>, after the layout
+
+// The base Panel carries border, surface, shadow, rounding, min-w-48 and z-40; a
+// menu panel just wants the tighter row padding.
+const CONTENT = 'p-1';
+
+export default class Content extends PuzzleView {
+  data(params, props) {
+    return {
+      contentClass: [CONTENT, props.class].filter(Boolean).join(' '),
+      align: props.align,
+      opens: props.opens,
+      wide: props.wide ? true : false,
+      effect: props.effect,
+    };
+  }
+}
+</script>

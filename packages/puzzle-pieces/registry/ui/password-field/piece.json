@@ -1,0 +1,8 @@
+{
+  "name": "password-field",
+  "description": "Password input with an in-input show/hide visibility toggle and hint/error state",
+  "files": ["PasswordField.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

@@ -1,0 +1,130 @@
+<puzzle-view>
+  <div
+    class={ rootClass }
+    role="meter"
+    aria-valuemin={ min }
+    aria-valuemax={ max }
+    aria-valuenow={ value }
+    aria-valuetext={ valueTextAttr }
+    aria-label={ label }>
+    {#if showHeader}
+      <div class="flex justify-between mb-1.5">
+        <span class="text-sm font-medium text-ink">{ label }</span>
+        <span class="text-sm text-muted">{ valueLabel }</span>
+      </div>
+    {/if}
+    <div class={ trackClass }>
+      <div class={ fillClass } style={ fillStyle }></div>
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Meter — a semantic gauge (role="meter") for a MEASURED value within a range,
+// distinct from Progress (role="progressbar", a task-completion indicator).
+// Pass `value`/`min`/`max` plus `low`/`high` band thresholds and the fill is
+// colored by sentiment: success (good), warning (caution), danger (bad). The
+// piece never formats numbers itself — pass a preformatted `valueText`
+// ("7.2 GB / 10 GB") or let it fall back to the raw rounded value.
+//
+//   <Meter value={ 72 } low={ 60 } high={ 85 } label="Disk usage" />
+//   <Meter value={ 26 } min={ 0 } max={ 32 } low={ 24 } high={ 28 }
+//          label="Memory" valueText="26 GB / 32 GB" />
+//   <Meter value={ 40 } size="sm" label="Battery" optimum={ 100 } low={ 20 } high={ 60 } />
+//   <Meter value={ 55 } label="Coverage" />   // no thresholds — neutral brand fill
+//
+// Band/sentiment logic mirrors HTML <meter> semantics, simplified to three
+// flat bands (no interior gradient): `low`/`high` split the range into a low,
+// mid, and high region, and `optimum` decides which region is "good":
+//   - optimum <= low   → lower is better   (low region = success, high = danger)
+//   - optimum >= high  → higher is better  (high region = success, low = danger)
+//   - low < optimum < high → [low, high] itself is the healthy target band
+//     (success); either side of it is equally off-target (danger) — this is a
+//     deliberate simplification of the native <meter> algorithm, which can
+//     grade the two out-of-range sides differently.
+// When `optimum` is omitted, Meter defaults to "lower is better" (optimum
+// treated as <= low) since resource-usage gauges (disk/CPU/error-rate — the
+// most common Meter use case) skew that way. Pass `optimum` explicitly to
+// invert this. If neither `low` nor `high` is set, the fill stays neutral
+// (bg-brand) — Meter with no thresholds is just a plain measured-value bar.
+//
+// The middle region always renders `warning` (the "caution, not yet bad"
+// band) via the `--color-warning` token.
+const SENTIMENT_FILL = {
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-danger',
+  brand: 'bg-brand',
+};
+const TRACK_SIZE = { sm: 'h-1.5', md: 'h-2.5' };
+
+export default class Meter extends PuzzleView {
+  data(params, props) {
+    const min = typeof props.min === 'number' && !Number.isNaN(props.min) ? props.min : 0;
+    const maxRaw = typeof props.max === 'number' && !Number.isNaN(props.max) ? props.max : 100;
+    const max = maxRaw > min ? maxRaw : min + 100;
+
+    const rawValue = typeof props.value === 'number' && !Number.isNaN(props.value) ? props.value : 0;
+    const value = Math.min(Math.max(rawValue, min), max);
+    const pct = ((value - min) / (max - min)) * 100;
+
+    const hasLow = typeof props.low === 'number' && !Number.isNaN(props.low);
+    const hasHigh = typeof props.high === 'number' && !Number.isNaN(props.high);
+    const low = hasLow ? Math.min(Math.max(props.low, min), max) : min;
+    const high = hasHigh ? Math.min(Math.max(props.high, min), max) : max;
+
+    let sentiment = 'brand';
+    if (hasLow || hasHigh) {
+      const hasOptimum = typeof props.optimum === 'number' && !Number.isNaN(props.optimum);
+      const optimumSide = hasOptimum
+        ? props.optimum <= low
+          ? 'low'
+          : props.optimum >= high
+            ? 'high'
+            : 'mid'
+        : 'low';
+
+      const region = value < low ? 'low' : value > high ? 'high' : 'mid';
+
+      if (optimumSide === 'low') {
+        sentiment = region === 'low' ? 'success' : region === 'mid' ? 'warning' : 'danger';
+      } else if (optimumSide === 'high') {
+        sentiment = region === 'high' ? 'success' : region === 'mid' ? 'warning' : 'danger';
+      } else {
+        sentiment = region === 'mid' ? 'success' : 'danger';
+      }
+    }
+
+    const showValue = props.showValue !== false;
+    const hasLabel = typeof props.label === 'string' && props.label.trim() !== '';
+    const label = hasLabel ? props.label : 'Meter';
+
+    const hasValueText = typeof props.valueText === 'string' && props.valueText.trim() !== '';
+    const valueLabel = hasValueText ? props.valueText : String(Math.round(value));
+
+    return {
+      min,
+      max,
+      value,
+      label,
+      // aria-valuetext is only emitted when the caller supplies a formatted
+      // string; otherwise AT falls back to computing it from value/min/max.
+      valueTextAttr: hasValueText ? props.valueText : undefined,
+      valueLabel,
+      showHeader: showValue,
+      trackClass: [
+        'w-full overflow-hidden rounded-full bg-surface-sunken',
+        TRACK_SIZE[props.size] || TRACK_SIZE.md,
+      ].join(' '),
+      fillClass: [
+        'h-full rounded-full transition-[width] duration-300',
+        SENTIMENT_FILL[sentiment],
+      ].join(' '),
+      fillStyle: `width:${pct}%`,
+      rootClass: props.class || '',
+    };
+  }
+}
+</script>

@@ -1,0 +1,8 @@
+{
+  "name": "toolbar",
+  "description": "Horizontal or vertical grouped controls container with role=toolbar and roving-tabindex arrow-key navigation across buttons, toggles, and separators",
+  "files": ["Toolbar.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

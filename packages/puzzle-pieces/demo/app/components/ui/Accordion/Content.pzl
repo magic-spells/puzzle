@@ -1,0 +1,56 @@
+<puzzle-view>
+  <Collapsible.Content
+    class={ contentClass }
+    defaultOpen={ defaultOpen }
+    speed={ speed }
+    minDuration={ minDuration }
+    maxDuration={ maxDuration }
+    easing={ easing }><Children/></Collapsible.Content>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Collapsible from '../Collapsible/index.js';
+
+// Accordion.Content — the panel body of one Item. A member of the Accordion family
+// (D167); it composes Collapsible.Content and adds the accordion's panel padding, so
+// it renders <collapsible-content> as its single root with no wrapper — which is
+// what <collapsible-component> resolves with querySelector('collapsible-content').
+//
+//   <Accordion.Content>
+//     <p class="text-sm text-body">Anything. Lists, tables, other components.</p>
+//   </Accordion.Content>
+//
+// THERE IS NO `open` PROP HERE, on purpose. The Accordion root owns which panels are
+// open and drives them through show()/hide() — see Accordion.pzl. `defaultOpen` seeds
+// an UNCONTROLLED accordion's starting row and is read exactly once; on a controlled
+// accordion `value` wins at mount, so set it there instead.
+//
+// THE PADDING LANDS ON THE INNER WRAPPER the base renders, not on
+// <collapsible-content> itself. The element animates its HEIGHT, and height is the
+// content box, so padding on the host would leave 16px of dead space under every
+// CLOSED row. `class` is merged onto that same wrapper.
+//
+// Props (forwarded to Collapsible.Content unless noted)
+//   defaultOpen  start this row expanded — uncontrolled accordions only, initial only
+//   speed        px/sec pace feeding the derived duration (upstream default 900)
+//   minDuration  seconds; floor for that duration
+//   maxDuration  seconds; ceiling for it
+//   easing       CSS timing function, forwarded as --collapsible-easing
+//   class        merged onto the inner padding wrapper, after the padding
+
+const CONTENT = 'px-4 pb-4';
+
+export default class Content extends PuzzleView {
+  data(params, props) {
+    return {
+      contentClass: [CONTENT, props.class].filter(Boolean).join(' '),
+      defaultOpen: props.defaultOpen ? true : false,
+      speed: props.speed,
+      minDuration: props.minDuration,
+      maxDuration: props.maxDuration,
+      easing: props.easing,
+    };
+  }
+}
+</script>

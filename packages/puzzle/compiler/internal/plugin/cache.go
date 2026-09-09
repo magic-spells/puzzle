@@ -1,0 +1,267 @@
+package plugin
+
+// cache.go — the BUILD-SCOPED .pzl transform memo.
+//
+// A one-shot static build registers three separate Plugin instances, one per
+// esbuild pass (browser app.js, the node prerender bundle, the per-page browser
+// bundles). Each pass ran the full onLoad body for every .pzl it reached:
+// ReadFile → SplitSections → codegen.Compile, where Compile itself parses the
+// template and (when present) the skeleton. Per file per static build that is
+// three reads, six SplitSections/ParseTemplate passes and three codegen runs of
+// which two produce bytes that are discarded (the prerender and per-page passes
+// keep only the JS esbuild bundles; their CSS is thrown away).
+//
+// Nothing in the transform varies by pass. The generated module is a pure
+// function of (app root, file path, file bytes): the plugin's only other inputs
+// are the app root — fixed for the whole build — and SVGDedup, which the plugin
+// path always sets. Platform, dev/prod, defines, minification, and splitting all
+// live in the esbuild BuildOptions and are applied AFTER onLoad returns, to the
+// same input bytes. So one entry per file serves all three passes, and the
+// per-pass work reduces to re-registering the file's <style> block into that
+// pass's own CSS collector.
+//
+// Scope is one Build call for `puzzle build`, and the whole SESSION for the
+// static dev builder (StaticWatchBuilder), which keeps one cache alive across
+// rebuilds so a save re-transforms only what it touched.
+//
+// Cross-rebuild reuse is safe because the key carries a content hash: an edited
+// file simply misses. Eviction (Evict) is therefore about two other things —
+// keeping the map from growing one entry per keystroke-burst per file, and the
+// one genuine correctness hole, the SVG memo, which is keyed by PATH and would
+// otherwise serve pre-edit markup for an icon whose .pzl still hashes the same.
+// Over-eviction costs a re-transform and nothing else, so callers evict
+// generously.
+//
+// WatchBuilder (SPA dev) still attaches no cache: its rebuilds re-run onLoad
+// exactly as before and esbuild's own onLoad result cache stays the only memo on
+// that path.
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"sync"
+
+	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+)
+
+// pzlResult is everything one .pzl transform produces. It is written once, then
+// read concurrently by every pass, so it must be treated as immutable after
+// publication — callers copy the slices they hand to esbuild.
+type pzlResult struct {
+	// name is the app-relative filename used for diagnostics, ModeForPath, the
+	// module stamp, and the scoped-style ScopeID.
+	name string
+	// js is the generated module (empty when errs is non-empty: a file that
+	// fails to compile emits no output).
+	js string
+	// loader is JS or TS per <script lang>.
+	loader api.Loader
+	// hasStyles / cssBody carry the <style> block exactly as the collector wants
+	// it — already @scope-wrapped when the block was scoped. Every pass applies
+	// this to its OWN css map; the memo never holds a pass's collector state.
+	hasStyles bool
+	cssBody   string
+	// watchFiles are the {#svg} paths codegen recorded (present even on failure,
+	// so esbuild can invalidate a cached failure once a missing asset appears).
+	watchFiles []string
+	// errs are the positioned esbuild messages for a failed split/compile.
+	errs []api.Message
+	// warnings are codegen's out-of-band diagnostics. They are printed by the
+	// pass that MISSES — i.e. once per build rather than once per pass, which is
+	// what a user reading a build log expects: three identical copies of the same
+	// warning is noise that says nothing extra.
+	warnings []codegen.Warning
+}
+
+// CompileCache memoizes .pzl transforms for the lifetime of one build.
+//
+// esbuild runs onLoad concurrently, and the three passes overlap only in time,
+// not in goroutines — but the same file can still be requested concurrently
+// within one pass. Each key gets its own sync.Once so a file is transformed
+// exactly once no matter how many callers race for it, and the loser waits for
+// the winner rather than duplicating the work.
+type CompileCache struct {
+	mu      sync.Mutex
+	entries map[string]*cacheEntry
+
+	// byFile indexes the entry keys a source path participates in, so Evict does
+	// not have to walk (or parse) every key. A key is listed under the .pzl's own
+	// path AND under every file it inlines with {#svg} — the dependency edge that
+	// makes an icon edit invalidate its consumers.
+	byFile map[string]map[string]bool
+
+	// assetOwners is the {#svg} edge read the OTHER way round: asset path → the
+	// .pzl files that inline it. byFile answers "what must I forget", which is all
+	// eviction needs; route-level invalidation needs "what does this icon
+	// change", and an icon is not an esbuild input, so the module graph cannot
+	// answer it. Entries are never removed — a .pzl that stops inlining an icon
+	// leaves a stale edge, which can only over-report consumers, and an
+	// over-reported consumer costs one re-render.
+	assetOwners map[string]map[string]bool
+
+	// svg memoizes {#svg} asset reads + scans for the same build. It is shared
+	// with codegen (through Options.SVGCache) AND with the shared-asset virtual
+	// module loader, so an icon used at fifty sites across three passes is read
+	// and parsed once rather than 150+ times.
+	svg *codegen.SVGCache
+}
+
+type cacheEntry struct {
+	once sync.Once
+	res  pzlResult
+}
+
+// NewCompileCache returns an empty cache. A nil *CompileCache is a valid
+// "no caching" value — every method is nil-safe — which is what the watch/dev
+// path passes.
+func NewCompileCache() *CompileCache {
+	return &CompileCache{
+		entries:     map[string]*cacheEntry{},
+		byFile:      map[string]map[string]bool{},
+		assetOwners: map[string]map[string]bool{},
+		svg:         codegen.NewSVGCache(),
+	}
+}
+
+// Evict drops every memoized transform that names one of paths — the .pzl
+// itself, or any file it inlined via {#svg} — and the SVG memo for those paths.
+// A nil cache and an empty batch are no-ops.
+//
+// The .pzl entries do not strictly NEED evicting (their keys carry a content
+// hash, so a changed file misses on its own); the SVG memo does, and a .pzl
+// whose bytes are unchanged but whose inlined icon moved must miss too, which is
+// exactly what the {#svg} edge in byFile expresses. Dropping the .pzl entries as
+// well keeps a long dev session's map proportional to the tree rather than to
+// the number of saves.
+func (c *CompileCache) Evict(paths []string) {
+	if c == nil || len(paths) == 0 {
+		return
+	}
+	// Both sides are symlink-resolved: esbuild reports args.Path resolved, while
+	// a watcher hands back the path the user spelled (macOS /var vs /private/var
+	// alone would make every eviction miss).
+	resolved := make([]string, 0, len(paths)*2)
+	for _, p := range paths {
+		resolved = append(resolved, p, resolveSymlinks(p))
+	}
+	c.svg.Evict(resolved)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, p := range resolved {
+		keys := c.byFile[p]
+		for key := range keys {
+			delete(c.entries, key)
+			// The key may be indexed under other files too (its own path plus each
+			// icon it inlines); drop it from all of them so the index cannot outlive
+			// the entries it points at.
+			for _, other := range c.byFile {
+				delete(other, key)
+			}
+		}
+		delete(c.byFile, p)
+	}
+}
+
+// index records that key was produced from owner (a .pzl path) and from each of
+// its {#svg} dependencies (assets). Callers hold no lock.
+func (c *CompileCache) index(key, owner string, assets []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	own := resolveSymlinks(owner)
+	for _, f := range append([]string{own}, assets...) {
+		f = resolveSymlinks(f)
+		set := c.byFile[f]
+		if set == nil {
+			set = map[string]bool{}
+			c.byFile[f] = set
+		}
+		set[key] = true
+	}
+	for _, f := range assets {
+		f = resolveSymlinks(f)
+		owners := c.assetOwners[f]
+		if owners == nil {
+			owners = map[string]bool{}
+			c.assetOwners[f] = owners
+		}
+		owners[own] = true
+	}
+}
+
+// AssetConsumers returns the symlink-resolved .pzl paths that inline any of
+// paths with {#svg}, as recorded by the transforms this cache has memoized. It
+// is the dependency edge no esbuild metafile carries: an inlined asset is a
+// watch file, not a module input, so route-level invalidation has to ask the
+// compiler which views a changed icon reaches. Unknown paths contribute
+// nothing; the caller decides what an empty answer means.
+func (c *CompileCache) AssetConsumers(paths []string) []string {
+	if c == nil || len(paths) == 0 {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range paths {
+		for _, key := range []string{p, resolveSymlinks(p)} {
+			for owner := range c.assetOwners[key] {
+				if seen[owner] {
+					continue
+				}
+				seen[owner] = true
+				out = append(out, owner)
+			}
+		}
+	}
+	return out
+}
+
+// svgCache returns the build's {#svg} memo, or nil when there is no cache (the
+// watch/dev path), which codegen and the asset loader both treat as "no memo".
+func (c *CompileCache) svgCache() *codegen.SVGCache {
+	if c == nil {
+		return nil
+	}
+	return c.svg
+}
+
+// SetCompileCache attaches a build-scoped memo shared with the other passes of
+// the same build. Left unset (the WatchBuilder path), every onLoad transforms
+// from source as before.
+func (p *Plugin) SetCompileCache(c *CompileCache) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cache = c
+}
+
+// load returns the transform for (path, src), computing it with compute at most
+// once per distinct key. The key is the app root, the resolved file path, and a
+// content hash of the bytes: the root because it decides every app-relative name
+// baked into the output (diagnostics, the module stamp, ScopeID), and the hash
+// so a file rewritten mid-build cannot serve a result for bytes that no longer
+// exist. A nil cache always computes.
+func (c *CompileCache) load(appRoot, path string, src []byte, compute func() pzlResult) pzlResult {
+	if c == nil {
+		return compute()
+	}
+	sum := sha256.Sum256(src)
+	key := appRoot + "\x00" + path + "\x00" + hex.EncodeToString(sum[:])
+
+	c.mu.Lock()
+	e := c.entries[key]
+	if e == nil {
+		e = &cacheEntry{}
+		c.entries[key] = e
+	}
+	c.mu.Unlock()
+
+	e.once.Do(func() {
+		e.res = compute()
+		// Index the entry under its own path and every {#svg} file it inlined, so
+		// a long-lived cache can invalidate it when any of them changes.
+		c.index(key, path, e.res.watchFiles)
+	})
+	return e.res
+}

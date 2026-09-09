@@ -1,0 +1,8 @@
+{
+  "name": "toast",
+  "description": "Imperative toast() API with a Toaster host — variants, pausable auto-dismiss, corner positioning",
+  "files": ["toast.js", "Toaster.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

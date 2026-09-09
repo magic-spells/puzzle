@@ -1,0 +1,36 @@
+<puzzle-view>
+  <split-panel size={ size } min={ min } max={ max } class={ paneClass }><Children/></split-panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// SplitPanel.Pane — one resizable pane. Renders the real <split-panel>; the
+// parent group writes its `--split-panel-size` flex share and mirrors `min` /
+// `max` to inline CSS, so this piece owns none of the geometry.
+//
+// A Pane must be a DIRECT child of SplitPanel — upstream reads the group's own
+// children in document order to pair panes with dividers.
+//
+// `size` is the authored share and is read at connect and again whenever the
+// child list changes, which is how a pane added mid-list gets a sensible width.
+// It is NOT a live binding: after mount the group owns the sizes, and this
+// attribute is only the seed.
+//
+// Props
+//   size   percent share (30 or '30%') or a pixel width ('250px')
+//   min    minimum extent — a number of px, '240px', or '25%'
+//   max    maximum extent, same units
+//   class  merged onto <split-panel>
+
+export default class SplitPanelPane extends PuzzleView {
+  data(params, props) {
+    return {
+      size: props.size == null ? false : String(props.size),
+      min: props.min == null ? false : String(props.min),
+      max: props.max == null ? false : String(props.max),
+      paneClass: props.class || false,
+    };
+  }
+}
+</script>

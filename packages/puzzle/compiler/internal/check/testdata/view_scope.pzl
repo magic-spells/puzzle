@@ -1,0 +1,38 @@
+<puzzle-view class={ classes } title="Hello { name | upper }">
+  {#if user}
+    <h1>{ user.name | fallback('friend') }</h1>
+  {:else if loading}
+    <p>{ status }</p>
+  {:else}
+    <p>Done</p>
+  {/if}
+
+  {#for item in items, index}
+    <button disabled={ item.done } @click={ select(item, index) }>
+      { index }: { item.label }
+    </button>
+  {/for}
+
+  {#case kind}
+    {:when 'alpha', 'beta'}<p>{ kind }</p>
+    {:else}<p>{ fallbackLabel }</p>
+  {/case}
+
+  <Portal><Slot name="overlay"/><Children/></Portal>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ViewScope extends PuzzleView {
+  classes = 'ready';
+  user: { name: string } | null = null;
+  loading = false;
+  items: Array<{ done: boolean; label: string }> = [];
+  kind = 'alpha';
+
+  events = {
+    select: (item: { done: boolean; label: string }, index: number) => ({ item, index }),
+  };
+}
+</script>

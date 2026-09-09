@@ -1,0 +1,64 @@
+<puzzle-view>
+  <div class={ classes } role={ role }>
+    {#if danger}
+      <svg class={ iconClass } viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 2l6.5 11.5h-13L8 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+        <path d="M8 6.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        <circle cx="8" cy="11.5" r="0.75" fill="currentColor" />
+      </svg>
+    {:else}
+      <svg class={ iconClass } viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5" />
+        <path d="M8 7.5v3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        <circle cx="8" cy="5" r="0.75" fill="currentColor" />
+      </svg>
+    {/if}
+    <div class="min-w-0">
+      {#if title}
+        <p class="font-medium text-ink">{ title }</p>
+      {/if}
+      <div class="text-sm text-body"><Slot/></div>
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Alert — an inline callout. Variants are plain lookup maps composed into one
+// class string in data(). The `danger` variant is a genuine assertive message,
+// so it renders role="alert"; the informational variants render role="status".
+// A circle-i icon leads the default/brand variants and a warning triangle leads
+// danger. `title` is an optional strong first line; the slot is the body text.
+//
+//   <Alert>Your changes were saved.</Alert>
+//   <Alert variant="brand" title="Heads up">A new version is available.</Alert>
+//   <Alert variant="danger" title="Payment failed">Update your card to continue.</Alert>
+const BASE = 'flex gap-3 rounded-lg border p-4';
+const ICON = 'size-4 shrink-0 mt-0.5';
+
+const VARIANT = {
+  default: 'border-border bg-surface-sunken',
+  brand: 'border-brand bg-brand-tint',
+  danger: 'border-danger bg-danger-tint',
+};
+
+const ICON_TONE = {
+  default: 'text-muted',
+  brand: 'text-brand',
+  danger: 'text-danger',
+};
+
+export default class Alert extends PuzzleView {
+  data(params, props) {
+    const variant = VARIANT[props.variant] ? props.variant : 'default';
+    return {
+      classes: [BASE, VARIANT[variant], props.class || ''].join(' '),
+      iconClass: [ICON, ICON_TONE[variant]].join(' '),
+      role: variant === 'danger' ? 'alert' : 'status',
+      danger: variant === 'danger',
+      title: props.title || '',
+    };
+  }
+}
+</script>

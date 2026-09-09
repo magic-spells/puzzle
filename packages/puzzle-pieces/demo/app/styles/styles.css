@@ -1,0 +1,249 @@
+@import "tailwindcss";
+
+/*
+ * The scroll-stack piece WRAPS the @magic-spells/scroll-stack web component
+ * rather than porting it, so the component's own stylesheet has to be loaded —
+ * it is where every effect, the sticky pinning, snapping and the per-view
+ * flex-basis actually live. Tailwind v4 resolves this bare specifier out of
+ * node_modules, so the rules land in dist/styles.css with everything else.
+ *
+ * Consuming apps do the same one-line merge (documented on the Scroll Stack
+ * docs page). `layer(components)` matters: the component's rules are plain
+ * element selectors (`scroll-stack`, `scroll-stack-item`) and an unlayered
+ * import would beat every Tailwind utility, so `gap-4` or `rounded-xl` on the
+ * element would silently do nothing. In the components layer the normal
+ * mental model holds — utilities win, the component's defaults fill in the
+ * rest.
+ */
+@import "@magic-spells/scroll-stack/css" layer(components);
+
+/*
+ * The sheet piece wraps @magic-spells/sheet the same way, and that one needs
+ * TWO stylesheets: its dialog-panel peer owns the <dialog>/<dialog-backdrop>
+ * transport, and sheet.css layers the panel geometry, the handle and the
+ * overlay on top of it. dialog-panel FIRST — sheet.css deliberately overrides
+ * several of its rules and an inverted order would undo them. Same
+ * `layer(components)` reasoning as above.
+ */
+@import "@magic-spells/dialog-panel/css" layer(components);
+@import "@magic-spells/sheet/css" layer(components);
+
+/*
+ * bottom-sheet is the third wrapper over the same family and shares the
+ * dialog-panel transport imported just above — one copy, imported once. Its own
+ * stylesheet carries the panel geometry, the grabber, the snap-point heights
+ * and the scrim, so it goes after dialog-panel for the same reason sheet.css
+ * does.
+ */
+@import "@magic-spells/bottom-sheet/css" layer(components);
+
+/*
+ * The dropdown-panel family (the shared DropdownPanel base and every menu piece
+ * built on it, NavigationMenu first) wraps @magic-spells/dropdown-panel. The
+ * core sheet is REQUIRED — it is where the panel positioning, the open/closed
+ * state and the hover bridge live, and it is also what keeps a closed panel at
+ * opacity 0 before the JS lands. The effects sheet is optional: it adds the
+ * five entrance effects and draws the trigger arrow, and without it `effect`,
+ * `arrow` and `arrow-shape` are simply no-ops. Same `layer(components)`
+ * reasoning as above — both sheets are plain element selectors.
+ */
+@import "@magic-spells/dropdown-panel/css" layer(components);
+@import "@magic-spells/dropdown-panel/css/effects" layer(components);
+
+/*
+ * The Collapsible and Accordion families wrap @magic-spells/collapsible-content.
+ * This sheet is REQUIRED: display:block, overflow:hidden, the height transition
+ * the whole animation runs on, the button reset, and the prefers-reduced-motion
+ * opt-out all live in it — the pieces do not animate without it. Same
+ * `layer(components)` reasoning as above: it is plain element selectors
+ * (collapsible-group, collapsible-component, collapsible-content), so an
+ * unlayered import would outrank every Tailwind utility the pieces put on them.
+ */
+@import "@magic-spells/collapsible-content/css" layer(components);
+
+/*
+ * The Tabs family wraps @magic-spells/tab-group. This sheet is REQUIRED for one
+ * rule above all: `tab-panel[hidden] { display: none }` is what actually hides
+ * an inactive panel — without it every panel renders at once. It also sets the
+ * strip's flex/overflow and the tab cursor. `layer(components)` for the usual
+ * reason (plain element selectors), and it is load-bearing here: the pieces put
+ * padding and colour utilities straight on <tab-list> and <tab-button>.
+ */
+@import "@magic-spells/tab-group/css" layer(components);
+
+/*
+ * The SplitPanel family wraps @magic-spells/split-panel. REQUIRED: the flex
+ * layout, the `--split-panel-size` flex-grow binding the group writes on every
+ * pane, the divider's gutter, hit target and cursors, and the dragging/ready
+ * state rules all live here. The piece bridges the sheet's divider colour
+ * custom properties to pieces.css tokens on the group host.
+ */
+@import "@magic-spells/split-panel/css" layer(components);
+
+/*
+ * The PanelStack family wraps @magic-spells/panel-stack. REQUIRED: the absolute
+ * panel positioning, the per-state transform/filter custom properties, the
+ * stack effect's inner shadow and the reduced-motion opt-out are all in here,
+ * and so is the :not(:defined) guard that stops every panel flashing at once
+ * before the upgrade lands.
+ */
+@import "@magic-spells/panel-stack/css" layer(components);
+
+/*
+ * The Select family wraps @magic-spells/select-dropdown. This sheet is REQUIRED,
+ * not cosmetic: the panel's at-rest `opacity: 0; visibility: hidden;
+ * pointer-events: none` and the `select-dropdown[visible]` rule that reverses
+ * them ARE the show/hide mechanism, and `select-dropdown:not(:defined)
+ * select-panel { display: none }` is what keeps the un-upgraded option list out
+ * of a prerendered page. Same `layer(components)` reasoning as above — plain
+ * element selectors (select-dropdown, select-trigger, select-panel,
+ * select-option), so an unlayered import would outrank every Tailwind utility
+ * the family puts on them.
+ */
+@import "@magic-spells/select-dropdown/css" layer(components);
+
+/*
+ * The Marquee piece wraps @magic-spells/scrolling-content. REQUIRED: the host's
+ * overflow, the track's flex / max-content sizing (which the clone measurement
+ * is derived from), the gap custom property, the drag cursors and the edge-fade
+ * mask all live here. Importing it is duplicate-free — the component detects
+ * this sheet through its `--scrolling-content-styles` sentinel and skips its own
+ * <style> injection. `layer(components)` for the usual reason.
+ */
+@import "@magic-spells/scrolling-content/css" layer(components);
+
+/*
+ * The QuantityInput piece wraps @magic-spells/quantity-input and deliberately
+ * imports NOTHING: that package's optional stylesheet carries hex colours and
+ * fixed control sizing, which is what this registry replaces with tokens, and the
+ * one rule worth having (hiding the native number spinners) is a Tailwind
+ * arbitrary variant in the piece itself. The component needs no CSS to work.
+ */
+
+/*
+ * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
+ * and JS so the utility classes they use are generated. Paths are relative to
+ * this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * dist/ is COMMITTED (GitHub Pages serves it), so it is not gitignored — which
+ * means v4's automatic content detection also scans the PREVIOUS build's own
+ * output. A class deleted from source then keeps its rule for exactly one more
+ * build, and a malformed class literal can look like it works because the older
+ * bundle still carried the correct one. Exclude it so the generated CSS reflects
+ * source alone. Requires Tailwind >= 4.1 (this project is on 4.3).
+ */
+@source not "../../dist/**";
+
+/* Gutter system (Luna-theme pattern, same as magic-spells-puzzle-site): one
+   responsive variable drives side padding via Tailwind utilities (px-gutter). */
+:root {
+  --gutter-base: 1.25rem;
+  --gutter-md: 2rem;
+  --gutter-lg: 2.5rem;
+  --spacing-gutter: var(--gutter-base);
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --spacing-gutter: var(--gutter-md);
+  }
+}
+
+@media (min-width: 80rem) {
+  :root {
+    --spacing-gutter: var(--gutter-lg);
+  }
+}
+
+/* Register the gutter as a Tailwind spacing token → px-gutter, mx-gutter, gap-gutter… */
+@theme {
+  --spacing-gutter: var(--spacing-gutter);
+}
+
+/*
+ * puzzle-pieces design tokens — merged from registry/theme/pieces.css, exactly
+ * the way a consuming app would. Every piece styles itself through the semantic
+ * utilities these generate (bg-surface, text-ink, border-border, bg-brand, …).
+ *
+ * Dark mode: every token is a `light-dark(light, dark)` pair resolved by
+ * `color-scheme`. No data-theme attribute → follow the OS; the header switcher
+ * sets data-theme="light"/"dark" on <html> (persisted in localStorage, applied
+ * pre-paint by an inline script in public/index.html).
+ */
+
+:root {
+  color-scheme: light dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@theme {
+  /* Text — darkest to faintest. */
+  --color-ink: light-dark(#1f2933, #f4f4f5);
+  --color-body: light-dark(#52606d, #b4b4bb);
+  --color-muted: light-dark(#7b8794, #7f7f88);
+  --color-faint: light-dark(#cbd2d9, #46464e);
+
+  /* Surfaces. */
+  --color-page: light-dark(#f5f7fa, #09090b);
+  --color-surface: light-dark(#ffffff, #101013);
+  --color-surface-sunken: light-dark(#eef1f6, #18181c);
+
+  /* Brand. */
+  --color-brand: light-dark(#4c6ef5, #5c7cfa);
+  --color-brand-dark: light-dark(#3b5bdb, #748ffc);
+  --color-brand-tint: light-dark(#eef2ff, #1d2440);
+  --color-brand-ink: #ffffff;
+
+  /* Danger. */
+  --color-danger: light-dark(#e03131, #fa5252);
+  --color-danger-dark: light-dark(#c92a2a, #ff6b6b);
+  --color-danger-tint: light-dark(#fff5f5, #271417);
+  --color-danger-ink: #ffffff;
+
+  /* Success — positive deltas, "up is good" indicators (counterpart to danger). */
+  --color-success: light-dark(#006300, #0ca30c);
+  --color-success-tint: light-dark(#ebf7eb, #122616); /* soft positive backgrounds */
+
+  /* Warning — caution band between success and danger (meters, gauges, alerts). */
+  --color-warning: light-dark(#b45309, #f59e0b);
+  --color-warning-tint: light-dark(#fff8eb, #2a1c07); /* soft caution backgrounds */
+
+  /* Charts — categorical series palette, assigned in fixed slot order (1→8), never cycled.
+     Validated for colorblind safety + lightness/chroma bands in both modes
+     (dataviz six-checks validator, 2026-07-17). Light slots 3/4/5 sit below 3:1
+     contrast on white by design — chart pieces mitigate with legends, tooltips,
+     and their built-in accessible table views. */
+  --color-chart-1: light-dark(#2a78d6, #3987e5);
+  --color-chart-2: #008300;
+  --color-chart-3: light-dark(#e87ba4, #d55181);
+  --color-chart-4: light-dark(#eda100, #c98500);
+  --color-chart-5: light-dark(#1baf7a, #199e70);
+  --color-chart-6: light-dark(#eb6834, #d95926);
+  --color-chart-7: light-dark(#4a3aa7, #9085e9);
+  --color-chart-8: light-dark(#e34948, #e66767);
+
+  /* Lines & focus. */
+  --color-border: light-dark(#e4e9f0, #1f1f23);
+  --color-border-strong: light-dark(#c3cfe6, #2e2e35);
+  --color-ring: light-dark(#4c6ef5, #5c7cfa);
+}
+
+@import './schemes.css';
+
+@layer base {
+  body {
+    -webkit-font-smoothing: antialiased;
+    color: var(--color-body);
+    background: var(--color-page);
+  }
+}

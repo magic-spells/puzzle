@@ -1,0 +1,8 @@
+{
+  "name": "stepper",
+  "description": "Numbered step-progress indicator — horizontal or vertical, complete/current/upcoming states, optional clickable steps",
+  "files": ["Stepper.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

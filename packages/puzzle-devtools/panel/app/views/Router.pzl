@@ -1,0 +1,244 @@
+<puzzle-view class="h-full flex flex-col min-h-0">
+  {#if disconnected}
+    <div class="flex-1 min-w-0">
+      <Empty title={ emptyTitle } description={ emptyHint } class="py-8! px-4!" />
+    </div>
+  {:else}
+    <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
+      <span class="shrink-0 font-mono text-[13px] font-semibold text-ink" data-pathname>{ pathname }</span>
+      {#if hasPattern}
+        <span class="min-w-0 truncate font-mono text-[10px] text-faint" title="matched route pattern">{ pattern }</span>
+      {/if}
+      <button
+        type="button"
+        data-reload-route
+        title="Re-request snapshot:route"
+        class="ml-auto flex size-4 items-center justify-center rounded text-muted hover:bg-raised hover:text-accent { loadingClass }"
+        @click={ reload }>{#svg 'icons/refresh.svg'}</button>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-auto p-3 grid gap-3">
+      {#if error}
+        <p class="m-0 rounded border border-danger px-2 py-1 font-mono text-[11px] text-danger">{ error }</p>
+      {/if}
+
+      <div class="grid gap-3 grid-cols-1 lg:grid-cols-2">
+        <StateGroup title="params" tone="plain" entries={ paramEntries } emptyLabel="no route params" />
+        <StateGroup title="query" tone="plain" entries={ queryEntries } emptyLabel="no query string" />
+      </div>
+
+      <section class="rounded border border-line bg-canvas overflow-hidden" data-chain>
+        <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
+          <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Matched chain</h2>
+          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ chain.length }</span>
+        </header>
+        {#if chain.length === 0}
+          <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No chain reported.</p>
+        {:else}
+          <ol class="m-0 p-0 list-none">
+            {#for link in chain}
+              <li
+                key={ link.key }
+                data-chain-row="{ link.key }"
+                class="flex items-center gap-2 min-h-[22px] px-2 py-0.5 border-b border-line last:border-b-0 { link.rowClass }">
+                <span class="shrink-0 font-mono text-[10px] tabular-nums text-faint" style="padding-left:{ link.indent }">{ link.depth }</span>
+                <span class="shrink-0 font-mono text-[12px] leading-none { link.nameClass }">{ link.name }</span>
+                {#if link.hasPattern}
+                  <span class="min-w-0 truncate font-mono text-[10px] text-faint">{ link.pattern }</span>
+                {/if}
+                {#if link.isLeaf}
+                  <span class="ml-auto shrink-0 font-mono text-[9px] uppercase tracking-wide text-accent">leaf</span>
+                {/if}
+              </li>
+            {/for}
+          </ol>
+        {/if}
+      </section>
+
+      <section class="rounded border border-line bg-canvas overflow-hidden" data-history>
+        <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
+          <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Navigation history</h2>
+          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ history.length }</span>
+        </header>
+        {#if history.length === 0}
+          <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No navigations captured yet.</p>
+        {:else}
+          <ul class="m-0 p-0 list-none">
+            {#for entry in history}
+              <li
+                key={ entry.id }
+                data-history-row="{ entry.id }"
+                class="flex items-baseline gap-2 min-h-[20px] px-2 py-0.5 border-b border-line last:border-b-0">
+                <span class="shrink-0 font-mono text-[10px] tabular-nums text-faint">{ entry.time }</span>
+                <span class="shrink-0 font-mono text-[11px] text-ink">{ entry.pathname }</span>
+                <span class="min-w-0 truncate text-[10px] text-muted">{ entry.title }</span>
+              </li>
+            {/for}
+          </ul>
+        {/if}
+      </section>
+    </div>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Empty from '../components/ui/Empty.pzl';
+import StateGroup from '../components/StateGroup.pzl';
+import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
+import { EVENTS } from '../../../protocol/constants.js';
+import { disconnectedEmpty } from '../emptystate.js';
+import { api } from '../bridge.js';
+import { entriesOf } from '../values.js';
+
+/**
+ * The Router panel: where the app is, how it got matched, and where it has
+ * been.
+ *
+ * Two sources, deliberately: the CARD is a `snapshot:route` pull (authoritative,
+ * complete — it carries `routes`/`route` patterns that the `route-commit` event
+ * does not), while the HISTORY feed is read straight off the capped event ring
+ * the bridge already fills. Nothing extra is recorded for it, which is why the
+ * feed survives a panel that was opened after the navigations happened.
+ */
+
+/** A commit lands with the DOM; give the runtime a beat before re-reading. */
+const COMMIT_DEBOUNCE_MS = 80;
+const HISTORY_LIMIT = 40;
+
+export default class RouterView extends PuzzleView {
+  created() {
+    this.setData({ route: null, loading: false, error: '' });
+    this._seenGeneration = null;
+    this._commitTimer = null;
+  }
+
+  mounted() {
+    if (this.connected()) this.load();
+  }
+
+  destroyed() {
+    clearTimeout(this._commitTimer);
+  }
+
+  data() {
+    const store = this.ctx.store;
+    const connection = store.findOne('connection', CONNECTION_ID);
+    const events = store.findMany('event');
+    const local = this.getData();
+
+    const state = connection?.state ?? CONNECTION_STATE.WAITING;
+    const connected = state === CONNECTION_STATE.CONNECTED;
+
+    // `route` on the connection singleton is the last route-commit payload; its
+    // identity changes on every commit, which is exactly the refresh trigger.
+    const commit = connection?.route ?? null;
+    const generation = `${state}#${connection?.eventCount ?? 0}#${commit?.pathname ?? ''}`;
+    if (generation !== this._seenGeneration) {
+      const first = this._seenGeneration === null;
+      this._seenGeneration = generation;
+      if (!connected) clearTimeout(this._commitTimer);
+      else if (!first) this.scheduleReload();
+    }
+
+    // The pulled snapshot is richer; the last commit is the live fallback until
+    // it lands (and after a panel opens mid-session).
+    const route = local.route ?? commit ?? {};
+    const empty = disconnectedEmpty(state);
+
+    return {
+      disconnected: !connected,
+      emptyTitle: empty.title,
+      emptyHint: empty.description,
+
+      pathname: route.pathname ?? '—',
+      pattern: route.route ?? '',
+      hasPattern: !!route.route,
+      paramEntries: entriesOf(route.params),
+      queryEntries: entriesOf(route.query),
+      chain: this.toChain(route),
+      history: this.toHistory(events),
+
+      loadingClass: local.loading ? 'animate-spin text-accent' : '',
+      error: local.error,
+    };
+  }
+
+  /**
+   * Zip the two parallel arrays SPEC §55 sends: `chain` is view names root→leaf,
+   * `routes` the path patterns of the same entries. They are the same length in
+   * practice, but a layout with no pattern of its own would make them differ, so
+   * the zip is by index and tolerates a short `routes`.
+   */
+  toChain(route) {
+    const names = Array.isArray(route.chain) ? route.chain : [];
+    const patterns = Array.isArray(route.routes) ? route.routes : [];
+    const last = names.length - 1;
+    return names.map((name, index) => {
+      const pattern = patterns[index] ?? '';
+      const isLeaf = index === last;
+      return {
+        key: `${index}-${name}`,
+        depth: index,
+        indent: `${index * 8}px`,
+        name,
+        pattern,
+        hasPattern: pattern !== '',
+        isLeaf,
+        rowClass: isLeaf ? 'bg-accent-soft' : '',
+        nameClass: isLeaf ? 'text-accent font-semibold' : 'text-ink',
+      };
+    });
+  }
+
+  /** route-commit events out of the shared ring, newest first. */
+  toHistory(events) {
+    const commits = events.filter((event) => event.type === EVENTS.ROUTE_COMMIT);
+    return commits
+      .slice(-HISTORY_LIMIT)
+      .reverse()
+      .map((event) => ({
+        id: event.id,
+        time: event.time,
+        pathname: event.payload?.pathname ?? '(no path)',
+        title: event.payload?.title ?? '',
+      }));
+  }
+
+  connected() {
+    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
+    return connection?.state === CONNECTION_STATE.CONNECTED;
+  }
+
+  scheduleReload() {
+    clearTimeout(this._commitTimer);
+    this._commitTimer = setTimeout(() => {
+      this._commitTimer = null;
+      this.load();
+    }, COMMIT_DEBOUNCE_MS);
+  }
+
+  async load() {
+    if (this.isDestroyed || !this.connected()) return;
+    this.setData({ loading: true, error: '' });
+    this.refresh();
+    try {
+      const result = await api.snapshotRoute();
+      if (!this.isDestroyed) this.setData('route', result ?? null);
+    } catch (err) {
+      if (!this.isDestroyed) this.setData('error', err?.message ?? String(err));
+    } finally {
+      if (!this.isDestroyed) {
+        this.setData('loading', false);
+        this.refresh();
+      }
+    }
+  }
+
+  events = {
+    reload: () => {
+      this.load();
+    },
+  };
+}
+</script>

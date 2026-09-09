@@ -1,0 +1,174 @@
+---
+name: 'D87 — route guards: the inherited `guard` route field (v1.53)'
+status: verified
+connections:
+  - COMPONENT-ROUTER
+  - COMPONENT-SSG
+  - DOC-SPEC
+  - DOC-SPEC-ROUTER
+  - DOC-ROUTER
+  - DOC-RELEASE-SURFACE
+  - DECISION-D19-NAVIGATION-COMMIT
+  - DECISION-D30-NESTED-ROUTES
+  - DECISION-D66-APP-LIFECYCLE-HOOKS
+  - DECISION-D83-QUERY-REPLACE
+  - FILE-ROUTER
+  - FEATURE-V1-53-ROUTE-GUARDS
+verified_at: '2026-08-24T21:39:15.808Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Merged and verified: 957 vitest green (guard suites in history + memory modes, prerender
+      warning tests), go test ./..., test:types, stays example builds. Real-browser pass of the
+      stays login flow not yet run.
+    sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+  - kind: verified
+    text: >-
+      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
+      card was found true as written, so nothing changed but the baseline. Bound code was read at
+      this sha; the framework suite is green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: gotcha
+    text: >-
+      Verb inheritance made a SELF-redirect deadlock, and `push()` needs an explicit exemption for
+      it. When the verdict is the very path being denied — the inherited-guard mistake, where a
+      guard on the parent bounces to '/login' and '/login' is a child that inherits it — the
+      redirect re-enters through `push()` while the denied navigation still owns `#pendingNavPath`.
+      `push()`'s in-flight double-click guard then matches and hands the redirect that navigation's
+      OWN `#pendingNavPromise`, so `#navigate`'s redirect branch awaits itself and the navigation
+      never settles: `await router.push(…)` hangs forever, the redirect never happens, and
+      `#pendingNavPath` stays set. `replace()` has no such guard, which is why the pre-inheritance
+      shape reached the redirect-limit cycle error instead. Fix: `push()` skips the in-flight
+      same-key guard while `#guardRedirecting` is set (it is set only around the redirect re-entry),
+      so the self-redirect supersedes normally and trips the limit at ten — loud and diagnosable.
+      Pinned by "a guard redirecting to the path it denies trips the limit instead of hanging" in
+      tests/router.test.js, which races the push against a timeout so a regression fails fast rather
+      than hanging the suite.
+    sha: b821e2c
+---
+
+# D87 — route guards: the inherited `guard` route field (v1.53)
+
+Client-side navigation middleware. Any route node may declare `guard: fn`
+(`({ to, from, ctx }) => verdict`); a navigation runs every guard along the
+matched chain **root → leaf, sequentially, first failure wins**, before any
+view/layout construction and before the D19 load gate. Guarding a top-level
+route locks its whole layout subtree with one declaration — the D30 "layouts
+are auth walls" framing made literal. Cory's design (2026-07-23); see
+[[DOC-SPEC-ROUTER]] §48 and the [[DOC-ROUTER]] guards section.
+
+## Context
+
+Guards sat on the deliberately-not-shipped list from v1 ("Planned — not in
+v1"), with the interim idiom being a `router.push('/login')` from `mounted()` —
+which D61/D83 machinery (commit-window deferral, same-path no-op, `replace()`)
+was explicitly hardened to support. A cross-framework survey (Vue Router
+guards + merged `meta`, ember-simple-auth's authenticated parent route,
+TanStack's `_authenticated` layout route, Angular `canActivate`/
+`canActivateChild`, React Router middleware) shows subtree-at-the-layout-
+boundary is the universal auth idiom, and surfaced the one famous footgun:
+SvelteKit's layout-guard pitfall, where guards riding data-loading primitives
+that are cached across child navigations (and run parallel to children)
+silently fail to protect subtrees. Puzzle's load-then-atomic-commit pipeline
+is structurally immune **if** guards get their own sequential, always-run
+phase before the load gate — which is exactly where this lands. The
+`#navigate` chokepoint (every push/replace/popstate/initial navigation flows
+through it) made a single insertion point possible.
+
+## Decision
+
+
+**One new route field, one new pipeline phase:**
+
+- `guard` is a top-level route field (sibling of `layout`/`transitionMode`/
+  `prerender` — behavioral flags stay out of `meta`, which is reserved for
+  page metadata) valid at **any depth**, unlike root-only `layout`. The entry
+  compiles its inherited chain at construction
+  (`chain.map(n => n.guard).filter(Boolean)`); a non-function guard throws at
+  construction like an unknown `transitionMode`.
+- Guards run in `#navigate` after the match and cancellation-token bump,
+  before any view/layout is constructed — a denied navigation has nothing to
+  tear down and commits nothing (D19/D61 inherited). They re-run on **every**
+  matched navigation (params-only and query-only included — avoiding Vue's
+  `beforeEnter`-doesn't-refire surprise), with the token rechecked after every
+  await so a superseded guarded navigation abandons silently.
+- **Verdicts are return values, not throws:** `undefined`/`true` allow,
+  `false` blocks (stay put), a string path redirects — and the ROUTER performs
+  the redirect via the public `push()`/`replace()` seam, **inheriting the
+  denied navigation's verb**: a push redirect is a `push()` that mints the
+  destination's own entry, so Back still reaches the page the user was on; a
+  pop or navigation-#0 redirect is a `replace()` that takes over the entry the
+  browser already moved to. Denied URLs never enter history either way (a push
+  writes no entry until commit, D61); the destination's own guards run through
+  the normal pipeline. A thrown guard follows the data()-failure posture: log,
+  stay put. The shared post-failure cleanup (stalled-transition +
+  pending-memory-index recovery) is one helper used by both paths.
+- **Loop safety:** at most ten guard-owned redirects per logical navigation;
+  the next is treated as a cycle (console.error, stay put). The counter resets
+  on a successful commit AND at the start of every externally-initiated
+  navigation — a guard redirect re-entering through `push()`/`replace()` is
+  flagged as a continuation and keeps the count, everything else starts from
+  zero. Resetting only at commit would let the count accumulate across
+  INDEPENDENT user navigations, because a redirect to the already-committed
+  path is the D83 same-path no-op and never commits. A real A↔B cycle never
+  commits either, so the cap still catches it; the query-param deny idiom
+  commits on `/login`.
+- **Output modes — warnings only, no enforcement** (Cory: the developer's
+  call; guards are UX, not a secrecy boundary — prerendered files are public
+  bytes and servers must authorize independently). Hybrid prerender warns per
+  rendered page whose chain has a guard (`prerender: false` is the quiet
+  opt-out); a static build warns once that guards never run (no router).
+- **Idioms over API:** session restore belongs in D66 `beforeMount(app)`
+  (awaited before navigation #0, so guards stay synchronous store reads);
+  redirect-after-login is the query idiom
+  (`'/login?redirect=' + encodeURIComponent(to.path)`, read back via the D83
+  query snapshot) — no new router state.
+
+## Consequences
+
+- `examples/stays` gains the acceptance flow: a store-backed fake session, a
+  guarded `/account` subtree, and a `/login` view that replays
+  `this.route.query.redirect` via `replace()`.
+- The `mounted()`-redirect idiom remains valid (and its hardening remains
+  load-bearing for guards' own redirects), but declarative guards are now the
+  documented path — no flash of protected content, no wasted `data()` run.
+- Guards are SPA/hybrid-runtime behavior; static output ignores them by
+  construction. Public types gain `GuardFn` + `Route.guard`.
+- Unguarded routes keep a byte-identical synchronous path to view
+  construction (the guard phase adds no microtask when `entry.guards` is
+  empty).
+
+## Alternatives rejected
+
+
+- **Global `beforeEach` hook + `meta.requiresAuth` flags (Vue's shape)** —
+  policy lives away from the route tree, needs a matched-chain scan in user
+  code, and adds a second registration surface; the route field keeps the
+  lock visible exactly where the subtree is declared.
+- **Root-only `guard` (strict `layout` parity)** — inheritance already gives
+  the layout lock; forbidding child guards forces a route-tree split the
+  moment an admin sub-section needs a second check.
+- **Throw-based redirects (`throw redirect(...)`, TanStack/React Router
+  shape)** — return values compose with the existing verdict handling and
+  avoid exception-as-control-flow; the router performing the redirect keeps
+  D61 atomicity centralized (Angular's "return a UrlTree, never `navigate()`
+  imperatively" rule, same reasoning).
+- **Redirecting through `replace()` whatever the denied verb** (the v1.53
+  shape, amended in the 0.7.0 final review) — the goal, keeping the denied
+  URL out of history, is already guaranteed for a push by D61 (pushState
+  fires only at commit), so the replace bought nothing there and cost the
+  origin entry: `replaceState` overwrote the page the user was on, Back from
+  `/login` skipped it, and after the documented post-login `replace(redirect)`
+  Back from the protected page left the site. Inheriting the verb keeps the
+  pop and navigation-#0 collapse (the browser already sits on the denied URL)
+  and gives a push redirect the destination's own entry.
+- **`auth` as the field name** — names the dominant use case, not the
+  mechanism; misleads for role/paywall/onboarding gates and implies framework
+  session machinery that deliberately does not exist. Release surface already
+  said "navigation guards."
+- **Hard enforcement in prerender modes (auto-exclude or build error)** —
+  rejected by Cory: SSG blogs and auth'd SPAs barely overlap in practice, and
+  a developer prerendering a guarded route may legitimately mean it (public
+  markup, UX-only gate). Warnings keep the footgun visible without taking the
+  choice away.

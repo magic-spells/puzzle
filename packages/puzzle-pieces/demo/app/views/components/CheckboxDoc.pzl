@@ -1,0 +1,111 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Checkbox</h1>
+        <p class="mt-2 text-body">
+          A checkbox built on a native input element, with an optional label and hint. The whole row is a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>,
+          so a click anywhere toggles it; state is controlled through a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          callback.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <Checkbox label="Subscribe to the newsletter" checked={ subscribe } @change={ setSubscribe } />
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="hint" title="With hint" code={ codeHint }>
+          <Checkbox label="Ship it" hint="Applies to every item in the order" checked={ shipIt } @change={ setShipIt } />
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled } tall={ false }>
+          <Checkbox label="Gift wrapping" hint="Not available for this order" checked={ false } disabled />
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Checkbox from '@/components/ui/Checkbox.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece checkbox';
+const usageImport = `import Checkbox from '@/components/ui/Checkbox.pzl';`;
+const usageMarkup = `<Checkbox label="Subscribe to the newsletter" checked={ subscribe } @change={ setSubscribe } />`;
+
+const codeHero = `<Checkbox label="Subscribe to the newsletter" checked={ subscribe } @change={ setSubscribe } />
+
+// parent
+events = {
+  setSubscribe: (v) => this.setData('subscribe', v),
+};`;
+
+const codeHint = `<Checkbox
+  label="Ship it"
+  hint="Applies to every item in the order"
+  checked={ shipIt }
+  @change={ setShipIt } />`;
+
+const codeDisabled = `<Checkbox label="Gift wrapping" hint="Not available for this order" checked={ false } disabled />`;
+
+export default class CheckboxDoc extends PuzzleView {
+  created() {
+    this.setData({ subscribe: true, shipIt: false });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeHint,
+      codeDisabled,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'With hint', href: '#hint' },
+        { label: 'Disabled', href: '#disabled' },
+      ],
+    };
+  }
+
+  events = {
+    setSubscribe: (v) => {
+      this.setData('subscribe', v);
+      this.refresh();
+    },
+    setShipIt: (v) => {
+      this.setData('shipIt', v);
+      this.refresh();
+    },
+  };
+}
+</script>

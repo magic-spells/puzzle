@@ -1,0 +1,45 @@
+<puzzle-view>
+  <nav class={ rootClass } aria-label="On this page">
+    <p class="mb-3 text-sm font-medium text-ink">On This Page</p>
+    <ul class="space-y-2 border-l border-border">
+      {#for item in items}
+        <li key={ item.href }>
+          <a
+            href={ item.href }
+            class="-ml-px block border-l border-transparent pl-4 text-sm text-muted transition-colors hover:border-border-strong hover:text-ink"
+            @click={ jump(item.href, event) }>{ item.label }</a>
+        </li>
+      {/for}
+    </ul>
+  </nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Toc — the "On This Page" column (docs-only). Config-first: items are
+// [{ label, href }] where href is a '#section-id' anchor. Clicks are handled in
+// JS (scrollIntoView, smooth) rather than left to the raw hash navigation, so
+// the SPA router never sees them; the href stays on the <a> for middle-click
+// and copy-link semantics. Sections need scroll-mt to clear the sticky header
+// (ExampleBox applies scroll-mt-20 to its own <section>).
+//
+//   <Toc class="hidden xl:block" items={ toc }/>
+export default class Toc extends PuzzleView {
+  data(params, props) {
+    return {
+      items: props.items || [],
+      rootClass: props.class || '',
+    };
+  }
+
+  events = {
+    jump: (href, event) => {
+      const id = typeof href === 'string' && href.startsWith('#') ? href.slice(1) : null;
+      if (!id) return;
+      event.preventDefault();
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+  };
+}
+</script>

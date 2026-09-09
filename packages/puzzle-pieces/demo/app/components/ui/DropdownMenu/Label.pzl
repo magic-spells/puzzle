@@ -1,0 +1,27 @@
+<puzzle-view>
+  <div class={ labelClass }><Children/></div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DropdownMenu.Label — a non-interactive heading over a run of rows. A member of
+// the DropdownMenu family (D167); plain markup.
+//
+//   <DropdownMenu.Label>Account</DropdownMenu.Label>
+//
+// It is not focusable and carries no role, so it does not match menu mode's item
+// selector and the arrow walk and typeahead skip it for free — nothing here has
+// to teach them to.
+//
+// Props
+//   class  merged onto the heading
+
+const LABEL = 'px-2.5 pt-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted';
+
+export default class Label extends PuzzleView {
+  data(params, props) {
+    return { labelClass: [LABEL, props.class].filter(Boolean).join(' ') };
+  }
+}
+</script>

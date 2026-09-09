@@ -1,0 +1,28 @@
+<puzzle-view>
+  <select-label class={ labelClass }><Children/></select-label>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Select.Label — a non-interactive group heading inside the panel. A member of
+// the Select family (D167). Renders the real <select-label>, whose constructor
+// stamps role="presentation", so this file authors no ARIA of its own and the
+// heading is never announced as an option.
+//
+//   <Select.Label>North America</Select.Label>
+//   <Select.Option value="us">United States</Select.Option>
+//
+// Props
+//   class  merged onto <select-label>, after the chrome
+
+const LABEL =
+  'block cursor-default select-none px-3 pt-3 pb-1 text-xs font-semibold ' +
+  'uppercase tracking-wide text-muted';
+
+export default class SelectLabel extends PuzzleView {
+  data(params, props) {
+    return { labelClass: [LABEL, props.class].filter(Boolean).join(' ') };
+  }
+}
+</script>

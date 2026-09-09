@@ -1,0 +1,503 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Scroll Stack</h1>
+        <p class="mt-2 text-body">
+          A natively scrolling list whose items animate at the scrollport edges instead of clipping.
+          The exiting item stops dead at the boundary, fades and shrinks in place, and the next
+          one slides over it. No scroll hijacking — the
+          browser scrolls, the component only reads.
+        </p>
+        <p class="mt-3 text-body">
+          This piece is a <strong class="font-medium text-ink">wrapper</strong>, not a port: it
+          renders the real
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<scroll-stack>' }</code>
+          custom element from
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/scroll-stack</code>
+          and binds attributes to it. Every effect is a CSS rule keyed off a progress custom
+          property the engine writes, so the component is fully restylable from outside — there is
+          no behavior worth reimplementing, and the measurement code is subtle enough that forking
+          it would be a liability.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Every live example on this page runs with <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">snap</code>
+          on, so each list comes to rest on an item boundary rather than mid-fade. It is off by
+          default, and it is <strong class="font-medium text-ink">mandatory</strong> — see
+          <a class="text-brand underline underline-offset-2" href="#snap">Snap carousel</a>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <ScrollStack class="h-96 w-full max-w-xl rounded-xl border border-border bg-surface p-3" snap={ true } gap="0.75rem">
+          {#for card in cards}
+            <scroll-stack-item key={ card.id }>
+              <div class="rounded-lg border border-border bg-surface-sunken p-4">
+                <span class="font-mono text-xs uppercase tracking-wider text-brand">{ card.tag }</span>
+                <h3 class="mt-1 text-lg font-semibold text-ink">{ card.title }</h3>
+                <p class="mt-1 text-sm text-body">{ card.body }</p>
+              </div>
+            </scroll-stack-item>
+          {/for}
+        </ScrollStack>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Unlike every other piece, this one has a runtime dependency: the web component it wraps.
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge the component's stylesheet into your app's style entry
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
+          It is where the effects, the pinning, the snapping and the per-view sizing actually live,
+          so the piece does nothing without it:
+        </p>
+        <CodeBlock code={ installCss }/>
+        <p class="mt-3 text-sm text-muted">
+          The <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">layer(components)</code>
+          part is not decoration. The component styles itself with plain element selectors, and an
+          unlayered import outranks every Tailwind utility — <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">gap-4</code>
+          or <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">rounded-xl</code>
+          on the element would silently do nothing. In the components layer the normal mental model
+          holds: your utilities win, the component's defaults fill in the rest.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <section id="items" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Item markup contract</h2>
+        <p class="mb-3 text-sm text-body">
+          Children are parent-authored and pass through the default slot untouched, so you write the
+          item elements yourself. Three rules:
+        </p>
+        <ul class="space-y-1.5 text-sm text-body">
+          <li>
+            <span class="font-medium text-ink">Every child is a { '<scroll-stack-item>' }.</span>
+            It is the layout and pinning box, and it carries the progress custom properties.
+          </li>
+          <li>
+            <span class="font-medium text-ink">Every item needs exactly one element child.</span>
+            That child is what the effect applies to — the wrapper pins while the content fades and
+            scales, so neither fights the other. An item with no element child is skipped with one
+            console warning.
+          </li>
+          <li>
+            <span class="font-medium text-ink">Style the inner element, not the item.</span>
+            Padding, background, borders and rounding all belong on the child; the item should stay
+            a bare box.
+          </li>
+          <li>
+            <span class="font-medium text-ink">No scroll-axis margins on that child.</span>
+            The pin travels in percentages of the content box. The component stretches the content
+            to fill the item box and zeroes its margins along the scroll axis
+            (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">margin-block</code> vertically,
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">margin-inline</code> horizontally) — cross-axis margins like
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">mx-auto</code> are left alone. That reset is only element-selector strength,
+            though, so a Tailwind <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">my-*</code> on a vertical list's content still wins and
+            desynchronises the pin by that many pixels per item. Use the
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">gap</code> prop for spacing between items.
+          </li>
+        </ul>
+        <p class="mt-3 text-sm text-muted">
+          One thing to avoid: a dynamic
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">style={ '{ … }' }</code>
+          binding on an item. The patcher rewrites the whole style attribute and would clobber the
+          per-frame custom-property writes — the same rule that applies to morph elements. A static
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">style</code>
+          string is fine.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Sizing note: <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">perView</code>
+          resolves to a <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">flex-basis</code>
+          on the item, which beats any width you put on it. Size the content element instead, or
+          drop the sizing props.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="horizontal" title="Horizontal + per-view sizing" code={ codeHorizontal }>
+          <div class="w-full space-y-3">
+            <ScrollStack
+              class="w-full rounded-xl border border-border bg-surface p-3"
+              direction="horizontal"
+              snap={ true }
+              perView="auto"
+              itemMin="14rem"
+              itemMax="20rem"
+              gap="0.75rem">
+              {#for tile in tiles}
+                <scroll-stack-item key={ tile.id }>
+                  <div class="flex h-40 flex-col justify-end rounded-lg border border-border bg-brand-tint p-4">
+                    <span class="font-mono text-xs uppercase tracking-wider text-brand">{ tile.tag }</span>
+                    <span class="mt-1 text-lg font-semibold text-ink">{ tile.title }</span>
+                  </div>
+                </scroll-stack-item>
+              {/for}
+            </ScrollStack>
+            <p class="text-sm text-muted">
+              The tiles carry no width of their own. Resize the window and the count changes: the
+              engine fits as many whole items as still clear <span class="font-medium text-ink">itemMin</span>,
+              divides the remainder evenly, and publishes the result as a custom property that
+              drives each item's flex-basis.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="snap" title="Snap carousel" code={ codeSnap }>
+          <div class="w-full space-y-3">
+            <ScrollStack
+              class="w-full rounded-xl border border-border bg-surface p-3"
+              direction="horizontal"
+              effect="fade-scale"
+              snap={ true }
+              perView={ 3 }
+              itemMin="12rem"
+              gap="0.75rem">
+              {#for tile in tiles}
+                <scroll-stack-item key={ tile.id }>
+                  <div class="flex h-40 items-center justify-center rounded-lg border border-border bg-surface-sunken text-lg font-semibold text-ink">
+                    { tile.title }
+                  </div>
+                </scroll-stack-item>
+              {/for}
+            </ScrollStack>
+            <p class="text-sm text-muted">
+              <span class="font-medium text-ink">snap</span> is native CSS scroll snapping — two
+              declarations, no JavaScript. The one thing the engine does differently while snapping
+              is drop the scroll-padding it normally writes: padding shifts every snap position, and
+              a snapped item is fully visible anyway. Pass
+              <span class="font-medium text-ink">snap="center"</span> to snap item centers instead
+              of their leading edges.
+            </p>
+            <p class="text-sm text-muted">
+              Bare <span class="font-medium text-ink">snap</span> and
+              <span class="font-medium text-ink">snap="center"</span> are
+              <strong class="font-medium text-ink">mandatory</strong>. They can be because items are
+              plain flow boxes whose snap areas never move — while the pin was
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">position: sticky</code>
+              a stuck item's snap area tracked the scroll offset and mandatory truncated every fling.
+              <span class="font-medium text-ink">snap="proximity"</span> is the softer opt-out.
+            </p>
+            <p class="text-sm text-muted">
+              This example also fixes the count — <span class="font-medium text-ink">perView={ 3 }</span>
+              divides the port three ways instead of fitting as many as clear the minimum — and uses
+              <span class="font-medium text-ink">effect="fade-scale"</span>, which is the default's
+              visuals without the pinning.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="pin" title="Pin both edges — a deck" code={ codePin }>
+          <div class="w-full max-w-xl space-y-3">
+            <ScrollStack
+              class="h-96 w-full rounded-xl border border-border bg-surface p-3"
+              effect="fade-scale"
+              pin="both"
+              snap={ true }
+              gap="0.75rem">
+              {#for card in cards}
+                <scroll-stack-item key={ card.id }>
+                  <div class="rounded-lg border border-border bg-surface-sunken p-4">
+                    <span class="font-mono text-xs uppercase tracking-wider text-brand">{ card.tag }</span>
+                    <h3 class="mt-1 text-lg font-semibold text-ink">{ card.title }</h3>
+                  </div>
+                </scroll-stack-item>
+              {/for}
+            </ScrollStack>
+            <p class="text-sm text-muted">
+              <span class="font-medium text-ink">pin</span> decides stickiness;
+              <span class="font-medium text-ink">effect</span> only decides pixels. With
+              <span class="font-medium text-ink">pin="both"</span> each item is pinned at the top and
+              the bottom, so the next card waits pinned at the bottom edge, fading up as it is dealt,
+              while the spent one pins at the top and recedes. Omit <span class="font-medium text-ink">pin</span>
+              and the effect implies one — <span class="font-medium text-ink">stack-fade</span> pins
+              at the start edge, everything else pins nothing.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="custom" title="Custom effect from the progress variable" code={ codeCustom }>
+          <div class="w-full max-w-xl space-y-3">
+            <ScrollStack
+              class="h-96 w-full rounded-xl border border-border bg-surface p-3"
+              effect="none"
+              easing="ease-in"
+              snap={ true }
+              gap="0.75rem">
+              {#for card in cards}
+                <scroll-stack-item key={ card.id }>
+                  <div class="rounded-lg border border-border bg-surface-sunken p-4 [filter:blur(calc(var(--scroll-stack-progress,0)_*_8px))_saturate(calc(1_+_var(--scroll-stack-progress,0)_*_2))] [opacity:calc(1_-_0.9_*_var(--scroll-stack-progress,0))] [transform:scale(calc(1_-_0.12_*_var(--scroll-stack-progress,0)))]">
+                    <span class="font-mono text-xs uppercase tracking-wider text-brand">{ card.tag }</span>
+                    <h3 class="mt-1 text-lg font-semibold text-ink">{ card.title }</h3>
+                  </div>
+                </scroll-stack-item>
+              {/for}
+            </ScrollStack>
+            <p class="text-sm text-muted">
+              With <span class="font-medium text-ink">effect="none"</span> the component ships no
+              visuals at all — it only publishes
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">--scroll-stack-progress</code>
+              (eased 0 → 1) and
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">--scroll-stack-edge</code>
+              (-1 at the start edge, 1 at the end, 0 in between). Everything above is arbitrary-value
+              Tailwind reading those two numbers. There is no plugin API because there is nothing a
+              plugin API could do that <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">calc()</code> cannot.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+          <p class="mb-4 text-sm text-body">
+            Every prop maps to an attribute on the element. A prop you don't pass renders no
+            attribute at all, so the component's own default applies.
+          </p>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Props</h3>
+          <div class="text-sm">
+            {#for row in propRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Custom properties</h3>
+          <div class="text-sm">
+            {#for row in cssRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-64 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Events</h3>
+          <p class="mb-2 text-sm text-body">
+            The element dispatches these itself and they bubble, so listen on any ancestor. They
+            fire on state change only, never per frame.
+          </p>
+          <div class="text-sm">
+            {#for row in eventRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-64 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ScrollStack from '@/components/ui/ScrollStack.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for ScrollStack — follows the CarouselDoc / ScrollAreaDoc exemplar
+// shape. Code samples live as template-literal consts because literal tag names
+// and {#…} tokens would be parsed as template syntax in prose.
+const installCmd = 'puzzle add piece scroll-stack';
+const installDep = 'npm install @magic-spells/scroll-stack';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/scroll-stack/css" layer(components);`;
+
+const usageImport = `import ScrollStack from '@/components/ui/ScrollStack.pzl';`;
+
+const usageMarkup = `<ScrollStack class="h-96 rounded-xl border border-border" snap={ true } gap="0.75rem">
+  <scroll-stack-item>
+    <div class="rounded-lg bg-surface-sunken p-4">One</div>
+  </scroll-stack-item>
+  <scroll-stack-item>
+    <div class="rounded-lg bg-surface-sunken p-4">Two</div>
+  </scroll-stack-item>
+</ScrollStack>`;
+
+const codeHero = `// The default effect is stack-fade: the exiting item pins at the top edge
+// and fades while the next one slides over it. Give the list a height —
+// it is the scroller.
+<ScrollStack class="h-96 rounded-xl border border-border p-3" snap={ true } gap="0.75rem">
+  <scroll-stack-item>
+    <div class="rounded-lg border border-border bg-surface-sunken p-4">…</div>
+  </scroll-stack-item>
+  …
+</ScrollStack>`;
+
+const codeHorizontal = `// perView="auto" fits as many whole items as clear itemMin, then divides
+// the leftover evenly. itemMax caps the result. Resizing recounts for free.
+<ScrollStack
+  class="rounded-xl border border-border p-3"
+  direction="horizontal"
+  snap={ true }
+  perView="auto"
+  itemMin="14rem"
+  itemMax="20rem"
+  gap="0.75rem">
+  <scroll-stack-item>
+    <div class="h-40 rounded-lg bg-brand-tint p-4">…</div>
+  </scroll-stack-item>
+  …
+</ScrollStack>
+
+// A fixed count instead: perView={ 3 } divides the port three ways.`;
+
+const codeSnap = `// snap={ true } and snap="center" are MANDATORY; snap="proximity" is the
+// softer opt-out. Mandatory is safe because nothing is sticky.
+// fade-scale is stack-fade's visuals without the pinning.
+<ScrollStack
+  class="rounded-xl border border-border p-3"
+  direction="horizontal"
+  effect="fade-scale"
+  snap={ true }
+  perView={ 3 }
+  itemMin="12rem"
+  gap="0.75rem">
+  …items…
+</ScrollStack>`;
+
+const codePin = `// pin is independent of effect. "both" pins every item at the top
+// AND the bottom, so the list deals like a deck in either direction.
+<ScrollStack
+  class="h-96 rounded-xl border border-border p-3"
+  effect="fade-scale"
+  pin="both"
+  snap={ true }
+  gap="0.75rem">
+  …items…
+</ScrollStack>
+
+// pin="none" gives stack-fade's visuals with no stickiness at all;
+// pin="start" is what the default stack-fade implies.`;
+
+const codeCustom = `// effect="none" turns the component into a pure progress broadcaster:
+// it writes --scroll-stack-progress (0 → 1) and --scroll-stack-edge
+// (-1 start / 0 middle / 1 end) and nothing else. Write the pixels yourself.
+<ScrollStack
+  class="h-96 rounded-xl border border-border p-3"
+  effect="none"
+  easing="ease-in"
+  snap={ true }
+  gap="0.75rem">
+  <scroll-stack-item>
+    <div class="rounded-lg bg-surface-sunken p-4
+      [filter:blur(calc(var(--scroll-stack-progress,0)_*_8px))]
+      [opacity:calc(1_-_0.9_*_var(--scroll-stack-progress,0))]
+      [transform:scale(calc(1_-_0.12_*_var(--scroll-stack-progress,0)))]">
+      …
+    </div>
+  </scroll-stack-item>
+</ScrollStack>
+
+/* …or as plain CSS in your stylesheet: */
+scroll-stack[effect='none'] scroll-stack-item > * {
+  opacity: calc(1 - var(--scroll-stack-progress, 0));
+  filter: blur(calc(var(--scroll-stack-progress, 0) * 6px));
+}`;
+
+const propRows = [
+  { name: 'direction', desc: "'vertical' (default) | 'horizontal' — the scroll axis. The progress math is direction-agnostic; everything else behaves identically." },
+  { name: 'effect', desc: "'stack-fade' (default) | 'fade-scale' | 'fade' | 'scale' | 'none'. Selects a block of CSS and nothing more — 'none' publishes the variables and ships no visuals." },
+  { name: 'pin', desc: "'start' | 'end' | 'both' | 'none' — which edges hold an item still while its flow position keeps moving. Omit it and the effect implies one: stack-fade → start, everything else → none." },
+  { name: 'zone', desc: "'item' (default) | '<n>px' | '<n>%' — how deep the animation band reaches in from an edge. Capped at 45% of the scrollport so the two bands can never overlap." },
+  { name: 'edges', desc: "'both' (default) | 'start' | 'end' — which scrollport edges animate at all." },
+  { name: 'snap', desc: "Native CSS scroll snapping. true snaps item starts to the edge and 'center' snaps their centers — both MANDATORY, which is safe because items are plain flow boxes. 'proximity' is the softer opt-out, start-aligned." },
+  { name: 'perView', desc: "A positive integer, or 'auto' to fit as many whole items as clear itemMin. Resolves to each item's flex-basis, so it works on either axis." },
+  { name: 'itemMin', desc: 'CSS length (px, rem, % of the scrollport — a bare number means px). Floor for the resolved item length, and the input to the auto count.' },
+  { name: 'itemMax', desc: 'CSS length. Ceiling for the resolved item length; when it is smaller than the fitted slot the row stops filling the port exactly.' },
+  { name: 'easing', desc: "'linear' (default) | 'ease-in' | 'ease-out' | 'ease-in-out' — applied to progress before it is written." },
+  { name: 'reducedMotion', desc: "'auto' (default) | 'ignore'. Under prefers-reduced-motion transforms are dropped and fades are kept; 'ignore' opts the list out." },
+  { name: 'disabled', desc: 'Zeroes every variable, drops the state attributes, and detaches the engine — the list becomes a plain scroller.' },
+  { name: 'gap', desc: 'CSS length written as --scroll-stack-gap. Tailwind gap-* utilities work too.' },
+  { name: 'class', desc: 'Merged onto the element. This is where the height (or width) that makes it a scroller goes.' },
+  { name: 'style', desc: 'Appended after the gap declaration — for setting the other custom properties inline.' },
+];
+
+const cssRows = [
+  { name: '--scroll-stack-gap', desc: 'Space between items. Default 0; also settable with the gap prop or a Tailwind gap utility.' },
+  { name: '--scroll-stack-shrink', desc: 'How far the built-in scale effects shrink at full progress. Default 0.15.' },
+  { name: '--scroll-stack-progress', desc: 'Read-only, written on each item: eased progress from 0 (fully in view) to 1 (fully faded), quantized to a thousandth.' },
+  { name: '--scroll-stack-edge', desc: 'Read-only, written on each item: -1 at the start edge, 1 at the end edge, 0 anywhere in between.' },
+  { name: '--scroll-stack-item-length', desc: 'Read-only, written on the element when perView / itemMin / itemMax are in play: the resolved slot length in px.' },
+];
+
+const eventRows = [
+  { name: 'scroll-stack:item-hidden', desc: 'An item reached full progress. detail: { item, index, edge }.' },
+  { name: 'scroll-stack:item-shown', desc: 'An item left full progress. detail: { item, index, edge }.' },
+];
+
+const CARDS = [
+  { id: 'threshold', tag: 'Edge', title: 'Threshold', body: 'The band where an item stops being fully visible and starts being a number.' },
+  { id: 'overshoot', tag: 'Math', title: 'Overshoot', body: 'How far past the edge the item has travelled, normalized against the zone.' },
+  { id: 'handoff', tag: 'Sticky', title: 'Handoff', body: 'The moment the pinned card stops moving and the next one takes the frame.' },
+  { id: 'damping', tag: 'Math', title: 'Damping', body: 'An edge you cannot scroll past never animates the item resting against it.' },
+  { id: 'quantize', tag: 'Writes', title: 'Quantize', body: 'A thousandth of progress is the smallest change worth a style write.' },
+  { id: 'coalesce', tag: 'Frames', title: 'Coalesce', body: 'Every scroll burst, resize and mutation collapses into one animation frame.' },
+  { id: 'origin', tag: 'Effect', title: 'Origin', body: 'Scaling content pulls away from the clip boundary instead of being sliced by it.' },
+  { id: 'settle', tag: 'Rest', title: 'Settle', body: 'Nothing is scheduled while the list is at rest — the loop is genuinely idle.' },
+];
+
+const TILES = [
+  { id: 'one', tag: '01', title: 'Threshold' },
+  { id: 'two', tag: '02', title: 'Overshoot' },
+  { id: 'three', tag: '03', title: 'Handoff' },
+  { id: 'four', tag: '04', title: 'Damping' },
+  { id: 'five', tag: '05', title: 'Quantize' },
+  { id: 'six', tag: '06', title: 'Coalesce' },
+  { id: 'seven', tag: '07', title: 'Origin' },
+  { id: 'eight', tag: '08', title: 'Settle' },
+];
+
+export default class ScrollStackDoc extends PuzzleView {
+  data() {
+    return {
+      cards: CARDS,
+      tiles: TILES,
+      installCmd,
+      installDep,
+      installCss,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeHorizontal,
+      codeSnap,
+      codePin,
+      codeCustom,
+      propRows,
+      cssRows,
+      eventRows,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Item markup', href: '#items' },
+        { label: 'Horizontal + sizing', href: '#horizontal' },
+        { label: 'Snap carousel', href: '#snap' },
+        { label: 'Pin both edges', href: '#pin' },
+        { label: 'Custom effect', href: '#custom' },
+        { label: 'Reference', href: '#reference' },
+      ],
+    };
+  }
+}
+</script>

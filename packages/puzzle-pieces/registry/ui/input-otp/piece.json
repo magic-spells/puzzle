@@ -1,0 +1,8 @@
+{
+  "name": "input-otp",
+  "description": "Segmented one-time-code input — single-char cells with paste distribution, backspace/arrow navigation, numeric or alphanumeric charsets, optional group separators, and change/complete callbacks",
+  "files": ["InputOtp.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

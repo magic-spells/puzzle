@@ -1,0 +1,8 @@
+{
+  "name": "breadcrumb",
+  "description": "Config-first breadcrumb trail rendered from an items array, with a chevron separator and the final crumb as aria-current page text",
+  "files": ["Breadcrumb.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

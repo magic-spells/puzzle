@@ -1,0 +1,8 @@
+{
+  "name": "fader",
+  "description": "Full-width fill slider — a flat, dial-style parameter control with an inline label, right-aligned value readout, interior ticks, and a bar handle",
+  "files": ["Fader.pzl"],
+  "registryDependencies": ["lib/slider-math.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

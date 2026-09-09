@@ -1,0 +1,113 @@
+<puzzle-view>
+  <DropdownPanel
+    class={ rootClass }
+    menu={ true }
+    trigger={ triggerMode }
+    effect={ effect }
+    @show={ onShow }
+    @hide={ onHide }
+    @select={ onSelect }><Children/></DropdownPanel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// ContextMenu — a right-click menu that opens AT THE POINTER. A FAMILY (D167)
+// composed over the shared DropdownPanel base, running the
+// @magic-spells/dropdown-panel web component in menu mode with
+// trigger="contextmenu":
+//
+//   import ContextMenu from '@/components/ui/ContextMenu';
+//
+//   <ContextMenu @select={ onSelect }>
+//     <div class="h-40 w-72 rounded-xl border-2 border-dashed border-border">
+//       Right-click anywhere in here
+//     </div>
+//     <ContextMenu.Content>
+//       <ContextMenu.Item value="open" @press={ run }>Open</ContextMenu.Item>
+//       <ContextMenu.Separator/>
+//       <ContextMenu.Item value="delete" variant="danger" @press={ run }>Delete</ContextMenu.Item>
+//     </ContextMenu.Content>
+//   </ContextMenu>
+//
+// THERE IS NO TRIGGER, and that is the point. The SURFACE is everything you put
+// inside this component apart from the Content — a right-click or a 500 ms touch
+// long-press anywhere in it opens the panel pinned to the pointer, clamped to an
+// 8px margin and flipped left or up rather than clipped. Escape, an outside
+// press, a scroll or a second right-click elsewhere all dismiss it, and focus
+// returns to whatever was focused BEFORE the menu opened — which for a
+// mouse-opened menu is usually the <body>, because a right-click moves no focus.
+// It is a restore, not a return TO the surface: after a keyboard or long-press
+// open it lands back on the element that had focus. All of that is the
+// component's; this piece is markup and tokens.
+//
+// BREAKING CHANGE in 0.7.0: the `items[]` config array is gone, along with ~290
+// lines of ported machinery — the pointer clamp, the document contextmenu and
+// scroll listeners, the roving tabindex and the Arrow/Home/End switch. Rows are
+// markup now. This also retires the stale-coordinate bug in the port's clamp
+// (Astra F4): the coordinates are the component's and are measured per open.
+//
+// `open` IS NOT A PROP, deliberately. A context menu without coordinates is
+// meaningless, and the coordinates exist only at the instant of the gesture, so
+// there is nothing sane for a boolean to mean. Report-only: @show and @hide tell
+// you what happened. To summon one from your own gesture, call
+// showAt(x, y) on a DropdownPanel — see DropdownPanel.pzl.
+//
+// ACCESSIBILITY. Menu mode is on, so the component owns role="menu" /
+// role="menuitem", the roving tabindex, typeahead, Enter/Space (Space clicks a
+// link too), Tab-to-close and ArrowRight/Left for submenus, and it focuses the
+// first row on open. Do not author role, tabindex or aria-* anywhere in this
+// family. Requires @magic-spells/dropdown-panel >= 2.1.0.
+//
+// A right-click menu is an ENHANCEMENT, never the only route to an action —
+// there is no keyboard gesture for it and no discoverability. Put the same
+// choices in a DropdownMenu, a toolbar or a Popconfirm as well.
+//
+// ROWS ARE DROPDOWN-MENU'S. Item, Link, Group, Label, Separator, Shortcut and
+// Sub are re-exported from the DropdownMenu family, not duplicated — see
+// index.js. That is why this piece takes `dropdown-menu` as its registry
+// dependency.
+//
+// Props
+//   disabled  true → the menu is inert and the BROWSER'S OWN context menu comes
+//             back. It works by not setting the trigger mode at all, which
+//             leaves the component with no trigger to find; expect one
+//             "requires <dropdown-trigger>" console warning per disabled
+//             instance while it waits for children that are not coming.
+//   effect    'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class     merged onto <dropdown-component>, after `inline-block`
+// Callbacks
+//   @show()                 the menu opened
+//   @hide()                 the menu closed
+//   @select(value, event)   a row was activated, anywhere in the chain. Fires
+//             exactly once per activation; `value` is data-value, then value,
+//             then href, else null. Return false to keep the menu open.
+//
+// STYLESHEETS. Through DropdownPanel this piece needs the component's CSS in
+// your app's style entry:
+//   @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+//   @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */
+
+const ROOT = 'inline-block';
+
+export default class ContextMenu extends PuzzleView {
+  data(params, props) {
+    return {
+      rootClass: [ROOT, props.class].filter(Boolean).join(' '),
+      // `false` is the compiler's omit sentinel: no attribute at all, so the
+      // component falls back to its `both` default, finds no <dropdown-trigger>
+      // and never wires anything up. Nothing opens, and the native menu — which
+      // only the contextmenu listener would have preventDefault'd — survives.
+      triggerMode: props.disabled ? false : 'contextmenu',
+      effect: props.effect,
+    };
+  }
+
+  events = {
+    onShow: () => this.props.show?.(),
+    onHide: () => this.props.hide?.(),
+    onSelect: (value, event) => this.props.select?.(value, event),
+  };
+}
+</script>

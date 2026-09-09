@@ -1,0 +1,85 @@
+<puzzle-view>
+  <collapsible-content style={ contentStyle } open={ initialOpen } speed={ speedAttr } min-duration={ minDurationAttr } max-duration={ maxDurationAttr }><div class={ contentClass }><Children/></div></collapsible-content>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Collapsible.Content — the region that expands and collapses. A member of the
+// Collapsible family (D167). It renders the real <collapsible-content> element as
+// its single root, which is what <collapsible-component> resolves with
+// querySelector('collapsible-content').
+//
+//   <Collapsible.Content>
+//     <p class="text-sm text-body">Real markup, not a text prop.</p>
+//   </Collapsible.Content>
+//
+// `open` IS FROZEN ON THE FIRST RENDER AND NEVER BOUND AGAIN. <collapsible-content>
+// OBSERVES the `open` attribute and its own `collapsed` setter writes it back, so a
+// live binding would fight the patcher on every render — the same rule
+// dropdown-panel's `visible` has. What this attribute is for: a prerendered page
+// paints in the right state, and connectedCallback seeds the height (auto or 0)
+// with no animation. Every later change is imperative — Collapsible drives
+// show()/hide() from its afterUpdate(), and Accordion does the same for its
+// members. Nothing else ever writes `open`.
+//
+// PADDING GOES ON THE INNER WRAPPER, NEVER ON <collapsible-content>. The element
+// animates its HEIGHT, and height is the content box: a closed panel at height 0
+// still renders its own padding, so `pb-4` on the host leaves 16px of dead space
+// under every closed row. The single <div> inside is where the padding and the
+// typography live — this is upstream's own documented shape — and `class` is
+// merged onto that div, not onto the host.
+//
+// NO LAYOUT UTILITIES ON THE HOST EITHER. The stylesheet owns display:block,
+// overflow:hidden and `transition: height`. An overflow-hidden, a height utility
+// or a transition-* class there duplicates it or breaks the measurement.
+//
+// DO NOT AUTHOR role, aria-labelledby, aria-hidden or inert. The component writes
+// all four, and keeps aria-hidden/inert in step with every animation.
+//
+// ARBITRARY CONTENT. The body is real markup — this is what the 0.7.0 rewrite
+// bought. The old Accordion's plain-text `content` limitation is gone.
+//
+// Props
+//   defaultOpen  start expanded. INITIAL ONLY — see the frozen-attribute rule
+//                above. To drive the panel after mount, put `open` on the
+//                Collapsible root (or `value` on the Accordion root)
+//   open         accepted as an alias for defaultOpen, and equally initial-only
+//   speed        px/sec pace; the duration is derived from the distance travelled
+//                and clamped (upstream default 900)
+//   minDuration  seconds; floor for the derived duration (upstream default 0.25)
+//   maxDuration  seconds; ceiling for it (upstream default 0.8)
+//   easing       CSS timing function, forwarded as --collapsible-easing. The
+//                duration variable is upstream-computed — never set it
+//   class        merged onto the inner padding wrapper, after the padding
+
+// Padding and typography, on the INNER wrapper. Never overflow-hidden, never a
+// height utility, never a transition — those belong to the element stylesheet.
+const CONTENT = 'pb-3 text-sm text-body';
+
+// A prop that was not passed renders no attribute — `false` is the compiler's
+// omit sentinel, so the component's own default stands.
+function num(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? String(n) : false;
+}
+
+export default class Content extends PuzzleView {
+  #initialOpen;
+
+  data(params, props) {
+    // Frozen on the FIRST data() call and never recomputed. A later render must
+    // not move this attribute — see the rule above.
+    this.#initialOpen ??= !!(props.open ?? props.defaultOpen);
+
+    return {
+      initialOpen: this.#initialOpen || false,
+      speedAttr: num(props.speed),
+      minDurationAttr: num(props.minDuration),
+      maxDurationAttr: num(props.maxDuration),
+      contentStyle: props.easing ? `--collapsible-easing:${props.easing}` : false,
+      contentClass: [CONTENT, props.class].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>

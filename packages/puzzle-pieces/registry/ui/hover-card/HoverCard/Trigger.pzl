@@ -1,0 +1,50 @@
+<puzzle-view>
+  <DropdownPanel.Trigger class={ triggerClass }><Children/></DropdownPanel.Trigger>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// HoverCard.Trigger — the target you hover. A member of the HoverCard family
+// (D167); it composes DropdownPanel.Trigger and adds the quiet inline chrome, so
+// it renders <dropdown-trigger> as its single root with no wrapper — the
+// direct-children contract holds.
+//
+//   <HoverCard.Trigger>@ada</HoverCard.Trigger>
+//
+// THE TRIGGER ITSELF IS THE CONTROL. The component gives <dropdown-trigger>
+// role="button", tabindex="0" and the aria wiring at upgrade, so plain text and
+// spans are the normal content here.
+//
+// A REAL LINK IS ALLOWED, at a price. Put an <a href> inside and the component
+// leaves its activation alone (it detects an interactive descendant and does not
+// hijack the press), so the link still navigates — but the trigger and the link
+// are then two tab stops. Do it when the preview hangs off a link that must
+// navigate; otherwise keep the content non-interactive.
+//
+// Props
+//   variant  'link' (default) — underlined inline text, the @mention shape
+//            'plain' — inherits the surrounding type, no decoration
+//   class    merged onto <dropdown-trigger>, after the variant chrome
+
+const FOCUS =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const LINK =
+  'inline-flex items-center gap-1 select-none cursor-pointer font-medium text-brand ' +
+  'underline decoration-from-font underline-offset-2 transition-colors hover:text-brand-dark ' +
+  FOCUS;
+
+const PLAIN = 'inline-flex items-center gap-1 select-none cursor-pointer ' + FOCUS;
+
+export default class Trigger extends PuzzleView {
+  data(params, props) {
+    return {
+      triggerClass: [props.variant === 'plain' ? PLAIN : LINK, props.class]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+}
+</script>

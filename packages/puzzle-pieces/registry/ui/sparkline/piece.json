@@ -1,0 +1,8 @@
+{
+  "name": "sparkline",
+  "description": "Tiny inline trend line — no axes, grid, or tooltip; color inherits from the text token, with an optional soft area fill",
+  "files": ["Sparkline.pzl"],
+  "registryDependencies": ["lib/chart-math.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

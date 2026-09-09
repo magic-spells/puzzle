@@ -1,0 +1,299 @@
+<puzzle-view>
+  <dropdown-component
+    class={ rootClass }
+    style={ rootStyle }
+    menu={ menuAttr }
+    trigger={ triggerAttr }
+    open-delay={ openDelayAttr }
+    close-delay={ closeDelayAttr }
+    arrow={ arrowAttr }
+    arrow-shape={ arrowShapeAttr }>
+    <Children/>
+  </dropdown-component>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DropdownPanel — the shared base for every trigger↔panel overlay in the
+// registry: a hover/click disclosure whose panel is positioned by CSS, with
+// nested submenus, full-width mega panels, one-open-at-a-time arbitration and
+// the whole keyboard model living upstream.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real
+// <dropdown-component> / <dropdown-trigger> / <dropdown-panel> custom elements
+// from @magic-spells/dropdown-panel and binds attributes to them. Why:
+//
+//   1. The value is interaction, not markup. Hover intent and the hover
+//      BRIDGE (a skewed invisible shape that keeps the pointer "inside" while
+//      it travels from trigger to panel), the touch/pointer-type rules, the
+//      latch promotion from hover-open to click-open, the "opening one closes
+//      every other that is not an ancestor or descendant" arbitration, and the
+//      arrow-key model that answers only in the innermost open panel — all
+//      subtle, load-bearing, and maintained upstream. A fork is a liability.
+//   2. There is nothing token-styled to own down there. The core stylesheet
+//      declares no colours and no custom properties at all: it sets position,
+//      opacity, pointer-events, z-index and the bridge, and stops. Every pixel
+//      of chrome is Tailwind on our side (see DropdownPanel.Panel).
+//
+// THIS IS A FAMILY (D167). Import the barrel once and invoke with dot
+// notation; the members are thin and meant to be edited in your own app:
+//
+//   import DropdownPanel from '@/components/ui/DropdownPanel';
+//
+//   <DropdownPanel trigger="both">
+//     <DropdownPanel.Trigger class="px-3 py-2">Menu</DropdownPanel.Trigger>
+//     <DropdownPanel.Panel align="end">
+//       <a href="/one" class="block rounded px-3 py-2 hover:bg-surface-sunken">One</a>
+//     </DropdownPanel.Panel>
+//   </DropdownPanel>
+//
+// DIRECT-CHILDREN CONTRACT. <dropdown-trigger> and <dropdown-panel> must be
+// DIRECT children of <dropdown-component> — the component resolves them with a
+// child selector and re-resolves when children arrive late. A Puzzle component
+// renders its own single root and adds no wrapper, so
+// <DropdownPanel.Trigger> / <DropdownPanel.Panel> satisfy that. Do NOT wrap
+// either one in a div, and do not put an {#if} directly around them at that
+// level — put the condition inside the member instead.
+//
+// OPEN IS OPTIONAL-CONTROLLED AND EDGE-TRIGGERED, AND THE DROPDOWN CLOSES
+// ITSELF. Leave `open` off entirely and the component owns its own state, which
+// is the normal case. Pass it and only a CHANGE acts: true → show(), false →
+// hide(). The user can still close it (Escape, outside pointerdown, another
+// dropdown opening, pointer leaving a hover-opened panel) and it REPORTS
+// through @hide; the parent's job is to flip `open` back to false there so the
+// next open is a fresh edge. `visible` is NEVER bound in the template: the
+// component reflects that attribute as its own state, so a patcher binding
+// would fight it every render.
+//
+//   @show()   the panel opened
+//   @hide()   the panel closed
+//
+// Both come from the component's bubbling `dropdown-panel:show` /
+// `dropdown-panel:hide` events, filtered to this element — a NESTED submenu's
+// events pass straight through this one on their way up, and reporting those as
+// ours would tell the parent the wrong panel moved.
+//
+//   @select(value, event)   menu mode only: a row was activated
+//
+// SELECT IS FILTERED THE OTHER WAY ROUND, AND THAT IS DELIBERATE. A choice made
+// in a submenu closes the WHOLE chain and returns focus to the ROOT trigger —
+// upstream walks up to the outermost `dropdown-component[menu]` to do it — so
+// the root is the element that owes the parent a report. `dropdown-panel:select`
+// therefore is NOT target-filtered: every one that reaches this element is
+// forwarded, submenus included. What keeps it from firing twice is the `sub`
+// prop: a nested root passes `sub` and stays quiet, so exactly one instance per
+// chain reports, exactly once per activation.
+//
+// `value` is upstream's precedence — `data-value`, then the `value` attribute,
+// then `href`, else null. The event is cancelable: return `false` from the
+// handler and the chain stays OPEN (how a checkbox menu keeps itself up).
+//
+// Props (each attribute prop renders NO attribute when unset, so the
+// component's own default applies)
+//   trigger         'hover' | 'click' | 'both' (default) | 'contextmenu'.
+//                   `hover` falls back to click where (hover: hover) does not
+//                   match, so a menu is never unopenable on a phone.
+//                   'contextmenu' opens the panel AT THE POINTER on right-click
+//                   or a 500 ms touch long-press anywhere inside the component,
+//                   clamped and flipped to stay on screen — and needs no
+//                   <dropdown-trigger> at all. See ContextMenu.
+//   menu            true → application-menu semantics from the component:
+//                   role="menu" / role="menuitem", a roving tabindex, typeahead,
+//                   Enter/Space activation (Space clicks a link too), Tab to
+//                   close, ArrowRight/Left for submenus, and a
+//                   dropdown-panel:select on every activation. Opt-in, read once
+//                   at setup, and the whole reason DropdownMenu / ContextMenu /
+//                   SplitButton own no keyboard code. Requires
+//                   @magic-spells/dropdown-panel >= 2.1.0.
+//   sub             true → this root is a NESTED menu inside another one, so it
+//                   does NOT report @select. See the @select note below.
+//   arrow           'flip' (default) | 'static' | 'none' — how the drawn
+//                   trigger arrow behaves. Effects stylesheet only.
+//   arrowShape      'chevron' (default) | 'triangle'. Effects stylesheet only,
+//                   and drawn only when the [data-dropdown-arrow] hook is empty.
+//   openDelay       ms of hover intent before a hover-opened panel shows
+//   closeDelay       ms of grace after the pointer leaves before it hides.
+//                   Both are HOVER-ONLY, and both are honoured by
+//                   @magic-spells/dropdown-panel >= 2.1.0 and IGNORED by 2.0.0
+//                   (an unknown attribute is inert — a piece that sets them
+//                   still works on 2.0.0, just without the delay).
+//   effectDuration  CSS time for the entrance effect and the arrow flip
+//   effectEasing    CSS easing for the same
+//   open            optional-controlled, edge-triggered as above
+//   class           merged onto <dropdown-component>
+//
+// LOADING. The package registers its custom elements at module scope with
+// `class extends HTMLElement`, a ReferenceError under Node — so a top-level
+// import would crash the prerender pass of any app on static or hybrid output.
+// The import lives in mounted() instead, which never runs server-side, and it
+// lives ONLY HERE: the members never import anything, and the dynamic import is
+// module-cached so N dropdowns on a page cost one fetch.
+//
+// PRERENDER. The core stylesheet alone puts a closed panel at `opacity: 0;
+// pointer-events: none`, so there is no flash of an open panel before the JS
+// lands — provided the stylesheet is imported. `aria-hidden` and `inert` are
+// written by the component at upgrade, so for that pre-JS instant a closed
+// panel is invisible and unclickable but still in the accessibility tree and
+// the tab order. That is the whole exposure, and it ends at hydration.
+//
+// STYLESHEETS. This piece needs the component's CSS, which is not part of the
+// copied files. Add it once to your app's style entry:
+//   @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+//   @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */
+// The first carries the positioning, the open/closed state and the hover
+// bridge — the piece does nothing without it. The second adds the five
+// entrance effects and the drawn trigger arrow; skip it and `effect`, `arrow`
+// and `arrow-shape` are simply no-ops. The layer is not optional cosmetics:
+// both sheets use plain element selectors, and an unlayered import would
+// outrank every Tailwind utility you put on these elements.
+//
+// THEME. The core sheet exposes no custom properties, so the design-system
+// bridge is Tailwind utilities on the members' hosts, not variables. The only
+// knobs are the effects sheet's timing pair, forwarded from `effectDuration` /
+// `effectEasing` as inline custom-property declarations — a STYLE attribute
+// rather than arbitrary-value utilities, because those values are runtime
+// strings and Tailwind only generates classes it can see in the source. There
+// is no per-frame style write on this element for the binding to clobber. The
+// glyph size knobs (--dp-arrow-size, --dp-arrow-thickness) keep their defaults;
+// retune them from your app CSS.
+//
+// BROWSER SUPPORT. Positioning depends on :has() and closed panels on `inert` —
+// Chrome/Edge 105+, Safari 15.5+, Firefox 121+. No polyfill is loaded.
+
+// A prop that was not passed renders no attribute — `false` is the compiler's
+// omit sentinel, so the component's own default stands.
+function oneOf(value, allowed) {
+  return allowed.includes(value) ? value : false;
+}
+
+// Same sentinel for the millisecond attributes: unset (or nonsense) renders no
+// attribute, so the component's own default stands.
+function ms(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? String(Math.round(n)) : false;
+}
+
+export default class DropdownPanel extends PuzzleView {
+  #live = false;
+  #ready = false;
+  #lastOpen = false;
+
+  // All four dropdown-panel:* events BUBBLE, so a nested submenu's show would
+  // otherwise reach this component's listeners and be reported as its own.
+  #mine(event) {
+    return event.target === this.element;
+  }
+
+  #onShow = (event) => {
+    if (!this.#mine(event)) return;
+    this.props.show?.();
+  };
+
+  #onHide = (event) => {
+    if (!this.#mine(event)) return;
+    this.props.hide?.();
+  };
+
+  // NOT #mine-filtered, and NOT an oversight — see the SELECT note above. A
+  // nested root is silenced by `sub` instead, so one chain reports once.
+  #onSelect = (event) => {
+    if (this.props.sub) return;
+    const result = this.props.select?.(event.detail?.value ?? null, event);
+    // A handler that returns false cancels the close, leaving the menu open.
+    if (result === false) event.preventDefault();
+  };
+
+  data(params, props) {
+    const declarations = [];
+    if (props.effectDuration) declarations.push(`--dp-effect-duration:${props.effectDuration}`);
+    if (props.effectEasing) declarations.push(`--dp-effect-easing:${props.effectEasing}`);
+
+    return {
+      rootClass: props.class || false,
+      rootStyle: declarations.length ? declarations.join(';') : false,
+      menuAttr: props.menu ? true : false,
+      triggerAttr: oneOf(props.trigger, ['hover', 'click', 'both', 'contextmenu']),
+      openDelayAttr: ms(props.openDelay),
+      closeDelayAttr: ms(props.closeDelay),
+      arrowAttr: oneOf(props.arrow, ['flip', 'static', 'none']),
+      arrowShapeAttr: oneOf(props.arrowShape, ['chevron', 'triangle']),
+    };
+  }
+
+  mounted() {
+    // Browser-only by construction — see LOADING above. The guard is belt and
+    // braces for any host that runs lifecycle hooks outside a document.
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#lastOpen = !!this.props.open;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this.element.addEventListener('dropdown-panel:show', this.#onShow);
+    this.element.addEventListener('dropdown-panel:hide', this.#onHide);
+    this.element.addEventListener('dropdown-panel:select', this.#onSelect);
+
+    // A dropdown that mounted already open records the intent on the attribute;
+    // the component reads it the moment it upgrades, so nothing is lost.
+    if (this.#lastOpen) this.element.setAttribute('visible', '');
+
+    import('@magic-spells/dropdown-panel')
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+      })
+      .catch((error) => {
+        console.error(
+          '[DropdownPanel] failed to load @magic-spells/dropdown-panel — the ' +
+            'panel will not open.',
+          error
+        );
+      });
+  }
+
+  afterUpdate() {
+    if (!this.#live) return;
+    // Edge-triggered, never level-triggered: a re-render carrying the same
+    // `open` is not a request, so an unrelated update can never re-open a panel
+    // the user just dismissed while the parent's state still says open.
+    const open = !!this.props.open;
+    if (open === this.#lastOpen) return;
+    this.#lastOpen = open;
+
+    if (this.#ready) {
+      if (open) this.element.show?.();
+      else this.element.hide?.();
+      return;
+    }
+    // Not upgraded yet — leave the intent on the attribute for the component to
+    // pick up. show()/hide() are attribute writes anyway.
+    if (open) this.element.setAttribute('visible', '');
+    else this.element.removeAttribute('visible');
+  }
+
+  // Opens the panel pinned to a point in VIEWPORT coordinates, clamped and
+  // flipped to stay on screen — what trigger="contextmenu" does for you, exposed
+  // for the app that wants to summon a menu from its own gesture. A no-op before
+  // the component has upgraded, because there is no attribute to leave the
+  // intent on: a coordinate is not state, it is an event. ContextMenu does not
+  // use this; documented so you can.
+  showAt(x, y) {
+    if (!this.#ready) return;
+    this.element?.showAt?.(x, y);
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.element?.removeEventListener('dropdown-panel:show', this.#onShow);
+    this.element?.removeEventListener('dropdown-panel:hide', this.#onHide);
+    this.element?.removeEventListener('dropdown-panel:select', this.#onSelect);
+    // Unbind FIRST: this close is a teardown, not a user dismissal, and must not
+    // call back into a parent being torn down with us. restoreFocus is off for
+    // the same reason — nothing here asked for focus.
+    if (this.#ready && this.element?.visible) {
+      this.element.hide?.({ restoreFocus: false });
+    }
+  }
+}
+</script>

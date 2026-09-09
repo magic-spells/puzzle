@@ -1,0 +1,8 @@
+{
+  "name": "radio-group",
+  "description": "Config-first radio group rendered from an options array, with native arrow-key nav, per-option hints/disabled, and vertical or horizontal layout",
+  "files": ["RadioGroup.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

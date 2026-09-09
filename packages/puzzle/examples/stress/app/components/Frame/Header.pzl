@@ -1,0 +1,11 @@
+<puzzle-view>
+  <p class="font-mono text-[10px] uppercase tracking-[0.28em] text-faint"><Children/></p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Frame.Header — the family's label row. Invoked through the barrel's dotted
+// name, never imported directly by a caller.
+export default class FrameHeader extends PuzzleView {}
+</script>

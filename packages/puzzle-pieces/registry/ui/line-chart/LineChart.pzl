@@ -1,0 +1,397 @@
+<puzzle-view>
+  <figure class={ rootClass } aria-label={ label }>
+    {#if showLegend}
+      <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {#for item in legend}
+          <div class="flex items-center gap-1.5" key={ item.key }>
+            <span class="size-2 shrink-0 rounded-[2px] { item.swatchClass }"></span>
+            <span class="text-sm text-body">{ item.label }</span>
+          </div>
+        {/for}
+      </div>
+    {/if}
+
+    <div class="relative" data-chart-plot>
+      <svg
+        class="block"
+        width={ width }
+        height={ height }
+        aria-hidden="true"
+        @pointermove={ onMove(event) }
+        @pointerleave={ onLeave(event) }>
+        <rect x="0" y="0" width={ width } height={ height } fill="transparent" pointer-events="all"/>
+
+        {#if showGrid}
+          <g>
+            {#for g in gridLines}
+              <line x1={ plotLeft } y1={ g.y } x2={ plotRight } y2={ g.y } class="stroke-border" stroke-width="1" key={ g.key }/>
+            {/for}
+          </g>
+        {/if}
+
+        {#if showTooltip}
+          <line x1={ crosshairX } y1={ plotTop } x2={ crosshairX } y2={ plotBottom } class="stroke-border" stroke-width="1"/>
+        {/if}
+
+        <g>
+          {#for s in seriesPaths}
+            <path
+              d={ s.path }
+              class="fill-none { s.strokeClass }"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              key={ s.key }/>
+          {/for}
+        </g>
+
+        {#if showTooltip}
+          <g>
+            {#for m in markers}
+              <circle cx={ m.cx } cy={ m.cy } r="3.5" class="stroke-surface { m.fillClass }" stroke-width="2" key={ m.key }/>
+            {/for}
+          </g>
+        {/if}
+      </svg>
+
+      <!-- Axis labels live as HTML overlays, NOT SVG <text>: the Puzzle compiler
+           emits ViewNode('text', …) for its internal text-node marker, so an SVG
+           <text> element collides with it and is silently dropped. Coordinates
+           map 1:1 because the SVG has no viewBox scaling. -->
+      {#if showGrid}
+        <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+          {#for g in gridLines}
+            <span class="absolute -translate-y-1/2 text-xs tabular-nums text-muted" style={ g.style } key={ g.key }>{ g.label }</span>
+          {/for}
+        </div>
+      {/if}
+      <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+        {#for x in xLabels}
+          <span class="absolute -translate-x-1/2 text-xs text-muted" style={ x.style } key={ x.key }>{ x.label }</span>
+        {/for}
+      </div>
+
+      {#if showTooltip}
+        <div
+          class="pointer-events-none absolute z-10 min-w-[8rem] -translate-y-1/2 rounded-md border border-border bg-surface px-3 py-2 text-xs shadow-md"
+          style={ tooltipStyle }>
+          <div class="mb-1 text-muted">{ tooltipX }</div>
+          {#for row in tooltipRows}
+            <div class="flex items-center gap-2" key={ row.key }>
+              <span class="size-2 shrink-0 rounded-full { row.swatchClass }"></span>
+              <span class="text-body">{ row.label }</span>
+              <span class="ml-auto font-medium text-ink">{ row.value }</span>
+            </div>
+          {/for}
+        </div>
+      {/if}
+    </div>
+
+    <table class="sr-only">
+      <caption>{ label }</caption>
+      <thead>
+        <tr>
+          <th scope="col">{ xHeader }</th>
+          {#for h in tableHead}
+            <th scope="col" key={ h.key }>{ h.label }</th>
+          {/for}
+        </tr>
+      </thead>
+      <tbody>
+        {#for r in tableRows}
+          <tr key={ r.key }>
+            <th scope="row">{ r.x }</th>
+            {#for c in r.cells}
+              <td key={ c.key }>{ c.value }</td>
+            {/for}
+          </tr>
+        {/for}
+      </tbody>
+    </table>
+  </figure>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { extent, niceDomain, linearScale, bandScale, linePath, formatTick } from '../../lib/chart-math.js';
+
+// LineChart — a config-first, responsive multi-series line chart. Pure
+// presentation: `data` rows + a `series` schema in, no internal data state.
+// Everything geometric (scales, path strings, per-point cx/cy, gridlines, the
+// hover crosshair + tooltip) is precomputed in data() so the template stays a
+// dumb walk of arrays with single-element {#for} roots. Axis labels render as
+// HTML overlay spans, never SVG text — the compiler's internal text-node marker
+// is ViewNode('text', …), so an SVG text element collides and is dropped.
+//
+//   const data = [{ month: 'Jan', revenue: 4200, target: 4000 }, …];
+//   <LineChart
+//     data={ data }
+//     xKey="month"
+//     series={ [{ key: 'revenue', label: 'Revenue' }, { key: 'target', label: 'Target' }] } />
+//
+// PROPS
+//   data         array   row objects. Each row supplies one x label (row[xKey])
+//                        and one numeric value per series (row[series.key]).
+//                        null / missing values render as line gaps.
+//   xKey         string  the row key holding the x-axis label.
+//   series       array   [{ key, label }] — one line each. Colors are assigned in
+//                        FIXED slot order by position (series[0] → chart-1, …);
+//                        anything past 8 series is ignored.
+//   height       number  plot height in px (default 288). Width is responsive
+//                        (measured via ResizeObserver — see mounted()).
+//   label        string  accessible <figure> label + sr-only table caption
+//                        (default: the series labels joined).
+//   formatValue  fn      value formatter for the tooltip + sr-only table
+//                        (default formatTick — "1.2k" style).
+//   showGrid     bool    horizontal gridlines + y ticks (default true).
+//   showLegend   bool    override the auto rule. A legend is shown only for TWO
+//                        OR MORE series; a single series never gets one (there is
+//                        only one color — the title already says what is plotted).
+//   class        string  appended to the root <figure>.
+//
+// COLOR / CHROME RULES (from the dataviz method): 2px round-capped lines; 1px
+// horizontal gridlines in the border token only (no vertical grid, no axis box);
+// axis text is text-xs muted and NEVER wears a series color; markers carry a 2px
+// surface ring so they stay legible where a line crosses. The SVG uses explicit
+// pixel width/height (no viewBox) so text never distorts.
+
+const DEFAULT_WIDTH = 640;
+
+// Fixed slot arrays — LITERAL class strings so Tailwind's source scan sees them
+// (a computed `stroke-chart-${n}` would never be generated). Index = series slot.
+const STROKE = [
+  'stroke-chart-1', 'stroke-chart-2', 'stroke-chart-3', 'stroke-chart-4',
+  'stroke-chart-5', 'stroke-chart-6', 'stroke-chart-7', 'stroke-chart-8',
+];
+const FILL = [
+  'fill-chart-1', 'fill-chart-2', 'fill-chart-3', 'fill-chart-4',
+  'fill-chart-5', 'fill-chart-6', 'fill-chart-7', 'fill-chart-8',
+];
+const SWATCH = [
+  'bg-chart-1', 'bg-chart-2', 'bg-chart-3', 'bg-chart-4',
+  'bg-chart-5', 'bg-chart-6', 'bg-chart-7', 'bg-chart-8',
+];
+
+const MARGIN_TOP = 8;
+const MARGIN_RIGHT = 12;
+const MARGIN_BOTTOM = 28; // room for the x-axis label band below the baseline
+
+// Coerce a cell to a finite number, or null (→ a line gap / blank table cell).
+function num(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export default class LineChart extends PuzzleView {
+  created() {
+    this._cxs = []; // per-index center x, read by the pointer handler
+    this._width = DEFAULT_WIDTH;
+    this._ro = null;
+    this.setData({ measuredWidth: 0, hover: null });
+  }
+
+  // Responsive width: observe the rendered figure and store its content width.
+  // Guarded so an unchanged measure never loops the ResizeObserver → refresh.
+  mounted() {
+    if (typeof ResizeObserver === 'undefined' || !this.element) return;
+    this._ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0]?.contentRect?.width || this.element.clientWidth || 0);
+      if (w > 0 && w !== this.getData().measuredWidth) {
+        this.setData({ measuredWidth: w });
+        this.refresh();
+      }
+    });
+    this._ro.observe(this.element);
+  }
+
+  destroyed() {
+    this._ro?.disconnect();
+    this._ro = null;
+  }
+
+  data(params, props) {
+    const rows = Array.isArray(props.data) ? props.data : [];
+    const xKey = props.xKey;
+    const fmt = typeof props.formatValue === 'function' ? props.formatValue : formatTick;
+
+    const series = (Array.isArray(props.series) ? props.series : []).slice(0, 8).map((s, i) => ({
+      key: s.key,
+      label: s.label != null ? String(s.label) : String(s.key ?? ''),
+      strokeClass: STROKE[i],
+      fillClass: FILL[i],
+      swatchClass: SWATCH[i],
+    }));
+
+    const measured = this.getData().measuredWidth;
+    const width = measured > 0 ? measured : DEFAULT_WIDTH;
+    const height = Number(props.height) > 0 ? Number(props.height) : 288;
+    this._width = width;
+
+    const label = props.label || (series.length ? series.map((s) => s.label).join(', ') : 'Chart');
+
+    const showLegend =
+      series.length >= 2 && (props.showLegend === undefined ? true : !!props.showLegend);
+    const showGrid = props.showGrid !== false;
+
+    // Y domain over every visible value, always including 0 so positive data
+    // reads against a real baseline (the dataviz rule).
+    const values = [];
+    for (const row of rows) for (const s of series) {
+      const v = num(row[s.key]);
+      if (v != null) values.push(v);
+    }
+    const [dmin, dmax] = values.length ? extent(values) : [0, 1];
+    const domain = niceDomain(Math.min(0, dmin), Math.max(0, dmax), 5);
+
+    // Left margin sized to the widest y-tick label (approx ch width).
+    const tickLabels = domain.ticks.map((t) => formatTick(t));
+    const maxTickChars = tickLabels.reduce((m, s) => Math.max(m, s.length), 1);
+    const marginLeft = Math.max(32, maxTickChars * 7 + 10);
+
+    const plotLeft = marginLeft;
+    const plotRight = width - MARGIN_RIGHT;
+    const plotTop = MARGIN_TOP;
+    const plotBottom = height - MARGIN_BOTTOM;
+    const innerWidth = Math.max(0, plotRight - plotLeft);
+
+    const yScale = linearScale(domain.min, domain.max, plotBottom, plotTop);
+    const band = bandScale(rows.length, plotLeft, plotRight);
+    const cx = (i) => band.position(i) + band.bandwidth / 2;
+    this._cxs = rows.map((_, i) => cx(i));
+
+    // Gridlines + y ticks.
+    const gridLines = showGrid
+      ? domain.ticks.map((t, i) => ({
+          key: `g-${i}`,
+          y: yScale(t),
+          label: formatTick(t),
+          style: `left:0px;top:${Math.round(yScale(t))}px;`,
+        }))
+      : [];
+
+    // Per-series path strings ([x,y] pairs, null = gap).
+    const seriesPaths = series.map((s) => {
+      const pts = rows.map((row, i) => {
+        const v = num(row[s.key]);
+        return v == null ? null : [this._cxs[i], yScale(v)];
+      });
+      return { key: s.key, path: linePath(pts), strokeClass: s.strokeClass };
+    });
+
+    // X labels — thin them so they never crowd (show every Nth).
+    const maxLabelChars = rows.reduce((m, r) => Math.max(m, String(r[xKey] ?? '').length), 1);
+    const approxLabelW = maxLabelChars * 6.5 + 10;
+    const maxLabels = Math.max(1, Math.floor(innerWidth / approxLabelW));
+    const step = Math.max(1, Math.ceil(rows.length / maxLabels));
+    const xLabels = [];
+    rows.forEach((row, i) => {
+      if (i % step !== 0) return;
+      xLabels.push({
+        key: `x-${i}`,
+        x: this._cxs[i],
+        label: String(row[xKey] ?? ''),
+        style: `left:${Math.round(this._cxs[i])}px;top:${height - 22}px;`,
+      });
+    });
+
+    // Hover model.
+    const hover = this.getData().hover;
+    const ai = hover && rows.length ? Math.max(0, Math.min(rows.length - 1, hover.index)) : -1;
+    const showTooltip = hover != null && ai >= 0;
+
+    let crosshairX = 0;
+    let markers = [];
+    let tooltipRows = [];
+    let tooltipX = '';
+    let tooltipStyle = '';
+    if (showTooltip) {
+      crosshairX = this._cxs[ai];
+      markers = series
+        .map((s) => {
+          const v = num(rows[ai][s.key]);
+          return v == null ? null : { key: s.key, cx: this._cxs[ai], cy: yScale(v), fillClass: s.fillClass };
+        })
+        .filter(Boolean);
+      tooltipRows = series.map((s) => {
+        const v = num(rows[ai][s.key]);
+        return { key: s.key, label: s.label, value: v == null ? '—' : fmt(v), swatchClass: s.swatchClass };
+      });
+      tooltipX = String(rows[ai][xKey] ?? '');
+      const flip = hover.x > width * 0.6;
+      tooltipStyle =
+        (flip ? `right:${Math.round(width - hover.x + 12)}px;` : `left:${Math.round(hover.x + 12)}px;`) +
+        `top:${Math.round(hover.y)}px;`;
+    }
+
+    // sr-only table twin.
+    const tableRows = rows.map((row, i) => ({
+      key: `tr-${i}`,
+      x: String(row[xKey] ?? ''),
+      cells: series.map((s) => {
+        const v = num(row[s.key]);
+        return { key: `${s.key}-${i}`, value: v == null ? '' : fmt(v) };
+      }),
+    }));
+
+    return {
+      rootClass: ['relative m-0 block w-full', props.class || ''].join(' '),
+      label,
+      width,
+      height,
+      showLegend,
+      legend: series.map((s) => ({ key: s.key, label: s.label, swatchClass: s.swatchClass })),
+      showGrid,
+      gridLines,
+      plotLeft,
+      plotRight,
+      plotTop,
+      plotBottom,
+      seriesPaths,
+      xLabels,
+      showTooltip,
+      crosshairX,
+      markers,
+      tooltipRows,
+      tooltipX,
+      tooltipStyle,
+      xHeader: String(xKey ?? ''),
+      tableHead: series.map((s) => ({ key: s.key, label: s.label })),
+      tableRows,
+    };
+  }
+
+  events = {
+    // Nearest-index snapping: compare the pointer's local x against precomputed
+    // center-x positions. Only re-render when the resolved index or position moves.
+    onMove: (event) => {
+      const xs = this._cxs;
+      if (!xs || !xs.length) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const lx = event.clientX - rect.left;
+      const ly = event.clientY - rect.top;
+      let best = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < xs.length; i++) {
+        const d = Math.abs(xs[i] - lx);
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      }
+      const h = this.getData().hover;
+      if (!h || h.index !== best || h.x !== lx || h.y !== ly) {
+        this.setData({ hover: { index: best, x: lx, y: ly } });
+        this.refresh();
+      }
+    },
+
+    onLeave: () => {
+      if (this.getData().hover != null) {
+        this.setData({ hover: null });
+        this.refresh();
+      }
+    },
+  };
+}
+</script>

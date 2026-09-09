@@ -1,0 +1,56 @@
+<puzzle-view>
+  <DropdownPanel.Panel
+    class={ contentClass }
+    align={ align }
+    opens={ opens }
+    flip={ flip }
+    effect={ effect }><Children/></DropdownPanel.Panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// DropdownMenu.Content — the panel the menu drops. A member of the DropdownMenu
+// family (D167); it composes DropdownPanel.Panel and adds the menu's tighter row
+// padding, so it renders <dropdown-panel> as its single root with no wrapper —
+// the direct-children contract holds.
+//
+//   <DropdownMenu.Content align="end">
+//     <DropdownMenu.Item value="new" @press={ run }>New</DropdownMenu.Item>
+//   </DropdownMenu.Content>
+//
+// In menu mode the component stamps role="menu" on this element and collects its
+// rows as menuitems. A {#for} INSIDE this panel is fine — it is the level ABOVE,
+// directly inside <DropdownMenu>, that the direct-children contract rules out.
+//
+// A submenu's Content takes opens="right", which puts it beside its trigger and
+// rotates the hover bridge onto the horizontal axis.
+//
+// NEVER overflow-hidden, here or above it: it clips a nested submenu at this
+// panel's edge, and clips the drawn arrow.
+//
+// Props (forwarded to DropdownPanel.Panel unless noted)
+//   align   'start' (default) | 'end' — for a menu near the right edge
+//   opens   'down' (default) | 'right' for a submenu
+//   flip    opt-in: open upward when the panel would run past the bottom of the
+//           viewport and there is room above
+//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class   merged onto <dropdown-panel>, after the padding
+
+// The base Panel carries border, surface, shadow, rounding, min-w-48 and z-40; a
+// menu panel just wants the tighter row padding.
+const CONTENT = 'p-1';
+
+export default class Content extends PuzzleView {
+  data(params, props) {
+    return {
+      contentClass: [CONTENT, props.class].filter(Boolean).join(' '),
+      align: props.align,
+      opens: props.opens,
+      flip: props.flip ? true : false,
+      effect: props.effect,
+    };
+  }
+}
+</script>

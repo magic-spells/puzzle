@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+
+# Environment files
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+
+# Puzzle cached files
+.puzzle/
+
+# Source maps — dev builds drop these into the tracked dist/ output
+dist/*.map

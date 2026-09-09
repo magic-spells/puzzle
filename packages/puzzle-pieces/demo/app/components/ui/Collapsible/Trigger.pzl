@@ -1,0 +1,57 @@
+<puzzle-view>
+  <button type="button" class={ triggerClass } disabled={ isDisabled }><span class="min-w-0 text-left"><Children/></span><span data-chevron class="ml-2 flex size-4 shrink-0 items-center justify-center text-muted transition-[rotate] duration-200 motion-reduce:transition-none"><svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Collapsible.Trigger — the control that expands and collapses the panel. A
+// member of the Collapsible family (D167). It renders a real <button> as its
+// single root, which is exactly what <collapsible-component> looks for:
+// connectedCallback resolves querySelector('button'), gives it an id, type,
+// aria-controls and aria-expanded, and binds the click listener.
+//
+//   <Collapsible.Trigger>Shipping and returns</Collapsible.Trigger>
+//   <Collapsible.Trigger>Filters <Badge>3</Badge></Collapsible.Trigger>
+//
+// DO NOT AUTHOR aria-expanded, aria-controls, id or type — the component writes
+// all four at upgrade and overwrites anything you put there. And do not nest a
+// second <button> or an <a> in here: it would be a control inside a control, and
+// the component's own click handler already owns the whole row.
+//
+// THE CHEVRON IS PURE CSS. It flips on the button's own aria-expanded state
+// through an arbitrary variant, so there is no `open` prop on this member and no
+// JS in the rotation path. Tailwind v4's rotate-* sets the CSS `rotate` PROPERTY
+// rather than `transform`, so the transition names `rotate` explicitly — a
+// transition-transform here would never animate.
+//
+// KEYBOARD is the native button's: Enter and Space activate, Tab moves on.
+// Nothing is intercepted.
+//
+// Props
+//   disabled  renders the `disabled` attribute; upstream's click listener then
+//             never fires, so the panel cannot be opened from the trigger
+//   class     merged onto the <button>, after the chrome
+
+// The outline COLOR is set unconditionally (outline-ring) so transition-colors
+// does not flash it in from the default on every focus. The upstream stylesheet
+// gives the button its own focus-visible outline in currentColor; these
+// utilities sit in layer(components) above it and win.
+const TRIGGER =
+  'flex w-full cursor-pointer select-none items-center justify-between gap-2 py-2 ' +
+  'text-left text-sm font-medium text-ink transition-colors ' +
+  'disabled:cursor-not-allowed disabled:opacity-50 ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  '[&[aria-expanded=true]_[data-chevron]]:rotate-180';
+
+export default class Trigger extends PuzzleView {
+  data(params, props) {
+    return {
+      // `false` is the compiler's omit sentinel — an enabled button renders no
+      // disabled attribute at all.
+      isDisabled: props.disabled ? true : false,
+      triggerClass: [TRIGGER, props.class].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>

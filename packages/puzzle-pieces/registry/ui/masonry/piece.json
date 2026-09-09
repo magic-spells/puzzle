@@ -1,0 +1,8 @@
+{
+  "name": "masonry",
+  "description": "Responsive CSS-columns masonry/gallery grid — slot children flow into a responsive column count with a gap prop",
+  "files": ["Masonry.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

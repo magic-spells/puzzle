@@ -1,0 +1,8 @@
+{
+  "name": "timeline",
+  "description": "Vertical event timeline from an items array — dot/connector rail with per-item title, time, description, optional status color, and optional icon or step-number markers",
+  "files": ["Timeline.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

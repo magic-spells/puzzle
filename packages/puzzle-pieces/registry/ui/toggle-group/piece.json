@@ -1,0 +1,8 @@
+{
+  "name": "toggle-group",
+  "description": "Config-first joined row of pressed-state buttons (single or multiple select) with a11y group semantics",
+  "files": ["ToggleGroup.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

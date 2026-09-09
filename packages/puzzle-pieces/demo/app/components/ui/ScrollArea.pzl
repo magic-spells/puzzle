@@ -1,0 +1,380 @@
+<puzzle-view>
+  <div class={ rootClass } @pointerenter={ onEnter } @pointerleave={ onLeave }>
+    <div
+      class={ viewportClass }
+      style={ viewportStyle }
+      data-scroll-viewport
+      role={ regionRole }
+      aria-label={ ariaLabel }
+      @scroll={ onScroll }>
+      <Slot/>
+    </div>
+
+    {#if showV}
+      <div class={ trackVClass } data-scroll-track="v" aria-hidden="true">
+        <div
+          class={ thumbVClass }
+          data-scroll-thumb="v"
+          @pointerdown={ onThumbDown(event, 'v') }></div>
+      </div>
+    {/if}
+
+    {#if showH}
+      <div class={ trackHClass } data-scroll-track="h" aria-hidden="true">
+        <div
+          class={ thumbHClass }
+          data-scroll-thumb="h"
+          @pointerdown={ onThumbDown(event, 'h') }></div>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ScrollArea — a wrapper that hides the native scrollbar and paints its own
+// overlay scrollbar: a rounded, fading, draggable thumb pinned to the right edge
+// (vertical), the bottom edge (horizontal), or both. Content scrolls natively —
+// wheel, trackpad, touch, and keyboard all work untouched — so this is purely a
+// cosmetic + gesture layer over real overflow; nothing about the scroll position
+// is owned here. There is no `value`/controlled state: you drop content in the
+// default slot and the piece measures it.
+//
+//   <ScrollArea maxHeight={ 256 }>
+//     <TallList/>
+//   </ScrollArea>
+//
+//   <ScrollArea orientation="horizontal" class="w-96">
+//     <div class="flex gap-4 w-max">…cards…</div>
+//   </ScrollArea>
+//
+//   <ScrollArea orientation="both" maxHeight={ 300 } class="w-96" label="Log output">
+//     <pre class="w-max">…</pre>
+//   </ScrollArea>
+//
+// Props
+//   orientation  'vertical' (default) | 'horizontal' | 'both' — which axes get a
+//                custom thumb (and which native overflow is enabled)
+//   maxHeight    number → inline max-height in px on the viewport. Omit and size
+//                the viewport yourself through `class` (e.g. `h-64`).
+//   label        optional accessible name; when set the viewport becomes a
+//                role="region" so screen-reader users can enter it as a landmark
+//   class        merged onto the root (width, height, rounding, …)
+//
+// PERFORMANCE MODEL (mirrors Slider/Sheet). The native `scroll` event is
+// high-frequency, so the handler never calls setData/refresh — it coalesces to
+// one requestAnimationFrame and writes the thumb geometry straight to the DOM
+// (`style.height` / `style.transform`), the same imperative escape hatch Sheet
+// uses for its drag transform. Writing `element.style.transform = 'translateY()'`
+// sets the real CSS `transform` property (unlike Tailwind's `translate-*`
+// utilities, which set the `translate` property and wouldn't compose here). A
+// ResizeObserver re-measures on layout changes; the thumb is itself draggable via
+// pointer capture (Slider's gesture shape). Bars fade in on scroll/hover and fade
+// out on an 800ms idle timer (prefers-reduced-motion drops the transition via
+// motion-reduce:). The viewport is keyboard-scrollable and takes tabindex="0"
+// only while it actually overflows.
+const SCROLLBAR_HIDE = '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
+const FOCUS =
+  'focus-visible:outline-2 focus-visible:-outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const OVERFLOW = {
+  vertical: 'overflow-y-auto overflow-x-hidden',
+  horizontal: 'overflow-x-auto overflow-y-hidden',
+  both: 'overflow-auto',
+};
+
+const TRACK_BASE =
+  'absolute z-10 opacity-0 transition-opacity duration-300 motion-reduce:transition-none';
+const THUMB_V =
+  'absolute left-0 top-0 w-full min-h-[24px] rounded-full bg-border-strong ' +
+  'hover:bg-muted transition-colors cursor-pointer';
+const THUMB_H =
+  'absolute top-0 left-0 h-full min-w-[24px] rounded-full bg-border-strong ' +
+  'hover:bg-muted transition-colors cursor-pointer';
+
+const IDLE_MS = 800;
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(v, hi));
+}
+
+export default class ScrollArea extends PuzzleView {
+  created() {
+    this._raf = null;
+    this._idle = null;
+    this._hovering = false;
+    this._ro = null;
+    this._drag = null;
+    this._listening = false;
+    this._onWinMove = (e) => this._dragMove(e);
+    this._onWinUp = (e) => this._dragEnd(e);
+  }
+
+  data(params, props) {
+    const orientation =
+      props.orientation === 'horizontal' || props.orientation === 'both'
+        ? props.orientation
+        : 'vertical';
+    const both = orientation === 'both';
+    const showV = orientation === 'vertical' || both;
+    const showH = orientation === 'horizontal' || both;
+    const label = props.label || '';
+    const mh = Number(props.maxHeight);
+
+    return {
+      orientation,
+      showV,
+      showH,
+      rootClass: ['relative', props.class || ''].filter(Boolean).join(' '),
+      viewportClass: ['w-full', OVERFLOW[orientation], SCROLLBAR_HIDE, FOCUS]
+        .join(' '),
+      viewportStyle: Number.isFinite(mh) && mh > 0 ? `max-height:${mh}px` : false,
+      // Vertical track hugs the right edge; inset its bottom when a horizontal
+      // track shares the corner. Padding centers the 6px thumb in the 10px lane.
+      trackVClass: [
+        TRACK_BASE,
+        'right-0 top-0 w-2.5 px-0.5',
+        both ? 'bottom-2.5' : 'bottom-0',
+      ].join(' '),
+      trackHClass: [
+        TRACK_BASE,
+        'left-0 bottom-0 h-2.5 py-0.5',
+        both ? 'right-2.5' : 'right-0',
+      ].join(' '),
+      thumbVClass: THUMB_V,
+      thumbHClass: THUMB_H,
+      regionRole: label ? 'region' : false,
+      ariaLabel: label || false,
+    };
+  }
+
+  mounted() {
+    if (typeof ResizeObserver !== 'undefined') {
+      this._ro = new ResizeObserver(() => this._scheduleMeasure());
+      const vp = this._viewport();
+      if (vp) {
+        this._ro.observe(vp);
+        // Viewport height is capped by max-height, so growing content won't
+        // resize the viewport box — observe the inner content too.
+        if (vp.firstElementChild) this._ro.observe(vp.firstElementChild);
+      }
+    }
+    this._measure();
+  }
+
+  afterUpdate() {
+    // A re-render (prop change) recreates the thumb nodes and drops the inline
+    // geometry we wrote imperatively — reassert it.
+    this._measure();
+  }
+
+  destroyed() {
+    if (this._raf) cancelAnimationFrame(this._raf);
+    if (this._idle) clearTimeout(this._idle);
+    if (this._ro) this._ro.disconnect();
+    this._removeWindowListeners();
+  }
+
+  // --- element lookups --------------------------------------------------------
+
+  _viewport() {
+    return this.element && this.element.querySelector('[data-scroll-viewport]');
+  }
+  _track(axis) {
+    return this.element && this.element.querySelector(`[data-scroll-track="${axis}"]`);
+  }
+  _thumb(axis) {
+    return this.element && this.element.querySelector(`[data-scroll-thumb="${axis}"]`);
+  }
+
+  // --- measurement (imperative — never setData) -------------------------------
+
+  _scheduleMeasure() {
+    if (this._raf) return;
+    this._raf = requestAnimationFrame(() => {
+      this._raf = null;
+      this._measure();
+    });
+  }
+
+  // Read the viewport's scroll metrics and paint the thumb(s): size proportional
+  // to the visible fraction (min 24px), offset proportional to scroll progress.
+  // Also toggles the viewport's tabindex so it only enters the tab order while it
+  // genuinely overflows.
+  _measure() {
+    const vp = this._viewport();
+    if (!vp) return;
+    const d = this.getData();
+    let overflow = false;
+
+    if (d.showV) overflow = this._measureAxis('v', vp) || overflow;
+    if (d.showH) overflow = this._measureAxis('h', vp) || overflow;
+
+    vp.setAttribute('tabindex', overflow ? '0' : '-1');
+  }
+
+  _measureAxis(axis, vp) {
+    const track = this._track(axis);
+    const thumb = this._thumb(axis);
+    if (!track || !thumb) return false;
+
+    const vertical = axis === 'v';
+    const scrollSize = vertical ? vp.scrollHeight : vp.scrollWidth;
+    const clientSize = vertical ? vp.clientHeight : vp.clientWidth;
+    const scrollPos = vertical ? vp.scrollTop : vp.scrollLeft;
+    const overflow = scrollSize > clientSize + 1;
+
+    if (!overflow) {
+      track.style.display = 'none';
+      return false;
+    }
+    track.style.display = '';
+
+    const rect = track.getBoundingClientRect();
+    const trackLen = vertical ? rect.height : rect.width;
+    const size = Math.max(24, (clientSize / scrollSize) * trackLen);
+    const maxScroll = scrollSize - clientSize;
+    const maxThumb = trackLen - size;
+    const pos = maxScroll > 0 ? clamp((scrollPos / maxScroll) * maxThumb, 0, maxThumb) : 0;
+
+    if (vertical) {
+      thumb.style.height = `${size}px`;
+      thumb.style.transform = `translateY(${pos}px)`;
+    } else {
+      thumb.style.width = `${size}px`;
+      thumb.style.transform = `translateX(${pos}px)`;
+    }
+    return true;
+  }
+
+  // --- visibility / fade ------------------------------------------------------
+
+  _showBars() {
+    const d = this.getData();
+    if (d.showV) {
+      const t = this._track('v');
+      if (t) t.style.opacity = '1';
+    }
+    if (d.showH) {
+      const t = this._track('h');
+      if (t) t.style.opacity = '1';
+    }
+    this._armIdle();
+  }
+
+  _armIdle() {
+    if (this._idle) clearTimeout(this._idle);
+    this._idle = setTimeout(() => {
+      this._idle = null;
+      if (this._hovering || this._drag) return;
+      this._hideBars();
+    }, IDLE_MS);
+  }
+
+  _hideBars() {
+    const v = this._track('v');
+    const h = this._track('h');
+    if (v) v.style.opacity = '0';
+    if (h) h.style.opacity = '0';
+  }
+
+  // --- thumb drag (pointer capture, Slider's shape) ---------------------------
+
+  _addWindowListeners() {
+    if (this._listening || typeof window === 'undefined') return;
+    this._listening = true;
+    window.addEventListener('pointermove', this._onWinMove);
+    window.addEventListener('pointerup', this._onWinUp);
+    window.addEventListener('pointercancel', this._onWinUp);
+  }
+
+  _removeWindowListeners() {
+    if (!this._listening || typeof window === 'undefined') return;
+    this._listening = false;
+    window.removeEventListener('pointermove', this._onWinMove);
+    window.removeEventListener('pointerup', this._onWinUp);
+    window.removeEventListener('pointercancel', this._onWinUp);
+  }
+
+  _dragMove(event) {
+    const drag = this._drag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const vp = this._viewport();
+    const track = this._track(drag.axis);
+    if (!vp || !track) return;
+
+    const vertical = drag.axis === 'v';
+    const scrollSize = vertical ? vp.scrollHeight : vp.scrollWidth;
+    const clientSize = vertical ? vp.clientHeight : vp.clientWidth;
+    const rect = track.getBoundingClientRect();
+    const trackLen = vertical ? rect.height : rect.width;
+    const size = Math.max(24, (clientSize / scrollSize) * trackLen);
+    const maxThumb = trackLen - size;
+    const maxScroll = scrollSize - clientSize;
+    if (maxThumb <= 0) return;
+
+    const delta = (vertical ? event.clientY : event.clientX) - drag.startPos;
+    const next = clamp(drag.startScroll + delta * (maxScroll / maxThumb), 0, maxScroll);
+    if (vertical) vp.scrollTop = next;
+    else vp.scrollLeft = next;
+    // the native scroll event repaints the thumb via _scheduleMeasure
+  }
+
+  _dragEnd(event) {
+    const drag = this._drag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const thumb = this._thumb(drag.axis);
+    try {
+      if (thumb && thumb.hasPointerCapture && thumb.hasPointerCapture(event.pointerId)) {
+        thumb.releasePointerCapture(event.pointerId);
+      }
+    } catch (_) {
+      /* best effort */
+    }
+    this._drag = null;
+    this._removeWindowListeners();
+    this._armIdle();
+  }
+
+  events = {
+    onScroll: () => {
+      this._showBars();
+      this._scheduleMeasure();
+    },
+
+    onEnter: () => {
+      this._hovering = true;
+      this._showBars();
+    },
+
+    onLeave: () => {
+      this._hovering = false;
+      this._armIdle();
+    },
+
+    onThumbDown: (event, axis) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const vp = this._viewport();
+      if (!vp) return;
+      const vertical = axis === 'v';
+      this._drag = {
+        axis,
+        pointerId: event.pointerId,
+        startPos: vertical ? event.clientY : event.clientX,
+        startScroll: vertical ? vp.scrollTop : vp.scrollLeft,
+      };
+      const thumb = this._thumb(axis);
+      try {
+        if (thumb) thumb.setPointerCapture(event.pointerId);
+      } catch (_) {
+        /* best effort */
+      }
+      this._showBars();
+      this._addWindowListeners();
+    },
+  };
+}
+</script>

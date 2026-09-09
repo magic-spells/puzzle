@@ -1,0 +1,190 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Line Chart</h1>
+        <p class="mt-2 text-body">
+          A config-first, responsive multi-series line chart. A
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">data</code>
+          array and a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">series</code>
+          schema render 2px lines against a hairline horizontal grid, with a nearest-x hover
+          crosshair and tooltip. Series colors are assigned in fixed slot order; a legend appears
+          automatically for two or more series.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full">
+          <LineChart data={ revenueData } xKey="month" series={ revenueSeries } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece and its math helper into your app — they compile with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          chart-math.js is a shared lib file — LineChart imports it as ../../lib/chart-math.js. It ships
+          alongside the piece; keep it in app/lib/.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <div>
+          <ExampleBox id="single-series" title="Single series" code={ codeSingle }>
+            <div class="w-full">
+              <LineChart data={ revenueData } xKey="month" series={ singleSeries } />
+            </div>
+          </ExampleBox>
+          <p class="mt-3 text-sm text-muted">
+            One series gets no legend — there is only one color, so the surrounding title already says
+            what is plotted. The rule holds even if you pass showLegend explicitly.
+          </p>
+        </div>
+
+        <ExampleBox id="formatting" title="Custom height and value formatting" code={ codeFormatting }>
+          <div class="w-full">
+            <LineChart
+              data={ revenueData }
+              xKey="month"
+              series={ revenueSeries }
+              height={ 360 }
+              formatValue={ money } />
+          </div>
+        </ExampleBox>
+
+        <section id="accessibility" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+          <p class="mb-4 text-sm text-body">
+            The hover crosshair and tooltip are a progressive enhancement — every value they reveal is
+            also reachable without a pointer. The chart is built so assistive tech never depends on the
+            drawing:
+          </p>
+          <ul class="space-y-2.5 text-sm text-body">
+            <li>
+              The root is a
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">figure</code>
+              with an
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">aria-label</code>
+              (the label prop, or the series labels joined), so the whole chart announces as one named figure.
+            </li>
+            <li>
+              The SVG itself is
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">aria-hidden</code>
+              — the marks carry no semantics a screen reader could use.
+            </li>
+            <li>
+              A visually-hidden
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">sr-only</code>
+              table twins the plot: x values are row headers and each series is a column, so the exact
+              numbers are read in order without ever hovering.
+            </li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import LineChart from '@/components/ui/LineChart.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for LineChart — follows the TableDoc / CalendarDoc exemplar (header →
+// hero ExampleBox → Installation → titled example sections → Toc). The chart is
+// pure presentation, so the data lives as static module consts fed straight in.
+
+const installCmd = 'puzzle add piece line-chart';
+const usageImport = `import LineChart from '@/components/ui/LineChart.pzl';`;
+const usageMarkup = `<LineChart data={ data } xKey="month" series={ series } />`;
+
+// A stable module reference keeps the child prop identity steady across re-renders.
+const money = (n) => '$' + Number(n).toLocaleString();
+
+const codeHero = `const data = [
+  { month: 'Jan', revenue: 42000, target: 40000 },
+  { month: 'Feb', revenue: 45000, target: 44000 },
+  { month: 'Mar', revenue: 48000, target: 46000 },
+  // …one row per x label, one numeric field per series
+];
+const series = [
+  { key: 'revenue', label: 'Revenue' },
+  { key: 'target',  label: 'Target' },
+];
+
+<LineChart data={ data } xKey="month" series={ series } />`;
+
+const codeSingle = `// One series → no legend (there is only one color).
+const series = [{ key: 'revenue', label: 'Revenue' }];
+
+<LineChart data={ data } xKey="month" series={ series } />`;
+
+const codeFormatting = `// height sets the plot height in px; formatValue formats tooltip + table values.
+const money = (n) => '$' + n.toLocaleString();
+
+<LineChart
+  data={ data }
+  xKey="month"
+  series={ series }
+  height={ 360 }
+  formatValue={ money } />`;
+
+const revenueData = [
+  { month: 'Jan', revenue: 42000, target: 40000 },
+  { month: 'Feb', revenue: 45000, target: 44000 },
+  { month: 'Mar', revenue: 48000, target: 46000 },
+  { month: 'Apr', revenue: 51000, target: 50000 },
+  { month: 'May', revenue: 49000, target: 52000 },
+  { month: 'Jun', revenue: 55000, target: 54000 },
+  { month: 'Jul', revenue: 61000, target: 58000 },
+  { month: 'Aug', revenue: 64000, target: 60000 },
+  { month: 'Sep', revenue: 62000, target: 63000 },
+  { month: 'Oct', revenue: 70000, target: 66000 },
+  { month: 'Nov', revenue: 76000, target: 72000 },
+  { month: 'Dec', revenue: 83000, target: 78000 },
+];
+const revenueSeries = [
+  { key: 'revenue', label: 'Revenue' },
+  { key: 'target', label: 'Target' },
+];
+const singleSeries = [{ key: 'revenue', label: 'Revenue' }];
+
+export default class LineChartDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      money,
+      codeHero,
+      codeSingle,
+      codeFormatting,
+      revenueData,
+      revenueSeries,
+      singleSeries,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Single series', href: '#single-series' },
+        { label: 'Custom height and value formatting', href: '#formatting' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+}
+</script>

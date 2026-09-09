@@ -1,0 +1,337 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Tree</h1>
+        <p class="mt-2 text-body">
+          A config-first WAI-ARIA tree view. One
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">nodes</code>
+          array of nested objects renders an expand/collapse file-explorer tree with
+          roving-tabindex keyboard navigation, controlled selection, and an
+          optional-controlled
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">expanded</code>
+          set.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-sm">
+          <div class="rounded-xl border border-border bg-surface p-2">
+            <Tree
+              nodes={ fileTree }
+              value={ selected }
+              expanded={ expanded }
+              label="Project files"
+              @select={ onSelect }
+              @toggle={ onToggle }/>
+          </div>
+          <p class="mt-3 text-sm text-muted">
+            Selected: <span class="font-mono text-ink">{ selected || '—' }</span>
+          </p>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Selection is controlled (the parent owns
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">value</code>);
+          expansion is optional-controlled — omit
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">expanded</code>
+          and the Tree owns it internally.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="controlled" title="Controlled expansion" code={ codeControlled }>
+          <div class="w-full max-w-sm">
+            <div class="mb-3 flex gap-2">
+              <button
+                type="button"
+                class="inline-flex h-8 items-center rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                @click={ expandAll }>
+                Expand all
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-8 items-center rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                @click={ collapseAll }>
+                Collapse all
+              </button>
+            </div>
+            <div class="rounded-xl border border-border bg-surface p-2">
+              <Tree
+                nodes={ fileTree }
+                value={ selected2 }
+                expanded={ expanded2 }
+                label="Controlled tree"
+                @select={ onSelect2 }
+                @toggle={ onToggle2 }/>
+            </div>
+            <p class="mt-3 text-sm text-muted">
+              Expanded: <span class="font-mono text-ink">{ expandedReadout }</span>
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled nodes" code={ codeDisabled }>
+          <div class="w-full max-w-sm">
+            <div class="rounded-xl border border-border bg-surface p-2">
+              <Tree
+                nodes={ disabledTree }
+                value={ selected3 }
+                label="Team"
+                @select={ onSelect3 }/>
+            </div>
+            <p class="mt-3 text-sm text-muted">
+              A disabled node is
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-disabled</code>
+              and cannot be selected or toggled, but stays reachable by keyboard.
+            </p>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="keyboard" class="mt-12 scroll-mt-20 max-w-3xl">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+        <p class="mb-4 text-sm text-body">
+          The tree is a single Tab stop (roving tabindex): exactly one visible row is
+          tabbable — the selected row when visible, otherwise the first enabled root.
+          Focus then moves with the arrow keys over the visible rows.
+        </p>
+        <div class="overflow-x-auto rounded-xl border border-border">
+          <table class="w-full text-left text-sm">
+            <thead class="border-b border-border bg-surface-sunken text-ink">
+              <tr>
+                <th class="px-4 py-2.5 font-semibold">Key</th>
+                <th class="px-4 py-2.5 font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border text-body">
+              {#for k in keys}
+                <tr>
+                  <td class="whitespace-nowrap px-4 py-2.5">
+                    <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">{ k.key }</kbd>
+                  </td>
+                  <td class="px-4 py-2.5">{ k.action }</td>
+                </tr>
+              {/for}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20 max-w-3xl">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <ul class="list-disc space-y-2 pl-5 text-sm text-body">
+          <li>
+            The root is a
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">role="tree"</code>
+            list with an accessible <strong class="font-medium text-ink">label</strong> prop
+            (default <em>Tree</em>); every row is a
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">role="treeitem"</code>.
+          </li>
+          <li>
+            Each item carries
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-level</code>,
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-posinset</code>,
+            and <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-setsize</code>,
+            so the flattened rows are announced with their true depth and position.
+          </li>
+          <li>
+            Parents expose
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-expanded</code>;
+            the selected row is
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-selected</code>,
+            and disabled rows are
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-disabled</code>.
+          </li>
+          <li>
+            Roving tabindex keeps the tree one Tab stop; arrow keys move focus and
+            expand/collapse. Every row shows a visible focus ring (unconditional outline
+            color, revealed on
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">:focus-visible</code>).
+          </li>
+        </ul>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Tree from '@/components/ui/Tree.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece tree';
+const usageImport = `import Tree from '@/components/ui/Tree.pzl';`;
+const usageMarkup = `<Tree nodes={ nodes } value={ selected } expanded={ expanded } label="Project files" @select={ onSelect } @toggle={ onToggle } />`;
+
+// Icon paths are 24×24 stroked `d` strings (fill none) — the config-first icon slot.
+const folder = 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z';
+const file = 'M14 3v4a1 1 0 001 1h4M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z';
+const user = 'M17 20v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M10 10a3 3 0 100-6 3 3 0 000 6';
+
+const fileTree = [
+  {
+    id: 'src', label: 'src', icon: folder, children: [
+      {
+        id: 'components', label: 'components', icon: folder, children: [
+          { id: 'Button.pzl', label: 'Button.pzl', icon: file },
+          { id: 'Tree.pzl', label: 'Tree.pzl', icon: file },
+        ],
+      },
+      { id: 'index.js', label: 'index.js', icon: file },
+    ],
+  },
+  {
+    id: 'public', label: 'public', icon: folder, children: [
+      { id: 'favicon.ico', label: 'favicon.ico', icon: file },
+    ],
+  },
+  { id: 'package.json', label: 'package.json', icon: file },
+  { id: 'README.md', label: 'README.md', icon: file },
+];
+
+const disabledTree = [
+  {
+    id: 'engineering', label: 'Engineering', icon: folder, children: [
+      { id: 'ada', label: 'Ada Reese', icon: user },
+      { id: 'kit', label: 'Kit Novak', icon: user, disabled: true },
+    ],
+  },
+  { id: 'design', label: 'Design (archived)', icon: folder, disabled: true, children: [
+    { id: 'noa', label: 'Noa Lane', icon: user },
+  ] },
+  { id: 'sol', label: 'Sol Byrne', icon: user },
+];
+
+const codeHero = `const folder = 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z';
+const file   = 'M14 3v4a1 1 0 001 1h4M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z';
+
+const nodes = [
+  { id: 'src', label: 'src', icon: folder, children: [
+    { id: 'components', label: 'components', icon: folder, children: [
+      { id: 'Button.pzl', label: 'Button.pzl', icon: file },
+      { id: 'Tree.pzl',   label: 'Tree.pzl',   icon: file },
+    ] },
+    { id: 'index.js', label: 'index.js', icon: file },
+  ] },
+  { id: 'package.json', label: 'package.json', icon: file },
+];
+
+// value = controlled selection; expanded = optional-controlled set of open ids.
+<Tree nodes={ nodes } value={ selected } expanded={ expanded }
+      label="Project files" @select={ onSelect } @toggle={ onToggle } />
+
+events = {
+  onSelect: (id) => this.setData({ selected: id }),
+  onToggle: ({ expanded }) => this.setData({ expanded }),
+};`;
+
+const codeControlled = `// Omit \`expanded\` and the Tree owns expansion internally. Pass it and the
+// parent owns it — @toggle({ id, expanded }) hands you the full next array.
+<Tree nodes={ nodes } expanded={ expanded } @toggle={ onToggle } />
+
+events = {
+  onToggle: ({ expanded }) => this.setData({ expanded }),
+  expandAll: () => this.setData({ expanded: allParentIds(nodes) }),
+  collapseAll: () => this.setData({ expanded: [] }),
+};`;
+
+const codeDisabled = `// A node with disabled: true is aria-disabled — no select/toggle from
+// pointer, but still focusable by keyboard so it is announced.
+const nodes = [
+  { id: 'engineering', label: 'Engineering', icon: folder, children: [
+    { id: 'ada', label: 'Ada Reese', icon: user },
+    { id: 'kit', label: 'Kit Novak', icon: user, disabled: true },
+  ] },
+  { id: 'design', label: 'Design (archived)', icon: folder, disabled: true,
+    children: [ { id: 'noa', label: 'Noa Lane', icon: user } ] },
+];
+
+<Tree nodes={ nodes } value={ selected } @select={ onSelect } />`;
+
+const keys = [
+  { key: 'Down / Up', action: 'Move focus to the next / previous visible row.' },
+  { key: 'Right', action: 'Expand a collapsed parent; on an expanded parent, focus its first child.' },
+  { key: 'Left', action: 'Collapse an expanded parent; otherwise focus the parent row.' },
+  { key: 'Home / End', action: 'Focus the first / last visible row.' },
+  { key: 'Enter / Space', action: 'Select the row (a parent also expands or collapses).' },
+];
+
+// Collect every parent id in the tree for the Expand-all control.
+function allParentIds(nodes, out) {
+  out = out || [];
+  (nodes || []).forEach((n) => {
+    if (Array.isArray(n.children) && n.children.length) {
+      out.push(n.id);
+      allParentIds(n.children, out);
+    }
+  });
+  return out;
+}
+
+export default class TreeDoc extends PuzzleView {
+  created() {
+    this.setData({
+      selected: 'src/Tree.pzl',
+      expanded: ['src', 'components'],
+      selected2: '',
+      expanded2: ['src'],
+      selected3: 'ada',
+    });
+  }
+
+  data(params, props) {
+    const d = this.getData();
+    return {
+      ...d,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeControlled,
+      codeDisabled,
+      fileTree,
+      disabledTree,
+      keys,
+      expandedReadout: (d.expanded2 && d.expanded2.length) ? d.expanded2.join(', ') : '—',
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Controlled expansion', href: '#controlled' },
+        { label: 'Disabled nodes', href: '#disabled' },
+        { label: 'Keyboard', href: '#keyboard' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    onSelect: (id) => { this.setData({ selected: id }); this.refresh(); },
+    onToggle: ({ expanded }) => { this.setData({ expanded }); this.refresh(); },
+
+    onSelect2: (id) => { this.setData({ selected2: id }); this.refresh(); },
+    onToggle2: ({ expanded }) => { this.setData({ expanded2: expanded }); this.refresh(); },
+    expandAll: () => { this.setData({ expanded2: allParentIds(fileTree) }); this.refresh(); },
+    collapseAll: () => { this.setData({ expanded2: [] }); this.refresh(); },
+
+    onSelect3: (id) => { this.setData({ selected3: id }); this.refresh(); },
+  };
+}
+</script>

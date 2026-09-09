@@ -1,0 +1,174 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Progress ring</h1>
+        <p class="mt-2 text-body">
+          A determinate circular progress indicator. An SVG ring draws its value arc with the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">stroke-dashoffset</code>
+          technique, sweeping clockwise from 12 o'clock, with a centered percentage. For the
+          indeterminate case (unknown or ongoing work), reach for
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Spinner</code>
+          instead.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex w-full items-center justify-center">
+          <ProgressRing value={ 73 } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Zero dependencies — all geometry is computed in the component. Requires the pieces.css
+          tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes }>
+          <div class="flex w-full flex-wrap items-center justify-center gap-8">
+            <ProgressRing value={ 66 } size="sm" />
+            <ProgressRing value={ 66 } size="md" />
+            <ProgressRing value={ 66 } size="lg" />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="colors" title="Colors" code={ codeColors }>
+          <div class="flex w-full flex-wrap items-center justify-center gap-8">
+            <ProgressRing value={ 80 } />
+            <ProgressRing value={ 80 } class="text-success" />
+            <ProgressRing value={ 80 } class="text-danger" />
+            <ProgressRing value={ 80 } class="text-chart-5" />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="thickness" title="Thickness" code={ codeThickness }>
+          <div class="flex w-full flex-wrap items-center justify-center gap-8">
+            <ProgressRing value={ 55 } thickness={ 4 } />
+            <ProgressRing value={ 55 } thickness={ 8 } />
+            <ProgressRing value={ 55 } thickness={ 14 } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="no-value" title="Arc only" code={ codeNoValue }>
+          <div class="flex w-full flex-wrap items-center justify-center gap-10">
+            <div class="flex flex-col items-center gap-2">
+              <ProgressRing value={ 42 } showValue={ false } label="Storage used" />
+              <span class="text-sm text-muted">Storage used</span>
+            </div>
+            <div class="flex flex-col items-center gap-2">
+              <ProgressRing value={ 88 } size="sm" showValue={ false } label="Battery" />
+              <span class="text-sm text-muted">Battery</span>
+            </div>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <p class="mb-3 text-sm text-body">
+          The root carries
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="progressbar"</code>
+          with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-valuemin</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-valuemax</code>,
+          and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-valuenow</code>
+          (the clamped value), so assistive tech announces real progress.
+        </p>
+        <p class="text-sm text-muted">
+          The SVG and the centered percentage are
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-hidden</code>
+          — they visually duplicate the value — leaving
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>
+          as the accessible name. Always pass a descriptive <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>;
+          on rings under 88px it is name-only, and on larger rings it also renders as a caption
+          under the percentage.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ProgressRing from '@/components/ui/ProgressRing.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for ProgressRing — follows the Table/Spinner exemplar shape
+// (header → hero ExampleBox → Installation → titled example sections →
+// Accessibility → Toc).
+const installCmd = 'puzzle add piece progress-ring';
+const usageImport = `import ProgressRing from '@/components/ui/ProgressRing.pzl';`;
+const usageMarkup = `<ProgressRing value={ 73 } />`;
+
+const codeHero = `<ProgressRing value={ 73 } />`;
+
+const codeSizes = `// size is a px diameter or a preset: sm/md/lg = 48/96/128.
+<ProgressRing value={ 66 } size="sm" />
+<ProgressRing value={ 66 } size="md" />
+<ProgressRing value={ 66 } size="lg" />
+
+// or an explicit diameter:
+<ProgressRing value={ 66 } size={ 64 } />`;
+
+const codeColors = `// The arc is stroke-current and the root defaults to text-brand,
+// so retint with any text-color token via class.
+<ProgressRing value={ 80 } />
+<ProgressRing value={ 80 } class="text-success" />
+<ProgressRing value={ 80 } class="text-danger" />
+<ProgressRing value={ 80 } class="text-chart-5" />`;
+
+const codeThickness = `// thickness is the stroke width in px (default 8),
+// clamped so it never overruns the radius.
+<ProgressRing value={ 55 } thickness={ 4 } />
+<ProgressRing value={ 55 } thickness={ 8 } />
+<ProgressRing value={ 55 } thickness={ 14 } />`;
+
+const codeNoValue = `// Hide the centered percentage with showValue={ false } and
+// label the ring externally (label still names it for AT).
+<ProgressRing value={ 42 } showValue={ false } label="Storage used" />
+<ProgressRing value={ 88 } size="sm" showValue={ false } label="Battery" />`;
+
+export default class ProgressRingDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeSizes,
+      codeColors,
+      codeThickness,
+      codeNoValue,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Sizes', href: '#sizes' },
+        { label: 'Colors', href: '#colors' },
+        { label: 'Thickness', href: '#thickness' },
+        { label: 'Arc only', href: '#no-value' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+}
+</script>

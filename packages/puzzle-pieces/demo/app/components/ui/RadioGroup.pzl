@@ -1,0 +1,80 @@
+<puzzle-view>
+  <fieldset class={ fieldsetClass } disabled={ disabled }>
+    {#if label}
+      <legend class="mb-2 text-sm font-medium text-ink">{ label }</legend>
+    {/if}
+    <div class={ listClass }>
+      {#for opt in options}
+        <label class="inline-flex items-start gap-2 select-none cursor-pointer {#if opt.disabled}opacity-50 cursor-not-allowed{/if}">
+          <span class="relative inline-flex shrink-0 mt-0.5">
+            <input
+              type="radio"
+              class="peer size-4 appearance-none rounded-full border border-border-strong bg-surface cursor-pointer disabled:cursor-not-allowed transition-colors checked:border-brand focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
+              name={ name }
+              value={ opt.value }
+              checked={ opt.value === value }
+              disabled={ opt.disabled }
+              @change={ handleChange(opt.value, event) } />
+            <span class="pointer-events-none absolute inset-0 m-auto size-1.5 rounded-full bg-brand opacity-0 transition-opacity peer-checked:opacity-100"></span>
+          </span>
+          <span class="min-w-0">
+            <span class="block text-sm text-ink">{ opt.label }</span>
+            {#if opt.hint}
+              <span class="block text-sm text-muted">{ opt.hint }</span>
+            {/if}
+          </span>
+        </label>
+      {/for}
+    </div>
+  </fieldset>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// RadioGroup — config-first: one component renders the whole group from an
+// `options` array (Puzzle has no context API, so there is deliberately no
+// separate RadioItem). Each row is a real <input type="radio"> restyled with
+// appearance-none, so native group semantics — including arrow-key movement —
+// come for free; the brand dot is a peer-checked overlay. The <fieldset>
+// disabled attr disables every input at once for a whole-group lock.
+//
+//   <RadioGroup label="Plan" options={ plans } value={ plan } @change={ pick }/>
+//   <RadioGroup options={ sizes } value={ size } orientation="horizontal" @change={ pick }/>
+//
+// options: [{ value, label, hint?, disabled? }]
+const ORIENTATION = {
+  vertical: 'flex flex-col gap-2',
+  horizontal: 'flex flex-wrap gap-x-6 gap-y-2',
+};
+
+// Module-level counter for a stable name fallback when `name` is omitted, so
+// each mounted group's radios stay mutually exclusive from any other group's.
+let uid = 0;
+
+export default class RadioGroup extends PuzzleView {
+  data(params, props) {
+    const name = props.name || (this._name ??= `pieces-radio-${++uid}`);
+    return {
+      fieldsetClass: [
+        'min-w-0 border-0 p-0 m-0',
+        props.disabled ? 'opacity-50' : '',
+        props.class || '',
+      ].join(' '),
+      listClass: ORIENTATION[props.orientation] || ORIENTATION.vertical,
+      label: props.label || '',
+      options: props.options || [],
+      value: props.value,
+      name,
+      disabled: !!props.disabled,
+    };
+  }
+
+  events = {
+    handleChange: (value, event) => {
+      const { change } = this.props;
+      if (typeof change === 'function') change(value, event);
+    },
+  };
+}
+</script>

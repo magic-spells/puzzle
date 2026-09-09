@@ -1,0 +1,298 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Kanban</h1>
+        <p class="mt-2 text-body">
+          A config-first, <strong class="font-medium text-ink">controlled</strong> board: horizontal
+          columns each holding a vertical list of cards, with pointer drag-and-drop and full keyboard
+          moves. The parent owns the data — the board emits a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@move</code>
+          intent and you apply it, passing new
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">columns</code>
+          back down.
+        </p>
+      </header>
+
+      <!-- self-start: the ExampleBox preview is a centered flex box. The board's
+           height changes while dragging (the placeholder grows the hovered
+           column), and a vertically centered board recenters on every change —
+           shifting every card by half the delta, which `flip` then animates as
+           jitter. Top-aligning pins the board so only the bottom edge moves. -->
+      <ExampleBox code={ codeHero }>
+        <div class="w-full self-start">
+          <Kanban columns={ board } @move={ onMove } label="Sprint board"/>
+        </div>
+      </ExampleBox>
+
+      <p class="mt-4 text-sm text-muted">Last move: { lastMove }</p>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          No registry or npm dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Two files land in your app: <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Kanban.pzl</code> owns
+          the columns and all the drag-and-drop, and <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">KanbanCard.pzl</code> owns
+          what a single card looks like. Edit the card file to change card content or read extra
+          fields off your own objects — the board renders it both as the row in a column and as the
+          ghost that follows your pointer, so the two never drift apart.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <section id="data" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Data shape and the move contract</h2>
+        <p class="mb-3 text-sm text-body">
+          Cards live inside their column. Each card needs a board-unique
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">id</code>
+          and a <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">title</code>;
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">badge</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">badgeVariant</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">meta</code>, and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">assignee</code> are optional.
+        </p>
+        <CodeBlock code={ codeData }/>
+        <p class="mt-3 text-sm text-body">
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '@move({ cardId, toColumnId, toIndex, event })' }</code>
+          hands you a <em>splice-into-the-remaining-list</em> index:
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">toIndex</code>
+          is where the card should land in the destination column <em>after</em> it has been removed from its source, so it is always in
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">[0, destRemainingLength]</code>.
+          Remove-then-insert and you match the placeholder the user saw.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
+          <div class="w-full self-start">
+            <Kanban columns={ staticBoard } disabled label="Read-only board"/>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="keyboard" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+        <p class="mb-4 text-sm text-body">
+          Full keyboard drag-and-drop, announced through a polite live region:
+        </p>
+        <ul class="space-y-2 text-sm text-body">
+          <li>
+            <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">Tab</kbd>
+            moves focus between cards.
+          </li>
+          <li>
+            <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">Space</kbd>
+            or
+            <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">Enter</kbd>
+            picks up the focused card (<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-grabbed="true"</code>); press again to drop it.
+          </li>
+          <li>
+            While a card is held,
+            <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">↑</kbd>
+            <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">↓</kbd>
+            reorder it within its column and
+            <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">←</kbd>
+            <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">→</kbd>
+            move it to the adjacent column at a comparable index. Each step emits
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@move</code>
+            and keeps the card held and refocused.
+          </li>
+          <li>
+            <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">Esc</kbd>
+            cancels a pickup (pointer drags cancel on Escape too, with no move emitted).
+          </li>
+        </ul>
+      </section>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <ul class="space-y-2 text-sm text-body">
+          <li>
+            The board is a <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="group"</code>
+            with an accessible name from <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>; each column is a labelled
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">section</code> wrapping a
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="list"</code> of cards.
+          </li>
+          <li>
+            Every pickup, move, drop, and cancel is announced through a polite
+            <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-live</code> region.
+          </li>
+          <li>
+            Card focus outlines set their color unconditionally, so the ring never flashes from a default color on first focus.
+          </li>
+          <li>
+            Pointer drags rely on window listeners and root-level pointer capture, so a drag that leaves the board (or whose source card is removed mid-drag) still completes.
+          </li>
+        </ul>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Kanban from '@/components/ui/Kanban.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece kanban';
+const usageImport = `import Kanban from '@/components/ui/Kanban.pzl';`;
+const usageMarkup = `<Kanban columns={ columns } @move={ onMove } label="Sprint board"/>`;
+
+const codeHero = `const columns = [
+  { id: 'todo', title: 'To do', cards: [
+    { id: 'c1', title: 'Design empty states', badge: 'Design', assignee: 'Ada Lovelace' },
+    { id: 'c2', title: 'Fix drag on Safari', badge: 'Bug', badgeVariant: 'danger', meta: 'Due Fri' },
+  ] },
+  { id: 'doing', title: 'In progress', cards: [
+    { id: 'c3', title: 'Ship keyboard DnD', badge: 'a11y', badgeVariant: 'brand', assignee: 'Grace Hopper' },
+  ] },
+  { id: 'done', title: 'Done', cards: [
+    { id: 'c4', title: 'Token audit', meta: 'Merged' },
+  ] },
+];
+
+<Kanban columns={ columns } @move={ onMove } label="Sprint board"/>
+
+// toIndex is the position in the DESTINATION column AFTER the card is removed
+// from its source — remove-then-insert and you match what the user dropped on.
+events = {
+  // @move forwards ONE payload object — destructure the move details from it.
+  onMove: ({ cardId, toColumnId, toIndex }) => {
+    const cols = this.getData().board.map((c) => ({ ...c, cards: c.cards.slice() }));
+    let card = null;
+    for (const c of cols) {
+      const i = c.cards.findIndex((k) => k.id === cardId);
+      if (i !== -1) { card = c.cards.splice(i, 1)[0]; break; }
+    }
+    cols.find((c) => c.id === toColumnId).cards.splice(toIndex, 0, card);
+    this.setData({ board: cols });
+    this.refresh();
+  },
+};`;
+
+const codeData = `columns: [
+  {
+    id: 'todo',              // stable column id
+    title: 'To do',
+    cards: [
+      {
+        id: 'c1',            // board-unique card id
+        title: 'Card title',
+        badge: 'Bug',        // optional chip text
+        badgeVariant: 'danger', // default | brand | danger | outline
+        meta: 'Due Fri',     // optional secondary line
+        assignee: 'Ada Lovelace', // optional → initials disc
+      },
+    ],
+  },
+]`;
+
+const codeDisabled = `// disabled blocks every drag + keyboard move; cards stay focusable and readable.
+<Kanban columns={ columns } disabled label="Read-only board"/>`;
+
+const INITIAL_BOARD = [
+  {
+    id: 'todo',
+    title: 'To do',
+    cards: [
+      { id: 'c1', title: 'Design empty states', badge: 'Design', assignee: 'Ada Lovelace' },
+      { id: 'c2', title: 'Fix drag on Safari', badge: 'Bug', badgeVariant: 'danger', meta: 'Due Fri' },
+      { id: 'c3', title: 'Write changelog', meta: 'Small' },
+    ],
+  },
+  {
+    id: 'doing',
+    title: 'In progress',
+    cards: [
+      { id: 'c4', title: 'Ship keyboard DnD', badge: 'a11y', badgeVariant: 'brand', assignee: 'Grace Hopper' },
+      { id: 'c5', title: 'Placeholder indicator', meta: 'In review' },
+    ],
+  },
+  {
+    id: 'done',
+    title: 'Done',
+    cards: [
+      { id: 'c6', title: 'Token audit', badge: 'Done', badgeVariant: 'outline', assignee: 'Alan Turing' },
+    ],
+  },
+];
+
+const STATIC_BOARD = [
+  { id: 'backlog', title: 'Backlog', cards: [
+    { id: 's1', title: 'Locked task', meta: 'Read-only' },
+    { id: 's2', title: 'Another item', badge: 'Later' },
+  ] },
+  { id: 'shipped', title: 'Shipped', cards: [
+    { id: 's3', title: 'Released v1', badge: 'Done', badgeVariant: 'brand' },
+  ] },
+];
+
+export default class KanbanDoc extends PuzzleView {
+  created() {
+    this.setData({ board: INITIAL_BOARD, lastMove: 'none' });
+  }
+
+  data(params, props) {
+    const d = this.getData();
+    return {
+      ...d,
+      board: d.board || INITIAL_BOARD,
+      staticBoard: STATIC_BOARD,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeData,
+      codeDisabled,
+      lastMove: d.lastMove || 'none',
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Data shape', href: '#data' },
+        { label: 'Disabled', href: '#disabled' },
+        { label: 'Keyboard', href: '#keyboard' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    onMove: ({ cardId, toColumnId, toIndex }) => {
+      const cols = (this.getData().board || []).map((c) => ({
+        ...c,
+        cards: c.cards.slice(),
+      }));
+      let card = null;
+      for (const c of cols) {
+        const i = c.cards.findIndex((k) => k.id === cardId);
+        if (i !== -1) {
+          card = c.cards.splice(i, 1)[0];
+          break;
+        }
+      }
+      if (!card) return;
+      const dest = cols.find((c) => c.id === toColumnId);
+      if (!dest) return;
+      const at = Math.max(0, Math.min(toIndex, dest.cards.length));
+      dest.cards.splice(at, 0, card);
+      this.setData({ board: cols, lastMove: `${card.title} → ${dest.title}` });
+      this.refresh();
+    },
+  };
+}
+</script>

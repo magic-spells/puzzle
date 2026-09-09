@@ -1,0 +1,42 @@
+<puzzle-view>
+  <Collapsible.Trigger class={ triggerClass } disabled={ isDisabled }><Children/></Collapsible.Trigger>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Collapsible from '../Collapsible/index.js';
+
+// Accordion.Trigger — the header row that opens and closes an Item. A member of
+// the Accordion family (D167); it composes Collapsible.Trigger and adds the
+// accordion's row padding, so it renders a real <button> as its single root with no
+// wrapper — which is what <collapsible-component> resolves with
+// querySelector('button').
+//
+//   <Accordion.Trigger>Shipping and returns</Accordion.Trigger>
+//   <Accordion.Trigger disabled>Not available yet</Accordion.Trigger>
+//
+// `disabled` DISABLES THE REAL BUTTON, so upstream's click listener never fires and
+// the row cannot be opened from the trigger. The root can still drive it through
+// `value` — that is deliberate, and it is how a row opens under program control
+// while staying unpressable.
+//
+// aria-expanded, aria-controls, id and type are the component's. Do not author them,
+// and do not nest another button or link inside.
+//
+// Props
+//   disabled  forwarded to the <button>
+//   class     merged onto the button, after the accordion's padding
+
+// The base already carries the row layout, the token colours, the focus ring and the
+// chevron rotation. An accordion row just wants more padding than a bare disclosure.
+const TRIGGER = 'px-4 py-3';
+
+export default class Trigger extends PuzzleView {
+  data(params, props) {
+    return {
+      isDisabled: props.disabled ? true : false,
+      triggerClass: [TRIGGER, props.class].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>

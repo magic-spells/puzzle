@@ -1,0 +1,8 @@
+{
+  "name": "skeleton",
+  "description": "Pulsing loading placeholder with text/circle/block shapes",
+  "files": ["Skeleton.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

@@ -1,0 +1,281 @@
+<puzzle-view>
+  <div class={ rootClass } role="toolbar" aria-label={ ariaLabel } aria-orientation={ ariaOrientation }>
+    {#for item in items}
+      <div class="contents" key={ item.key }>
+        {#if item.type === 'separator'}
+          <div class={ item.sepClass } role="separator" aria-orientation={ item.sepOrientation }></div>
+        {:else}
+          <button
+            type="button"
+            data-tb-value={ item.value }
+            class={ item.class }
+            title={ item.title }
+            aria-pressed={ item.pressedAttr }
+            tabindex={ item.tabindex }
+            disabled={ item.disabled }
+            @focus={ focusItem(item.value) }
+            @keydown={ handleKey(item.value, event) }
+            @click={ activate(item.value, event) }>
+            {#if item.icon}
+              <svg class={ iconClass } viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d={ item.icon }/>
+              </svg>
+            {/if}
+            <span class={ item.labelClass }>{ item.label }</span>
+          </button>
+        {/if}
+      </div>
+    {/for}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Toolbar — a WAI-ARIA `role="toolbar"` container that groups related controls
+// (buttons, toggles, separators) into a SINGLE Tab stop with roving-tabindex
+// arrow-key navigation across its focusable children. Config-first: the whole
+// strip renders from one ordered, mixed `items` array.
+//
+// THE DISTINCTION FROM ButtonGroup / ToggleGroup: those use natural tab order —
+// every control is its own Tab stop and there is no arrow-key model. A toolbar is
+// ONE Tab stop: exactly one interactive control has tabindex="0" at any moment
+// (the roving item), all others tabindex="-1". Left/Right (horizontal) or Up/Down
+// (vertical) move focus between controls, skipping separators and disabled items;
+// Home/End jump to the first/last enabled control. This is the accessible toolbar
+// keyboard model, and it is the whole reason this piece exists alongside the groups.
+//
+// ITEMS — a flat array mixing three shapes (order preserved):
+//   { type:'button',    value, label, icon?, iconOnly?, disabled? }  fires @press(value)
+//   { type:'toggle',    value, label, icon?, iconOnly?, pressed?, disabled? }  fires @toggle({ value, pressed })
+//   { type:'separator' }                                             a non-focusable divider
+// `type` defaults to 'button' when omitted. `value` must be unique across the
+// interactive items (it keys the row and drives the callbacks + roving focus).
+//
+// ICON CONTRACT — like ButtonGroup: `icon` is an SVG path `d` string (24×24,
+// stroke-current), rendered before the label. `label` is ALWAYS required — it is
+// the control's accessible name. For an icon-only control set `iconOnly: true`:
+// the label renders sr-only and is mirrored onto the button's `title` (hover
+// tooltip), so the control keeps both a visible affordance and a screen-reader name.
+//
+//   const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
+//   <Toolbar label="Text formatting" @toggle={ setMark } @press={ act } items={[
+//     { type:'toggle', value:'bold',   label:'Bold',   icon:BOLD, iconOnly:true, pressed:marks.bold },
+//     { type:'toggle', value:'italic', label:'Italic', icon:ITALIC, iconOnly:true, pressed:marks.italic },
+//     { type:'separator' },
+//     { type:'button', value:'clear', label:'Clear formatting', icon:CLEAR, iconOnly:true },
+//   ]}/>
+//
+// PROPS
+//   items        the mixed config array above.
+//   label        aria-label on the role="toolbar" root (default 'Toolbar').
+//   orientation  'horizontal' (default) | 'vertical' — sets aria-orientation AND
+//                the arrow-key axis (Left/Right vs Up/Down). Separators render
+//                perpendicular to the toolbar axis.
+//   disabled     disables every control in the toolbar.
+//   class        appended last to the root.
+// CALLBACKS (Puzzle forwards ONE value to an @event handler, so payloads that
+// carry more than the value ride in a single object; names differ from props)
+//   @press(value)                 a button was activated (click or Enter/Space).
+//   @toggle({ value, pressed })   a toggle was activated; `pressed` is the NEXT
+//                                 pressed state (parent owns it and writes back).
+//
+// CONTROLLED DISCIPLINE — the parent owns each toggle's `pressed` state: the piece
+// never stores it. The ONLY internal state is the roving-focus position
+// (`rovingValue`), which is view-local and does not round-trip through the parent.
+//
+// A {#for} body needs a single element root, so each row is wrapped in a
+// `display:contents` element (transparent to the toolbar's flex layout) and the
+// button/separator branch lives inside it; every per-item class string, role,
+// tabindex and pressed attr is precomputed in data().
+const ROOT_BASE =
+  'inline-flex rounded-lg border border-border bg-surface p-1';
+
+const ORIENTATION = {
+  horizontal: 'flex-row items-center gap-1',
+  vertical: 'flex-col items-stretch gap-1',
+};
+
+// Separator recipe, keyed by the separator's OWN orientation (perpendicular to
+// the toolbar axis): a horizontal toolbar gets vertical separators and vice versa.
+const SEP = {
+  vertical: 'self-stretch w-px bg-border mx-1',
+  horizontal: 'w-full h-px bg-border my-1',
+};
+
+const ITEM_BASE =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
+  'h-8 min-w-8 px-2 rounded-md text-sm font-medium cursor-pointer transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none';
+
+// Pressed toggles read as depressed (bg-faint text-ink, matching Toggle/ToggleGroup);
+// buttons and un-pressed toggles share the ghost treatment.
+const OFF = 'bg-transparent text-body hover:bg-surface-sunken hover:text-ink';
+const ON = 'bg-faint text-ink hover:bg-faint';
+
+const ICON_CLASS = 'size-4 shrink-0';
+
+export default class Toolbar extends PuzzleView {
+  data(params, props) {
+    const source = Array.isArray(props.items) ? props.items : [];
+    const groupDisabled = !!props.disabled;
+    const orientation = props.orientation === 'vertical' ? 'vertical' : 'horizontal';
+    // A separator's own orientation is perpendicular to the toolbar axis.
+    const sepAxis = orientation === 'vertical' ? 'horizontal' : 'vertical';
+
+    // Track which interactive values are enabled, in DOM order, so roving nav has
+    // an ordered subset to walk.
+    const enabled = [];
+
+    const items = source.map((raw, i) => {
+      const it = raw || {};
+      const type =
+        it.type === 'toggle'
+          ? 'toggle'
+          : it.type === 'separator'
+            ? 'separator'
+            : 'button';
+
+      if (type === 'separator') {
+        return {
+          key: `__tb-sep-${i}`,
+          type,
+          sepClass: SEP[sepAxis],
+          sepOrientation: sepAxis === 'vertical' ? 'vertical' : false,
+        };
+      }
+
+      const disabled = groupDisabled || !!it.disabled;
+      const iconOnly = !!it.iconOnly;
+      const pressed = type === 'toggle' ? !!it.pressed : false;
+      if (!disabled) enabled.push(it.value);
+
+      return {
+        key: it.value,
+        type,
+        value: it.value,
+        label: it.label,
+        icon: it.icon || false,
+        disabled,
+        pressed,
+        pressedAttr: type === 'toggle' ? (pressed ? 'true' : 'false') : false,
+        title: iconOnly ? it.label : false,
+        labelClass: iconOnly ? 'sr-only' : '',
+        class: [ITEM_BASE, type === 'toggle' && pressed ? ON : OFF].join(' '),
+        tabindex: '-1', // assigned below once the roving item is known
+      };
+    });
+
+    // Roving tabindex lands on the remembered position if it is still an enabled
+    // interactive value, else the first enabled control keeps the Tab stop.
+    const prev = (this.getData && this.getData()) || {};
+    let rovingValue = prev.rovingValue;
+    if (enabled.indexOf(rovingValue) === -1) rovingValue = enabled[0];
+
+    items.forEach((item) => {
+      if (item.type !== 'separator') {
+        item.tabindex = item.value === rovingValue ? '0' : '-1';
+      }
+    });
+
+    return {
+      items,
+      orientation,
+      rovingValue,
+      iconClass: ICON_CLASS,
+      rootClass: [ROOT_BASE, ORIENTATION[orientation], props.class || ''].join(' '),
+      ariaLabel: props.label || 'Toolbar',
+      ariaOrientation: orientation,
+    };
+  }
+
+  // ---- roving-focus helpers -------------------------------------------------
+
+  // Ordered list of enabled interactive values (the roving nav subset).
+  _enabledValues() {
+    return this.getData()
+      .items.filter((i) => i.type !== 'separator' && !i.disabled)
+      .map((i) => i.value);
+  }
+
+  // Move DOM focus to the interactive button carrying `value`.
+  focusValue(value) {
+    if (!this.element) return;
+    const btns = this.element.querySelectorAll('[data-tb-value]');
+    for (let i = 0; i < btns.length; i++) {
+      if (btns[i].getAttribute('data-tb-value') === value) {
+        btns[i].focus();
+        return;
+      }
+    }
+  }
+
+  // Make `value` the roving item and focus it. Sets state BEFORE focusing so the
+  // resulting @focus sees an already-matching rovingValue and short-circuits.
+  moveTo(value) {
+    this.setData('rovingValue', value);
+    this.refresh();
+    this.focusValue(value);
+  }
+
+  events = {
+    activate: (value, event) => {
+      const item = this.getData().items.find(
+        (i) => i.type !== 'separator' && i.value === value
+      );
+      if (!item || item.disabled) return;
+
+      if (item.type === 'toggle') {
+        const { toggle } = this.props;
+        if (typeof toggle === 'function') toggle({ value, pressed: !item.pressed });
+      } else {
+        const { press } = this.props;
+        if (typeof press === 'function') press(value, event);
+      }
+    },
+
+    // Remember the last-focused control so a Tab-out/Tab-in returns to it.
+    focusItem: (value) => {
+      if (this.getData().rovingValue === value) return;
+      this.setData('rovingValue', value);
+      this.refresh();
+    },
+
+    handleKey: (value, event) => {
+      const { orientation } = this.getData();
+      const enabled = this._enabledValues();
+      const n = enabled.length;
+      if (n === 0) return;
+      const idx = enabled.indexOf(value);
+      if (idx === -1) return;
+
+      const vertical = orientation === 'vertical';
+      const nextKey = vertical ? 'ArrowDown' : 'ArrowRight';
+      const prevKey = vertical ? 'ArrowUp' : 'ArrowLeft';
+
+      let target = null;
+      switch (event.key) {
+        case nextKey:
+          target = (idx + 1) % n;
+          break;
+        case prevKey:
+          target = (idx - 1 + n) % n;
+          break;
+        case 'Home':
+          target = 0;
+          break;
+        case 'End':
+          target = n - 1;
+          break;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      if (target === null) return;
+      this.moveTo(enabled[target]);
+    },
+  };
+}
+</script>

@@ -1,0 +1,29 @@
+<puzzle-view>
+  <span
+    class="inline-block animate-spin rounded-full border-2 border-border border-t-brand { sizeClass } { extraClass }"
+    role="status"
+    aria-label={ label }></span>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Rotating-ring spinner: a border-border ring with its top edge tinted brand,
+// spun by Tailwind's animate-spin. Renders as a single inline <span>, so it
+// drops straight into the parent's flow with no wrapper.
+//
+//   <Spinner/>                          medium, "Loading" label
+//   <Spinner size="sm" label="Saving"/>
+//   <Spinner class="border-current/30 border-t-current"/>  inherit text color
+const SIZE = { sm: 'size-4', md: 'size-6', lg: 'size-10' };
+
+export default class Spinner extends PuzzleView {
+  data(params, props) {
+    return {
+      sizeClass: SIZE[props.size] || SIZE.md,
+      label: props.label || 'Loading',
+      extraClass: props.class || '',
+    };
+  }
+}
+</script>

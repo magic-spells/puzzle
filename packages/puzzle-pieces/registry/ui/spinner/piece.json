@@ -1,0 +1,8 @@
+{
+  "name": "spinner",
+  "description": "Inline rotating-ring loading indicator",
+  "files": ["Spinner.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

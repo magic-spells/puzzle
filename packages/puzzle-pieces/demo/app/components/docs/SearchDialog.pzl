@@ -1,0 +1,291 @@
+<puzzle-view>
+  <div class="contents">
+    <button
+      data-search-open
+      type="button"
+      aria-label="Search the docs"
+      aria-keyshortcuts="Control+K"
+      class="inline-flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface px-2.5 text-sm text-muted transition-colors hover:border-border-strong hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+      <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-4-4" />
+      </svg>
+      <span class="hidden sm:inline">Search</span>
+      <Kbd class="hidden gap-1 sm:inline-flex">
+        <span data-search-shortcut>Ctrl</span><span>K</span>
+      </Kbd>
+    </button>
+
+    <dialog
+      data-search-dialog
+      aria-label="Search the docs"
+      class="m-0 h-dvh max-h-dvh w-full max-w-none border-0 bg-surface p-0 text-body shadow-2xl open:flex backdrop:bg-page/75 sm:fixed sm:inset-0 sm:mx-auto sm:mt-20 sm:h-fit sm:max-h-[min(34rem,calc(100vh-10rem))] sm:w-[min(92%,38rem)] sm:rounded-xl sm:border sm:border-border">
+      <div data-search-frame class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <div class="flex items-center gap-3 border-b border-border p-4">
+          <svg class="size-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-4-4" />
+          </svg>
+          <!-- String(): non-path expr keeps this one-way. The `input` listener wired in
+               mounted() owns `query` — it also recomputes results, so a bare bind would
+               write query without them (D147). -->
+          <input
+            data-search-input
+            type="search"
+            value={ String(query) }
+            placeholder="Search components, demos, and pages…"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Search query"
+            class="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-muted" />
+          <button
+            data-search-close
+            type="button"
+            class="cursor-pointer rounded-md px-2 py-1 text-sm font-medium text-brand transition-colors hover:bg-brand-tint hover:text-brand-dark outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+            Close
+          </button>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto p-2" data-search-scroll>
+          {#if showHint}
+            <p class="px-2 py-8 text-center text-sm text-muted">
+              Search { indexCount } components, demos, and pages by name or description.
+            </p>
+          {/if}
+
+          {#if showEmpty}
+            <p class="px-2 py-8 text-center text-sm text-muted">No matches for “{ query }”.</p>
+          {/if}
+
+          {#if hasResults}
+            <div class="space-y-1">
+              {#for result in results}
+                <a
+                  data-search-result
+                  key={ result.path }
+                  href={ result.href }
+                  class={ result.rowClass }>
+                  <span class="flex items-baseline gap-2">
+                    <span class="font-medium text-ink">{ result.title }</span>
+                    <span class="text-xs text-faint">{ result.section }</span>
+                  </span>
+                  {#if result.description}
+                    <span class="mt-1 block text-sm/relaxed text-muted">{ result.description }</span>
+                  {/if}
+                </a>
+              {/for}
+            </div>
+          {/if}
+        </div>
+
+        <div class="hidden items-center gap-4 border-t border-border px-4 py-2.5 text-xs text-faint sm:flex">
+          <span class="inline-flex items-center gap-1.5"><Kbd>↑</Kbd><Kbd>↓</Kbd> navigate</span>
+          <span class="inline-flex items-center gap-1.5"><Kbd>↵</Kbd> open</span>
+          <span class="inline-flex items-center gap-1.5"><Kbd>Esc</Kbd> close</span>
+        </div>
+      </div>
+    </dialog>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { MorphEngine } from '@magic-spells/morph-engine';
+import Kbd from '@/components/ui/Kbd.pzl';
+import { searchDocs, SEARCH_COUNT } from '@/docs/search.js';
+
+// SearchDialog — the header search. Docs chrome, not a registry piece: it knows
+// about nav.js and hash routing, neither of which belongs in a copy-in component.
+//
+// The panel MORPHS out of its trigger button (@magic-spells/morph-engine): the
+// button's box grows into the dialog's. Morph is opt-out, not opt-in — a narrow
+// viewport (where the dialog is full-screen, so there is no box to grow into) or
+// prefers-reduced-motion falls back to a plain showModal(). The dialog is a real
+// <dialog> used modally, so focus trapping, inertness, and the top layer are the
+// platform's job rather than ours.
+//
+// Two morph constraints this markup respects: the dialog is positioned with
+// margins (mx-auto/mt-20), never a transform, and it carries no dynamic style
+// binding — both would fight the engine's own box interpolation. `open:flex`
+// rather than a bare `flex` keeps dialog:not([open]){display:none} intact.
+//
+// Results come from a local index (see docs/search.js). Everything is keyboard
+// reachable: Cmd/Ctrl+K toggles, arrows move the selection, Enter opens it.
+
+const ROW_BASE =
+  'block scroll-my-2 rounded-lg border px-3 py-2.5 transition-colors outline-none';
+const ROW_IDLE = 'border-transparent hover:bg-surface-sunken';
+const ROW_ACTIVE = 'border-border-strong bg-surface-sunken';
+
+export default class SearchDialog extends PuzzleView {
+  created() {
+    this.setData({ query: '', results: [], activeIndex: 0 });
+  }
+
+  data() {
+    const state = this.getData();
+    const query = state.query || '';
+    const results = state.results || [];
+    const activeIndex = state.activeIndex || 0;
+
+    return {
+      query,
+      indexCount: SEARCH_COUNT,
+      hasResults: results.length > 0,
+      showHint: !query.trim(),
+      showEmpty: !!query.trim() && results.length === 0,
+      // Per-row class precomputed here — a {#for} body cannot branch on its own.
+      results: results.map((result, i) => ({
+        ...result,
+        href: `#${result.path}`,
+        rowClass: `${ROW_BASE} ${i === activeIndex ? ROW_ACTIVE : ROW_IDLE}`,
+      })),
+    };
+  }
+
+  mounted() {
+    const root = this.element;
+    this._openButton = root.querySelector('[data-search-open]');
+    this._dialog = root.querySelector('[data-search-dialog]');
+    this._frame = root.querySelector('[data-search-frame]');
+    this._input = root.querySelector('[data-search-input]');
+    this._scroll = root.querySelector('[data-search-scroll]');
+    this._morph = new MorphEngine();
+
+    this._wide = window.matchMedia('(min-width: 40rem)');
+    this._reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    const isApple = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+    if (isApple) {
+      const key = root.querySelector('[data-search-shortcut]');
+      if (key) key.textContent = '⌘';
+      this._openButton.setAttribute('aria-keyshortcuts', 'Meta+K');
+    }
+
+    this._onOpen = () => this.openModal();
+    this._onClose = () => this.closeModal();
+    this._onInput = () => this.runSearch(this._input.value);
+    this._onInputKey = (event) => this.onInputKey(event);
+
+    // A native <dialog> self-closes on Escape; preventDefault so the close goes
+    // through the same path that unwinds the morph.
+    this._onCancel = (event) => {
+      event.preventDefault();
+      this.closeModal();
+    };
+    this._onDialogClose = () => {
+      document.body.style.overflow = this._storedOverflow || '';
+      if (this._morph.state === 'shown') this._morph.hide();
+    };
+    // Clicks land on the <dialog> itself only in the backdrop area.
+    this._onDialogClick = (event) => {
+      if (event.target === this._dialog) this.closeModal();
+    };
+    this._onResultClick = (event) => {
+      if (event.target.closest('[data-search-result]')) this.closeModal();
+    };
+    this._onWindowKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        this._dialog.open ? this.closeModal() : this.openModal();
+      }
+    };
+
+    this._morph.on('reveal', ({ to }) => {
+      if (to !== this._dialog || this._dialog.open) return;
+      this._dialog.showModal();
+      this.afterOpen();
+    });
+    this._morph.on('unreveal', ({ to }) => {
+      if (to === this._dialog && this._dialog.open) this._dialog.close();
+    });
+
+    this._openButton.addEventListener('click', this._onOpen);
+    root.querySelector('[data-search-close]').addEventListener('click', this._onClose);
+    this._input.addEventListener('input', this._onInput);
+    this._input.addEventListener('keydown', this._onInputKey);
+    this._dialog.addEventListener('cancel', this._onCancel);
+    this._dialog.addEventListener('close', this._onDialogClose);
+    this._dialog.addEventListener('click', this._onDialogClick);
+    this._frame.addEventListener('click', this._onResultClick);
+    window.addEventListener('keydown', this._onWindowKey);
+  }
+
+  destroyed() {
+    this._openButton?.removeEventListener('click', this._onOpen);
+    this._input?.removeEventListener('input', this._onInput);
+    this._input?.removeEventListener('keydown', this._onInputKey);
+    this._dialog?.removeEventListener('cancel', this._onCancel);
+    this._dialog?.removeEventListener('close', this._onDialogClose);
+    this._dialog?.removeEventListener('click', this._onDialogClick);
+    this._frame?.removeEventListener('click', this._onResultClick);
+    window.removeEventListener('keydown', this._onWindowKey);
+    document.body.style.overflow = this._storedOverflow || '';
+    if (this._dialog?.open) this._dialog.close();
+    this._morph?.destroy();
+  }
+
+  // Full-screen on a narrow viewport means there is no target box to morph into.
+  shouldMorph() {
+    return this._wide.matches && !this._reducedMotion.matches;
+  }
+
+  openModal() {
+    if (this._dialog.open) return;
+    if (!this.shouldMorph()) {
+      this._dialog.showModal();
+      this.afterOpen();
+      return;
+    }
+    if (this._morph.state === 'idle' || this._morph.state === 'hiding') {
+      this._morph.show({ from: this._openButton, to: this._dialog, display: 'flex' });
+    }
+  }
+
+  closeModal() {
+    const morphing = this._morph.state === 'showing' || this._morph.state === 'shown';
+    if (this._dialog.open) this._dialog.close();
+    if (morphing && this._morph.state !== 'hiding') this._morph.hide();
+  }
+
+  afterOpen() {
+    this._storedOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    this._input.focus();
+    this._input.select();
+  }
+
+  runSearch(value) {
+    this.setData({ query: value, results: searchDocs(value), activeIndex: 0 });
+    this.refresh();
+  }
+
+  onInputKey(event) {
+    const results = this.getData().results || [];
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (!results.length) return;
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      const next = (this.getData().activeIndex + step + results.length) % results.length;
+      this.setData({ activeIndex: next });
+      this.refresh();
+      this.scrollActiveIntoView(next);
+      return;
+    }
+    if (event.key === 'Enter') {
+      const active = results[this.getData().activeIndex];
+      if (!active) return;
+      event.preventDefault();
+      window.location.hash = active.path;
+      this.closeModal();
+    }
+  }
+
+  // Safe to read straight away: refresh() patches synchronously, so the rows
+  // already carry the new active class by the time this runs.
+  scrollActiveIntoView(index) {
+    const rows = this._scroll?.querySelectorAll('[data-search-result]');
+    rows?.[index]?.scrollIntoView({ block: 'nearest' });
+  }
+}
+</script>

@@ -1,0 +1,458 @@
+---
+name: SPEC — template grammar, events, and composition
+kind: reference
+status: verified
+connections:
+  - DOC-SPEC
+  - COMPONENT-TEMPLATE-PARSER
+  - COMPONENT-CODEGEN
+  - COMPONENT-VIEW-MANAGER
+verified_at: '2026-07-25T05:53:18.357Z'
+verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+notes:
+  - kind: verified
+    text: >-
+      Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
+      census); §N numbers unchanged
+    sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+  - kind: state
+    text: >-
+      Text whitespace rule (§6, recorded on [[DECISION-D168-TEXT-RUN-WHITESPACE]] in the 0.7.0 final
+      review): template text collapses whitespace runs to one space and drops an edge space that
+      held a newline — source indentation at element boundaries. That strip is an element-boundary
+      rule only: inside one coalesced text run (text↔interpolation, interpolation↔interpolation
+      across a whitespace-only newline node) a stripped edge that borders another run member gets
+      exactly one space back, so `{ user.first }\n  { user.last }` renders "John Doe" as it does in
+      HTML, Vue and Svelte. `{ a }{ b }` with nothing between stays adjacent; run edges still strip;
+      the `<b>{ name }</b>\n(text)` element-boundary case is deliberately unchanged. Also: `{#for i
+      in 1...5}` is a positioned compile error steering to `{#for 1...5, i}` — the range form always
+      binds its counter after the range.
+  - kind: state
+    text: >-
+      Text whitespace rule (§6), superseding the earlier note above — the full rule as of the 0.7.0
+      final review, recorded on [[DECISION-D168-TEXT-RUN-WHITESPACE]]. Template text collapses
+      whitespace runs to one space and drops an edge space that held a newline (source indentation).
+      That strip is an ELEMENT-boundary rule only. Every non-element boundary keeps one space:
+      inside a coalesced text run (text↔interpolation, interpolation↔interpolation across a
+      whitespace-only newline node), and between a text run and an adjacent control-flow block —
+      `{#if}`, `{#for}`, `{#case}` — on either side. So `{ user.first }\n  { user.last }` renders
+      "John Doe" and `you have { n } new\n  {#if x}message{/if}` renders "new message", as they do
+      in HTML, Vue and Svelte. `{ a }{ b }` and `{#if x}a{/if}{ b }` with nothing between stay
+      adjacent; nothing is invented at an element edge, so a block that is an element's first/last
+      child gains no space; a block's own body edges keep the strip. Deliberately unchanged: the
+      `<b>{ name }</b>\n(text)` element-boundary case, and two blocks separated only by a newline.
+    sha: 513d834
+---
+
+The frozen v1 contract for templates: the `@event` handler convention and its modifiers, the template grammar, DOM islands, inline SVG, composition markers and named slots, list keying, cached handlers, and compiler accessibility warnings. See [[DOC-SPEC]] for the section index and the rest of the contract.
+
+## 5. Event handler convention
+
+Three forms in templates, one rule each:
+
+1. **Bare identifier** — `@click={ clearCompleted }` → the handler is invoked as `clearCompleted(event)`.
+2. **Call expression** — `@click={ setFilter('all') }` or `@submit={ addTodo(event) }` → the compiler wraps the expression as `(event) => setFilter('all')`, evaluated **at event time** with `event` in scope. The handler receives exactly the arguments written in the template.
+3. **Null-toggle ternary** — `@pointerdown:outside={ menuOpen ? closeMenu : null }` → each branch must itself be form 1, form 2, or `null`; the condition is evaluated against render data and a `null` branch detaches the listener while the element stays mounted (§47, D86). The grammar is deliberately narrow: `@click={ a + b }`, `@click={ (e) => close(e) }`, `@click={ this.close }`, and `@click={ handlers.close }` all remain positioned compile errors. A bare `@click={ null }` is legal and emits no handler.
+
+`event` names the DOM event only when it is not otherwise bound. A `{#for}` item or counter named `event` shadows nothing — the loop variable wins, and the compiler emits the DOM event under an internal name instead.
+
+```html
+<form @submit={ addTodo(event) }>
+<input @keydown:enter={ addTodo(event) } />
+<button @click={ deleteTodo(todo) }>×</button>
+<button @click={ setFilter('all') }>All</button>
+<button @click={ clearCompleted }>Clear</button>
+```
+
+```js
+events = {
+  addTodo: (event) => { event.preventDefault(); /* … */ },
+  deleteTodo: (todo) => { todo.destroy(); },
+  setFilter: (filter) => { this.setData('currentFilter', filter); },
+  clearCompleted: () => { /* … */ },
+};
+```
+
+Form controls carrying a path-shaped `value=`/`checked=` need no handler —
+they two-way bind (§6, D147); an author `@input`/`@change` on the control
+suppresses the synthesis and owns the write. The curried pattern from older
+examples (`deleteTodo: (todo) => () => { ... }`) is removed.
+
+### Event modifiers (v1.7, D38)
+
+A binding may carry `:modifier` suffixes — `@event:modifier[:modifier…]={ handler }` — that adjust dispatch declaratively. The handler value stays a plain function; the modifiers are encoded in the vnode key (`@keydown:enter:prevent`), so modifier-free bindings are unchanged.
+
+| Modifier | Effect | Applies to |
+| -------- | ------ | ---------- |
+| `prevent` | `event.preventDefault()` | any event |
+| `stop` | `event.stopPropagation()` | any event |
+| `once` | handler fires **once ever** for this binding (the spent-marker survives per-patch handler swaps; it clears only when the binding is actually removed, so a later re-add starts fresh) | any event |
+| `outside` | the listener attaches to **`document` (capture phase)** and the handler runs only when the event target is **outside** the bound element — declarative outside-dismiss for popovers/dropdowns; framework-owned cleanup on unmount (v1.52, D86 — full contract §47) | any event |
+| `enter` `escape` `tab` `space` `up` `down` `left` `right` `backspace` `delete` | key filter — handler runs only when `event.key` matches (`Enter`/`Escape`/`Tab`/`' '`/`ArrowUp`/`ArrowDown`/`ArrowLeft`/`ArrowRight`/`Backspace`/`Delete`; `backspace`/`delete` added in v1.13, D45) | `keydown`/`keyup`/`keypress` only |
+
+Modifiers stack, and **execution order is canonical regardless of written order**: outside-gate (v1.52) → key-gate → once-spend → `preventDefault` → `stopPropagation` → handler. The gates run first, so an inside event (for `outside`) or a non-matching key bails before `preventDefault` (native behavior preserved) and without spending `once`.
+
+**Compile errors (not warnings):** unknown modifier, a key filter on a non-keyboard event, a duplicate modifier, more than one key filter, or any modifier on a **component callback prop** (component-tag `@name={...}`, D16).
+
+```html
+<input @keydown:enter={ addTodo(event) } @keydown:escape:prevent={ cancelEdit } />
+<a @click:prevent:stop={ navigate('/home') }>Home</a>
+<button @click:once={ claimReward }>Claim</button>
+```
+
+## 6. Template grammar (v1)
+
+
+Supported:
+
+- **Interpolation:** `{ expression }` with plain JS expressions. **Nullish display (D127):** `null` and `undefined` render as an empty string, never the literal words — `{ user.middleName }` on a null field renders nothing. `0`, `false`, `''`, `NaN`, and objects coerce exactly as `String` would (`??` semantics, not `||`, so a zero count and a false flag still render). The **nullish** rule holds identically in a bare interpolation, a concatenated text run, a quoted attribute (`title="{ x }"`), and a brace-only attribute (`data-x={ x }`) — before D127 the first three rendered `"null"` while the last removed the attribute. Non-nullish coercion deliberately differs by position: a brace-only attribute keeps DOM attribute semantics (§ attributes — `false` removes the attribute, `true` sets it empty; boolean toggling, not text), while every text position renders `"false"`. A **`undefined`** value additionally logs one development warning naming the expression (for a brace-only DOM attribute, the attribute name — expression labels ride only through text and quoted positions), since it nearly always means a mistyped or renamed field; the warning and the name are both absent from production builds.
+- **Expression boundary (contract):** template expressions are **lexed, not parsed** — the compiler tokenizes them (string/template/regex/comment-aware) and prefixes data identifiers, but has no expression grammar (§4: the Go compiler never parses JS). Consequences, by design and not bugs: (a) the only names in scope are `data()` fields, loop variables/counters, `event` (in handlers), and JS globals — an identifier imported or declared in `<script>` is **not** reachable (it compiles to a data read of the same name and evaluates `undefined`; since the pre-0.1.0 hardening pass the compiler emits a positioned **warning** when a template expression reads a name that `<script>` imports); (b) binding-introducing forms are unsupported in expressions — arrow functions, object literals at expression head (positioned compile error), and destructuring — because a lexer cannot see binding positions. The supported idiom is unchanged: compute in `data()`, render the result.
+- **Formatters:** `{ value | formatter(args) }`, chainable (`{ text | trim | capitalize }`). Display-only; filtering/sorting belongs in `data()`. **Unknown-formatter guard (v1.12, D43):** a formatter name not in the runtime registry does **not** crash the render — the compiled call is guarded (`(__f["name"] || __f.__missing("name"))(…)` — bracket access, since registry keys are arbitrary strings), the value passes through unchanged, and one `console.error` per unknown name identifies it (with a did-you-mean suggestion when a close match exists). A compile-time check is impossible by design: custom formatters are registered at runtime (§2), and the compiler never parses JS (§4). **Built-in `link` (v1.46, D79):** `{ path | link }` converts a path-shaped route into the mode-appropriate href via `router.url()` (§9) — `href="{ '/collections/' + c.id | link }"` renders `/collections/1` in path mode (base-prefixed under a `routerBase`), `#/collections/1` in hash mode, and unchanged in memory mode. Registered by `PuzzleApp` at mount (after the router exists), **only if absent** — a user `link` in `config.formatters` wins. Fail-soft per formatter convention: nullish → `''`, non-strings coerced; strings not starting with `/` pass through untouched (external URLs, `mailto:`, bare `#anchor`). Not part of the D31 tree-shake manifest (it needs the live router; the scanner ignores the name like any custom formatter). **Calendar dates (D114):** a bare `YYYY-MM-DD` string is a calendar date — the date family (`date`/`time`/`datetime`/`timeago`/`in_timezone`) parses it as *local* midnight, so it displays as written in every timezone (the ES spec's UTC-midnight parse showed the previous day west of UTC); invalid components keep the fail-soft raw-value path, the `iso` preset returns the string unchanged (the ISO form of a calendar date is itself), and inputs carrying a time or zone are untouched.
+- **Conditionals:** `{#if expr} … {:else} … {/if}`.
+- **Conditional chaining (v1.9, D40):** `{#if a} … {:else if b} … {:else} … {/if}` — zero or more `{:else if expr}` clauses between the `{#if}` body and the optional trailing `{:else}`, which must be the **last** clause. `expr` is any JS expression, exactly like `{#if}`. Desugars at parse time to nested `{#if}` nodes (additive; codegen unchanged). Spelled `else if` (JS), not `elsif` — `{:elsif}`/`{:elseif}` get a did-you-mean compile error. Compile errors: an empty condition, `{:else if}` after `{:else}`, `{:else if}` outside `{#if}`, inside `{#unless}` or `{#case}` (see D36/D37), and inside attribute-value inline-ifs (the attribute mini-grammar stays flat `{#if}…{:else}` only).
+- **Inverted conditional (v1.7, D36):** `{#unless expr} … {/unless}` renders the body when `expr` is **falsy**; an optional `{:else}` renders when `expr` is truthy. `expr` is any JS boolean expression, exactly like `{#if}`. Desugars at parse time to a negated `{#if}` (additive; codegen unchanged). `{:else if}` inside `{#unless}` is a positioned compile error suggesting an `{#if}` restructuring.
+- **Multi-branch (v1.7, D37):** `{#case expr}` + one or more `{:when v1, v2, …}` clauses (top-level commas are **OR**) + optional trailing `{:else}` + `{/case}`. Matching is strict `===`, **first match wins, no fallthrough**; the case expression is evaluated exactly once. Compile errors: missing case expression, zero `{:when}` clauses, non-whitespace content before the first `{:when}`, a valueless `{:when}`, a `{:when}` after `{:else}`, `{:else if}` inside a case, a `{:when}` outside any case, and unclosed/mismatched closers. Named `{#case}` (not `{#switch}`) after Puzzle's Liquid heritage — no `break`/fallthrough semantics.
+- **Loops:** `{#for item in items} … {/for}` and range form `{#for 1...n} … {/for}`. A trailing `, name` on either header binds the **loop counter** — `{#for item in items, i}` (0-based index) / `{#for 1...n, x}` (the current number) — in scope throughout the block like the item variable (v1.2, D29; additive, keying unchanged). Rows are keyed automatically — pk-aware since v1.26, with an explicit `key={ … }` override on the body root; see §28 (D58).
+- **Attribute values:** interpolation and inline `{#if}` blocks inside attribute values, e.g. `class="base {#if done}line-through{/if}"`.
+- **Bindings:** dynamic attributes — `value={ expr }`, `checked={ expr }`, `disabled={ expr }`, and any other name. **Implicit two-way binding (v1.68, D147):** a `value=`/`checked=` on a plain `<input>`/`<textarea>`/`<select>` auto-binds when its expression is exactly `ident` or `ident.ident` — the compiler synthesizes the write-back handler (`'@input:bind'`/`'@change:bind'` → `this.__bind(target, field, spec)`, a render-time call returning a memoized handler; no `__h` site, and identity is stable — hence no listener churn — for every target whose own identity is stable, which is locals and store records by construction). ALL trigger conditions must hold: (1) a plain form control, never a component (component `value` stays a prop, D16); (2) the expression is a bare identifier or one-member path — no calls, operators, brackets, `?.`, ternaries, formatter pipes, deeper chains, or `this.`; keyword/global roots and the reserved `event` root never classify; a **bare** loop variable doesn't classify, a loop-var-rooted member path (`todo.completed`) does; (3) no author `@input`/`@change` (any modifiers) — either one means the author owns the write and NOTHING is synthesized; handlers on other events (`@keydown:enter`, `@blur`) do not suppress; (4) no static `readonly`/`disabled`; (5) `type` absent or a static classifiable string — dynamic `type={ }` never binds, `checked` binds only with static `type="checkbox"`, `value` on a checkbox (the submit-value) never binds, and `file`/`radio`/`submit`/`button`/`reset`/`image`/`hidden` plus `<select multiple>` are excluded. **Event/coercion matrix:** text-ish inputs (absent type, text, search, email, password, url, tel, color), `<textarea>`, and `range` bind on `input`; `number`, `checkbox`, the date/time kinds, and `<select>` bind on `change` (numeric coercion would break the caret-preserving echo round-trip mid-typing — `"1.20"` → `1.2` would rewrite the field under the user). Numeric (`vn`) writes: `''` writes `null` (never `0`), NaN is skipped entirely. `checkbox` writes `!!checked`. A mid-IME-composition `input` (`event.isComposing`) never writes; the post-`compositionend` input lands the composed text — but state necessarily lags the DOM for the composition's duration, so a re-render driven by something else mid-composition re-asserts the stale value into the composing element. **Write dispatch:** a bare identifier writes local state (`setData` + `refresh` — `data()`-derived values stay live, so a bound filter narrows its list as you type); a member path writes the resolved root — a store record goes through validated `update()` (a rejected write reports to `onError` with `phase: 'bind'`, mutates nothing, and leaves the typed text on screen), a plain object mutates and repaints its owner. **Non-classifying templates compile exactly as before, silently** — `value={ draft || '' }` is a one-way display binding by design. The three escapes are all existing syntax: an author handler, a non-path expression (`String(x)`), or static `readonly`. Taught rule: **bind the path you want written** — `value={ profile.name }` for record forms, bare `value={ draft }` for local drafts; a constrained free-text field binds a draft and commits via `record.update()` on submit (`record.validate()` for form UX). Migration hazard: a handler-less `value={ x }` whose value a `@keydown` handler used to commit becomes live-bound — use a non-path expression if edit-buffer semantics matter. A dev-only diagnostic warns once per key when a `data()` commit reverts a bound local key (the layer-clobber trap).
+- **Events:** `@event={ … }` per section 5.
+- **Components:** capitalized tags with props — `<UserProfile userId={selectedUserId} />` — imported in `<script>`. **Component-name grammar (v1.80, D167):** a component tag must be a valid member path — `Ident('.'Ident)*`, each segment `[A-Za-z_][A-Za-z0-9_]*`; any other capitalized name (a `-`, a `:`, an empty segment) is a positioned compile error (before v1.80 those compiled silently into syntactically broken JS). Dotted tags — `<Frame.Wrapper>` — emit the member expression verbatim and resolve lexically against module scope exactly like a plain `<Frame>`; there is no registry and the compiler still never reads imports. This is the **component-family** idiom: `.pzl` stays one class per file, and a family is a directory of members grouped by a plain JS barrel (`export default Object.assign(Frame, { Wrapper, Content })` plus named exports; scaffolded by `puzzle generate component Frame --family Wrapper,Content`). A dotted name whose first segment is a reserved marker name (`Children`, `Slot`, `Snippet`, `Portal` — `<Slot.Foo>`) is a positioned steering error; none of this applies inside `{#raw}` or to lowercase tags, so custom elements keep their dashes.
+- **Component children (default slot):** children written at a component's call site render at the child's `<Children/>` marker (D16; spelled `<slot />` until v1.41 — D74 — and `<children/>` until v1.64 — D134, §24) — `<Card><p>body</p></Card>`. Guidance: **props for data, slots for markup** — pass `label="Save"` when it's a string, pass children when the caller supplies actual content.
+- **Callback props:** `@name={ handler }` on a **component tag** passes the wrapped handler to the child as the prop `name`; the child receives it via `data(params, props)` and calls it like any function. DOM listeners belong to the child's own template — the event lands on the child's element first, the child's handler gates/shapes it, then invokes the parent's callback, which executes in the parent (D16).
+- **Layout slot:** `<Slot/>` inside layout components renders the routed view.
+- **DOM islands (v1.13, D44):** a bare static `island` attribute on a plain element makes its children browser-owned after mount — the template children render once as *seed content* and are never reconciled again, while the element's own attributes and listeners keep patching normally. See §17.
+- **Element refs (v1.39, D72):** a static `ref="name"` on a plain element binds the live DOM node to `this.refs.name` — populated before `mounted()`, re-pointed on replacement, nulled on removal; the attribute never reaches the DOM. Static-string only (`ref={ expr }` is a positioned compile error — the expression boundary makes a braces form unimplementable); see §38 for the full contract and error set.
+- **Comments (v1.37, D70):** `{## any text }` (inline, self-contained) and `{#comment} … {/comment}` (block; body discarded **raw** — interpolations, block tags, and malformed template code inside are ignored, so it can comment out broken markup; nested `{#comment}` blocks count). Both are erased at the lexer — no token, no vnode, nothing in the bundle — and are legal at any text position, including `<puzzle-skeleton>` bodies. Inline comments track `{`/`}` nesting depth with `\{`/`\}` escapes and are deliberately NOT string-aware (`{## don't }` is fine); a lone `}` needs `\}`. The block closer tolerates whitespace (`{/ comment }`); opener content after the keyword is ignored. HTML comments `<!-- -->` remain compile-time-stripped as always. Compile errors (positioned): unclosed `{##`, unterminated `{#comment}`, either spelling inside an attribute value, a stray `{/comment}`. Additive; comment-free templates compile byte-identically.
+- **Raw blocks (v1.70, D150):** `{#raw}…{/raw}` makes every brace in its body literal while preserving ordinary HTML parsing. See §57 for the full contract. Value-level `raw`/`noescape` formatters are unrelated: they run after lexing and cannot make source braces literal.
+
+Deferred: `$emit`/event bus. (Named slots shipped in v1.21 — D53, §24; `<puzzle-skeleton>` auto-swapping shipped in v1.8 — D39, §16.)
+
+## 17. DOM islands (v1.13)
+
+
+The declarative "this subtree's DOM is owned by someone else" primitive. Shipped in v1.13 (D44); an additive template-grammar + runtime amendment. The motivating cases are always-on `contenteditable` surfaces (the Grimoire example's Notion-style block editor) and third-party DOM mounts (maps, charts, canvas wrappers) — anywhere the virtual DOM must stop asserting ownership below a boundary element.
+
+```html
+<div contenteditable="true" island
+     @input={ syncText(event) }
+     @keydown:enter:prevent={ splitBlock(event) }>{ block.text }</div>
+```
+
+**Semantics.**
+
+- **Mount:** the island's template children render normally — they are the **seed content**, and the full template grammar (§6) is available in them.
+- **Patch:** the element's own **attributes and listeners patch normally** (dynamic `class=`, `@event` handler swaps). Its **children are never reconciled** — the patcher carries the previously mounted child vnodes forward and leaves the child DOM untouched, no matter what the browser (or third-party code) has done to it.
+- **Identity:** keyed islands move with their DOM subtree intact. A **tag or key change replaces the node and re-seeds from the template** — changing the key is the sanctioned "reset this island" lever. **Island-ness is part of node identity too:** two conditional branches sharing a tag and key but disagreeing about `island` describe different ownership, so switching branches **replaces** the element in both directions — island→managed remounts a fresh framework-owned subtree, managed→island re-seeds and freezes. Ownership is never handed across a patch (the carried-forward vnodes of an island describe DOM its owner may have rewritten, so patching the flip would diff against a lie).
+- **The attribute never reaches the DOM** — `island` is a framework directive, stripped like `key`. Style hooks belong to the author's own classes.
+
+**Compile errors (not warnings):** a dynamic value (`island={ expr }` — island-ness cannot toggle mid-life); `island` on a component tag (it is not a prop); a component tag or any composition marker (`<Children/>`/`<Slot/>`/`<Slot name="…"/>`) anywhere inside an island subtree (a live instance inside browser-owned DOM can be destroyed out from under the framework); `island` on the `<puzzle-view>` root (the view root is the navigation/animation boundary, D20/D28).
+
+**One-way flow, stated plainly:** after mount, data flows **out of** an island (input events → store), never into it. Listeners on seeded children *inside* the island are wired at mount and never swapped (arrow-field handlers stay correct; call-expression arguments are frozen at mount-time values). Programmatic content changes — a block merge, a "clear" action — must update **both** the island's DOM (imperatively) and the store; the framework deliberately will not re-sync store → island. When store-driven re-rendering of the content is what you want, you don't want an island.
+
+**What v1.13 deliberately does not add:** a controlled `contenteditable` binding (two-way `text=`). `value=` on inputs works because an input holds a flat string the browser never restructures; a contenteditable holds a DOM tree the browser rewrites during editing (paste, IME composition, spellcheck). No mainstream framework ships this binding; the island is the honest version of the feature.
+
+## 18. Inline SVG assets: `{#svg}` (v1.14)
+
+
+The Shopify-snippet ergonomic for icons: one SVG file on disk, referenced by name from any template, inlined at **compile time**. Shipped in v1.14 (D46); a parser + codegen + (small) runtime amendment. The motivating case is the global icon set — cart, account, open/close — simple shapes carrying `currentColor`, recolored by hover states on the parent `<button>`.
+
+```html
+<button class="group text-gray-500 hover:text-red-500" @click={ toggleCart }>
+  <span class="inline-block size-5">{#svg 'icons/cart.svg'}</span>
+</button>
+```
+
+**Grammar.** `{#svg '<path>'}` is the framework's first **void block tag** — self-contained, no `{/svg}` (a stray `{/svg}` is a dedicated compile error: *`{#svg}` is self-contained — remove the `{/svg}`*). The header is exactly one single- or double-quoted **static string literal**; a non-literal path is a compile error (inlining happens at compile time, the D44 static-only precedent), and anything after the path is a compile error — per-use attributes were deliberately rejected (see below). Legal anywhere an element is: inside `{#if}`/`{#for}`/`{#case}` bodies, inside islands, and inside `<puzzle-skeleton>` (§16).
+
+**Resolution.** Paths resolve from the conventional **`app/assets/`** folder only — `'icons/cart.svg'` means `app/assets/icons/cart.svg`. Absolute, `./`, `../`, and directory-escaping paths are compile errors (portable src strings; relative-to-`.pzl` resolution can be added later without breaking anything). `app/assets/` is **compile-time only** — never copied to `dist/` (contrast `app/public/`, which is copied verbatim and never inlined). Missing file, missing `app/assets/` dir, or a malformed file are positioned compile errors (in the `.pzl` for path problems; in the `.svg` for file problems). Under `puzzle dev`, inlined files are registered as esbuild watch files: editing only the `.svg` rebuilds, and creating a previously-missing file recovers the build.
+
+**Inlining semantics — the file is inert.** The compiler strips an optional XML prolog/DOCTYPE, requires a single `<svg …>` root (nested `<svg>` inside is fine — depth-counted), tokenizes **only the root open tag** to lift its attributes onto a vnode, and embeds everything inside as a **verbatim string**. File contents are never template-parsed: `{ expr }`, `{#blocks}`, components, and event handlers inside the file do nothing (literal `{` is fine — it's just text). At runtime the root `<svg>` is a real vnode (the differ places/removes it; created via the SVG-namespace path) whose string children are seeded once via `innerHTML` and then **island-owned (D44)**: never reconciled, zero diff cost per patch regardless of file size. String-versus-array children are part of node identity, like the island flip: a `{#svg}` seed and authored `<svg>` markup sharing one conditional position are a replacement boundary in both directions, never a patch. The escape hatch is explicit: want a reactive or animated SVG? Paste the markup into the template directly — arbitrary SVG in templates has always compiled (no element whitelist, automatic `createElementNS` namespace propagation), `<text>` included: it shares the runtime's reserved text-node tag and is told apart by the absence of a `value` attr on the vnode (the text-node marker always carries one).
+
+**Styling contract.** No per-use attributes on the tag — `{#svg 'path' class="…"}` was rejected as an incoherent mix of Liquid-tag and HTML-attribute syntax (Shopify's own `{% render %}` takes none). Style the icon the Shopify way: `currentColor` (and `width="100%" height="100%"` or a `viewBox`) in the file; color/hover classes on the parent; sizing via a wrapper `<span class="size-5">`, a `[&_svg]:size-5` child selector, or in-file dimensions. Liquid-style params (`{#svg 'path', class: '…'}`) remain a reserved, backwards-compatible future extension.
+
+**Cost model, stated plainly:** each `{#svg}` use embeds its own copy of the string in the bundle — identical to hand-pasting, right for small icons. A huge SVG used many times belongs in `app/public/` as an `<img src>` instead.
+
+**Tooling.** `pzlc` grew `--assets <dir>` (default: the nearest ancestor `app` directory's `assets/`). `puzzle init` scaffolds `app/assets/icons/heart.svg` and uses it in the default template's `Home.pzl`. Related but distinct: `import data from './x.json'` in `<script>` has always worked (esbuild's built-in JSON loader) — see DOC-PUZZLE-FILE.
+
+## 24. Composition markers: `<Children>`, `<Slot>`, `<Slot name>` (v1.21, amended v1.41, v1.64, v1.65)
+
+Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retired the bare lowercase `<slot/>`; v1.64 (D134) capitalized the markers; v1.65 (D141) added fallback bodies; v1.79 (D166) gave the markers data attributes and added the caller-side `<Snippet>` — see §64. Two tags, three roles: **`<Children>` is the default marker** (call-site content), **`<Slot>` is the router outlet** (D30), and **`<Slot name="x">` is a named slot**. Each marker is written **self-closing** (no fallback) or **paired**, where the body is fallback content: rendered only when nothing fills that position, replaced entirely by supplied content, and an empty paired body is equivalent to self-closing. A fallback body is **ordinary template content** — interpolations and formatter pipes, `{#if}`/`{#for}`/`{#case}`, components, event bindings, refs, `{#svg}` — compiled through the same paths as any element body; the one restriction is that a composition marker may not appear inside another marker's fallback body (positioned compile error). The lowercase `<children>`/`<slot>` spellings are positioned steering errors. Capitalization uniformly means "the framework resolves this tag": components from your imports, markers from the grammar (`Children`, `Slot`, and `Snippet` are reserved tag names — parseElement matches them before component resolution). All markers compile to the same marker vnode, carrying their fallback as its children.
+
+```html
+<!-- Card.pzl -->
+<puzzle-view class="card">
+  <header><Slot name="header"/></header>
+  <div class="body"><Children/></div>
+  <footer><Slot name="footer"/></footer>
+</puzzle-view>
+
+<!-- call site -->
+<Card>
+  <h2 slot="header">{ post.title }</h2>
+  <p>{ post.excerpt }</p>            <!-- no slot attr → default content → <Children/> -->
+  <Button slot="footer" @click={ open }>Read</Button>
+</Card>
+```
+
+- **`<Children>` — the default marker.** Renders the invocation's untagged direct children (or, in a routed view/layout, whatever fills the default bucket). Its only attributes are **snippet arguments** (§64) — `<Children user={ user }>` hands `user` to the snippet filling this position; every other attribute is a positioned compile error (`ref` gets the render-target message, D72; a bare attribute steers to `<Snippet>`, where bare names declare parameters). Unfilled, it renders its fallback body — or nothing when self-closing (there is no is-slot-filled probe; the fallback body is the default-content mechanism, D141). One default marker per body, counting `<Slot>` too — except that markers carrying arguments are exempt from that uniqueness rule, because one such marker inside `{#for}` is the intended N-stamp case (§64).
+- **`<Slot>` — the router outlet.** Bare: the canonical spelling in routed shells/layouts (D30 fills it). A fallback body renders when no child route occupies the outlet — a parent route rendering as the leaf. The compiler cannot tell a view from a component (same `.pzl` format), so `<Slot>`-in-views vs `<Children>`-in-components is a documented convention over one mechanism, not an enforced split.
+- **`<Slot name="x">` — a named slot.** `name` is static, non-empty, unique per template body; `name="default"` and `name="children"` are reserved (both steer to `<Children/>`). Renders the call-site children tagged `slot="x"`; unfilled, its fallback body — or nothing when self-closing. Every valued attribute besides `name` is a snippet argument (§64).
+- **Retired spellings (v1.64, D134):** any `<children…>` or `<slot…>` tag is a positioned compile error steering to the capitalized form — `<Children/>` for the default marker, `<Slot name="x"/>` for a named slot, with the bare-`<slot>` error naming both replacements. A lowercase `<snippet …fits>` steers the same way (§64); a plain `<template>` element is ordinary HTML and means nothing to the framework.
+- **Call-site side (unchanged, D53):** a **static** `slot="x"` attribute on a **direct child** (element or component tag) of a component invocation routes it to that region; the attribute is stripped from the rendered output. Direct children without one form the default content.
+- **Compile errors (unchanged, D53):** dynamic `slot={expr}` on a direct component child; a control-flow block at direct-child level containing top-level `slot`-attributed elements (put the condition inside the slotted element instead). Elsewhere, `slot` is the ordinary HTML global attribute and passes through.
+- **Views/layouts (unchanged):** one marker type, one expansion pass — but the router only ever fills the DEFAULT bucket; a named slot in a routed view's template renders its fallback (or nothing when self-closing), never routed content.
+- **Forwarding through a component (v1.38, D71 — respelled by v1.64, extended by v1.79):** a default marker placed INSIDE a component invocation forwards the enclosing template's default content through that component — `<Card><Children/></Card>` in a layout hands the routed page to Card's default slot (`<Slot/>` works identically in that position — same node). The expansion walk substitutes the enclosing template's markers in call-site children before the inner component expands its own; a routed vnode's pinned instance rides along and mounts as usual. Only the default marker forwards: `<Slot name="x"/>` inside a component invocation is a positioned compile error (no defined fill source — the router fills the default slot only), enforced through nested elements, control flow, and deeper invocations. Forwarding carries **snippets too** (v1.79, D166): the caller's `<Snippet>`s ride through that bare `<Children/>` into the inner invocation alongside the default content, unmodified and uninvoked, transitively through wrapper chains — so a wrapper exposes its inner component's snippet points by doing nothing more than forwarding (§64).
+- Scoped slots shipped in v1.79 as **snippets** — see §64.
+
+## 28. List keying (v1.26)
+
+How `{#for}` rows get their reconciliation keys. Shipped in v1.26 (D58); codegen + one ViewNode static, byte-identical emission for range-form loops and for `key` attributes outside loop roots.
+
+- **Auto-key is primary-key-aware.** An item-form `{#for item in items}` body root gets a synthetic `key: ViewNode.keyOf(item)` (previously the hardcoded `item.id`). `ViewNode.keyOf` resolves at render time: a store record (a `PuzzleModel` instance) keys by its model's `primaryKey()` field — so `Puzzle.string().primary()` on `main_id` keys lists by `main_id` with no template change — and any other value keys by `.id` exactly as before. `keyOf` is internal surface (like `SLOT_TAG`): compiled output calls it; app code shouldn't.
+- **Explicit key overrides.** A `key={ … }` attribute written on the `{#for}` body root (element or component, item or range form) **replaces** the synthetic key — the compiler skips its prepend; the author's expression is used verbatim (`keyOf` is not applied). This is the sanctioned escape hatch for non-record data with a different identity field. Keys must be stable and unique across the collection. (Previously an explicit key silently emitted a **duplicate** `key:` property alongside the synthetic one — that hazard is gone.)
+- **Null keys warn.** When `keyOf` resolves `null`/`undefined` (no `.id`, unmodeled data), it warns once — naming the offending item shape — and returns null, so the list degrades to positional diffing **diagnosed** instead of silently. The existing duplicate-key warning (§ v1.23 review pass) is unchanged and covers the colliding-values case. Production builds already strip `console.*`; the warning is dev-only in effect.
+- **Range form unchanged:** range/counter loops key by the generated number (unique by construction) with byte-identical emission to v1.25.
+
+## 31. Cached event handlers (v1.29)
+
+Every `@event` site whose handler is **data-independent** — the bare form `@click={ h }`, or the call form when its arguments reference nothing from the render scope beyond `event` (literals, `event`, `this.…`, and JS globals are all fine: they're evaluated at fire time *inside* the closure) — compiles to a per-instance cached closure (D62):
+
+```js
+'@click': ((this.__h ??= {})[3] ??= (event) => this.events.h(event))
+```
+
+instead of a fresh arrow per render. Handler *semantics* are unchanged (`this.events` lookup still happens at fire time); what changes is **identity** — the same function object is passed on every render of the instance. Consequences:
+
+- **Component callback props now shallow-compare equal across parent re-renders.** A child whose props are all static, cached, or memoized (§32) no longer re-runs `data()` on every parent render — this restores §4's prop-reactivity rule (`data()` re-runs when props *change*), which fresh-closure callback props had made fire on phantom changes since v1.
+- **DOM listeners at cached sites stop rebinding per patch** (`patchAttrs` sees an unchanged value). The `:once` spent flag is unaffected — it lives on the element, not the handler function.
+- **Call forms that capture render data or loop variables** (`save(draft)`, `remove(card.id)`) still emit fresh closures, byte-identical to v1.28 — their captures genuinely change, and a component receiving such a prop still re-runs `data()` per parent render (correct: the prop really is new).
+
+Site numbering is per-file and deterministic (`render()` and `renderSkeleton()` share the counter), so recompiling an unchanged file stays byte-stable. `this.__h` joins the emitted `__d`/`__f` as a reserved name on component instances.
+
+## 43. Compiler accessibility warnings (v1.48)
+
+The compiler emits **positioned, non-fatal warnings** (never errors) for five template accessibility mistakes, on the same out-of-band diagnostics channel as the script-import collision warning — generated JavaScript is byte-identical whether or not a template warns (D82).
+
+- Rules: `<img>` without `alt`; `<input type="image">` without `alt` (only when `type` is statically `image`); `<iframe>` without `title`; `<a>` without `href`; a statically positive `tabindex`.
+- `alt=""` is valid (decorative images) and never warns. An attribute counts as **present** when any static, valueless, dynamic (`alt={expr}`), or mixed attribute carries the name — the rules never guess about runtime values, and a dynamic `type`/`tabindex` never warns.
+- Both the template and `<puzzle-skeleton>` are scanned, descending into `{#if}`/`{#for}`/`{#case}` bodies, component call-site children, and marker fallback bodies (D141).
+- No suppression syntax, no warning IDs, no ARIA role matrix, no click/keyboard heuristics — five reliable rules over a rules engine. Additions are SPEC amendments.
+
+## 47. The `outside` event modifier: `@event:outside` (v1.52)
+
+`@click:outside={ close }` — a generic event modifier (§5 table, D86) for declarative outside-dismiss. Works on any event: `@pointerdown:outside` dismisses on press, `@focusin:outside` detects focus leaving a widget.
+
+- **Placement semantics:** the listener attaches to **`document` in the capture phase**; the handler runs only when `el.contains(event.target)` is false for the element carrying the binding. Capture is load-bearing: an unrelated component's `stopPropagation()` cannot swallow the outside event, and the interaction that opens a panel cannot dismiss it in the same dispatch (a panel mounted synchronously mid-event attaches after document's capture phase has passed).
+- **Gate order:** the outside-gate runs before every other modifier step (§5's canonical order) — an inside event spends no `once`, triggers no `preventDefault`.
+- **Lifecycle:** the framework owns the document listener. It attaches when the bound element mounts and detaches on every removal shape (conditional toggle, keyed-row removal, subtree teardown, full view destroy) and on the inline-null toggle (`@pointerdown:outside={ open ? close : null }`). The idiomatic form puts the binding on the panel root inside `{#if open}`, so the listener's lifetime tracks the panel; the always-mounted alternative is the root-element binding with the null-toggle.
+- `@click` and `@click:outside` on one element are independent bindings. Existing §5 compile errors are unchanged (`outside` on a component callback prop is rejected like every modifier).
+- **Documented limitations:** events inside an `<iframe>` never reach the parent document; on touch, `pointerdown` fires at scroll-start — prefer `@click:outside` where scroll tolerance matters. The event choice is the author's.
+
+## 57. Raw template blocks: `{#raw}…{/raw}` (v1.70)
+
+
+`{#raw}` disables Puzzle's brace lexer for its body. It is the static-source
+escape for JSON, JavaScript, CSS, and examples that need literal template-like
+syntax:
+
+```html
+<script type="application/json" data-tarot-options>
+  {#raw}{ "loop": true, "slidesPerView": 3 }{/raw}
+</script>
+
+<pre>{#raw}const shape = { a: 1, b: [2, 3] };{/raw}</pre>
+```
+
+- Every `{`/`}` sequence in the body is literal text: interpolations,
+  `{#if}`/`{#for}`/`{#comment}`, branches, closers, formatter pipes, and
+  brace-valued event bindings do not activate template grammar.
+- HTML remains structural. `{#raw}<b>hi</b>{/raw}` emits a real `<b>` vnode,
+  not the source string `"<b>hi</b>"`. Attributes inside that markup are static;
+  `@click={ handler }` is an authored literal attribute, never a Puzzle listener.
+- A brace-valued attribute keeps its bytes verbatim, but the scan that finds its
+  closing `}` is JS-lexically aware — a `}` inside a string, template literal,
+  regex literal, or comment does not end the value, so `data-json={ {"text": "}"} }`
+  survives intact. The one consequence: an unbalanced quote inside such a value
+  swallows the closer and is a positioned compile error, even though nothing in
+  a raw block is otherwise interpreted. Only the boundary comes from that scan;
+  the bytes it spans are never given meaning.
+- The block does not nest. The first tolerant closer wins: `{/raw}`,
+  `{/ raw }`, and `{/raw }` are equivalent. A literal `{/raw}` therefore cannot
+  occur in the body. Content after the opener keyword is ignored, matching
+  `{#comment}`.
+- Raw blocks are legal at text positions, including skeleton bodies. A raw
+  opener inside a quoted or brace-only attribute value is a positioned compile
+  error. An unterminated block errors at its opening brace with the expected
+  `{/raw}` closer.
+- The body is static, author-written source. It accepts no expression and no
+  runtime value, so it is not dynamic raw-HTML injection; `{@html expr}` remains
+  deferred.
+
+Client rendering creates literal text nodes. Prerendering is parent-aware:
+ordinary element text is entity-escaped in the HTML string and decoded back by
+the HTML parser, while `<script>`/`<style>` use §36's D113 RAWTEXT policy. A
+JSON-typed script still rewrites `<` to its JSON-transparent unicode escape,
+preserving `JSON.parse(element.textContent)` while preventing a closing-tag
+breakout.
+
+## 64. Snippets: `<Snippet>` + marker data attributes (v1.79)
+
+
+
+Slots render a passed-in template; **snippets render it repeatedly, with data**.
+A `<Snippet>` is a caller-declared body with parameters; the component stamps it
+once per item by handing values to its own marker. Shipped in v1.79
+([[DECISION-D166-SNIPPETS]]); it extends §24 and changes nothing about a
+template that does not use it.
+
+```html
+<!-- caller -->
+<UserList users={ users }>
+  <Snippet user><img src={ user.avatar } /> <b>{ user.name }</b></Snippet>
+</UserList>
+
+<GroupedList groups={ groups }>
+  <Snippet fits="heading" group>{ group.title }</Snippet>
+  <Snippet fits="row" user group>…</Snippet>
+</GroupedList>
+
+<!-- component -->
+{#for user in users}
+  <li key={ user.id }><Children user={ user }>{ user.name }</Children></li>
+{/for}
+<Slot name="row" user={ user } group={ group }>fallback…</Slot>
+```
+
+**Grammar.** `<Snippet>` is a third reserved marker tag, matched before
+component resolution like `Children` and `Slot`. It is **paired-only** (a
+self-closing `<Snippet/>` is a positioned compile error) and legal **only as a
+direct child of a component invocation** — the same position rule the `slot="x"`
+attribute has, including the rejection of control-flow blocks at that level.
+`fits="x"` is a static, non-empty string routing the snippet to
+`<Slot name="x">`; omitted, it fills the default `<Children>` position. **Every
+other attribute is bare and declares a parameter**: `fits` is the only attribute
+on `<Snippet>` that takes a value, and a valued parameter (`user={ … }`), an
+`@event`, or a dynamic/mixed attribute is a positioned error steering to the
+bare form. Parameter names must be valid identifiers, must not repeat, and must
+not be `fits`. A lowercase `<snippet>` carrying `fits` steers to `<Snippet>`;
+`<template>` remains an ordinary HTML element with no framework meaning.
+
+**Marker side.** On `<Children>` and `<Slot name="x">`, every valued attribute
+other than `name` becomes a per-stamp **argument**, evaluated in the component's
+scope and rebuilt on every render. A bare attribute on a marker is a positioned
+error steering to `<Snippet>`. `@event` attributes on markers stay rejected.
+
+**Binding is by name.** The marker's argument names feed the snippet's declared
+parameter names — the two files compile separately, so neither can know the
+other's ordering. Declaring a subset of what the marker hands over is legal.
+Parameters shadow both caller data fields and enclosing `{#for}` variables, the
+same way a loop binding does; the rest of the caller's scope stays visible
+inside the body.
+
+**Fallbacks are unchanged (D141).** A paired marker body still renders when
+nothing fills the position, so adding an argument-bearing marker to an existing
+component breaks no existing caller. Plain (non-snippet) content filling an
+argument-bearing marker renders the fallback and warns in development.
+
+**Uniqueness and placement.** At most one snippet per `fits` name per
+invocation, `default` included; a snippet and a `slot="x"` element may not
+target the same name, and a default snippet may not coexist with plain default
+content. The §24 per-body marker-uniqueness rule **skips markers that carry
+arguments** — one such marker inside `{#for}` is precisely the intended N-stamp
+case — while markers without arguments keep the old rule. Argument-bearing
+markers remain rejected inside `island` subtrees (§17).
+
+**A snippet body is a composition LEAF.** `<Children>`, `<Slot>`, and
+`<Snippet>` are positioned compile errors anywhere inside a `<Snippet>` body, at
+any depth — **including a `<Snippet>` on a component invocation inside that
+body**. Stamped output cannot declare composition positions; the marker belongs
+in the component's own template. Ordinary component invocations are legal in a
+snippet body, and so is `<Portal>` — it relocates DOM rather than declaring a
+composition position, so it is walked like any element, though a marker *inside*
+the portal is still rejected. Nesting a snippet is expressed by **extraction** —
+move that invocation and its snippet into their own component, whose template
+holds the marker at top level, and name that component in the snippet body.
+`ref=` is rejected there for the same stamped-N-times reason (§38: a ref names
+one element on one instance). §24's nested-fallback restriction does not apply
+to a snippet body.
+
+**Semantics.** A snippet compiles to a function carried in the invocation's
+**children**, not its props: it closes over the caller's render data, so it
+cannot be identity-cached, and as a prop it would defeat the §31 shallow compare
+and re-run the child's `data()` on every caller render. Each stamp calls that
+function with its own arguments and gets **fresh vnodes**, so N stamps patch
+independently through ordinary keyed reconciliation (§28). A component re-render
+re-invokes; a caller re-render rides the existing slot-only update path. Both
+prerender modes (§36) share the same expansion and stamp snippets with no
+special case, and a prepared takeover tree expands exactly once.
+
+**Forwarding through wrappers.** A bare `<Children/>` placed inside a nested
+component invocation forwards the caller's snippets alongside the default
+content (§24, D71): `DatePicker` rendering `<Calendar …><Children/></Calendar>`
+hands a caller's `<Snippet fits="day" …>` to Calendar's `day` marker with `fits`,
+parameters, and function intact and never invoked on the way. The rule is
+transitive through wrapper chains; an argument-bearing marker still stamps
+locally and never forwards; a wrapper may both stamp and forward the same
+snippet. A snippet nothing in the chain stamps is never invoked and never
+reaches the DOM. Runtime-only, behind the same gate.
+
+**Development diagnostics** (absent from production builds): a
+parameter/argument shape mismatch, an argument-bearing marker filled with plain
+content, and a snippet whose output contains a composition marker. Each warns
+once per component and position. There is deliberately no "unused snippet"
+diagnostic — a marker inside a false `{#if}` or an empty `{#for}` is not visited
+either, so nothing consuming a snippet is not evidence of a mistake.
+
+**Cost.** The feature is gated behind `__PUZZLE_HAS_SNIPPETS__` (D89): an app
+using no snippet and no marker argument pays **zero bytes** and takes the same
+expansion fast path it took before; an app that uses them pays about 50 B gzip.
+
+## 65. Component families: dotted component tags (v1.80)
+
+Related components import as one unit and invoke with dot notation. Shipped in
+v1.80 ([[DECISION-D167-COMPONENT-FAMILIES]]); the §6 component bullet is the
+short form, this section is the contract.
+
+```html
+<script>import Frame from '@/components/Frame';</script>
+
+<Frame><Frame.Wrapper><Frame.Content>…</Frame.Content></Frame.Wrapper></Frame>
+```
+
+**Tag-name grammar.** A capitalized tag that survives marker resolution must be
+a valid member path — `Ident('.'Ident)*`, each segment
+`[A-Za-z_][A-Za-z0-9_]*`. Any other capitalized name — a `-`, a `:`, an empty
+segment (`<Frame-x>`, `<Frame:Wrapper>`, `<Frame.>`) — is a positioned compile
+error. This is a bug fix as much as a feature: the tag text has always been
+emitted verbatim as the ViewNode tag expression, so `<Frame.Wrapper>` already
+compiled to `new ViewNode(Frame.Wrapper, …)`, but nothing validated the name and
+those spellings compiled cleanly into syntactically broken JavaScript. A dotted
+name whose first segment is a reserved marker name (`Children`, `Slot`,
+`Snippet`, `Portal` — `<Slot.Foo>`) is a positioned steering error. The check
+does not run inside `{#raw}` and never applies to lowercase tags, so custom
+elements keep their dashes and namespaced SVG is untouched.
+
+**Resolution is lexical, and codegen is unchanged.** A dotted tag emits the
+member expression verbatim and resolves against module scope at runtime exactly
+like a plain `<Frame>`. There is no component registry, and the compiler still
+never reads imports (§4).
+
+**The family is a convention, not a mechanism.** `.pzl` stays strictly one class
+per file; a family is a directory of member files beside a plain JS `index.js`
+barrel that re-exports them and hangs them off the root:
+
+```js
+export default Object.assign(Frame, { Wrapper, Content });
+export { Frame, Wrapper, Content };
+```
+
+so both `import Frame from '@/components/Frame'` and
+`import { Wrapper } from '@/components/Frame'` work.
+`puzzle generate component Frame --family Wrapper,Content` (§53 CLI) scaffolds
+the directory, one component stub per member, and the barrel: member names are
+PascalCase-validated, may not repeat, may not collide with the root, and may not
+be marker names; `--family` on a non-component kind is an error; the scaffold is
+all-or-nothing, and `--force` rewrites only the family's own files. Family stubs
+are composition-shaped (`<Children/>` plus a caller `class` override) because a
+closed stub would silently drop nested members. Without `--family`,
+`generate component` output is byte-identical to before.

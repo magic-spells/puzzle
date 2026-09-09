@@ -1,0 +1,93 @@
+<puzzle-view>
+  <DropdownMenu
+    class={ rootClass }
+    sub={ true }
+    trigger={ triggerMode }
+    effect={ effect }><Children/></DropdownMenu>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownMenu from './DropdownMenu.pzl';
+
+// DropdownMenu.Sub — a submenu: a nested menu root that lives as a ROW inside a
+// Content. A member of the DropdownMenu family (D167).
+//
+//   <DropdownMenu.Content>
+//     <DropdownMenu.Item value="save" @press={ run }>Save</DropdownMenu.Item>
+//     <DropdownMenu.Sub>
+//       <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+//       <DropdownMenu.Content opens="right">
+//         <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
+//       </DropdownMenu.Content>
+//     </DropdownMenu.Sub>
+//   </DropdownMenu.Content>
+//
+// WHY A MEMBER AND NOT AN ITEM WITH CHILDREN. An Item is a <button>, and a
+// <button> cannot contain a <dropdown-component>. The nested trigger and panel
+// must be DIRECT children of that nested component, so something has to supply
+// exactly that host and nothing else. Sub is it — the same job Menubar.Menu does
+// one level up. Give the inner Content opens="right".
+//
+// `block!` IS LOAD-BEARING, not cosmetic — and the `!` is too: the root's own
+// `inline-block` is emitted AFTER `.block` in Tailwind's display group, so it
+// wins the cascade regardless of class order. <dropdown-component> ships
+// display: inline-block, so a nested one shrink-wraps its trigger text — and an
+// opens="right" panel resolves left: 100% against that narrow box, landing on
+// top of the parent panel instead of beside it.
+//
+// `sub` IS WHY @select FIRES ONCE. A choice made in here closes the whole chain
+// and returns focus to the ROOT trigger, so the ROOT is what owes the parent the
+// report; `dropdown-panel:select` bubbles through this element on its way there.
+// Passing `sub` silences this instance, so exactly one report leaves the chain.
+// Do not hang a @select on a Sub expecting a submenu-local callback — put it on
+// the root, or use @press on the individual rows.
+//
+// trigger="both" (the default here) is the submenu feel: hovering the row opens
+// it, and ArrowRight from the keyboard does the same. Escape or ArrowLeft closes
+// this level and refocuses its trigger, with the parent still open — all of it
+// the component's, none of it this file's.
+//
+// A Sub AT TOP LEVEL REPORTS NOTHING, and dev builds say so. `sub` silences this
+// root's @select on the understanding that a non-`sub` root above it will do the
+// reporting; with no such root there is nobody left to report, and a selection
+// vanishes silently. mounted() checks for an ancestor
+// `dropdown-component[menu]` and warns when there is none. The check is behind
+// __PUZZLE_DEV__ — a build-wide define, so a production build folds the branch
+// away entirely.
+//
+// Props
+//   trigger  'both' (default) | 'hover' | 'click', forwarded
+//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class    merged onto the host, after the load-bearing `block!`
+
+export default class Sub extends PuzzleView {
+  data(params, props) {
+    return {
+      rootClass: ['block!', props.class].filter(Boolean).join(' '),
+      triggerMode: props.trigger || 'both',
+      effect: props.effect,
+    };
+  }
+
+  mounted() {
+    if (typeof __PUZZLE_DEV__ !== 'undefined' && !__PUZZLE_DEV__) return;
+    if (typeof window === 'undefined') return;
+    // Deferred one frame: a child's mounted() can run before its ancestors are
+    // in the document, and an ancestor that is not there yet is not an ancestor
+    // that is missing.
+    requestAnimationFrame(() => {
+      const element = this.element;
+      if (!element?.isConnected) return;
+      if (element.parentElement?.closest('dropdown-component[menu]')) return;
+      console.warn(
+        '[DropdownMenu.Sub] a Sub outside a DropdownMenu.Content reports no ' +
+          '@select: it passes `sub`, which hands the reporting to the root menu ' +
+          'above it, and there is none. Put this Sub inside a ' +
+          'DropdownMenu.Content, or use a plain DropdownMenu instead.',
+        element
+      );
+    });
+  }
+}
+</script>

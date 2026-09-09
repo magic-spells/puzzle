@@ -1,0 +1,67 @@
+<puzzle-view>
+  <section class={ sectionClass } id={ sectionId }>
+    {#if title}
+      <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">{ title }</h2>
+    {/if}
+    <!-- No overflow-hidden on the frame: overlay pieces (Select, DatePicker,
+         Popover) must be able to open past the preview edge. The code area
+         clips itself and keeps the bottom corners rounded. -->
+    <div class="rounded-xl border border-border">
+      <div class={ previewClass }>
+        <Slot/>
+      </div>
+
+      {#if code}
+        <div class="overflow-hidden rounded-b-xl border-t border-border bg-surface">
+          <Code code={ code } lang={ lang } bare={ true } collapsible={ true } maxHeight="450px"/>
+        </div>
+      {/if}
+    </div>
+  </section>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Code from '../ui/Code.pzl';
+
+// ExampleBox — the featured demo frame every docs page is built from (docs-only,
+// not a registry piece). A tall bordered box shows the live component centered on
+// the page background (so the piece's own surfaces pop against it); below it the
+// usage snippet is a collapsible <Code/> panel — dimmed three-line peek, "View
+// Code" pill, animated expand, syntax highlighting, line numbers, copy button.
+// All of the code behavior lives in Code.pzl; this component is just the frame.
+//
+//   <ExampleBox code={ codeHero }>
+//     <Button variant="primary" @press={ go }>Get started</Button>
+//   </ExampleBox>
+//
+//   <ExampleBox id="variants" title="Variants" code={ codeVariants }>
+//     …demo markup…
+//   </ExampleBox>
+//
+// Props:
+//   title  optional section heading rendered above the frame
+//   id     anchor id on the <section> (Toc scrolls to it; scroll-mt clears the
+//          sticky header)
+//   code   the usage snippet, a plain template-literal string from the view's
+//          <script>
+//   lang   optional language hint forwarded to Code (auto-guessed otherwise)
+//   tall   default true — min-h-[350px] centered preview; pass tall={ false }
+//          for compact demos (e.g. a lone Kbd) to sit in a shorter box
+//   class  appended to the root <section>
+export default class ExampleBox extends PuzzleView {
+  data(params, props) {
+    const tall = props.tall !== false;
+    return {
+      title: props.title || '',
+      sectionId: props.id || false,
+      sectionClass: ['scroll-mt-20', props.class || ''].join(' '),
+      code: props.code || '',
+      lang: props.lang || false,
+      previewClass: tall
+        ? 'flex min-h-[350px] items-center justify-center p-10'
+        : 'flex min-h-[160px] items-center justify-center p-8',
+    };
+  }
+}
+</script>

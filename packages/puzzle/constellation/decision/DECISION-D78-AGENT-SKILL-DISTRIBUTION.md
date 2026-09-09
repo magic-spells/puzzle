@@ -1,0 +1,112 @@
+---
+name: 'D78 — Agent-skill distribution: embedded skill + `puzzle add skills` (v1.45)'
+status: verified
+connections:
+  - COMPONENT-COMPILER-CLI
+  - DOC-SPEC
+  - DOC-SPEC-BUILD
+  - DECISION-D77-INIT-PROMPTS
+  - DECISION-D32-CLI-TOOLING
+  - FILE-CLI-ADD
+verified_at: '2026-08-24T21:11:50.859Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Merged to main in PR #9. Verified end-to-end: install/refusal/--overwrite/no-target paths
+      against a fake HOME with the real huh dependency; full Go + JS suites green.
+    sha: 1c2f4b6fef8106cbf3d0a433bfb6186ef89fcc73
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+---
+
+# D78 — Agent-skill distribution: embedded skill + `puzzle add skills` (v1.45)
+
+The repo ships a distilled AI-agent skill for building Puzzle apps
+(`skills/puzzle/SKILL.md`, cross-agent SKILL.md format), and the CLI installs it:
+`puzzle add skills` (alias `skill`) copies the embedded skill into every detected
+agent config dir. See [[DOC-SPEC-BUILD]] §13.
+
+## Context
+
+An app-builder skill (grammar, lifecycle, SSG footguns, pieces conventions) had
+proven itself as a private `~/.claude/skills/puzzle` file, but it hard-coded
+owner-local paths and had no distribution or versioning story. The skill's
+content drifts with the framework (CLI surface, SSG rules), so the copy a user
+has must match the framework version they run. Claude Code, Codex, and Cursor
+all consume the same `<root>/skills/<name>/SKILL.md` layout, and Cursor
+additionally reads Claude's and Codex's dirs for compatibility.
+
+## Decision
+
+**The skill lives in-repo at `skills/puzzle/` (portable links only), is embedded
+into the binary via a root-level `go:embed` package (`skills/embed.go`), and
+`puzzle add skills` installs it.**
+
+- Target detection: a target is offered iff the tool's root config dir exists —
+  `~/.claude` (Claude Code), `~/.codex` (Codex), `~/.cursor` (Cursor).
+  Destination `<root>/skills/puzzle/` is created as needed (Cursor typically
+  lacks `skills/`). `--skill-root <dir>` (repeatable) names the config dirs
+  outright instead, and skips detection and the target prompt — explicit roots
+  are explicit intent.
+- On a TTY: a `charmbracelet/huh` multi-select checkbox list, all detected
+  targets pre-selected (space toggles, enter confirms). Deselecting all
+  installs nothing, exit 0.
+- Non-TTY: installs to ALL detected targets silently — the never-prompt,
+  never-hang convention from D32/D77.
+- An existing `<root>/skills/puzzle/` is a refresh case rather than an error;
+  which installs are current, which are asked about, and which are refused
+  belongs to [[DECISION-D99-SKILL-REFRESH-PROMPT]]. `--overwrite` is the
+  unconditional write, and the only way through a symlinked destination.
+- Copy is recursive, so a future `references/` folder ships without CLI changes.
+- Embedding at build time is the versioning story: the installed skill always
+  matches the CLI that wrote it.
+
+## Alternatives rejected
+
+- **Scaffold-only distribution (`puzzle init` writes `.claude/skills/`)**: only
+  reaches new apps; existing apps and global installs get nothing. Still a
+  candidate as a complement, tracked as an open follow-up.
+- **npm-package payload users copy by hand**: manual step, no target detection,
+  and the npm `files` allowlist would grow non-runtime content.
+- **A plugin marketplace / skills-registry publish**: a second artifact to keep
+  in lockstep; can layer on later once content stabilizes.
+- **Zero-dep numbered prompt instead of huh**: matches D77's plain-text stance,
+  but a multi-toggle selection is a genuinely different interaction than D77's
+  two sequential one-answer questions; the owner chose real checkboxes. This
+  narrows D77's "no bubbletea/huh" rejection to *sequential* prompts — the
+  dependency now exists, and migrating init's prompts to huh is an open idea,
+  not a commitment.
+
+## Consequences
+
+- First TUI dependency: `github.com/charmbracelet/huh` (+ bubbletea/lipgloss
+  tree). Compile-time only for non-`add skills` paths.
+- `ui.IsTerminal` does a real isatty check (`mattn/go-isatty`, already in the
+  graph) rather than a `ModeCharDevice` heuristic — `/dev/null` is a char device
+  and would otherwise count as a TTY, making huh block forever under cron/CI
+  stdin. `init`/`main` gates inherit the stricter check.
+- The D3 no-JS-rewriting rule is untouched (the command writes only skill
+  files under tool config dirs, never project JavaScript).
+- The skill file is release-checklist surface: its content must be re-verified
+  against the docs whenever the public surface changes. **Nothing in the build
+  enforces this, and it has drifted** — `SKILL.md` sat stale past
+  D91/D93/D94/D95/D98/D100 before anyone noticed. `constellation/plan.md`'s
+  release checklist carries it as an explicit numbered item.
+
+## Refresh
+
+Re-running the install IS the refresh mechanism, and two follow-ons make it
+something other than a manual step nobody remembers:
+
+- [[DECISION-D97-UPGRADE-SKILL-REFRESH]] — `puzzle upgrade` offers the refresh
+  after a version actually changes, and must **re-exec the newly installed
+  binary** to do it, because the payload is `go:embed`-ed and the running
+  process still holds the old one.
+- [[DECISION-D99-SKILL-REFRESH-PROMPT]] — an existing install asks instead of
+  aborting, and installs carry a `.puzzle-skill-version` stamp that turns "is
+  this current?" from an inference into a fact. Adds `puzzle upgrade skills`.

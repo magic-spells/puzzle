@@ -1,0 +1,247 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Time Picker</h1>
+        <p class="mt-2 text-body">
+          A Field-shaped trigger and popover for choosing a time: scrolling hour / minute
+          (and optional seconds) listbox columns, with a 12-hour am/pm or 24-hour display. The
+          controlled
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
+          is always stored as a 24-hour
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">"HH:MM"</code>
+          string — display format never leaks into it. It is parent-owned: it emits
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          on every column pick.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-xs">
+          <TimePicker
+            label="Meeting time"
+            hint="24-hour clock."
+            value={ meeting }
+            @change={ setMeeting } />
+        </div>
+      </ExampleBox>
+
+      <p class="mt-4 text-sm text-muted">
+        Focus lands in the hours column on open. Arrow up/down moves within a column, arrow
+        left/right jumps between columns, and the popover auto-flips above the trigger near the
+        bottom of the viewport.
+      </p>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the picker into your components directory — it ships self-contained (no lib
+          dependency, no npm packages):
+        </p>
+        <CodeBlock code={ installCmd }/>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="twelve-hour" title="12-hour (am/pm)" code={ codeTwelve }>
+          <div class="w-full max-w-xs">
+            <TimePicker
+              label="Reminder"
+              hourCycle={ 12 }
+              value={ reminder }
+              @change={ setReminder } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="seconds" title="With seconds" code={ codeSeconds }>
+          <div class="w-full max-w-xs">
+            <TimePicker
+              label="Lap time"
+              seconds={ true }
+              value={ lap }
+              @change={ setLap } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="step" title="Minute step" code={ codeStep }>
+          <div class="w-full max-w-xs">
+            <TimePicker
+              label="Slot"
+              minuteStep={ 15 }
+              value={ slot }
+              @change={ setSlot } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="controlled" title="Controlled open" code={ codeControlled }>
+          <div class="w-full max-w-xs">
+            <TimePicker
+              label="Departure"
+              value={ departure }
+              open={ depOpen }
+              @change={ setDeparture }
+              @show={ openDeparture }
+              @hide={ closeDeparture } />
+            <p class="mt-3 text-sm text-muted">
+              Panel is { depOpen ? 'open' : 'closed' } · value { departure || '—' }
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="error" title="Error state" code={ codeError }>
+          <div class="w-full max-w-xs">
+            <TimePicker
+              label="Start"
+              error="Please choose a start time."
+              value={ startTime }
+              @change={ setStartTime } />
+          </div>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <div class="overflow-hidden rounded-xl border border-border">
+            <table class="w-full text-sm">
+              <tbody class="divide-y divide-border">
+                {#for row in keys}
+                  <tr>
+                    <td class="w-40 whitespace-nowrap px-4 py-2.5 align-top">
+                      <kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 font-mono text-xs text-ink">{ row.key }</kbd>
+                    </td>
+                    <td class="px-4 py-2.5 text-body">{ row.desc }</td>
+                  </tr>
+                {/for}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import TimePicker from '@/components/ui/TimePicker.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for TimePicker — follows the DatePickerDoc exemplar (header → hero
+// ExampleBox → Installation → titled example sections → Keyboard table → Toc).
+// Parent-owned: the view holds each "HH:MM[:SS]" value and TimePicker forwards its
+// @change back into it.
+
+const installCmd = 'puzzle add piece time-picker';
+const usageImport = `import TimePicker from '@/components/ui/TimePicker.pzl';`;
+const usageMarkup = `<TimePicker label="Meeting time" hint="24-hour clock." value={ meeting } @change={ setMeeting } />`;
+
+const codeHero = `<TimePicker
+  label="Meeting time"
+  hint="24-hour clock."
+  value={ meeting }
+  @change={ setMeeting } />
+
+// parent
+events = {
+  setMeeting: (value) => this.setData('meeting', value),
+};`;
+
+const codeTwelve = `<!-- hourCycle 12 adds an am/pm column; value stays 24h canonical -->
+<TimePicker
+  label="Reminder"
+  hourCycle={ 12 }
+  value={ time }
+  @change={ setTime } />`;
+
+const codeSeconds = `<TimePicker
+  label="Lap time"
+  seconds={ true }
+  value={ time }
+  @change={ setTime } />   <!-- emits "HH:MM:SS" -->`;
+
+const codeStep = `<!-- thin the minutes column to :00 :15 :30 :45 -->
+<TimePicker
+  label="Slot"
+  minuteStep={ 15 }
+  value={ time }
+  @change={ setTime } />`;
+
+const codeControlled = `<TimePicker
+  label="Departure"
+  value={ time }
+  open={ open }
+  @change={ setTime }
+  @show={ () => this.setData('open', true) }
+  @hide={ () => this.setData('open', false) } />`;
+
+const codeError = `<TimePicker
+  label="Start"
+  error="Please choose a start time."
+  value={ time }
+  @change={ setTime } />`;
+
+export default class TimePickerDoc extends PuzzleView {
+  created() {
+    this.setData({
+      meeting: '09:30',
+      reminder: '14:15',
+      lap: '00:01:30',
+      slot: '10:45',
+      departure: '18:20',
+      depOpen: false,
+      startTime: '',
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeTwelve,
+      codeSeconds,
+      codeStep,
+      codeControlled,
+      codeError,
+      keys: [
+        { key: '↑ / ↓', desc: 'Move the highlighted option within the focused column.' },
+        { key: '← / →', desc: 'Move focus between the hour, minute, second, and am/pm columns.' },
+        { key: 'Home / End', desc: 'Jump to the first / last option in the focused column.' },
+        { key: 'Enter / Space', desc: 'Confirm the current time and close, returning focus to the trigger.' },
+        { key: 'Escape', desc: 'Close the popover and return focus to the trigger.' },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: '12-hour (am/pm)', href: '#twelve-hour' },
+        { label: 'With seconds', href: '#seconds' },
+        { label: 'Minute step', href: '#step' },
+        { label: 'Controlled open', href: '#controlled' },
+        { label: 'Error state', href: '#error' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    setMeeting: (value) => this.setData('meeting', value),
+    setReminder: (value) => this.setData('reminder', value),
+    setLap: (value) => this.setData('lap', value),
+    setSlot: (value) => this.setData('slot', value),
+    setDeparture: (value) => this.setData('departure', value),
+    openDeparture: () => this.setData('depOpen', true),
+    closeDeparture: () => this.setData('depOpen', false),
+    setStartTime: (value) => this.setData('startTime', value),
+  };
+}
+</script>

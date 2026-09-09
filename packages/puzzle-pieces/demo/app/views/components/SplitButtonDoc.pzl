@@ -1,0 +1,291 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Split Button</h1>
+        <p class="mt-2 text-body">
+          A primary action fused to a caret that opens a menu of secondary actions — the classic
+          "Save ▾" pattern. It is a compound
+          <strong class="font-medium text-ink">family</strong> whose menu half is a
+          <a class="text-brand underline underline-offset-2" href="#/components/dropdown-menu">Dropdown Menu</a>,
+          so the keyboard model, the dismissal and the ARIA all come from the web component
+          underneath rather than from 250 lines of ported machinery.
+        </p>
+        <p class="mt-3 text-body">
+          The two halves stay cleanly separated: pressing the primary fires
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@press</code>
+          and never opens anything, and choosing a row fires
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@select</code>
+          on the menu half.
+        </p>
+        <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
+          <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
+          <p class="mt-1 text-sm text-body">
+            The <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">label</code>
+            and <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">actions</code>
+            props are gone — the halves are written out as members. And because Puzzle has no
+            cross-component context,
+            <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">variant</code>
+            and <code class="rounded bg-surface px-1 py-0.5 font-mono text-[13px] text-ink">size</code>
+            are passed to <span class="font-medium text-ink">both</span> halves. That is the
+            consequence of the family shape, not an oversight.
+          </p>
+        </div>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex w-full flex-col items-start gap-4 pb-48">
+          <SplitButton>
+            <SplitButton.Action @press={ onPrimary }>Save</SplitButton.Action>
+            <SplitButton.Menu label="More save actions" @select={ onSelect }>
+              <SplitButton.Item value="save-as" @press={ run }>Save as…<SplitButton.Shortcut>⇧⌘S</SplitButton.Shortcut></SplitButton.Item>
+              <SplitButton.Item value="save-close" @press={ run }>Save and close</SplitButton.Item>
+              <SplitButton.Separator/>
+              <SplitButton.Item value="discard" variant="danger" @press={ run }>Discard changes</SplitButton.Item>
+            </SplitButton.Menu>
+          </SplitButton>
+
+          <p class="text-sm text-muted">Last event: <span class="font-medium text-ink">{ last }</span></p>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the family into your app. It pulls
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">dropdown-menu</code>
+          — whose rows it re-exports — and the shared
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">dropdown-panel</code>
+          base along with it:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          That base has a runtime dependency — the web component it wraps. Menu mode is 2.1.0's, so
+          the range matters:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheets into your app's style entry. The first is required; the
+          second adds the entrance effects:
+        </p>
+        <CodeBlock code={ installCss }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          Rows go straight inside <span class="font-medium text-ink">Menu</span> — it supplies the
+          trigger and the panel itself, because those are the two direct children the component has
+          to find and neither is yours to place.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="variants" title="Variants and sizes" code={ codeVariants }>
+          <div class="flex flex-wrap items-center gap-4 pb-48">
+            {#for v in variantRows}
+              <SplitButton key={ v.variant }>
+                <SplitButton.Action variant={ v.variant } size={ v.size } @press={ onPrimary }>{ v.label }</SplitButton.Action>
+                <SplitButton.Menu variant={ v.variant } size={ v.size } label={ v.menuLabel } @select={ onSelect }>
+                  <SplitButton.Item value="duplicate" @press={ run }>Duplicate</SplitButton.Item>
+                  <SplitButton.Item value="archive" @press={ run }>Archive</SplitButton.Item>
+                </SplitButton.Menu>
+              </SplitButton>
+            {/for}
+          </div>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">
+            The primary half is a plain button. The caret half is a menu button, and everything it
+            does is the web component's menu mode:
+          </p>
+          <div class="text-sm">
+            {#for row in keyRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+        </section>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          {#for group in reference}
+            <div key={ group.title }>
+              <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">{ group.title }</h3>
+              <p class="mb-2 text-sm text-muted">{ group.summary }</p>
+              <div class="text-sm">
+                {#for row in group.rows}
+                  <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                    <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                    <span class="text-body">{ row.desc }</span>
+                  </div>
+                {/for}
+              </div>
+            </div>
+          {/for}
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import SplitButton from '@/components/ui/SplitButton/index.js';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for the SplitButton family. Code samples live as template-literal
+// consts because literal tag names and {#…} tokens would be parsed as template
+// syntax in prose.
+const installCmd = 'puzzle add piece split-button';
+const installDep = 'npm install @magic-spells/dropdown-panel@^2.1.0';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+@import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */`;
+
+const usageImport = `import SplitButton from '@/components/ui/SplitButton';`;
+
+const usageMarkup = `<SplitButton>
+  <SplitButton.Action variant="primary" size="md" @press={ save }>
+    Save
+  </SplitButton.Action>
+
+  <SplitButton.Menu variant="primary" size="md" label="More save actions" @select={ run }>
+    <SplitButton.Item value="save-as" @press={ run }>Save as…</SplitButton.Item>
+    <SplitButton.Separator />
+    <SplitButton.Item value="discard" variant="danger" @press={ run }>Discard</SplitButton.Item>
+  </SplitButton.Menu>
+</SplitButton>`;
+
+const codeHero = `// Two halves, two callbacks. Pass the SAME variant and size to both —
+// there is no context to share them through.
+<SplitButton>
+  <SplitButton.Action @press={ onPrimary }>Save</SplitButton.Action>
+  <SplitButton.Menu label="More save actions" @select={ onSelect }>
+    <SplitButton.Item value="save-as" @press={ run }>Save as…<SplitButton.Shortcut>⇧⌘S</SplitButton.Shortcut></SplitButton.Item>
+    <SplitButton.Item value="save-close" @press={ run }>Save and close</SplitButton.Item>
+    <SplitButton.Separator />
+    <SplitButton.Item value="discard" variant="danger" @press={ run }>Discard changes</SplitButton.Item>
+  </SplitButton.Menu>
+</SplitButton>`;
+
+const codeVariants = `// Button's whole vocabulary, on both halves at once.
+<SplitButton>
+  <SplitButton.Action variant="outline" size="sm" @press={ onPrimary }>Export</SplitButton.Action>
+  <SplitButton.Menu variant="outline" size="sm" label="More export options" @select={ onSelect }>
+    <SplitButton.Item value="duplicate" @press={ run }>Duplicate</SplitButton.Item>
+  </SplitButton.Menu>
+</SplitButton>`;
+
+const variantRows = [
+  { variant: 'primary', size: 'md', label: 'Publish', menuLabel: 'More publish options' },
+  { variant: 'secondary', size: 'md', label: 'Share', menuLabel: 'More share options' },
+  { variant: 'outline', size: 'sm', label: 'Export', menuLabel: 'More export options' },
+  { variant: 'destructive', size: 'lg', label: 'Delete', menuLabel: 'More delete options' },
+];
+
+const keyRows = [
+  { name: 'Tab', desc: 'Moves onto the primary half, then the caret. Inside an open menu it closes the menu and moves on.' },
+  { name: 'Enter / Space', desc: 'On the primary: fire @press. On the caret: open the menu and focus the first row. On a row: choose it.' },
+  { name: 'ArrowDown / ArrowUp', desc: 'On the closed caret: open and focus the first (or last) row. Inside the menu: move row focus, wrapping and skipping disabled rows.' },
+  { name: 'Home / End · a–z', desc: 'First / last row, and typeahead by the row text.' },
+  { name: 'Escape', desc: 'Close the menu and return focus to the caret.' },
+];
+
+const reference = [
+  {
+    title: 'SplitButton',
+    summary: 'The layout shell: `relative inline-flex`, which fuses the halves and anchors the panel.',
+    rows: [{ name: 'class', desc: 'Merged onto the wrapper, after the layout.' }],
+  },
+  {
+    title: 'SplitButton.Action',
+    summary: "The primary half — a real button wearing Button's recipes, rounded on the left only.",
+    rows: [
+      { name: 'variant', desc: "'primary' (default) | 'secondary' | 'outline' | 'ghost' | 'destructive'." },
+      { name: 'size', desc: "'sm' | 'md' (default) | 'lg'." },
+      { name: 'disabled', desc: 'Greys it out and swallows the press. Disable the Menu half too.' },
+      { name: 'class', desc: 'Merged onto the button, after the chrome.' },
+      { name: '@press', desc: 'press(event) — the primary action. It never opens the menu.' },
+    ],
+  },
+  {
+    title: 'SplitButton.Menu',
+    summary: 'The caret half and the menu it opens. Rows go straight inside it; it supplies its own trigger and panel.',
+    rows: [
+      { name: 'variant', desc: "Match Action's — there is no context to share it through." },
+      { name: 'size', desc: "Match Action's." },
+      { name: 'label', desc: "The caret's accessible name, default 'More actions'. Rendered as an sr-only span." },
+      { name: 'disabled', desc: 'Greys the caret out and makes it unpressable.' },
+      { name: 'class', desc: 'Merged onto the caret, after the chrome.' },
+      { name: '@show / @hide', desc: 'The menu opened or closed.' },
+      { name: '@select', desc: 'Value-first: select(value, event). Fires once; the menu then closes and focus returns to the caret.' },
+    ],
+  },
+  {
+    title: 'Rows — Item · Link · Group · Label · Separator · Shortcut · Sub',
+    summary: 'Re-exported from the DropdownMenu family, so SplitButton.Item and DropdownMenu.Item are the same component. See the Dropdown Menu reference for their props.',
+    rows: [
+      { name: 'value', desc: 'Passed to @press and reported by the Menu half\'s @select.' },
+      { name: 'variant', desc: "'default' | 'danger'." },
+      { name: 'disabled', desc: 'Greys the row out and takes it out of the keyboard walk.' },
+    ],
+  },
+];
+
+export default class SplitButtonDoc extends PuzzleView {
+  created() {
+    this.setData({ last: 'nothing yet' });
+  }
+
+  data() {
+    return {
+      last: this.getData().last,
+      installCmd,
+      installDep,
+      installCss,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeVariants,
+      variantRows,
+      keyRows,
+      reference,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Variants and sizes', href: '#variants' },
+        { label: 'Keyboard', href: '#keyboard' },
+        { label: 'Reference', href: '#reference' },
+      ],
+    };
+  }
+
+  events = {
+    onPrimary: () => {
+      this.setData('last', 'primary @press');
+      this.refresh();
+    },
+    onSelect: (value) => {
+      this.setData('last', `@select ${String(value)}`);
+      this.refresh();
+    },
+    run: () => {},
+  };
+}
+</script>

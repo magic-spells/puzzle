@@ -1,0 +1,1148 @@
+// @vitest-environment jsdom
+// Static output mode (D81) — the prerender + shell-surgery half
+// (client-runtime/ssg/index.js `mode: 'static'`): per-page store snapshot capture,
+// __pzlModule stamp collection (+ the missing-stamp error), slug rules + collision
+// suffixing, static shell surgery (app.js tag stripped, data + entry scripts
+// injected, `</script>` in a record cannot break the JSON island, data-puzzle-static
+// marker), and the extended summary fields. Prerender remains DOM-free; jsdom is
+// present only for the hybrid/static/live-router markup parity assertion.
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { prerender, prerenderToDir, injectStaticShell } from '../client-runtime/ssg/index.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
+import { hasReadState } from '../client-runtime/capabilities.js';
+import { Router } from '../client-runtime/router/router.js';
+import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
+import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
+import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
+
+const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
+const text = (value) => new ViewNode('text', { value });
+const slot = () => new ViewNode(SLOT_TAG);
+
+/** Stamp a fixture class the way CONTRACT 2 codegen will (app-root-relative path). */
+function stamp(Class, module) {
+	Class.__pzlModule = module;
+	return Class;
+}
+
+class Layout extends PuzzleView {
+	render() {
+		return h('div', { class: 'layout' }, [slot()]);
+	}
+}
+stamp(Layout, 'app/layouts/Default.pzl');
+
+class Home extends PuzzleView {
+	render() {
+		return h('h1', {}, [text('Home')]);
+	}
+}
+stamp(Home, 'app/views/Home.pzl');
+
+class Guide extends PuzzleView {
+	render() {
+		return h('div', { class: 'guide' }, [slot()]);
+	}
+}
+stamp(Guide, 'app/views/Guide.pzl');
+
+class Templates extends PuzzleView {
+	render() {
+		return h('p', {}, [text('templates')]);
+	}
+}
+stamp(Templates, 'app/views/guide/Templates.pzl');
+
+class NotFound extends PuzzleView {
+	render() {
+		return h('h1', {}, [text('404')]);
+	}
+}
+stamp(NotFound, 'app/views/NotFound.pzl');
+
+class Note extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		body: Puzzle.string(),
+	};
+}
+
+const SHELL =
+	'<!doctype html><html><head><title>Shell</title></head>' +
+	'<body><div id="app"></div><script type="module" src="/app.js"></script></body></html>';
+
+const staticConfig = () => ({
+	target: '#app',
+	models: { note: Note },
+	formatters: {},
+	routes: [
+		{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } },
+		{
+			path: '/guide',
+			name: 'guide',
+			view: Guide,
+			layout: Layout,
+			children: [
+				{ path: 'templates', name: 'guide-templates', view: Templates, meta: { title: 'Templates' } },
+			],
+		},
+		{ path: '*', name: 'not-found', view: NotFound, layout: Layout, meta: { title: 'Not found' } },
+	],
+});
+
+function writeShell(dir, shell = SHELL) {
+	const shellPath = path.join(dir, 'shell.html');
+	fs.writeFileSync(shellPath, shell);
+	return shellPath;
+}
+
+describe('static prerender (D81)', () => {
+	it('keeps a static page shadowed under SPA precedence because static output has no router', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-shadow-'));
+		const shellPath = writeShell(outDir);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const cfg = {
+			target: '#app',
+			routes: [
+				{ path: '/user/:id', name: 'user', view: Home, layout: Layout },
+				{ path: '/user/new', name: 'new-user', view: Home, layout: Layout },
+			],
+		};
+
+		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+		expect(summary.skipped).toEqual([
+			{
+				path: '/user/:id',
+				reason: 'dynamic',
+				modules: { views: ['app/views/Home.pzl'], layout: 'app/layouts/Default.pzl' },
+			},
+		]);
+		expect(summary.warnings.some((warning) => warning.includes('shadowed route'))).toBe(false);
+		expect(summary.written.some((page) => page.path === '/user/new')).toBe(true);
+		expect(fs.existsSync(path.join(outDir, 'user', 'new', 'index.html'))).toBe(true);
+		warn.mockRestore();
+	});
+
+	// A skipped route ships no page, but its views are still chain roots for the
+	// dev builder's render-wide walk (D155): omit them and every component the
+	// route shares with a rendered page reads as render-wide, so one component
+	// edit re-renders the whole site.
+	describe('skipped-route chain modules', () => {
+		const dynamicConfig = () => ({
+			target: '#app',
+			routes: [{ path: '/blog/:id', name: 'post', view: Home, layout: Layout }],
+		});
+
+		it('reports them for a skipped static route', async () => {
+			const { skipped } = await prerender(dynamicConfig(), { mode: 'static' });
+			expect(skipped[0].modules).toEqual({
+				views: ['app/views/Home.pzl'],
+				layout: 'app/layouts/Default.pzl',
+			});
+		});
+
+		it('does not report them in hybrid output, which has no per-page graph', async () => {
+			const { skipped } = await prerender(dynamicConfig());
+			expect(skipped[0].modules).toBeUndefined();
+		});
+
+		it('drops a missing stamp instead of failing the build', async () => {
+			// A hand-written view is a build ERROR on a rendered route (CONTRACT 2),
+			// but a skipped one ships no module and must not be held to it.
+			class Unstamped extends PuzzleView {
+				render() {
+					return h('p', {}, [text('unstamped')]);
+				}
+			}
+			const { skipped } = await prerender(
+				{ target: '#app', routes: [{ path: '/blog/:id', name: 'post', view: Unstamped }] },
+				{ mode: 'static' }
+			);
+			expect(skipped[0].modules).toEqual({ views: [], layout: null });
+		});
+	});
+
+	describe('per-page store snapshot capture', () => {
+		it('warns once when any static route declares a guard', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const cfg = staticConfig();
+			cfg.routes[1].children[0].guard = () => true;
+
+			const { warnings } = await prerender(cfg, { mode: 'static' });
+			const guardWarnings = warnings.filter((warning) =>
+				warning.includes('guards never run in static output')
+			);
+
+			expect(guardWarnings).toHaveLength(1);
+			expect(warn).toHaveBeenCalledWith(guardWarnings[0]);
+			warn.mockRestore();
+		});
+
+		it('captures each page`s store snapshot as `data` (wire shape)', async () => {
+			class Seeded extends PuzzleView {
+				created() {
+					this.ctx.store.createRecord('note', { id: 'n1', body: 'hello' });
+				}
+				render() {
+					return h('p', {}, [text('seeded')]);
+				}
+			}
+			stamp(Seeded, 'app/views/Seeded.pzl');
+			const cfg = {
+				target: '#app',
+				models: { note: Note },
+				routes: [{ path: '/', name: 'home', view: Seeded }],
+			};
+			const { pages } = await prerender(cfg, { mode: 'static' });
+			expect(pages[0].data).toBeTruthy();
+			expect(pages[0].data.note).toHaveLength(1);
+			expect(pages[0].data.note[0]).toMatchObject({ id: 'n1', body: 'hello' });
+		});
+
+		it('writes each page its OWN data island — the payload memo is content-keyed', async () => {
+			// The island's escape pass is memoized across a build (identical seeds are the
+			// common case). The key is the stringified payload itself, so a page whose
+			// store differs by one byte can never be served the previous page's island.
+			class PerPage extends PuzzleView {
+				created() {
+					this.ctx.store.createRecord('note', { id: this.route.path, body: this.route.path });
+				}
+				render() {
+					return h('p', {}, [text('x')]);
+				}
+			}
+			stamp(PerPage, 'app/views/PerPage.pzl');
+			const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-island-'));
+			const shellPath = path.join(dir, 'shell.html');
+			fs.writeFileSync(shellPath, SHELL);
+			const outDir = path.join(dir, 'dist');
+			await prerenderToDir(
+				{
+					target: '#app',
+					models: { note: Note },
+					routes: [
+						{ path: '/a', name: 'a', view: PerPage },
+						{ path: '/b', name: 'b', view: PerPage },
+						{ path: '/c', name: 'c', view: PerPage },
+					],
+				},
+				{ outDir, shellPath, mode: 'static' }
+			);
+
+			for (const page of ['a', 'b', 'c']) {
+				const html = fs.readFileSync(path.join(outDir, page, 'index.html'), 'utf8');
+				expect(html).toContain(`{"note":[{"id":"/${page}","body":"/${page}","__synced":false}]}`);
+			}
+		});
+
+		it('does not attach static fields in hybrid mode', async () => {
+			const { pages } = await prerender(staticConfig());
+			expect(pages[0].data).toBeUndefined();
+			expect(pages[0].modules).toBeUndefined();
+			expect(pages[0].route).toBeUndefined();
+		});
+
+		it('captures beforeMount data + modules for a prerender:false page (html null)', async () => {
+			// CONTRACT 3: a prerender:false page builds the context (beforeMount runs) and
+			// captures the payload, but the VIEW is not preloaded (html stays null) — so the
+			// snapshot carries beforeMount seeds only, and data() re-runs client-side.
+			class SpaOnly extends PuzzleView {
+				render() {
+					return h('p', {}, [text('spa')]);
+				}
+			}
+			stamp(SpaOnly, 'app/views/SpaOnly.pzl');
+			const cfg = {
+				target: '#app',
+				models: { note: Note },
+				routes: [{ path: '/app', name: 'spa', view: SpaOnly, prerender: false }],
+				beforeMount({ store }) {
+					store.createRecord('note', { id: 'spa', body: 'x' });
+				},
+			};
+			const { pages } = await prerender(cfg, { mode: 'static' });
+			const spa = pages.find((p) => p.path === '/app');
+			expect(spa.html).toBeNull();
+			expect(spa.prerender).toBe(false);
+			expect(spa.data.note[0].id).toBe('spa');
+			expect(spa.modules).toEqual({ views: ['app/views/SpaOnly.pzl'], layout: null });
+		});
+	});
+
+	describe('__pzlModule stamp collection', () => {
+		it('collects chain view stamps + the layout stamp', async () => {
+			const { pages } = await prerender(staticConfig(), { mode: 'static' });
+			const byPath = Object.fromEntries(pages.map((p) => [p.path, p]));
+			expect(byPath['/'].modules).toEqual({
+				views: ['app/views/Home.pzl'],
+				layout: 'app/layouts/Default.pzl',
+			});
+			expect(byPath['/guide/templates'].modules).toEqual({
+				views: ['app/views/Guide.pzl', 'app/views/guide/Templates.pzl'],
+				layout: 'app/layouts/Default.pzl',
+			});
+		});
+
+		it('serializes a plain-JSON route snapshot (no classes)', async () => {
+			const { pages } = await prerender(staticConfig(), { mode: 'static' });
+			const templates = pages.find((p) => p.path === '/guide/templates');
+			expect(templates.route).toEqual({
+				path: '/guide/templates',
+				params: {},
+				chain: [
+					{ path: '/guide', name: 'guide' },
+					{ path: 'templates', name: 'guide-templates', meta: { title: 'Templates' } },
+				],
+			});
+			// No view classes leaked into the JSON snapshot.
+			expect(JSON.stringify(templates.route)).not.toContain('function');
+		});
+
+		it('throws naming the route + class when a view has no __pzlModule stamp', async () => {
+			class Unstamped extends PuzzleView {
+				render() {
+					return h('p', {}, [text('x')]);
+				}
+			}
+			const cfg = {
+				target: '#app',
+				routes: [{ path: '/bare', name: 'bare', view: Unstamped }],
+			};
+			await expect(prerender(cfg, { mode: 'static' })).rejects.toThrow(
+				/static output requires \.pzl views\/layouts.*route "\/bare".*Unstamped.*__pzlModule/s
+			);
+		});
+
+		it('throws when the layout has no __pzlModule stamp', async () => {
+			class BareLayout extends PuzzleView {
+				render() {
+					return h('div', {}, [slot()]);
+				}
+			}
+			const cfg = {
+				target: '#app',
+				routes: [{ path: '/', name: 'home', view: Home, layout: BareLayout }],
+			};
+			await expect(prerender(cfg, { mode: 'static' })).rejects.toThrow(
+				/route "\/" layout BareLayout has no __pzlModule stamp/
+			);
+		});
+	});
+
+	describe('slug rules + collision suffixing', () => {
+		it('maps `/` → index, `*` → 404, nested → `--`, and suffixes collisions', async () => {
+			// Two distinct routes that both slugify to `guide--templates`: the second
+			// gets `-2` deterministically in enumeration order.
+			class A extends PuzzleView {
+				render() {
+					return h('p', {}, [text('a')]);
+				}
+			}
+			class B extends PuzzleView {
+				render() {
+					return h('p', {}, [text('b')]);
+				}
+			}
+			stamp(A, 'app/views/A.pzl');
+			stamp(B, 'app/views/B.pzl');
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-slug-'));
+			const shellPath = writeShell(outDir);
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/', name: 'home', view: A },
+					{ path: '/guide/templates', name: 't1', view: A },
+					{ path: '/guide--templates', name: 't2', view: B }, // slugifies identically
+					{ path: '*', name: 'nf', view: B },
+				],
+			};
+			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+			const byPath = Object.fromEntries(summary.written.map((w) => [w.path, w.entry]));
+			expect(byPath['/']).toBe('_puzzle/index.js');
+			expect(byPath['/guide/templates']).toBe('_puzzle/guide--templates.js');
+			// The second route slugifies to the same base → deterministic `-2` suffix.
+			expect(byPath['/guide--templates']).toBe('_puzzle/guide--templates-2.js');
+			expect(byPath['*']).toBe('_puzzle/404.js');
+		});
+	});
+
+	describe('duplicate output paths', () => {
+		// Two routes declaring the SAME path get distinct slugs (about, about-2) but a
+		// path-DERIVED output file, so both wrote dist/about/index.html and the second
+		// silently won — while the Go build still generated the dead about-2 bundle.
+		// Hybrid catches this via shadow detection; static deliberately keeps shadowed
+		// pages, so the writer itself has to refuse the second claim.
+		it('skips a second route claiming an already-written file instead of overwriting it', async () => {
+			class First extends PuzzleView {
+				render() {
+					return h('p', { class: 'first' }, [text('first')]);
+				}
+			}
+			class Second extends PuzzleView {
+				render() {
+					return h('p', { class: 'second' }, [text('second')]);
+				}
+			}
+			stamp(First, 'app/views/First.pzl');
+			stamp(Second, 'app/views/Second.pzl');
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-dup-'));
+			const shellPath = writeShell(outDir);
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/about', name: 'about', view: First },
+					{ path: '/about', name: 'about-again', view: Second },
+				],
+			};
+
+			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+			// The FIRST (reachable-order) route owns the file and the emitted module href.
+			const html = fs.readFileSync(path.join(outDir, 'about', 'index.html'), 'utf8');
+			expect(html).toContain('first');
+			expect(html).not.toContain('second');
+			expect(html).toContain('/_puzzle/about.js');
+			expect(html).not.toContain('/_puzzle/about-2.js');
+
+			// …and the counts stay truthful: one page, one bundle, one skip.
+			expect(summary.written.filter((w) => w.path === '/about')).toHaveLength(1);
+			expect(summary.written[0].entry).toBe('_puzzle/about.js');
+			expect(summary.count).toBe(1);
+			expect(summary.skipped).toContainEqual({
+				path: '/about',
+				reason: 'duplicate',
+				modules: { views: ['app/views/Second.pzl'], layout: null },
+			});
+			expect(
+				summary.warnings.some(
+					(w) => w.includes('duplicate route "/about"') && w.includes('about/index.html')
+				)
+			).toBe(true);
+		});
+
+		it('treats two different route paths that normalize to one file as duplicates', async () => {
+			class Only extends PuzzleView {
+				render() {
+					return h('p', {}, [text('only')]);
+				}
+			}
+			stamp(Only, 'app/views/Only.pzl');
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-dup2-'));
+			const shellPath = writeShell(outDir);
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/caf%C3%A9', name: 'cafe-encoded', view: Only },
+					{ path: '/café', name: 'cafe-literal', view: Only },
+				],
+			};
+
+			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+			expect(summary.count).toBe(1);
+			expect(summary.written[0].path).toBe('/caf%C3%A9');
+			expect(summary.skipped).toContainEqual({
+				path: '/café',
+				reason: 'duplicate',
+				modules: { views: ['app/views/Only.pzl'], layout: null },
+			});
+			expect(
+				summary.warnings.some(
+					(w) => w.includes('duplicate route "/café"') && w.includes('"/caf%C3%A9"')
+				)
+			).toBe(true);
+		});
+	});
+
+	describe('static shell surgery', () => {
+		it('strips /app.js, injects data + entry scripts, marks data-puzzle-static', async () => {
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-'));
+			const shellPath = writeShell(outDir);
+			const summary = await prerenderToDir(staticConfig(), { outDir, shellPath, mode: 'static' });
+
+			const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+			// app.js bundle tag stripped.
+			expect(index).not.toContain('src="/app.js"');
+			// static marker (NOT the router takeover marker).
+			expect(index).toContain('<div id="app" data-puzzle-static><div class="layout"><h1>Home</h1></div></div>');
+			expect(index).not.toContain('data-puzzle-ssg');
+			// data island + per-page module before </body>.
+			expect(index).toContain('<script type="application/json" data-puzzle-static-data>');
+			expect(index).toContain('<script type="module" src="/_puzzle/index.js"></script>');
+			expect(index).toContain('<title>Home</title>');
+
+			// The extended summary fields.
+			expect(summary.mode).toBe('static');
+			expect(summary.target).toBe('app');
+			expect(summary.apiURL).toBeNull();
+			expect(summary.hasFormatters).toBe(false);
+			expect(summary.hasAdapter).toBe(false);
+		});
+
+		it('warns once (not per page) when no /app.js tag is present', async () => {
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-noappjs-'));
+			const noBundle =
+				'<!doctype html><html><head><title>Shell</title></head><body><div id="app"></div></body></html>';
+			const shellPath = writeShell(outDir, noBundle);
+			const summary = await prerenderToDir(staticConfig(), { outDir, shellPath, mode: 'static' });
+			const appJsWarnings = summary.warnings.filter((w) => w.includes('to strip'));
+			expect(appJsWarnings).toHaveLength(1);
+		});
+
+		it('reports apiURL + hasFormatters + hasAdapter from config', async () => {
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-cfg-'));
+			const shellPath = writeShell(outDir);
+			const cfg = {
+				target: '#app',
+				apiURL: 'https://api.example.com',
+				adapter,
+				formatters: { shout: (s) => String(s).toUpperCase() },
+				routes: [{ path: '/', name: 'home', view: Home }],
+			};
+			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+			expect(summary.apiURL).toBe('https://api.example.com');
+			expect(summary.hasFormatters).toBe(true);
+			expect(summary.hasAdapter).toBe(true);
+		});
+
+		// The static build generates each page's entry, so it has to bind the SAME
+		// capability value the render installed. A configured capability holds
+		// functions and cannot cross this summary — only these two facts can, and
+		// the build resolves them into an import.
+		describe('adapter identity facts', () => {
+			const adapterSummary = async (cfgAdapter, options = {}) => {
+				const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-adapter-'));
+				const shellPath = writeShell(outDir);
+				const cfg = { ...staticConfig(), adapter: cfgAdapter };
+				return prerenderToDir(cfg, { outDir, shellPath, mode: 'static', ...options });
+			};
+
+			it('reports the bare capability as unconfigured', async () => {
+				const summary = await adapterSummary(adapter);
+				expect(summary.hasAdapter).toBe(true);
+				expect(summary.adapterConfigured).toBe(false);
+			});
+
+			it('reports an adapter.defaults() capability as configured', async () => {
+				const summary = await adapterSummary(adapter.defaults({}));
+				expect(summary.adapterConfigured).toBe(true);
+			});
+
+			it('reports no conventional module as null, not false', async () => {
+				expect((await adapterSummary(adapter.defaults({}))).adapterModuleMatches).toBeNull();
+			});
+
+			it('matches a module that IS the configured capability', async () => {
+				const configured = adapter.defaults({});
+				const summary = await adapterSummary(configured, { adapterModule: configured });
+				expect(summary.adapterModuleMatches).toBe(true);
+			});
+
+			it('does not match a module holding a different capability', async () => {
+				const summary = await adapterSummary(adapter.defaults({}), {
+					adapterModule: adapter.defaults({}),
+				});
+				expect(summary.adapterModuleMatches).toBe(false);
+			});
+
+			it('does not match a module that is not a capability at all', async () => {
+				const summary = await adapterSummary(adapter.defaults({}), {
+					adapterModule: (path) => `/api${path}`,
+				});
+				expect(summary.adapterModuleMatches).toBe(false);
+			});
+		});
+
+		it('leaves a prerender:false page`s target empty + unmarked but still injects scripts', async () => {
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-spa-'));
+			const shellPath = writeShell(outDir);
+			const cfg = {
+				target: '#app',
+				routes: [{ path: '/app', name: 'spa', view: stamp(class extends Home {}, 'app/views/Spa.pzl'), prerender: false }],
+			};
+			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+			const spa = fs.readFileSync(path.join(outDir, 'app', 'index.html'), 'utf8');
+			// Target stays empty + unmarked.
+			expect(spa).toContain('<div id="app"></div>');
+			expect(spa).not.toContain('data-puzzle-static>');
+			// But the per-page module + data island are still injected.
+			expect(spa).toContain('<script type="module" src="/_puzzle/app.js"></script>');
+			expect(spa).toContain('data-puzzle-static-data');
+			expect(spa).not.toContain('src="/app.js"');
+			expect(summary.written[0].prerender).toBe(false);
+		});
+	});
+
+	describe('data island JSON escaping', () => {
+		it('escapes `<` so a `</script>` in a record cannot break out of the island', () => {
+			const evil = { note: [{ id: 'n', body: '</script><script>alert(1)</script>' }] };
+			const out = injectStaticShell(SHELL.replace('<script type="module" src="/app.js"></script>', ''), {
+				targetId: 'app',
+				content: '<p>x</p>',
+				title: null,
+				slug: 'index',
+				data: evil,
+			});
+			// No literal `</script>` from the record survives — every `<` is escaped.
+			const island = out.slice(
+				out.indexOf('data-puzzle-static-data>') + 'data-puzzle-static-data>'.length,
+				out.indexOf('</script><script type="module"')
+			);
+			expect(island).not.toContain('</script>');
+			expect(island).not.toContain('<script>');
+			expect(island).toContain('\\u003c/script>');
+			// And it still parses back to the original data.
+			const parsed = JSON.parse(island);
+			expect(parsed.note[0].body).toBe('</script><script>alert(1)</script>');
+		});
+
+		it('appends scripts when the shell has no </body>', () => {
+			const out = injectStaticShell('<div id="app"></div>', {
+				targetId: 'app',
+				content: '<p>x</p>',
+				title: null,
+				slug: 'index',
+				data: {},
+			});
+			expect(out).toContain('<div id="app" data-puzzle-static><p>x</p></div>');
+			expect(out.endsWith('<script type="module" src="/_puzzle/index.js"></script>')).toBe(true);
+		});
+	});
+
+	describe('hybrid mode is unchanged', () => {
+		it('emits no static scripts/markers and byte-identical takeover output', async () => {
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-hybrid-'));
+			const shellPath = writeShell(outDir);
+			const summary = await prerenderToDir(staticConfig(), { outDir, shellPath });
+			const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+			expect(index).toContain('data-puzzle-ssg');
+			expect(index).not.toContain('data-puzzle-static');
+			expect(index).not.toContain('_puzzle/');
+			expect(index).toContain('src="/app.js"'); // bundle tag kept
+			expect(summary.mode).toBeUndefined();
+		});
+	});
+});
+
+// A view that reads the build-time router facade the way the `link` formatter and a
+// path-aware view do, so its serialized output reveals url()/current at prerender.
+class Linked extends PuzzleView {
+	render() {
+		const cur = this.ctx.router.current;
+		return h('a', { href: this.ctx.router.url('/next') }, [text(cur ? cur.path : 'NULL')]);
+	}
+}
+stamp(Linked, 'app/views/Linked.pzl');
+
+describe('static prerender router facade parity (D81, item B4)', () => {
+	it('static mode prefixes url() by routerBase and IGNORES routerMode — matching the client stub (P2.1)', async () => {
+		const cfg = {
+			target: '#app',
+			routerMode: hashRouter(),
+			routerBase: '/app',
+			routes: [{ path: '/', name: 'home', view: Linked }],
+		};
+		const { pages, warnings } = await prerender(cfg, { mode: 'static' });
+		// Base applies; the hash mode does not — static files are path-shaped, and a
+		// static page installs no router to intercept a '#/' link.
+		expect(pages[0].html).toContain('href="/app/next"');
+		expect(pages[0].html).not.toContain('href="#/app/next"');
+		expect(warnings.some((w) => w.includes('ignores routerMode (hash routing)'))).toBe(true);
+	});
+
+	it('static mode with no mode/base falls back to history semantics (unprefixed) — matching the client default', async () => {
+		const cfg = { target: '#app', routes: [{ path: '/', name: 'home', view: Linked }] };
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		expect(pages[0].html).toContain('href="/next"');
+	});
+
+	it('static prerender router.current is the page snapshot, not null (a view can read current.path)', async () => {
+		const cfg = { target: '#app', routes: [{ path: '/', name: 'home', view: Linked }] };
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		expect(pages[0].html).toContain('>/</a>'); // current.path === '/', not 'NULL'
+	});
+
+	it('hybrid prerender router.current is the page snapshot while url() stays unprefixed', async () => {
+		const cfg = { target: '#app', routes: [{ path: '/', name: 'home', view: Linked }] };
+		const { pages } = await prerender(cfg); // hybrid default, path-mode
+		expect(pages[0].html).toContain('href="/next"');
+		expect(pages[0].html).toContain('>/</a>'); // current.path === '/', not 'NULL'
+	});
+
+	it('hybrid, static, and a started live router render matching current-aware markup', async () => {
+		let liveView = null;
+		class ParityLinked extends Linked {
+			constructor(ctx) {
+				super(ctx);
+				liveView = this;
+			}
+		}
+		const routes = [{ path: '/', name: 'home', view: ParityLinked }];
+		const cfg = { target: '#app', routes };
+		const [{ pages: hybridPages }, { pages: staticPages }] = await Promise.all([
+			prerender(cfg),
+			prerender(cfg, { mode: 'static' }),
+		]);
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const router = new Router(routes, { mode: memoryRouter() });
+
+		try {
+			await router.start(target, { store: null, router, formatters: null });
+			// Navigation mounts before #commitState advances current. Re-render after
+			// start resolves to compare against the started router's public state.
+			await liveView.refresh();
+			expect(hybridPages[0].html).toBe(staticPages[0].html);
+			expect(hybridPages[0].html).toBe(target.innerHTML);
+		} finally {
+			router.stop();
+			target.remove();
+		}
+	});
+});
+
+describe('static page module href is base-prefixed (D81, item B5)', () => {
+	it('prefixes the per-page module with a normalized routerBase', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-base-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			routerBase: '/app/', // trailing slash normalizes away
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const index = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' }).then(() =>
+			fs.readFileSync(path.join(outDir, 'index.html'), 'utf8')
+		);
+		expect(index).toContain('<script type="module" src="/app/_puzzle/index.js"></script>');
+		expect(index).not.toContain('src="/_puzzle/index.js"');
+	});
+
+	it('no routerBase → root-absolute module href (unchanged default)', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-nobase-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const index = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' }).then(() =>
+			fs.readFileSync(path.join(outDir, 'index.html'), 'utf8')
+		);
+		expect(index).toContain('<script type="module" src="/_puzzle/index.js"></script>');
+	});
+});
+
+describe('hybrid × hash/memory guard (D81, item B6)', () => {
+	const cfg = (routerMode) => ({
+		target: '#app',
+		routerMode,
+		routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+	});
+
+	it('hybrid + hash rejects (a hash router would render home over every prerendered page)', async () => {
+		await expect(prerender(cfg(hashRouter()))).rejects.toThrow(
+			/hybrid prerender output requires path routing/
+		);
+	});
+
+	it('hybrid + memory rejects', async () => {
+		await expect(prerender(cfg(memoryRouter()))).rejects.toThrow(/path routing/);
+	});
+
+	it('hybrid + an unset mode (history, the default) is allowed', async () => {
+		expect((await prerender(cfg(undefined))).pages).toHaveLength(1);
+	});
+
+	it('static + hash is allowed, but the mode is ignored with a warning (P2.1)', async () => {
+		const { pages, warnings } = await prerender(cfg(hashRouter()), { mode: 'static' });
+		expect(pages).toHaveLength(1);
+		expect(warnings.some((w) => w.includes('ignores routerMode (hash routing)'))).toBe(true);
+	});
+
+	it('prerenderToDir hybrid + hash rejects — fails the Go build', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-hybrid-hash-'));
+		const shellPath = writeShell(outDir);
+		await expect(prerenderToDir(cfg(hashRouter()), { outDir, shellPath })).rejects.toThrow(
+			/path routing/
+		);
+	});
+});
+
+describe('static output ignores storage with a warning (D81, item B3)', () => {
+	it('warns when a static build config sets storage; the summary carries no dead placeholder', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-storage-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			storage: { getItem: () => null, setItem: () => {} }, // a live Storage-like object
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+		expect(summary.warnings.some((w) => w.includes('static output ignores `storage`'))).toBe(true);
+		// No `storage` field rides the summary → the Go build can never emit a dead `{}`.
+		expect('storage' in summary).toBe(false);
+	});
+
+	it('no storage configured → no warning', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-nostorage-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+		expect(summary.warnings.some((w) => w.includes('ignores `storage`'))).toBe(false);
+	});
+});
+
+describe('static subset render (D155)', () => {
+	// The dev loop's route-level invalidation hook. The contract is that a subset
+	// render is INDISTINGUISHABLE from a full one for everything a later page
+	// depends on — the page list, the skip set, the warnings, the output paths and
+	// above all the slugs, which are assigned by walking the page list in order.
+	const renderBoth = async (cfg, only) => {
+		const fullDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-full-'));
+		const partDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-part-'));
+		const full = await prerenderToDir(cfg, {
+			outDir: fullDir,
+			shellPath: writeShell(fullDir),
+			mode: 'static',
+		});
+		const part = await prerenderToDir(cfg, {
+			outDir: partDir,
+			shellPath: writeShell(partDir),
+			mode: 'static',
+			only,
+		});
+		return { fullDir, partDir, full, part };
+	};
+
+	it('renders only the requested routes and reports the rest as reused', async () => {
+		const { fullDir, partDir, full, part } = await renderBoth(staticConfig(), ['/guide/templates']);
+
+		expect(part.written.map((page) => page.path)).toEqual(full.written.map((page) => page.path));
+		expect(part.written.filter((page) => !page.reused).map((page) => page.path)).toEqual([
+			'/guide/templates',
+		]);
+		// Slugs, output paths, modules and route snapshots are identical either way.
+		for (let i = 0; i < full.written.length; i++) {
+			expect(part.written[i].entry).toBe(full.written[i].entry);
+			expect(part.written[i].modules).toEqual(full.written[i].modules);
+			expect(part.written[i].route).toEqual(full.written[i].route);
+			expect(path.relative(partDir, part.written[i].file)).toBe(
+				path.relative(fullDir, full.written[i].file)
+			);
+		}
+		expect(part.skipped).toEqual(full.skipped);
+		expect(part.warnings).toEqual(full.warnings);
+	});
+
+	it('writes the rendered page byte-for-byte and writes nothing for a reused one', async () => {
+		const { fullDir, partDir, part } = await renderBoth(staticConfig(), ['/guide/templates']);
+
+		const rendered = part.written.find((page) => page.path === '/guide/templates');
+		expect(fs.readFileSync(rendered.file, 'utf8')).toBe(
+			fs.readFileSync(path.join(fullDir, 'guide', 'templates', 'index.html'), 'utf8')
+		);
+		for (const page of part.written) {
+			if (page.reused) expect(fs.existsSync(page.file)).toBe(false);
+		}
+	});
+
+	it('never runs beforeMount or data() for a page it is not rendering', async () => {
+		const seen = [];
+		class Counted extends PuzzleView {
+			data() {
+				seen.push('data');
+				return {};
+			}
+			render() {
+				return h('p', {}, [text('counted')]);
+			}
+		}
+		stamp(Counted, 'app/views/Counted.pzl');
+		const cfg = {
+			target: '#app',
+			beforeMount() {
+				seen.push('beforeMount');
+			},
+			routes: [
+				{ path: '/', name: 'home', view: Counted, layout: Layout },
+				{ path: '/two', name: 'two', view: Counted, layout: Layout },
+				{ path: '/three', name: 'three', view: Counted, layout: Layout },
+			],
+		};
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-hooks-'));
+		await prerenderToDir(cfg, {
+			outDir,
+			shellPath: writeShell(outDir),
+			mode: 'static',
+			only: ['/two'],
+		});
+		expect(seen).toEqual(['beforeMount', 'data']);
+	});
+
+	it('renders nothing at all for an empty filter, and still reports every page', async () => {
+		const { full, part } = await renderBoth(staticConfig(), []);
+		expect(part.written.every((page) => page.reused)).toBe(true);
+		expect(part.written).toHaveLength(full.written.length);
+		expect(part.count).toBe(full.count);
+	});
+
+	it('builds no context at all for an empty filter', async () => {
+		// An empty subset is the dev loop's "a public asset changed" rebuild. It
+		// renders no route, so it must not construct the application either —
+		// otherwise every public-asset save runs beforeMount's side effects and a
+		// save that touched no route can fail on application setup.
+		const seen = [];
+		class Counted extends PuzzleView {
+			data() {
+				seen.push('data');
+				return {};
+			}
+			render() {
+				return h('p', {}, [text('counted')]);
+			}
+		}
+		stamp(Counted, 'app/views/Counted.pzl');
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-empty-'));
+		await prerenderToDir(
+			{
+				target: '#app',
+				beforeMount() {
+					seen.push('beforeMount');
+				},
+				routes: [
+					{ path: '/', name: 'home', view: Counted, layout: Layout },
+					{ path: '/two', name: 'two', view: Counted, layout: Layout },
+				],
+			},
+			{ outDir, shellPath: writeShell(outDir), mode: 'static', only: [] }
+		);
+		expect(seen).toEqual([]);
+	});
+
+	it('still runs beforeMount for a full render whose route table produces no static page', async () => {
+		// The historical fail-fast posture, which only an explicit `only` subset
+		// opts out of: a throwing beforeMount fails the build even when every route
+		// is dynamic and nothing is written.
+		const seen = [];
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-nopages-'));
+		await prerenderToDir(
+			{
+				target: '#app',
+				beforeMount() {
+					seen.push('beforeMount');
+				},
+				routes: [{ path: '/blog/:id', name: 'post', view: Home, layout: Layout }],
+			},
+			{ outDir, shellPath: writeShell(outDir), mode: 'static' }
+		);
+		expect(seen).toEqual(['beforeMount']);
+	});
+
+	it('is ignored in hybrid mode, where every reachable route is always rendered', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-hybrid-'));
+		const summary = await prerenderToDir(staticConfig(), {
+			outDir,
+			shellPath: writeShell(outDir),
+			only: [],
+		});
+		expect(summary.written.every((page) => !page.reused)).toBe(true);
+		expect(fs.existsSync(path.join(outDir, 'index.html'))).toBe(true);
+	});
+});
+
+// ---- read-state transfer (D161) ---------------------------------------------
+//
+// A prerender that faults tracked queries settles them at build time. The records
+// ride in the data island as before; what the records CANNOT say — which
+// collections came back complete, which identities came back 404 — rides in a
+// second, versioned island so the browser session does not repeat either read.
+// Hybrid deliberately transfers none of it (its SPA boot is a fresh session).
+
+class ApiNote extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		body: Puzzle.string(),
+	};
+	static adapter = { endpoint: '/notes' };
+}
+
+class Feed extends PuzzleView {
+	data() {
+		const store = this.ctx.store;
+		return { notes: store.findMany('note'), gone: store.findOne('note', 'gone') };
+	}
+	render() {
+		const d = this.getData();
+		return h('ul', {}, [
+			...d.notes.map((n) => h('li', { key: n.id }, [text(n.body)])),
+			h('em', {}, [text(d.gone === null ? 'missing' : 'found')]),
+		]);
+	}
+}
+stamp(Feed, 'app/views/Feed.pzl');
+
+const apiResponse = (body, status = 200) => ({
+	ok: status >= 200 && status < 300,
+	status,
+	statusText: status === 404 ? 'Not Found' : status === 500 ? 'Server Error' : 'OK',
+	text: async () => JSON.stringify(body),
+	json: async () => body,
+});
+
+/** Serve the collection, 404 the one missing id, and record every URL asked for. */
+function stubApi({ collectionStatus = 200 } = {}) {
+	const calls = [];
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (url) => {
+			const href = String(url);
+			calls.push(href);
+			if (href.endsWith('/notes/gone')) return apiResponse({ error: 'nope' }, 404);
+			return apiResponse([{ id: 'a', body: 'alpha' }], collectionStatus);
+		})
+	);
+	return calls;
+}
+
+const feedConfig = () => ({
+	target: '#app',
+	apiURL: 'https://api.test',
+	adapter,
+	models: { note: ApiNote },
+	routes: [{ path: '/', name: 'home', view: Feed, meta: { title: 'Feed' } }],
+});
+
+describe('static read-state island (D161)', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('recognizes loaded-only read state and keeps an empty envelope empty', () => {
+		expect(hasReadState({ v: 1, complete: [], loaded: ['post'], absent: [] })).toBe(true);
+		expect(hasReadState({ v: 1, complete: [], loaded: [], absent: [] })).toBe(false);
+		expect(hasReadState(null)).toBe(false);
+	});
+
+	it('keeps static shell bytes unchanged when read state is empty or omitted', () => {
+		const shell = '<div id="app"></div>';
+		const page = { targetId: 'app', content: '<p>local</p>', slug: 'index', data: {} };
+		const expected =
+			'<div id="app" data-puzzle-static><p>local</p></div>' +
+			'<script type="application/json" data-puzzle-static-data>{}</script>' +
+			'<script type="module" src="/_puzzle/index.js"></script>';
+		expect(injectStaticShell(shell, page)).toBe(expected);
+		expect(
+			injectStaticShell(shell, {
+				...page,
+				readState: { v: 1, complete: [], loaded: [], absent: [] },
+			})
+		).toBe(expected);
+	});
+
+	it('settles tracked queries at build time and captures what the records cannot say', async () => {
+		stubApi();
+		const { pages } = await prerender(feedConfig(), { mode: 'static' });
+
+		// The prerendered markup carries the FETCHED record and the settled null.
+		expect(pages[0].html).toContain('alpha');
+		expect(pages[0].html).toContain('missing');
+		expect(pages[0].data.note).toHaveLength(1);
+		expect(pages[0].readState).toEqual({
+			v: 1,
+			complete: ['note'],
+			loaded: ['note'],
+			absent: ['note gone'],
+		});
+	});
+
+	it('writes the envelope as a second JSON island beside the record island', async () => {
+		stubApi();
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-read-'));
+		const shellPath = writeShell(outDir);
+		await prerenderToDir(feedConfig(), { outDir, shellPath, mode: 'static' });
+
+		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+		const start = index.indexOf('data-puzzle-static-read>') + 'data-puzzle-static-read>'.length;
+		const island = index.slice(start, index.indexOf('</script>', start));
+		expect(JSON.parse(island)).toEqual({
+			v: 1,
+			complete: ['note'],
+			loaded: ['note'],
+			absent: ['note gone'],
+		});
+		// It rides between the record island and the per-page module.
+		expect(index.indexOf('data-puzzle-static-data')).toBeLessThan(
+			index.indexOf('data-puzzle-static-read')
+		);
+		expect(index.indexOf('data-puzzle-static-read')).toBeLessThan(
+			index.indexOf('src="/_puzzle/index.js"')
+		);
+	});
+
+	it('omits the island entirely for a page with no adapter', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-noread-'));
+		const shellPath = writeShell(outDir);
+		const summary = await prerenderToDir(staticConfig(), { outDir, shellPath, mode: 'static' });
+
+		expect(summary.written.every((page) => page.readState === undefined)).toBe(true);
+		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+		expect(index).not.toContain('data-puzzle-static-read');
+	});
+
+	it('omits the island when an adapter page settled nothing', async () => {
+		stubApi();
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-emptyread-'));
+		const shellPath = writeShell(outDir);
+		const cfg = { ...feedConfig(), routes: [{ path: '/', name: 'home', view: Home }] };
+		await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+		expect(index).not.toContain('data-puzzle-static-read');
+	});
+
+	it('escapes the envelope so a record identity cannot break out of the island', () => {
+		const out = injectStaticShell(SHELL.replace('<script type="module" src="/app.js"></script>', ''), {
+			targetId: 'app',
+			content: '<p>x</p>',
+			title: null,
+			slug: 'index',
+			data: {},
+			readState: { v: 1, complete: [], absent: ['note </script><script>alert(1)</script>'] },
+		});
+		const start = out.indexOf('data-puzzle-static-read>') + 'data-puzzle-static-read>'.length;
+		const island = out.slice(start, out.indexOf('</script>', start));
+		expect(island).not.toContain('<script>');
+		expect(JSON.parse(island).absent[0]).toBe('note </script><script>alert(1)</script>');
+	});
+
+	it('fails the build naming the route when a tracked fault rejects', async () => {
+		stubApi({ collectionStatus: 500 });
+		await expect(prerender(feedConfig(), { mode: 'static' })).rejects.toThrow(
+			/prerender failed for route "\/"/
+		);
+	});
+
+	it('transfers nothing in hybrid mode — the SPA boot is a fresh read session', async () => {
+		stubApi();
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-hybrid-read-'));
+		const shellPath = writeShell(outDir);
+		const { pages } = await prerender(feedConfig());
+
+		// Hybrid settles the same queries — it just keeps none of the bookkeeping.
+		expect(pages[0].html).toContain('alpha');
+		expect(pages[0].readState).toBeUndefined();
+		expect(pages[0].data).toBeUndefined();
+
+		await prerenderToDir(feedConfig(), { outDir, shellPath });
+		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+		expect(index).not.toContain('data-puzzle-static-read');
+		expect(index).not.toContain('data-puzzle-static-data');
+	});
+});

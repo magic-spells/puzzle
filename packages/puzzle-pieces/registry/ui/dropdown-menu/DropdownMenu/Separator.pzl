@@ -1,0 +1,28 @@
+<puzzle-view>
+  <div role="separator" class={ ruleClass }></div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// DropdownMenu.Separator — a hairline between runs of rows. A member of the
+// DropdownMenu family (D167); plain markup.
+//
+//   <DropdownMenu.Separator/>
+//
+// role="separator" names a real, meaningful divider inside the panel, and it is
+// what ARIA asks for in a role="menu". No aria-hidden — a separator that
+// announces itself is the point. It does not match menu mode's item selector, so
+// the arrow walk steps over it.
+//
+// Props
+//   class  merged onto the rule
+
+const RULE = 'my-1 border-t border-border';
+
+export default class Separator extends PuzzleView {
+  data(params, props) {
+    return { ruleClass: [RULE, props.class].filter(Boolean).join(' ') };
+  }
+}
+</script>

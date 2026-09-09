@@ -1,0 +1,171 @@
+---
+name: Wrap @magic-spells web components; port only when wrapping can't work
+status: built
+connections:
+  - DOC-REGISTRY
+  - DECISION-CONFIG-FIRST-API
+  - DECISION-COPY-IN-DISTRIBUTION
+  - FEATURE-DOM-FREE-SHEET-LIBS
+notes:
+  - kind: gotcha
+    text: >-
+      Wrap-safety criteria sharpened by the 2026-08-22 registry-wide survey
+      (notes/2026-08-22-wrap-candidates-assessment.md, §2). The attribute-diff fact is necessary but
+      not sufficient. Three more gates: (1) SIBLING-NODE RULE — a component may set
+      attributes/inline styles on itself or on slotted children freely, and may create ONE node the
+      template can pre-author (dialog-panel's <dialog-backdrop>); but a component that
+      inserts/moves/removes nodes AMONG template-rendered siblings is unsafe under a KEYED child
+      list — patchKeyedChildren's move guard (puzzle client-runtime/views/viewManager.js ~L1169,
+      nextPersistentSibling ~L1188) skips only mid-leave elements, not foreign nodes, so it
+      re-inserts on every patch. Unkeyed fixed lists survive (that is why ScrollStack works).
+      tarot-puzzle/docs/PUZZLE-FRICTION.md is independent prior art. (2) ATTRIBUTE-DRIVABILITY —
+      most @magic-spells components have no usable observedAttributes (dialog-panel, dropdown-panel,
+      tab-group, select-dropdown declare none); a wrapper then drives them imperatively from
+      mounted()/afterUpdate() (show()/hide()/setActiveTab()), which is fine for a few methods
+      (sheet/dialog) and 'more glue than the port' when the whole API is imperative. A wrapper can
+      only expose callbacks the component actually emits. (3) PUBLISHED UPSTREAM — piece.json
+      dependencies resolve from npm, so an unpublished component (range-slider, notification-stack,
+      date-picker, tarot pkgs, color-picker at the time of the survey) cannot be wrapped at all.
+      Also: the demo pins some wrappers to file:../../<repo>, so a green demo build does not prove
+      the npm tarball works — smoke against the published version before shipping.
+  - kind: state
+    text: >-
+      2026-08-22 (phase 2, feat/sheet-wrapper, uncommitted): bottom-sheet is now a wrapper too —
+      registry/ui/bottom-sheet/BottomSheet.pzl renders dialog-panel > dialog >
+      bottom-sheet(-header/-content/-footer) from @magic-spells/bottom-sheet, replacing the
+      1,123-line port and sheet-math.js. Two gotchas the sheet conversion did not hit: (1) the
+      bottom-sheet ESM bundle does NOT side-effect-import its dialog-panel peer (sheet's does), so
+      mounted() must dynamically import BOTH packages or show() throws "panel?.show is not a
+      function"; (2) its snap API is a VALUE in dvh percent, not an index — the component reflects
+      the committed snap back into the snap attribute, so the wrapper never binds that attribute (it
+      writes it once at mount as the opening rung and drives it with snapTo() after), and the event
+      is camelCase snapChange with detail { from, to }. Upstream gap found in the browser: published
+      bottom-sheet 2.0.2 still paints its scrim on dialog::backdrop and its display:none rule for
+      dialog-backdrop loses on specificity to dialog-panel 2.0.1's [state='shown'] rule, so two
+      overlays paint at once (cosmetic; fixed on the component's main branch, which needs a 2.0.3
+      publish).
+  - kind: state
+    text: >-
+      2026-08-22 — all four overlay pieces are wrappers now on feat/sheet-wrapper (→ release/0.7.0):
+      sheet (1093ded), bottom-sheet (140dd60), dialog + alert-dialog (5da6c6a), each over the real
+      @magic-spells/dialog-panel family (sheet/bottom-sheet add their own package;
+      dialog/alert-dialog use dialog-panel alone). Shared contract: edge-triggered `open`, @show /
+      @hide({ result, triggerElement }), buttons close via a real <button data-action-hide-dialog
+      data-result>, dynamic import in mounted(), theme bridge via custom properties/utilities,
+      #mine(event) target guard against nested overlays' bubbling events. Controlled `snap` (sheet
+      index / bottom-sheet dvh value) is edge-triggered on the parent's value with announced rungs
+      absorbed as echoes — test/snap-echo.test.js — which is what the ported sheet's flick-bounce
+      bug was. Findings logged in notes/2026-08-22-sheet-wrapper-plan.md: dialog-panel dialogClick
+      misreads keyboard (detail===0) clicks as backdrop taps (upstream), bottom-sheet 2.0.2 double
+      overlay (upstream, fixed on main), and a Puzzle gap reported by the phase-3 agent — named-slot
+      FALLBACK bodies render once and are never patched (needs a minimal repro in ../puzzle). Site
+      sync (../magic-spells-puzzle-site) in progress.
+  - kind: state
+    text: >-
+      2026-09-04: `dropdown-panel` 2.0.0 wrapped as the shared base family `DropdownPanel` ·
+      `.Trigger` · `.Panel`, carrying the single `mounted()` dynamic import and the effects-timing
+      bridge. NavigationMenu is the first consumer and composes those members (not re-export),
+      replacing its `items[].children[]` config array — a breaking change taken inside unreleased
+      0.7.0. Eight more menu-style pieces follow.
+  - kind: state
+    text: >-
+      0.7.0: `collapsible` and `accordion` converted from ports to wrappers over
+      @magic-spells/collapsible-content 1.2.0, as the families Collapsible·Trigger·Content and
+      Accordion·Item·Trigger·Content (see COMPONENT-COLLAPSIBLE). Deleted from this repo: the Web
+      Animations height model, the speed→duration math, the `_openMap` / `_seeded` bookkeeping, the
+      matchMedia reduced-motion checks, and every hand-written aria-expanded / aria-controls /
+      aria-labelledby / role=region / aria-hidden / inert. Accordion's Rule B violation — a config
+      `items` array whose `content` could only be plain text, because Puzzle has no per-row slots —
+      is retired with it: panel bodies are arbitrary markup now. Upstream additions that made the
+      conversion possible (observed `open` on the content, `<collapsible-group exclusive>`, a
+      bubbling `collapsible:toggle`, `show()/hide()/toggle()`) went upstream first, not into a fork.
+  - kind: state
+    text: >-
+      0.7.0: tabs, split-panel and panel-stack converted from ports to D167 families over
+      @magic-spells/tab-group 1.2.0, split-panel 0.2.0 and panel-stack 0.2.0 (COMPONENT-TABS,
+      COMPONENT-SPLIT-PANEL, COMPONENT-PANEL-STACK). These were the last three big ports in the
+      registry — every remaining port is either a token-styled form control (Calendar) or has no web
+      component to wrap. Deleted with them: SplitPanel's 708-line geometry/snap/localStorage port
+      and registry/lib/panel-stack.js, whose panelClass()/panelInert() class sets the components'
+      own per-state CSS custom properties replace.
+  - kind: state
+    text: >-
+      2026-09-05 (feat/menu-families): the last three ports over dropdown-panel converted —
+      dropdown-menu, context-menu and split-button are now D167 families over the shared base, and
+      ~1,010 lines of flat port became ~10 thin members plus three barrels. What made it possible
+      was upstream work, not local cleverness: @magic-spells/dropdown-panel 2.1.0 added an opt-in
+      `menu` attribute (application-menu semantics), `trigger="contextmenu"` with `showAt(x, y)`,
+      `dropdown-panel:select`, `focusItem(i)`, and `align`/`flip` on the panel. That is the rule
+      working as intended — the piece wanted roving tabindex, typeahead, pointer clamping and
+      Space-activates-a-link, and every one of them went upstream instead of into a fork. Two Astra
+      review rows were RETIRED by the conversion rather than patched: F4 (ContextMenu opening at
+      stale 0,0 coordinates) and F16 (Space on an href row closing without navigating) — the
+      coordinate math and the Space branch are both upstream's now. Where the plan and the as-built
+      upstream disagreed, upstream won; there were no substantive disagreements, only the panel
+      `align` attribute, which the base ignores in favour of the existing utility recipe five
+      shipped families already depend on.
+  - kind: gotcha
+    text: >-
+      2026-09-05 (feat/select-marquee-quantity): three framework facts every wrapper must respect,
+      established while wrapping select-dropdown / scrolling-content / quantity-input. (1) Puzzle's
+      patcher PROPS set (client-runtime viewManager.js,
+      `value`/`checked`/`disabled`/`selected`/`muted`) is name-keyed, not tag-keyed: `value={…}` on
+      ANY element, custom elements included, is a property write with NO attribute. A component that
+      reads `getAttribute('value')` (select-option does) sees nothing — set the attribute
+      imperatively from `mounted()`/`afterUpdate()` (see Select.Option). `disabled={…}` on a custom
+      element likewise writes an expando before upgrade; it only works because the patcher also
+      writes the attribute and these components observe it. (2) `patchAttrs` force-syncs `value` on
+      `<input>`/`<textarea>` against the LIVE DOM property on every patch, so the "frozen prerender
+      seed" pattern is wrong whenever a web component also writes that field — the seed re-asserts
+      and reverts the component. Render the live (clamped) prop with a `String()` D147 escape
+      instead (QuantityInput). (3) Never defer a component call with requestAnimationFrame to dodge
+      an event-ordering problem — rAF does not fire in a hidden tab, so a parent-driven `open`
+      stalls; fix the ordering upstream (select-dropdown 0.3.0 defers its own outside-click
+      listener) and call `show()`/`hide()` synchronously.
+  - kind: state
+    text: >-
+      2026-09-08/09: every upstream component the 0.7.0 wrappers depend on is now PUBLISHED —
+      collapsible-content 1.2.0, dropdown-panel 2.1.0, panel-stack 0.2.0, quantity-input 1.1.0,
+      scrolling-content 2.1.0, select-dropdown 0.3.0, split-panel 0.2.0, tab-group 1.2.0.
+      demo/package.json now installs all eight from npm as caret ranges instead of
+      `file:../../../../../open-sourcery/<name>` machine-local paths (one of which,
+      select-dropdown-wt, pointed at a deleted worktree). That closes this card's own gotcha "the
+      demo pins some wrappers to file:../../<repo>, so a green demo build does not prove the npm
+      tarball works": the demo build now IS the npm-tarball smoke test — `npm ci && npm run build`
+      in demo/ resolves the published tarballs and their `/css` export subpaths, and the built
+      bundle carries the version-gating markers (collapsible-group, dropdown-panel open-delay,
+      select-dropdown:change, panel-stack:push/pop). The only remaining working-tree link in the
+      demo is `@magic-spells/puzzle: file:../../puzzle`, which is deliberate. Practical effect: CI
+      and any fresh clone can build the demo; a wrapper can no longer go green against an
+      unpublished local checkout.
+---
+
+# Wrap @magic-spells web components; port only when wrapping can't work
+
+## Context
+
+The `@magic-spells` ecosystem has 15+ mature web components (dialog-panel, sheet, scroll-stack, select-dropdown, tab-group, range-slider, …) that keep shipping via npm for Shopify themes and other non-Puzzle contexts. Pieces need the same behavior inside Puzzle apps. The question is whether a piece renders the real custom element or re-expresses its behavior as native `.pzl` markup.
+
+## Decision (2026-08-22)
+
+**Wrap the web component directly whenever possible.** A wrapper piece renders the custom element's markup around `<Slot/>`/`<Children/>`, binds props to attributes, declares the npm package in `piece.json.dependencies`, dynamic-imports the package in `mounted()` (module-scope `class extends HTMLElement` crashes Node prerender), and documents the stylesheet import (`@import "@magic-spells/<pkg>/css" layer(components)`) so Tailwind utilities on the host still win. Upstream fixes then reach every consumer through a version bump; nothing is re-ported. ScrollStack is the exemplar.
+
+**Port (a native `.pzl` rebuild) only when wrapping genuinely can't work** — the behavior doesn't exist as a web component, or the piece's value is token-styled form-control markup where a wrapper would cost more than it saves (Calendar-style controls). Ported pieces keep the rules that make ports workable: no `<style>` blocks, no `customElements.define`, Tailwind semantic tokens only, config-first props.
+
+Why: a complete rewrite is a fork. Every upstream fix has to be translated by hand into a differently shaped codebase, and the translation is where bugs enter. The sheet port is the cautionary case — ~5,600 lines, larger than the ~2,100-line upstream component plus its CSS — and it deliberately rearchitected measurement, the backdrop, and dismissal acknowledgement; those were exactly where bugs appeared that never reproduced upstream.
+
+Self-managed state is acceptable in a wrapper: the parent passes `open`, the component runs itself, and `@show` / `@hide({ result, triggerElement })` report what happened (dialog-panel's `hidden` detail carries the pressed button's `data-result`); the parent re-syncs `open` after the fact. This is a deliberate relaxation of the strict parent-owned-`open` contract for wrapped overlays.
+
+## Alternatives
+
+- **Native `.pzl` rebuilds for every piece** — the original rule (2026-07 → 2026-08-22), abandoned. It rested on two technical claims that did not hold up: (1) "self-mutating web components fight Puzzle's reconciliation" — the patcher (`client-runtime/views/viewManager.js` `patchAttrs`) diffs only the attributes the template rendered, so host attributes and inline custom properties a component sets on itself survive, and the one injected node (dialog-panel's `<dialog-backdrop>`) is created only if the template doesn't already author it; (2) "`island` would be needed and it freezes children" — ScrollStack (2026-08-19, the first wrapper) wraps a light-DOM custom element with reactive slotted children and no `island`. The part that stayed true — "the transferable IP is the behavior design, not the code" — is the argument *for* not forking the code. Existing ports (Select, Dialog, DatePicker, BottomSheet, …) stay as they are until there is a reason to touch them; new pieces and any piece being reworked follow the wrap rule. Sheet is the first scheduled conversion.
+- **Copy DOM-free engine modules verbatim into `registry/lib` and rewrite only the host** — the sheet's interim approach ([[FEATURE-DOM-FREE-SHEET-LIBS]]). A half-fork: the libs stayed identical but the host seam still had to be re-ported by hand.
+
+## Consequences
+
+- Wrappers need the package installed (the CLI prints the npm install) and its stylesheet imported in `layer(components)` — two consumer steps, documented in each piece's installation section.
+- Wrapped overlays self-close and notify; they don't wait for the parent to flip `open`. Piece docs must say so.
+- Theming goes through the component's CSS custom properties set on the host (e.g. `--sheet-panel-background: var(--color-surface)`) plus utilities; upstream defaults should stay minimal — placement and function, not colors.
+- Piece-only extras (a `top` sheet position, a grabber toggle, a close `reason`) go upstream first, not into a fork.
+- [[DECISION-SPRING-PHYSICS]] and [[FEATURE-DOM-FREE-SHEET-LIBS]] describe ports made under the old rule; they remain accurate history for those pieces.
+- Config-first APIs still follow from having no cross-component context ([[DECISION-CONFIG-FIRST-API]]); a wrapper's props simply map to attributes.

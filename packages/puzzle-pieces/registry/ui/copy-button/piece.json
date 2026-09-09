@@ -1,0 +1,8 @@
+{
+  "name": "copy-button",
+  "description": "Click-to-copy button — writes a value to the clipboard and shows a transient copied state (check icon, swapped label/aria-label, aria-live announcement) before reverting",
+  "files": ["CopyButton.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

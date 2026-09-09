@@ -1,0 +1,245 @@
+<puzzle-view>
+  <collapsible-group class={ rootClass } exclusive={ isExclusive }><Children/></collapsible-group>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Accordion — a set of disclosures that coordinate: in `single` mode opening one
+// closes the rest, in `multiple` mode they are independent. A FAMILY (D167) over
+// the same @magic-spells/collapsible-content web component the Collapsible family
+// wraps, so the exclusivity, the height animation and every ARIA attribute are
+// upstream's.
+//
+//   import Accordion from '@/components/ui/Accordion';
+//
+//   <Accordion value={ open } @change={ setOpen }>
+//     <Accordion.Item value="shipping">
+//       <Accordion.Trigger>Shipping</Accordion.Trigger>
+//       <Accordion.Content>…real markup…</Accordion.Content>
+//     </Accordion.Item>
+//   </Accordion>
+//
+// BREAKING CHANGE in 0.7.0: the `items` config array is gone, and with it the
+// plain-text `content` limitation it forced (Puzzle has no per-row slots, so a
+// config array could only ever carry a string). Panels are written as markup now
+// and their bodies take anything.
+//
+// EXCLUSIVITY IS THE ELEMENT'S. `exclusive` on <collapsible-group> makes the
+// component close its siblings when one opens; this piece never closes anything
+// itself. A member joins its NEAREST group ancestor, so a nested Accordion — or a
+// standalone <Collapsible>, which carries its own plain group — is not a member of
+// this one and is left alone.
+//
+// CONTROLLED value, DRIVEN THROUGH THE DOM. There is no cross-component context in
+// Puzzle, so the root cannot hand state down to Item/Content as props. It reaches
+// its members through the DOM instead: mounted() and afterUpdate() call show() /
+// hide() on the <collapsible-component> elements that are DIRECT members of this
+// group. `value` is a string in single mode ('' = all closed) and an array of
+// strings in multiple mode; `defaultValue` seeds uncontrolled mode once.
+//
+// EDGE-TRIGGERED, WITH A NO-OP GUARD. afterUpdate() acts when `value` changed OR
+// when the MEMBER SET changed — a row appended to a keyed {#for} whose id is
+// already in `value` has to be opened, and its own value never moved. #sync()
+// skips any item whose state already matches, so a parent echoing back the value
+// we just reported, or an unrelated row joining the list, animates nothing.
+//
+// A REJECTED TOGGLE IS NOT REVERTED. Wrapped-overlay contract (D-WRAP): the
+// component self-manages and reports; the parent re-syncs. A parent that ignores
+// @change leaves a panel visually open while its own state says closed, and the
+// next real change to `value` puts it right. Reverting would fight the animation
+// and double-fire collapsible:toggle. The mechanism is that #last tracks
+// props.value and NOTHING ELSE — never the value we reported — so a rejected
+// toggle leaves no pending edge for a later unrelated render to act on.
+//
+// ONE @change PER USER ACTION. Opening B in an exclusive group makes upstream close
+// A first, so TWO collapsible:toggle events fire in the same task (A closed, then B
+// opened). Reporting each one would hand the parent a transient '' before the real
+// value. The listener therefore schedules a single microtask and reads the whole
+// group's state from the DOM once everything has settled — one call, with the final
+// value.
+//
+// STYLESHEET. Same one-line merge as Collapsible; add it once to your style entry:
+//   @import "@magic-spells/collapsible-content/css" layer(components);
+//
+// TODO: switch to ^1.2.0 once published — this repo's demo pins the package by
+// file: path while 1.2.0 is unreleased. Consumers install ^1.2.0.
+//
+// Props
+//   type          'single' (default) — one open at a time | 'multiple'. The SHAPE
+//                 OF `value` WINS where they disagree: an array value behaves as
+//                 multiple whatever `type` says, and a string value under
+//                 type="multiple" still reports an array back
+//   value         controlled: a string in single mode, a string[] in multiple mode
+//   defaultValue  uncontrolled seed, applied once at mount
+//   class         merged onto <collapsible-group>, after the card chrome
+//   @change(value)  value-first, fired once per user action with the next value
+
+const ROOT = 'divide-y divide-border rounded-xl border border-border bg-surface';
+
+export default class Accordion extends PuzzleView {
+  #live = false;
+  #ready = false;
+  #syncing = false;
+  #queued = false;
+  #controlled = false;
+  #last;
+  #members = '';
+
+  #multiple() {
+    return this.props.type === 'multiple' || Array.isArray(this.props.value);
+  }
+
+  // Direct members of THIS group only. A nested Accordion's items, and any
+  // standalone <Collapsible> (which carries its own plain group), resolve their
+  // closest group to something else and drop out here.
+  #items() {
+    if (!this.element) return [];
+    return [...this.element.querySelectorAll('collapsible-component[data-value]')].filter(
+      (el) => el.closest('collapsible-group') === this.element
+    );
+  }
+
+  // Identity of the current member set, so a row appended (or removed) between
+  // renders is an edge the controlled path can act on.
+  #memberKey() {
+    return this.#items()
+      .map((item) => item.dataset.value)
+      .join('\u0000');
+  }
+
+  #isOpen(id, value) {
+    return Array.isArray(value) ? value.includes(id) : value === id;
+  }
+
+  // The group's state, read back off the DOM. Upstream is the source of truth for
+  // what is open, so deriving the value beats accumulating it from event details.
+  #readValue() {
+    const open = this.#items()
+      .filter((item) => item.open)
+      .map((item) => item.dataset.value);
+    return this.#multiple() ? open : (open[0] ?? '');
+  }
+
+  #apply(item, want) {
+    if (!!item.open === want) return; // already there — no redundant animation
+    if (this.#ready && typeof item.show === 'function') {
+      want ? item.show() : item.hide();
+      return;
+    }
+    // Not upgraded yet: leave the intent on the attribute. connectedCallback reads
+    // it and seeds the height with no animation.
+    const content = item.querySelector('collapsible-content');
+    if (!content) return;
+    if (want) content.setAttribute('open', '');
+    else content.removeAttribute('open');
+  }
+
+  // Drives every member to match `value`. The flag keeps our own listener from
+  // reporting writes we made — show()/hide() dispatch synchronously, so it covers
+  // the whole cascade including the siblings an exclusive group closes.
+  #sync(value) {
+    this.#syncing = true;
+    try {
+      for (const item of this.#items()) {
+        this.#apply(item, this.#isOpen(item.dataset.value, value));
+      }
+    } finally {
+      this.#syncing = false;
+    }
+  }
+
+  #onToggle = (event) => {
+    if (this.#syncing) return;
+    const item = event.target?.closest?.('collapsible-component');
+    if (!item || !item.dataset.value) return;
+    // collapsible:toggle BUBBLES and is composed: a nested Accordion's items pass
+    // straight through this element on their way up, and reporting those as ours
+    // would name a panel this accordion does not own.
+    if (item.closest('collapsible-group') !== this.element) return;
+    if (this.#queued) return;
+
+    this.#queued = true;
+    queueMicrotask(() => {
+      this.#queued = false;
+      if (!this.#live) return;
+      // #last is NEVER set from what we report — it tracks props.value only. An
+      // accepted change comes back through afterUpdate and syncs as a no-op (the
+      // DOM already matches); a REJECTED one leaves #last where it was, so no
+      // later unrelated render can quietly revert the panel. That is the
+      // rejected-toggle contract above, and this is the line that keeps it.
+      this.props.change?.(this.#readValue());
+    });
+  };
+
+  data(params, props) {
+    return {
+      rootClass: [ROOT, props.class].filter(Boolean).join(' '),
+      // `false` is the compiler's omit sentinel — multiple mode renders no
+      // attribute at all, which is what leaves the group non-exclusive.
+      isExclusive: props.type === 'multiple' || Array.isArray(props.value) ? false : true,
+    };
+  }
+
+  mounted() {
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#controlled = this.props.value !== undefined;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this.element.addEventListener('collapsible:toggle', this.#onToggle);
+
+    const seed = this.#controlled ? this.props.value : this.props.defaultValue;
+    this.#last = this.props.value;
+    this.#members = this.#memberKey();
+    // Seeded on the attribute before the upgrade, so the opening panel is painted
+    // open rather than animated open on mount.
+    if (seed !== undefined) this.#sync(seed);
+
+    import('@magic-spells/collapsible-content')
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+      })
+      .catch((error) => {
+        console.error(
+          '[Accordion] failed to load @magic-spells/collapsible-content — the ' +
+            'panels will not expand.',
+          error
+        );
+      });
+  }
+
+  afterUpdate() {
+    if (!this.#live || !this.#controlled) return;
+    const value = this.props.value;
+    const members = this.#memberKey();
+    // Edge-triggered, never level-triggered: an unrelated re-render carrying the
+    // same value must not reopen a panel the user just closed.
+    //
+    // The MEMBER SET is the second edge. A row appended to a keyed {#for} whose id
+    // is already in `value` mounts closed — Content never receives `open`, and the
+    // value did not change — so it would stay closed until the next value change.
+    // Re-syncing when the members differ covers that; the item.open === want guard
+    // in #apply keeps every unchanged row from animating.
+    if (same(value, this.#last) && members === this.#members) return;
+    this.#last = value;
+    this.#members = members;
+    this.#sync(value);
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.element?.removeEventListener('collapsible:toggle', this.#onToggle);
+  }
+}
+
+// Shallow value equality — `value` is a string or an array of strings.
+function same(a, b) {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+  return a === b;
+}
+</script>

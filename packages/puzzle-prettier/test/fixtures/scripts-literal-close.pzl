@@ -1,0 +1,23 @@
+<puzzle-view class="tricky">
+  <pre>{ output }</pre>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A literal </script> inside a line comment must NOT close the body.
+export default class Tricky extends PuzzleView {
+  data() {
+    const a = '</script>'; // a string containing the close tag
+    const b = "also </script> here";
+    const c = `template with </script> and ${a} interpolation and nested ${`</script>`}`;
+    /* block comment with </script> */
+    const re = /<\/script>/g;
+    return { output: a + b + c + re.source };
+  }
+}
+</script>
+
+<style>
+.tricky::before{content:'</script>'}
+</style>

@@ -1,0 +1,9 @@
+<puzzle-view>
+  <h1>Hello World</h1>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Home extends PuzzleView {}
+</script>

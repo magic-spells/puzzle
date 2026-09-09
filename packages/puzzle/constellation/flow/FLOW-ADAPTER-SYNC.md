@@ -1,0 +1,182 @@
+---
+name: Adapter server sync
+status: verified
+triggers:
+  - kind: manual
+connections:
+  - STATE-RECORD
+  - FLOW-REACTIVITY
+  - COMPONENT-STORE
+  - COMPONENT-PUZZLE-MODEL
+  - FILE-STORE
+  - FILE-PUZZLE-MODEL
+  - DOC-SPEC-DATA
+  - DOC-DATASTORE
+  - DECISION-D21-ADAPTER-READ-PATH
+  - DECISION-D48-SCHEMA-VALIDATION
+  - DECISION-D50-ADAPTER-WRITE-SYNC
+  - DECISION-D91-ADAPTER-REQUEST-HOOK
+  - DECISION-D98-FIXTURES-MODULE-FLAG
+  - DECISION-D112-STORE-ID-KEY-NORMALIZATION
+  - DECISION-D125-SAVE-RECONCILE-REVISION
+  - DECISION-D132-CROSS-VERB-WRITE-CHAIN
+  - DECISION-D137-LOAD-PK-GUARD
+  - DECISION-D138-LOAD-REVISION-MERGE
+  - DECISION-D157-ADAPTER-SUBPATH
+  - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
+  - DECISION-D161-AUTO-FETCHING-FINDS
+  - FEATURE-ADAPTER-WRITE-SYNC
+  - FEATURE-STORE-PUBLIC-UPSERT
+  - FILE-ADAPTER
+verified_at: '2026-08-24T21:39:23.520Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Re-verified against current code and corrected: at least one claim on this card no longer
+      matched the runtime, and the card was rewritten to state what the code actually does. Verified
+      at this sha with the framework suite green at 1871 tests.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+---
+
+# Adapter server sync
+
+The opt-in server path. [[FLOW-REACTIVITY]] owns the local tracking loop; this
+flow ends by re-entering it, because the last thing every server verb does is an
+ordinary store notification — a component that queried the loaded records
+re-runs `data()` with no server-specific wiring anywhere in it.
+
+The division of labour is the whole design: **a transport owns the HTTP
+conversation and nothing else.** Validation, shape guards, identity,
+primary-key adoption, provenance, write ordering, notification, and persistence
+are framework-owned, and therefore behave identically whether the bytes were
+moved by an endpoint-generated REST default or by a function the author wrote.
+
+1. The app passes the capability from `@magic-spells/puzzle/adapter` **once** in
+   its `PuzzleApp` config — the bare `adapter`, or `adapter.defaults({ ...verbs })`
+   to declare an app-wide dialect ([[DECISION-D157-ADAPTER-SUBPATH]]).
+   - a truthy value that is not the capability is a construction-time error
+     naming the import
+   - a model declaring `static adapter` while no capability was passed warns in
+     development with the model name and the fix
+2. Installing grafts the server surface onto `Store`, `PuzzleModel`, and
+   `PuzzleView` prototypes before any Store is constructed. It is idempotent,
+   and an app that
+   never opts in ships none of it — no verbs, no write chain, no settle loop,
+   no adapter error class.
+3. A verb is invoked. The read verbs (`loadMany`, `loadOne`, `upsert`,
+   `request`) run straight away — called explicitly, or by a
+   [[DECISION-D161-AUTO-FETCHING-FINDS]] tracked fault, which first consults
+   the in-flight dedup maps, the negative cache, and the collection-complete
+   set and only then dispatches the same loader. Writes (`save`, `delete`)
+   enqueue on that record's single
+   write chain and wait ([[DECISION-D132-CROSS-VERB-WRITE-CHAIN]]).
+4. At the front of the chain the write re-reads the record, then pre-flights.
+   - a save whose record was removed while it waited rejects with the same
+     message `save()` gives at call time — no write may revive a discarded row
+   - a save validates the **full** record first; invalid rejects with
+     `PuzzleValidationError` and no request is made
+   - a delete of a never-synced record removes locally and sends nothing
+5. Transport dispatch resolves in three tiers: the model's own function, then
+   the app `adapter.defaults()` function, then the endpoint-generated REST
+   default ([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]). Nothing at any tier is a
+   per-verb error naming the signature to add — except on the tracked fault
+   path, where an unresolvable read verb simply means the find stays
+   pure-local.
+6. The Store captures the reconciliation boundary **before** awaiting: the map
+   key this record is currently indexed under, and its local mutation revision
+   ([[DECISION-D125-SAVE-RECONCILE-REVISION]]).
+7. The transport runs, calling the enhanced fetch pre-bound to it. It is
+   platform-shaped — URL plus init in, `Response` out — with no URL prefixing
+   and no automatic JSON.
+8. That fetch funnels through the one seam: `beforeRequest(init, context)` runs
+   synchronously and may mutate or replace the init, method and body are then
+   re-stamped from the original, and `_network` makes the call
+   ([[DECISION-D91-ADAPTER-REQUEST-HOOK]]).
+   - a hook that throws is not caught — an auth failure must reject the verb,
+     not ship an unauthenticated request
+   - `/fixtures` replaces `_network`, so mocking runs strictly *after* the hook
+     ([[DECISION-D98-FIXTURES-MODULE-FLAG]])
+9. The result is normalized. A returned `Response` is status-checked and its
+   body read exactly once — parsed JSON when it parses, raw text when it does
+   not, `undefined` when empty; parsed data an author returned directly passes
+   through untouched. A non-OK status — generated transports included — throws
+   `PuzzleAdapterError` with status and body.
+10. Shape and key guards run **before any mutation**: loads require object
+    shapes carrying the primary key on every element, checked up front and
+    all-or-nothing ([[DECISION-D137-LOAD-PK-GUARD]]), and — on the tracked
+    fault path only — a `loadOne` response pk must match the requested id
+    under `recordKey` normalization; an explicit `loadOne` is permissive so it
+    can resolve a non-primary key. Writes
+    require a pk-bearing object or a nullish no-echo.
+11. Identity is re-checked against the key captured in step 6. If this is no
+    longer the indexed record there, every local effect is skipped and the verb
+    resolves with the detached record.
+12. Reconciliation applies: revision-gated merge, primary-key adoption on a
+    first save, `_synced` set, or `removeRecord` on a delete ack — see
+    [[STATE-RECORD]] for what each does to the record's position. D161 read
+    state reconciles beside it: a landed identity clears its negative entry, a
+    normalized 404 records one, a no-options collection success marks the type
+    complete, and a confirmed delete records absence.
+13. The Store notifies the affected record and collection keys and flags
+    persistence; the batched `flush()` delivers subscribers once and writes the
+    storage snapshot once. A view mid-settle coalesces the notification into
+    one more pass instead of a competing refresh.
+
+## Ordering that is load-bearing
+
+
+- **Validate before the network.** An invalid record must never reach the
+  server, and the caller must be able to tell a rejected write from a failed
+  one: `PuzzleValidationError` means nothing was sent.
+- **Capture the key before the await, compare after.** Everything downstream —
+  pk adoption, the `_synced` flip, the delete's removal — reconciles against
+  exactly that key. It is also why the request hook may not rewrite method or
+  body: a hook that flipped POST to PUT would silently invalidate the check.
+- **Guard the whole payload before touching anything.** A load validates every
+  element up front so a bad entry mid-array cannot half-apply the response.
+- **Serialize per record, across verbs.** Save and delete mutate the same server
+  row and the same map entry, so ordering them separately is not enough. A
+  delete queued behind a first save builds its request from the *adopted* server
+  key; a chained link's rejection is swallowed for chaining only, so every
+  caller observes its own outcome and nothing inherits a neighbour's failure.
+- **A save is ordered against in-flight reads.** Step 6 also takes a dispatch
+  generation from the same counter the reads use, and each success path stamps
+  it on the record (`Math.max`, so a read that landed after the save keeps its
+  precedence). A read dispatched BEFORE the save is then dropped for that
+  record, so it cannot revert the body the server acknowledged — and the next
+  `save()` cannot PUT the reverted value back
+  ([[DECISION-D138-LOAD-REVISION-MERGE]]). Save reconciliation never routes
+  through `_upsert`; the public `upsert()` still passes no generation and stays
+  deliberately outside this ordering.
+- **In-flight read entries clear in `finally` with an identity check**, and
+  every fault promise carries a rejection observer, so a superseded or throwing
+  data pass can neither strand an in-flight key nor leak an unhandled
+  rejection.
+
+## Gotchas
+
+- **404-tolerance on delete belongs to the generated transport**, not the
+  framework. An author's delete that returns a 404 `Response` rejects; to keep
+  the idempotent behaviour, handle it inside the function.
+- **A write that rejects leaves `_synced` false.** On a create that the server
+  actually applied but acknowledged with a body Puzzle refuses, the row exists
+  remotely while the next `save()` dispatches create again and duplicates it. A
+  server that acknowledges without echoing the record needs a create/update
+  function that returns nothing.
+- **Global fetch is legal and bypasses everything in step 8** — the hook and the
+  mock seam both. Author functions must use the fetch they are handed to stay
+  inside the pipeline.
+- **`upsert()` is imperative, not revision-gated.** Loads respect edits made
+  while they were in flight ([[DECISION-D138-LOAD-REVISION-MERGE]]); `upsert()`
+  and `request()` deliberately do not — they are the explicit
+  "apply this server truth now" verbs for custom-action responses.
+- **`store.adapter(type)` is the only way to call a custom transport.** The
+  framework never invokes one; the bound view exists so an author's function
+  gets the enhanced fetch, and its result is usually handed to `upsert()`.
+- **Configured dialects are per Store**, so two apps on one page can carry
+  different app defaults.
+- **Only a normalized 404 means absence on the fault path.** An author function
+  signalling not-found any other way (returning `null`, throwing a bare object
+  with `status: 404`) is a shape error or an ordinary failure — the convention
+  is `new Response(null, { status: 404 })`.

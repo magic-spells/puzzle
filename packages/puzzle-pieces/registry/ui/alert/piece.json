@@ -1,0 +1,8 @@
+{
+  "name": "alert",
+  "description": "Inline callout with default/brand/danger variants, leading icon, and optional title",
+  "files": ["Alert.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

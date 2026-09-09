@@ -1,0 +1,8 @@
+{
+  "name": "kanban",
+  "description": "Config-first controlled Kanban board — pointer and keyboard card movement, insertion placeholders, aria-live announcements, a value-first @move intent, and caller-owned card and column-header snippets that preserve piece-owned drag mechanics",
+  "files": ["Kanban.pzl", "KanbanCard.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

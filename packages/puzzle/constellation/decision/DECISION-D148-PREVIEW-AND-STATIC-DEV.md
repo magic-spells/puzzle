@@ -1,0 +1,140 @@
+---
+name: D148 — `puzzle preview` + real static serving in dev
+status: verified
+connections:
+  - DECISION-D81-STATIC-PAGES-MODE
+  - DECISION-D154-STATIC-DEV-WARM-REBUILDS
+  - DECISION-D90-DEV-PORT-SCAN
+  - DECISION-D92-DEV-ERROR-OVERLAY
+  - DECISION-D98-FIXTURES-MODULE-FLAG
+  - COMPONENT-DEV-SERVER
+  - COMPONENT-COMPILER-CLI
+  - DOC-SPEC-BUILD
+verified_at: '2026-08-24T19:03:32.784Z'
+verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+notes:
+  - kind: verified
+    text: >-
+      Verified at the 0.5.0 release prep: compiler/internal/serve owns both Resolve (serve.go:61)
+      and the port scan (port_test.go covers scan/strict/exhausted/zero/range), so dev and preview
+      share one resolver. preview defaults to port 4000 (cmd/puzzle/main.go:172), sets
+      Cache-Control: no-cache on HTML (preview.go:162), and --fixtures + output:'static' is refused
+      at dev startup (dev/dev.go:204). compiler/internal/{preview,serve} tests pass.
+    sha: f2aef082b4b17fb4ded5da94da53a547e2fe66b1
+  - kind: verified
+    text: >-
+      Preview mode resolution re-truthed against preview.go: the marker is read from dist/index.html
+      alone.
+    sha: c809db6680eb9355961897756f54e97f1164b88f
+code_refs:
+  - compiler/cmd/puzzle/main.go
+  - compiler/internal/build/prerender.go
+  - compiler/internal/build/prerender_pages.go
+  - compiler/internal/build/watch_static.go
+  - compiler/internal/dev/dev.go
+  - compiler/internal/keys/keys.go
+  - compiler/internal/preview/preview.go
+  - compiler/internal/serve/serve.go
+---
+
+# D148 — `puzzle preview` + real static serving in dev
+
+Two halves of one principle — **you should see what ships before you deploy it**
+(v1.69):
+
+1. **`puzzle preview [dir] [--port N] [--strict-port]`** serves an existing
+   `dist/` the way the production host will, per resolved output mode: SPA →
+   history-API fallback; hybrid → prerendered page first, shell otherwise;
+   static → clean URLs and a REAL 404 (serving the built `404.html`), never the
+   shell. No watcher, no SSE, no injection, no `dev.proxy` — the artifact is
+   checked as it sits on disk. Default port 4000 so it runs beside dev.
+2. **`puzzle dev` on an `output: 'static'` project runs the real pipeline**:
+   every rebuild is the full static build (bundle + Tailwind + prerender +
+   per-page modules, staging + atomic swap), served with static-host semantics
+   — clean URLs, genuine full-page navigations, real 404s, no router. How that
+   rebuild is DRIVEN — a cold `build.Build` per save, or the persistent
+   contexts of `StaticWatchBuilder` — is [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]'s
+   question, not this card's; the output and the last-good guarantee are the
+   same either way.
+
+## Context
+
+Dev always served the SPA runtime regardless of output mode, so a static-mode
+project was developed against a router that does not exist in what ships;
+prerender-output bugs (the D113 RAWTEXT class), takeover, and per-page
+`mountStatic` behavior were structurally invisible until after deploy. And
+`npx serve dist` — the only preview story — breaks SPA deep links (no history
+fallback) while quietly serving the shell for missing static routes, hiding
+exactly the bug class a preview should expose.
+
+## Decision
+
+- **Shared resolver, one source of truth.** `compiler/internal/serve` owns both
+  the mode-aware URL→file mapping (`Resolve`) and the D90 port scan (moved
+  verbatim out of dev), so dev and preview answer static URLs identically and
+  cannot drift. Resolve answers "which file, what status"; each caller decides
+  how to write the response (dev injects live-reload, preview never rewrites).
+- **Hybrid dev stays the SPA loop.** A hybrid site IS the SPA bundle after
+  takeover, so the SPA loop already shows what ships; dev prerenders nothing
+  for it. Only `static` changes dev behavior.
+- **Static dev injects the reload client at serve time** into every HTML page
+  it serves — disk stays production-clean — so reload and the D92 build-error
+  overlay reach static pages through the existing SSE channel with no new
+  mechanism, and a dev 404 page carries the client too (self-heals when the
+  route appears). A failed compile OR prerender keeps the last good pages
+  serving (staging swap), with the retained build error replayed over SSE.
+- **Static dev rebuilds a COMPLETE tree and swaps it, every time.** The
+  prerender pass needs a whole, atomically swapped output — the in-place
+  incremental builder the SPA loop uses deliberately does not produce one — so
+  a static rebuild is never a patch of the served `dist/`. That constraint is
+  this card's; making those complete rebuilds warm (persistent esbuild
+  contexts, a session-long compile memo, the shared `tailwindcss --watch`
+  child) is [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]. `--fixtures` + static is
+  rejected at dev startup (D98's rule, failed fast instead of once per
+  rebuild).
+- **Preview mode resolution: config wins, artifact breaks ties.** An explicit
+  `output` key is the request and always wins, and a config that will not load
+  is fatal here — falling back to the zero Config would preview a static site
+  with SPA semantics, the exact mismatch preview exists to expose. When the
+  config is silent (the build used the `--static`/`--hybrid` FLAG), preview
+  reads the mode back from the marker the prerenderer stamps into
+  `dist/index.html` — `data-puzzle-static` / `data-puzzle-ssg` — and says which
+  one it found; a config/artifact disagreement warns that `dist/` predates the
+  config instead of guessing. The marker is read from the ROOT page only, so a
+  flag-built site whose root route is `prerender: false` writes an unmarked
+  `dist/index.html` and previews as an SPA — for static output the `app.js`
+  shape check still warns (a static build ships none), a flag-built hybrid site
+  is indistinguishable from an SPA build, and naming `output` in the config
+  removes the ambiguity for both.
+- Preview defaults to port 4000 — not dev's 3000 — so `dev` + `preview`
+  side by side never silently port-scan past each other. HTML is served
+  `Cache-Control: no-cache` (a host usually wouldn't) so a stale page can
+  never straddle two builds. Missing/empty `dist/` is a hard error naming
+  `puzzle build`. Terminal affordances match dev: on a real TTY, cbreak `q`
+  quits (and the banner advertises it) via the shared
+  `compiler/internal/keys` package both commands use; on pipes/CI/Windows the
+  listener silently stays off and Ctrl+C is unaffected.
+
+## Alternatives rejected
+
+- **Prerender-in-dev for hybrid too** — slows every rebuild to verify only
+  first-paint HTML and the takeover moment; `build` + `preview` covers those.
+- **A `puzzle dev` opt-out flag back to the SPA loop for static projects** —
+  speculative surface; dev showing a router that will not ship is the bug this
+  closes, not a mode to preserve.
+- **Guessing preview's mode from file shapes alone** — the marker is the
+  artifact describing itself; shape-sniffing (`app.js` present/absent) is kept
+  only as a warning, never as the decision.
+- **`http.ServeFile` for HTML** — it 301-redirects `…/index.html` to `…/` and
+  cannot carry the 404 status a built `404.html` must be served with; HTML is
+  written out directly instead.
+
+## Consequences
+
+SPEC §13 gains the `preview` command; §36's "dev is unchanged (SPA)" contract
+is amended to static-mode real serving. The SPA dev path is byte-identical
+(resolution merely moved into the shared resolver — nested-`index.html`
+shadowing rule, symlink traversal backstop and all). Serving what ships is not
+negotiable: when the cost of doing so hurt on large sites, the answer was to
+make the rebuild warm (D154) and — next — to make the prerender itself
+incremental, never to go back to serving the SPA.

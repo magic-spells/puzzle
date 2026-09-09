@@ -1,0 +1,38 @@
+---
+name: incremental build context
+status: verified
+path: compiler/internal/build/watch.go
+language: go
+summary: Reusable esbuild context, CSS graph pruning, and public-asset mirroring.
+connections:
+  - COMPONENT-ESBUILD-PLUGIN
+  - COMPONENT-DEV-SERVER
+verified_at: '2026-08-24T21:11:50.859Z'
+verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: verified
+    text: >-
+      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
+      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
+      one — the path moved, the code did not. No content was re-checked, and none needed to be.
+    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+---
+
+Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/build/watch.go`.
+
+[[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] makes rebuild input explicit:
+the builder receives the changed batch, owns usage/public classification, and
+reports whether its committed component-CSS revision moved (test and profiling
+evidence; the dev server recomposes each rebuild and dedupes by bytes). A
+public source that appears or moves syncs on the next rebuild. Public-only
+batches also skip esbuild unless the changed asset belongs to the last
+successful module graph, compared symlink-resolved. Working plugin
+CSS is promoted only after a full successful rebuild; Tailwind never reads
+partially updated state.
+Under [[DECISION-D160-SPA-CODE-SPLITTING]] a splitting dev build runs with
+`Write: false` and materializes the outputs itself, then deletes the previous
+rebuild's outputs this one did not produce. Dev keeps `dist/` warm, so an edited
+lazy module's re-hashed chunk would otherwise accumulate beside its predecessor
+forever. Only paths this builder wrote are prune candidates, so the public
+mirror stays `prevPublic`'s job and `app.js` (rewritten every pass) is safe by
+construction. With the flag off, `Write: true` and none of this runs.

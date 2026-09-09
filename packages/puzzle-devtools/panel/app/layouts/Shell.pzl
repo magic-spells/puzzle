@@ -1,0 +1,76 @@
+<puzzle-view class="h-full flex flex-col bg-canvas text-ink">
+  <header class="shrink-0 flex items-center gap-3 min-h-9 px-3 py-1 border-b border-line bg-surface">
+    <span class="shrink-0 font-mono text-[11px] font-semibold tracking-wider text-accent">PUZZLE</span>
+
+    <nav class="flex items-center gap-1" aria-label="Panels">
+      {#for item in nav}
+        <a
+          key={ item.path }
+          class="rounded px-2.5 py-1 text-[12px] no-underline { item.cls }"
+          href="{ item.path | link }">{ item.label }</a>
+      {/for}
+    </nav>
+
+    <span class="ml-auto inline-flex items-center gap-1.5 text-[11px] text-muted">
+      <span class="h-1.5 w-1.5 rounded-full { statusDotClass }"></span>
+      { statusLabel }
+    </span>
+  </header>
+
+  <main class="flex-1 min-w-0 min-h-0 overflow-y-auto">
+    <Slot/>
+  </main>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
+
+const NAV = [
+  { path: '/', label: 'Connection' },
+  { path: '/views', label: 'Views' },
+  { path: '/store', label: 'Store' },
+  { path: '/subscriptions', label: 'Subscriptions' },
+  { path: '/router', label: 'Router' },
+  { path: '/performance', label: 'Performance' },
+];
+
+const ACTIVE = 'bg-accent-soft text-accent font-medium';
+const IDLE = 'text-muted hover:bg-raised hover:text-ink';
+
+export default class Shell extends PuzzleView {
+  data() {
+    // Subscribes to the singleton, so the status chip tracks the connection
+    // without the layout knowing anything about the transport.
+    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
+    const here = this.route?.pathname ?? '/';
+
+    return {
+      nav: NAV.map((item) => ({
+        ...item,
+        cls: item.path === here ? ACTIVE : IDLE,
+      })),
+      statusLabel: this.statusLabel(connection),
+      statusDotClass: this.statusDotClass(connection),
+    };
+  }
+
+  statusLabel(connection) {
+    if (!connection) return 'starting';
+    if (connection.port === 'disconnected') return 'disconnected';
+    if (connection.state === CONNECTION_STATE.MISMATCH) return 'version mismatch';
+    if (connection.state === CONNECTION_STATE.CONNECTED) {
+      return connection.appMounted ? 'connected' : 'app unmounted';
+    }
+    return 'no app';
+  }
+
+  statusDotClass(connection) {
+    if (!connection) return 'bg-faint';
+    if (connection.port === 'disconnected') return 'bg-danger';
+    if (connection.state === CONNECTION_STATE.MISMATCH) return 'bg-warn';
+    if (connection.state === CONNECTION_STATE.CONNECTED && connection.appMounted) return 'bg-ok';
+    return 'bg-faint';
+  }
+}
+</script>

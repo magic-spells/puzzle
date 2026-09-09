@@ -1,0 +1,95 @@
+<puzzle-view>
+  <DropdownPanel
+    class={ rootClass }
+    trigger="hover"
+    arrow="none"
+    openDelay={ openDelay }
+    closeDelay={ closeDelay }
+    open={ openState }
+    effect={ effect }
+    @show={ onShow() }
+    @hide={ onHide() }><Children/></DropdownPanel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// HoverCard — Popover's hover-triggered cousin, for supplementary previews
+// (link previews, @user cards). A FAMILY (D167) composed over the shared
+// DropdownPanel base, which wraps the @magic-spells/dropdown-panel web
+// component:
+//
+//   import HoverCard from '@/components/ui/HoverCard';
+//
+//   <HoverCard>
+//     <HoverCard.Trigger>@ada</HoverCard.Trigger>
+//     <HoverCard.Content>…profile preview…</HoverCard.Content>
+//   </HoverCard>
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. Hover intent, the hover BRIDGE (the
+// invisible skewed shape that keeps the pointer "inside" while it travels from
+// the trigger to the card, which is what lets you hover the card itself),
+// dismissal and the keyboard model are the web component's. Nothing here
+// schedules a timer or listens on the document.
+//
+// BREAKING CHANGE in 0.7.0: the piece used to be a single component with a
+// `label` prop and a named "trigger" slot. It is written as markup now — a named
+// slot is a compile error anywhere inside a component invocation, so a piece
+// whose root is <DropdownPanel> has exactly ONE content channel, and a trigger
+// plus a card needs two. Gone with the port: both hand-rolled timers, the
+// pointerenter/leave/focusin/focusout wiring, the Escape handler, the document
+// pointerdown listener, `side` and the rAF flip measurement.
+//
+// TIMING. `openDelay` (600ms) and `closeDelay` (300ms) reproduce the old piece's
+// defaults, forwarded to the component's open-delay / close-delay attributes.
+// Those are honoured by @magic-spells/dropdown-panel >= 2.1.0 and IGNORED by
+// 2.0.0, where an unknown attribute is simply inert — on 2.0.0 the card opens
+// and closes immediately, which is the only visible difference.
+//
+// trigger="hover" falls back to click where (hover: hover) does not match, so
+// the card is still reachable on a phone.
+//
+// ACCESSIBILITY. A hover card is SUPPLEMENTARY by design. Do NOT put content
+// that is only available here — anything critical (an action, a destination,
+// information a task depends on) must also live in the normal document flow.
+// Use Popover for interactive, must-reach content.
+//
+// STYLESHEETS. Through DropdownPanel this piece needs the component's CSS in
+// your app's style entry:
+//   @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+//   @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */
+//
+// Props
+//   openDelay   ms of hover intent before the card shows (default 600)
+//   closeDelay  ms of grace after the pointer leaves (default 300)
+//   open        optional-controlled, edge-triggered, forwarded to the base
+//   effect      'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet)
+//   class       merged onto <dropdown-component>
+//   @show / @hide  fired when THIS card opens or closes
+
+const OPEN_DELAY = 600;
+const CLOSE_DELAY = 300;
+
+function delay(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+export default class HoverCard extends PuzzleView {
+  data(params, props) {
+    return {
+      rootClass: props.class || false,
+      openState: props.open,
+      effect: props.effect,
+      openDelay: delay(props.openDelay, OPEN_DELAY),
+      closeDelay: delay(props.closeDelay, CLOSE_DELAY),
+    };
+  }
+
+  events = {
+    onShow: () => this.props.show?.(),
+    onHide: () => this.props.hide?.(),
+  };
+}
+</script>

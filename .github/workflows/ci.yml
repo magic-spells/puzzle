@@ -1,27 +1,103 @@
 name: CI
 
+# Release branches are the working trunk: feature branches PR into
+# release/x.y.z, and main is only touched at launch. Gating on main alone would
+# leave every day-to-day branch and PR uncovered until the very last merge.
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'release/**']
 
 jobs:
   go:
     name: Go (compiler)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/puzzle
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - run: go vet ./...
       - run: go build ./...
       - run: go test ./...
+      # cmd/pzl-wasm sits behind a `js && wasm` build tag, so the `go build
+      # ./...` above never compiles it — the playground compiler (D164) could
+      # break for weeks without CI noticing. This is the cheapest proof it still
+      # builds; the artifact itself is produced on demand by
+      # scripts/build-wasm.mjs and nothing is uploaded here.
+      - name: Build the playground WASM compiler
+        run: go build -o /dev/null ./compiler/cmd/pzl-wasm
+        env:
+          GOOS: js
+          GOARCH: wasm
+
+  windows:
+    name: Go + CLI smoke (Windows)
+    # The only job that proves the shipped win32-x64 binary is real: nothing else
+    # in CI runs on Windows, and the platform-specific risks are all in the Go
+    # side (path separators, the dist/ swap, the no-op keys fallback). There is
+    # deliberately no Windows vitest job — the runtime JS is platform-independent
+    # and jsdom does not care which OS it runs on.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: packages/puzzle/go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # One command per step on purpose: GitHub's pwsh wrapper only propagates
+      # the LAST command's exit code, so chaining these in one `run` block would
+      # let a failing `go vet` pass as long as `go test` succeeded.
+      - run: go vet ./...
+        working-directory: packages/puzzle/compiler
+      - run: go build ./...
+        working-directory: packages/puzzle/compiler
+      - run: go test ./...
+        working-directory: packages/puzzle/compiler
+      # End-to-end proof that the binary we ship for win32-x64 scaffolds and
+      # builds a real app. The scaffold is created OUTSIDE the checkout so the
+      # compiler's in-repo runtime walk cannot satisfy the import for us;
+      # PUZZLE_RUNTIME points it at the working-tree runtime instead, because the
+      # scaffold's `@magic-spells/puzzle` range is unpublished on a release
+      # branch — so the app's own dependency is dropped and only the template's
+      # Tailwind devDependencies are installed. Every native call is exit-checked
+      # for the same reason the Go steps are split.
+      - name: Scaffold and build an app with the Windows binary
+        shell: pwsh
+        working-directory: packages/puzzle
+        run: |
+          function Assert-Ok($what) {
+            if ($LASTEXITCODE -ne 0) { throw "$what exited $LASTEXITCODE" }
+          }
+          $runtime = (Get-Location).Path
+          $exe = Join-Path $env:RUNNER_TEMP 'puzzle.exe'
+          go build -o $exe ./compiler/cmd/puzzle
+          Assert-Ok 'go build'
+          Set-Location $env:RUNNER_TEMP
+          & $exe init smokeapp
+          Assert-Ok 'puzzle init'
+          Set-Location (Join-Path $env:RUNNER_TEMP 'smokeapp')
+          npm pkg delete "dependencies.@magic-spells/puzzle"
+          Assert-Ok 'npm pkg delete'
+          npm install --no-audit --no-fund
+          Assert-Ok 'npm install'
+          $env:PUZZLE_RUNTIME = $runtime
+          & $exe build
+          Assert-Ok 'puzzle build'
+          if (-not (Test-Path 'dist\index.html')) { throw 'puzzle build produced no dist\index.html' }
 
   js:
     name: JS (runtime)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/puzzle
     steps:
       - uses: actions/checkout@v5
       # Go is needed because `npm test` runs `build:example-modules` (pretest),
@@ -29,11 +105,12 @@ jobs:
       # compiled-variant integration suite runs against fresh compiler output.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: packages/puzzle/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm run verify:pack
@@ -44,6 +121,9 @@ jobs:
   e2e-pack:
     name: E2E (packed tarball)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/puzzle
     steps:
       - uses: actions/checkout@v5
       # Go builds the compiler (run via `go run`); Node packs + installs the
@@ -51,27 +131,109 @@ jobs:
       # builds a real app from node_modules, not the in-repo esbuild alias.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: packages/puzzle/package-lock.json
       - run: npm ci
       - run: npm run test:e2e-pack
 
   browser:
     name: Browser smoke (Playwright)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/puzzle
     steps:
       - uses: actions/checkout@v5
       # Go runs the two example dev servers Playwright's webServer starts.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: packages/puzzle/go.mod
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: packages/puzzle/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser
+
+  pieces:
+    name: Pieces (registry + demo)
+    # Node 25 + macOS carried over from the old puzzle-pieces repo CI — the
+    # document-model suites were minted under that line (see the pieces
+    # CLAUDE.md); keep the pin unless those suites are re-minted.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Go builds the demo with the in-repo CLI: working-tree compiler AND
+      # working-tree runtime (the compiler's in-repo walk aliases
+      # '@magic-spells/puzzle' to this checkout) — strictly stronger than the
+      # old repo's published-CLI build.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: packages/puzzle/go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 25
+      - run: npm run build:compiler
+        working-directory: packages/puzzle
+      - name: Registry lib tests
+        working-directory: packages/puzzle-pieces
+        run: |
+          npm ci
+          npm test
+      - name: Demo compiles against the working tree
+        working-directory: packages/puzzle-pieces/demo
+        run: |
+          npm ci
+          npm run build
+
+  devtools:
+    name: DevTools (panel suite)
+    # No paths filter, deliberately: the panel is a Puzzle app linked to the
+    # working-tree runtime (file: dep), so a framework breaking change fails
+    # this job the day it lands instead of at the next extension release.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Go builds the compiler binary build.mjs defaults to (../../puzzle);
+      # without a compiled panel bundle the 88 panel-app suites skip silently.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: packages/puzzle/go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm run build:compiler
+      - name: Panel build + full suite against the working-tree runtime
+        working-directory: packages/puzzle-devtools
+        run: |
+          npm ci
+          npm run build
+          npx vitest run
+
+  plugins:
+    name: Lint/format plugins
+    # Both vendor JS ports of the compiler's section splitter/lexer
+    # (packages/puzzle/compiler/internal/parser) — running them on every push is
+    # the drift alarm for grammar changes.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: ESLint plugin suite
+        working-directory: packages/puzzle-eslint
+        run: |
+          npm ci
+          npx vitest run
+      - name: Prettier plugin suite
+        working-directory: packages/puzzle-prettier
+        run: |
+          npm ci
+          npx vitest run

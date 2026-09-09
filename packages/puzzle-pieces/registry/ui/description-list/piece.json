@@ -1,0 +1,8 @@
+{
+  "name": "description-list",
+  "description": "Semantic key-value description list (<dl>/<dt>/<dd>) rendered from an items array, for detail panels, summaries, and spec sheets — stacked or inline two-column layout, optional row dividers, two sizes",
+  "files": ["DescriptionList.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

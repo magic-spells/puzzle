@@ -1,0 +1,556 @@
+<puzzle-view class="h-full flex flex-col min-h-0">
+  {#if disconnected}
+    <div class="flex-1 min-w-0">
+      <Empty title={ emptyTitle } description={ emptyHint } class="py-8! px-4!" />
+    </div>
+  {:else}
+    <header class="shrink-0 flex items-center gap-2 min-h-9 px-3 py-1.5 border-b border-line bg-surface">
+      <button
+        type="button"
+        data-perf-record
+        aria-pressed="{ recordPressed }"
+        title="{ recordTitle }"
+        class="flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[11px] { recordClass }"
+        @click={ toggleRecord }>
+        <span class="size-1.5 rounded-full { recordDotClass }" aria-hidden="true"></span>
+        { recordLabel }
+      </button>
+
+      <span
+        data-perf-elapsed
+        class="font-mono text-[11px] tabular-nums text-ink"
+        title="Elapsed recording time, as the runtime reports it">{ elapsed }</span>
+      <span class="min-w-0 truncate font-mono text-[10px] text-faint">{ statusNote }</span>
+
+      <button
+        type="button"
+        data-perf-reload
+        title="Re-request snapshot:profile"
+        class="ml-auto flex size-4 items-center justify-center rounded text-muted hover:bg-raised hover:text-accent { loadingClass }"
+        @click={ reload }>{#svg 'icons/refresh.svg'}</button>
+    </header>
+
+    {#if error}
+      <p
+        data-perf-error
+        class="shrink-0 m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-danger break-words">{ error }</p>
+    {/if}
+
+    <div class="flex-1 min-h-0 overflow-auto p-3 grid gap-3">
+      {#if !hasProfile}
+        <Empty
+          title="Nothing profiled yet"
+          description={ idleHint }
+          class="py-8! px-4!" />
+      {:else}
+        <section class="rounded border border-line bg-canvas overflow-hidden" data-perf-totals>
+          <div class="flex flex-wrap items-stretch">
+            <div class="flex-1 min-w-[190px] px-3 py-2 border-r border-line" data-perf-total="wastedRenders">
+              <p class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Wasted renders</p>
+              <p class="m-0 flex items-baseline gap-2">
+                <span
+                  data-perf-wasted
+                  class="font-mono text-[26px] leading-[1.15] font-semibold tabular-nums { wastedToneClass }">{ totalWasted }</span>
+                <span class="font-mono text-[12px] tabular-nums { wastedToneClass }">{ totalWastedPct }</span>
+              </p>
+              <p class="m-0 text-[10px] leading-snug text-muted">{ wastedHint }</p>
+            </div>
+
+            {#for tile in totalTiles}
+              <div
+                key={ tile.key }
+                data-perf-total="{ tile.key }"
+                class="min-w-[96px] px-3 py-2 border-r border-line last:border-r-0">
+                <p class="m-0 font-mono text-[10px] uppercase tracking-wider text-faint">{ tile.label }</p>
+                <p class="m-0 font-mono text-[15px] tabular-nums text-ink">{ tile.value }</p>
+              </div>
+            {/for}
+          </div>
+        </section>
+
+        {#if hasWarnings}
+          <section class="rounded border border-danger bg-danger-soft overflow-hidden" data-perf-warnings>
+            <header class="flex items-baseline gap-2 px-2 py-1 border-b border-danger">
+              <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-danger">
+                Render loops detected
+              </h2>
+              <span class="ml-auto font-mono text-[10px] tabular-nums text-danger">{ warningCount }</span>
+            </header>
+            <ul class="m-0 p-0 list-none">
+              {#for warning in warnings}
+                <li key={ warning.key }>
+                  <div
+                    data-perf-warning="{ warning.kind }"
+                    class="flex items-baseline gap-2 min-h-[24px] px-2 py-1 border-b border-line last:border-b-0 { warning.rowClass }"
+                    title="{ warning.title }"
+                    @click={ openView(warning.viewId) }>
+                    <span class="shrink-0 font-mono text-[9px] font-semibold uppercase tracking-wide text-danger">{ warning.kindLabel }</span>
+                    <span class="shrink-0 font-mono text-[11px] text-ink">{ warning.name }</span>
+                    <span class="min-w-0 flex-1 truncate text-[10px] text-muted">{ warning.detail }</span>
+                    <span class="shrink-0 font-mono text-[10px] tabular-nums text-danger">×{ warning.count }</span>
+                  </div>
+                </li>
+              {/for}
+            </ul>
+          </section>
+        {/if}
+
+        <section class="rounded border border-line bg-canvas overflow-hidden" data-perf-table>
+          <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
+            <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Views</h2>
+            <span class="font-mono text-[10px] tabular-nums text-faint">{ rowCount }</span>
+            <span class="ml-auto min-w-0 truncate text-[10px] text-faint">{ heatLegend }</span>
+          </header>
+
+          {#if rowCount === 0}
+            <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No views rendered during this recording.</p>
+          {:else}
+            <table class="w-full border-collapse text-left">
+              <thead class="sticky top-0 bg-surface">
+                <tr>
+                  <th
+                    scope="col"
+                    title="Renders relative to the busiest view in this report"
+                    class="w-[76px] px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">heat</th>
+                  {#for column in columns}
+                    <th
+                      key={ column.key }
+                      scope="col"
+                      data-perf-sort="{ column.key }"
+                      aria-sort="{ column.ariaSort }"
+                      title="{ column.hint }"
+                      class="cursor-pointer select-none whitespace-nowrap px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide { column.align } { column.cls }"
+                      @click={ sortBy(column.key) }>{ column.label }<span class="ml-0.5 text-[8px]">{ column.indicator }</span></th>
+                  {/for}
+                </tr>
+              </thead>
+              <tbody>
+                {#for row in rows}
+                  <tr
+                    key={ row.key }
+                    data-perf-view="{ row.id }"
+                    class="{ row.rowClass }"
+                    title="{ row.title }"
+                    @click={ openView(row.id) }>
+                    <td class="px-2 py-1 border-b border-line">
+                      <span class="flex h-1.5 w-full overflow-hidden rounded-full bg-raised" aria-hidden="true">
+                        <span
+                          data-perf-heat="{ row.heatLevel }"
+                          class="h-full rounded-full { row.heatClass } { row.hatchClass }"
+                          style="width:{ row.heatWidth }"></span>
+                      </span>
+                    </td>
+                    <td class="max-w-[15rem] px-2 py-1 border-b border-line">
+                      <ViewIdentity name={ row.name } module={ row.module } dim={ row.dim } />
+                    </td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-ink">{ row.renders }</td>
+                    <td
+                      data-perf-cell="wasted"
+                      class="whitespace-nowrap px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums { row.wastedClass }">
+                      { row.wasted }<span class="ml-1 text-[9px]">{ row.wastedPct }</span>
+                    </td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-muted">{ row.mutations }</td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-muted">{ row.renderMs }</td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-muted">{ row.patchMs }</td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-muted">{ row.dataMs }</td>
+                  </tr>
+                {/for}
+              </tbody>
+            </table>
+          {/if}
+        </section>
+
+        <section class="rounded border border-line bg-canvas overflow-hidden" data-perf-flushes>
+          <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
+            <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Store flushes</h2>
+            <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ flushCount }</span>
+          </header>
+          {#if flushCount === 0}
+            <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No store writes during this recording.</p>
+          {:else}
+            <ul class="m-0 p-0 list-none">
+              {#for flush in flushes}
+                <li
+                  key={ flush.key }
+                  data-perf-flush
+                  class="flex items-baseline gap-2 min-h-[20px] px-2 py-0.5 border-b border-line last:border-b-0"
+                  title="{ flush.title }">
+                  <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-ink">{ flush.keys }</span>
+                  <span class="shrink-0 font-mono text-[10px] tabular-nums text-muted">{ flush.notified } notified</span>
+                  <span class="shrink-0 font-mono text-[10px] tabular-nums text-faint">{ flush.durationMs } ms</span>
+                </li>
+              {/for}
+            </ul>
+          {/if}
+        </section>
+      {/if}
+    </div>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Empty from '../components/ui/Empty.pzl';
+import ViewIdentity from '../components/ViewIdentity.pzl';
+import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
+import { EVENTS } from '../../../protocol/constants.js';
+import { disconnectedEmpty } from '../emptystate.js';
+import { api, applyProfileSnapshot, ensureViews, requestViewSelection } from '../bridge.js';
+import {
+  DEFAULT_PROFILE_DIRECTION,
+  DEFAULT_PROFILE_SORT,
+  formatDuration,
+  mergeWarnings,
+  nextSortState,
+  profileColumns,
+  profileFlushes,
+  profileRows,
+  profileTotals,
+} from '../values.js';
+
+/**
+ * The Performance panel: what re-rendered while you were recording, and how much
+ * of it was for nothing.
+ *
+ * WASTED RENDERS are the headline metric, because they are the only number here
+ * that is unambiguously a bug. A render pass that produced zero DOM mutations
+ * means the framework re-ran the view, re-ran its data(), rebuilt its vnode tree
+ * and diffed the whole thing against the DOM — and then changed nothing. Every
+ * other counter is a cost you may well have chosen; this one never is.
+ *
+ * THIS PANEL POLLS, and it is the only one that does. SPEC §55 defines no
+ * per-render event on purpose: the page hook buffers 500 messages before the
+ * panel attaches and the panel's ring holds 200, so a render firehose would
+ * overrun both and evict the events the other panels depend on. Instead the
+ * runtime keeps counters and this panel pulls the whole report on an interval
+ * while recording — a bounded, predictable one request per second, and zero
+ * requests when the button says Record.
+ *
+ * The one exception to "only while recording" is a `perf-warning`: the loop
+ * detector fires rarely and matters immediately, so the bridge bumps
+ * `connection.perfSeq` and a single debounced snapshot follows. That is the same
+ * counter-and-debounce mechanism every other panel uses, not a second polling
+ * path.
+ */
+
+/** How often to pull `snapshot:profile` while recording. */
+const POLL_MS = 1000;
+
+/** A `perf-warning` means the report we are holding predates a detection. */
+const WARNING_DEBOUNCE_MS = 150;
+
+/**
+ * How stale the view tree may be before a sample re-pulls it.
+ *
+ * Comfortably longer than POLL_MS on purpose: the rows navigate to the Views
+ * panel, which selects against the `pview` collection, so this panel needs the
+ * tree it never draws — but polling the PROFILE must not turn into polling the
+ * tree as well. `ensureViews` shares its freshness window with the Views and
+ * Subscriptions panels, so arriving here from either costs nothing.
+ */
+const VIEW_TREE_MAX_AGE_MS = 5000;
+
+const RECORD_IDLE = 'border-line text-ink hover:border-accent hover:text-accent';
+const RECORD_LIVE = 'border-danger text-danger hover:bg-danger-soft';
+
+export default class PerformanceView extends PuzzleView {
+  created() {
+    this.setData({
+      recording: false,
+      // Guards the Record button against a double click while perf:start is in
+      // flight; also drives the reload glyph's spinner.
+      busy: false,
+      error: '',
+      sort: DEFAULT_PROFILE_SORT,
+      direction: DEFAULT_PROFILE_DIRECTION,
+    });
+
+    this._seenGeneration = null;
+    /** The poll chain's pending tick. */
+    this._pollTimer = null;
+    /** One-shot snapshots (mount, reload button, warning) — never the chain. */
+    this._sampleTimer = null;
+  }
+
+  mounted() {
+    // One snapshot on arrival. It doubles as the resume path: if a recording is
+    // still running from before a panel-tab switch, the report says so and
+    // `adoptRecordingState` picks the polling back up.
+    if (this.connected()) this.scheduleSample(0);
+  }
+
+  destroyed() {
+    clearTimeout(this._pollTimer);
+    clearTimeout(this._sampleTimer);
+    // Deliberately NOT stopping the recording. Switching to the Views panel to
+    // look at something mid-session is normal, and silently ending the recording
+    // under the user would be worse than leaving a profiler they explicitly
+    // started running — which the panel re-adopts and reports on the way back.
+  }
+
+  data() {
+    const store = this.ctx.store;
+    const connection = store.findOne('connection', CONNECTION_ID);
+    const samples = store.findMany('profileSample');
+    const events = store.findMany('event');
+    const views = store.findMany('pview');
+    const local = this.getData();
+
+    const state = connection?.state ?? CONNECTION_STATE.WAITING;
+    const connected = state === CONNECTION_STATE.CONNECTED;
+
+    // Reading `perfSeq` here is what subscribes us to it. A loop detection —
+    // or the handshake completing — means the report we hold is out of date.
+    const generation = `${state}#${connection?.perfSeq ?? 0}`;
+    if (generation !== this._seenGeneration) {
+      const first = this._seenGeneration === null;
+      this._seenGeneration = generation;
+      if (!connected) this.stopPolling();
+      else if (!first) this.scheduleSample(WARNING_DEBOUNCE_MS);
+    }
+
+    // Samples are appended with an increasing id, so the newest is the last one.
+    const sample = samples.length > 0 ? samples[samples.length - 1] : null;
+
+    // Which rows can link to the Views panel. Same shape as the Subscriptions
+    // panel's subscriber list, with one deliberate difference: it gates on the
+    // pview record EXISTING, this gates on the view still being LIVE.
+    //
+    // A subscription graph describes the present, so a missing record is the
+    // only failure mode there. A profile describes the PAST — views mounting and
+    // being destroyed mid-recording is the normal case, and their records stick
+    // around marked dead. Linking to one would land the Views panel on an
+    // `inspect:view` error for a view the report is legitimately reporting on.
+    const knownIds = new Set(views.filter((view) => view.live).map((view) => view.id));
+
+    const totals = profileTotals(sample?.totals);
+    const rows = profileRows(sample?.views, {
+      sort: local.sort,
+      direction: local.direction,
+      knownIds,
+    });
+    const flushes = profileFlushes(sample?.flushes);
+    const warnings = mergeWarnings(sample?.warnings, this.warningPayloads(events), knownIds);
+    const empty = disconnectedEmpty(state);
+
+    return {
+      disconnected: !connected,
+      emptyTitle: empty.title,
+      emptyHint: empty.description,
+      idleHint:
+        'Press Record, exercise the app, then press Stop. Renders, wasted renders and DOM ' +
+        'mutations are counted per view while recording.',
+
+      recordLabel: local.recording ? 'Stop' : 'Record',
+      recordPressed: local.recording ? 'true' : 'false',
+      recordClass: local.recording ? RECORD_LIVE : RECORD_IDLE,
+      recordDotClass: local.recording ? 'bg-danger dt-recording' : 'bg-faint',
+      recordTitle: local.recording
+        ? 'perf:stop — end the recording and keep the counters'
+        : 'perf:start — begin counting renders',
+
+      // The runtime owns elapsed time; the panel never runs its own clock, so a
+      // paused or throttled page cannot make this drift.
+      elapsed: formatDuration(sample?.durationMs),
+      statusNote: this.statusNote(local.recording, sample),
+      loadingClass: local.busy ? 'animate-spin text-accent' : '',
+      error: local.error,
+
+      // A report exists from the first snapshot on, but one full of zeros is not
+      // worth a screen of empty tiles — the idle empty state says more. Once
+      // recording starts the report shows immediately, even before the first
+      // counter moves, so the panel visibly responds to the button.
+      hasProfile: !!sample && (local.recording || rows.length > 0 || warnings.length > 0),
+
+      totalWasted: totals.wasted,
+      totalWastedPct: totals.wastedPct,
+      wastedToneClass: totals.wastedToneClass,
+      wastedHint: totals.hasWaste
+        ? 'Render passes that produced no DOM mutations at all — pure burned CPU.'
+        : 'Every render pass changed the DOM. Nothing was burned.',
+      totalTiles: totals.tiles,
+
+      warnings,
+      warningCount: warnings.length,
+      hasWarnings: warnings.length > 0,
+
+      columns: profileColumns(local.sort, local.direction),
+      rows,
+      rowCount: rows.length,
+      heatLegend: 'heat = renders vs the busiest view · hatched = mostly wasted',
+
+      flushes,
+      flushCount: flushes.length,
+    };
+  }
+
+  /**
+   * `perf-warning` payloads still in the shared event ring.
+   *
+   * Read from the ring rather than recorded separately, the same way the Router
+   * panel builds its history feed: the bridge already put them there, so a panel
+   * opened AFTER the loop was detected still shows it.
+   */
+  warningPayloads(events) {
+    return events
+      .filter((event) => event.type === EVENTS.PERF_WARNING)
+      .map((event) => event.payload);
+  }
+
+  statusNote(recording, sample) {
+    if (recording) return `recording · polling snapshot:profile every ${POLL_MS / 1000}s`;
+    if (sample) return 'stopped · showing the last report';
+    return 'not recording';
+  }
+
+  connected() {
+    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
+    return connection?.state === CONNECTION_STATE.CONNECTED;
+  }
+
+  /* ---- sampling ---------------------------------------------------------- */
+
+  /** A one-shot snapshot on its own timer, so it can never cancel the poll chain. */
+  scheduleSample(delay) {
+    clearTimeout(this._sampleTimer);
+    this._sampleTimer = setTimeout(() => {
+      this._sampleTimer = null;
+      this.loadSample();
+    }, delay);
+  }
+
+  /**
+   * Arm the next poll. A chained timeout rather than setInterval: a slow answer
+   * must delay the next request, not queue a second one behind it.
+   */
+  startPolling() {
+    this.stopPolling();
+    this._pollTimer = setTimeout(() => {
+      this._pollTimer = null;
+      this.loadSample();
+    }, POLL_MS);
+  }
+
+  stopPolling() {
+    clearTimeout(this._pollTimer);
+    this._pollTimer = null;
+  }
+
+  async loadSample() {
+    if (this.isDestroyed || !this.connected()) return null;
+    try {
+      const [report] = await Promise.all([
+        api.snapshotProfile(),
+        // Best-effort: a failed tree pull costs navigability, not the report.
+        ensureViews({ maxAgeMs: VIEW_TREE_MAX_AGE_MS }).catch(() => null),
+      ]);
+      if (this.isDestroyed) return null;
+      applyProfileSnapshot(report);
+      if (this.getData().error) this.setData('error', '');
+      this.adoptRecordingState(report?.recording === true);
+      return report;
+    } catch (err) {
+      if (this.isDestroyed) return null;
+      // A framework build with no profiler answers `{ error }`, which panel-glue
+      // turns into a rejection. Stop rather than retry: one failure per second
+      // for as long as the tab is open helps nobody.
+      this.stopPolling();
+      this.setData({ error: err?.message ?? String(err), recording: false });
+      this.refresh();
+      return null;
+    }
+  }
+
+  /**
+   * The RUNTIME decides whether a recording is running; this panel only asks.
+   *
+   * That single rule covers four situations with no extra branches: the normal
+   * start and stop, a panel remounted onto a recording that is still going, and
+   * a page that reloaded out from under a recording (the fresh runtime reports
+   * `false`, and the polling stops on its own).
+   */
+  adoptRecordingState(recording) {
+    if (recording !== this.getData().recording) {
+      this.setData('recording', recording);
+      this.refresh();
+    }
+    if (!recording) {
+      this.stopPolling();
+      return;
+    }
+    if (!this._pollTimer) this.startPolling();
+  }
+
+  async startRecording() {
+    if (!this.connected() || this.getData().busy) return;
+    this.setData({ busy: true, error: '', recording: true });
+    this.refresh();
+    try {
+      await api.perfStart();
+      if (this.isDestroyed) return;
+      // Seeds the first report and, through adoptRecordingState, arms the poll.
+      await this.loadSample();
+    } catch (err) {
+      if (!this.isDestroyed) {
+        this.setData({ recording: false, error: err?.message ?? String(err) });
+      }
+    } finally {
+      if (!this.isDestroyed) {
+        this.setData('busy', false);
+        this.refresh();
+      }
+    }
+  }
+
+  async stopRecording() {
+    if (this.getData().busy) return;
+    this.stopPolling();
+    this.setData({ busy: true, recording: false });
+    this.refresh();
+    try {
+      await api.perfStop();
+      if (this.isDestroyed) return;
+      // One last pull, so the table shows the final counters rather than
+      // whatever the poll happened to catch a fraction of a second earlier.
+      await this.loadSample();
+    } catch (err) {
+      if (!this.isDestroyed) this.setData('error', err?.message ?? String(err));
+    } finally {
+      if (!this.isDestroyed) {
+        this.setData('busy', false);
+        this.refresh();
+      }
+    }
+  }
+
+  events = {
+    toggleRecord: () => {
+      if (this.getData().recording) this.stopRecording();
+      else this.startRecording();
+    },
+
+    sortBy: (key) => {
+      const local = this.getData();
+      this.setData(nextSortState(local.sort, local.direction, key));
+      this.refresh();
+    },
+
+    // Cross-panel navigation, exactly as the Subscriptions panel does it: park
+    // the intent in the `ui` singleton, then route. The Views panel adopts it on
+    // mount — it does not exist yet at click time.
+    openView: (viewId) => {
+      if (viewId == null) return;
+      // Same rule the rows are drawn with: a view that has been destroyed since
+      // the recording is still worth reporting, but there is nothing to select.
+      const record = this.ctx.store.findOne('pview', viewId);
+      if (!record || !record.live) return;
+      requestViewSelection(viewId);
+      this.ctx.router.push('/views');
+    },
+
+    reload: () => {
+      this.scheduleSample(0);
+    },
+  };
+}
+</script>

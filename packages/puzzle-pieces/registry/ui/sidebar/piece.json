@@ -1,0 +1,8 @@
+{
+  "name": "sidebar",
+  "description": "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, and an optional-controlled collapsed icon-only mode with header/footer slots",
+  "files": ["Sidebar.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

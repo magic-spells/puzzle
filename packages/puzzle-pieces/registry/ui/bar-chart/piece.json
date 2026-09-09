@@ -1,0 +1,8 @@
+{
+  "name": "bar-chart",
+  "description": "Config-first categorical bar chart — single, grouped, or stacked series with a legend, per-bar hover tooltips, responsive width, and an sr-only data table",
+  "files": ["BarChart.pzl"],
+  "registryDependencies": ["lib/chart-math.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

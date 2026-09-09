@@ -1,0 +1,132 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Toggle</h1>
+        <p class="mt-2 text-body">
+          A two-state
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-pressed</code>
+          button for tool states like bold or italic — not a call to action. Controlled: the
+          parent owns
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">pressed</code>
+          and flips it from @change.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>
+          <Toggle variant="outline" pressed={ italic } @change={ setItalic }>I</Toggle>
+          <p class="text-sm text-muted">Bold: { bold ? 'on' : 'off' } · Italic: { italic ? 'on' : 'off' }</p>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="variants" title="Variants" code={ codeVariants }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Toggle pressed={ vDefault } @change={ setVDefault }>Default</Toggle>
+            <Toggle variant="outline" pressed={ vOutline } @change={ setVOutline }>Outline</Toggle>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Toggle variant="outline" size="sm" pressed={ sSm } @change={ setSSm }>Small</Toggle>
+            <Toggle variant="outline" size="md" pressed={ sMd } @change={ setSMd }>Medium</Toggle>
+            <Toggle variant="outline" size="lg" pressed={ sLg } @change={ setSLg }>Large</Toggle>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Toggle from '@/components/ui/Toggle.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Toggle — follows the ButtonDoc exemplar shape.
+const installCmd = 'puzzle add piece toggle';
+const usageImport = `import Toggle from '@/components/ui/Toggle.pzl';`;
+const usageMarkup = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>`;
+
+const codeHero = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>
+<Toggle variant="outline" pressed={ italic } @change={ setItalic }>I</Toggle>
+
+// parent — owns each pressed boolean, flips it from @change
+events = {
+  setBold: (v) => this.setData('bold', v),
+  setItalic: (v) => this.setData('italic', v),
+};`;
+
+const codeVariants = `<Toggle pressed={ a } @change={ setA }>Default</Toggle>
+<Toggle variant="outline" pressed={ b } @change={ setB }>Outline</Toggle>`;
+
+const codeSizes = `<Toggle size="sm" pressed={ a } @change={ setA }>Small</Toggle>
+<Toggle size="md" pressed={ b } @change={ setB }>Medium</Toggle>
+<Toggle size="lg" pressed={ c } @change={ setC }>Large</Toggle>`;
+
+export default class ToggleDoc extends PuzzleView {
+  created() {
+    this.setData({
+      bold: true,
+      italic: false,
+      vDefault: true,
+      vOutline: true,
+      sSm: false,
+      sMd: true,
+      sLg: false,
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeVariants,
+      codeSizes,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Variants', href: '#variants' },
+        { label: 'Sizes', href: '#sizes' },
+      ],
+    };
+  }
+
+  events = {
+    setBold: (v) => this.setData('bold', v),
+    setItalic: (v) => this.setData('italic', v),
+    setVDefault: (v) => this.setData('vDefault', v),
+    setVOutline: (v) => this.setData('vOutline', v),
+    setSSm: (v) => this.setData('sSm', v),
+    setSMd: (v) => this.setData('sMd', v),
+    setSLg: (v) => this.setData('sLg', v),
+  };
+}
+</script>

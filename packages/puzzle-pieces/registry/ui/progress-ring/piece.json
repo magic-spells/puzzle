@@ -1,0 +1,8 @@
+{
+  "name": "progress-ring",
+  "description": "Determinate circular progress ring — SVG dashoffset sweep from 12 o'clock with centered percentage, sized and tinted via tokens",
+  "files": ["ProgressRing.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

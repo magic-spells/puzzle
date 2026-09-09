@@ -1,0 +1,173 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Chat Attachment</h1>
+        <p class="mt-2 text-body">
+          A file chip for message attachments and upload previews. The leading icon is inferred
+          from the filename extension, the name truncates with a hover title, and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">href</code>
+          /
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">removable</code>
+          turn it into a download link or a dismissible chip.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex flex-wrap gap-2">
+          <ChatAttachment name="proposal.pdf" size="2.4 MB"/>
+          <ChatAttachment name="hero.png" size="840 KB"/>
+          <ChatAttachment name="assets.zip" size="18 MB"/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          The
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">size</code>
+          prop is a preformatted string — the chip does no byte math. Removal is delegated:
+          the chip never mutates a list itself, it fires
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">@remove(name)</code>
+          and the parent drops the file.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="removable" title="Removable" code={ codeRemovable }>
+          <div class="flex min-h-[3rem] flex-wrap items-start gap-2">
+            {#for file in files}
+              <ChatAttachment
+                name={ file.name }
+                size={ file.size }
+                removable
+                @remove={ removeFile }/>
+            {/for}
+            {#if files.length === 0}
+              <p class="text-sm text-muted">All attachments removed.
+                <button type="button" class="text-brand underline cursor-pointer" @click={ resetFiles }>Reset</button>
+              </p>
+            {/if}
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="types" title="Types" code={ codeTypes }>
+          <div class="flex flex-wrap gap-2">
+            <ChatAttachment name="report.pdf" size="1.1 MB"/>
+            <ChatAttachment name="screenshot.png" size="620 KB"/>
+            <ChatAttachment name="demo.mp4" size="42 MB"/>
+            <ChatAttachment name="voice-memo.m4a" size="3.2 MB"/>
+            <ChatAttachment name="release.zip" size="18 MB"/>
+            <ChatAttachment name="build" type="archive" size="9 MB"/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="links" title="Download links" code={ codeLinks }>
+          <div class="flex flex-wrap gap-2">
+            <ChatAttachment name="invoice.pdf" size="212 KB" href="#invoice"/>
+            <ChatAttachment name="brand-kit.zip" size="24 MB" href="#brand-kit"/>
+            <ChatAttachment name="archived.pdf" size="1 MB" disabled/>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ChatAttachment from '@/components/ui/ChatAttachment.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece chat-attachment';
+const usageImport = `import ChatAttachment from '@/components/ui/ChatAttachment.pzl';`;
+const usageMarkup = `<ChatAttachment name="proposal.pdf" size="2.4 MB" />`;
+
+const codeHero = `<ChatAttachment name="proposal.pdf" size="2.4 MB" />
+<ChatAttachment name="hero.png" size="840 KB" />
+<ChatAttachment name="assets.zip" size="18 MB" />`;
+
+const codeRemovable = `// The chip is value-first: it fires @remove(name, event). The parent owns
+// the list and filters the removed file out.
+data() {
+  return { files: [
+    { name: 'proposal.pdf', size: '2.4 MB' },
+    { name: 'hero.png', size: '840 KB' },
+    { name: 'assets.zip', size: '18 MB' },
+  ] };
+}
+events = {
+  removeFile: (name) =>
+    this.setData({ files: this.getData().files.filter((f) => f.name !== name) }),
+};
+
+{#for file in files}
+  <ChatAttachment name={ file.name } size={ file.size } removable
+                  @remove={ removeFile } />
+{/for}`;
+
+const codeTypes = `// type is inferred from the extension: image / video / audio / archive,
+// else the generic 'file' document icon. Pass type explicitly for
+// extensionless names.
+<ChatAttachment name="report.pdf" size="1.1 MB" />      <!-- file -->
+<ChatAttachment name="screenshot.png" size="620 KB" />  <!-- image -->
+<ChatAttachment name="demo.mp4" size="42 MB" />         <!-- video -->
+<ChatAttachment name="voice-memo.m4a" size="3.2 MB" />  <!-- audio -->
+<ChatAttachment name="release.zip" size="18 MB" />      <!-- archive -->
+<ChatAttachment name="build" type="archive" size="9 MB" />`;
+
+const codeLinks = `// href wraps the chip body in a download link. disabled dims it and
+// blocks both the link and the remove button.
+<ChatAttachment name="invoice.pdf" size="212 KB" href="/files/invoice.pdf" />
+<ChatAttachment name="brand-kit.zip" size="24 MB" href="/files/brand-kit.zip" />
+<ChatAttachment name="archived.pdf" size="1 MB" disabled />`;
+
+const INITIAL_FILES = [
+  { name: 'proposal.pdf', size: '2.4 MB' },
+  { name: 'hero.png', size: '840 KB' },
+  { name: 'assets.zip', size: '18 MB' },
+];
+
+export default class ChatAttachmentDoc extends PuzzleView {
+  data(params, props) {
+    const prev = this.getData();
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeRemovable,
+      codeTypes,
+      codeLinks,
+      files: prev && prev.files ? prev.files : INITIAL_FILES.slice(),
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Removable', href: '#removable' },
+        { label: 'Types', href: '#types' },
+        { label: 'Download links', href: '#links' },
+      ],
+    };
+  }
+
+  events = {
+    removeFile: (name) =>
+      this.setData({ files: this.getData().files.filter((f) => f.name !== name) }),
+    resetFiles: () => this.setData({ files: INITIAL_FILES.slice() }),
+  };
+}
+</script>

@@ -1,0 +1,92 @@
+<puzzle-view>
+  <select-option class={ optionClass } disabled={ disabledAttr }>
+    <span class="min-w-0 flex-1 truncate"><Children/></span>
+    <svg
+      class="size-4 shrink-0 text-brand opacity-0 group-aria-selected:opacity-100"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.75"
+      aria-hidden="true">
+      <path d="M5 10.5l3.5 3.5L15 7" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </select-option>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Select.Option — one selectable row. A member of the Select family (D167).
+// Renders the real <select-option>; the host <select-dropdown> owns its `role`,
+// `id`, `tabindex`, `selected`, `aria-selected` and `aria-disabled`, so this file
+// authors none of them.
+//
+//   <Select.Option value="us">United States</Select.Option>
+//   <Select.Option value="mx" disabled>Mexico (sold out)</Select.Option>
+//
+// SELECTED STATE IS PURE CSS. Upstream writes `aria-selected` on every change, so
+// the tinted row and the check glyph hang off Tailwind's `aria-selected:` and
+// `group-aria-selected:` variants — no JS branch and nothing to keep in step.
+//
+// `disabled` IS AN ATTRIBUTE, NOT A FORM-CONTROL STATE. <select-option> is a
+// custom element, so Tailwind's `disabled:` variant (which compiles to
+// `:disabled`) will never match it; the styling uses `[&[aria-disabled=true]]:`
+// against the attribute upstream mirrors onto it. Upstream skips a disabled
+// option in clicks, ArrowUp/Down, Home/End and typeahead, and never focuses it.
+//
+// `value` IS SET IMPERATIVELY, NOT BOUND — and this is the one surprise in the
+// family. Puzzle routes `value` through the PROPERTY path for every element
+// (viewManager's PROPS set is name-keyed, not tag-keyed), which is exactly right
+// for an <input> and exactly wrong here: it would assign `el.value` and write no
+// attribute at all, while upstream reads the option's value with
+// `getAttribute('value')` — and silently falls back to the row's TEXT when it is
+// missing. So the attribute is written from mounted()/afterUpdate() instead.
+//
+// Props
+//   value     the value this option reports through the root's @change. Optional
+//             — upstream falls back to the row's trimmed text, which is what you
+//             want for a list of plain strings.
+//   disabled  not selectable, not focusable, skipped by keyboard navigation
+//   class     merged onto <select-option>, after the chrome
+
+const OPTION =
+  'group flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 ' +
+  'text-sm text-body transition-colors ' +
+  'hover:bg-surface-sunken hover:text-ink ' +
+  'focus:bg-surface-sunken focus:text-ink focus:outline-none ' +
+  'aria-selected:bg-brand-tint aria-selected:font-medium aria-selected:text-ink ' +
+  '[&[aria-disabled=true]]:cursor-not-allowed [&[aria-disabled=true]]:opacity-50 ' +
+  '[&[aria-disabled=true]]:pointer-events-none';
+
+export default class SelectOption extends PuzzleView {
+  #applied;
+
+  #apply() {
+    const el = this.element;
+    if (!el) return;
+    const value = this.props.value;
+    const next = value === undefined || value === null ? null : String(value);
+    if (next === this.#applied) return;
+    this.#applied = next;
+    if (next === null) el.removeAttribute('value');
+    else el.setAttribute('value', next);
+  }
+
+  data(params, props) {
+    return {
+      disabledAttr: props.disabled ? true : false,
+      optionClass: [OPTION, props.class].filter(Boolean).join(' '),
+    };
+  }
+
+  mounted() {
+    if (typeof window === 'undefined') return;
+    this.#apply();
+  }
+
+  afterUpdate() {
+    if (typeof window === 'undefined') return;
+    this.#apply();
+  }
+}
+</script>

@@ -1,0 +1,107 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Spinner</h1>
+        <p class="mt-2 text-body">
+          An inline rotating-ring loading indicator. Renders as a single
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">span</code>,
+          so it drops straight into the parent's flow with no wrapper.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero } tall={ false }>
+        <div class="flex items-center gap-8">
+          <Spinner size="sm" />
+          <Spinner size="md" />
+          <Spinner size="lg" />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="in-button" title="Inside a button" code={ codeInButton } tall={ false }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Button variant="primary" loading={ loading }>Saving</Button>
+            <Button variant="outline" @press={ toggleLoading }>Toggle loading</Button>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Spinner from '@/components/ui/Spinner.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Spinner — follows the Button exemplar shape (header → hero
+// ExampleBox → Installation → titled example sections → Toc).
+const installCmd = 'puzzle add piece spinner';
+const usageImport = `import Spinner from '@/components/ui/Spinner.pzl';`;
+const usageMarkup = `<Spinner size="sm" />`;
+
+const codeHero = `<Spinner size="sm" />
+<Spinner size="md" />
+<Spinner size="lg" />`;
+
+const codeInButton = `<Button variant="primary" loading={ saving }>Saving</Button>
+
+// Button ships its own loading spinner. To build a custom busy
+// state, drop a Spinner into any element and inherit its color:
+<button class="inline-flex items-center gap-2 ...">
+  <Spinner size="sm" class="border-current/30 border-t-current" />
+  Loading
+</button>`;
+
+export default class SpinnerDoc extends PuzzleView {
+  created() {
+    this.setData({ loading: false });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeInButton,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Inside a button', href: '#in-button' },
+      ],
+    };
+  }
+
+  events = {
+    toggleLoading: () => {
+      this.setData({ loading: !this.getData().loading });
+      this.refresh();
+    },
+  };
+}
+</script>

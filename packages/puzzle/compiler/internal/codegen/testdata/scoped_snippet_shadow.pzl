@@ -1,0 +1,18 @@
+<puzzle-view>
+  {#for user in users}
+    <UserList key={ user.id }>
+      <Snippet user>
+        <p>{ user.name } — { title }</p>
+      </Snippet>
+    </UserList>
+  {/for}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import UserList from '../components/UserList.pzl';
+
+export default class ScopedSnippetShadow extends PuzzleView {
+  data() { return { users: [], user: { name: 'data user' }, title: 'People' }; }
+}
+</script>

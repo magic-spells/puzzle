@@ -1,0 +1,67 @@
+<puzzle-view>
+  <DropdownPanel.Panel
+    class={ contentClass }
+    wide={ wide }
+    opens={ opens }
+    align={ align }
+    effect={ effect }><Children/></DropdownPanel.Panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// NavigationMenu.Content — the flyout panel for an Item. A member of the
+// NavigationMenu family (D167); it composes DropdownPanel.Panel and adds the
+// bar's layout, so it renders <dropdown-panel> as its single root with no
+// wrapper — the direct-children contract holds.
+//
+//   <NavigationMenu.Content columns={ 2 }>
+//     <NavigationMenu.Link href="/a" label="Analytics" description="…"/>
+//   </NavigationMenu.Content>
+//
+// COLUMNS ARE EXPLICIT. The old piece counted children and flipped to two
+// columns past four of them; now you say so. `columns={ 2 }` is one column on
+// small screens and two from `md` up, which is what a link-card panel wants.
+//
+// PLACEMENT IS PURE CSS. There is no measuring pass and no viewport clamp —
+// that JS is gone with the port. Three knobs cover what it did:
+//   * a panel near the right edge → align="end"
+//   * a panel that should span the whole bar → wide (the family's <nav> is
+//     already `relative`, which is what a wide panel positions against)
+//   * a submenu → opens="right"
+//
+// Never put overflow-hidden on this or on anything above it: it clips nested
+// submenus at this panel's edge.
+//
+// Props (forwarded to DropdownPanel.Panel unless noted)
+//   columns  1 (default) | 2 — this member's own layout prop
+//   wide     full-width mega panel spanning the <nav>
+//   opens    'down' (default) | 'right' for a submenu
+//   align    'start' (default) | 'end'
+//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   class    merged onto <dropdown-panel>, after the layout classes
+
+const ONE = 'grid grid-cols-1 gap-1';
+const TWO = 'grid grid-cols-1 gap-1 md:grid-cols-2';
+// A mega panel gets more room to breathe than a popover's p-2.
+const WIDE = 'p-4';
+
+export default class Content extends PuzzleView {
+  data(params, props) {
+    return {
+      contentClass: [
+        Number(props.columns) === 2 ? TWO : ONE,
+        props.wide ? WIDE : '',
+        props.class,
+      ]
+        .filter(Boolean)
+        .join(' '),
+      wide: props.wide ? true : false,
+      opens: props.opens,
+      align: props.align,
+      effect: props.effect,
+    };
+  }
+}
+</script>

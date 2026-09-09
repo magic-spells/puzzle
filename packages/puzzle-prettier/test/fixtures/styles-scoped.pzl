@@ -1,0 +1,17 @@
+<puzzle-view class="card">
+  <div class="box">{ label }</div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Card extends PuzzleView {
+  data() {
+    return { label: 'hi' };
+  }
+}
+</script>
+
+<style scoped>
+.box{color:red;padding:1rem;margin:0}
+.box:hover{color:blue}
+</style>

@@ -1,0 +1,13 @@
+<puzzle-view>
+  <div class="rounded-xl border border-hairline bg-surface px-4 py-3"><Children/></div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Frame — the root of the lab's one component family (D167). It exists to keep
+// the dotted tag form (<Frame.Header>, <Frame.Body>) in the compiled corpus:
+// the eslint/prettier plugins sweep examples/**/*.pzl, and without a family
+// here neither of them ever sees a dotted component tag.
+export default class Frame extends PuzzleView {}
+</script>

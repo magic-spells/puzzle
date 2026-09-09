@@ -1,0 +1,189 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Rating</h1>
+        <p class="mt-2 text-body">
+          A star rating in two modes. Read-only
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">display</code>
+          supports half stars; interactive input is an accessible radiogroup with arrow-key navigation and a
+          hover preview. It is controlled — the parent owns
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
+          and reads changes back from
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex flex-col items-center gap-3">
+          <Rating value={ score } size="lg" @change={ setScore } />
+          <p class="text-sm text-muted">Value: <span class="font-medium text-ink">{ scoreLabel }</span></p>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="display" title="Display mode" code={ codeDisplay }>
+          <div class="space-y-3">
+            <div class="flex items-center gap-3">
+              <Rating value={ 3.5 } readOnly />
+              <span class="text-sm text-muted">3.5</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <Rating value={ 4.5 } readOnly />
+              <span class="text-sm text-muted">4.5</span>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes }>
+          <div class="flex flex-col items-center gap-3">
+            <Rating value={ 4 } readOnly size="sm" />
+            <Rating value={ 4 } readOnly size="md" />
+            <Rating value={ 4 } readOnly size="lg" />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="colors" title="Colors" code={ codeColors }>
+          <div class="flex flex-col items-center gap-3">
+            <Rating value={ 4 } readOnly class="text-amber-500" />
+            <Rating value={ 4 } readOnly class="text-danger" />
+            <Rating value={ 4 } readOnly class="text-success" />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="forms" title="Forms" code={ codeForms }>
+          <div class="flex flex-col items-center gap-3">
+            <Rating value={ formScore } name="rating" @change={ setFormScore } />
+            <p class="text-sm text-muted">
+              Posts <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">rating={ formScore }</code>
+            </p>
+          </div>
+        </ExampleBox>
+
+        <section id="keyboard" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+          <p class="mb-3 text-sm text-body">In input mode one star is tabbable (the selected one, else the first); focus it, then:</p>
+          <ul class="mb-4 space-y-1.5 text-sm text-body">
+            <li><span class="font-medium text-ink">Right / Up arrows</span> — raise the rating by one star</li>
+            <li><span class="font-medium text-ink">Left / Down arrows</span> — lower the rating by one star</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last star</li>
+            <li><span class="font-medium text-ink">Space / Enter</span> — select the focused star</li>
+          </ul>
+          <ExampleBox code={ codeKeyboard }>
+            <div class="flex flex-col items-center gap-3">
+              <Rating value={ kbdScore } @change={ setKbd } />
+              <p class="text-sm text-muted">Selected: <span class="font-medium text-ink">{ kbdLabel }</span></p>
+            </div>
+          </ExampleBox>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Rating from '@/components/ui/Rating.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece rating';
+const usageImport = `import Rating from '@/components/ui/Rating.pzl';`;
+const usageMarkup = `<Rating value={ score } size="lg" @change={ setScore } />`;
+
+const codeHero = `<Rating value={ score } size="lg" @change={ setScore } />
+
+// parent — input mode commits whole-star values
+events = {
+  setScore: (v) => this.setData('score', v),
+};`;
+
+const codeDisplay = `// readOnly renders a static row; the value rounds to the nearest half.
+<Rating value={ 3.5 } readOnly />
+<Rating value={ 4.5 } readOnly />`;
+
+const codeSizes = `<Rating value={ 4 } readOnly size="sm" />
+<Rating value={ 4 } readOnly size="md" />
+<Rating value={ 4 } readOnly size="lg" />`;
+
+const codeColors = `// Filled stars inherit the root text color — pass any text-* token to retint.
+<Rating value={ 4 } readOnly class="text-amber-500" />
+<Rating value={ 4 } readOnly class="text-danger" />
+<Rating value={ 4 } readOnly class="text-success" />`;
+
+const codeForms = `// name emits a hidden input carrying the whole-star value for form posts.
+<Rating value={ formScore } name="rating" @change={ setFormScore } />`;
+
+const codeKeyboard = `<Rating value={ kbdScore } @change={ setKbd } />
+
+// Focus a star, then Arrow keys move the value, Home/End jump to the ends,
+// Space/Enter selects. Halves are display-only; input commits whole stars.`;
+
+export default class RatingDoc extends PuzzleView {
+  created() {
+    this.setData({ score: 3, formScore: 4, kbdScore: 2 });
+  }
+
+  data(params, props) {
+    const d = this.getData();
+    return {
+      ...d,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeDisplay,
+      codeSizes,
+      codeColors,
+      codeForms,
+      codeKeyboard,
+      scoreLabel: d.score > 0 ? `${d.score} of 5` : 'unrated',
+      kbdLabel: d.kbdScore > 0 ? `${d.kbdScore} of 5` : 'unrated',
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Display', href: '#display' },
+        { label: 'Sizes', href: '#sizes' },
+        { label: 'Colors', href: '#colors' },
+        { label: 'Forms', href: '#forms' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    setScore: (v) => {
+      this.setData('score', v);
+      this.refresh();
+    },
+    setFormScore: (v) => {
+      this.setData('formScore', v);
+      this.refresh();
+    },
+    setKbd: (v) => {
+      this.setData('kbdScore', v);
+      this.refresh();
+    },
+  };
+}
+</script>

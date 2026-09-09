@@ -1,0 +1,288 @@
+<puzzle-view>
+  <div class={ rootClass } role="group" aria-label={ ariaLabel }>
+    {#for item in items}
+      <div class={ item.wrapClass }>
+        {#if item.kind === 'cell'}
+          <input
+            id={ item.id }
+            class={ item.cellClass }
+            type="text"
+            value={ item.char }
+            maxlength="1"
+            data-otp-index={ item.index }
+            aria-label={ item.ariaLabel }
+            aria-invalid={ invalid }
+            autocomplete={ item.autocomplete }
+            inputmode={ item.inputmode }
+            pattern={ item.pattern }
+            disabled={ disabled }
+            @input={ onInput(item, event) }
+            @keydown={ onKey(item, event) }
+            @paste={ onPaste(item, event) }
+            @focus={ onFocus(item, event) } />
+        {:else}
+          <span class="select-none text-lg text-muted" aria-hidden="true">-</span>
+        {/if}
+      </div>
+    {/for}
+    {#if name}
+      <input type="hidden" name={ name } value={ value } />
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// InputOtp — a segmented one-time-code input: N real single-char <input> cells
+// (native caret, mobile keyboard, per-cell focus) plus an optional hidden
+// aggregate <input name> for form submission. Controlled: `value` is the full
+// string and each cell derives its char from it; edits go out through
+// `@change(value, event)`, and `@complete(value)` fires once the moment the
+// value first reaches `length`. No autoSubmit — `@complete` is the parent's hook.
+//
+//   <InputOtp value={ code } @change={ setCode } @complete={ verify } />
+//   <InputOtp length={ 4 } value={ pin } @change={ setPin } />
+//   <InputOtp value={ code } groups={ [3, 3] } @change={ setCode } />
+//   <InputOtp type="alphanumeric" value={ code } @change={ setCode } />
+//   <InputOtp value={ code } error @change={ setCode } />   // danger border/ring
+//
+// Charset: `type="numeric"` (default) sets inputmode="numeric" + pattern="[0-9]*"
+// and strips to digits; `type="alphanumeric"` sets inputmode="text" and keeps
+// [A-Za-z0-9]. `autocomplete="one-time-code"` is set on the FIRST cell only so a
+// platform SMS-autofill lands there, and the multi-char input/paste distribution
+// spreads it across the remaining cells.
+//
+// Interaction: typing a valid char advances to the next cell; Backspace on a
+// filled cell clears it, Backspace on an empty cell moves back and clears the
+// previous cell; ArrowLeft/Right (and Home/End) move between cells; Delete
+// clears the current cell; pasting distributes left-to-right from the focused
+// cell and lands focus on the next empty cell. Invalid characters are rejected.
+//
+// Focus can never rest past the first open slot. `value` is a COMPACT prefix
+// string — cell N has no slot in it until N chars exist — so clicking, tabbing
+// or arrowing beyond the typed chars redirects to the first empty cell, and any
+// edit clamps to it (`_slot`). Without that, typing into a cell past the prefix
+// wrote the char at the end of the string (it appeared in a different cell) and
+// advanced focus from the clicked index, skipping cells.
+//
+// `groups={[3,3]}` renders aria-hidden separators between segments — the render
+// list `items` is a precomputed mix of `kind:'cell'` and `kind:'sep'` entries so
+// the {#for} body keeps a single element root (a display:contents wrapper with an
+// inner {#if}). Per-cell focus/danger outline colors are set UNCONDITIONALLY
+// alongside the focus-visible reveal so the outline never flashes from a default.
+
+// Per-instance id seed so cell/separator ids stay unique across instances.
+let uid = 0;
+
+const CELL_BASE =
+  'size-10 rounded-lg border bg-surface text-center text-lg font-medium text-ink ' +
+  'transition-colors caret-brand ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'disabled:opacity-50 disabled:cursor-not-allowed';
+// Outline COLOR is unconditional (outline-ring / outline-danger) so Tailwind's
+// transition-colors doesn't flash it from the default on every focus; the
+// focus-visible:outline-2 above only reveals the width.
+const CELL_OK = 'border-border outline-ring focus-visible:outline-ring';
+const CELL_ERROR = 'border-danger outline-danger focus-visible:outline-danger';
+
+function sanitize(str, type) {
+  const s = String(str ?? '');
+  return type === 'alphanumeric' ? s.replace(/[^a-zA-Z0-9]/g, '') : s.replace(/[^0-9]/g, '');
+}
+
+export default class InputOtp extends PuzzleView {
+  data(params, props) {
+    const id = props.id || (this._fallbackId ??= `pp-otp-${++uid}`);
+    const length = Number.isInteger(props.length) && props.length > 0 ? props.length : 6;
+    const type = props.type === 'alphanumeric' ? 'alphanumeric' : 'numeric';
+    const value = sanitize(props.value ?? '', type).slice(0, length);
+    const disabled = !!props.disabled;
+    const invalid = !!(props.error || props.invalid);
+    const inputmode = type === 'numeric' ? 'numeric' : 'text';
+    const pattern = type === 'numeric' ? '[0-9]*' : false;
+    const cellClass = [CELL_BASE, invalid ? CELL_ERROR : CELL_OK].join(' ');
+
+    // Build one render item per cell, carrying its own precomputed attrs so the
+    // {#for} body reads only `item.*`.
+    const cells = [];
+    for (let i = 0; i < length; i++) {
+      cells.push({
+        kind: 'cell',
+        index: i,
+        id: `${id}-cell-${i}`,
+        char: value[i] || '',
+        ariaLabel: `Digit ${i + 1}`,
+        autocomplete: i === 0 ? 'one-time-code' : 'off',
+        inputmode,
+        pattern,
+        cellClass,
+        wrapClass: 'contents',
+      });
+    }
+
+    // Interleave aria-hidden separators when `groups` is set (e.g. [3, 3]).
+    const groups = Array.isArray(props.groups) && props.groups.length ? props.groups : null;
+    const items = [];
+    if (groups) {
+      let ci = 0;
+      groups.forEach((count, gi) => {
+        const n = Number.isInteger(count) ? count : 0;
+        for (let k = 0; k < n && ci < length; k++) items.push(cells[ci++]);
+        if (gi < groups.length - 1 && ci < length) {
+          items.push({ kind: 'sep', id: `${id}-sep-${gi}`, wrapClass: 'contents' });
+        }
+      });
+      while (ci < length) items.push(cells[ci++]);
+    } else {
+      items.push(...cells);
+    }
+
+    return {
+      items,
+      value,
+      length,
+      type,
+      disabled,
+      invalid: invalid ? 'true' : false,
+      name: props.name || false,
+      ariaLabel: props.label || 'Verification code',
+      rootClass: ['inline-flex items-center gap-2', props.class || ''].join(' '),
+    };
+  }
+
+  mounted() {
+    if (this.props.autoFocus) {
+      const { value, length } = this.getData();
+      this._focus(Math.min(value.length, length - 1));
+    }
+  }
+
+  // Focus (and select) the cell at index `i`, if it exists and is in range.
+  _focus(i) {
+    const { length } = this.getData();
+    if (i < 0 || i >= length) return;
+    const el = this.element?.querySelector(`[data-otp-index="${i}"]`);
+    if (!el) return;
+    // Focus we move ourselves is already aimed at the right cell, so flag it and
+    // let onFocus skip its redirect: el.focus() dispatches focus synchronously,
+    // and at that point the parent has not committed the new `value` back yet —
+    // getData() would still read the pre-edit value and bounce focus backwards.
+    this._selfFocus = true;
+    el.focus();
+    el.select?.();
+    this._selfFocus = false;
+  }
+
+  // The slot an interaction at cell `i` actually acts on. `value` is a compact
+  // prefix string, so cell N only exists in it once N chars are typed — clamping
+  // to `value.length` keeps the edit landing in the cell the user is looking at
+  // instead of silently appending at the end of the string.
+  _slot(i) {
+    const { value } = this.getData();
+    return Math.min(i, value.length);
+  }
+
+  // Emit the new full value and fire @complete once, the moment the value first
+  // transitions to full length (never again while it stays full).
+  _emit(next, event) {
+    const { value, length } = this.getData();
+    const { change, complete } = this.props;
+    if (typeof change === 'function') change(next, event);
+    if (next.length === length && value.length !== length && typeof complete === 'function') {
+      complete(next);
+    }
+  }
+
+  events = {
+    onInput: (item, event) => {
+      const { value, length, type, disabled } = this.getData();
+      if (disabled) return;
+      const i = this._slot(item.index);
+      const chars = sanitize(event.target.value, type);
+      if (chars.length === 0) {
+        // Rejected char (e.g. a letter in a numeric field): restore the cell.
+        event.target.value = value[i] || '';
+        return;
+      }
+      if (chars.length === 1) {
+        // Single edit replaces just this cell, then advances.
+        const next = (value.slice(0, i) + chars + value.slice(i + 1)).slice(0, length);
+        this._emit(next, event);
+        this._focus(i + 1);
+      } else {
+        // Multi-char (SMS autofill into one field): distribute from this cell.
+        const next = (value.slice(0, i) + chars).slice(0, length);
+        this._emit(next, event);
+        this._focus(Math.min(next.length, length - 1));
+      }
+    },
+
+    onKey: (item, event) => {
+      const { value, length, disabled } = this.getData();
+      if (disabled) return;
+      const i = this._slot(item.index);
+      switch (event.key) {
+        case 'Backspace':
+          event.preventDefault();
+          if (value[i]) {
+            // Filled cell: clear it in place.
+            this._emit(value.slice(0, i) + value.slice(i + 1), event);
+          } else if (i > 0) {
+            // Empty cell: step back and clear the previous cell.
+            this._emit(value.slice(0, i - 1) + value.slice(i), event);
+            this._focus(i - 1);
+          }
+          break;
+        case 'Delete':
+          event.preventDefault();
+          if (value[i]) this._emit(value.slice(0, i) + value.slice(i + 1), event);
+          break;
+        case 'ArrowLeft':
+          event.preventDefault();
+          this._focus(i - 1);
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          this._focus(this._slot(i + 1));
+          break;
+        case 'Home':
+          event.preventDefault();
+          this._focus(0);
+          break;
+        case 'End':
+          event.preventDefault();
+          this._focus(this._slot(length - 1));
+          break;
+        default:
+          break;
+      }
+    },
+
+    onPaste: (item, event) => {
+      const { value, length, type, disabled } = this.getData();
+      if (disabled) return;
+      event.preventDefault();
+      const chars = sanitize(event.clipboardData?.getData('text') ?? '', type);
+      if (!chars) return;
+      const next = (value.slice(0, this._slot(item.index)) + chars).slice(0, length);
+      this._emit(next, event);
+      this._focus(Math.min(next.length, length - 1));
+    },
+
+    onFocus: (item, event) => {
+      // Clicking (or tabbing to) a cell past the filled prefix would put the
+      // caret somewhere the value can't reach — send focus to the first open
+      // slot instead. Cells inside the prefix, and every cell of a full code,
+      // keep the focus they were given.
+      const slot = this._slot(item.index);
+      if (!this._selfFocus && slot !== item.index) {
+        this._focus(slot);
+        return;
+      }
+      // Select the char so typing into a filled cell replaces it.
+      event.target.select?.();
+    },
+  };
+}
+</script>

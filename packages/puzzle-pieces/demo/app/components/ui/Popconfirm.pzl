@@ -1,0 +1,162 @@
+<puzzle-view>
+  <DropdownPanel
+    class={ rootClass }
+    trigger="click"
+    arrow="none"
+    open={ openState }
+    @show={ onShow() }
+    @hide={ onHide() }>
+    <DropdownPanel.Trigger class={ triggerClass }><Children><span class={ stockClass }>{ label }</span></Children></DropdownPanel.Trigger>
+    <DropdownPanel.Panel class={ panelClass } align={ align }>
+      <p class="text-sm font-medium text-ink">{ title }</p>
+      {#if description}
+        <p class="mt-1 text-sm text-muted">{ description }</p>
+      {/if}
+      <div class="mt-3 flex justify-end gap-2">
+        <button type="button" class={ cancelClass } @click={ onCancel(event) }>{ cancelLabel }</button>
+        <button type="button" class={ confirmClass } @click={ onConfirm(event) }>{ confirmLabel }</button>
+      </div>
+    </DropdownPanel.Panel>
+  </DropdownPanel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from './DropdownPanel/index.js';
+
+// Popconfirm — a lightweight inline confirmation bubble anchored to a trigger,
+// for low-stakes confirmations ("Delete this item?") that don't warrant a modal.
+// Distinct from AlertDialog, which is a focus-trapping native <dialog>.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It composes the shared DropdownPanel
+// base, which wraps @magic-spells/dropdown-panel: press-to-toggle, outside
+// dismissal, Escape, focus return and one-open-at-a-time are the web
+// component's. What is left here is the prompt itself.
+//
+//   <Popconfirm title="Delete this item?" @confirm={ remove }>
+//     <span class="…">Delete</span>
+//   </Popconfirm>
+//
+//   <Popconfirm
+//     title="Delete this file?"
+//     description="This cannot be undone."
+//     confirmLabel="Delete"
+//     variant="danger"
+//     align="end"
+//     @confirm={ remove }
+//     @cancel={ dismiss }>
+//     <span class="…">Delete</span>
+//   </Popconfirm>
+//
+// THIS PIECE STAYS A SINGLE COMPONENT, unlike its Popover / HoverCard cousins,
+// because its panel is entirely prescribed — a title, an optional description and
+// two buttons. Only the TRIGGER is arbitrary, so the one content channel a piece
+// gets goes there. (Why one: a named slot is a compile error anywhere inside a
+// component invocation, and this piece's root is <DropdownPanel>.)
+//
+// TRIGGER CHROME — the children marker's FALLBACK BODY is the stock chrome
+// (D141): a secondary-button box whose text comes from `label`. Pass your own
+// children and they REPLACE that fallback entirely — call-site content WINS over
+// `label`, so a custom trigger must carry its own accessible name. Keep that
+// content NON-INTERACTIVE: <dropdown-trigger> is the control (the component
+// gives it role="button", tabindex and the aria wiring), so a nested <button>
+// would be a second tab stop.
+//
+// BREAKING CHANGES in 0.7.0: `message` is now `title`; the "trigger" slot is now
+// plain children; `placement` is gone (panels open downward — use `align` for the
+// horizontal edge). Gone with the port: the auto-flip measurement, the document
+// pointerdown listener, the Escape handler, the aria-* mirroring onto the
+// consumer's trigger, and the focus-the-Cancel-button pass.
+//
+// DISMISSAL IS NO LONGER CANCEL. Escape and an outside press are the component's
+// and close the bubble WITHOUT firing @cancel — dismissing is walking away;
+// @cancel means the Cancel button was pressed. If you need to know either way,
+// listen to @hide, which fires for every close.
+//
+// CLOSING FROM INSIDE. A click inside the panel does not close it upstream (only
+// an outside press does), so both buttons close it explicitly through the
+// nearest <dropdown-component>. That call is also what returns focus to the
+// trigger: hide() restores focus when focus was inside, and it was — on the
+// button you just pressed.
+//
+// open — OPTIONAL-CONTROLLED and EDGE-TRIGGERED through the base. Omit it and the
+// component owns its state, which is the normal case.
+//
+// STYLESHEETS. Through DropdownPanel this piece needs the component's CSS in your
+// app's style entry:
+//   @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
+//   @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */
+//
+// Props
+//   title         the question (required in practice)
+//   description   a second line under it
+//   label         text for the STOCK trigger — the fallback body only
+//   confirmLabel  default "Confirm"
+//   cancelLabel   default "Cancel"
+//   variant       'danger' tints the confirm button destructive
+//   align         'start' (default) | 'end' — which edge the bubble hangs from
+//   open          optional-controlled, edge-triggered
+//   class         merged onto <dropdown-panel>
+//   triggerClass  merged onto <dropdown-trigger>
+//   @confirm      the Confirm button was pressed (fires, then closes)
+//   @cancel       the Cancel button was pressed (fires, then closes)
+//   @show / @hide every open / close, dismissals included
+
+// Footer button recipes copied verbatim from Button.pzl (as AlertDialog does) so
+// the actions render identically to <Button size="sm">.
+const BTN_BASE =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
+  'rounded-lg font-medium cursor-pointer transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none h-8 px-3 text-sm';
+const BTN_PRIMARY = 'bg-brand text-brand-ink hover:bg-brand-dark';
+const BTN_DANGER = 'bg-danger text-danger-ink hover:bg-danger-dark';
+const BTN_SECONDARY = 'bg-surface-sunken text-ink hover:bg-border';
+const BTN_OUTLINE =
+  'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken';
+
+// The base Panel carries the card chrome; a confirmation wants a fixed, readable
+// column rather than the menu's min-width.
+const PANEL = 'w-64 max-w-xs p-4';
+
+export default class Popconfirm extends PuzzleView {
+  // The bubble does not close itself on a press inside the panel, so a button
+  // that acted has to say so. closest() from the button walks out to this
+  // piece's own <dropdown-component> (never a parent's — the buttons are inside
+  // this panel), and hide() returns focus to the trigger on the way.
+  #close(event) {
+    event?.currentTarget?.closest?.('dropdown-component')?.hide?.();
+  }
+
+  data(params, props) {
+    return {
+      rootClass: 'inline-block',
+      openState: props.open,
+      title: props.title != null ? String(props.title) : '',
+      description: props.description != null ? String(props.description) : '',
+      label: props.label != null ? String(props.label) : '',
+      confirmLabel: props.confirmLabel != null ? String(props.confirmLabel) : 'Confirm',
+      cancelLabel: props.cancelLabel != null ? String(props.cancelLabel) : 'Cancel',
+      align: props.align === 'end' ? 'end' : false,
+      panelClass: [PANEL, props.class].filter(Boolean).join(' '),
+      triggerClass: props.triggerClass || false,
+      stockClass: [BTN_BASE, BTN_SECONDARY].join(' '),
+      cancelClass: [BTN_BASE, BTN_OUTLINE].join(' '),
+      confirmClass: [BTN_BASE, props.variant === 'danger' ? BTN_DANGER : BTN_PRIMARY].join(' '),
+    };
+  }
+
+  events = {
+    onShow: () => this.props.show?.(),
+    onHide: () => this.props.hide?.(),
+    onConfirm: (event) => {
+      this.props.confirm?.();
+      this.#close(event);
+    },
+    onCancel: (event) => {
+      this.props.cancel?.();
+      this.#close(event);
+    },
+  };
+}
+</script>

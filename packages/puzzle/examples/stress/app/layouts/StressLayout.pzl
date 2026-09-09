@@ -1,0 +1,44 @@
+<puzzle-view class="min-h-screen bg-ink text-fg">
+  <header class="border-b border-hairline">
+    <div class="max-w-6xl mx-auto px-6 py-5 flex items-baseline justify-between gap-6">
+      <div>
+        <h1 class="text-lg font-semibold tracking-tight text-fg">Puzzle Stress Lab</h1>
+        <p class="mt-0.5 text-xs text-muted">
+          Deterministic performance scenarios · drive from the page or from
+          <code class="font-mono text-accent">window.__STRESS__</code>
+        </p>
+      </div>
+      <div class="font-mono text-[10px] uppercase tracking-[0.28em] text-faint shrink-0">
+        seed { seedHex }
+      </div>
+    </div>
+  </header>
+
+  <main class="py-6">
+    <Slot/>
+  </main>
+
+  <!-- Grammar corner: the lab's specimen of the 0.7.0 template additions. -->
+  <footer class="max-w-6xl mx-auto px-6 pb-8">
+    <Frame>
+      <Frame.Header>grammar corner</Frame.Header>
+      <Frame.Body>
+        Dotted family tags (D167) render this box. A backslash escapes a brace,
+        so \{ seedHex \} is literal text while { seedHex } interpolates — and
+        \{{ seedHex }\} wraps the interpolation in real braces.
+      </Frame.Body>
+    </Frame>
+  </footer>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Frame from '../components/Frame/index.js';
+import { STRESS_SEED } from '../scenario-utils.js';
+
+export default class StressLayout extends PuzzleView {
+  data() {
+    return { seedHex: '0x' + STRESS_SEED.toString(16) };
+  }
+}
+</script>

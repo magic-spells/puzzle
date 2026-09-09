@@ -1,0 +1,8 @@
+{
+  "name": "rich-text",
+  "description": "Renders a stored rich text document — RichTextEditor's Shopify-style JSON tree — as semantic HTML with the shared typography classes; XSS-safe tree walker with zero npm dependencies",
+  "files": ["RichText.pzl"],
+  "registryDependencies": ["lib/rich-text-doc.js"],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

@@ -1,0 +1,11 @@
+<puzzle-view>
+  <div>x</div>
+</puzzle-view>
+
+<script>
+const a = "</script> not a close";
+const b = `also </script> here`;
+// and a comment </script>
+const re = /<\/script>/;
+export const real = a + b;
+</script>

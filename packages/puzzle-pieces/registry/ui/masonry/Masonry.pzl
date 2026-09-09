@@ -1,0 +1,160 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <Slot/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Masonry — a responsive, measurement-free gallery layout built on CSS
+// multi-column (`columns-*`). Items are the component's DEFAULT-SLOT CHILDREN
+// (one direct child = one masonry item); each flows top-to-bottom and wraps into
+// the next column, so columns stay height-balanced with zero JS measuring, no
+// ResizeObserver, and no transform math (dodging the Tailwind translate gotcha).
+//
+//   <Masonry columns={ 3 } gap={ 4 }>
+//     <div>…card one…</div>
+//     <div>…card two (taller)…</div>
+//     <div>…card three…</div>
+//   </Masonry>
+//
+//   <Masonry columns={ { base: 1, sm: 2, lg: 3 } } gap={ 6 }>
+//     …cards…
+//   </Masonry>
+//
+// The root applies `break-inside-avoid` to every direct child (so a card never
+// splits across a column break) and a matching bottom margin for vertical rhythm
+// — the caller drops plain children in and needs no per-child masonry classes.
+//
+// Props
+//   columns  number (2–6) for a fixed count, or a responsive object
+//            { base, sm, md, lg, xl } — each value 1–6. Default 3.
+//   gap      Tailwind spacing step for the column gap AND the between-item
+//            vertical gap. One of 0 / 2 / 3 / 4 / 6 / 8. Default 4.
+//   class    merged onto the root
+//
+// No callbacks — purely presentational.
+//
+// ORDERING. CSS columns is COLUMN-MAJOR: items fill column one top-to-bottom,
+// then column two, and so on — NOT the left-to-right, row-major order of a
+// measured JS masonry. If strict row-major reading order matters, this layout is
+// not the right tool; for galleries where visual balance beats reading order it
+// is exactly right.
+//
+// TAILWIND STATIC SCAN. The demo's Tailwind scanner only emits classes that
+// appear LITERALLY in source, so every candidate `columns-*` / `gap-*` /
+// `[&>*]:mb-*` string is written out whole in the lookup maps below and selected
+// by key — never assembled by interpolation like `columns-${n}` (which the
+// scanner can't see, leaving the layout unstyled).
+const BASE = 'w-full [&>*]:break-inside-avoid';
+
+// Whole, literal class strings — one per supported column count, per breakpoint.
+const COLUMNS = {
+  1: 'columns-1',
+  2: 'columns-2',
+  3: 'columns-3',
+  4: 'columns-4',
+  5: 'columns-5',
+  6: 'columns-6',
+};
+const COLUMNS_SM = {
+  1: 'sm:columns-1',
+  2: 'sm:columns-2',
+  3: 'sm:columns-3',
+  4: 'sm:columns-4',
+  5: 'sm:columns-5',
+  6: 'sm:columns-6',
+};
+const COLUMNS_MD = {
+  1: 'md:columns-1',
+  2: 'md:columns-2',
+  3: 'md:columns-3',
+  4: 'md:columns-4',
+  5: 'md:columns-5',
+  6: 'md:columns-6',
+};
+const COLUMNS_LG = {
+  1: 'lg:columns-1',
+  2: 'lg:columns-2',
+  3: 'lg:columns-3',
+  4: 'lg:columns-4',
+  5: 'lg:columns-5',
+  6: 'lg:columns-6',
+};
+const COLUMNS_XL = {
+  1: 'xl:columns-1',
+  2: 'xl:columns-2',
+  3: 'xl:columns-3',
+  4: 'xl:columns-4',
+  5: 'xl:columns-5',
+  6: 'xl:columns-6',
+};
+
+// Column gap (multi-column `column-gap`).
+const GAP = {
+  0: 'gap-0',
+  2: 'gap-2',
+  3: 'gap-3',
+  4: 'gap-4',
+  6: 'gap-6',
+  8: 'gap-8',
+};
+
+// Between-item vertical gap: bottom margin on each direct child.
+const CHILD_GAP = {
+  0: '[&>*]:mb-0',
+  2: '[&>*]:mb-2',
+  3: '[&>*]:mb-3',
+  4: '[&>*]:mb-4',
+  6: '[&>*]:mb-6',
+  8: '[&>*]:mb-8',
+};
+
+const DEFAULT_COLUMNS = 3;
+const DEFAULT_GAP = 4;
+
+function pick(map, key, fallback) {
+  return map[key] || fallback;
+}
+
+// Resolve the `columns` prop to a whitelisted, space-joined class string.
+function columnsClass(columns) {
+  if (columns && typeof columns === 'object') {
+    const out = [];
+    // base defaults to a single column on the smallest screens
+    out.push(columns.base != null ? pick(COLUMNS, columns.base, COLUMNS[1]) : COLUMNS[1]);
+    if (columns.sm != null && COLUMNS_SM[columns.sm]) out.push(COLUMNS_SM[columns.sm]);
+    if (columns.md != null && COLUMNS_MD[columns.md]) out.push(COLUMNS_MD[columns.md]);
+    if (columns.lg != null && COLUMNS_LG[columns.lg]) out.push(COLUMNS_LG[columns.lg]);
+    if (columns.xl != null && COLUMNS_XL[columns.xl]) out.push(COLUMNS_XL[columns.xl]);
+    return out.join(' ');
+  }
+  const n = Number(columns);
+  return pick(COLUMNS, n, COLUMNS[DEFAULT_COLUMNS]);
+}
+
+function gapKey(gap) {
+  if (gap == null) return DEFAULT_GAP;
+  const n = Number(gap);
+  return GAP[n] ? n : DEFAULT_GAP;
+}
+
+export default class Masonry extends PuzzleView {
+  data(params, props) {
+    const cols = props.columns != null ? props.columns : DEFAULT_COLUMNS;
+    const g = gapKey(props.gap);
+    return {
+      rootClass: [
+        BASE,
+        columnsClass(cols),
+        GAP[g],
+        CHILD_GAP[g],
+        props.class || '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+}
+</script>

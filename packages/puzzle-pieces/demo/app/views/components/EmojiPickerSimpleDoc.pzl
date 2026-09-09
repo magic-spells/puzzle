@@ -1,0 +1,159 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Emoji Picker Simple</h1>
+        <p class="mt-2 text-body">
+          The lightweight sibling of
+          the <a href="#/components/emoji-picker" class="text-brand hover:underline">Emoji Picker</a>: no search box, a category tab bar along the bottom instead. One category renders
+          at a time, and because there is nothing to search, the keyword data file is never
+          copied or bundled — the piece depends on the emoji inventory alone.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            class="h-9 w-64 rounded-lg border border-border bg-surface px-3 text-sm text-ink placeholder:text-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
+            placeholder="Say something…"
+            value={ message }
+            @input={ onMessageInput(event) } />
+          <EmojiPickerSimple align="end" @change={ addEmoji }/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Pulls in lib/emoji-data.js only. Choose this variant when you don't need
+          search; the searchable picker additionally ships lib/emoji-keywords.js.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          Same contract as the searchable picker: @change receives the picked emoji as a
+          string, the popover closes, and focus returns to the trigger. The selected
+          category sticks around while the page lives, so reopening lands where the user
+          left off.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="custom-trigger" title="Custom trigger" code={ codeTrigger }>
+          <EmojiPickerSimple label="Add reaction" @change={ addEmoji }>
+            <span slot="trigger" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken">
+              React { lastEmoji }
+            </span>
+          </EmojiPickerSimple>
+        </ExampleBox>
+
+        <ExampleBox id="controlled" title="Controlled open" code={ codeControlled }>
+          <div class="flex items-center gap-3">
+            <EmojiPickerSimple open={ pickerOpen } @change={ addEmoji } @show={ openPicker } @hide={ closePicker }/>
+            <span class="text-sm text-muted">{ pickerOpen ? 'open' : 'closed' }</span>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="keyboard" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+        <p class="text-sm text-body">
+          The grid itself takes focus on open and tracks the highlighted cell with
+          aria-activedescendant: arrows move it (Left/Right by one, Up/Down by a row of
+          eight), Home and End jump, Enter or Space picks, Escape closes and refocuses
+          the trigger. Tab moves on to the category bar — a tablist with Left/Right
+          arrow navigation that switches categories as it goes.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import EmojiPickerSimple from '@/components/ui/EmojiPickerSimple.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece emoji-picker-simple';
+const usageImport = `import EmojiPickerSimple from '@/components/ui/EmojiPickerSimple.pzl';`;
+const usageMarkup = `<EmojiPickerSimple @change={ addEmoji }/>
+
+// events: { addEmoji: (char) => { …append char to your state… } }`;
+
+const codeHero = `<input value={ message } @input={ onMessageInput(event) } />
+<EmojiPickerSimple align="end" @change={ addEmoji }/>
+
+// addEmoji: (char) => this.setData({ message: this.getData().message + char })`;
+
+const codeTrigger = `<EmojiPickerSimple label="Add reaction" @change={ addEmoji }>
+  <span slot="trigger" class="…">React</span>
+</EmojiPickerSimple>
+
+// Filling the named "trigger" slot replaces the default smiley icon — that stock icon
+// is the slot's fallback body, so no flag is needed. \`label\` remains the accessible
+// name, not visible text.`;
+
+const codeControlled = `<EmojiPickerSimple open={ pickerOpen } @change={ addEmoji }
+                   @show={ openPicker } @hide={ closePicker }/>
+
+// Omit \`open\` and the picker manages itself; pass it and the parent owns it.`;
+
+export default class EmojiPickerSimpleDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      message: '',
+      lastEmoji: '',
+      pickerOpen: false,
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeTrigger,
+      codeControlled,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Custom trigger', href: '#custom-trigger' },
+        { label: 'Controlled open', href: '#controlled' },
+        { label: 'Keyboard', href: '#keyboard' },
+      ],
+    };
+  }
+
+  events = {
+    addEmoji: (char) => {
+      const { message } = this.getData();
+      this.setData({ message: message + char, lastEmoji: char });
+      this.refresh();
+    },
+
+    onMessageInput: (event) => {
+      this.setData({ message: event.target.value });
+    },
+
+    openPicker: () => {
+      this.setData({ pickerOpen: true });
+      this.refresh();
+    },
+
+    closePicker: () => {
+      this.setData({ pickerOpen: false });
+      this.refresh();
+    },
+  };
+}
+</script>

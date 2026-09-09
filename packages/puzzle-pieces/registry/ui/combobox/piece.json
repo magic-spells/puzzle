@@ -1,0 +1,8 @@
+{
+  "name": "combobox",
+  "description": "Filterable autocomplete combobox with ranked filtering, groups, optional-controlled open, aria-activedescendant keyboard nav, and snippet-customizable option content",
+  "files": ["Combobox.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

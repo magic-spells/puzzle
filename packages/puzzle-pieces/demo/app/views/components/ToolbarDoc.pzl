@@ -1,0 +1,232 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Toolbar</h1>
+        <p class="mt-2 text-body">
+          A WAI-ARIA
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="toolbar"</code>
+          container that groups buttons, toggles, and separators into a
+          <strong class="font-medium text-ink">single Tab stop</strong> with roving-tabindex
+          arrow-key navigation. Config-first from an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">items</code>
+          array; value-first
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@press</code>
+          /
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@toggle</code>
+          callbacks.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <Toolbar label="Text formatting" items={ formatItems } @toggle={ setMark } @press={ act }/>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="mixed" title="Mixed controls" code={ codeMixed }>
+          <Toolbar label="Editor actions" items={ mixedItems } @press={ act } @toggle={ setWrap }/>
+        </ExampleBox>
+
+        <ExampleBox id="vertical" title="Vertical orientation" code={ codeVertical }>
+          <Toolbar orientation="vertical" label="Canvas tools" items={ verticalItems } @press={ act } @toggle={ setGrid }/>
+        </ExampleBox>
+      </div>
+
+      <section id="keyboard" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
+        <p class="mb-4 text-sm text-body">
+          The whole toolbar is a single Tab stop. Once focus is inside, arrow keys move between
+          controls (wrapping at the ends) and skip separators and disabled items:
+        </p>
+        <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+          <dt class="font-mono text-ink"><kbd class="rounded bg-surface-sunken px-1.5 py-0.5">Tab</kbd></dt>
+          <dd class="text-body">Move into / out of the toolbar (one stop for the whole group).</dd>
+          <dt class="font-mono text-ink"><kbd class="rounded bg-surface-sunken px-1.5 py-0.5">←</kbd> <kbd class="rounded bg-surface-sunken px-1.5 py-0.5">→</kbd></dt>
+          <dd class="text-body">Previous / next control (horizontal toolbars).</dd>
+          <dt class="font-mono text-ink"><kbd class="rounded bg-surface-sunken px-1.5 py-0.5">↑</kbd> <kbd class="rounded bg-surface-sunken px-1.5 py-0.5">↓</kbd></dt>
+          <dd class="text-body">Previous / next control (vertical toolbars).</dd>
+          <dt class="font-mono text-ink"><kbd class="rounded bg-surface-sunken px-1.5 py-0.5">Home</kbd> <kbd class="rounded bg-surface-sunken px-1.5 py-0.5">End</kbd></dt>
+          <dd class="text-body">First / last enabled control.</dd>
+          <dt class="font-mono text-ink"><kbd class="rounded bg-surface-sunken px-1.5 py-0.5">Enter</kbd> <kbd class="rounded bg-surface-sunken px-1.5 py-0.5">Space</kbd></dt>
+          <dd class="text-body">Activate the focused button or toggle.</dd>
+        </dl>
+      </section>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility</h2>
+        <p class="mb-3 text-sm text-body">
+          The root is a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="toolbar"</code>
+          with an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-label</code>
+          (default <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">"Toolbar"</code>) and an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-orientation</code>
+          matching the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">orientation</code> prop.
+          Exactly one control carries
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">tabindex="0"</code> at a time
+          (roving tabindex); the rest are <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">-1</code>.
+        </p>
+        <p class="mb-3 text-sm text-body">
+          Toggles carry
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-pressed</code>;
+          the parent owns each toggle's
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">pressed</code> state and writes it back
+          from <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '@toggle({ value, pressed })' }</code>.
+          Separators are <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="separator"</code>
+          and are never focusable.
+        </p>
+        <p class="text-sm text-body">
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code> is
+          <strong class="font-medium text-ink">always required</strong> on every control — it is the accessible name. For an
+          icon-only control set
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">iconOnly: true</code>:
+          the label renders
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">sr-only</code>
+          and is mirrored onto the control's
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">title</code>.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Toolbar from '@/components/ui/Toolbar.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+// Docs page for Toolbar — follows the ButtonGroupDoc / ToggleGroupDoc exemplar shape.
+const installCmd = 'puzzle add piece toolbar';
+const usageImport = `import Toolbar from '@/components/ui/Toolbar.pzl';`;
+const usageMarkup = `<Toolbar label="Text formatting" @toggle={ setMark } @press={ act } items={[ { type: 'toggle', value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true, pressed: marks.bold }, { type: 'toggle', value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true, pressed: marks.italic }, { type: 'toggle', value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true, pressed: marks.underline }, { type: 'separator' }, { type: 'button', value: 'left', label: 'Align left', icon: ALIGN_LEFT, iconOnly: true }, { type: 'button', value: 'center', label: 'Align center', icon: ALIGN_CENTER, iconOnly: true }, { type: 'button', value: 'right', label: 'Align right', icon: ALIGN_RIGHT, iconOnly: true }, ]}/>`;
+
+// SVG path `d` strings (24×24, stroke-current), one per icon.
+const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
+const ITALIC = 'M19 4h-9 M14 20H5 M15 4 9 20';
+const UNDERLINE = 'M6 4v6a6 6 0 0 0 12 0V4 M4 20h16';
+const ALIGN_LEFT = 'M21 6H3 M15 12H3 M17 18H3';
+const ALIGN_CENTER = 'M21 6H3 M17 12H7 M19 18H5';
+const ALIGN_RIGHT = 'M21 6H3 M21 12H9 M21 18H7';
+const UNDO = 'M3 7v6h6 M3 13a9 9 0 1 0 3-7.7L3 8';
+const REDO = 'M21 7v6h-6 M21 13a9 9 0 1 1-3-7.7L21 8';
+const ZOOM_IN = 'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16 M21 21l-4.35-4.35 M11 8v6 M8 11h6';
+const ZOOM_OUT = 'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16 M21 21l-4.35-4.35 M8 11h6';
+const GRID = 'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z';
+
+const codeHero = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
+// …ITALIC, UNDERLINE, ALIGN_* path strings…
+
+<Toolbar label="Text formatting" @toggle={ setMark } @press={ act } items={[
+  { type: 'toggle', value: 'bold',      label: 'Bold',      icon: BOLD,      iconOnly: true, pressed: marks.bold },
+  { type: 'toggle', value: 'italic',    label: 'Italic',    icon: ITALIC,    iconOnly: true, pressed: marks.italic },
+  { type: 'toggle', value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true, pressed: marks.underline },
+  { type: 'separator' },
+  { type: 'button', value: 'left',   label: 'Align left',   icon: ALIGN_LEFT,   iconOnly: true },
+  { type: 'button', value: 'center', label: 'Align center', icon: ALIGN_CENTER, iconOnly: true },
+  { type: 'button', value: 'right',  label: 'Align right',  icon: ALIGN_RIGHT,  iconOnly: true },
+]}/>
+
+// parent — the toggle's pressed state is parent-owned
+events = {
+  setMark: ({ value, pressed }) => this.setData({ marks: { ...this.getData().marks, [value]: pressed } }),
+};`;
+
+const codeMixed = `// Buttons fire @press; the toggle fires @toggle({ value, pressed }); a separator groups them.
+<Toolbar label="Editor actions" @press={ act } @toggle={ setWrap } items={[
+  { type: 'button', value: 'undo', label: 'Undo', icon: UNDO },
+  { type: 'button', value: 'redo', label: 'Redo', icon: REDO },
+  { type: 'separator' },
+  { type: 'toggle', value: 'wrap', label: 'Wrap text', pressed: wrap },
+]}/>`;
+
+const codeVertical = `// orientation="vertical" switches the arrow-key axis to Up/Down and stacks the controls.
+<Toolbar orientation="vertical" label="Canvas tools" @press={ act } @toggle={ setGrid } items={[
+  { type: 'button', value: 'zoom-in',  label: 'Zoom in',  icon: ZOOM_IN,  iconOnly: true },
+  { type: 'button', value: 'zoom-out', label: 'Zoom out', icon: ZOOM_OUT, iconOnly: true },
+  { type: 'separator' },
+  { type: 'toggle', value: 'grid', label: 'Show grid', icon: GRID, iconOnly: true, pressed: grid },
+]}/>`;
+
+export default class ToolbarDoc extends PuzzleView {
+  created() {
+    this.setData({
+      marks: { bold: true, italic: false, underline: false },
+      wrap: false,
+      grid: true,
+    });
+  }
+
+  data(params, props) {
+    const { marks, wrap, grid } = this.getData();
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeMixed,
+      codeVertical,
+      formatItems: [
+        { type: 'toggle', value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true, pressed: marks.bold },
+        { type: 'toggle', value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true, pressed: marks.italic },
+        { type: 'toggle', value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true, pressed: marks.underline },
+        { type: 'separator' },
+        { type: 'button', value: 'left', label: 'Align left', icon: ALIGN_LEFT, iconOnly: true },
+        { type: 'button', value: 'center', label: 'Align center', icon: ALIGN_CENTER, iconOnly: true },
+        { type: 'button', value: 'right', label: 'Align right', icon: ALIGN_RIGHT, iconOnly: true },
+      ],
+      mixedItems: [
+        { type: 'button', value: 'undo', label: 'Undo', icon: UNDO },
+        { type: 'button', value: 'redo', label: 'Redo', icon: REDO },
+        { type: 'separator' },
+        { type: 'toggle', value: 'wrap', label: 'Wrap text', pressed: wrap },
+      ],
+      verticalItems: [
+        { type: 'button', value: 'zoom-in', label: 'Zoom in', icon: ZOOM_IN, iconOnly: true },
+        { type: 'button', value: 'zoom-out', label: 'Zoom out', icon: ZOOM_OUT, iconOnly: true },
+        { type: 'separator' },
+        { type: 'toggle', value: 'grid', label: 'Show grid', icon: GRID, iconOnly: true, pressed: grid },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Mixed controls', href: '#mixed' },
+        { label: 'Vertical orientation', href: '#vertical' },
+        { label: 'Keyboard', href: '#keyboard' },
+        { label: 'Accessibility', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    act: (value) => toast({ message: `Pressed “${value}”.`, variant: 'success' }),
+    setMark: ({ value, pressed }) =>
+      this.setData({ marks: { ...this.getData().marks, [value]: pressed } }),
+    setWrap: ({ pressed }) => this.setData({ wrap: pressed }),
+    setGrid: ({ pressed }) => this.setData({ grid: pressed }),
+  };
+}
+</script>

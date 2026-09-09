@@ -1,0 +1,16 @@
+<puzzle-view class="styled">
+  <div class="thing"></div>
+</puzzle-view>
+
+<style>
+/* a literal </style> inside a CSS comment must not close the body */
+.thing::after {
+  content: "</style>";
+}
+.thing::before {
+  content: '</style> too';
+}
+.thing {
+  color: red;
+}
+</style>

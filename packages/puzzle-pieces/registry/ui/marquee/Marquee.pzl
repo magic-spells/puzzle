@@ -1,0 +1,135 @@
+<puzzle-view>
+  <scrolling-content
+    class={ rootClass }
+    style={ rootStyle }
+    speed={ speedAttr }
+    direction={ directionAttr }
+    pause-on-hover={ pauseAttr }
+    drag={ dragAttr }
+    fade={ fadeAttr }><scrolling-track><scrolling-item><Children/></scrolling-item></scrolling-track></scrolling-content>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Marquee — a continuously scrolling ticker of content (logos, announcements,
+// testimonials). The children are one pass of that content; the component clones
+// them enough times to overfill the row and translates the track forever.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <scrolling-content>
+// custom element from @magic-spells/scrolling-content in its ADOPT form — the
+// `<scrolling-track>` and `<scrolling-item>` are authored here, which is the
+// supported framework-friendly shape: with both already present the component
+// moves nothing, it measures the authored item and appends clones after it. The
+// rAF loop, the seamless wrap, the clone accounting, pause-on-hover,
+// drag-to-scrub and prefers-reduced-motion are upstream's.
+//
+//   <Marquee>
+//     <span>Acme</span> <span>Globex</span> <span>Initech</span>
+//   </Marquee>
+//
+//   <Marquee direction="right" speed={ 80 } gap={ 8 } fade pauseOnHover={ false }>
+//     …logos…
+//   </Marquee>
+//
+// THE TRACK AND ITEM MUST EXIST AT CONNECT TIME. They do, because Puzzle builds
+// a component's whole subtree before inserting it — but that is why they are
+// written into this template rather than generated. Never re-create the
+// <scrolling-item> element itself from a conditional: the component's
+// MutationObserver is pinned to the element present at connect, and swapping it
+// out leaves the clones stale (call `element.rebuild()` if you ever must).
+// Patching INSIDE the item is fine and is the normal case — an edited promo
+// string rebuilds every clone on the next frame, automatically.
+//
+// FIRST PAINT IS ONE STATIC ROW. The stylesheet exempts pre-authored markup from
+// the `:not(:defined)` hide, so a prerendered page shows a single un-cloned pass
+// immediately; the clones arrive on the ResizeObserver's first callback, a frame
+// after the module lands.
+//
+// NO VERTICAL DIRECTION. The 0.7.0 rewrite dropped `direction="up"`/`"down"`:
+// upstream is a horizontal marquee and a vertical mode belongs there, not in a
+// fork. `direction` is 'left' or 'right'.
+//
+// `paused` IS NOT A PROP. <scrolling-content> REFLECTS that attribute (its own
+// start()/stop() and the hover gate write it), so a binding would fight the
+// patcher every render. Reach for `element.start()` / `element.stop()` if you
+// need programmatic control.
+//
+// A11Y. Clones carry `data-clone`, `aria-hidden` and `inert` — unannounced AND
+// out of the tab order, so a cloned link is never a focus stop a screen reader
+// cannot describe. Ids inside clones are stripped. The obsolete `marquee` role is
+// deliberately not used.
+//
+// STYLESHEET. This piece needs the component's CSS, which is not part of the
+// copied file. Add it once to your app's style entry:
+//   @import "@magic-spells/scrolling-content/css" layer(components);
+// It carries the host's overflow, the track's flex/gap/max-content sizing (which
+// the clone measurement depends on), the drag cursors and the edge-fade mask.
+// Importing it is duplicate-free — the component detects the sheet through its
+// `--scrolling-content-styles` sentinel and skips its own <style> injection. The
+// layer is not optional cosmetics: the sheet is plain element selectors, so an
+// unlayered import would outrank every Tailwind utility on these elements.
+//
+// Props
+//   direction     'left' (default) | 'right'
+//   speed         pixels per second (default 40; larger = faster)
+//   pauseOnHover  pause while a MOUSE pointer is over the marquee (default true;
+//                 a touch tap does not latch it paused)
+//   drag          drag-to-scrub (default true)
+//   gap           Tailwind spacing STEP between items and between loop copies
+//                 (default 4 → 1rem), written as --scrolling-content-gap
+//   fade          false (default) | true → the stylesheet's 4rem edge mask |
+//                 any CSS length string → that mask width
+//   class         merged onto the host (height, rounding, borders, …)
+//   style         merged after the piece's own custom-property declarations
+
+export default class Marquee extends PuzzleView {
+  data(params, props) {
+    const declarations = [];
+    // Tailwind spacing step → rem, so `gap={ 8 }` reads like `gap-8` elsewhere
+    // in the registry. The component's own default is 1rem, i.e. step 4.
+    const step = Number.isFinite(props.gap) ? props.gap : 4;
+    declarations.push(`--scrolling-content-gap:${step * 0.25}rem`);
+    // A `fade="<length>"` makes upstream write --scrolling-content-fade into this
+    // same inline style, which the patcher owns and rewrites wholesale. Declaring
+    // the identical value here keeps the two in agreement, so a render that
+    // rewrites `style` for an unrelated reason can never drop the mask width. A
+    // BARE `fade` is left out on purpose: upstream REMOVES the property in that
+    // case, and the stylesheet's 4rem default applies.
+    const fadeLength = props.fade === true || !props.fade ? null : String(props.fade);
+    if (fadeLength) declarations.push(`--scrolling-content-fade:${fadeLength}`);
+    if (props.style) declarations.push(String(props.style));
+
+    return {
+      rootClass: props.class || false,
+      rootStyle: declarations.join(';'),
+      // always written: the piece's default is 40 px/s, upstream's is 60
+      speedAttr: Number.isFinite(props.speed) ? props.speed : 40,
+      directionAttr: props.direction === 'right' ? 'right' : 'left',
+      // both are opt-OUT attributes upstream — the string 'false' is the only
+      // value that means anything, so the default renders no attribute at all
+      pauseAttr: props.pauseOnHover === false ? 'false' : false,
+      dragAttr: props.drag === false ? 'false' : false,
+      // bare `fade` takes the stylesheet's default width; a string sets it
+      fadeAttr: props.fade === true ? true : fadeLength || false,
+    };
+  }
+
+  mounted() {
+    // Browser-only by construction: the package registers its custom elements at
+    // module scope with `class extends HTMLElement`, which is a ReferenceError
+    // under Node — a top-level import would take the prerender pass down with it.
+    if (typeof window === 'undefined') return;
+    // Fire-and-forget: every bound attribute is observed and none of them is
+    // written back, so the markup is already correct and the elements upgrade in
+    // place the moment the module lands.
+    import('@magic-spells/scrolling-content').catch((error) => {
+      console.error(
+        '[Marquee] failed to load @magic-spells/scrolling-content — the row will ' +
+          'render but not scroll.',
+        error
+      );
+    });
+  }
+}
+</script>

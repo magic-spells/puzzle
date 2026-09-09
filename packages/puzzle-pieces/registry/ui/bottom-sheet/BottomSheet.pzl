@@ -1,0 +1,404 @@
+<puzzle-view>
+  <dialog-panel ref="panel" class={ rootClass }>
+    <dialog-backdrop class={ backdropClass }></dialog-backdrop>
+
+    <dialog aria-labelledby={ labelledby }>
+      <bottom-sheet
+        ref="sheet"
+        class={ panelClass }
+        style={ panelStyle }
+        snap-points={ snapPointsAttr }
+        spring={ springAttr }
+        max-display-width={ maxDisplayWidthAttr }
+        inset={ insetAttr }>
+
+        <bottom-sheet-header class={ headerClass }>
+          <Slot name="header">
+            {#if title}
+              <h2 id={ titleId } class={ titleClass }>{ title }</h2>
+            {/if}
+          </Slot>
+        </bottom-sheet-header>
+
+        <bottom-sheet-content>
+          <Children/>
+        </bottom-sheet-content>
+
+        <bottom-sheet-footer class="empty:hidden">
+          <Slot name="footer"/>
+        </bottom-sheet-footer>
+      </bottom-sheet>
+    </dialog>
+  </dialog-panel>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// BottomSheet — a native-dialog sheet that rises from the bottom edge, dragged
+// and flicked with a finger, optionally resting on snap points that settle on a
+// velocity-aware spring, with a pinned footer and a scrim that tracks the
+// dismissal rather than the drag.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <dialog-panel> /
+// <bottom-sheet> custom elements from @magic-spells/bottom-sheet (plus its
+// @magic-spells/dialog-panel peer) and binds attributes to them. It replaces a
+// 1,100-line port plus a copied math lib. Why:
+//
+//   1. The value here is motion, not markup. The gesture policy that decides
+//      whether a finger belongs to the sheet or to the list inside it, the
+//      velocity rules that tell a dismissal from a resize, and the spring that
+//      makes a hard throw arrive differently from a slow drag are all subtle,
+//      load-bearing and maintained upstream. A fork of that is a liability, and
+//      an upstream fix reaches every consumer through a version bump instead of
+//      a re-port.
+//   2. There is nothing token-styled to own. The panel's own chrome is one
+//      background, one radius and one handle pill, all already published as CSS
+//      custom properties — so the whole design-system bridge is four variables
+//      set on the root element (see THEME below).
+//
+//   <BottomSheet open={ filtersOpen } title="Filters" snapPoints="40,70,90"
+//     @hide={ closeFilters }>
+//     <FilterList/>
+//     <button slot="footer" data-action-hide-dialog data-result="apply">Apply</button>
+//   </BottomSheet>
+//
+// OPEN IS EDGE-TRIGGERED, AND THE SHEET CLOSES ITSELF. The parent owns `open`,
+// but only a CHANGE to it acts: true → show(), false → hide(). An unrelated
+// re-render never re-opens a sheet the user just swiped away while the parent's
+// state still says open. The sheet dismisses itself on Escape, a backdrop tap,
+// a downward flick or drag, or any [data-action-hide-dialog] descendant, and
+// REPORTS through @hide; the parent's job is to flip `open` back to false there
+// so the next open is a fresh edge. Nothing here calls preventDefault on
+// `cancel` — dialog-panel already owns that.
+//
+//   @show()                        the entrance settled
+//   @hide({ result, triggerElement })
+//                                  the exit finished. `result` is the
+//                                  data-result of the [data-action-hide-dialog]
+//                                  button that closed it, and null for Escape,
+//                                  a backdrop tap or a swipe. That is how a
+//                                  footer answers a question:
+//                                    <button slot="footer"
+//                                      data-action-hide-dialog
+//                                      data-result="delete">Delete</button>
+//                                  and the parent reads detail.result in @hide.
+//   @snapChange(value)             a release committed a different snap. The
+//                                  value is the new resting snap in dvh percent
+//                                  — the same number you wrote in snapPoints,
+//                                  NOT an index.
+//
+// Props (every attribute prop renders NO attribute when unset, so the
+// component's own defaults apply — see its README for the full semantics)
+//   open           bool, edge-triggered as above
+//   title          stock header heading; generates its id and wires
+//                  aria-labelledby. Ignored once the header slot is filled.
+//   labelledby     id of the labelling heading, for a filled header slot
+//   snapPoints     comma- or space-separated percentages of the viewport
+//                  height, or an array of numbers. Each one is a HEIGHT, which
+//                  is what keeps the footer pinned at every snap. Omit it for
+//                  the two-state sheet: content height, drag down to dismiss.
+//   snap           optional-controlled resting snap, in dvh percent. Set at
+//                  mount it is also the opening rung; only a CHANGE in it
+//                  later calls snapTo(), and a change that writes back a rung
+//                  the sheet itself announced through @snapChange is absorbed
+//                  — so a render that lands late can never drag the sheet back
+//                  to a rung the user already left. Undeclared values are
+//                  ignored, not clamped. Pair it with @snapChange.
+//   spring         '<attraction>,<friction>' snap-settle override, both dials
+//                  in (0, 1); 'none' settles on the CSS curve instead. It
+//                  governs the SETTLE only — opening, closing and every sheet
+//                  without snapPoints stay on plain transitions.
+//   inset          detaches the sheet from all three edges and rounds every
+//                  corner. CSS only; the off-screen position is corrected to
+//                  match, so the exit still clears the gap.
+//   maxDisplayWidth  largest viewport width where the sheet may open. It also
+//                  closes an open sheet when a resize crosses the limit.
+//   showGrabber    false zeroes the handle pill. CSS only; the header is a drag
+//                  surface either way.
+//   class          merged onto <bottom-sheet>
+//   backdropClass  merged onto <dialog-backdrop>
+//   style          merged onto <bottom-sheet> after the piece's own classes
+//
+// MARKUP CONTRACT. <bottom-sheet-header> always renders — it hosts the grabber
+// pseudo-element and is an unconditional drag surface, and the piece pads its
+// top so header content clears the pill. The header slot's fallback body is the
+// `title` heading, so a FILLED header slot replaces it entirely and must bring
+// its own heading plus a matching `labelledby` (there is no is-slot-filled
+// probe). Untagged children become the scrollable <bottom-sheet-content>. The
+// footer slot fills <bottom-sheet-footer>, which is `empty:hidden` so an
+// unfilled slot leaves no visible bar. A slot="…" attribute must sit on a
+// DIRECT child of the <BottomSheet> tag, so wrap two footer buttons in one div.
+//
+// LOADING. BOTH packages are imported, and both in mounted(). The bundle keeps
+// its dialog-panel peer external and never imports it — bottom-sheet.show()
+// delegates straight to the parent <dialog-panel>, which is a plain unknown
+// element until its own module registers it — so loading only the one package
+// leaves a sheet that cannot open. (The sheet piece needs one import for the
+// same pair; its bundle side-effect-imports the peer. Do not copy that shape
+// here.) And they load in mounted() rather than at module scope because each
+// registers custom elements with `class extends HTMLElement`, a ReferenceError
+// under Node that would crash the prerender pass of any app on static or hybrid
+// output. Markup prerenders correctly either way: an un-upgraded <dialog> is
+// closed, so a closed sheet is invisible before the JS lands, and an `open`
+// that is already true when the view mounts is remembered and applied the
+// moment the modules arrive.
+//
+// STYLESHEETS. This piece needs TWO, neither of which is part of the copied
+// file. Add them once to your app's style entry:
+//   @import "@magic-spells/dialog-panel/css" layer(components);
+//   @import "@magic-spells/bottom-sheet/css" layer(components);
+// dialog-panel first — bottom-sheet.css deliberately overrides some of its
+// rules. The layer is not optional cosmetics: both stylesheets use plain
+// element selectors, and an unlayered import would outrank every Tailwind
+// utility on the elements.
+//
+// THEME. The design-system bridge is four custom properties set on the ROOT
+// <dialog-panel> as arbitrary-property utilities — no <style> block, no hex.
+// The root rather than the panel because the overlay is a SIBLING of the dialog
+// (and, on the currently published release, the dialog's own ::backdrop), so it
+// reads the overlay tokens by inheritance either way. Everything else (radius,
+// bleed, content padding, transition duration and curve) keeps the component's
+// own defaults; retune those from your app CSS, or change the token VALUES in
+// theme/pieces.css to move every piece at once.
+//
+// KNOWN GAPS, all upstream:
+//   * TWO overlays paint at once on the published pair (bottom-sheet 2.0.2 +
+//     dialog-panel 2.0.1), verified in the browser. 2.0.2 still paints the
+//     scrim on the dialog's native ::backdrop and tries to hide
+//     <dialog-backdrop> with a selector that dialog-panel's own
+//     [state='shown'] rule outranks on specificity — so dialog-panel's 30%
+//     backdrop paints beneath this piece's 50% one and the overlay reads
+//     darker than the token says, while backdropClass has nothing visible to
+//     style. Cosmetic, and already fixed on the component's main branch, which
+//     moves the scrim onto <dialog-backdrop> the way sheet.css does.
+//   * `empty:hidden` hides an unfilled footer, but the component's
+//     `:has(bottom-sheet-footer)` rule still matches it and drops the dialog's
+//     own safe-area padding, so a footerless sheet loses that inset on a
+//     notched phone.
+//   * The `hidden` detail carries no reason, so @hide cannot tell Escape from a
+//     backdrop tap from a swipe. Only a [data-action-hide-dialog] close is
+//     distinguishable, through `result` — and a KEYBOARD activation of such a
+//     button reports null, because dialog-panel reads a pointerless click at
+//     (0,0) as a backdrop tap before the delegated handler runs.
+//   * maxDisplayWidth refuses the open silently: show() returns early and no
+//     event fires, so a parent that set open={true} above the ceiling stays out
+//     of sync until it flips the flag back.
+let uid = 0;
+
+// A prop that was not passed renders no attribute — `false` is the compiler's
+// omit sentinel, so the component's own default stands.
+function attr(value) {
+  return value === undefined || value === null || value === '' ? false : String(value);
+}
+
+// The whole design-token bridge. Panel and handle map onto pieces.css tokens so
+// the sheet follows the app's theme in light and dark; the overlay reproduces
+// the look the ported piece had (black at 50%, blurred) rather than the
+// component's slightly lighter default.
+const THEME =
+  '[--bs-panel-background:var(--color-surface)] ' +
+  '[--bs-handle-color:var(--color-faint)] ' +
+  '[--bs-overlay-background:rgb(0_0_0_/_0.5)] ' +
+  '[--bs-overlay-blur:8px]';
+
+// showGrabber={false}, expressed entirely in CSS. The pill is a pseudo-element
+// sized by these two properties alone, so zeroing them paints nothing; it is
+// absolutely positioned, so nothing reflows when it goes.
+const NO_GRABBER = '[--bs-handle-height:0px] [--bs-handle-width:0px]';
+
+// The panel paints --color-surface, so its text has to come from the same token
+// family rather than inheriting whatever the page behind it had.
+const PANEL = 'text-body';
+
+// The component gives the header horizontal padding only, and floats the
+// grabber inside it at top: 8px. Header content has to clear that pill itself —
+// including a filled header slot, which is why the padding lives on the element
+// rather than on the stock heading.
+const HEADER = 'pt-6';
+const HEADER_NO_GRABBER = 'pt-4';
+
+// Centred, which is what the grabber and the drag axis both point at.
+const TITLE = 'pb-3 text-base font-semibold text-ink text-center';
+
+export default class BottomSheet extends PuzzleView {
+  #id = `bottom-sheet-${++uid}`;
+  #panel = null;
+  #sheet = null;
+  #live = false;
+  #ready = false;
+  #lastOpen = false;
+  // The parent's last rendered `snap`, and the rungs the component announced
+  // through @snapChange that the parent has not written back yet.
+  #lastProp;
+  #pending = [];
+
+  // dialog-panel's events bubble, so a nested overlay's close would otherwise
+  // reach this panel's listeners too — and be reported as this sheet's own.
+  #mine(event) {
+    return event.target === this.#panel;
+  }
+
+  #onShown = (event) => {
+    if (!this.#mine(event)) return;
+    this.props.show?.();
+  };
+
+  #onHidden = (event) => {
+    if (!this.#mine(event)) return;
+    const detail = event.detail || {};
+    this.props.hide?.({
+      result: detail.result ?? null,
+      triggerElement: detail.triggerElement ?? null,
+    });
+  };
+
+  // Upstream spells this event in camelCase, so the listener has to as well —
+  // addEventListener is case-sensitive and a lowercase name silently never
+  // fires.
+  #onSnapChange = (event) => {
+    const to = event.detail?.to;
+    if (typeof to !== 'number') return;
+    // Remember the announcement before making it: when the parent writes this
+    // rung back into `snap` — immediately, or in a render that lands late — it
+    // is an echo to absorb, not a request to run snapTo() against a sheet that
+    // has moved on. Capped so a parent that never echoes cannot grow it.
+    this.#pending.push(to);
+    if (this.#pending.length > 16) this.#pending.shift();
+    this.props.snapChange?.(to);
+  };
+
+  data(params, props) {
+    const title = props.title || '';
+    const snapPoints = Array.isArray(props.snapPoints)
+      ? props.snapPoints.join(',')
+      : props.snapPoints;
+    const grabber = props.showGrabber !== false;
+
+    return {
+      title,
+      titleId: `${this.#id}-title`,
+      titleClass: TITLE,
+      labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
+      rootClass: THEME,
+      backdropClass: attr(props.backdropClass),
+      headerClass: grabber ? HEADER : HEADER_NO_GRABBER,
+      panelClass: [PANEL, grabber ? '' : NO_GRABBER, props.class].filter(Boolean).join(' '),
+      panelStyle: attr(props.style),
+      snapPointsAttr: attr(snapPoints),
+      springAttr: attr(props.spring),
+      maxDisplayWidthAttr: attr(props.maxDisplayWidth),
+      // A boolean attribute: presence alone detaches the sheet from the edges.
+      insetAttr: props.inset ? true : false,
+    };
+  }
+
+  mounted() {
+    // Browser-only by construction — see LOADING above. The guard is belt and
+    // braces for any host that runs lifecycle hooks outside a document.
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#panel = this.refs.panel;
+    this.#sheet = this.refs.sheet;
+    this.#lastOpen = !!this.props.open;
+    this.#lastProp = this.props.snap;
+
+    // `snap` is deliberately NOT a bound attribute: the component reflects the
+    // committed snap back into it on every settle, and a bound one would be
+    // rewritten by the next render — superseding a settle that is still in
+    // flight. Written once here instead, where it is the opening rung, and
+    // driven by snapTo() from then on.
+    if (this.#lastProp !== undefined && this.#lastProp !== null) {
+      this.#sheet?.setAttribute('snap', String(this.#lastProp));
+    }
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this.#panel?.addEventListener('shown', this.#onShown);
+    this.#panel?.addEventListener('hidden', this.#onHidden);
+    this.#sheet?.addEventListener('snapChange', this.#onSnapChange);
+
+    // Both, in parallel: neither module reads the other at module scope, and
+    // the sheet is only usable once both have registered.
+    Promise.all([import('@magic-spells/dialog-panel'), import('@magic-spells/bottom-sheet')])
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+        // A sheet that mounted already open opens now, at the first moment the
+        // elements can honour it.
+        this.#sync();
+      })
+      .catch((error) => {
+        console.error(
+          '[BottomSheet] failed to load @magic-spells/bottom-sheet — the sheet will not open.',
+          error
+        );
+      });
+  }
+
+  afterUpdate() {
+    if (!this.#live) return;
+
+    const open = !!this.props.open;
+    if (open !== this.#lastOpen) {
+      this.#lastOpen = open;
+      this.#sync();
+    }
+
+    // Edge-triggered on the PARENT's value, exactly like `open`: a render that
+    // carries the same `snap` as the last one is not a request — even when the
+    // component has since moved — so a render Puzzle defers by a frame (or by
+    // its visibility fallback) can never drag the sheet back to a rung the user
+    // already left. A changed value that merely echoes an announced rung is
+    // absorbed; anything else is a genuine request and supersedes every
+    // announcement still in flight.
+    const snap = this.props.snap;
+    if (snap !== this.#lastProp) {
+      this.#lastProp = snap;
+      const echo =
+        snap === undefined || snap === null ? -1 : this.#pending.indexOf(Number(snap));
+      if (echo !== -1) {
+        this.#pending.splice(0, echo + 1);
+      } else if (snap !== undefined && snap !== null) {
+        this.#pending.length = 0;
+        if (this.#ready) this.#sheet?.snapTo?.(Number(snap));
+      }
+    }
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.#panel?.removeEventListener('shown', this.#onShown);
+    this.#panel?.removeEventListener('hidden', this.#onHidden);
+    this.#sheet?.removeEventListener('snapChange', this.#onSnapChange);
+    // Unbind FIRST: this close is a teardown, not a user dismissal, and must not
+    // call back into a parent that is being torn down with us. Everything else —
+    // the top-layer dialog, the scroll lock, the resize listener — is released
+    // by the elements' own disconnectedCallback when Puzzle removes them.
+    if (this.#panel?.isOpen) this.#sheet?.hide?.();
+    this.#panel = null;
+    this.#sheet = null;
+  }
+
+  // Edge-triggered, never level-triggered: called only when `open` actually
+  // changed (or when the module finally landed on a sheet that mounted open).
+  // The isOpen guards make a redundant edge — the parent flipping `open` false
+  // inside @hide, for a sheet that already closed itself — a no-op.
+  #sync() {
+    if (!this.#ready || !this.#panel || !this.#sheet) return;
+    if (this.#lastOpen) {
+      if (!this.#panel.isOpen) this.#sheet.show(this.#trigger());
+    } else if (this.#panel.isOpen) {
+      this.#sheet.hide();
+    }
+  }
+
+  // The element show() returns focus to. Whatever the user was on when the
+  // parent opened the sheet is the honest answer, and it keeps focus return
+  // working with no prop to pass.
+  #trigger() {
+    const active = document.activeElement;
+    return active && active !== document.body && active.focus ? active : undefined;
+  }
+}
+</script>

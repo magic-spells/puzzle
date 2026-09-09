@@ -1,0 +1,100 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Alert</h1>
+        <p class="mt-2 text-body">
+          An inline callout with default, brand, and danger variants, a leading
+          icon, and an optional title. The danger variant is assertive
+          (role="alert"); the others announce politely.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-md">
+          <Alert variant="brand" title="Heads up">A new version is available. Refresh to update.</Alert>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="variants" title="Variants" code={ codeVariants }>
+          <div class="w-full max-w-md space-y-3">
+            <Alert>Your changes were saved.</Alert>
+            <Alert variant="brand" title="Heads up">A new version is available.</Alert>
+            <Alert variant="danger" title="Payment failed">Update your card to continue.</Alert>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="without-title" title="Without title" code={ codeNoTitle }>
+          <div class="w-full max-w-md space-y-3">
+            <Alert>Your changes were saved.</Alert>
+            <Alert variant="danger">We couldn't reach the server. Retrying…</Alert>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Alert from '@/components/ui/Alert.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Alert — follows the Button exemplar shape (header → hero
+// ExampleBox → Installation → titled example sections → Toc).
+const installCmd = 'puzzle add piece alert';
+const usageImport = `import Alert from '@/components/ui/Alert.pzl';`;
+const usageMarkup = `<Alert variant="brand" title="Heads up"></Alert>`;
+
+const codeHero = `<Alert variant="brand" title="Heads up">
+  A new version is available. Refresh to update.
+</Alert>`;
+
+const codeVariants = `<Alert>Your changes were saved.</Alert>
+<Alert variant="brand" title="Heads up">A new version is available.</Alert>
+<Alert variant="danger" title="Payment failed">Update your card to continue.</Alert>`;
+
+const codeNoTitle = `<Alert>Your changes were saved.</Alert>
+<Alert variant="danger">We couldn't reach the server. Retrying…</Alert>`;
+
+export default class AlertDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeVariants,
+      codeNoTitle,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Variants', href: '#variants' },
+        { label: 'Without title', href: '#without-title' },
+      ],
+    };
+  }
+}
+</script>

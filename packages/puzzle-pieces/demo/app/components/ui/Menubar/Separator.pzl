@@ -1,0 +1,28 @@
+<puzzle-view>
+  <div role="separator" class={ ruleClass }></div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Menubar.Separator — a hairline between groups of items. A member of the
+// Menubar family (D167); plain markup.
+//
+//   <Menubar.Separator/>
+//
+// role="separator" is the one ARIA the family authors, and it is not a menu
+// role: it names a real, meaningful divider for assistive tech in a panel that
+// is otherwise a plain group. No aria-hidden — a separator that announces itself
+// is the point.
+//
+// Props
+//   class  merged onto the rule
+
+const RULE = 'my-1 border-t border-border';
+
+export default class Separator extends PuzzleView {
+  data(params, props) {
+    return { ruleClass: [RULE, props.class].filter(Boolean).join(' ') };
+  }
+}
+</script>

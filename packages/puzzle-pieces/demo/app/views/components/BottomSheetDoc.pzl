@@ -1,0 +1,567 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Bottom Sheet</h1>
+        <p class="mt-2 text-body">
+          A native-dialog sheet that rises from the bottom edge, dragged and flicked with a
+          finger, optionally resting on snap points that settle on a velocity-aware spring,
+          with a pinned footer and a scrim that tracks the dismissal rather than the drag.
+        </p>
+        <p class="mt-3 text-body">
+          This piece is a <strong class="font-medium text-ink">wrapper</strong>, not a port: it
+          renders the real
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<dialog-panel>' }</code>
+          and
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<bottom-sheet>' }</code>
+          custom elements from
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/bottom-sheet</code>
+          and binds attributes to them. The value here is motion — the gesture policy that decides
+          whether a finger belongs to the sheet or to the list inside it, the velocity rules that
+          tell a dismissal from a resize — and none of that is worth forking. The design-system
+          bridge is four CSS custom properties.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          The sheet closes <strong class="font-medium text-ink">itself</strong> on Escape, a
+          backdrop tap, a downward flick, or any
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">data-action-hide-dialog</code>
+          button, and reports through
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@hide</code>.
+          Your job is to flip <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+          back to false there — see <a class="text-brand underline underline-offset-2" href="#usage">Usage</a>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex flex-col items-center gap-2">
+          <Button variant="outline" @press={ openHero }>Open snapping sheet</Button>
+          <span class="text-sm text-muted">snap: { snap }</span>
+        </div>
+        <BottomSheet
+          open={ heroOpen }
+          title="Filters"
+          snapPoints="40,70,90"
+          snap={ snap }
+          @snapChange={ setSnap }
+          @hide={ closeHero }>
+          <div class="space-y-3 py-4 text-sm text-body">
+            <div class="flex gap-2">
+              {#for step in snapSteps}
+                <button
+                  key={ step.value }
+                  type="button"
+                  class={ step.class }
+                  @click={ setSnap(step.value) }>{ step.label }</button>
+              {/for}
+            </div>
+            <p>Those three buttons write the snap prop, and the piece calls snapTo() for you — that is the whole controlled path. They live inside the sheet because showModal() makes everything outside it inert.</p>
+            <p>Each snap is a HEIGHT in dvh percent, not a distance to push the sheet down by. That is what keeps the footer pinned to the bottom edge and the scrollable region exactly as tall as the visible area at every rung.</p>
+            <p>This one keeps the zero-config chrome: pass title and the stock header renders a heading, generates its id and wires aria-labelledby for you. The grabber pill above it comes from the component.</p>
+            <p>A slow release settles on the nearest snap; a flick steps exactly one snap in its direction, measured from wherever the sheet actually is. Drag below the shortest rung and the gesture stops being a resize and becomes the ordinary dismiss.</p>
+            {#for n in paragraphs}
+              <p key={ n }>Filter group { n } — scroll this list, then lift your finger and start a second gesture at the top to drag the sheet itself.</p>
+            {/for}
+          </div>
+          <Button slot="footer" class="w-full" @press={ closeHero }>Apply filters</Button>
+        </BottomSheet>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Like Sheet and Scroll Stack, this piece has a runtime dependency: the web component it
+          wraps.
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/dialog-panel</code>
+          is a peer that npm 7+ and pnpm install for you; Yarn 1 only warns, so install it
+          explicitly there. If you already use the Sheet piece it is the same peer, installed once.
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge <strong class="font-medium text-ink">both</strong> stylesheets into your app's
+          style entry
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
+          dialog-panel owns the dialog and overlay transport; bottom-sheet.css layers the panel
+          geometry, the grabber, the snap heights and the scrim on top of it. Without them the
+          sheet is an unstyled full-bleed native dialog:
+        </p>
+        <CodeBlock code={ installCss }/>
+        <p class="mt-3 text-sm text-muted">
+          Order matters — dialog-panel first, because bottom-sheet.css deliberately overrides
+          several of its rules. So does
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">layer(components)</code>:
+          both stylesheets use plain element selectors, and an unlayered import would outrank every
+          Tailwind utility you put on the panel.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+          is <strong class="font-medium text-ink">edge-triggered</strong>: only a change to it acts.
+          That is what makes a self-closing sheet safe — an unrelated re-render never re-opens a
+          sheet the user just flicked away while your state still says it is open.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Coming from the ported piece: @close(reason) is gone. The sheet reports through @hide,
+          whose detail carries result and triggerElement — result names the button that closed it
+          and is null for every dismissal. dismissible has no equivalent upstream; a bottom sheet
+          is always dismissible.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="binary" title="Binary sheet" code={ codeBinary }>
+          <Button variant="outline" @press={ openBinary }>Open binary sheet</Button>
+          <BottomSheet open={ binaryOpen } title="Quick actions" @hide={ closeBinary }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Without snapPoints the sheet takes its content height, capped by --bs-panel-max-height (85vh), and has exactly two states: open and gone.</p>
+              <p>Drag it down more than 100px, or flick it downward faster than 0.5 px/ms, and it dismisses. A shorter drag springs back. Upward drags never dismiss — they rubber-band with resistance and return.</p>
+              <p>Every rule about snap release is inert here. There is nothing to resize to, so the whole downward drag counts as the dismissal and the scrim fades with it.</p>
+            </div>
+            <Button slot="footer" variant="secondary" class="w-full" @press={ closeBinary }>Done</Button>
+          </BottomSheet>
+        </ExampleBox>
+
+        <ExampleBox id="inset" title="Inset, and the settle without a spring" code={ codeInset }>
+          <Button variant="outline" @press={ openInset }>Open inset sheet</Button>
+          <BottomSheet
+            open={ insetOpen }
+            title="Delivery options"
+            snapPoints="45,80"
+            spring="none"
+            inset
+            @hide={ closeInset }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>inset detaches the sheet from the screen edges: all four corners take the panel radius and a gap opens on three sides. It is pure CSS — no script reads the attribute — and the off-screen position is corrected to match, so the exit still clears the gap instead of stopping short.</p>
+              <p>A detached sheet at a given snap sits slightly higher than an edge-anchored one: the snap describes the sheet, not the gap beneath it.</p>
+              <p>spring="none" opts the snap settle out of the physics and back onto a CSS curve. It changes which clock runs the settle more than how the settle reads — the default curve overshoots by about what the spring produces at its default tuning.</p>
+            </div>
+          </BottomSheet>
+        </ExampleBox>
+
+        <ExampleBox id="result" title="A footer that answers" code={ codeResult }>
+          <div class="flex flex-col items-center gap-2">
+            <Button variant="outline" @press={ openConfirm }>Delete project</Button>
+            <span class="text-sm text-muted">last result: { lastResult }</span>
+          </div>
+          <BottomSheet open={ confirmOpen } title="Delete project?" @hide={ closeConfirm }>
+            <div class="space-y-2 py-2 text-sm text-body">
+              <p>This cannot be undone.</p>
+              <p>Each button carries data-action-hide-dialog and a data-result, so @hide receives which one closed the sheet. The readout next to the trigger is that value. Escape, a backdrop tap and a flick all report null — that is how a dismissal is told apart from an answer.</p>
+              <p>Neither button has a click handler. The component closes the sheet through the panel and the page catches up in @hide, which is the one place that has to flip open back to false.</p>
+            </div>
+            <div slot="footer" class="flex gap-3">
+              <button type="button" data-action-hide-dialog data-result="cancel" class={ cancelButtonClass }>Cancel</button>
+              <button type="button" data-action-hide-dialog data-result="delete" class={ deleteButtonClass }>Delete project</button>
+            </div>
+          </BottomSheet>
+        </ExampleBox>
+
+        <ExampleBox id="header-slot" title="Custom header and the grabber" code={ codeHeader }>
+          <div class="flex flex-col items-center gap-3">
+            <Button variant="outline" @press={ openHeader }>Open with custom header</Button>
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-muted">
+              <input type="checkbox" class="size-4 accent-brand" checked={ headerGrabber } @change={ toggleHeaderGrabber }/>
+              showGrabber
+            </label>
+          </div>
+          <BottomSheet
+            open={ headerOpen }
+            labelledby="bottom-sheet-promo-title"
+            snapPoints="50,85"
+            showGrabber={ headerGrabber }
+            @hide={ closeHeader }>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center gap-2 pr-9">
+                <h2 id="bottom-sheet-promo-title" class="text-base font-semibold text-ink">Summer promo</h2>
+                <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink">New</span>
+                <button type="button" data-action-hide-dialog aria-label="Close" class={ closeButtonClass }>×</button>
+              </div>
+            </div>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Filling the header slot replaces the stock title entirely, so a custom header brings its own heading and points labelledby at it. There is no is-slot-filled probe — the piece cannot render the fallback alongside your markup.</p>
+              <p>The grabber is not part of that trade. It is a pseudo-element floating inside the header's padding rather than a box in the flow, so it survives any header content; the piece pads the header's top so your markup clears it. Toggle showGrabber next to the trigger to see the pill go — the drag surfaces are unchanged either way.</p>
+              <p>The header is always a drag surface, and so is the footer. Only the content region has to decide: it hands the gesture over the moment the list runs out.</p>
+            </div>
+          </BottomSheet>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Props</h3>
+          <div class="text-sm">
+            {#for row in propRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Callbacks</h3>
+          <div class="text-sm">
+            {#for row in callbackRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Slots</h3>
+          <div class="text-sm">
+            {#for row in slotRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">CSS custom properties</h3>
+          <p class="mb-3 text-sm text-body">
+            Everything the ported piece exposed as tuning constants — durations, easings, the
+            hidden-offset overshoot, the inset gaps — is a custom property on the component,
+            tunable from your own CSS with no prop at all. The piece bridges four of them onto the
+            design tokens
+            (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">--bs-panel-background</code>,
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">--bs-handle-color</code>,
+            and the two overlay tokens) and leaves the rest at the component's defaults:
+          </p>
+          <div class="text-sm">
+            {#for row in cssRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-56 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+          <p class="mt-3 text-sm text-muted">
+            The full list lives in the component's README — these are the ones a piece consumer
+            reaches for most.
+          </p>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Known gaps</h3>
+          <div class="space-y-3 text-sm text-body">
+            <p>
+              Touch cannot hand a scroll to the sheet mid-gesture. The content scrolls natively,
+              and Pointer Events do not let a gesture change owner once the browser has started
+              panning with it, so reaching the top of a list and continuing into a drag takes two
+              gestures: lift, then drag. A mouse or pen can reverse mid-gesture. This is the
+              component's deliberate trade, not a piece limitation.
+            </p>
+            <p>
+              A <strong class="font-medium text-ink">keyboard</strong> activation of a
+              data-action-hide-dialog button closes the sheet but reports result: null. A
+              pointerless click carries coordinates of 0,0, which dialog-panel reads as a tap
+              outside the dialog before the delegated handler runs. A mouse click reports the
+              data-result correctly. Fix pending upstream in dialog-panel.
+            </p>
+            <p>
+              On the currently published pair — bottom-sheet 2.0.2 with dialog-panel 2.0.1 — two
+              overlays paint at once, so the scrim reads darker than the 50% the piece sets:
+              2.0.2 still paints its scrim on the dialog's native ::backdrop and tries to hide
+              dialog-panel's own backdrop element with a rule that loses on specificity. It is
+              cosmetic, backdropClass has nothing visible to style until it is settled, and the
+              component's main branch already moves the scrim onto the element.
+            </p>
+            <p>
+              An unfilled footer slot leaves no visible bar, but the component's :has() rule still
+              sees the empty element and drops the dialog's own safe-area padding — so a
+              footerless sheet loses that inset on a notched phone.
+            </p>
+            <p>
+              maxDisplayWidth refuses the open silently: show() returns early and no event fires,
+              so opening above the ceiling leaves your state out of sync until you flip the flag
+              back yourself.
+            </p>
+          </div>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import BottomSheet from '@/components/ui/BottomSheet.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece bottom-sheet';
+const installDep = `npm install @magic-spells/bottom-sheet
+# Yarn 1 only — npm 7+ and pnpm install the peer for you
+# yarn add @magic-spells/bottom-sheet @magic-spells/dialog-panel`;
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dialog-panel/css" layer(components);
+@import "@magic-spells/bottom-sheet/css" layer(components);`;
+
+const usageImport = `import BottomSheet from '@/components/ui/BottomSheet.pzl';`;
+const usageMarkup = `<BottomSheet open={ filtersOpen } title="Filters" @hide={ () => this.setData('filtersOpen', false) }>
+  <FilterList/>
+  <Button slot="footer" @press={ apply }>Apply</Button>
+</BottomSheet>
+
+// open is EDGE-TRIGGERED: only a change to it acts. The sheet dismisses
+// itself on Escape, a backdrop tap, a downward flick, or any
+// [data-action-hide-dialog] descendant, then reports through @hide —
+// where you flip open back to false so the next open is a fresh edge.`;
+
+// The close-button class string is spelled out once in codeHeader and elided as
+// class="…" elsewhere, following the docs convention for long utility strings.
+// Every sample's MARKUP matches its live example exactly.
+const closeButtonClass =
+  'absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full ' +
+  'text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken ' +
+  'hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2';
+
+const cancelButtonClass =
+  'flex-1 cursor-pointer rounded-lg border border-border bg-surface px-4 py-2 text-sm ' +
+  'font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2';
+
+const deleteButtonClass =
+  'flex-1 cursor-pointer rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-ink ' +
+  'transition-colors outline-ring hover:bg-danger-dark focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2';
+
+// Labels match the snapPoints list on the hero example, shortest rung first.
+// Built once at module scope: the row never changes, and the live value is
+// already reported by the readout next to the trigger.
+const SNAP_STEP =
+  'cursor-pointer rounded-lg border border-border bg-surface px-3 py-1.5 text-xs ' +
+  'font-medium text-body transition-colors outline-ring hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2';
+const SNAP_STEPS = [40, 70, 90].map((value) => ({
+  value,
+  label: `${value}%`,
+  class: SNAP_STEP,
+}));
+
+const codeHero = `<Button variant="outline" @press={ openSheet }>Open snapping sheet</Button>
+<span class="text-sm text-muted">snap: { snap }</span>
+
+<BottomSheet
+  open={ sheetOpen }
+  title="Filters"
+  snapPoints="40,70,90"
+  snap={ snap }
+  @snapChange={ (value) => this.setData('snap', value) }
+  @hide={ () => this.setData('sheetOpen', false) }>
+
+  <div class="flex gap-2">
+    <button type="button" class="…" @click={ setSnap(40) }>40%</button>
+    <button type="button" class="…" @click={ setSnap(70) }>70%</button>
+    <button type="button" class="…" @click={ setSnap(90) }>90%</button>
+  </div>
+  <FilterList/>
+  <Button slot="footer" class="w-full" @press={ apply }>Apply filters</Button>
+</BottomSheet>
+
+// Those buttons only write snap; the piece sees the prop change and calls
+// snapTo() for you. They sit INSIDE the sheet because showModal() makes
+// everything outside the dialog inert.
+// snapPoints are percentages of the viewport HEIGHT, comma or space
+// separated, or an array of numbers. Each one is the sheet's height at that
+// rung, which is what keeps the footer pinned and the scroll region exactly
+// as tall as the visible area.
+// snap is optional-controlled and is a VALUE, not an index: pass it with
+// @snapChange to own the committed rung, or omit it and the sheet tracks its
+// own. Set at mount it is also the opening rung; otherwise the sheet opens
+// at the shortest snap. snapChange fires on commit only, never mid-drag.
+// No header slot: title alone gets the heading, the generated id and
+// aria-labelledby wired for you — plus the component's grabber pill.`;
+
+const codeBinary = `<BottomSheet open={ open } title="Quick actions" @hide={ close }>
+  <QuickActions/>
+  <Button slot="footer" variant="secondary" class="w-full" @press={ close }>Done</Button>
+</BottomSheet>
+
+// No snapPoints: content height, capped by --bs-panel-max-height (85vh).
+// Dismiss rules with no snaps to land on — a downward flick faster than
+// 0.5 px/ms, or a drag past 100px that was not meaningfully reversed.`;
+
+const codeInset = `<BottomSheet
+  open={ open }
+  title="Delivery options"
+  snapPoints="45,80"
+  spring="none"
+  inset
+  @hide={ close }>
+  <DeliveryOptions/>
+</BottomSheet>
+
+// inset detaches the sheet from all three edges and rounds every corner —
+// pure CSS, with the off-screen position corrected so the exit clears the gap.
+// spring="none" settles onto a snap on --bs-snap-duration / --bs-snap-timing
+// instead of the velocity-seeded spring. Tune the spring instead of dropping
+// it with spring="attraction,friction", both dials in (0, 1).`;
+
+const codeResult = `<Button variant="outline" @press={ openConfirm }>Delete project</Button>
+<span class="text-sm text-muted">last result: { lastResult }</span>
+
+<BottomSheet open={ confirmOpen } title="Delete project?" @hide={ finishConfirm }>
+  <p>This cannot be undone.</p>
+
+  <div slot="footer" class="flex gap-3">
+    <button type="button" data-action-hide-dialog data-result="cancel" class="…">Cancel</button>
+    <button type="button" data-action-hide-dialog data-result="delete" class="…">Delete project</button>
+  </div>
+</BottomSheet>
+
+// events = {
+//   finishConfirm: ({ result }) => {
+//     this.setData({ confirmOpen: false, lastResult: result ?? 'dismissed' });
+//     if (result === 'delete') this.deleteProject();
+//   },
+// };
+
+// data-action-hide-dialog closes the sheet through the component; the
+// button's data-result rides along in the @hide detail, so one handler can
+// tell which answer was given. Escape, a backdrop tap and a flick all report
+// null. A bottom sheet has no dismiss policy — those three are always open,
+// so a question that must be answered belongs in a Dialog, not here.
+// The footer slot takes a single direct child, so two buttons share a
+// wrapper div that carries slot="footer".`;
+
+const codeHeader = `<BottomSheet
+  open={ open }
+  labelledby="bottom-sheet-promo-title"
+  snapPoints="50,85"
+  showGrabber={ showGrabber }
+  @hide={ close }>
+  <div slot="header" class="pb-3">
+    <div class="relative flex h-8 items-center gap-2 pr-9">
+      <h2 id="bottom-sheet-promo-title" class="text-base font-semibold text-ink">Summer promo</h2>
+      <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink">New</span>
+      <button
+        type="button"
+        data-action-hide-dialog
+        aria-label="Close"
+        class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2">×</button>
+    </div>
+  </div>
+  <PromoDetails/>
+</BottomSheet>
+
+// A filled header slot replaces the stock title, so it must bring its own
+// heading and point labelledby at that heading's id. The grabber is a
+// pseudo-element floating in the header's padding, so it survives any header
+// content — the piece pads the header's top to leave room for it.
+// slot="header" must sit on a direct child of the BottomSheet tag.
+// showGrabber={ false } zeroes the pill; the drag surfaces are unchanged.`;
+
+export default class BottomSheetDoc extends PuzzleView {
+  created() {
+    this.setData({
+      heroOpen: false,
+      binaryOpen: false,
+      insetOpen: false,
+      confirmOpen: false,
+      headerOpen: false,
+      headerGrabber: true,
+      snap: 70,
+      lastResult: '—',
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      installDep,
+      installCss,
+      usageImport,
+      usageMarkup,
+      closeButtonClass,
+      cancelButtonClass,
+      deleteButtonClass,
+      codeHero,
+      codeBinary,
+      codeInset,
+      codeResult,
+      codeHeader,
+      snapSteps: SNAP_STEPS,
+      paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
+      propRows: [
+        { name: 'open', desc: 'Controlled, and EDGE-TRIGGERED: only a change acts. true opens, false closes. An unrelated re-render never re-opens a sheet the user already dismissed.' },
+        { name: 'title', desc: 'Heading text rendered by the stock header, which also generates its id and wires aria-labelledby. Ignored once the header slot is filled.' },
+        { name: 'labelledby', desc: 'Id of the labelling heading when the header slot is filled.' },
+        { name: 'snapPoints', desc: 'Comma- or space-separated percentages of the viewport height, or an array of numbers. Each is a HEIGHT, which is what pins the footer at every rung. Sorted and deduped; anything outside 0–100 is dropped. Omit for the two-state sheet.' },
+        { name: 'snap', desc: 'Optional-controlled resting snap in dvh percent — a VALUE, not an index. Set at mount it is also the opening rung; only a change later calls snapTo(), and a change that writes back a rung the sheet itself announced through @snapChange is absorbed — a late render can never drag the sheet back to a rung the user already left. Undeclared values are ignored, not clamped. Pair with @snapChange.' },
+        { name: 'spring', desc: '"attraction,friction" override for the snap settle, both dials in (0, 1); "none" settles on the CSS curve instead. Governs the SETTLE only — opening, closing and every sheet without snapPoints stay on plain transitions.' },
+        { name: 'inset', desc: 'Detaches the sheet from all three edges and rounds every corner. CSS only; the off-screen position is corrected so the exit still clears the gap.' },
+        { name: 'maxDisplayWidth', desc: 'Largest viewport width where the sheet may open. It also closes an open sheet when a resize crosses the limit. Above it show() returns early and no event fires.' },
+        { name: 'showGrabber', desc: 'Default true. false zeroes the handle pill. CSS only; the header is a drag surface either way.' },
+        { name: 'class', desc: 'Merged onto the bottom-sheet element.' },
+        { name: 'backdropClass', desc: 'Merged onto the dialog-backdrop element. Inert on bottom-sheet 2.0.2, which still paints the scrim on the dialog\'s native ::backdrop.' },
+        { name: 'style', desc: 'Merged onto the bottom-sheet element after the piece\'s own classes.' },
+      ],
+      callbackRows: [
+        { name: '@hide(detail)', desc: 'The exit finished. detail is { result, triggerElement }: result is the data-result of the [data-action-hide-dialog] button that closed it, and null for Escape, a backdrop tap or a flick. Flip open back to false here.' },
+        { name: '@show()', desc: 'The entrance settled and the native dialog is in the top layer.' },
+        { name: '@snapChange(value)', desc: 'A release committed a different snap; the value is the new resting rung in dvh percent. Fires on commit only, never mid-drag, and never when the sheet settles back where it started.' },
+      ],
+      slotRows: [
+        { name: 'header', desc: 'Fills bottom-sheet-header, replacing the title heading entirely; a filled header brings its own heading and points labelledby at it. The grabber is a pseudo-element and survives it. Always a drag surface.' },
+        { name: 'footer', desc: 'Fills bottom-sheet-footer, pinned below the content at every snap and hidden while empty. Also a drag surface. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute.' },
+        { name: 'default', desc: 'Untagged children become bottom-sheet-content, the scrollable region.' },
+      ],
+      cssRows: [
+        { name: '--bs-panel-max-height', desc: 'Cap on a sheet with no snap points (85vh). Inert once snapPoints is set — the tallest snap is the cap.' },
+        { name: '--bs-panel-border-radius', desc: 'Top corner radius (25px), or all four with inset.' },
+        { name: '--bs-content-padding', desc: 'Horizontal header/content inset (20px). --bs-content-padding-block adds a vertical one; --bs-footer-padding follows it, plus the safe area.' },
+        { name: '--bs-panel-hidden-offset', desc: 'Extra travel past the bottom edge when hidden (20px), so the close does not read as cut short. Applied to the hidden, showing and hiding transforms alike.' },
+        { name: '--bs-transition-duration', desc: 'Open, close and backdrop fade (400ms), on --bs-transition-timing. The snap settle keeps its own pair, --bs-snap-duration and --bs-snap-timing, which only reach the sheet with spring="none".' },
+        { name: '--bs-panel-inset-x', desc: 'Side gap in inset mode (12px); --bs-panel-inset-bottom (12px) is the gap below, added on top of the safe area.' },
+        { name: '--bs-panel-bleed', desc: 'Off-screen fill of panel colour below an edge-anchored sheet (60px), so an upward rubber-band drag never reveals the page beneath.' },
+        { name: '--bs-footer-background', desc: 'Footer fill (transparent, so the panel shows through). --bs-handle-width sizes the grabber the piece already colours.' },
+      ],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Binary sheet', href: '#binary' },
+        { label: 'Inset', href: '#inset' },
+        { label: 'Footer results', href: '#result' },
+        { label: 'Custom header', href: '#header-slot' },
+        { label: 'Reference', href: '#reference' },
+      ],
+    };
+  }
+
+  events = {
+    openHero: () => this.setData('heroOpen', true),
+    closeHero: () => this.setData('heroOpen', false),
+    setSnap: (value) => this.setData('snap', value),
+    openBinary: () => this.setData('binaryOpen', true),
+    closeBinary: () => this.setData('binaryOpen', false),
+    openInset: () => this.setData('insetOpen', true),
+    closeInset: () => this.setData('insetOpen', false),
+    openConfirm: () => this.setData('confirmOpen', true),
+    // The one handler that reads the @hide detail: data-result tells a deliberate
+    // answer apart from a dismissal, which reports null.
+    closeConfirm: (detail) =>
+      this.setData({ confirmOpen: false, lastResult: detail?.result ?? 'dismissed' }),
+    openHeader: () => this.setData('headerOpen', true),
+    closeHeader: () => this.setData('headerOpen', false),
+    toggleHeaderGrabber: (event) =>
+      this.setData('headerGrabber', !!event.target.checked),
+  };
+}
+</script>

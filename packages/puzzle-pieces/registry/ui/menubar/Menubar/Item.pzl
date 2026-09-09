@@ -1,0 +1,82 @@
+<puzzle-view>
+  <button type="button" class={ rowClass } disabled={ disabled } @click={ onPress(event) }><Children/></button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Menubar.Item — one action row inside a Content. A member of the Menubar family
+// (D167); plain token-styled markup with no web component underneath.
+//
+//   <Menubar.Item value="new" @press={ run }>New file<Menubar.Shortcut>⌘N</Menubar.Shortcut></Menubar.Item>
+//   <Menubar.Item value="delete" variant="danger" @press={ run }>Delete</Menubar.Item>
+//
+// A REAL <button>, so Enter and Space activate natively and the component's own
+// Up/Down/Home/End model finds the row (it collects focusable descendants of the
+// panel). Item content is the children, which is what lets a Shortcut ride along.
+//
+// A ROW THAT NAVIGATES IS Menubar.Link, not this with an href. One template may
+// declare only ONE children marker, so a two-branch <a>/<button> root cannot
+// compile — and a real <a> is better than a button that calls location anyway.
+//
+// PRESSING CLOSES THE WHOLE BAR. The web component does not close on a press
+// inside its panel — only an outside press does — so the row hides every
+// <dropdown-component> above it, innermost first, which collapses a submenu and
+// its parent together instead of leaving the bar half open. hide() on the
+// innermost also returns focus to its trigger.
+//
+// The callback is value-first, `@press(value)`, and named distinctly from the
+// `value` prop: a callback whose @event name equals a prop name collides in the
+// same props object and the last one silently wins.
+//
+// Props
+//   value     passed to @press
+//   variant   'default' | 'danger' — destructive tint
+//   disabled  greys the row out and swallows the press
+//   class     merged onto the row, after the chrome
+//   @press    (value) — fired on activation, then the menus close
+
+const ROW_BASE =
+  'flex w-full items-center gap-6 rounded-md px-2.5 py-1.5 text-sm cursor-pointer ' +
+  'no-underline transition-colors ' +
+  'disabled:opacity-50 disabled:pointer-events-none ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+const ROW_NORMAL = 'text-body hover:bg-surface-sunken hover:text-ink';
+const ROW_DANGER = 'text-danger hover:bg-danger-tint';
+
+export default class Item extends PuzzleView {
+  // Collapse the whole open chain, innermost first. closest() from the row finds
+  // this item's own panel component; each step walks out of the one just hidden.
+  #closeAll(event) {
+    let node = event?.currentTarget?.closest?.('dropdown-component');
+    while (node) {
+      node.hide?.();
+      node = node.parentElement?.closest?.('dropdown-component');
+    }
+  }
+
+  data(params, props) {
+    return {
+      disabled: !!props.disabled,
+      rowClass: [
+        ROW_BASE,
+        props.variant === 'danger' ? ROW_DANGER : ROW_NORMAL,
+        props.class,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+
+  events = {
+    onPress: (event) => {
+      if (this.props.disabled) {
+        event.preventDefault();
+        return;
+      }
+      this.props.press?.(this.props.value);
+      this.#closeAll(event);
+    },
+  };
+}
+</script>

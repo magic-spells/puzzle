@@ -1,0 +1,61 @@
+<puzzle-view>
+  <nav aria-label="Breadcrumb" class={ navClass }>
+    <ol class="flex flex-wrap items-center gap-1.5 text-sm">
+      {#for item in items}
+        <li class="inline-flex items-center gap-1.5">
+          {#if item.isLast}
+            <span class="font-medium text-ink" aria-current="page">{ item.label }</span>
+          {:else}
+            <a
+              href={ item.href }
+              class="rounded text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring">{ item.label }</a>
+            <svg
+              class="size-3.5 shrink-0 text-faint"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true">
+              <path d="M6 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          {/if}
+        </li>
+      {/for}
+    </ol>
+  </nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Breadcrumb — config-first: the whole trail renders from an `items` array.
+// Every item except the last is a link (muted, hover:text-ink); the LAST item
+// is plain text with aria-current="page" and NO href even if one was passed —
+// it's the current page, not a destination. A chevron-right separator (inline
+// SVG, aria-hidden) sits after each non-final crumb.
+//
+// The per-item `isLast` flag is precomputed in data() so the {#for} body stays
+// a single <li> root (Puzzle requires one element root per loop body).
+//
+//   <Breadcrumb items={ trail }/>
+//   <Breadcrumb items={ trail } class="mb-4"/>
+//
+// items: [{ label, href }]  — href is ignored on the final item
+export default class Breadcrumb extends PuzzleView {
+  data(params, props) {
+    const src = props.items || [];
+    const last = src.length - 1;
+    const items = src.map((item, i) => ({
+      label: item.label,
+      // Drop the href on the current-page crumb — it renders as plain text.
+      href: i === last ? undefined : item.href,
+      isLast: i === last,
+    }));
+
+    return {
+      items,
+      navClass: props.class || '',
+    };
+  }
+}
+</script>

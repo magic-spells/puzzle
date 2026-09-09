@@ -1,0 +1,8 @@
+{
+  "name": "chat-scroller",
+  "description": "Stick-to-bottom chat viewport — role=log region that follows new content while pinned, with a jump-to-latest pill once the reader scrolls up",
+  "files": ["ChatScroller.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

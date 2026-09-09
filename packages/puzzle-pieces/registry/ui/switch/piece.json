@@ -1,0 +1,8 @@
+{
+  "name": "switch",
+  "description": "Toggle switch on a native checkbox with role=switch, optional label and hint",
+  "files": ["Switch.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

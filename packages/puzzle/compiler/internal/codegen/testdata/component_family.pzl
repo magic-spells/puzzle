@@ -1,0 +1,21 @@
+<puzzle-view class="page">
+  <Frame title={ title }>
+    <Frame.Wrapper tone="quiet">
+      <Frame.Content>{ body }</Frame.Content>
+    </Frame.Wrapper>
+  </Frame>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Frame from '../components/Frame';
+
+export default class ComponentFamily extends PuzzleView {
+  data(params, props) {
+    return {
+      title: props.title || 'Frame',
+      body: props.body || ''
+    };
+  }
+}
+</script>

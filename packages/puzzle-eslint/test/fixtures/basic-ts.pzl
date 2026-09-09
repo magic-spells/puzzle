@@ -1,0 +1,14 @@
+<puzzle-view>
+  <div>{ count }</div>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Counter extends PuzzleView {
+	data(): { count: number } {
+		const n: number = 0;
+		return { count: n };
+	}
+}
+</script>

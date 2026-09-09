@@ -1,0 +1,106 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Badge</h1>
+        <p class="mt-2 text-body">
+          A small status chip in four variants. Slot content is the label — text,
+          or text beside a tiny inline icon.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero } tall={ false }>
+        <div class="flex flex-wrap items-center justify-center gap-2">
+          <Badge>Default</Badge>
+          <Badge variant="brand">Brand</Badge>
+          <Badge variant="danger">Danger</Badge>
+          <Badge variant="outline">Outline</Badge>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="in-context" title="In context" code={ codeContext } tall={ false }>
+          <div class="w-full max-w-md space-y-4">
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-semibold text-ink">Billing plan</h3>
+              <Badge variant="brand">Pro</Badge>
+            </div>
+            <div class="flex items-center justify-between rounded-lg border border-border px-4 py-2.5">
+              <span class="text-sm text-body">Invoice #1042</span>
+              <Badge variant="danger">Overdue</Badge>
+            </div>
+            <div class="flex items-center justify-between rounded-lg border border-border px-4 py-2.5">
+              <span class="text-sm text-body">Invoice #1043</span>
+              <Badge>Draft</Badge>
+            </div>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Badge from '@/components/ui/Badge.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Badge — follows the Button exemplar shape (header → hero
+// ExampleBox → Installation → titled example sections → Toc).
+const installCmd = 'puzzle add piece badge';
+const usageImport = `import Badge from '@/components/ui/Badge.pzl';`;
+const usageMarkup = `<Badge>Default</Badge>`;
+
+const codeHero = `<Badge>Default</Badge>
+<Badge variant="brand">Brand</Badge>
+<Badge variant="danger">Danger</Badge>
+<Badge variant="outline">Outline</Badge>`;
+
+const codeContext = `<div class="flex items-center gap-2">
+  <h3 class="text-base font-semibold text-ink">Billing plan</h3>
+  <Badge variant="brand">Pro</Badge>
+</div>
+
+<div class="flex items-center justify-between ...">
+  <span>Invoice #1042</span>
+  <Badge variant="danger">Overdue</Badge>
+</div>`;
+
+export default class BadgeDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeContext,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'In context', href: '#in-context' },
+      ],
+    };
+  }
+}
+</script>

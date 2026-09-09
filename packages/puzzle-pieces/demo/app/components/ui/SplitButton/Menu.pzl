@@ -1,0 +1,106 @@
+<puzzle-view>
+  <DropdownMenu
+    @show={ onShow }
+    @hide={ onHide }
+    @select={ onSelect }>
+    <DropdownMenu.Trigger variant="bare" class={ caretClass }>
+      <span class="sr-only">{ menuLabel }</span>
+      <svg class={ iconClass } viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path d="M6 8l4 4 4-4z"/>
+      </svg>
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="end"><Children/></DropdownMenu.Content>
+  </DropdownMenu>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownMenu from '../DropdownMenu/index.js';
+
+// SplitButton.Menu — the caret half and the menu it opens. A member of the
+// SplitButton family (D167); it composes DropdownMenu, so it renders
+// <dropdown-component> as its single root with no wrapper.
+//
+//   <SplitButton.Menu variant="primary" size="md" label="More save actions" @select={ run }>
+//     <SplitButton.Item value="save-as" @press={ run }>Save as…</SplitButton.Item>
+//   </SplitButton.Menu>
+//
+// The children go straight into the menu's panel — write rows, not a Content;
+// this member supplies the Content and the Trigger, because they are the two
+// direct children the component must find and neither is yours to place.
+//
+// It rounds the RIGHT end only and carries a left divider (current colour at low
+// opacity, which reads on every variant), so it fuses with the Action beside it.
+// `variant` and `size` must match Action's — there is no context to share them
+// through. The caret is the repo's standard FILLED triangle, matching Select and
+// Combobox.
+//
+// The accessible name is an .sr-only span rather than aria-label, because the
+// component owns the ARIA on <dropdown-trigger> and an authored aria-label there
+// is one more thing to keep out of its way. The trigger content stays
+// non-interactive — the trigger IS the control.
+//
+// Props
+//   variant   'primary' (default) | 'secondary' | 'outline' | 'ghost' | 'destructive'
+//   size      'sm' | 'md' (default) | 'lg'
+//   disabled  greys the caret out. It does not stop the menu opening on its own —
+//             disable the whole pair, or leave the panel empty.
+//   label     the accessible name, default 'More actions'
+//   class     merged onto <dropdown-trigger>, after the chrome
+// Callbacks
+//   @show() / @hide()       the menu opened or closed
+//   @select(value, event)   a row was chosen. Fires once; the menu then closes
+//             and focus returns to the caret.
+
+const BUTTON_BASE =
+  'relative inline-flex items-center justify-center whitespace-nowrap select-none ' +
+  'font-medium cursor-pointer transition-colors ' +
+  'focus-visible:z-10 ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+const VARIANT = {
+  primary: 'bg-brand text-brand-ink hover:bg-brand-dark',
+  secondary: 'bg-surface-sunken text-ink hover:bg-border',
+  outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
+  ghost: 'text-body hover:bg-surface-sunken hover:text-ink',
+  destructive: 'bg-danger text-danger-ink hover:bg-danger-dark',
+};
+
+const HEIGHT = { sm: 'h-8', md: 'h-9', lg: 'h-10' };
+// The caret is a square toggle sized to the height, with no text padding.
+const CARET_W = { sm: 'w-8', md: 'w-9', lg: 'w-10' };
+const ICON = { sm: 'size-3.5', md: 'size-4', lg: 'size-4' };
+
+// <dropdown-trigger> is not a <button>, so `disabled:` variants do not apply —
+// the muted, unpressable treatment is spelled out instead.
+const DISABLED = 'opacity-50 pointer-events-none';
+
+export default class Menu extends PuzzleView {
+  data(params, props) {
+    const variant = VARIANT[props.variant] ? props.variant : 'primary';
+    const size = HEIGHT[props.size] ? props.size : 'md';
+
+    return {
+      menuLabel: props.label != null ? String(props.label) : 'More actions',
+      iconClass: `${ICON[size]} shrink-0`,
+      caretClass: [
+        BUTTON_BASE,
+        VARIANT[variant],
+        HEIGHT[size],
+        CARET_W[size],
+        'rounded-r-lg rounded-l-none border-l border-current/20',
+        props.disabled ? DISABLED : '',
+        props.class,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+
+  events = {
+    onShow: () => this.props.show?.(),
+    onHide: () => this.props.hide?.(),
+    onSelect: (value, event) => this.props.select?.(value, event),
+  };
+}
+</script>

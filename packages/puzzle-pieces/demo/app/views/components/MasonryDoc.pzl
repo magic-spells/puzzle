@@ -1,0 +1,213 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Masonry</h1>
+        <p class="mt-2 text-body">
+          A responsive, measurement-free gallery layout built on CSS
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">columns</code>.
+          Direct children flow top-to-bottom then wrap into the next column, so columns stay
+          height-balanced with no JavaScript measuring. Ordering is column-major.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <Masonry class="w-full" columns={ 3 } gap={ 4 }>
+          <div class="rounded-lg border border-border bg-surface p-4">
+            <div class="mb-3 h-16 rounded-md bg-brand-tint"></div>
+            <p class="font-medium text-ink">Mountain trail</p>
+            <p class="text-sm text-muted">A short caption.</p>
+          </div>
+          <div class="rounded-lg border border-border bg-surface p-4">
+            <div class="mb-3 h-32 rounded-md bg-success-tint"></div>
+            <p class="font-medium text-ink">Harbor at dusk</p>
+            <p class="text-sm text-muted">A longer caption that wraps onto a couple of lines so this tile is noticeably taller than its neighbors.</p>
+          </div>
+          <div class="rounded-lg border border-border bg-surface p-4">
+            <div class="mb-3 h-24 rounded-md bg-surface-sunken"></div>
+            <p class="font-medium text-ink">Studio light</p>
+          </div>
+          <div class="rounded-lg border border-border bg-surface p-4">
+            <div class="mb-3 h-40 rounded-md bg-danger-tint"></div>
+            <p class="font-medium text-ink">Canyon road</p>
+            <p class="text-sm text-muted">Varied heights are exactly what makes the masonry flow visible.</p>
+          </div>
+          <div class="rounded-lg border border-border bg-surface p-4">
+            <div class="mb-3 h-20 rounded-md bg-surface-sunken"></div>
+            <p class="font-medium text-ink">Quiet street</p>
+            <p class="text-sm text-muted">Another short one.</p>
+          </div>
+          <div class="rounded-lg border border-border bg-surface p-4">
+            <div class="mb-3 h-28 rounded-md bg-brand-tint"></div>
+            <p class="font-medium text-ink">Open field</p>
+          </div>
+        </Masonry>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="responsive" title="Responsive columns" code={ codeResponsive }>
+          <Masonry class="w-full" columns={ responsiveCols } gap={ 4 }>
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="mb-3 h-24 rounded-md bg-brand-tint"></div>
+              <p class="text-sm text-body">One column on phones, two on small screens, three on large — resize the window to watch it reflow.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="mb-3 h-16 rounded-md bg-success-tint"></div>
+              <p class="text-sm text-body">Each breakpoint value is a whole, whitelisted class string.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="mb-3 h-32 rounded-md bg-surface-sunken"></div>
+              <p class="text-sm text-body">The column count is driven entirely by CSS media variants.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="mb-3 h-20 rounded-md bg-danger-tint"></div>
+              <p class="text-sm text-body">No ResizeObserver, no transforms, no layout thrash.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="mb-3 h-28 rounded-md bg-brand-tint"></div>
+              <p class="text-sm text-body">Just multi-column flow doing the balancing for you.</p>
+            </div>
+          </Masonry>
+        </ExampleBox>
+
+        <ExampleBox id="gap" title="Gap" code={ codeGap }>
+          <Masonry class="w-full" columns={ 3 } gap={ 8 }>
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="mb-3 h-20 rounded-md bg-surface-sunken"></div>
+              <p class="text-sm text-body">A larger gap between columns and rows.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="mb-3 h-32 rounded-md bg-brand-tint"></div>
+              <p class="text-sm text-body">The gap prop drives both the column gap and the vertical spacing between stacked items.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="mb-3 h-16 rounded-md bg-success-tint"></div>
+              <p class="text-sm text-body">Supported steps: 0, 2, 3, 4, 6, 8.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="mb-3 h-24 rounded-md bg-danger-tint"></div>
+              <p class="text-sm text-body">Everything else falls back to 4.</p>
+            </div>
+          </Masonry>
+        </ExampleBox>
+
+        <ExampleBox id="columns" title="Fixed column count" code={ codeColumns }>
+          <Masonry class="w-full" columns={ 4 } gap={ 3 }>
+            <div class="rounded-lg border border-border bg-surface p-3">
+              <div class="mb-2 h-16 rounded-md bg-brand-tint"></div>
+              <p class="text-sm text-body">Four tight columns.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-3">
+              <div class="mb-2 h-28 rounded-md bg-surface-sunken"></div>
+              <p class="text-sm text-body">Great for dense thumbnail grids.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-3">
+              <div class="mb-2 h-20 rounded-md bg-success-tint"></div>
+              <p class="text-sm text-body">A fixed number.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-3">
+              <div class="mb-2 h-24 rounded-md bg-danger-tint"></div>
+              <p class="text-sm text-body">Passed straight through.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-3">
+              <div class="mb-2 h-16 rounded-md bg-surface-sunken"></div>
+              <p class="text-sm text-body">Column-major order.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-3">
+              <div class="mb-2 h-32 rounded-md bg-brand-tint"></div>
+              <p class="text-sm text-body">Items fill each column top-to-bottom before moving to the next.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-3">
+              <div class="mb-2 h-20 rounded-md bg-success-tint"></div>
+              <p class="text-sm text-body">Balanced heights.</p>
+            </div>
+            <div class="rounded-lg border border-border bg-surface p-3">
+              <div class="mb-2 h-16 rounded-md bg-danger-tint"></div>
+              <p class="text-sm text-body">No measuring.</p>
+            </div>
+          </Masonry>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Masonry from '@/components/ui/Masonry.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece masonry';
+const usageImport = `import Masonry from '@/components/ui/Masonry.pzl';`;
+const usageMarkup = `<Masonry columns={ 3 } gap={ 4 }></Masonry>`;
+
+const codeHero = `<Masonry columns={ 3 } gap={ 4 }>
+  <div class="rounded-lg border border-border bg-surface p-4">…short card…</div>
+  <div class="rounded-lg border border-border bg-surface p-4">…taller card…</div>
+  <div class="rounded-lg border border-border bg-surface p-4">…card…</div>
+  <div class="rounded-lg border border-border bg-surface p-4">…tall card…</div>
+</Masonry>`;
+
+const codeResponsive = `<!-- 1 column on phones, 2 on small screens, 3 on large -->
+<Masonry columns={ { base: 1, sm: 2, lg: 3 } } gap={ 4 }>
+  <div class="rounded-lg border border-border bg-surface p-4">…</div>
+  <div class="rounded-lg border border-border bg-surface p-4">…</div>
+  <div class="rounded-lg border border-border bg-surface p-4">…</div>
+</Masonry>`;
+
+const codeGap = `<!-- gap drives both the column gap and between-item spacing -->
+<Masonry columns={ 3 } gap={ 8 }>
+  <div class="rounded-lg border border-border bg-surface p-4">…</div>
+  <div class="rounded-lg border border-border bg-surface p-4">…</div>
+</Masonry>`;
+
+const codeColumns = `<Masonry columns={ 4 } gap={ 3 }>
+  <div class="rounded-lg border border-border bg-surface p-3">…</div>
+  <div class="rounded-lg border border-border bg-surface p-3">…</div>
+  <div class="rounded-lg border border-border bg-surface p-3">…</div>
+</Masonry>`;
+
+export default class MasonryDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      ...this.getData(),
+      responsiveCols: { base: 1, sm: 2, lg: 3 },
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeResponsive,
+      codeGap,
+      codeColumns,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Responsive columns', href: '#responsive' },
+        { label: 'Gap', href: '#gap' },
+        { label: 'Fixed column count', href: '#columns' },
+      ],
+    };
+  }
+}
+</script>

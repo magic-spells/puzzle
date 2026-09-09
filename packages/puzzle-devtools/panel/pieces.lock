@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "registry": "npm:@magic-spells/puzzle-pieces@0.6.0",
+  "puzzle": "0.6.0",
+  "pieces": {
+    "badge": {
+      "files": {
+        "app/components/ui/Badge.pzl": "sha256:0d18280ee03d89afe02960db9f558f5d546fb1cb66746a4f71b7ac8e05770c9a"
+      }
+    },
+    "copy-button": {
+      "files": {
+        "app/components/ui/CopyButton.pzl": "sha256:d4d0bac5226723a90015bfeb61a9c8a3a06e9f62a9afcad6e06edaa184321d4f"
+      }
+    },
+    "empty": {
+      "files": {
+        "app/components/ui/Empty.pzl": "sha256:9508da2a54c7de6d95e1a26bfbbcc23dcf83a8e7fcca1b4f003c5dedf39c3c29"
+      }
+    },
+    "split-panel": {
+      "files": {
+        "app/components/ui/SplitPanel.pzl": "sha256:52ac5d52b7f681c104454263884b10cfdb210f5df6eda224c8bdb7927a092539"
+      }
+    },
+    "theme/pieces.css": {
+      "files": {
+        "app/styles/pieces.css": "sha256:84290f1d7ca1312dc611be673440bafa1a2652ebefc6d9abe5c42b52c2b0f211"
+      }
+    }
+  }
+}

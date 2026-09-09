@@ -1,0 +1,383 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Slider</h1>
+        <p class="mt-2 text-body">
+          A touch-friendly single-value or dual-thumb range slider. It is controlled — the parent owns the value and
+          reads it back from
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@input</code>
+          (live during drag) and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          (on commit). A focused thumb responds to arrow keys, PageUp / PageDown, and Home / End.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-sm space-y-2">
+          <div class="flex items-center justify-between">
+            <Label>Volume</Label>
+            <p class="text-sm text-muted">{ volume }</p>
+          </div>
+          <Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="range" title="Range" code={ codeRange }>
+          <div class="w-full max-w-sm space-y-2">
+            <div class="flex items-center justify-between">
+              <Label>Price range</Label>
+              <p class="text-sm text-muted">${ priceMin } – ${ priceMax }</p>
+            </div>
+            <Slider valueMin={ priceMin } valueMax={ priceMax } min={ 0 } max={ 1000 } step={ 10 } @input={ setPrice } @change={ setPrice } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="steps" title="Steps" code={ codeSteps }>
+          <div class="w-full max-w-sm space-y-6">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <Label>Step 10</Label>
+                <p class="text-sm text-muted">{ stepped }</p>
+              </div>
+              <Slider value={ stepped } min={ 0 } max={ 100 } step={ 10 } @input={ setStepped } @change={ setStepped } />
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <Label>Continuous (step="any")</Label>
+                <p class="text-sm text-muted">{ fine }</p>
+              </div>
+              <Slider value={ fine } min={ 0 } max={ 100 } step="any" @input={ setFine } @change={ setFine } />
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="ticks" title="Ticks" code={ codeTicks }>
+          <div class="w-full max-w-sm space-y-6">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <Label>Auto grid</Label>
+                <p class="text-sm text-muted">{ autoTicked }</p>
+              </div>
+              <Slider value={ autoTicked } min={ 0 } max={ 100 } ticks={ true } @input={ setAutoTicked } @change={ setAutoTicked } />
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <Label>Explicit values</Label>
+                <p class="text-sm text-muted">{ quarter }</p>
+              </div>
+              <Slider value={ quarter } min={ 0 } max={ 100 } step={ 25 } ticks={ quarterTicks } @input={ setQuarter } @change={ setQuarter } />
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <Label>Every 10, snapping</Label>
+                <p class="text-sm text-muted">{ stepTen }</p>
+              </div>
+              <Slider value={ stepTen } min={ 0 } max={ 100 } step={ 10 } ticks={ true } tickStep={ 10 } @input={ setStepTen } @change={ setStepTen } />
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="tick-labels" title="Tick labels" code={ codeTickLabels }>
+          <div class="w-full max-w-sm space-y-6">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <Label>Labelled grid</Label>
+                <p class="text-sm text-muted">{ labeled }</p>
+              </div>
+              <Slider value={ labeled } min={ 0 } max={ 100 } step={ 20 } ticks={ true } tickStep={ 20 } tickLabels={ true } @input={ setLabeled } @change={ setLabeled } />
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <Label>Formatted</Label>
+                <p class="text-sm text-muted">{ zoom }%</p>
+              </div>
+              <Slider value={ zoom } min={ 0 } max={ 200 } step={ 25 } ticks={ true } tickStep={ 50 } tickLabels={ percent } @input={ setZoom } @change={ setZoom } />
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="tick-position" title="Tick position" code={ codeTickPosition }>
+          <div class="w-full max-w-sm space-y-8">
+            <div class="space-y-2">
+              <Label>Below (default)</Label>
+              <Slider value={ posBelow } min={ 0 } max={ 100 } step={ 25 } ticks={ true } tickStep={ 25 } tickLabels={ true } @input={ setPosBelow } @change={ setPosBelow } />
+            </div>
+            <div class="space-y-2">
+              <Label>Above</Label>
+              <Slider value={ posAbove } min={ 0 } max={ 100 } step={ 25 } ticks={ true } tickStep={ 25 } tickLabels={ true } tickPosition="above" @input={ setPosAbove } @change={ setPosAbove } />
+            </div>
+            <div class="space-y-2">
+              <Label>Inside</Label>
+              <Slider value={ posInside } min={ 0 } max={ 100 } step={ 25 } ticks={ true } tickStep={ 25 } tickLabels={ true } tickPosition="inside" @input={ setPosInside } @change={ setPosInside } />
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="custom-ticks" title="Custom ticks" code={ codeCustomTicks }>
+          <div class="w-full max-w-sm space-y-6">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <Label>Redline at 90</Label>
+                <p class="text-sm text-muted">{ redline }</p>
+              </div>
+              <Slider value={ redline } min={ 0 } max={ 100 } step={ 5 } ticks={ redlineTicks } tickLabels={ true } @input={ setRedline } @change={ setRedline } />
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <Label>Named endpoints</Label>
+                <p class="text-sm text-muted">{ mode }</p>
+              </div>
+              <Slider value={ mode } min={ 0 } max={ 100 } step={ 25 } ticks={ modeTicks } tickLabels={ true } @input={ setMode } @change={ setMode } />
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled } tall={ false }>
+          <div class="w-full max-w-sm space-y-2">
+            <Label>Disabled</Label>
+            <Slider value={ 40 } disabled />
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Slider from '@/components/ui/Slider.pzl';
+import Label from '@/components/ui/Label.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece slider';
+const usageImport = `import Slider from '@/components/ui/Slider.pzl';`;
+const usageMarkup = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />`;
+
+// Stable module references — tick arrays and formatters keep their identity
+// across re-renders, so the slider reuses its cached tick geometry.
+const quarterTicks = [0, 25, 50, 75, 100];
+const redlineTicks = [0, 25, 50, 75, { value: 90, class: 'bg-danger', labelClass: 'text-danger' }, 100];
+const modeTicks = [{ value: 0, label: 'Off' }, 25, 50, 75, { value: 100, label: 'Max' }];
+const percent = (v) => v + '%';
+
+const codeHero = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
+
+// parent — @input fires live during drag, @change on release
+events = {
+  setVolume: (v) => this.setData('volume', v),
+};`;
+
+const codeRange = `// the presence of valueMin / valueMax switches to dual-thumb range mode
+<Slider valueMin={ priceMin } valueMax={ priceMax } min={ 0 } max={ 1000 } step={ 10 }
+  @input={ setPrice } @change={ setPrice } />
+
+// parent — range callbacks receive { valueMin, valueMax }
+events = {
+  setPrice: ({ valueMin, valueMax }) => this.setData({ priceMin: valueMin, priceMax: valueMax }),
+};`;
+
+const codeSteps = `// a numeric step quantizes to a detent
+<Slider value={ stepped } min={ 0 } max={ 100 } step={ 10 } @change={ setStepped } />
+
+// step="any" is continuous
+<Slider value={ fine } min={ 0 } max={ 100 } step="any" @change={ setFine } />`;
+
+const codeTicks = `// ticks={ true } generates a grid and auto-coarsens it: a 0–100 step-1 slider
+// gets 21 marks, not 101.
+<Slider value={ autoTicked } min={ 0 } max={ 100 } ticks={ true } @change={ setAutoTicked } />
+
+// an array places exactly the marks you list (bare numbers and objects may mix)
+const quarterTicks = [0, 25, 50, 75, 100];
+
+<Slider value={ quarter } min={ 0 } max={ 100 } step={ 25 } ticks={ quarterTicks }
+  @change={ setQuarter } />
+
+// tickStep sets the generated interval. Marks are decoration, not detents — set
+// step to the same number and the thumb lands on every mark.
+<Slider value={ stepTen } min={ 0 } max={ 100 } step={ 10 } ticks={ true } tickStep={ 10 }
+  @change={ setStepTen } />`;
+
+const codeTickLabels = `// tickLabels renders the label row; tickLabels={ true } prints each tick's own
+// value. Labels thin to at most 11, but the first and last always survive.
+<Slider value={ labeled } min={ 0 } max={ 100 } step={ 20 }
+  ticks={ true } tickStep={ 20 } tickLabels={ true } @change={ setLabeled } />
+
+// pass a formatter instead — (value, tick) => string. Keep it at module scope so
+// the prop identity stays stable across re-renders.
+const percent = (v) => v + '%';
+
+<Slider value={ zoom } min={ 0 } max={ 200 } step={ 25 }
+  ticks={ true } tickStep={ 50 } tickLabels={ percent } @change={ setZoom } />`;
+
+const codeTickPosition = `// 'below' (default) — marks and labels sit in the gutter under the track
+<Slider value={ a } ticks={ true } tickStep={ 25 } tickLabels={ true } @change={ setA } />
+
+// 'above' — the whole tick row moves over the track
+<Slider value={ b } ticks={ true } tickStep={ 25 } tickLabels={ true }
+  tickPosition="above" @change={ setB } />
+
+// 'inside' — marks are cut through the bar itself; labels stay below
+<Slider value={ c } ticks={ true } tickStep={ 25 } tickLabels={ true }
+  tickPosition="inside" @change={ setC } />`;
+
+const codeCustomTicks = `// A per-tick class REPLACES that mark's color (its positioning is kept), so one
+// mark can stand out. Use semantic tokens — bg-danger, never bg-red-500.
+const redlineTicks = [
+  0, 25, 50, 75,
+  { value: 90, class: 'bg-danger', labelClass: 'text-danger' },
+  100,
+];
+
+<Slider value={ redline } min={ 0 } max={ 100 } step={ 5 }
+  ticks={ redlineTicks } tickLabels={ true } @change={ setRedline } />
+
+// A per-tick label supplies that mark's TEXT. A non-numeric one also feeds
+// aria-valuetext, so a screen reader announces "Off" rather than "0" at value 0 —
+// that still works with tickLabels={ false }, when no label row renders at all.
+const modeTicks = [
+  { value: 0, label: 'Off' },
+  25, 50, 75,
+  { value: 100, label: 'Max' },
+];
+
+<Slider value={ mode } min={ 0 } max={ 100 } step={ 25 }
+  ticks={ modeTicks } tickLabels={ true } @change={ setMode } />`;
+
+const codeDisabled = `<Slider value={ 40 } disabled />`;
+
+export default class SliderDoc extends PuzzleView {
+  created() {
+    this.setData({
+      volume: 60,
+      priceMin: 200,
+      priceMax: 800,
+      stepped: 40,
+      fine: 33,
+      autoTicked: 45,
+      quarter: 50,
+      stepTen: 30,
+      labeled: 60,
+      zoom: 100,
+      posBelow: 25,
+      posAbove: 50,
+      posInside: 75,
+      redline: 70,
+      mode: 0,
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      quarterTicks,
+      redlineTicks,
+      modeTicks,
+      percent,
+      codeHero,
+      codeRange,
+      codeSteps,
+      codeTicks,
+      codeTickLabels,
+      codeTickPosition,
+      codeCustomTicks,
+      codeDisabled,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Range', href: '#range' },
+        { label: 'Steps', href: '#steps' },
+        { label: 'Ticks', href: '#ticks' },
+        { label: 'Tick labels', href: '#tick-labels' },
+        { label: 'Tick position', href: '#tick-position' },
+        { label: 'Custom ticks', href: '#custom-ticks' },
+        { label: 'Disabled', href: '#disabled' },
+      ],
+    };
+  }
+
+  events = {
+    setVolume: (v) => {
+      this.setData('volume', v);
+      this.refresh();
+    },
+    setPrice: ({ valueMin, valueMax }) => {
+      this.setData({ priceMin: valueMin, priceMax: valueMax });
+      this.refresh();
+    },
+    setStepped: (v) => {
+      this.setData('stepped', v);
+      this.refresh();
+    },
+    setFine: (v) => {
+      this.setData('fine', v);
+      this.refresh();
+    },
+    setAutoTicked: (v) => {
+      this.setData('autoTicked', v);
+      this.refresh();
+    },
+    setQuarter: (v) => {
+      this.setData('quarter', v);
+      this.refresh();
+    },
+    setStepTen: (v) => {
+      this.setData('stepTen', v);
+      this.refresh();
+    },
+    setLabeled: (v) => {
+      this.setData('labeled', v);
+      this.refresh();
+    },
+    setZoom: (v) => {
+      this.setData('zoom', v);
+      this.refresh();
+    },
+    setPosBelow: (v) => {
+      this.setData('posBelow', v);
+      this.refresh();
+    },
+    setPosAbove: (v) => {
+      this.setData('posAbove', v);
+      this.refresh();
+    },
+    setPosInside: (v) => {
+      this.setData('posInside', v);
+      this.refresh();
+    },
+    setRedline: (v) => {
+      this.setData('redline', v);
+      this.refresh();
+    },
+    setMode: (v) => {
+      this.setData('mode', v);
+      this.refresh();
+    },
+  };
+}
+</script>

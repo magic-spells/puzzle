@@ -1,0 +1,53 @@
+<puzzle-view>
+  <span class="flex min-w-0 items-center gap-1.5">
+    <span class="shrink-0 size-1.5 rounded-full { kindClass }" data-kind-dot aria-hidden="true"></span>
+    <span class="shrink-0 font-mono text-[12px] leading-none { nameClass }">{ name }</span>
+    {#if hasModuleLabel}
+      <span class="min-w-0 truncate font-mono text-[10px] leading-none { moduleClass }">{ moduleLabel }</span>
+    {/if}
+  </span>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+// Aliased: this view returns a data() field called `moduleLabel`, and a bare
+// template identifier resolves to the data field — an unaliased import of the
+// same name is the exact collision the compiler warns about (SPEC §6).
+import { moduleLabel as basenameOf, viewKind } from '../values.js';
+
+/**
+ * One view's identity, in the tree's row language: kind dot, name, and the
+ * dimmed basename only when it is not just the name repeated.
+ *
+ * The Views tree does NOT use this — its rows carry a chevron, indent guides
+ * and a log button that make the markup meaningfully different. This exists so
+ * every OTHER place a view is listed (the Subscriptions subscriber pane today)
+ * reads identically without copying the projection rules, which live in
+ * values.js and are unit-tested there.
+ *
+ * Props: `name`, `module`, and `dim` — set `dim` for the merged 'fn' bucket and
+ * other non-navigable entries.
+ */
+const KIND_DOT = {
+  layout: 'bg-accent',
+  view: 'bg-ok',
+  component: 'bg-faint',
+};
+
+export default class ViewIdentity extends PuzzleView {
+  data(params, props) {
+    const name = props.name ?? 'View';
+    const label = basenameOf(name, props.module);
+    const dim = !!props.dim;
+
+    return {
+      name,
+      moduleLabel: label,
+      hasModuleLabel: label !== '',
+      kindClass: dim ? 'bg-line' : KIND_DOT[viewKind(props.module)],
+      nameClass: dim ? 'text-faint italic' : 'text-ink',
+      moduleClass: 'text-faint',
+    };
+  }
+}
+</script>

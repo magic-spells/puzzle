@@ -1,0 +1,273 @@
+<puzzle-view>
+  <figure class={ figureClass } aria-label={ label }>
+    <div class="relative shrink-0" data-plot style={ plotStyle } @pointerleave={ onLeave(event) }>
+      <svg width={ size } height={ size } class="block" aria-hidden="true">
+        {#for m in marks}
+          <path d={ m.d } class={ m.class } @pointermove={ onHover(m, event) } />
+        {/for}
+      </svg>
+
+      {#if showTotal}
+        <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span class="text-2xl font-semibold text-ink">{ totalValue }</span>
+          <span class="mt-0.5 text-xs text-muted">{ totalLabel }</span>
+        </div>
+      {/if}
+
+      {#if tip.visible}
+        <div class={ tipClass } style={ tipStyle }>
+          <div class="text-muted">{ tip.label }</div>
+          <div class="font-medium text-ink tabular-nums">{ tip.value } <span class="font-normal text-muted">{ tip.percent }</span></div>
+        </div>
+      {/if}
+    </div>
+
+    {#if showLegend}
+      <ul class="flex flex-col flex-wrap gap-x-6 gap-y-2">
+        {#for item in legend}
+          <li class="flex items-center gap-2" key={ item.key }>
+            <span class={ item.swatchClass }></span>
+            <span class="text-sm text-body">{ item.label }</span>
+            <span class="ml-auto pl-3 text-sm text-muted tabular-nums">{ item.value }</span>
+          </li>
+        {/for}
+      </ul>
+    {/if}
+
+    <table class="sr-only">
+      <caption>{ label }</caption>
+      <thead>
+        <tr>
+          <th scope="col">Label</th>
+          <th scope="col">Value</th>
+          <th scope="col">Percent</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#for r in tableRows}
+          <tr key={ r.key }>
+            <th scope="row">{ r.label }</th>
+            <td>{ r.value }</td>
+            <td>{ r.percent }</td>
+          </tr>
+        {/for}
+      </tbody>
+    </table>
+  </figure>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { arcPath, formatTick } from '../../lib/chart-math.js';
+
+// PieChart — a Tailwind-styled, accessible part-to-whole donut/pie. Config-first
+// and controlled: hand it an array of { label, value } and it renders the slices
+// (fixed slot colors), an always-present legend, per-slice hover tooltips, an
+// optional donut-center total, and an sr-only data table. It owns no state.
+//
+//   <PieChart data={ traffic } label="Traffic by source" totalLabel="Sessions" />
+//   <PieChart data={ traffic } label="Traffic by source" donut={ false } />
+//
+// PROPS
+//   data        array   [{ label, value }]. Slice colors follow slot order (first
+//                       slice → chart-1 … chart-8, capped). Zero / negative / non-finite
+//                       values are DROPPED (a pie only shows positive parts of a whole).
+//   donut       boolean render a donut (inner radius 0.62 × outer). Default true.
+//   size        number  fixed pixel diameter of the plot (default 240). The pie is a
+//                       fixed square — no ResizeObserver.
+//   label       string  accessible name for the <figure> + sr-only table caption.
+//   formatValue fn      value → string for tooltips, legend, center total, and the table
+//                       (default formatTick — "1.2k" style).
+//   showLegend  boolean legend beside/below the plot (default true).
+//   totalLabel  string  optional caption shown under the summed total in the donut
+//                       center (donut mode only). The value is the sum of all slices.
+//   class       string  appended to the root <figure>.
+//
+// FOLDING: with more than 8 slices the 7 largest are kept in place and the rest are
+// folded into a single "Other" slice (always chart-8), so the categorical palette is
+// never cycled past its 8 validated slots.
+//
+// RENDER MODEL: every slice's arc path / fill class / hover state is precomputed in
+// data() so the {#for} body stays a single <path>. Slices start at 12 o'clock and
+// sweep clockwise; a small pad angle (≈2px at the outer radius) opens a surface gap
+// between neighbors. Hover keeps the pointed slice at full opacity and dims the rest.
+
+let uid = 0;
+
+const GAP = 2; // px surface gap between slices (converted to a pad angle)
+
+const TIP_CLASS =
+  'pointer-events-none absolute left-0 top-0 z-10 whitespace-nowrap rounded-md border ' +
+  'border-border bg-surface px-3 py-2 text-xs shadow-md';
+
+// Slot fill / swatch classes in fixed order. Written as complete literal strings
+// (not `fill-chart-${n}`) so Tailwind's source scan generates them — a
+// template-built class name is invisible to the scanner.
+const FILL = [
+  'fill-chart-1', 'fill-chart-2', 'fill-chart-3', 'fill-chart-4',
+  'fill-chart-5', 'fill-chart-6', 'fill-chart-7', 'fill-chart-8',
+];
+const SWATCH = [
+  'bg-chart-1', 'bg-chart-2', 'bg-chart-3', 'bg-chart-4',
+  'bg-chart-5', 'bg-chart-6', 'bg-chart-7', 'bg-chart-8',
+];
+
+function pctStr(frac) {
+  const r = Math.round(frac * 1000) / 10;
+  return (Number.isInteger(r) ? String(r) : r.toFixed(1)) + '%';
+}
+
+// A full-ring / full-wedge slice can't be one SVG arc (start == end), so split a
+// ~360° span into two half-arcs; ordinary slices return a single path.
+function slicePaths(cx, cy, rO, rI, a0, a1) {
+  if (a1 - a0 >= Math.PI * 2 - 1e-6) {
+    const mid = a0 + Math.PI;
+    return [arcPath(cx, cy, rO, rI, a0, mid), arcPath(cx, cy, rO, rI, mid, a1)];
+  }
+  return [arcPath(cx, cy, rO, rI, a0, a1)];
+}
+
+export default class PieChart extends PuzzleView {
+  created() {
+    this._uid = ++uid;
+    this.setData({
+      hoveredId: null,
+      tip: { visible: false, x: 0, y: 0, flipX: false, label: '', value: '', percent: '' },
+    });
+  }
+
+  data(params, props) {
+    const local = this.getData();
+    const size = Number(props.size) || 240;
+    const donut = props.donut !== false;
+    const fmt = typeof props.formatValue === 'function' ? props.formatValue : formatTick;
+    const showLegend = props.showLegend !== false;
+    const hoveredId = local.hoveredId;
+
+    // Normalize → drop non-positive values.
+    let items = (Array.isArray(props.data) ? props.data : [])
+      .map((d, i) => ({
+        label: d && d.label != null ? String(d.label) : `Item ${i + 1}`,
+        value: Number(d ? d.value : 0),
+      }))
+      .filter((d) => Number.isFinite(d.value) && d.value > 0);
+
+    // Fold everything past the 7 largest into a single "Other" slice.
+    if (items.length > 8) {
+      const keep = new Set(
+        items
+          .map((d, idx) => ({ idx, value: d.value }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 7)
+          .map((o) => o.idx)
+      );
+      const kept = [];
+      let otherVal = 0;
+      items.forEach((d, idx) => {
+        if (keep.has(idx)) kept.push(d);
+        else otherVal += d.value;
+      });
+      items = kept;
+      if (otherVal > 0) items.push({ label: 'Other', value: otherVal });
+    }
+
+    const total = items.reduce((a, d) => a + d.value, 0);
+    const cx = size / 2;
+    const cy = size / 2;
+    const rOuter = size / 2;
+    const rInner = donut ? rOuter * 0.62 : 0;
+    const padAngle = items.length > 1 ? GAP / rOuter : 0;
+
+    const marks = [];
+    const legend = [];
+    const tableRows = [];
+    let cursor = 0;
+
+    items.forEach((d, i) => {
+      const frac = total > 0 ? d.value / total : 0;
+      const span = frac * Math.PI * 2;
+      const a0 = cursor + padAngle / 2;
+      const a1 = cursor + span - padAngle / 2;
+      cursor += span;
+
+      const id = `slice-${i}`;
+      const dim = hoveredId != null && hoveredId !== id;
+      const cls = `${FILL[i % 8]} transition-opacity ${dim ? 'opacity-60' : 'opacity-100'}`;
+      const percent = pctStr(frac);
+      const value = String(fmt(d.value));
+
+      if (a1 > a0) {
+        slicePaths(cx, cy, rOuter, rInner, a0, a1).forEach((dPath, p) => {
+          marks.push({
+            key: `${id}-${p}`,
+            id,
+            d: dPath,
+            class: cls,
+            tipLabel: d.label,
+            tipValue: value,
+            tipPercent: percent,
+          });
+        });
+      }
+
+      legend.push({
+        key: `lg-${i}`,
+        label: d.label,
+        value,
+        swatchClass: `inline-block size-3 shrink-0 rounded-sm ${SWATCH[i % 8]}`,
+      });
+      tableRows.push({ key: `tr-${i}`, label: d.label, value, percent });
+    });
+
+    const showTotal = donut && !!props.totalLabel;
+
+    const tip = local.tip || {
+      visible: false, x: 0, y: 0, flipX: false, label: '', value: '', percent: '',
+    };
+    const tipStyle =
+      `left:${tip.x}px;top:${tip.y}px;` +
+      `transform:translate(${tip.flipX ? 'calc(-100% - 14px)' : '14px'},-50%);`;
+
+    return {
+      figureClass: ['flex flex-wrap items-center gap-x-8 gap-y-4', props.class || ''].join(' ').trim(),
+      label: props.label || 'Pie chart',
+      size,
+      plotStyle: `width:${size}px;height:${size}px;`,
+      marks,
+      legend,
+      showLegend,
+      tableRows,
+      showTotal,
+      totalValue: String(fmt(total)),
+      totalLabel: props.totalLabel || '',
+      tip,
+      tipStyle,
+      tipClass: TIP_CLASS,
+    };
+  }
+
+  _tipFromEvent(event, label, value, percent) {
+    const plot = this.element?.querySelector('[data-plot]');
+    if (!plot) return null;
+    const rect = plot.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    return { visible: true, x, y, flipX: x > rect.width / 2, label, value, percent };
+  }
+
+  events = {
+    onHover: (mark, event) => {
+      const tip = this._tipFromEvent(event, mark.tipLabel, mark.tipValue, mark.tipPercent);
+      if (!tip) return;
+      this.setData({ hoveredId: mark.id, tip });
+      this.refresh();
+    },
+
+    onLeave: () => {
+      const tip = this.getData().tip;
+      this.setData({ hoveredId: null, tip: { ...tip, visible: false } });
+      this.refresh();
+    },
+  };
+}
+</script>

@@ -1,0 +1,341 @@
+<puzzle-view>
+  <select-dropdown class={ rootClass } id={ idAttr } disabled={ disabledAttr }>
+    <select-trigger class={ triggerClass }>
+      <Slot name="trigger">
+        <span class={ labelClass }>{ triggerText }</span>
+        <svg
+          class="size-4 shrink-0 text-muted transition-[rotate] group-aria-expanded:rotate-180"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true">
+          <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </Slot>
+    </select-trigger>
+    {#if nameAttr}
+      <input type="hidden" name={ nameAttr } />
+    {/if}
+    <select-panel class={ panelClass }><Children/></select-panel>
+  </select-dropdown>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Select — a listbox-pattern select: a trigger showing the current choice and an
+// overlay panel of options with typeahead, roving keyboard focus, group labels
+// and dividers.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <select-dropdown> /
+// <select-trigger> / <select-panel> / <select-option> custom elements from
+// @magic-spells/select-dropdown and puts tokens on them. The listbox ARIA wiring,
+// the roving tabindex, Home/End/typeahead, the disabled-option skipping, the
+// panel's overlay positioning and viewport clamping, the form-reset restore and
+// the outside-click dismissal are all upstream's. This family is markup and
+// Tailwind. The 0.6.x port — 600-odd lines of hand-rolled listbox — is gone.
+//
+// THIS IS A FAMILY (D167). Import the barrel once and invoke with dot notation:
+//
+//   import Select from '@/components/ui/Select';
+//
+//   <Select value={ country } placeholder="Pick a country" @change={ setCountry }>
+//     <Select.Label>North America</Select.Label>
+//     <Select.Option value="us">United States</Select.Option>
+//     <Select.Option value="ca">Canada</Select.Option>
+//     <Select.Divider/>
+//     <Select.Option value="mx" disabled>Mexico (sold out)</Select.Option>
+//   </Select>
+//
+// BREAKING CHANGE in 0.7.0: the old piece took an `options` ARRAY and rendered
+// rows from it, with `optionSnippet` for custom content. Options are CHILDREN
+// now — real markup you can style, nest icons into and drive from a {#for} —
+// which is the one API this family has. The `morph`, `position`, `indicator` and
+// `size` props are gone: upstream has a single (centre-overlay) placement mode,
+// and morph belongs to an upstream experiment rather than a fork here.
+//
+// THE TRIGGER IS A D141 NAMED SLOT WITH STOCK CHROME AS ITS FALLBACK BODY.
+// Nothing at the call site → the label span and the chevron below render. A
+// `slot="trigger"` element at the call site REPLACES them entirely, which means:
+//
+//   * your trigger content must carry its own accessible name — the `label`
+//     prop only ever feeds the stock text;
+//   * upstream finds the text node to update with
+//     `.querySelector('.select-label-text')`, so a custom trigger that wants the
+//     selected label written into it must put that class on the element it wants
+//     written. Without it upstream simply writes no label (harmless);
+//   * keep the content NON-INTERACTIVE. <select-trigger> is itself the control —
+//     it owns the click, Enter/Space and ArrowUp/Down handlers, plus `role`,
+//     `tabindex`, `aria-haspopup`, `aria-expanded`, `aria-controls` and
+//     `aria-disabled`. A <button> inside it would be a nested control.
+//
+// Upstream also injects its own caret span, but ONLY when the trigger has no
+// element child other than `.select-label-text` — the chevron below is that
+// child, so the stock caret never appears, and neither does it in a custom
+// trigger that renders any element of its own.
+//
+// `value` IS NEVER TEMPLATE-BOUND, ON THE HOST OR ON AN OPTION. <select-dropdown>
+// OBSERVES `value` and re-asserts the last applied one on every option mutation,
+// so a live binding would fight the patcher every render. It is written through
+// the property after the module resolves, and again from afterUpdate() whenever
+// props.value actually changes. Programmatic writes dispatch NO event, so there
+// is no echo. (Select.Option has its own reason — see that file.)
+//
+// `value` IS STICKY UPSTREAM, AND A CONTROLLED PARENT CANNOT CLEAR IT. The last
+// applied value — a user pick or a programmatic set — is re-asserted whenever the
+// option list changes, so a re-rendered {#for} restores the selection by itself
+// and this piece never re-writes it after a member-set change. The flip side is
+// that passing `value=""` or `value={ null }` does NOT deselect: upstream ignores
+// null/undefined outright and keeps an unmatched string pending. A selection
+// clears exactly one way — its option leaves the DOM — and that happens silently,
+// with no event, which is why afterUpdate() re-reads `element.selectedText` on
+// every pass and mirrors it into local state. Without that the stock trigger would
+// keep showing a label nothing selects. To offer a "clear" affordance, render an
+// explicit empty-valued option rather than pushing an empty `value`.
+//
+// THE STOCK TRIGGER RENDERS THE PLACEHOLDER AT MOUNT, NOT AN EMPTY SPAN. Upstream
+// captures that text ONCE, at connect, as the label to restore on a form reset or
+// a cleared selection. An empty span would make "cleared" render as nothing.
+// Local `label` starts empty, so the placeholder shows until the module lands and
+// the selection resolves — one post-upgrade repaint of that one text node.
+//
+// AFTER THE UPGRADE THE LABEL TEXT IS UPSTREAM'S. It writes
+// `.select-label-text`'s textContent directly. The mirror above is what keeps
+// this piece's own vdom agreeing with it, so a re-render that rebuilds the span
+// (a class change, say) restores the right text instead of the placeholder.
+//
+// `open` — OPTIONAL-CONTROLLED and EDGE-TRIGGERED, like DropdownPanel. Omit it
+// and the component owns its own open state, which is the normal case. Pass it
+// and only a CHANGE acts: true → show(), false → hide(). The user can still open
+// and close the panel, which reports through @show / @hide; the parent's job is
+// to store that so the next change is a fresh edge. A rejected toggle is not
+// reverted — the wrapped-overlay contract (D-WRAP). show()/hide() are called
+// SYNCHRONOUSLY from afterUpdate, exactly like DropdownPanel: upstream defers
+// attaching its own outside-click listener by a task, so an open driven from a
+// parent's own @click is no longer closed by that same click on its way up.
+//
+// DO NOT RE-RENDER THE OPTION LIST FROM THE @change HANDLER WHILE THE PANEL IS
+// OPEN. Focus is real DOM focus on the option element (a roving tabindex, not
+// aria-activedescendant), so replacing the focused option mid-selection drops
+// focus to the body. Selecting closes the panel anyway; change the list on the
+// next interaction.
+//
+// STYLESHEET. This piece needs the component's CSS, which is not part of the
+// copied files. Add it once to your app's style entry:
+//   @import "@magic-spells/select-dropdown/css" layer(components);
+// It is REQUIRED, not cosmetic: the panel's at-rest `opacity: 0; visibility:
+// hidden; pointer-events: none` and the `[visible]` rule that reverses them are
+// the entire show/hide mechanism, and the `:not(:defined)` rule is what keeps the
+// un-upgraded option list out of a prerendered page. The layer is not optional
+// either: the sheet is plain element selectors, so an unlayered import would
+// outrank every Tailwind utility this family puts on those elements.
+//
+// Props
+//   value        the selected option's value; controlled by the parent
+//   placeholder  stock-trigger text while nothing is selected (default 'Select…')
+//   name         renders a hidden <input name> the component keeps in sync, so
+//                the control submits with an enclosing form. It must be present
+//                AT MOUNT — upstream adopts the input once, in connectedCallback,
+//                so a `name` that appears on a later render is never picked up.
+//   disabled     the panel refuses to open and the trigger leaves the tab order
+//   open         optional-controlled, edge-triggered as above
+//   id           on the host
+//   class        merged onto <select-dropdown>
+//   @change(value)  value-first; a USER selection only, never a programmatic set
+//   @show() / @hide()  the panel opened / closed
+
+const ROOT = 'block w-full text-sm';
+
+const TRIGGER =
+  'group flex w-full cursor-pointer items-center justify-between gap-2 ' +
+  'rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink ' +
+  'transition-colors hover:border-border-strong ' +
+  'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  '[&[aria-disabled=true]]:cursor-not-allowed [&[aria-disabled=true]]:opacity-50 ' +
+  '[&[aria-disabled=true]]:hover:border-border';
+
+const PANEL =
+  'rounded-lg border border-border bg-surface p-1 text-sm text-ink shadow-lg';
+
+export default class Select extends PuzzleView {
+  #live = false;
+  #ready = false;
+  #syncing = false;
+  #controlled = false;
+  #openControlled = false;
+  #last;
+  #lastOpen = false;
+  // The selected option's text, mirrored from the component. Kept in a field
+  // rather than read back out of data() so the first data() call — which runs
+  // before there IS any data — has something to read.
+  #label = '';
+
+  // A cheap signature of the option set. Read from `data-value`, which the
+  // PATCHER writes while the children are being updated — reading the real
+  // `value` attribute here would depend on whether a member's afterUpdate ran
+  // before this one, which the framework does not promise.
+  #memberKey() {
+    if (!this.element) return '';
+    return [...this.element.querySelectorAll('select-option')]
+      .map((option) => option.getAttribute('data-value') ?? '')
+      .join(' ');
+  }
+
+  // Every select-dropdown:* event is dispatched on the host, but the guard costs
+  // nothing and states the intent: only THIS element's events are ours.
+  #mine(event) {
+    return event.target === this.element;
+  }
+
+  #onChange = (event) => {
+    if (!this.#mine(event) || this.#syncing) return;
+    const detail = event.detail || {};
+    // Keep our own vdom in step with the textContent upstream just wrote.
+    this.#setLabel(typeof detail.label === 'string' ? detail.label : '');
+    // #last is NEVER set from what we report — it tracks props.value only, so an
+    // ignored @change leaves no stale edge behind for a later render to act on.
+    this.props.change?.(detail.value ?? '');
+  };
+
+  #onShow = (event) => {
+    if (!this.#mine(event)) return;
+    this.props.show?.();
+  };
+
+  #onHide = (event) => {
+    if (!this.#mine(event)) return;
+    this.props.hide?.();
+  };
+
+  // Drives the element to `value` without letting our own listener report the
+  // write back. Upstream dispatches nothing on a programmatic set, so the flag is
+  // belt and braces — and free, because the setter is synchronous.
+  #apply(value) {
+    if (!this.#ready || value === undefined || value === null) return;
+    this.#syncing = true;
+    try {
+      this.element.value = value;
+    } finally {
+      this.#syncing = false;
+    }
+  }
+
+  // Re-read the component's own idea of the selected text. It runs on EVERY
+  // afterUpdate because that is what covers the case upstream emits no event for:
+  // a selection silently cleared because its option left the DOM. It also covers
+  // the first resolution after upgrade.
+  #mirrorLabel() {
+    if (!this.#ready) return;
+    const text = this.element?.selectedText;
+    if (typeof text === 'string') this.#setLabel(text);
+  }
+
+  #setLabel(text) {
+    if (text === this.#label) return;
+    this.#label = text;
+    this.setData({ label: text });
+  }
+
+  data(params, props) {
+    const label = this.#label;
+    const placeholder = props.placeholder ?? 'Select…';
+    return {
+      label,
+      triggerText: label || placeholder,
+      labelClass:
+        'select-label-text min-w-0 flex-1 truncate text-left ' +
+        (label ? 'text-ink' : 'text-muted'),
+      rootClass: [ROOT, props.class].filter(Boolean).join(' '),
+      triggerClass: TRIGGER,
+      panelClass: PANEL,
+      idAttr: props.id || false,
+      nameAttr: props.name || false,
+      disabledAttr: props.disabled ? true : false,
+    };
+  }
+
+  mounted() {
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#controlled = this.props.value !== undefined;
+    this.#openControlled = this.props.open !== undefined;
+    this.#last = this.props.value;
+    this.#lastOpen = !!this.props.open;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    const el = this.element;
+    el.addEventListener('select-dropdown:change', this.#onChange);
+    el.addEventListener('select-dropdown:show', this.#onShow);
+    el.addEventListener('select-dropdown:hide', this.#onHide);
+
+    import('@magic-spells/select-dropdown')
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+        // The value has to land through the property, not an attribute written
+        // before the upgrade: upstream reads an authored `value` in
+        // connectedCallback, but this piece never renders one.
+        this.#apply(this.props.value);
+        this.#mirrorLabel();
+        // show() before children exist is a safe no-op upstream; by here they do.
+        if (this.#openControlled && this.#lastOpen) el.show?.();
+      })
+      .catch((error) => {
+        console.error(
+          '[Select] failed to load @magic-spells/select-dropdown — the panel will ' +
+            'not open.',
+          error
+        );
+      });
+  }
+
+  afterUpdate() {
+    if (!this.#live) return;
+
+    if (this.#openControlled) {
+      // Edge-triggered, never level-triggered: a re-render carrying the same
+      // `open` is not a request, so an unrelated update can never re-open a panel
+      // the user just dismissed while the parent's state still says open.
+      const open = !!this.props.open;
+      if (open !== this.#lastOpen) {
+        this.#lastOpen = open;
+        // Before the upgrade there is nothing to leave the intent on — `visible`
+        // is written BY show()/hide() and pre-setting it would make show() bail.
+        // The import's .then applies #lastOpen instead.
+        if (this.#ready) {
+          if (open) this.element.show?.();
+          else this.element.hide?.();
+        }
+      }
+    }
+
+    if (!this.#ready) return;
+
+    if (this.#controlled) {
+      const value = this.props.value;
+      if (value !== this.#last) {
+        this.#last = value;
+        this.#apply(value);
+      }
+    }
+
+    this.#mirrorLabel();
+  }
+
+  destroyed() {
+    this.#live = false;
+    const el = this.element;
+    el?.removeEventListener('select-dropdown:change', this.#onChange);
+    el?.removeEventListener('select-dropdown:show', this.#onShow);
+    el?.removeEventListener('select-dropdown:hide', this.#onHide);
+    // Unbind FIRST: this close is a teardown, not a user dismissal, and must not
+    // call back into a parent being torn down with us. restoreFocus is off for
+    // the same reason — nothing here asked for focus.
+    if (this.#ready && el?.hasAttribute('visible')) {
+      el.hide?.({ restoreFocus: false });
+    }
+  }
+}
+</script>

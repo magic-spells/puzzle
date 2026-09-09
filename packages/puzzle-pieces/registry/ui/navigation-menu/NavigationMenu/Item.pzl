@@ -1,0 +1,80 @@
+<puzzle-view>
+  <li class={ itemClass }>
+    <DropdownPanel
+      class="block"
+      trigger={ triggerMode }
+      arrow={ arrowMode }
+      open={ openState }
+      @show={ onShow() }
+      @hide={ onHide() }><Children/></DropdownPanel>
+  </li>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import DropdownPanel from '../DropdownPanel/index.js';
+
+// NavigationMenu.Item — one entry in the bar. A member of the NavigationMenu
+// family (D167); see NavigationMenu.pzl for the whole story.
+//
+// The root is the <li> that keeps the bar valid list markup, and the
+// <dropdown-component> lives INSIDE it. That is fine and deliberate: the
+// direct-children contract is about <dropdown-trigger> / <dropdown-panel> being
+// direct children of <dropdown-component>, and the <li> sits outside the
+// component entirely.
+//
+//   <NavigationMenu.Item>
+//     <NavigationMenu.Trigger>Products</NavigationMenu.Trigger>
+//     <NavigationMenu.Content>…</NavigationMenu.Content>
+//   </NavigationMenu.Item>
+//
+// EVERY Item IS A DROPDOWN. A plain top-level bar link needs no member of its
+// own — it is a bare <li> you write yourself, straight inside <NavigationMenu>:
+//
+//   <li><NavigationMenu.Link variant="bar" href="/pricing" label="Pricing"/></li>
+//
+// (A template carries at most one <Children/> marker, so an Item that could be
+// either shape would have to duplicate it. A one-element <li> is cheaper than a
+// member that exists to render nothing.)
+//
+// NESTED SUBMENUS. An Item inside a Content is just another dropdown — give its
+// Content opens="right" and you are done:
+//
+//   <NavigationMenu.Item>
+//     <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
+//     <NavigationMenu.Content opens="right">…</NavigationMenu.Content>
+//   </NavigationMenu.Item>
+//
+// The `block` on the DropdownPanel below is why that works and is NOT cosmetic.
+// <dropdown-component> ships display: inline-block, so a nested one shrink-wraps
+// its trigger text — and an opens="right" panel resolves left: 100% against that
+// narrow box, landing on top of the parent panel instead of beside it. The <li>
+// being block-level does nothing for this; the rule has to be on the component
+// itself. It is harmless at the top level, where the <li> shrink-wraps anyway.
+//
+// Props
+//   trigger   'hover' | 'click' | 'both' (default), forwarded
+//   arrow     'flip' (default) | 'static' | 'none', forwarded
+//   open      optional-controlled and edge-triggered, forwarded. Leave it off
+//             and the component owns its own state, which is the normal case.
+//   class     merged onto the <li>
+//   @show / @hide  fired when THIS item's panel opens or closes. A nested
+//             submenu's events are filtered out by the base — see
+//             DropdownPanel.pzl.
+
+export default class Item extends PuzzleView {
+  data(params, props) {
+    return {
+      itemClass: props.class || false,
+      openState: props.open,
+      triggerMode: props.trigger,
+      arrowMode: props.arrow,
+    };
+  }
+
+  events = {
+    onShow: () => this.props.show?.(),
+    onHide: () => this.props.hide?.(),
+  };
+}
+</script>

@@ -1,0 +1,26 @@
+<puzzle-view>
+  <select-divider class={ dividerClass }></select-divider>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Select.Divider — a rule between option groups. A member of the Select family
+// (D167). Renders the real <select-divider>, whose constructor stamps
+// role="separator", so this file authors no ARIA of its own.
+//
+//   <Select.Option value="ca">Canada</Select.Option>
+//   <Select.Divider/>
+//   <Select.Label>Europe</Select.Label>
+//
+// Props
+//   class  merged onto <select-divider>, after the chrome
+
+const DIVIDER = 'my-1 block h-px bg-border';
+
+export default class SelectDivider extends PuzzleView {
+  data(params, props) {
+    return { dividerClass: [DIVIDER, props.class].filter(Boolean).join(' ') };
+  }
+}
+</script>

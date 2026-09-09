@@ -1,0 +1,8 @@
+{
+  "name": "scroll-area",
+  "description": "Overlay-scrollbar wrapper — native scrolling with a fading, draggable custom thumb in vertical, horizontal, or both orientations",
+  "files": ["ScrollArea.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

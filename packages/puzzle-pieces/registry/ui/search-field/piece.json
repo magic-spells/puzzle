@@ -1,0 +1,8 @@
+{
+  "name": "search-field",
+  "description": "Search input with a leading magnifier icon and a trailing clear button; submits on Enter",
+  "files": ["SearchField.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}
