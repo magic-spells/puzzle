@@ -10,6 +10,10 @@ import { readFile, access } from 'node:fs/promises';
 // manifests, the barrels, and the rules a wrapper piece has to keep.
 
 const PACKAGE = '@magic-spells/collapsible-content';
+// The manifest carries the version FLOOR the family was built against — 1.2.0
+// is the release that introduced <collapsible-group>, the element Accordion's
+// exclusivity depends on, and the exact bug D169's floors exist to prevent.
+const DEP = `${PACKAGE}@^1.2.0`;
 const SPECIFIER = PACKAGE.replace('/', '\\/');
 
 const readText = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -35,7 +39,7 @@ const PIECES = [
 		manifest: '../registry/ui/collapsible/piece.json',
 		files: COLLAPSIBLE_FILES,
 		registryDependencies: [],
-		dependencies: [PACKAGE],
+		dependencies: [DEP],
 	},
 	{
 		piece: 'accordion',

@@ -19,6 +19,13 @@ const readJSON = async (path) =>
 // wrap a package that only PEERs on it, and yarn 1 will not install a peer on
 // its own; the two dialogs wrap dialog-panel itself.
 const DIALOG_PANEL = '@magic-spells/dialog-panel';
+
+// A dependency entry is "<name>@<range>" (D169); the last @ separates, so a
+// scoped package keeps its leading one.
+const packageNameOf = (spec) => {
+	const at = spec.lastIndexOf('@');
+	return at > 0 ? spec.slice(0, at) : spec;
+};
 const WRAPPERS = [
 	{
 		piece: 'sheet',
@@ -56,9 +63,13 @@ for (const wrapper of WRAPPERS) {
 
 		assert.deepEqual(piece.files, [wrapper.file]);
 		assert.deepEqual(piece.registryDependencies, []);
+		// Each dependency is an install spec "<name>@<floor>" (D169), so compare
+		// on the package name — the floors themselves are pinned by
+		// registry-deps.test.js.
+		const declared = new Set(piece.dependencies.map(packageNameOf));
 		for (const pkg of new Set([wrapper.package, DIALOG_PANEL])) {
 			assert.ok(
-				piece.dependencies.includes(pkg),
+				declared.has(pkg),
 				`piece.json must declare ${pkg} — dialog-panel is a peer that yarn 1 will not install on its own`
 			);
 		}

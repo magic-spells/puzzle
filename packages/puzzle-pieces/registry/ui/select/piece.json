@@ -3,6 +3,6 @@
   "description": "Listbox-pattern select as a compound family — options, group labels and dividers as real children, with typeahead, roving keyboard focus, disabled options, an optional-controlled panel and a replaceable trigger slot; wraps the @magic-spells/select-dropdown web component rather than porting it",
   "files": ["Select/Select.pzl", "Select/Option.pzl", "Select/Label.pzl", "Select/Divider.pzl", "Select/index.js"],
   "registryDependencies": [],
-  "dependencies": ["@magic-spells/select-dropdown"],
+  "dependencies": ["@magic-spells/select-dropdown@^0.3.0"],
   "targetDir": "app/components/ui"
 }

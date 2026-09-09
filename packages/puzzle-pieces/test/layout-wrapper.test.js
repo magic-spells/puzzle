@@ -17,6 +17,7 @@ const PIECES = [
 		piece: 'tabs',
 		dir: 'Tabs',
 		package: '@magic-spells/tab-group',
+		floor: '^1.2.0',
 		root: 'Tabs/Tabs.pzl',
 		files: ['Tabs/Tabs.pzl', 'Tabs/List.pzl', 'Tabs/Tab.pzl', 'Tabs/Panel.pzl', 'Tabs/index.js'],
 		barrel: [
@@ -28,6 +29,7 @@ const PIECES = [
 		piece: 'split-panel',
 		dir: 'SplitPanel',
 		package: '@magic-spells/split-panel',
+		floor: '^0.2.0',
 		root: 'SplitPanel/SplitPanel.pzl',
 		files: [
 			'SplitPanel/SplitPanel.pzl',
@@ -44,6 +46,7 @@ const PIECES = [
 		piece: 'panel-stack',
 		dir: 'PanelStack',
 		package: '@magic-spells/panel-stack',
+		floor: '^0.2.0',
 		root: 'PanelStack/PanelStack.pzl',
 		files: ['PanelStack/PanelStack.pzl', 'PanelStack/Panel.pzl', 'PanelStack/index.js'],
 		barrel: [
@@ -60,7 +63,9 @@ for (const entry of PIECES) {
 		const piece = await readJSON(`../registry/ui/${entry.piece}/piece.json`);
 		assert.deepEqual(piece.files, entry.files);
 		assert.deepEqual(piece.registryDependencies, []);
-		assert.deepEqual(piece.dependencies, [entry.package]);
+		// The manifest spec carries the version FLOOR the wrapper was built
+		// against (D169); the .pzl still imports the BARE package specifier.
+		assert.deepEqual(piece.dependencies, [`${entry.package}@${entry.floor}`]);
 		assert.equal(piece.targetDir, 'app/components/ui');
 	});
 

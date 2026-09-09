@@ -375,22 +375,37 @@ func checkConflicts(units []plannedUnit) error {
 		strings.Join(conflicts, "\n  "))
 }
 
-// collectNpmDeps unions the npm dependencies of every resolved piece.
+// collectNpmDeps unions the npm dependencies of every resolved piece, keyed by
+// PACKAGE NAME so a package two pieces both need is installed once. When those
+// pieces disagree on the version floor (D169) the highest one wins: the app has
+// to satisfy every piece it just copied, so the strictest floor is the only
+// correct one to print. A bare name (no floor) loses to any floor and prints
+// bare, exactly as it did before floors existed.
 func collectNpmDeps(resolvedPieces []Piece) []string {
-	set := map[string]bool{}
+	floors := map[string]string{}
 	for _, p := range resolvedPieces {
 		for _, d := range p.Dependencies {
-			set[d] = true
+			name, rng := splitDepSpec(d)
+			if cur, seen := floors[name]; seen && compareFloors(rng, cur) <= 0 {
+				continue
+			}
+			floors[name] = rng
 		}
 	}
-	if len(set) == 0 {
+	if len(floors) == 0 {
 		return nil
 	}
-	deps := make([]string, 0, len(set))
-	for d := range set {
-		deps = append(deps, d)
+	// Sort by package NAME, not by the joined spec — appending "@<range>" would
+	// otherwise reorder a package whose name prefixes another's.
+	names := make([]string, 0, len(floors))
+	for name := range floors {
+		names = append(names, name)
 	}
-	sort.Strings(deps)
+	sort.Strings(names)
+	deps := make([]string, 0, len(names))
+	for _, name := range names {
+		deps = append(deps, joinDepSpec(name, floors[name]))
+	}
 	return deps
 }
 

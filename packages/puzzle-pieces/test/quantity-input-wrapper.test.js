@@ -7,6 +7,9 @@ import { readFile, access } from 'node:fs/promises';
 // bookkeeping live in @magic-spells/quantity-input and are tested there.
 
 const PACKAGE = '@magic-spells/quantity-input';
+// The manifest carries the version FLOOR the wrapper was built against (D169);
+// the .pzl still imports the BARE specifier.
+const DEP = `${PACKAGE}@^1.1.0`;
 const SPECIFIER = PACKAGE.replace('/', '\\/');
 const FILE = '../registry/ui/quantity-input/QuantityInput.pzl';
 
@@ -17,7 +20,7 @@ test('the quantity-input manifest declares its file and dependency', async () =>
 	const piece = await readJSON('../registry/ui/quantity-input/piece.json');
 	assert.deepEqual(piece.files, ['QuantityInput.pzl']);
 	assert.deepEqual(piece.registryDependencies, []);
-	assert.deepEqual(piece.dependencies, [PACKAGE]);
+	assert.deepEqual(piece.dependencies, [DEP]);
 	assert.equal(piece.targetDir, 'app/components/ui');
 	await access(new URL(FILE, import.meta.url));
 });

@@ -30,8 +30,12 @@ type Piece struct {
 	// PIECE; a "lib/…"-prefixed value ("lib/date-math.js") is a shared JS util
 	// copied to app/lib/. The prefix is the ONLY discriminator (see resolveAll).
 	RegistryDependencies []string `json:"registryDependencies"`
-	// Dependencies are npm package names the piece needs at runtime. We never run
-	// npm (D3) — they are accumulated and printed as a next step.
+	// Dependencies are the npm packages the piece needs at runtime, each an
+	// install spec "<name>[@<range>]" whose range is the semver FLOOR the piece
+	// was built against (D169) — "@magic-spells/collapsible-content@^1.2.0".
+	// A bare name still means "any version" so a third-party registry written
+	// against the older schema keeps working. We never run npm (D3) — the specs
+	// are accumulated (see collectNpmDeps) and printed as a next step.
 	Dependencies []string `json:"dependencies"`
 	// TargetDir is the app-relative destination for this piece's files; empty
 	// means the default (app/components/ui).

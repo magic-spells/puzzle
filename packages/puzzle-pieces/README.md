@@ -31,7 +31,10 @@ That copies `Button.pzl` and the `Select/` family (`Select.pzl`, `Option.pzl`,
 `Label.pzl`, `Divider.pzl` and an `index.js` barrel) into `app/components/ui/`,
 path-preserving (plus any shared `lib/` helpers and sibling pieces they depend on,
 resolved transitively), copies the `pieces.css` design tokens into your app if you
-don't have them yet, and prints — never auto-runs — any npm install you need.
+don't have them yet, and prints — never auto-runs — any npm install you need. That
+line carries a version floor per package (`npm install
+@magic-spells/collapsible-content@^1.2.0`) — the release the piece was built
+against — so run it as printed rather than installing the bare name.
 Existing files are never overwritten unless you pass `--overwrite`, and a
 `pieces.lock` of content hashes is kept so a future `diff`/`update` command can tell
 upstream changes from your local edits.
