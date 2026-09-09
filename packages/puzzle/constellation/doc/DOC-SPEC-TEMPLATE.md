@@ -27,6 +27,21 @@ notes:
       the `<b>{ name }</b>\n(text)` element-boundary case is deliberately unchanged. Also: `{#for i
       in 1...5}` is a positioned compile error steering to `{#for 1...5, i}` — the range form always
       binds its counter after the range.
+  - kind: state
+    text: >-
+      Text whitespace rule (§6), superseding the earlier note above — the full rule as of the 0.7.0
+      final review, recorded on [[DECISION-D168-TEXT-RUN-WHITESPACE]]. Template text collapses
+      whitespace runs to one space and drops an edge space that held a newline (source indentation).
+      That strip is an ELEMENT-boundary rule only. Every non-element boundary keeps one space:
+      inside a coalesced text run (text↔interpolation, interpolation↔interpolation across a
+      whitespace-only newline node), and between a text run and an adjacent control-flow block —
+      `{#if}`, `{#for}`, `{#case}` — on either side. So `{ user.first }\n  { user.last }` renders
+      "John Doe" and `you have { n } new\n  {#if x}message{/if}` renders "new message", as they do
+      in HTML, Vue and Svelte. `{ a }{ b }` and `{#if x}a{/if}{ b }` with nothing between stay
+      adjacent; nothing is invented at an element edge, so a block that is an element's first/last
+      child gains no space; a block's own body edges keep the strip. Deliberately unchanged: the
+      `<b>{ name }</b>\n(text)` element-boundary case, and two blocks separated only by a newline.
+    sha: 513d834
 ---
 
 The frozen v1 contract for templates: the `@event` handler convention and its modifiers, the template grammar, DOM islands, inline SVG, composition markers and named slots, list keying, cached handlers, and compiler accessibility warnings. See [[DOC-SPEC]] for the section index and the rest of the contract.

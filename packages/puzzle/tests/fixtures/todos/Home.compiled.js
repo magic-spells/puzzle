@@ -179,7 +179,7 @@ TodoHome.prototype.render = function () {
                 class: `relative flex-1 py-3.5 text-sm font-medium transition-colors ${__d.currentFilter === 'all' ? 'text-accent' : ''}${__d.currentFilter !== 'all' ? 'text-muted hover:text-fg' : ''}`,
                 '@click': ((this.__h ??= {})[1] ??= (event) => this.events.setFilter('all')),
               }, [
-                new ViewNode('text', { value: 'All' }),
+                new ViewNode('text', { value: 'All ' }),
                 ...(__d.currentFilter === 'all'
                   ? [
                       new ViewNode('span', { class: 'absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent' }, []),
@@ -192,7 +192,7 @@ TodoHome.prototype.render = function () {
                 class: `relative flex-1 py-3.5 text-sm font-medium transition-colors ${__d.currentFilter === 'active' ? 'text-accent' : ''}${__d.currentFilter !== 'active' ? 'text-muted hover:text-fg' : ''}`,
                 '@click': ((this.__h ??= {})[2] ??= (event) => this.events.setFilter('active')),
               }, [
-                new ViewNode('text', { value: 'Active' }),
+                new ViewNode('text', { value: 'Active ' }),
                 ...(__d.currentFilter === 'active'
                   ? [
                       new ViewNode('span', { class: 'absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent' }, []),
@@ -205,7 +205,7 @@ TodoHome.prototype.render = function () {
                 class: `relative flex-1 py-3.5 text-sm font-medium transition-colors ${__d.currentFilter === 'completed' ? 'text-accent' : ''}${__d.currentFilter !== 'completed' ? 'text-muted hover:text-fg' : ''}`,
                 '@click': ((this.__h ??= {})[3] ??= (event) => this.events.setFilter('completed')),
               }, [
-                new ViewNode('text', { value: 'Completed' }),
+                new ViewNode('text', { value: 'Completed ' }),
                 ...(__d.currentFilter === 'completed'
                   ? [
                       new ViewNode('span', { class: 'absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent' }, []),

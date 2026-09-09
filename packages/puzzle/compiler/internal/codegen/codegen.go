@@ -32,6 +32,12 @@
 // exactly one space back — a newline between "new" and "{ n }" separates words,
 // as it does in HTML, Vue and Svelte. `{ a }{ b }` with no whitespace between
 // them stays adjacent.
+//
+// A control-flow block ({#if}, {#for}, {#case}) breaks the run without ending
+// the line of prose, so a run edge that borders one — on either side — is
+// padded the same way: `you have { n } new\n{#if x}message{/if}` renders
+// "new message". Elements, components, markers and {#svg} are NOT control flow;
+// the element-boundary strip stands at those edges (D168).
 package codegen
 
 import (
@@ -1433,11 +1439,15 @@ func (c *compiler) branchToStr(parts []parser.Part, scope map[string]bool) strin
 func (c *compiler) processChildren(children []parser.Node, scope map[string]bool) ([]item, error) {
 	var items []item
 	var run []parser.Node
-	flush := func() error {
+	// leftBlock: the sibling immediately before the run being collected is a
+	// control-flow block, so the run's leading edge is a word boundary rather
+	// than an element boundary (see the package doc).
+	leftBlock := false
+	flush := func(rightBlock bool) error {
 		if len(run) == 0 {
 			return nil
 		}
-		val, ok, err := c.buildTextRun(run, scope)
+		val, ok, err := c.buildTextRun(run, scope, leftBlock, rightBlock)
 		run = run[:0]
 		if err != nil {
 			return err
@@ -1452,23 +1462,42 @@ func (c *compiler) processChildren(children []parser.Node, scope map[string]bool
 		case *parser.Text, *parser.Interpolation:
 			run = append(run, ch)
 		default:
-			if err := flush(); err != nil {
+			block := isControlFlow(ch)
+			if err := flush(block); err != nil {
 				return nil, err
 			}
 			items = append(items, item{node: ch})
+			leftBlock = block
 		}
 	}
-	if err := flush(); err != nil {
+	if err := flush(false); err != nil {
 		return nil, err
 	}
 	return items, nil
 }
 
+// isControlFlow reports whether n is a control-flow block — `{#if}` (which
+// `{#unless}` desugars to), `{#for}`, or `{#case}`. Such a node breaks the
+// coalesced text run, but the break is a word boundary, not an element
+// boundary: a newline between a run and an adjacent control-flow sibling
+// separates words exactly as a run-internal newline does. Elements,
+// components, markers, and `{#svg}` are deliberately NOT control flow — the
+// element-boundary strip stands there (D168).
+func isControlFlow(n parser.Node) bool {
+	switch n.(type) {
+	case *parser.If, *parser.For, *parser.Case:
+		return true
+	}
+	return false
+}
+
 // buildTextRun coalesces a run of Text/Interpolation siblings into a single
 // text-vnode value expression. Returns ("", false, nil) when the run reduces to
 // nothing (pure whitespace); a positioned error when an interpolation is an
-// object literal (SPEC §6).
-func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (string, bool, error) {
+// object literal (SPEC §6). leftBlock/rightBlock report that the run is bounded
+// by a control-flow sibling, which makes that edge a run-INTERNAL boundary for
+// padding purposes.
+func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool, leftBlock, rightBlock bool) (string, bool, error) {
 	type seg struct {
 		js         string // non-static segments
 		text       string // static segments, quoted at join time
@@ -1477,6 +1506,9 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 		gap        bool // emit a standalone ' ' before this segment
 	}
 	var segs []seg
+	// leadPad records a strip at the run's leading edge that no seg carries —
+	// a whitespace-only node dropped before anything else in the run.
+	leadPad := false
 	for _, n := range run {
 		switch t := n.(type) {
 		case *parser.Text:
@@ -1487,7 +1519,11 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 			s, keep, padL, padR := processText(t.Value)
 			if !keep {
 				// A dropped whitespace-only node still separates its neighbours.
-				if padR && len(segs) > 0 {
+				if len(segs) == 0 {
+					leadPad = leadPad || padL
+					continue
+				}
+				if padR {
 					segs[len(segs)-1].padR = true
 				}
 				continue
@@ -1519,7 +1555,26 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 			segs[i].gap = true
 		}
 	}
-	parts := make([]string, 0, len(segs)+1)
+	// A control-flow sibling breaks the run without ending the line of prose,
+	// so a stripped edge that borders one is padded exactly like an internal
+	// boundary. Element boundaries keep the strip.
+	trailGap := false
+	if leftBlock && (leadPad || segs[0].padL) {
+		if segs[0].static {
+			segs[0].text = " " + segs[0].text
+		} else {
+			segs[0].gap = true
+		}
+	}
+	if rightBlock && segs[len(segs)-1].padR {
+		last := len(segs) - 1
+		if segs[last].static {
+			segs[last].text += " "
+		} else {
+			trailGap = true
+		}
+	}
+	parts := make([]string, 0, len(segs)+2)
 	for _, s := range segs {
 		if s.gap {
 			parts = append(parts, "' '")
@@ -1529,6 +1584,9 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 		} else {
 			parts = append(parts, s.js)
 		}
+	}
+	if trailGap {
+		parts = append(parts, "' '")
 	}
 	return strings.Join(parts, " + "), true, nil
 }

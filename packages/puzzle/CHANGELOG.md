@@ -551,11 +551,15 @@ one is *not* a compile error; it silently builds a different product.
   BETWEEN members of one text run, so
   `<p>{ user.first }\n  { user.last }</p>` rendered "JohnDoe" and
   `you have { n } new\n  { unit }` rendered "newmessages" — the Stays example's
-  listing summary shipped as "4 guests ·2 bedrooms". Inside one run, a stripped
-  edge that borders another run member now gets exactly one space back, as it
-  does in HTML, Vue and Svelte; run edges (element-boundary indentation) still
-  strip, `{ a }{ b }` stays adjacent, and no golden file changed. Compiled
-  across every template in the repo, only that one Stays view differs.
+  listing summary shipped as "4 guests ·2 bedrooms". A stripped edge that
+  borders another run member — or an adjacent `{#if}` / `{#for}` / `{#case}`
+  sibling, which breaks the run without ending the line of prose — now gets
+  exactly one space back, as it does in HTML, Vue and Svelte, so
+  `you have { n } new\n  {#if x}message{/if}` renders "new message" instead of
+  "newmessage" (and the same in the other direction). Element boundaries still
+  strip (`</b>\n  text` is unchanged) and nothing is invented at an element
+  edge; `{ a }{ b }` stays adjacent. Compiled across every template in the
+  repo, five differ, each by the restored space.
 
 - **`{#for i in 1...5}` is a positioned compile error.** The range check ran
   before the `item in items` split, so the header parsed as a range whose lower

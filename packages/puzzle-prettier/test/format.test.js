@@ -202,6 +202,80 @@ describe('{#raw} blocks (D150)', () => {
 	});
 });
 
+describe('0.7.0 template grammar (D167 dotted tags, \\{ \\} escapes, the {#for} steer)', () => {
+	// Templates ride through verbatim, so every case here is really the same
+	// assertion: none of the 0.7.0 additions may desync a section boundary or be
+	// "helpfully" reformatted. The formatter is not a validator either — an
+	// invalid name is the compiler's error to report, not a reason to throw.
+	it('preserves the dotted family fixture byte-for-byte and still formats script + style', async () => {
+		const input = read('grammar-0-7.pzl');
+		const out = await format(input);
+		const a = sectionMap(input);
+		const b = sectionMap(out);
+		expect(b['puzzle-view'].inner).toBe(a['puzzle-view'].inner);
+		expect(b['puzzle-view'].openTag).toBe(a['puzzle-view'].openTag);
+		expect(Object.keys(b).sort()).toEqual(['puzzle-view', 'script', 'style']);
+		// The grammar specimens survive verbatim.
+		expect(out).toContain('<Frame.Header>{ title | capitalize }</Frame.Header>');
+		expect(out).toContain('<Frame.Footer/>');
+		expect(out).toContain('A literal \\{ stays a brace \\}, and \\{{ count }\\} wraps an interpolation in');
+		expect(out).toContain('{#for 1...5, i}');
+		// …and the sections around it DID get reformatted, proving the boundaries
+		// landed where they should.
+		expect(out).toContain('import { PuzzleView } from "@magic-spells/puzzle";');
+		expect(out).toContain('.note {\n  color: red;\n}');
+	});
+
+	it('round-trips a dotted tag, open/close and self-closing', async () => {
+		const src =
+			'<puzzle-view><Frame><Frame.Header>hi</Frame.Header><Frame.Body.Inner/></Frame></puzzle-view>\n';
+		expect(await format(src)).toBe(src);
+	});
+
+	it('round-trips an INVALID capitalized name instead of throwing', async () => {
+		// <Frame-x>, <Frame:Wrapper>, <Frame.> and <Slot.Foo> are positioned
+		// compile errors (D167). A formatter that rejected them would be stricter
+		// than the splitter it mirrors and would refuse to format a file mid-edit.
+		for (const tag of ['<Frame-x/>', '<Frame:Wrapper/>', '<Frame./>', '<Slot.Foo/>']) {
+			const src = `<puzzle-view><div>${tag}</div></puzzle-view>\n`;
+			expect(await format(src), tag).toBe(src);
+		}
+	});
+
+	it('round-trips \\{ \\} escapes, alone and adjacent to an interpolation', async () => {
+		for (const body of [
+			'a literal \\{ brace \\} is not a group',
+			'\\{{ name }\\} wraps the interpolation',
+			'{ name }\\} trailing escape',
+			'\\{#if not-a-block \\}',
+		]) {
+			const src = `<puzzle-view><p>${body}</p></puzzle-view>\n`;
+			expect(await format(src), body).toBe(src);
+		}
+	});
+
+	it('finds the section close with an escaped brace and a regex in <script>', async () => {
+		// The runaway shape: read `\{` as a real '{' and the group scan opens one
+		// brace too early, swallows </puzzle-view>, and closes on a later '}'.
+		const src =
+			'<puzzle-view><p>\\{{ name }\\}</p></puzzle-view>\n<script>\nconst re = /}/;\n</script>\n';
+		const out = await format(src);
+		const b = sectionMap(out);
+		expect(Object.keys(b).sort()).toEqual(['puzzle-view', 'script']);
+		expect(b['puzzle-view'].inner).toBe('<p>\\{{ name }\\}</p>');
+	});
+
+	it('does not mangle either {#for} range spelling', async () => {
+		// {#for 1...5, i} is the documented form; {#for i in 1...5} is a
+		// positioned compiler error (0.7.0) that the formatter must still hand
+		// back untouched, so the steer reads against what the author wrote.
+		for (const header of ['{#for 1...5, i}', '{#for i in 1...5}', '{#for item in items}']) {
+			const src = `<puzzle-view><ul>${header}<li>{ i }</li>{/for}</ul></puzzle-view>\n`;
+			expect(await format(src), header).toBe(src);
+		}
+	});
+});
+
 describe('lexer table parity with the compiler', () => {
 	it('treats ++ / -- as update operators so a following / is division', async () => {
 		// LexSkip consumes BOTH bytes of ++/--, preserving the incoming state, so

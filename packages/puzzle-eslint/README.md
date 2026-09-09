@@ -97,7 +97,11 @@ export default [
   [stylelint](https://stylelint.io/) for CSS.
 - **Template linting (`<puzzle-view>` / `<puzzle-skeleton>` markup) is future
   work.** This plugin lints the `<script>` body and validates section
-  structure only; it does not yet lint the Puzzle template grammar.
+  structure only; it does not yet lint the Puzzle template grammar. The 0.7.0
+  additions — D167 dotted family tags (`<Frame.Header>`), the `\{` / `\}` brace
+  escape, and the `{#for}` range spellings — split correctly and pass through
+  unjudged; a name the compiler rejects (`<Frame-x>`, `<Slot.Foo>`) is the
+  compiler's error to report, not this plugin's.
 - A `.pzl` file with no `<script>` section produces no JS blocks (but section
   errors are still reported).
 

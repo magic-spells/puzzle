@@ -17,10 +17,23 @@
   <main class="py-6">
     <Slot/>
   </main>
+
+  <!-- Grammar corner: the lab's specimen of the 0.7.0 template additions. -->
+  <footer class="max-w-6xl mx-auto px-6 pb-8">
+    <Frame>
+      <Frame.Header>grammar corner</Frame.Header>
+      <Frame.Body>
+        Dotted family tags (D167) render this box. A backslash escapes a brace,
+        so \{ seedHex \} is literal text while { seedHex } interpolates — and
+        \{{ seedHex }\} wraps the interpolation in real braces.
+      </Frame.Body>
+    </Frame>
+  </footer>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+import Frame from '../components/Frame/index.js';
 import { STRESS_SEED } from '../scenario-utils.js';
 
 export default class StressLayout extends PuzzleView {
