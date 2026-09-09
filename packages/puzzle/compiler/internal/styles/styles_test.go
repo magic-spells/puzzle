@@ -1,6 +1,7 @@
 package styles
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -62,9 +63,95 @@ func TestNpxRunnerMissingToolchain(t *testing.T) {
 		t.Skip("Tailwind CLI is runnable in this environment; missing-toolchain path not exercised")
 	}
 	msg := err.Error()
-	for _, want := range []string{"Tailwind pipeline is declared", "could not be run", "Attempts:"} {
+	for _, want := range []string{"Tailwind pipeline is declared", "no Tailwind CLI run succeeded", "Attempts:"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("missing-toolchain error should contain %q, got:\n%s", want, msg)
 		}
+	}
+}
+
+// failingCLI returns a fake ResolvedCLI standing in for a Tailwind CLI that
+// STARTS, prints a real diagnosis to stderr, and exits 1 — the shape of an
+// unresolvable `@import "@magic-spells/…/css"` (a dangling file: dependency in
+// CI). Run appends -i/-o/--minify after Args; with `sh -c <script> <arg0> ...`
+// those land as ignored positional params.
+func failingCLI(script string) ResolvedCLI {
+	return ResolvedCLI{
+		Name: "fake-tailwind",
+		Exec: "sh",
+		Args: []string{"-c", script, "fake-tailwind"},
+	}
+}
+
+// TestRunEchoesStderrOfFailedCLI pins the regression this package shipped: the
+// old diagnostic reported only the FIRST non-empty stderr line, which for
+// Tailwind v4 is its "≈ tailwindcss v4.3.3" banner — so a build that failed on
+// an unresolvable @import reported four identical version strings and claimed
+// the CLI "could not be run". The real error must survive into the message.
+func TestRunEchoesStderrOfFailedCLI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell CLI is unix-only")
+	}
+	script := `echo "~ tailwindcss v4.3.3" >&2; echo "Error:" >&2; echo "| Error: Can't resolve '@magic-spells/dropdown-panel/css'" >&2; exit 1`
+	_, err := NpxRunner{}.Run(RunOptions{
+		AppRoot: t.TempDir(),
+		CLIs:    []ResolvedCLI{failingCLI(script)},
+	})
+	if err == nil {
+		t.Fatal("expected Run to fail when the only CLI exits non-zero")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"fake-tailwind: exit status 1",
+		"Can't resolve '@magic-spells/dropdown-panel/css'",
+		"~ tailwindcss v4.3.3",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("failed-CLI error should contain %q, got:\n%s", want, msg)
+		}
+	}
+	// The banner must not be the ONLY thing reported (the old behavior).
+	if strings.Contains(msg, "could not be run") {
+		t.Errorf("a CLI that ran and exited non-zero must not be reported as unrunnable:\n%s", msg)
+	}
+}
+
+// TestRunStderrTailIsCapped keeps a runaway CLI from burying the build output:
+// only the last stderrTailLines lines survive, with a marker for the rest.
+func TestRunStderrTailIsCapped(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell CLI is unix-only")
+	}
+	_, err := NpxRunner{}.Run(RunOptions{
+		AppRoot: t.TempDir(),
+		CLIs:    []ResolvedCLI{failingCLI(`for i in $(seq 1 60); do echo "line $i" >&2; done; exit 1`)},
+	})
+	if err == nil {
+		t.Fatal("expected Run to fail")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "line 60") {
+		t.Errorf("the tail of stderr must survive, got:\n%s", msg)
+	}
+	if strings.Contains(msg, "line 1\n") {
+		t.Errorf("the head of a long stderr should be trimmed, got:\n%s", msg)
+	}
+	if !strings.Contains(msg, "earlier stderr line(s) omitted") {
+		t.Errorf("truncation should be marked, got:\n%s", msg)
+	}
+}
+
+// TestRunReportsExecErrorWhenNothingRan keeps the toolchain-missing path
+// intact: a CLI that never starts has no stderr, so the exec error is reported.
+func TestRunReportsExecErrorWhenNothingRan(t *testing.T) {
+	_, err := NpxRunner{}.Run(RunOptions{
+		AppRoot: t.TempDir(),
+		CLIs:    []ResolvedCLI{{Name: "bogus", Exec: "puzzle-nonexistent-binary-xyz"}},
+	})
+	if err == nil {
+		t.Fatal("expected Run to fail when the CLI cannot be started")
+	}
+	if !strings.Contains(err.Error(), "bogus: ") {
+		t.Errorf("expected the exec error under the attempt name, got:\n%s", err)
 	}
 }

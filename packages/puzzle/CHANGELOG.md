@@ -1025,6 +1025,16 @@ one is *not* a compile error; it silently builds a different product.
   "a `data()` that never resolves", which is now the only thing that can cause
   it.
 
+- **A failing Tailwind build reports the CLI's error, not its version banner.**
+  The runner kept only the FIRST non-empty stderr line per attempt, and Tailwind
+  v4 opens stderr with `≈ tailwindcss v4.3.3` — so a real failure (an
+  unresolvable `@import`, a CSS parse error) printed four identical version
+  strings under "the Tailwind CLI could not be run", which was also untrue: the
+  CLI ran fine and exited non-zero. Each attempt now names its exec error and
+  echoes the tail of that attempt's stderr, indented, with a marker when a long
+  stderr is trimmed. The headline says no run succeeded and points at the errors
+  below.
+
 ## 0.6.0 — 2026-08-15
 
 ### Fixed
