@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@magic-spells/puzzle": "^0.7.0"
+    "@magic-spells/puzzle": "^0.7.1"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.14",

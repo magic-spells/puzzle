@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "Puzzle DevTools",
-	"version": "0.7.0",
+	"version": "0.7.1",
 	"description": "Inspect Puzzle framework apps: view tree, store records, subscriptions, and routing.",
 	"minimum_chrome_version": "111",
 	"devtools_page": "devtools.html",
