@@ -27,19 +27,33 @@ The Puzzle CLI installs pieces straight from this registry:
 puzzle add piece button select
 ```
 
-That copies `Button.pzl` and `Select.pzl` into `app/components/ui/` (plus any shared
-`lib/` helpers and sibling pieces they depend on, resolved transitively), copies the
-`pieces.css` design tokens into your app if you don't have them yet, and prints —
-never auto-runs — any npm install you need. Existing files are never overwritten
-unless you pass `--overwrite`, and a `pieces.lock` of content hashes is kept so a
-future `diff`/`update` command can tell upstream changes from your local edits.
+That copies `Button.pzl` and the `Select/` family (`Select.pzl`, `Option.pzl`,
+`Label.pzl`, `Divider.pzl` and an `index.js` barrel) into `app/components/ui/`,
+path-preserving (plus any shared `lib/` helpers and sibling pieces they depend on,
+resolved transitively), copies the `pieces.css` design tokens into your app if you
+don't have them yet, and prints — never auto-runs — any npm install you need.
+Existing files are never overwritten unless you pass `--overwrite`, and a
+`pieces.lock` of content hashes is kept so a future `diff`/`update` command can tell
+upstream changes from your local edits.
+
+A **family** piece imports as one unit and invokes with dot notation:
+
+```js
+import Select from '@/components/ui/Select';
+```
+
+```html
+<Select value={ value } @change={ setValue }>
+  <Select.Option value="a">Option A</Select.Option>
+</Select>
+```
 
 You can also just copy files from `registry/ui/` by hand — every piece is plain
 source with a `piece.json` manifest describing its files and dependencies.
 
 ## What's inside
 
-**96 pieces**, from primitives (Button, Field, Select, Checkbox, Switch) through
+**97 pieces**, from primitives (Button, Field, Select, Checkbox, Switch) through
 overlays (Dialog, Sheet, Popover, DropdownMenu, Command), data display (DataTable,
 Timeline, Tree, StatCard), charts (LineChart, BarChart, AreaChart, PieChart,
 Sparkline), rich editing (RichTextEditor, MarkdownEditor), and app-scale composites
@@ -53,9 +67,12 @@ cd demo && npm install && npm run dev   # http://localhost:3070
 
 Every piece is a native Puzzle component compiling to plain semantic HTML with ARIA
 and Tailwind utility classes against the semantic tokens in
-[`registry/theme/pieces.css`](./registry/theme/pieces.css) — no custom elements, no
-hex colors, controlled-component APIs throughout. Three alternate themes (warm,
-void, dim) ship alongside the default in [`registry/theme/`](./registry/theme/).
+[`registry/theme/pieces.css`](./registry/theme/pieces.css) — no hex colors,
+controlled-component APIs throughout. Sixteen pieces are thin wrappers around a
+`@magic-spells` web component (the sheets, the dialogs, the dropdown-panel family,
+Tabs, Select, …); those declare the package in their `piece.json` and the CLI prints
+the `npm install` for you. Three alternate themes (warm, void, dim) ship alongside
+the default in [`registry/theme/`](./registry/theme/).
 
 ## License
 

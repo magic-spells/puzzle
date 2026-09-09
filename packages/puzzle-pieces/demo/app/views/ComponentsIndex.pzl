@@ -7,7 +7,7 @@
       <header class="mb-8 max-w-3xl">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Components</h1>
         <p class="mt-2 text-body">
-          All 96 pieces in the registry. Every one is a native Puzzle component you copy
+          All { pieceCount } pieces in the registry. Every one is a native Puzzle component you copy
           into your app — click through for live examples and usage.
         </p>
       </header>
@@ -35,7 +35,7 @@ import { COMPONENTS } from '../docs/nav.js';
 // nav.js config as the sidebar (descriptions come from each piece.json).
 export default class ComponentsIndex extends PuzzleView {
   data(params, props) {
-    return { components: COMPONENTS };
+    return { components: COMPONENTS, pieceCount: COMPONENTS.length };
   }
 }
 </script>

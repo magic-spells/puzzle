@@ -73,6 +73,46 @@ notes:
       would otherwise satisfy the check from local files); the compatibility-fallback notice is a
       failure and pieces.lock's resolved `registry` is the authoritative assertion. Both predicates
       live in scripts/release-checks.mjs with tests/release-checks.test.js.
+  - kind: state
+    text: >-
+      Truthing pass at b821e2c (PRs #123–#126 merged). Three corrections to the body above, which
+      was written before the final round:
+
+
+      (1) SIZES. The body's "21.4 KB gzip for hello-world and 24.4 KB for todos" is superseded. PR
+      #126's size cleanups took hello-world 22,379 → 21,301 and todos 25,445 → 24,359 bytes gzip, so
+      the shipping figures are **20.8 KB / 23.8 KB** — what the README banner and `measure-size
+      --check` now assert, and what CLAUDE.md records.
+
+
+      (2) WINDOWS-ON-ARM. The body's "Windows-on-ARM runs the x64 binary under emulation, so there
+      is deliberately no win32-arm64 package" reads as if emulation alone covers it; the note below
+      records that this was a claim the code did not honor, and how it was fixed. Still five
+      platform packages, but the coverage comes from three places agreeing — the shim's
+      PLATFORM_PACKAGES maps win32-arm64 → @magic-spells/puzzle-win32-x64, that manifest declares
+      `cpu: ["x64","arm64"]`, and `platformPackageNameFor` folds windows/arm64 to the same package —
+      not from emulation.
+
+
+      (3) LATE ADDITIONS not in the body's themes. **v1.80 component families** (D167): a component
+      tag is validated as a member path and `<Frame.Wrapper>` emits that member expression verbatim;
+      a family is a directory of one-class-per-file members behind a plain JS barrel, scaffolded by
+      `generate component --family`, and `add piece` installs compound pieces path-preserving. Then
+      the **0.7.0 final review** (PRs #124–#126): optional-attribute defaults across the pieces
+      registry; D168 run-internal text whitespace; the `{#for i in 1...5}` steering error; guard
+      redirects inheriting the denied verb (D87) and nav #0 moving no focus (D93); save
+      reconciliation ordered against in-flight reads (D138); `sort` comparing Date keys
+      chronologically; authored SVG `<text>` rendering and the `{#svg}` seed/markup replacement
+      boundary (D46); and the size cleanups themselves (dev-only diagnostics behind
+      `__PUZZLE_DEV__`, one refresh funnel, title-only head sync).
+  - kind: state
+    text: >-
+      Folded in: the note above is spent. "What's in it" now states the shipping facts directly —
+      20.8 / 23.8 KB gzip, the Windows-on-ARM coverage as the three-place fold (no emulation-alone
+      claim), and the late additions (D167 component families, the D168 whitespace rule, the
+      for-range steer, the save/read ordering, the Date key sort, the guard-redirect verb and nav-#0
+      focus gate, SVG `<text>`, the size cleanups, and the pieces optional-attribute defaults). Read
+      the body, not that note, for what 0.7.0 contains.
 ---
 
 # 0.7.0 — reads take care of themselves
@@ -150,6 +190,8 @@ router, the compiler, and the CLI.
 
 ## What's in it
 
+
+
 **Breaking (all three from D161, and only for apps passing the `/adapter`
 capability):**
 
@@ -188,6 +230,38 @@ capability):**
   `SNIPPET_TAG`/`isSnippet` join the
   public type surface, and `__PUZZLE_HAS_SNIPPETS__` keeps non-users at zero
   bytes (users pay roughly 50 B gzip).
+- **Component families** (D167, v1.80): related components import as one unit
+  and invoke with dot notation —
+  `<Frame><Frame.Wrapper><Frame.Content>…</Frame.Content></Frame.Wrapper></Frame>`.
+  A capitalized tag is validated as `Ident('.'Ident)*`, each segment
+  `[A-Za-z_][A-Za-z0-9_]*`, which is a bug fix as much as a feature: the tag
+  text has always been emitted verbatim as the ViewNode tag expression, so a
+  dotted tag already compiled, but nothing validated the name and a capitalized
+  `<Frame-x>` or `<Frame.>` compiled cleanly into syntactically broken
+  JavaScript. Those are positioned compile errors now, as is a dotted name
+  rooted at a reserved marker (`<Slot.Foo>`). Lowercase tags are untouched, so
+  custom elements keep their dashes, and `{#raw}` bodies still take any tag
+  literally. Codegen is unchanged — a dotted tag resolves lexically against
+  module scope, with no registry and no import inspection. The family itself is
+  a convention, not a mechanism: a directory of `.pzl` files (still strictly one
+  class per file) beside a plain JS `index.js` doing
+  `export default Object.assign(Frame, { Wrapper, Content })` plus named
+  exports, so both import styles work.
+  `puzzle generate component Frame --family Wrapper,Content` scaffolds the
+  directory, one stub per member, and the barrel; members are PascalCase- and
+  collision-validated, `--family` on a non-component type is an error, and the
+  scaffold is all-or-nothing (`--force` rewrites only the family's own files).
+  Without `--family`, `generate component` output is byte-identical to before.
+- **`puzzle add piece` installs compound pieces.** A manifest whose `files`
+  entries carry a directory (`"NavigationMenu/Item.pzl"`) is a D167 family: the
+  members are copied **path-preserving** under the manifest's `targetDir`,
+  intermediate directories are created, and `pieces.lock` keys each member by
+  its full app-relative path. The directory in `files` is the only signal — no
+  new manifest field, no registry schema bump. Manifest paths are validated as
+  clean relative slash paths (no `..`, absolute, `./`, backslash, or empty
+  segments), rejected by piece and entry name before anything is written; the
+  overwrite pre-flight stays all-or-nothing and names the full nested path of a
+  conflict.
 - **`puzzle check`** (D165): the new CLI command type-checks `.pzl` files with
   the app's own installed TypeScript. It emits virtual files under
   `.puzzle/check/src/` — a `lang="ts"` script verbatim plus a generated wrapper
@@ -216,10 +290,15 @@ capability):**
   `optionalDependency` like the other four. The packages are keyed the way Node
   spells the platform — `win32`, not Go's `windows` — because the bin shim looks
   them up by `process.platform`/`process.arch`; `puzzle upgrade` derived that
-  name in Go and had it wrong until now. Windows-on-ARM runs the x64 binary
-  under emulation, so there is deliberately no `win32-arm64` package. The
-  `puzzle dev` single-key shortcuts stay Unix-only and are simply absent there;
-  Ctrl-C still stops the server.
+  name in Go and had it wrong until now. Windows-on-ARM is covered by that same
+  package rather than a sixth one, and the coverage lives in three places that
+  must agree: the shim's `PLATFORM_PACKAGES` maps `win32-arm64` to
+  `@magic-spells/puzzle-win32-x64`, that manifest declares
+  `cpu: ["x64", "arm64"]` so npm installs it on a native-ARM64 Node, and
+  `platformPackageNameFor` folds `windows/arm64` to the same package so
+  `puzzle upgrade` names an install that exists. The fold is in the lookup, not
+  the matrix. The `puzzle dev` single-key shortcuts stay Unix-only and are
+  simply absent there; Ctrl-C still stops the server.
 
 **Changed:**
 
@@ -228,6 +307,22 @@ capability):**
   function gets its own message steering to `lazy()`. A value that is neither
   used to fail later, at construction on first navigation; it now fails from
   the `Router` constructor.
+- **Runtime size cleanups.** Five behavior-preserving cleanups take the
+  production bundles from 21.9 KB to **20.8 KB gzip** (hello-world) and from
+  24.8 KB to **23.8 KB** (todos), about 4.8%. The last ungated warn-once
+  diagnostics (animation specs, scroll-trigger options, null and duplicate list
+  keys, the relationship setter) sit behind the `__PUZZLE_DEV__` probe, so their
+  message strings, once-state, and the per-patch duplicate-key bookkeeping
+  tree-shake out of production; the Store's dev-only schema assertions moved
+  from class methods, which esbuild never removes, into one module function;
+  three `new Router()` config errors keep their diagnosis in production and
+  build their how-to-fix tails only in development; six copies of the
+  fire-and-forget refresh try/catch in `PuzzleView` collapsed into one
+  `#refreshContained`; and the browser resolves only `title` per navigation
+  instead of walking the chain for all four head fields, which stay SSG-only.
+  Development output is unchanged. The one visible difference: under
+  `build.dropConsole: false`, those five warnings no longer print in a
+  production build — the posture every other runtime diagnostic already had.
 
 **Fixed — data layer:**
 
@@ -246,6 +341,17 @@ capability):**
   the fault path gates on the model's own declared verb or endpoint.
 - Fixture mock responses normalize like real ones, and a mocked non-OK response
   rejects a custom `delete` instead of passing silently.
+- An acknowledged save can no longer be rolled back by an older read. Reads are
+  ordered by a dispatch generation (D138) but save reconciliation stamped
+  nothing, so an edit → slow `loadMany` → fast PUT let the stale GET land last,
+  revert the acknowledged field with the record still marked synced, and the
+  next `save()` write the stale value back to the server. A save now takes a
+  generation beside its revision snapshot and stamps the record on every success
+  path, never lowering a stamp a later read set.
+- `sort` orders Date keys chronologically. The comparator handled
+  number/number and fell back to string comparison for everything else, so a
+  `date()` field sorted by its weekday-first string form. Two Dates compare by
+  timestamp; an Invalid Date times out to `NaN` and sorts last.
 
 **Fixed — views and router:**
 
@@ -272,6 +378,22 @@ capability):**
   `<a href="#faq">` no longer re-runs every ancestor's `data()`.
 - `date(null)`, `timeago(null)`, and `in_timezone(null)` render empty instead of
   the epoch.
+- A guard redirect inherits the denied navigation's verb (D87). A string verdict
+  always re-entered through `replace()`, so a denied **push** — which has written
+  no history entry yet — overwrote the entry the user was standing on: Back from
+  `/login` skipped the origin page, and after the documented post-login
+  `replace(redirect)` Back from the protected page left the site. A push redirect
+  is now a `push()` that mints the destination's own entry; a pop or navigation
+  #0 redirect still replaces. The denied URL never enters history either way.
+- A guard redirect on navigation #0 moves no focus and announces nothing. The
+  gate was the verb flags, so a first-load redirect (a `replace()` with nothing
+  committed) stole focus on first paint; it is now "nothing committed yet"
+  (`from == null`), which keeps a user push that supersedes a slow navigation #0
+  focusing normally (D93).
+- An authored SVG `<text>` element renders, and a `{#svg}` seed and hand-written
+  `<svg>` markup sharing one conditional position replace rather than patch —
+  string-versus-array children are part of node identity, like the island flip
+  (D46).
 
 **Fixed — compiler, prerender, and CLI:**
 
@@ -299,11 +421,34 @@ capability):**
 - The import scan can no longer spin `puzzle build` forever on a NUL byte.
 - The darwin CLI binaries carry an `LC_UUID` load command; the build floor is
   Go 1.24.
+- Text and interpolations that wrap onto separate lines keep the space between
+  them (D168). The whitespace strip is an element-boundary rule, but it also ran
+  at the boundary BETWEEN members of one coalesced text run, so
+  `<p>{ user.first }` / `{ user.last }</p>` rendered "JohnDoe" and
+  `examples/stays` shipped "4 guests ·2 bedrooms". Inside one run, a stripped
+  edge bordering another run member gets exactly one space back, as it does in
+  HTML, Vue and Svelte; run edges still strip, `{ a }{ b }` stays adjacent, and
+  no golden file changed.
+- `{#for i in 1...5}` is a positioned compile error. The range check ran before
+  the `item in items` split, so the header parsed as a range whose lower bound
+  was the text `i in 1` and compiled green into JavaScript that threw
+  `Cannot use 'in' operator` on the first render. The parser steers to
+  `{#for 1...5, i}`; spread and call collections parse as before.
+- The `\{` / `\}` brace escape is documented. It always worked in text and
+  attribute values, but the docs named only `{#raw}` — which is not allowed
+  inside an attribute — so `pattern="[0-9]{5}"` silently compiled `{5}` as an
+  interpolation.
 
-Sizes grew with the settle loop, again with `lazy()`, and a little with
-snippets: **21.4 KB gzip for hello-world and 24.4 KB for todos**, against
-19.6 / 22.7 in 0.6.0. The README banner was regenerated at close-out and now
-matches those figures, so `release:prep`'s size check passes.
+**Fixed — pieces registry (shipping in the version-locked `0.7.0`):** every
+optional attribute on a form-style piece carries an explicit default, so a
+consumer app no longer sees missing-attribute warnings from Field, InputGroup,
+NumberField, PasswordField, SearchField, Textarea, MarkdownEditor,
+RichTextEditor, and Rating; Rating's read-only stars are keyed.
+
+Production sizes at ship: **20.8 KB gzip for hello-world and 23.8 KB for
+todos**, against 19.6 / 22.7 in 0.6.0 — the settle loop, `lazy()`, and snippets
+net of the size cleanups above. The README banner is regenerated by
+`release:prep`'s `measure-size --check`, so a stale figure fails the release.
 
 ## Upgrade notes
 
@@ -343,11 +488,13 @@ except for the shared fixes above.
 
 ## Still open before ship
 
+
+
 The matching `@magic-spells/puzzle-pieces` 0.7.0 publish (version-locked — it
 must land at or before the CLI release), `release:prep`, and the remaining
 release-checklist items on this card's close-out note: the editor grammars
 (vscode/sublime/zed) gaining the `Snippet` marker, and the site's llms.txt +
 playground go-live with a re-vendored skill file. The prose sweep is done —
 the CHANGELOG's 0.7.0 section is complete, `DOC-RELEASE-SURFACE` describes the
-0.7.0 surface, the SPEC carries §63 (`puzzle check`) and §64 (snippets), and
-the README size banner is current by measurement.
+0.7.0 surface, the SPEC carries §63 (`puzzle check`), §64 (snippets), and §65
+(component families), and the README size banner is current by measurement.

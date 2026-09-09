@@ -1140,6 +1140,43 @@ describe('Router — guard-redirect budget resets per navigation (Fix 2, D87)', 
 		expect(router.current.path).toBe('/'); // nothing committed — stayed put
 		errSpy.mockRestore();
 	});
+
+	// A guard whose verdict is the very path being denied — the inherited-guard
+	// mistake (a guard on the parent bounces to '/login', and '/login' is a child
+	// that inherits it). Since the redirect inherits the denied PUSH verb, it
+	// re-enters through push() while the denied navigation still owns
+	// #pendingNavPath, so push()'s in-flight double-click guard would hand the
+	// redirect that navigation's OWN promise and #navigate's `await` would wait on
+	// itself forever. push() exempts a guard re-entry (#guardRedirecting) so the
+	// self-redirect supersedes normally and trips the redirect limit — a loud,
+	// diagnosable error instead of a navigation that never settles.
+	it('a guard redirecting to the path it denies trips the limit instead of hanging', async () => {
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/login',
+				name: 'login',
+				view: AboutView,
+				layout: DefaultLayout,
+				guard: () => '/login',
+			},
+		];
+		const { router } = await boot(routes);
+
+		const settled = await Promise.race([
+			router.push('/login').then(() => 'settled'),
+			delay(500).then(() => 'hung'),
+		]);
+
+		expect(settled).toBe('settled');
+		expect(errSpy).toHaveBeenCalledWith(
+			'[puzzle] navigation guard redirect limit exceeded (10) — staying on the current route'
+		);
+		expect(router.current.path).toBe('/'); // nothing committed — stayed put
+		expect(location.pathname).toBe('/');
+		errSpy.mockRestore();
+	});
 });
 
 describe('Router — matching', () => {

@@ -136,6 +136,19 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 				regressions.push(`${file}: ${res.stderr.trim().split('\n')[0]}`);
 				continue;
 			}
+			if (file.endsWith('grammar-0-7.pzl')) {
+				// 0.7.0 grammar: the dotted family tags reach codegen as member
+				// expressions and the \{ \} escapes as literal braces in the text
+				// run — identically before and after formatting.
+				for (const literal of [
+					'new ViewNode(Frame.Header',
+					'new ViewNode(Frame.Footer',
+					'A literal { stays a brace }, and {',
+				]) {
+					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);
+					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
+				}
+			}
 			if (file.endsWith('raw-block.pzl')) {
 				// The raw bodies reach codegen byte-identically: same literal text
 				// nodes before and after formatting, braces and all.

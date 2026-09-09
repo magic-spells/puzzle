@@ -34,7 +34,7 @@ client runtime and the CLI:
 npm install -D @magic-spells/puzzle
 ```
 
-> **Status: 0.6.0** — the current release. The browser runtime, Go
+> **Status: 0.7.0** — the current release. The browser runtime, Go
 > compiler, static generator, and CLI are implemented and covered by Go,
 > Vitest/jsdom, type, package, example, and browser-focused checks.
 >
@@ -49,6 +49,8 @@ npm install -D @magic-spells/puzzle
 ## Features
 
 - **Single-file components** (`.pzl`) with template + scripts + styles — optional TypeScript (`<script lang="ts">`), scoped styles (`<style scoped>`), skeletons, comments, slots, and refs
+- **Snippets** — `<Snippet fits="row" user>…</Snippet>` hands a component a template it can stamp repeatedly with its own data; parameters are declared as bare attributes, and a snippet forwards through a wrapper's `<Children/>`
+- **Component families** — related components import as one unit and invoke with dot notation (`<Frame.Wrapper>`), scaffolded by `puzzle generate component Frame --family Wrapper,Content`
 - **Reactive data** with automatic view updates
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
@@ -56,11 +58,13 @@ npm install -D @magic-spells/puzzle
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
 - **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
+- **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout the first time a navigation needs it, guards first
 - **Virtual DOM** with efficient diffing and pk-aware list keying
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
 - **App-level error handling** — one compiled `errorView` replaces a failed view in place with `{ error, info, retry }`; the `onError` hook funnels every framework-contained error
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
+- **Type-checked templates** — `puzzle check` runs the app's own TypeScript over every `.pzl`, so a typo in `{ user.nmae }` is a type error reported at its real line and column
 - **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
 - **[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magic-spells.github.io/puzzle-pieces/))
 
@@ -146,6 +150,18 @@ my-puzzle-app/
 <p>{ user.name }</p>
 <h1>{ title | capitalize }</h1>
 ```
+
+A literal brace is escaped with a backslash — `\{` and `\}` — anywhere an
+expression could appear, attribute values included:
+
+```html
+<input pattern="[0-9]\{5\}" />
+<p>Use \{ name \} to interpolate.</p>
+```
+
+For a whole block of literal braces (JSON, CSS, a syntax example) use
+`{#raw}…{/raw}` instead — but `{#raw}` is not allowed inside an attribute
+value, so the escape is the only way out there.
 
 ### Comments
 
@@ -432,19 +448,23 @@ Wrapper,Content` scaffolds the whole directory, barrel included.
 
 ## Monorepo
 
-The framework lives at the repo root. `packages/` holds what releases in
-lockstep with it:
+The framework lives at `packages/puzzle` in the `magic-spells/puzzle`
+repository; the repo root is a private shell whose scripts delegate here.
+`packages/` holds everything that releases in lockstep with it:
 
-- [`packages/puzzle-pieces`](packages/puzzle-pieces) — the official component
+- [`packages/puzzle-pieces`](../puzzle-pieces) — the official component
   library (published to npm as `@magic-spells/puzzle-pieces`)
-- [`packages/puzzle-devtools`](packages/puzzle-devtools) — the Chrome DevTools
+- [`packages/puzzle-devtools`](../puzzle-devtools) — the Chrome DevTools
   extension (ships as an extension zip, not npm)
+- [`packages/puzzle-eslint`](../puzzle-eslint) and
+  [`packages/puzzle-prettier`](../puzzle-prettier) — the `.pzl` lint and format
+  plugins
 
 Editor grammars live in their own repos — see Syntax Highlighting below.
 
 ## Puzzle Pieces
 
-[Puzzle Pieces](packages/puzzle-pieces) is the official component library for
+[Puzzle Pieces](../puzzle-pieces) is the official component library for
 Puzzle — ready-made `.pzl` components (and their styles) you can drop into any
 app. It lives in this monorepo and releases in lockstep with the framework:
 
@@ -453,10 +473,15 @@ puzzle add piece <name>
 ```
 
 Pieces are fetched from the `@magic-spells/puzzle-pieces` npm package,
-version-matched to your CLI — puzzle 0.6.x pulls the newest pieces 0.6.x — so a
+version-matched to your CLI — puzzle 0.7.x pulls the newest pieces 0.7.x — so a
 piece is always authored for the compiler installing it. `--pieces-version`
 pins an exact release; `--registry` accepts `npm:pkg[@version]`, a local
 directory, or an http(s) URL.
+
+A piece that is a component family installs path-preserving: its members land in
+their own directory under the manifest's target
+(`app/components/ui/NavigationMenu/Item.pzl`), barrel included, and
+`pieces.lock` records each member by its full app-relative path.
 
 Preview every piece in the live catalog at
 [magicspells.io/puzzle-pieces](https://magicspells.io/puzzle-pieces).
@@ -500,6 +525,9 @@ puzzle build --static
 
 # Prerendered pages plus the SPA bundle the router takes over
 puzzle build --hybrid
+
+# Type-check .pzl scripts and template expressions with the app's own TypeScript
+puzzle check
 
 # Serve an existing build the way a production host will
 puzzle preview
@@ -584,7 +612,14 @@ is how you refresh it:
 `puzzle upgrade` offers the same refresh automatically after it installs a new
 version.
 
-The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §13): `init`, `generate`, `add`, `doctor`, and `info` join `dev` and `build`.
+`puzzle check` type-checks every `.pzl` file with the TypeScript the app itself
+has installed — Puzzle never installs one for you. A `lang="ts"` script is
+checked as written; every template expression is re-emitted as typed statements,
+so a typo in `{ user.nmae }` is a type error reported at its real `.pzl` line and
+column. A plain-JavaScript component gets its template expressions checked and
+its script body left alone.
+
+The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §13): `init`, `generate`, `add`, `check`, `doctor`, and `info` join `dev` and `build`.
 
 ```bash
 # Scaffold a project; omitting the name prompts only in an interactive terminal

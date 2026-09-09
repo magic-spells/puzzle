@@ -10,7 +10,7 @@
         </p>
         <div class="mt-6 flex flex-wrap gap-3">
           <Button variant="primary" @press={ browse }>Browse components</Button>
-          <Badge variant="outline">96 pieces</Badge>
+          <Badge variant="outline">{ pieceCount } pieces</Badge>
         </div>
       </header>
 
@@ -73,6 +73,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import Button from '@/components/ui/Button.pzl';
 import Badge from '@/components/ui/Badge.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import { COMPONENTS } from '../docs/nav.js';
 
 const tokensSnippet = `/* app/styles/styles.css — after @import "tailwindcss"; */
 @import './pieces.css';`;
@@ -88,7 +89,7 @@ const useMarkup = `<Button variant="primary" @press={ save }>Save changes</Butto
 
 export default class Introduction extends PuzzleView {
   data(params, props) {
-    return { tokensSnippet, addSnippet, useImport, useMarkup };
+    return { tokensSnippet, addSnippet, useImport, useMarkup, pieceCount: COMPONENTS.length };
   }
 
   events = {

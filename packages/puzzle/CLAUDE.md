@@ -147,19 +147,50 @@ enforced, not merely advised.
   made errorView retry hold its face until something refills the position,
   and landed the small fixes (`mock` allowlist, `/testing` alias, falsy
   `create()` throw + branded `RouterMode`, SVG anchor clicks, D158 write-guard
-  CHANGELOG). Production sizes after that round — README banner matches:
-  hello-world **20.8 KB gzip**, todos **23.8 KB gzip** (the size scripts only
-  check the banner; the README line is edited by hand). Cards truthed
-  through D168; the next free decision number is D169. `@magic-spells/puzzle-pieces`
+  CHANGELOG). Production sizes as published — hello-world **19.6 KB gzip**,
+  todos **22.7 KB gzip** (the figures the `v0.6.0` README banner carries).
+  `@magic-spells/puzzle-pieces`
   `0.6.0` is live on npm (`latest`) — the version-locked pieces resolution is
   verified end-to-end. Note `PUZZLE_PIECES_REGISTRY` is set in Cory's shell
   profile pointing at the pieces registry — now
   `packages/puzzle-pieces/registry` in this monorepo; unset it when smoke-testing
   the npm transport.
-- Product line: v1 through v1.75 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
+- **`0.7.0` (in progress on `release/0.7.0`, NOT yet published — Cory tags and
+  publishes):** D161 auto-fetching finds (BREAKING — a tracked
+  `findOne`/`findMany` inside `data()` fetches what the store is missing and the
+  view settles across fetch rounds; `store.loadAll` and the `loadAll` adapter
+  verb are `loadMany` and every old spelling throws; generated read failures are
+  `PuzzleAdapterError`; `output: 'static'` pages carry the build's read state
+  and HMR preserves it across a dev reload); D162 the monorepo — the framework
+  moved to `packages/puzzle` with pieces, devtools, and the two lint/format
+  plugins as lockstep siblings; D163 `lazy()` route views and layouts behind
+  `__PUZZLE_HAS_LAZY__`; D164 the playground's parser+codegen WASM core (tooling
+  only — no app or runtime surface); D165 `puzzle check`, which type-checks
+  `.pzl` files with the app's own `node node_modules/typescript/bin/tsc`; D166
+  snippets (`<Snippet fits>` plus marker arguments; a snippet body is a
+  composition **leaf**; snippets forward through a wrapper's bare
+  `<Children/>`); D167 component families — dotted component tags
+  (`<Frame.Wrapper>`), the `Object.assign` barrel convention,
+  `puzzle generate component --family`, and capitalized tag names validated as
+  `Ident('.'Ident)*` (BREAKING, though the names it now rejects only ever
+  compiled to invalid JavaScript); and D168 text-run whitespace across a line
+  break. Also in: Windows x64 CLI binaries, path-preserving compound
+  `puzzle add piece` installs, the documented `\{` / `\}` brace escape, the
+  `{#for i in 1...5}` steer, and the deep-review and final-review rounds (guard
+  redirects, authored SVG `<text>`, save-vs-read ordering, Date key sorting,
+  settle-window fixes). Closing it out, five behavior-preserving runtime size
+  cleanups — the last warn-once diagnostics behind `__PUZZLE_DEV__`, one refresh
+  funnel in `PuzzleView`, and title-only head sync per navigation (the other
+  three head fields stay SSG-only) — take production sizes to hello-world
+  **20.8 KB gzip**, todos **23.8 KB gzip**; the README banner matches (the size
+  scripts only check the banner; the README line is edited by hand). Cards
+  truthed through D168; the next free decision number is D169.
+- Product line: v1 through v1.80 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
-  amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75;
-  D146 is a correctness amendment with no product-line entry),
+  amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
+  D161 = v1.76, D163 = v1.77, D165 = v1.78, D166 = v1.79, D167 = v1.80;
+  D146, D162, D164, and D168 are correctness or infrastructure decisions with
+  no product-line entry),
   plus the July
   21 pre-release correctness/performance hardening pass and the July 24
   deep-review round. The `constellation/decision/` cards are the authoritative
@@ -266,7 +297,7 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 
 - `app.js`: `PuzzleApp` construction, service wiring, lifecycle hooks, mount /
   unmount, HMR restore, morph-handler forwarding.
-- `router/router.js`: history/hash/memory routing, nested route chains,
+- `router/router.js`: path/hash/memory routing, nested route chains,
   load-then-atomic-commit navigation, layouts/outlets, scroll restoration,
   transitions, SSG takeover.
 - `views/PuzzleView.js`: model/local state layers, tracked `data()`, refresh,
@@ -308,7 +339,8 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 - `internal/dev`: recursive watch, incremental rebuild, local server, SSE
   reload, terminal controls.
 - `cmd/puzzle` plus scaffold/generate/pieces packages: `init`, `dev`, `build`,
-  `generate`, `add`, `doctor`, `info`, and `--version`.
+  `generate`, `add`, `check`, `preview`, `upgrade`, `doctor`, `info`, and
+  `--version`.
 - `cmd/pzlc`: single-file compiler used by tests and tooling.
 
 ## Public invariants that are easy to break
@@ -320,8 +352,11 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 - `data()` owns the replace-on-commit model layer. `setData()` owns persistent
   local UI state and rerenders without rerunning `data()`. Use `refresh()` when
   local state feeds `data()`-derived values.
-- Store queries inside `data()` auto-subscribe. Record props carry identity;
-  children that need live record data should re-query by id.
+- Store queries inside `data()` auto-subscribe, and on an adapter-backed model a
+  tracked `findOne`/`findMany` that misses queues a fetch and re-runs the pass
+  rather than committing (D161). Reads outside `data()` never fetch. Record
+  props carry identity; children that need live record data should re-query by
+  id.
 - Navigation loads before commit. URL/title/history, mounted tree, route
   snapshot, outgoing scroll save, and reused-ancestor state (params, snapshot,
   data, subscriptions — D146) commit together. Failed or superseded pushes do
@@ -330,7 +365,11 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   composition, and `<Slot>` is the router outlet. A marker is self-closing or
   paired — a paired body is fallback content, rendered only when nothing fills
   the position (D141) — and any lowercase `<slot>`/`<children>` is a
-  positioned compile error steering to the capitalized form (D134).
+  positioned compile error steering to the capitalized form (D134). A
+  `<Snippet>` body is a composition **leaf** — no `<Children>`, `<Slot>`, nested
+  `<Snippet>`, or `ref=` inside one (D166). A capitalized tag name is validated
+  as `Ident('.'Ident)*`, so the dotted family form `<Frame.Wrapper>` is legal
+  and `<Frame-x>`, `<Frame:Wrapper>`, and `<Slot.Foo>` are not (D167).
 - DOM listeners are per-node and patch-managed. Component `@event` bindings
   are callback props, not custom DOM events; there is no `$emit`.
 - Template text is not HTML-entity decoded and interpolations become text

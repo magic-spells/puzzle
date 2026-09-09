@@ -320,3 +320,88 @@ describe('splitSections — {#raw} blocks (D150)', () => {
 		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe(sections.scripts.content);
 	});
 });
+
+// 0.7.0 grammar (D167 dotted component tags, the \{ \} brace escape, the
+// {#for} range steer). The splitter never parses template tags or block
+// headers — sections.go does not either — so the whole point of these cases is
+// that none of them desyncs a section boundary. Component-name validation and
+// the for-header steer are the COMPILER's job; this port must not grow its own
+// opinion about either, or it would reject files the real compiler accepts.
+describe('splitSections — 0.7.0 template grammar', () => {
+	const wrap = (tpl, tail = '<script>\nexport default 1;\n</script>\n') =>
+		`<puzzle-view>${tpl}</puzzle-view>\n${tail}`;
+
+	it('carves a file whose template uses dotted family tags (D167)', () => {
+		const tpl = '<Frame><Frame.Header>hi</Frame.Header><Frame.Body.Inner/></Frame>';
+		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+	});
+
+	it('passes an INVALID capitalized tag name through without an opinion', () => {
+		// <Frame-x>, <Frame:Wrapper>, <Frame.> and <Slot.Foo> are positioned
+		// compile errors (D167), but they are template-grammar errors the
+		// compiler reports one stage later. The splitter's contract is to carve
+		// the file so the <script> body still gets linted.
+		for (const tag of ['<Frame-x/>', '<Frame:Wrapper/>', '<Frame./>', '<Slot.Foo/>']) {
+			const { sections, errors } = splitSections(wrap(tag), 'x.pzl');
+			expect(errors, tag).toEqual([]);
+			expect(sections.view.content, tag).toBe(tag);
+			expect(sections.scripts.content, tag).toBe('\nexport default 1;\n');
+		}
+	});
+
+	it('honors the \\{ \\} brace escape in template text', () => {
+		const tpl = '<p>a literal \\{ brace \\} is not a group</p>';
+		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+	});
+
+	it('handles a brace escape adjacent to an interpolation', () => {
+		// \{{ name }\} — an escaped brace, a real group, an escaped brace. Read
+		// the first two bytes as an unescaped '{' and the group scan would open
+		// one brace too early and run past </puzzle-view>.
+		const tpl = '<p>\\{{ name }\\} and { name }</p>';
+		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+	});
+
+	it('an escaped closing brace does not close an enclosing group', () => {
+		const tpl = '<p>{ a }\\}</p>';
+		const { sections, errors } = splitSections(wrap(tpl, '<style>\n.a { color: red; }\n</style>\n'), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.styles.content).toBe('\n.a { color: red; }\n');
+	});
+
+	it('passes both {#for} range spellings through, valid and steered', () => {
+		// {#for 1...5, i} is the documented form; {#for i in 1...5} is now a
+		// positioned compiler error. Both are just template bytes here.
+		for (const header of ['{#for 1...5, i}', '{#for i in 1...5}']) {
+			const tpl = `<ul>${header}<li>{ i }</li>{/for}</ul>`;
+			const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+			expect(errors, header).toEqual([]);
+			expect(sections.view.content, header).toBe(tpl);
+			expect(sections.scripts.content, header).toBe('\nexport default 1;\n');
+		}
+	});
+
+	it('splits the 0.7.0 grammar fixture with zero structural errors', () => {
+		const src = fixture('grammar-0-7.pzl');
+		const { sections, errors } = splitSections(src, 'grammar-0-7.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toContain('<Frame.Header>');
+		expect(sections.view.content).toContain('\\{{ count }\\}');
+		expect(sections.view.content).toContain('{#for 1...5, i}');
+		expect(sections.styles.scoped).toBe(true);
+		// The whole file was carved: the script body is the real one, and its
+		// span round-trips byte for byte.
+		expect(sections.scripts.content).toContain('export default class GrammarSpecimen');
+		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe(sections.scripts.content);
+	});
+});

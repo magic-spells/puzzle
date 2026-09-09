@@ -26,6 +26,7 @@ decision cards explain why the contract has its current shape.
 ## Current state
 
 
+
 - **Published:** `0.1.0` (2026-07-21), `0.1.1` (interactive `puzzle init`
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
   skills` installer, D78/v1.45) are live on npm — MIT, five packages, manual
@@ -141,13 +142,35 @@ decision cards explain why the contract has its current shape.
   Known limitation at ship: a snippet does not yet forward through a wrapper
   component's `<Children/>` into a nested component (D71 carries plain content
   only).
+- **Current 0.7 component work (v1.80):**
+  [[DECISION-D167-COMPONENT-FAMILIES]] — a component tag is validated as a
+  member path `Ident('.'Ident)*` and a dotted tag (`<Frame.Wrapper>`) emits
+  that member expression verbatim, resolved lexically like any component. A
+  family is a directory of one-class-per-file members grouped by a plain JS
+  barrel, scaffolded by `puzzle generate component Frame --family Wrapper,Content`;
+  `puzzle add piece` installs compound (nested-path) pieces the same way. No
+  registry, no import reading, and marker names stay reserved (`<Slot.Foo>` is
+  a steering error).
+- **0.7.0 final review (no product-line entry):**
+  [[DECISION-D168-TEXT-RUN-WHITESPACE]] makes the whitespace strip an
+  element-boundary rule, so a line break inside one coalesced text run keeps
+  one space; `{#for i in 1...5}` became a positioned error steering to
+  `{#for 1...5, i}`; a guard redirect inherits the denied navigation's verb
+  (D87) and navigation #0 moves no focus (D93); save reconciliation is ordered
+  against in-flight reads (D138); `sort` compares Date keys chronologically;
+  authored SVG `<text>` renders and a `{#svg}` seed/markup flip replaces
+  (D46). The last round is size: the remaining ungated warn-once diagnostics,
+  Store's schema assertions and three Router route-table error tails moved
+  behind the `__PUZZLE_DEV__` probe, six fire-and-forget refresh try/catches
+  collapsed into one funnel, and `#syncHead` resolves only `title` (D89/D84/
+  D111) — hello-world **20.8 KB gzip**, todos **23.8 KB gzip**.
 - **Monorepo (0.7.0):** [[DECISION-D162-MONOREPO-PACKAGES]] — the repo root is
   a private shell; the framework lives at `packages/puzzle` beside
   puzzle-pieces, puzzle-devtools, puzzle-eslint, and puzzle-prettier, all
   carrying the framework version; grammars stay in their own repos; absorbed
   repos are archived, never deleted.
 - **Playground compiler Phase 1:** [[FEATURE-PLAYGROUND-WASM-COMPILER]] / [[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]] adds the esbuild-free parser+codegen WASM module, its synchronous JS globals, the pinned worker envelope, filesystem-free asset diagnostics, and size/dependency/smoke gates. The worker and UI remain later phases.
-- The next free decision number is D168.
+- The next free decision number is D169.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
@@ -353,18 +376,25 @@ makes an open-ended `is={}` real design work, not sugar.)
 
 ### Runtime components
 
+
+
 - [[COMPONENT-PUZZLE-APP]] — app wiring and lifecycle.
 - [[COMPONENT-ROUTER]] — routing, transitions, scrolling, and commit semantics.
 - [[COMPONENT-PUZZLE-VIEW]] — component state and lifecycle.
 - [[COMPONENT-VIEW-MANAGER]] — vnode/DOM patching and composition.
 - [[COMPONENT-ANIMATIONS]] — WAAPI and visible-trigger scheduling.
 - [[COMPONENT-STORE]] / [[COMPONENT-PUZZLE-MODEL]] — data layer.
+- [[COMPONENT-ADAPTER]] — the opt-in `@magic-spells/puzzle/adapter` server
+  read/write sync runtime (D157/D158/D161).
 - [[COMPONENT-FORMATTERS]] — formatter registry and built-ins.
 - [[COMPONENT-DEVSTATE]] — development reload state transfer; also owns the
   live-view registry the DevTools bridge ([[FILE-DEVTOOLS]], D100) observes.
 - [[COMPONENT-MORPH]] — optional shared-element morph integration.
 - [[COMPONENT-SSG]] — prerender runtime and serializer; hybrid (SPA takeover)
   and static (per-page module, no router) output modes.
+- [[COMPONENT-TESTING]] — the `/testing` app-author utilities (D94).
+- [[COMPONENT-FIXTURES]] — the self-contained `/fixtures` generator + mock
+  adapter, bundled only under `--fixtures` (D95/D98).
 
 ### Compiler and tooling
 

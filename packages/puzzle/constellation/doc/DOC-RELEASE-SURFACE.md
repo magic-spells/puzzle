@@ -90,6 +90,8 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## `.pzl` files and templates
 
+
+
 - One `<puzzle-view>` template; optional `<script>` and `<style>`; optional
   `<puzzle-skeleton min-duration="…">`.
 - `<script>` is real JS. `lang="ts"` enables esbuild transpilation only — the
@@ -101,6 +103,15 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
+- Template text collapses whitespace runs to one space and drops an edge space
+  that held a newline (source indentation at element boundaries). That strip is
+  an **element-boundary** rule only (D168): inside one coalesced text run —
+  text↔interpolation, or interpolation↔interpolation across a whitespace-only
+  newline node — a stripped edge bordering another run member gets exactly one
+  space back, so `{ user.first }` and `{ user.last }` on separate lines render
+  "John Doe" as they do in HTML, Vue and Svelte. `{ a }{ b }` with nothing
+  between stays adjacent. `\{` / `\}` escapes a literal brace in text and in
+  attribute values, which is the only escape available inside an attribute.
 - Implicit two-way binding (D147): a path-shaped `value=`/`checked=`
   (`ident` or `ident.ident`) on a plain form control synthesizes its own
   write-back handler (`@input:bind`/`@change:bind`) — suppressed by an author
@@ -113,10 +124,25 @@ second specification. Decision cards hold rationale and git holds chronology.
   compile error reserving the space (`xml`/`xlink`/`xmlns` allowlisted).
 - `{#if}` with `{:else if}`/`{:else}`, `{#unless}`, `{#case}` with `{:when}`,
   item/range `{#for}` with optional counters, template comments, inline SVG,
-  and static raw markup blocks (`{#raw}…{/raw}`, D150).
+  and static raw markup blocks (`{#raw}…{/raw}`, D150). A range loop binds its
+  counter after the range — `{#for 1...5, i}`; `{#for i in 1...5}` is a
+  positioned compile error steering to that form.
 - DOM events support bare/call handlers, `prevent`, `stop`, `once`, `outside`
   (document-capture outside-dismiss, D86), and keyboard filters. Component
   event attributes compile to callback props.
+- **Component tags and families (D167):** a capitalized tag is validated as a
+  member path — `Ident('.'Ident)*`, each segment `[A-Za-z_][A-Za-z0-9_]*` — so
+  a capitalized name carrying a `-`, a `:`, or an empty segment is a positioned
+  compile error instead of syntactically broken generated JS. A dotted tag
+  (`<Frame.Wrapper>`) emits the member expression verbatim and resolves
+  lexically against module scope exactly like a plain `<Frame>`: no registry,
+  no import inspection. That is the **component-family** idiom — `.pzl` stays
+  one class per file and a family is a directory of members grouped by a plain
+  JS `index.js` barrel (`export default Object.assign(Frame, { Wrapper })` plus
+  named exports), scaffolded by
+  `puzzle generate component Frame --family Wrapper,Content`. A dotted name
+  rooted at a reserved marker (`<Slot.Foo>`) is a steering error; lowercase
+  tags are untouched, so custom elements keep their dashes.
 - Composition: `<Children/>` default content, named `<Slot name="…"/>`,
   `<Slot/>` router outlets, unfilled-marker fallback bodies, and default-slot
   forwarding through component invocations. **Snippets (D166):** a caller-side
@@ -339,6 +365,8 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## CLI
 
+
+
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
 - `puzzle check [dir]` (D165): type-checks the app's `.pzl` script bodies and
@@ -363,14 +391,34 @@ second specification. Decision cards hold rationale and git holds chronology.
   `app/fixtures.js` through a generated wrapper entry so the `/fixtures`
   module installs before the app entry runs; rejected alongside
   `--static`/`--hybrid`. Without the flag no fixture bytes can ship.
-- `puzzle generate` / `g` for components, views, layouts, and models.
+- `puzzle generate` / `g` for components, views, layouts, and models, with
+  `--path <dir>` overriding the destination. On a component,
+  `--family Wrapper,Content` (D167) scaffolds a **component family**: a
+  directory named for the root, one `.pzl` stub per member, and an `index.js`
+  barrel (`export default Object.assign(Frame, { Wrapper, Content })` plus named
+  exports). Member names are PascalCase-validated, may not repeat, may not
+  collide with the root, and may not be reserved marker names; `--family` on a
+  non-component kind is an error; the scaffold is all-or-nothing and `--force`
+  rewrites only the family's own files. The printed import hint follows
+  `--path` — a family directory under `app/` prints the `@` alias form, anything
+  else the project-relative path. Without `--family`, output is byte-identical
+  to before.
 - `puzzle add tailwind` and `puzzle add piece`. The default piece source is
   the npm registry — `npm:@magic-spells/puzzle-pieces` resolved to the CLI's
   major.minor, older-only fallback with a printed notice, `--pieces-version`
   to pin (a D32 amendment); `--registry` accepts `npm:pkg[@version]`, a local
   dir, or HTTPS. Dependency resolution, path-containment checks, and
   `pieces.lock` hashes apply to all transports; the lock records the resolving
-  `puzzle` version.
+  `puzzle` version. A manifest whose `files` entries carry a directory
+  (`"NavigationMenu/Item.pzl"`) is a D167 family and installs
+  **path-preserving** under the piece's `targetDir`, creating intermediate
+  directories and keying each member in `pieces.lock` by its full app-relative
+  path — the nested path is the only signal, with no manifest field and no
+  registry-schema change. Every manifest path (`files`, `targetDir`, `theme`,
+  `lib/` registryDependencies) must be a clean relative slash path — no `..`,
+  absolute, `./`, backslash, or empty segments — validated by piece and entry
+  name before anything is written; the overwrite pre-flight stays
+  all-or-nothing and names the full nested path of a conflict.
 - `puzzle add skills` (alias `skill`, D78): installs the `go:embed`-ed agent
   skill into detected `~/.claude` / `~/.codex` / `~/.cursor` config dirs;
   `--skill-root <dir>` (repeatable, D97) pins them instead. Installs carry a

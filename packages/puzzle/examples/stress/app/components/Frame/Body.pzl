@@ -1,0 +1,10 @@
+<puzzle-view>
+  <p class="mt-1 text-xs leading-relaxed text-muted"><Children/></p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Frame.Body — the family's prose row.
+export default class FrameBody extends PuzzleView {}
+</script>

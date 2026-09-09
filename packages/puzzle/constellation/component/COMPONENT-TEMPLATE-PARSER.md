@@ -41,6 +41,15 @@ notes:
       is expressed by extraction, and the error message says so. Do not "fix" the Component
       recursion into an escape hatch — `snippets_test.go`'s "nested Snippet declaration" case pins
       it.
+  - kind: state
+    text: >-
+      0.7.0 final review: `parseForHeader` no longer accepts an item-in binding on the left of a
+      range. It checked for a top-level `...` BEFORE splitting `item in items`, so `{#for i in
+      1...5}` parsed as a range whose from-bound was the string `i in 1`, compiled green, and threw
+      `Cannot use 'in' operator` on the first render. A bare-identifier item on the left of a range
+      is now a positioned error steering to `{#for 1...5, i}` (the counter always binds AFTER the
+      range); spread and call collections still parse as before. Pinned in
+      compiler/internal/parser/parser_test.go.
 ---
 
 # Template parser

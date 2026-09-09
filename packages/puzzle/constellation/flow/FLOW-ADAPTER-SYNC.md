@@ -125,6 +125,7 @@ moved by an endpoint-generated REST default or by a function the author wrote.
 
 ## Ordering that is load-bearing
 
+
 - **Validate before the network.** An invalid record must never reach the
   server, and the caller must be able to tell a rejected write from a failed
   one: `PuzzleValidationError` means nothing was sent.
@@ -139,6 +140,15 @@ moved by an endpoint-generated REST default or by a function the author wrote.
   delete queued behind a first save builds its request from the *adopted* server
   key; a chained link's rejection is swallowed for chaining only, so every
   caller observes its own outcome and nothing inherits a neighbour's failure.
+- **A save is ordered against in-flight reads.** Step 6 also takes a dispatch
+  generation from the same counter the reads use, and each success path stamps
+  it on the record (`Math.max`, so a read that landed after the save keeps its
+  precedence). A read dispatched BEFORE the save is then dropped for that
+  record, so it cannot revert the body the server acknowledged — and the next
+  `save()` cannot PUT the reverted value back
+  ([[DECISION-D138-LOAD-REVISION-MERGE]]). Save reconciliation never routes
+  through `_upsert`; the public `upsert()` still passes no generation and stays
+  deliberately outside this ordering.
 - **In-flight read entries clear in `finally` with an identity check**, and
   every fault promise carries a rejection observer, so a superseded or throwing
   data pass can neither strand an in-flight key nor leak an unhandled

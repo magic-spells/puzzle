@@ -580,7 +580,7 @@ contract is broken, and `validate()` fails), or `shellDidMutate` reading 0 —
 which would mean the churn never ran and the zero above measured nothing.
 
 No components live inside an island here, and none may: the compiler rejects a
-component, `<children/>` or `<slot>` anywhere in an island subtree.
+component, `<Children/>` or `<Slot/>` anywhere in an island subtree.
 
 ## Scenario 8 — `formatters`
 
@@ -1477,8 +1477,12 @@ app/
   models/
     record.js               one general-purpose schema, registered per scenario type
     form-record.js          form-state's 24-field record, and only its own
+  components/
+    Frame/                  the D167 family specimen — dotted <Frame.Header> tags
+                            and the \{ \} brace escape, kept in the corpus the
+                            eslint/prettier plugins sweep
   layouts/
-    StressLayout.pzl        the lab's chrome
+    StressLayout.pzl        the lab's chrome (and the grammar-corner footer)
     RcLayout.pzl            route-churn's layout, panel and ops (reused level 0)
   views/
     Home.pzl                control panel, stats, log, scenario host

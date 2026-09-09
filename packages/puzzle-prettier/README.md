@@ -16,6 +16,7 @@ Both bodies honor your Prettier options (`singleQuote`, `useTabs`, `tabWidth`, `
 Template reformatting is **deliberately deferred to a future version.** In this v1 release the following are preserved **byte-for-byte**:
 
 - `<puzzle-view>` and `<puzzle-skeleton>` template bodies — including `{#raw}` … `{/raw}` blocks, which are never reindented or rewrapped
+- the 0.7.0 grammar additions: D167 dotted family tags (`<Frame.Header>`), the `\{` / `\}` brace escape, and both `{#for}` range spellings. A capitalized name the compiler rejects (`<Frame-x>`, `<Slot.Foo>`) still formats — a formatter is not a validator
 - every section's opening/closing tags and attributes
 - top-level HTML comments and all inter-section whitespace
 

@@ -30,7 +30,7 @@ connections:
 # Puzzle Pieces
 
 A **copy-in** UI component registry for the [Puzzle framework](../puzzle):
-90 Tailwind-styled, accessible, morph-aware `.pzl` pieces distributed as **source you
+97 Tailwind-styled, accessible, morph-aware `.pzl` pieces distributed as **source you
 copy into a consumer app**, not packages you install. This card is the map; the
 always-load rules, conventions, and hard-won gotchas live in `CLAUDE.md` (read it every
 session) and are not duplicated here.
@@ -69,8 +69,24 @@ component where possible, a native rebuild otherwise) — follows from it. See
 
 ## Current state
 
-All 90 pieces are built, compile-verified against the real compiler, and demo-verified.
-The [[FEATURE-ADD-CLI]] shipped in the Puzzle Go CLI (`puzzle add piece`). Publishing
-v0.1.0 means making this repo public — no npm package — and is tracked in
-[[RELEASE-V0-1-0]]. Sibling repos are linked in `connected_repos` above (`repo:`
-selector targets each).
+All 97 pieces are built, compile-verified against the real compiler, and demo-verified.
+The [[FEATURE-ADD-CLI]] shipped in the Puzzle Go CLI (`puzzle add piece`).
+[[RELEASE-V0-1-0]] records the first publish (2026-07-22, the repo going public); since
+then the registry itself ships as the npm package `@magic-spells/puzzle-pieces`, which
+`puzzle add piece` resolves by default and which is **version-locked to the framework's
+major.minor** — so this package's version must equal the framework's exactly, and the
+matching pieces release must publish at or before the CLI release. `0.6.0` is the current
+`latest` on npm; the tree is stamped `0.7.0` and unpublished.
+
+This package lives at `packages/puzzle-pieces` inside the `magic-spells/puzzle`
+monorepo (framework decision D162), with its own npm install and lockfile — there are
+deliberately no npm workspaces. Sibling repos are linked in `connected_repos` above
+(`repo:` selector targets each); the framework's own plan is `repo: puzzle`.
+
+0.7.0 shape: most overlay and disclosure pieces are now wrappers or D167 **component
+families** over published `@magic-spells/*` web components — `DropdownPanel` is the
+shared base family behind DropdownMenu, ContextMenu, SplitButton, Popover, HoverCard,
+Menubar, Popconfirm and NavigationMenu — and `puzzle add piece` installs those compound
+pieces path-preserving. The six assembled app demos (analytics, chat, banking, admin,
+project board, storefront) moved out of `demo/` into their own `puzzle-demos` repo; the
+demo app keeps the piece copies, the `*Doc` pages, and the docs shell.

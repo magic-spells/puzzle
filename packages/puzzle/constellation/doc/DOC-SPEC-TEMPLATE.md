@@ -27,6 +27,21 @@ notes:
       the `<b>{ name }</b>\n(text)` element-boundary case is deliberately unchanged. Also: `{#for i
       in 1...5}` is a positioned compile error steering to `{#for 1...5, i}` — the range form always
       binds its counter after the range.
+  - kind: state
+    text: >-
+      Text whitespace rule (§6), superseding the earlier note above — the full rule as of the 0.7.0
+      final review, recorded on [[DECISION-D168-TEXT-RUN-WHITESPACE]]. Template text collapses
+      whitespace runs to one space and drops an edge space that held a newline (source indentation).
+      That strip is an ELEMENT-boundary rule only. Every non-element boundary keeps one space:
+      inside a coalesced text run (text↔interpolation, interpolation↔interpolation across a
+      whitespace-only newline node), and between a text run and an adjacent control-flow block —
+      `{#if}`, `{#for}`, `{#case}` — on either side. So `{ user.first }\n  { user.last }` renders
+      "John Doe" and `you have { n } new\n  {#if x}message{/if}` renders "new message", as they do
+      in HTML, Vue and Svelte. `{ a }{ b }` and `{#if x}a{/if}{ b }` with nothing between stay
+      adjacent; nothing is invented at an element edge, so a block that is an element's first/last
+      child gains no space; a block's own body edges keep the strip. Deliberately unchanged: the
+      `<b>{ name }</b>\n(text)` element-boundary case, and two blocks separated only by a newline.
+    sha: 513d834
 ---
 
 The frozen v1 contract for templates: the `@event` handler convention and its modifiers, the template grammar, DOM islands, inline SVG, composition markers and named slots, list keying, cached handlers, and compiler accessibility warnings. See [[DOC-SPEC]] for the section index and the rest of the contract.
@@ -283,6 +298,7 @@ breakout.
 ## 64. Snippets: `<Snippet>` + marker data attributes (v1.79)
 
 
+
 Slots render a passed-in template; **snippets render it repeatedly, with data**.
 A `<Snippet>` is a caller-declared body with parameters; the component stamps it
 once per item by handing values to its own marker. Shipped in v1.79
@@ -390,3 +406,53 @@ either, so nothing consuming a snippet is not evidence of a mistake.
 **Cost.** The feature is gated behind `__PUZZLE_HAS_SNIPPETS__` (D89): an app
 using no snippet and no marker argument pays **zero bytes** and takes the same
 expansion fast path it took before; an app that uses them pays about 50 B gzip.
+
+## 65. Component families: dotted component tags (v1.80)
+
+Related components import as one unit and invoke with dot notation. Shipped in
+v1.80 ([[DECISION-D167-COMPONENT-FAMILIES]]); the §6 component bullet is the
+short form, this section is the contract.
+
+```html
+<script>import Frame from '@/components/Frame';</script>
+
+<Frame><Frame.Wrapper><Frame.Content>…</Frame.Content></Frame.Wrapper></Frame>
+```
+
+**Tag-name grammar.** A capitalized tag that survives marker resolution must be
+a valid member path — `Ident('.'Ident)*`, each segment
+`[A-Za-z_][A-Za-z0-9_]*`. Any other capitalized name — a `-`, a `:`, an empty
+segment (`<Frame-x>`, `<Frame:Wrapper>`, `<Frame.>`) — is a positioned compile
+error. This is a bug fix as much as a feature: the tag text has always been
+emitted verbatim as the ViewNode tag expression, so `<Frame.Wrapper>` already
+compiled to `new ViewNode(Frame.Wrapper, …)`, but nothing validated the name and
+those spellings compiled cleanly into syntactically broken JavaScript. A dotted
+name whose first segment is a reserved marker name (`Children`, `Slot`,
+`Snippet`, `Portal` — `<Slot.Foo>`) is a positioned steering error. The check
+does not run inside `{#raw}` and never applies to lowercase tags, so custom
+elements keep their dashes and namespaced SVG is untouched.
+
+**Resolution is lexical, and codegen is unchanged.** A dotted tag emits the
+member expression verbatim and resolves against module scope at runtime exactly
+like a plain `<Frame>`. There is no component registry, and the compiler still
+never reads imports (§4).
+
+**The family is a convention, not a mechanism.** `.pzl` stays strictly one class
+per file; a family is a directory of member files beside a plain JS `index.js`
+barrel that re-exports them and hangs them off the root:
+
+```js
+export default Object.assign(Frame, { Wrapper, Content });
+export { Frame, Wrapper, Content };
+```
+
+so both `import Frame from '@/components/Frame'` and
+`import { Wrapper } from '@/components/Frame'` work.
+`puzzle generate component Frame --family Wrapper,Content` (§53 CLI) scaffolds
+the directory, one component stub per member, and the barrel: member names are
+PascalCase-validated, may not repeat, may not collide with the root, and may not
+be marker names; `--family` on a non-component kind is an error; the scaffold is
+all-or-nothing, and `--force` rewrites only the family's own files. Family stubs
+are composition-shaped (`<Children/>` plus a caller `class` override) because a
+closed stub would silently drop nested members. Without `--family`,
+`generate component` output is byte-identical to before.
