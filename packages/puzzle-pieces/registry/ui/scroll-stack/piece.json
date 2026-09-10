@@ -3,6 +3,6 @@
   "description": "Natively scrolling list whose items animate at the scrollport edges instead of clipping — sticky stack handoff, vertical or horizontal, scroll snapping, responsive per-view item sizing, and effects driven by a progress custom property; wraps the @magic-spells/scroll-stack web component rather than porting it",
   "files": ["ScrollStack.pzl"],
   "registryDependencies": [],
-  "dependencies": ["@magic-spells/scroll-stack"],
+  "dependencies": ["@magic-spells/scroll-stack@^0.1.0"],
   "targetDir": "app/components/ui"
 }

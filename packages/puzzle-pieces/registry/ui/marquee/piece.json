@@ -3,6 +3,6 @@
   "description": "Continuously scrolling ticker of slot content — seamless rAF loop with pause-on-hover, drag-to-scrub, direction, speed, gap and edge-fade props, and prefers-reduced-motion respect; wraps the @magic-spells/scrolling-content web component rather than porting it",
   "files": ["Marquee.pzl"],
   "registryDependencies": [],
-  "dependencies": ["@magic-spells/scrolling-content"],
+  "dependencies": ["@magic-spells/scrolling-content@^2.1.0"],
   "targetDir": "app/components/ui"
 }

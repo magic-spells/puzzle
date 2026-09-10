@@ -1,6 +1,6 @@
 ---
 name: 0.7.0 — reads take care of themselves
-status: building
+status: built
 version: 0.7.0
 connections:
   - RELEASE-V0-6-0
@@ -117,10 +117,10 @@ notes:
 
 # 0.7.0 — reads take care of themselves
 
-Unreleased. In progress on the `release/0.7.0` branch: not published, not
-tagged, and nothing in it should be described as shipped. npm `latest` is still
-0.6.0. Every package in the train — framework, pieces, devtools, eslint,
-prettier — is stamped `0.7.0` locally.
+Published 2026-09-09 and tagged `v0.7.0`; npm `latest` is 0.7.0, and
+`release/0.7.0` is merged to `main`. See **Published** below for the outcome.
+Every package in the train — framework, pieces, devtools, eslint, prettier —
+carries `0.7.0`.
 
 The centerpiece is v1.76 auto-fetching finds
 ([[FEATURE-AUTO-FETCHING-FINDS]] / [[DECISION-D161-AUTO-FETCHING-FINDS]]).
@@ -187,6 +187,49 @@ platform other than the host ([[FLOW-RELEASE]]).
 Everything else is correctness. A pre-release review round and a decisions
 round closed a long tail across the model layer, the view lifecycle, the
 router, the compiler, and the CLI.
+
+## Published
+
+Published **2026-09-09** (UTC), tagged `v0.7.0`, `release/0.7.0` merged to
+`main` via PR #130, and the GitHub release notes posted.
+
+`npm run verify:published` came back clean against the registry metadata npm
+actually resolves against: it pins all **five** platform packages — including
+the new `@magic-spells/puzzle-win32-x64`, Puzzle's **first Windows release** —
+a temp-dir install runs `puzzle version 0.7.0`, and `add piece` in a scaffolded
+app resolves `npm:@magic-spells/puzzle-pieces@0.7.0` with
+`PUZZLE_PIECES_REGISTRY` deleted from the child env. A fresh-app smoke went one
+step further than the scripted check: `puzzle init`, then
+`add piece accordion`, then `@magic-spells/collapsible-content` 1.2.0, builds
+with the web component bundled.
+
+**Eight upstream web components had to be published first**, and that is the
+release's durable lesson. The [[DECISION-D167-COMPONENT-FAMILIES]] piece
+families were authored against unpublished local versions of their web
+components, and a piece manifest declares **bare dependency names** — which npm
+resolves to `latest`. So the registry would have installed whatever was on npm
+at the time, not what the piece was built against, and `add piece` would have
+produced apps that do not build. The publishes that unblocked 0.7.0:
+collapsible-content 1.2.0, dropdown-panel 2.1.0, tab-group 1.2.0,
+select-dropdown 0.3.0, split-panel 0.2.0, panel-stack 0.2.0,
+scrolling-content 2.1.0, and quantity-input 1.1.0. The pieces demo now installs
+them from npm rather than local `file:` paths (PR #129). Until registry version
+floors land as **D169 (0.7.1)**, treat "every web component a piece depends on
+is published at the version the piece was built against" as a hard release
+gate, checked before `release:prep`.
+
+Four fixes landed after the review round and before the tag, none of them
+moving the size figures: the router guard self-redirect hang and D168 completed
+at control-flow boundaries (PR #127), the Tailwind stderr diagnostic (#128),
+and the pieces demo's npm dependencies (#129). Shipping sizes are the ones this
+card states throughout — **20.8 KB gzip** hello-world, **23.8 KB gzip** todos.
+
+The three editor grammars (puzzle-vscode/sublime/zed) were swept for 0.7.0 —
+dotted tags, `<Snippet>`, and the `\{` / `\}` brace escape in text and in
+attribute values — and merged to `main` in each repo. They are **not part of
+the npm train**: dev-install only, never published to a marketplace, and
+versioned independently (all three now stamped `0.3.0` on their own
+`release/0.3.0` branches; puzzle-sublime is tagged `v0.3.0`).
 
 ## What's in it
 
@@ -385,6 +428,8 @@ capability):**
   `replace(redirect)` Back from the protected page left the site. A push redirect
   is now a `push()` that mints the destination's own entry; a pop or navigation
   #0 redirect still replaces. The denied URL never enters history either way.
+  A guard that redirects to the URL it was asked to guard no longer hangs the
+  router (PR #127).
 - A guard redirect on navigation #0 moves no focus and announces nothing. The
   gate was the verb flags, so a first-load redirect (a `replace()` with nothing
   committed) stole focus on first paint; it is now "nothing committed yet"
@@ -428,7 +473,8 @@ capability):**
   `examples/stays` shipped "4 guests ·2 bedrooms". Inside one run, a stripped
   edge bordering another run member gets exactly one space back, as it does in
   HTML, Vue and Svelte; run edges still strip, `{ a }{ b }` stays adjacent, and
-  no golden file changed.
+  no golden file changed. The rule is applied at control-flow boundaries too —
+  a run split across `{#if}`/`{#for}` keeps its space (PR #127).
 - `{#for i in 1...5}` is a positioned compile error. The range check ran before
   the `item in items` split, so the header parsed as a range whose lower bound
   was the text `i in 1` and compiled green into JavaScript that threw
@@ -438,12 +484,14 @@ capability):**
   attribute values, but the docs named only `{#raw}` — which is not allowed
   inside an attribute — so `pattern="[0-9]{5}"` silently compiled `{5}` as an
   interpolation.
+- A Tailwind failure reports its stderr instead of a bare exit code (PR #128).
 
 **Fixed — pieces registry (shipping in the version-locked `0.7.0`):** every
 optional attribute on a form-style piece carries an explicit default, so a
 consumer app no longer sees missing-attribute warnings from Field, InputGroup,
 NumberField, PasswordField, SearchField, Textarea, MarkdownEditor,
-RichTextEditor, and Rating; Rating's read-only stars are keyed.
+RichTextEditor, and Rating; Rating's read-only stars are keyed. The demo
+installs its web components from npm rather than local `file:` paths (PR #129).
 
 Production sizes at ship: **20.8 KB gzip for hello-world and 23.8 KB for
 todos**, against 19.6 / 22.7 in 0.6.0 — the settle loop, `lazy()`, and snippets
@@ -488,13 +536,16 @@ except for the shared fixes above.
 
 ## Still open before ship
 
+Nothing — 0.7.0 shipped on 2026-09-09. Every item that stood here is done:
+`@magic-spells/puzzle-pieces` 0.7.0 published at the framework version (the
+D32 version lock verified end to end by `verify:published`), `release:prep`
+green, the three editor grammars swept for the `Snippet` marker, dotted tags,
+and the brace escape, and the site's llms.txt + playground live with a
+re-vendored skill file. The prose sweep closed with it — the CHANGELOG's 0.7.0
+section is complete, `DOC-RELEASE-SURFACE` describes the 0.7.0 surface, the
+SPEC carries §63 (`puzzle check`), §64 (snippets), and §65 (component
+families), and the README size banner is current by measurement.
 
-
-The matching `@magic-spells/puzzle-pieces` 0.7.0 publish (version-locked — it
-must land at or before the CLI release), `release:prep`, and the remaining
-release-checklist items on this card's close-out note: the editor grammars
-(vscode/sublime/zed) gaining the `Snippet` marker, and the site's llms.txt +
-playground go-live with a re-vendored skill file. The prose sweep is done —
-the CHANGELOG's 0.7.0 section is complete, `DOC-RELEASE-SURFACE` describes the
-0.7.0 surface, the SPEC carries §63 (`puzzle check`), §64 (snippets), and §65
-(component families), and the README size banner is current by measurement.
+The one item that turned out to be missing from this list is recorded under
+**Published**: the eight upstream web-component publishes the piece families
+depended on. [[RELEASE-V0-7-1]] carries the follow-on work.

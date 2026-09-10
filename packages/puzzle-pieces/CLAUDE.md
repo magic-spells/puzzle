@@ -62,7 +62,7 @@ Rules that follow from this:
   "description": "One-line description (reused as the docs subtitle).",
   "files": ["DatePicker.pzl"],
   "registryDependencies": ["calendar", "lib/date-math.js"],
-  "dependencies": ["@magic-spells/morph-engine"],
+  "dependencies": ["@magic-spells/morph-engine@^0.1.2"],
   "targetDir": "app/components/ui"
 }
 ```
@@ -85,6 +85,18 @@ Rules that follow from this:
   `@magic-spells/dialog-panel` alone (wrappers over it directly — one dialog-panel copy
   serves all four overlays), the rich-text/markdown editors → `@tiptap/*`, `code` →
   `highlight.js`, `markdown` → `marked`.
+- **Every entry carries a version FLOOR** (D169) — it is an npm install spec,
+  `"<package>@<range>"`, not a bare name, and the CLI prints it verbatim
+  (`npm install @magic-spells/collapsible-content@^1.2.0`). Without one npm resolves
+  `latest`, which is how 0.7.0's `add piece accordion` installed collapsible-content
+  1.1.1 — no `<collapsible-group>`, no exclusivity. **The floor is the version the piece
+  was built and demoed against**, so it must match `demo/package.json` exactly (the caret
+  form of it for the tiptap packages, which the demo pins); one floor per package across
+  the whole registry, and `test/registry-deps.test.js` fails if any of that drifts. Wrap a
+  component only at a **published** version — an unpublished bump cannot be a floor. When
+  you bump a component in `demo/package.json`, bump the piece manifests with it. The `add`
+  CLI still accepts a bare name (third-party registries) and prints it bare, but nothing
+  in this registry may ship one.
 
 ## Versioning
 
@@ -273,6 +285,15 @@ with:
   file to its manifest `targetDir` (`app/components/ui/` for pieces, `app/lib/` for lib
   files). **Refuses to overwrite an existing target unless `--overwrite`** (all-or-nothing
   pre-flight). PRINTS — never auto-runs — npm installs for accumulated `dependencies`.
+- The printed line is `npm install <name>@<range> …`, one entry per package, sorted by
+  package name (D169). Specs merge by NAME across the resolved set, so a package two
+  pieces both need is printed once; if their floors disagree the HIGHER one is printed
+  (the app must satisfy every piece it just copied). A floorless bare name loses to any
+  floor and prints bare. The line is unconditional — the CLI never reads the app's
+  package.json to decide whether a dependency is already satisfied; re-running the install
+  with a range npm already satisfies is a no-op, and reading the manifest would trade that
+  for a second source of truth. `pieces.lock` records copied bytes only; floors are the
+  registry's claim, not the app's, so they are deliberately absent from it.
 - A `files` entry with a directory (a compound piece) is copied **path-preserving** under
   `targetDir`, creating intermediate dirs; entries that aren't clean relative slash paths
   are rejected by name before any write, and `pieces.lock` keys nested files by their full

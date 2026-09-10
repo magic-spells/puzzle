@@ -9,7 +9,7 @@
   ],
   "registryDependencies": [],
   "dependencies": [
-    "@magic-spells/collapsible-content"
+    "@magic-spells/collapsible-content@^1.2.0"
   ],
   "targetDir": "app/components/ui"
 }

@@ -6,6 +6,20 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-BUILD
   - DECISION-D76-CLI-UPGRADE
+notes:
+  - kind: state
+    text: >-
+      The `create-puzzle-app` wrapper is fully retired as of 2026-09-09. It never reached npm; the
+      only artifact was an uncommitted local draft package, and that draft was deleted. Nothing in
+      the repo references it any more — the last mention was DOC-USER-GUIDE's Quick Start, which
+      opened on `npx @magic-spells/create-puzzle-app my-app` with a note that the wrapper was "not
+      yet published"; that block now mirrors the README's canonical commands (`npm install -g
+      @magic-spells/puzzle`, then `puzzle init my-app`). `puzzle init` is the only onboarding path.
+
+
+      This card's "Publish `create-puzzle-app` for the guided flow" alternative stays as written —
+      it is the rationale for why the wrapper was rejected, not a description of something that
+      exists.
 ---
 
 # D77 — Interactive `puzzle init` prompts (v1.44)

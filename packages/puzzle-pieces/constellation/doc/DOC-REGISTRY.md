@@ -31,6 +31,7 @@ The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing ru
 - `files` copy to `targetDir` (default `app/components/ui/`).
 - `registryDependencies` are resolved **transitively**: `lib/*.js` → `app/lib/`, sibling pieces (e.g. `date-picker` → `calendar`) → their own `targetDir`.
 - `dependencies` are **real npm packages, plain JS only** — `.pzl` never appears there. Morph pieces (Select, Dialog, DatePicker) list `@magic-spells/morph-engine`.
+- Each `dependencies` entry is an npm INSTALL SPEC carrying a semver **floor**, not a bare package name: `"@magic-spells/collapsible-content@^1.2.0"`. The floor is the version the piece was built and demoed against, so it must equal what `demo/package.json` installs; one floor per package registry-wide. `puzzle add piece` prints the spec verbatim, which is what stops a wrapper from resolving against an npm `latest` older than the element it wraps (D169 in the framework plan — 0.7.0's `add piece accordion` installed collapsible-content 1.1.1 and lost `<collapsible-group>`). The CLI still accepts a bare name so third-party registries keep working; nothing here may ship one, and `test/registry-deps.test.js` enforces both that and the demo agreement.
 - `description` is reused verbatim as the docs subtitle, so it must read as one clean sentence.
 
 ## registry.json is generated

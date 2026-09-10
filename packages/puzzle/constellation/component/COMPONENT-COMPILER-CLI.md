@@ -78,6 +78,16 @@ notes:
       `PUZZLE_NO_UPDATE_CHECK`) and `PUZZLE_REGISTRY` are unchanged, and the helper re-checks the
       two env gates itself. Fold this into the body on the next pass over this card — it has no `##`
       sections, so it needs a full-body write.
+  - kind: state
+    text: >-
+      0.7.1 (D169): a piece manifest's `dependencies` entry is an npm install spec with a version
+      FLOOR — `"@magic-spells/collapsible-content@^1.2.0"` — and `add piece` prints `npm install
+      <name>@<range> …`. `internal/pieces/deps.go` splits the spec on the LAST `@` (so a scoped
+      package keeps its leading one) and compares floors by numeric semver core; `collectNpmDeps`
+      now merges by package NAME, keeping the highest floor when two resolved pieces disagree, so a
+      shared dependency prints once at the strictest range. A bare name still parses and still
+      prints bare — third-party registries on the old shape are unaffected — and neither
+      `registry.json`'s `"version": 1` nor `pieces.lock` changed shape.
 ---
 
 # Compiler CLI
