@@ -49,7 +49,10 @@ func spawnDetached() error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	// Release, never Wait: nothing here is going to be alive to reap the child.
-	// The init process adopts it.
-	return cmd.Process.Release()
+	// Reap in a goroutine rather than Release: a long-running parent (`puzzle
+	// dev`) would otherwise keep the finished helper as a zombie for the life
+	// of the server. A short-lived parent (`puzzle build`) exits first and the
+	// abandoned goroutine goes with it; init adopts and reaps the child.
+	go func() { _ = cmd.Wait() }()
+	return nil
 }
