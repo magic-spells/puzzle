@@ -53,6 +53,23 @@ notes:
       free, so it can be frequent), the failure backoff kept, cache writes made atomic because two
       parallel builds each spawn a helper. Accepted cost, stated plainly: the notice for a brand-new
       release arrives one run late.
+  - kind: gotcha
+    text: >-
+      Two MORE traps in the detached refresh, these invisible until CI runs it. (1) `Refresh()`
+      honors CI / PUZZLE_NO_UPDATE_CHECK by design — the subcommand is reachable from a shell — and
+      GitHub Actions exports `CI=true`, so any test that calls `Refresh()` and then reads the cache
+      passes locally and fails on every runner: the helper correctly no-ops and the test reads a file
+      nothing was ever going to write. Tests of the BODY must clear both gates first
+      (`ungateRefresh` in update_test.go); `TestRefreshHonorsGates` clears both and then sets one,
+      because otherwise the PUZZLE_NO_UPDATE_CHECK subtest passes on the ambient CI gate and proves
+      nothing. Reproduce with `CI=true go test ./internal/update/...`. (2) The atomic temp+rename
+      write is not atomic-and-always-successful on Windows: replacing a file another process holds
+      open is a sharing violation, not the silent success unix gives, so the concurrent-writers test
+      failed on windows-latest only. `renameWithRetry` (5 attempts, 20 ms apart) absorbs it — nothing
+      waits on the write, so the 80 ms worst case is spent inside the detached helper. The matching
+      test rule: only bytes that were successfully READ and do not parse are a torn read; an open
+      that fails is the race, not the bug.
+    sha: a793214ac3a76b0b9f06099da8636e493fac48ca
 code_refs:
   - compiler/cmd/puzzle/main.go
   - compiler/cmd/puzzle/updatecheck.go

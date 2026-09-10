@@ -30,6 +30,12 @@ const (
 	// command. A failed fetch writes no `checked_at`, so without the stamp the
 	// cache would never stop being stale.
 	failureBackoff = 15 * time.Minute
+
+	// renameAttempts / renameRetryDelay bound the atomic write's retry loop.
+	// See renameWithRetry: this exists for Windows, where a rename over a file
+	// another process has open is a sharing violation rather than a no-op.
+	renameAttempts   = 5
+	renameRetryDelay = 20 * time.Millisecond
 )
 
 // CacheDir overrides the directory containing update-check.json. When empty,
@@ -290,7 +296,33 @@ func writeCacheFile(disk cacheFile) error {
 	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path)
+	return renameWithRetry(tmp.Name(), path)
+}
+
+// renameWithRetry replaces the cache file, retrying briefly.
+//
+// On unix a rename over an open file always succeeds. On Windows it does not:
+// replacing a file another process holds open fails with a sharing violation,
+// and two `puzzle` commands started at once — each with its own helper, one
+// renaming while the other reads — is the normal case here, not an exotic one.
+// The window is a single small read, so a handful of short sleeps is the whole
+// of what is needed; anything still failing after that is a real error (a
+// read-only or vanished cache dir), and losing a refresh to it is silent by
+// design. The 80 ms worst case is charged either to the detached helper, which
+// has no one waiting on it, or to the last step of `puzzle upgrade`, which has
+// just spent seconds running a package manager. Never to `build` or `dev`:
+// CheckPassive only ever reads.
+func renameWithRetry(from, to string) error {
+	var err error
+	for attempt := 0; attempt < renameAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(renameRetryDelay)
+		}
+		if err = os.Rename(from, to); err == nil {
+			return nil
+		}
+	}
+	return err
 }
 
 // Stale reports whether the cached check is at least cacheTTL old.

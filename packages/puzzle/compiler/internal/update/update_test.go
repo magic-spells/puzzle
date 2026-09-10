@@ -1,6 +1,7 @@
 package update
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -77,6 +78,18 @@ func useTempCacheDir(t *testing.T) {
 	previous := CacheDir
 	CacheDir = t.TempDir()
 	t.Cleanup(func() { CacheDir = previous })
+}
+
+// ungateRefresh clears the two environment gates the helper re-evaluates, so a
+// test of Refresh's BODY tests the body. Without it the suite passes locally and
+// fails on every CI provider on earth: GitHub Actions exports CI=true, Refresh
+// honors it by design (D76 — the subcommand is reachable from a shell), and the
+// test then reads a cache nothing was ever going to write. The gating itself is
+// asserted separately by TestRefreshHonorsGates.
+func ungateRefresh(t *testing.T) {
+	t.Helper()
+	t.Setenv("CI", "")
+	t.Setenv("PUZZLE_NO_UPDATE_CHECK", "")
 }
 
 func TestCheckPassiveUsesFreshCache(t *testing.T) {
@@ -197,6 +210,7 @@ func TestCheckPassiveBacksOffAfterFailedRefresh(t *testing.T) {
 // any recorded failure.
 func TestRefreshWritesCacheAndClearsFailure(t *testing.T) {
 	useTempCacheDir(t)
+	ungateRefresh(t)
 	countingRegistry(t, "0.3.0")
 
 	if err := writeFailure(time.Now()); err != nil {
@@ -227,6 +241,7 @@ func TestRefreshWritesCacheAndClearsFailure(t *testing.T) {
 // exactly where it was so the notice keeps printing while the backoff runs.
 func TestRefreshStampsFailure(t *testing.T) {
 	useTempCacheDir(t)
+	ungateRefresh(t)
 	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "nope", http.StatusInternalServerError)
 	}))
@@ -260,6 +275,11 @@ func TestRefreshHonorsGates(t *testing.T) {
 		t.Run(gate, func(t *testing.T) {
 			useTempCacheDir(t)
 			hits := countingRegistry(t, "0.3.0")
+			// Clear both first, then set only the one under test: on a CI
+			// runner CI is already exported, and without this the
+			// PUZZLE_NO_UPDATE_CHECK subtest would pass on the OTHER gate and
+			// prove nothing.
+			ungateRefresh(t)
 			t.Setenv(gate, "1")
 
 			Refresh()
@@ -298,12 +318,30 @@ func TestWriteCacheIsAtomic(t *testing.T) {
 	torn := make(chan string, 1)
 	var reader sync.WaitGroup
 	reader.Add(1)
+	path := mustCachePath(t)
 	go func() {
 		defer reader.Done()
 		for !stop.Load() {
-			if _, err := readCacheFile(); err != nil && !os.IsNotExist(err) {
+			// Only bytes that were successfully read and do not parse are a
+			// torn read. An open that fails is the race, not the bug: the file
+			// is briefly absent between rename attempts, and on Windows an open
+			// can lose to a concurrent replace with a sharing violation or a
+			// delete-pending ACCESS_DENIED. Atomicity is the claim that a
+			// reader never sees HALF a file, and that is what this asserts.
+			// A brief pause between samples. On Windows the reader's own open
+			// handle is what makes a concurrent replace fail, so a maximally
+			// tight loop would push nearly every writer into the retry path and
+			// turn a sub-second test into a slow one. This still takes
+			// thousands of samples across the writers' run.
+			time.Sleep(500 * time.Microsecond)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			var disk cacheFile
+			if err := json.Unmarshal(data, &disk); err != nil {
 				select {
-				case torn <- err.Error():
+				case torn <- err.Error() + "; bytes: " + string(data):
 				default:
 				}
 				return
@@ -329,6 +367,26 @@ func TestWriteCacheIsAtomic(t *testing.T) {
 		if entry.Name() != cacheFileName {
 			t.Fatalf("stray file %q left in the cache dir", entry.Name())
 		}
+	}
+}
+
+// The retry loop exists for Windows sharing violations, which cannot be staged
+// on unix — so what is asserted here is the bookkeeping around it: a rename that
+// cannot ever succeed still terminates, still reports the error, and costs at
+// most the bounded delay rather than spinning.
+func TestRenameWithRetryGivesUp(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "does-not-exist")
+
+	start := time.Now()
+	err := renameWithRetry(missing, filepath.Join(dir, cacheFileName))
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("renaming a file that does not exist must report an error")
+	}
+	if budget := time.Duration(renameAttempts) * renameRetryDelay * 4; elapsed > budget {
+		t.Fatalf("renameWithRetry took %s, want well under %s", elapsed, budget)
 	}
 }
 
