@@ -1,6 +1,6 @@
 {
 	"name": "@magic-spells/prettier-plugin-puzzle",
-	"version": "0.7.0",
+	"version": "0.7.1",
 	"description": "Prettier 3 plugin for Puzzle Framework .pzl single-file components — formats the <script> and <style> bodies, preserves templates verbatim",
 	"type": "module",
 	"main": "./src/index.js",
