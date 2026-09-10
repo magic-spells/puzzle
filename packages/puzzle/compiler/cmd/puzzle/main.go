@@ -124,6 +124,9 @@ stderr. PUZZLE_PROFILE_BUILD=1 enables the same profiling.`,
 			StrictPort: strictPort,
 			Fixtures:   fixtures,
 			Profile:    profile,
+			// OnReady runs after the ready banner, with the listener already
+			// accepting in its own goroutine. The notice reads the cache and
+			// returns, so it delays nothing either way.
 			OnReady: func() {
 				printUpdateNotice(os.Stdout, ui.New(os.Stdout))
 			},
@@ -212,6 +215,9 @@ func formatMillis(d time.Duration) string {
 }
 
 func printUpdateNotice(stdout *os.File, out *ui.Printer) {
+	// The gates come first, so a CI, piped, or opted-out invocation never
+	// reaches the registry — CheckPassive is the only thing that starts the
+	// background refresh on the passive path.
 	if os.Getenv("CI") != "" || os.Getenv("PUZZLE_NO_UPDATE_CHECK") != "" || !ui.IsTerminal(stdout) {
 		return
 	}

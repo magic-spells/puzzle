@@ -570,9 +570,16 @@ rejection reports through `onError` as the `navigation` phase. A rejected import
 is never cached, so the next attempt loads again — and once the client reloads,
 it asks for the chunk names the current build wrote.
 
-On an interactive terminal, `build` and `dev` also use a cached, non-blocking
-daily check to mention newer Puzzle releases. Set `PUZZLE_NO_UPDATE_CHECK=1` to
-disable it; the check is skipped automatically when `CI` is set.
+On an interactive terminal, `build` and `dev` also mention newer Puzzle releases.
+The notice is printed from a cached answer and **never waits on the network** —
+no build pays registry latency, ever. When that answer is more than an hour old
+the command starts a detached background process to refresh it and exits without
+waiting, so a release published since your last check is mentioned on the run
+after the refresh lands rather than on the run that fetched it. A failed refresh
+is not retried for fifteen minutes, so an unreachable registry costs one
+short-lived process every quarter hour rather than one per command. Set
+`PUZZLE_NO_UPDATE_CHECK=1` to disable it; the check is skipped automatically
+when `CI` is set or output is not a terminal.
 
 `puzzle preview` serves a build you already produced, with no watcher, no live
 reload, and no `dev.proxy` — the artifact is checked exactly as it sits on disk.

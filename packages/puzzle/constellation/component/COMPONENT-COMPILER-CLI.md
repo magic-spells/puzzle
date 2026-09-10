@@ -54,6 +54,32 @@ notes:
       compiler/internal/pieces/pieces.go.
   - kind: state
     text: >-
+      2026-09-09 — the passive update notice is no longer cache-only, so the body's "24h cache,
+      background refresh" phrasing is stale. Current design (D76, amended): `internal/update` keeps
+      a **6h** cache under the user cache dir; a cache inside the TTL answers with no request at
+      all, and a missing or stale one is refreshed in the **foreground under a 500 ms cap** and
+      printed in the SAME run. Over the cap or on error the old fire-and-forget refresh (3s) takes
+      over and the stale answer returns immediately. TTY-only, skipped under `CI` /
+      `PUZZLE_NO_UPDATE_CHECK`, registry overridable via `PUZZLE_REGISTRY` — all unchanged. Fold
+      this into the body on the next pass over this card (it has no `##` sections, so it needs a
+      full-body write).
+  - kind: state
+    text: >-
+      2026-09-09, superseding the same-day note above — the same-run update notice was reverted
+      before it shipped. Current design (D76, and the body's "24h cache, background refresh" is
+      wrong only in the number): `internal/update` keeps a **1h** cache under the user cache dir and
+      `CheckPassive` NEVER fetches. It prints from the recorded answer and, when that answer is over
+      the TTL or absent and no `failed_at` backoff is running, starts a **detached helper process**
+      — the CLI re-execing itself as the hidden `puzzle update-check` subcommand
+      (cmd/puzzle/updatecheck.go), which fetches with a 3s budget and writes the cache or the
+      failure stamp. It is a process rather than a goroutine because `puzzle build` exits before any
+      in-process fetch can land; `dev` uses the same path so there is only one. Cache writes are
+      atomic (temp + rename) since parallel builds each spawn one. Gates (TTY-only, `CI`,
+      `PUZZLE_NO_UPDATE_CHECK`) and `PUZZLE_REGISTRY` are unchanged, and the helper re-checks the
+      two env gates itself. Fold this into the body on the next pass over this card — it has no `##`
+      sections, so it needs a full-body write.
+  - kind: state
+    text: >-
       0.7.1 (D169): a piece manifest's `dependencies` entry is an npm install spec with a version
       FLOOR — `"@magic-spells/collapsible-content@^1.2.0"` — and `add piece` prints `npm install
       <name>@<range> …`. `internal/pieces/deps.go` splits the spec on the LAST `@` (so a scoped
