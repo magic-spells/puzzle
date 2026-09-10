@@ -146,7 +146,27 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Added
 
+- **Registry dependencies carry a version floor (D169).** A piece manifest's
+  `dependencies` entry is now an npm install spec — `"@magic-spells/collapsible-content@^1.2.0"` —
+  and `puzzle add piece` prints `npm install <name>@<range> …` instead of a bare
+  package name, so a fresh app installs a component version that actually has
+  the attributes the piece wraps. When two resolved pieces share a dependency at
+  different floors the higher one wins and the package prints once. A bare name
+  still parses and prints bare, so third-party registries on the old shape are
+  unaffected; neither `registry.json`'s schema version nor `pieces.lock` changed.
+  Every bundled piece manifest now pins the floor it needs.
+
 ### Changed
+
+- **The update notice never waits on the network (D76).** `puzzle build` and
+  `puzzle dev` print "a newer version is available" from a cached answer and
+  never fetch in-process. When the cache is over an hour old, the CLI re-execs
+  itself as a detached background helper that refreshes it with a 3 s budget, so
+  a new release shows up on the next run after it lands rather than a day later,
+  and a slow or offline registry cannot add a millisecond to a build. A failed
+  refresh backs off for 15 minutes; cache writes are atomic so parallel builds
+  cannot corrupt each other. The gates are unchanged: TTY only, skipped under
+  `CI` and `PUZZLE_NO_UPDATE_CHECK`, registry overridable with `PUZZLE_REGISTRY`.
 
 ### Fixed
 
