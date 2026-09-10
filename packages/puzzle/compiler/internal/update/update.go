@@ -16,19 +16,19 @@ import (
 const (
 	defaultRegistry = "https://registry.npmjs.org"
 	cacheFileName   = "update-check.json"
-	cacheTTL        = 6 * time.Hour
+	// cacheTTL is how long a recorded answer is reused before a background
+	// refresh is started. Nothing ever waits on that refresh, so the TTL is
+	// short: it only decides how many runs a newly published release stays
+	// unmentioned, not how long any command takes.
+	cacheTTL = time.Hour
 
-	// syncTimeout caps the foreground fetch CheckPassive runs when the cache is
-	// cold. Short enough that a slow or unreachable registry is a rounding error
-	// on a build, long enough that a healthy registry answers inside it.
-	syncTimeout = 500 * time.Millisecond
-	// asyncTimeout is the fire-and-forget refresh's budget. It can afford to be
-	// generous — nothing is waiting on it.
-	asyncTimeout = 3 * time.Second
-	// failureBackoff is how long a failed foreground fetch suppresses the next
-	// one. Without it a blackholing network — packets dropped rather than
-	// refused — costs EVERY command the full syncTimeout, since a fetch that
-	// never answers also never writes a cache to go stale.
+	// refreshTimeout is the detached helper's fetch budget. It can afford to be
+	// generous — the command that started it has already exited.
+	refreshTimeout = 3 * time.Second
+	// failureBackoff is how long a failed refresh suppresses the next one, so an
+	// unreachable registry is contacted four times an hour rather than once per
+	// command. A failed fetch writes no `checked_at`, so without the stamp the
+	// cache would never stop being stale.
 	failureBackoff = 15 * time.Minute
 )
 
@@ -238,36 +238,59 @@ func WriteCache(latest string, checkedAt time.Time) error {
 		return err
 	}
 	// No FailedAt: a successful check clears any recorded failure.
-	data, err := json.Marshal(cacheFile{
+	return writeCacheFile(cacheFile{
 		CheckedAt: checkedAt.UTC().Format(time.RFC3339),
 		Latest:    latest,
 	})
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o644)
 }
 
-// writeFailure records a failed foreground check. The recorded answer is left
-// exactly as it was — only the failure stamp moves — so a stale-but-usable
-// latest keeps answering while the backoff runs.
+// writeFailure records a failed refresh. The recorded answer is left exactly as
+// it was — only the failure stamp moves — so a stale-but-usable latest keeps
+// answering while the backoff runs.
 func writeFailure(at time.Time) error {
-	path, err := cachePath()
-	if err != nil {
-		return err
-	}
 	// A missing or corrupt file yields the zero value, which is what we want:
 	// a stamp with no answer behind it.
 	disk, _ := readCacheFile()
 	disk.FailedAt = at.UTC().Format(time.RFC3339)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	return writeCacheFile(disk)
+}
+
+// writeCacheFile replaces the cache file atomically: a temp file in the same
+// directory, then a rename. Two commands started at once each spawn their own
+// helper, so concurrent writers are normal — and a reader must never catch a
+// half-written file and decide the cache is corrupt.
+func writeCacheFile(disk cacheFile) error {
+	path, err := cachePath()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	data, err := json.Marshal(disk)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	tmp, err := os.CreateTemp(dir, cacheFileName+".*")
+	if err != nil {
+		return err
+	}
+	// Harmless once the rename lands; the cleanup that matters is the one after
+	// a failed write partway through.
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	// CreateTemp makes the file 0600; the cache is not a secret.
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // Stale reports whether the cached check is at least cacheTTL old.
@@ -287,27 +310,21 @@ func cachePath() (string, error) {
 	return filepath.Join(dir, cacheFileName), nil
 }
 
-// CheckPassive returns a newer published version when one exists.
+// CheckPassive returns a newer published version when one exists, answering
+// from the cache alone. It never contacts the registry and never waits.
 //
-// A fresh cache answers on its own. A missing or stale cache is refreshed in
-// the foreground first, under a short cap, so a release published since the
-// last check is reported on THIS run rather than the next one. If that fetch
-// does not answer inside the cap — or fails — the command is not made to wait:
-// the fire-and-forget refresh takes over for a later run, and the answer comes
-// from whatever the stale cache held. Registry errors are never surfaced.
+// When the recorded answer is older than cacheTTL — or there is none — a
+// detached helper is started to refresh it for the NEXT run. The notice for a
+// freshly published release therefore appears one run late, which is the price
+// of never charging a build for the network. A failed refresh is stamped by the
+// helper and suppresses the next spawn for failureBackoff.
 //
-// A failure is recorded, and for failureBackoff afterwards no fetch is
-// attempted at all. Otherwise a network that drops packets rather than
-// refusing them would charge every command the full cap forever: the fetch
-// writes no cache when it fails, so nothing would ever go un-stale, and the
-// async fallback never lands for a short-lived `build` that exits first.
+// Registry errors are never surfaced, and a helper that cannot be spawned fails
+// silently: the notice is a courtesy, not a feature anything depends on.
 func CheckPassive(current string) (string, bool) {
 	now := time.Now()
 	disk, _ := readCacheFile()
 	cached, cacheErr := disk.result()
-	if cacheErr == nil && !cached.Stale(now) {
-		return newerThan(cached.Latest, current)
-	}
 
 	answer := func() (string, bool) {
 		if cacheErr != nil {
@@ -316,20 +333,32 @@ func CheckPassive(current string) (string, bool) {
 		return newerThan(cached.Latest, current)
 	}
 
+	if cacheErr == nil && !cached.Stale(now) {
+		return answer()
+	}
 	if until, backing := disk.backoffUntil(); backing && now.Before(until) {
 		return answer()
 	}
-
-	if latest, fetchErr := FetchLatest(syncTimeout); fetchErr == nil {
-		_ = WriteCache(latest, time.Now())
-		return newerThan(latest, current)
-	}
-
-	// Stamp before starting the refresh: a refresh that succeeds writes a
-	// clean cache, and that write must be the later one so it clears the stamp.
-	_ = writeFailure(time.Now())
-	refreshAsync()
+	_ = spawnRefresh()
 	return answer()
+}
+
+// Refresh performs the registry check the detached helper exists to run: fetch,
+// then record either the answer or the failure. It is the whole body of the
+// hidden `puzzle update-check` subcommand.
+//
+// The gates are re-evaluated here rather than trusted from the parent, because
+// the subcommand is reachable directly from a shell.
+func Refresh() {
+	if os.Getenv("CI") != "" || os.Getenv("PUZZLE_NO_UPDATE_CHECK") != "" {
+		return
+	}
+	latest, err := FetchLatest(refreshTimeout)
+	if err != nil {
+		_ = writeFailure(time.Now())
+		return
+	}
+	_ = WriteCache(latest, time.Now())
 }
 
 // newerThan reports latest when it is strictly newer than current.
@@ -338,13 +367,4 @@ func newerThan(latest, current string) (string, bool) {
 		return latest, true
 	}
 	return "", false
-}
-
-func refreshAsync() {
-	go func() {
-		latest, fetchErr := FetchLatest(asyncTimeout)
-		if fetchErr == nil {
-			_ = WriteCache(latest, time.Now())
-		}
-	}()
 }

@@ -63,6 +63,21 @@ notes:
       `PUZZLE_NO_UPDATE_CHECK`, registry overridable via `PUZZLE_REGISTRY` — all unchanged. Fold
       this into the body on the next pass over this card (it has no `##` sections, so it needs a
       full-body write).
+  - kind: state
+    text: >-
+      2026-09-09, superseding the same-day note above — the same-run update notice was reverted
+      before it shipped. Current design (D76, and the body's "24h cache, background refresh" is
+      wrong only in the number): `internal/update` keeps a **1h** cache under the user cache dir and
+      `CheckPassive` NEVER fetches. It prints from the recorded answer and, when that answer is over
+      the TTL or absent and no `failed_at` backoff is running, starts a **detached helper process**
+      — the CLI re-execing itself as the hidden `puzzle update-check` subcommand
+      (cmd/puzzle/updatecheck.go), which fetches with a 3s budget and writes the cache or the
+      failure stamp. It is a process rather than a goroutine because `puzzle build` exits before any
+      in-process fetch can land; `dev` uses the same path so there is only one. Cache writes are
+      atomic (temp + rename) since parallel builds each spawn one. Gates (TTY-only, `CI`,
+      `PUZZLE_NO_UPDATE_CHECK`) and `PUZZLE_REGISTRY` are unchanged, and the helper re-checks the
+      two env gates itself. Fold this into the body on the next pass over this card — it has no `##`
+      sections, so it needs a full-body write.
 ---
 
 # Compiler CLI

@@ -30,38 +30,36 @@ notes:
       `platformBinaryName()`. Still unhandled on Windows: the `node_modules/.bin/puzzle` fallback
       candidate is a shell script npm pairs with a `.cmd`, so exec'ing it fails and the candidate is
       simply skipped; the hoisted platform binary is tried first, so the common layouts still work.
+  - kind: gotcha
+    text: >-
+      Two traps in the detached refresh, both discovered building it. (1) `os.Executable()` inside a
+      Go test is the TEST binary, so a self-re-exec cannot be tested without a seam —
+      `executablePath` and `spawnRefresh` in internal/update/spawn.go exist for that, and the
+      fork-for-real test re-executes the test binary in a TestMain branch to get a parent that dies
+      immediately. (2) The helper resolves its cache through `os.UserCacheDir()`, which reads the
+      environment, so the only way to keep a genuinely forked helper out of the developer's own
+      ~/Library/Caches/puzzle is to hand the child a fake HOME/XDG_CACHE_HOME/LocalAppData.
+      `update.CacheDir` is a package var and does NOT reach a child process.
   - kind: decision
     text: >-
-      2026-09-09 — the passive notice was amended from cache-only to same-run. The original design
-      shipped 0.1.0 as pure update-notifier: print from cache, refresh in the background for next
-      time. In practice that meant a user only ever heard about a release after the 24h TTL expired
-      AND they ran a command twice, which is not a notification. Now the TTL is 6h and a cold or
-      stale cache is refreshed in the foreground under a 500 ms cap before printing; over the cap or
-      on any error the old fire-and-forget refresh takes over and the stale answer returns
-      immediately, so no command can be delayed further than the cap. The gates (CI /
-      PUZZLE_NO_UPDATE_CHECK / non-TTY stdout) are unchanged and still evaluated before anything
-      reaches the registry, and `puzzle upgrade` — which calls FetchLatest/WriteCache directly with
-      its own 5s budget — is untouched.
-  - kind: decision
-    text: >-
-      2026-09-09 — the foreground cap needed a failure backoff to actually bound the cost. Review of
-      the same-run change found the hole: a fetch that fails writes no cache, so the cache never
-      stops being stale, and every subsequent `puzzle build` pays the full 500 ms again — forever,
-      on a network that drops packets rather than refusing them (a refused connection fails
-      instantly; a blackholed one burns the whole cap), or on any link slower than the cap. The
-      async fallback does not rescue `build` either, since the process exits before the goroutine
-      lands. So a failed foreground fetch now stamps `failed_at` into the cache file (an optional
-      field; `latest`/`checked_at` are left exactly as they were, and an old-format file without it
-      still loads), and while `now < failed_at + 15m` CheckPassive attempts no fetch at all — it
-      just returns the cached answer if there is one. Any successful fetch, foreground or
-      background, clears the stamp. The async fallback is unchanged and still there for `dev`. Worst
-      case for an unreachable registry is therefore half a second every fifteen minutes rather than
-      half a second per command.
+      2026-09-09 — Cory chose "check in the background, print next run" over the 500 ms synchronous
+      wait. Two attempts at making the notice same-run had shipped on this branch that day (a 6h TTL
+      with a bounded foreground fetch, then a 15-minute failure backoff to bound its worst case);
+      both were reverted in favor of never waiting at all. The reasoning: a courtesy line must not
+      be on the critical path of `puzzle build`, and any cap is a number with no defensible value
+      once the build itself is ~70 ms. The design that replaced them keeps the fire-and-forget shape
+      the notice always had and fixes its one real defect — a goroutine cannot outlive `build` — by
+      making the refresh a detached `puzzle update-check` process instead. TTL 1h (a refresh is now
+      free, so it can be frequent), the failure backoff kept, cache writes made atomic because two
+      parallel builds each spawn a helper. Accepted cost, stated plainly: the notice for a brand-new
+      release arrives one run late.
 code_refs:
   - compiler/cmd/puzzle/main.go
+  - compiler/cmd/puzzle/updatecheck.go
   - compiler/cmd/puzzle/upgrade.go
   - compiler/internal/dev/dev.go
   - compiler/internal/update/update.go
+  - compiler/internal/update/spawn.go
 ---
 
 # D76 — Update notification + `puzzle upgrade` (v1.43)
@@ -74,25 +72,39 @@ The CLI ships as a Go binary inside npm platform packages (§35): users install 
 
 ## Decision
 
-**Notify on the run that asks, upgrade explicitly, and let the package manager do the installing.**
+**Notify from cache without ever waiting, refresh in the background, upgrade explicitly and let the package manager do the installing.**
 
-- The passive check is cache-backed but not cache-only. A cache younger than **6 hours** answers by itself — the common case, and free. When it is missing or stale the CLI fetches in the **foreground under a 500 ms cap**, writes the cache, and prints the notice **in the same run**, so a release published since the last check is seen the first time the user runs `puzzle dev` rather than on some later invocation. Past the cap — or on any error — the fire-and-forget refresh (3 s) takes over and the command answers from whatever the stale cache held; that refresh is only useful to a long-running `dev`, since `build` exits before it lands. A slow or unreachable registry therefore costs half a second at most, offline use stays silent, and CI / piped output / `PUZZLE_NO_UPDATE_CHECK=1` still skip the whole path including the fetch.
-- **A failed fetch backs off for 15 minutes.** The failure is stamped into the cache file (`failed_at`, leaving `latest`/`checked_at` alone) and no fetch is attempted again until the window passes; any success clears the stamp. The cap alone is not enough, because a failure writes no `checked_at`: against a network that drops packets rather than refusing them, every single `puzzle build` would pay the full cap forever, with the async fallback never landing to fix it. The backoff turns that worst case into half a second once every quarter hour.
-- The cap is safe where the notice is printed. `puzzle build` prints it after the summary, immediately before exit. `puzzle dev` prints it from `OnReady`, which fires *after* the ready banner and with the listener already accepting in its own goroutine — the bounded fetch delays neither the banner nor the first request.
-- `puzzle upgrade` never touches its own files. It detects the install context and shells out to the exact command a careful user would have typed. package.json, the lockfile, and the exact-pinned platform binary packages therefore stay consistent by construction.
+- **The passive check never touches the network on the command's own time.** `CheckPassive` reads the cache file and returns; the notice prints from whatever answer is recorded, or prints nothing. There is no timeout to tune and no bound to argue about, because there is nothing to wait for — a build costs exactly one small file read whatever the registry is doing.
+- **A recorded answer older than one hour starts a detached refresh for the next run.** The TTL is short precisely because it is free: it decides only how many runs a newly published release stays unmentioned, never how long a command takes. The notice for a fresh release therefore appears on the run *after* the refresh lands — one run late by design.
+- **The refresh is a separate process, not a goroutine.** `puzzle build` prints the notice as its last statement and exits in milliseconds; an in-process refresh dies with it, which is why the original background design never actually updated anything for `build` users. The CLI re-execs itself as `puzzle update-check` — a `Hidden: true` cobra subcommand that fetches with a 3 s budget, writes the cache or the failure stamp, prints nothing and exits 0 — started with `os.Executable()`, null standard streams, its own session (`Setsid`) or `DETACHED_PROCESS|CREATE_NEW_PROCESS_GROUP` on Windows, `Start()` + `Process.Release()` and never `Wait`. A spawn that fails is silent.
+- **`dev` and `build` use the same mechanism.** A long-running `dev` *could* refresh in-process, but two paths would mean two behaviors to reason about and only one of them exercised by the fast test. One mechanism, one code path, one set of tests; the helper works everywhere, so uniformity is free. `dev` still prints from `OnReady`, after the ready banner.
+- **A failed refresh backs off for 15 minutes.** The helper stamps `failed_at` into the cache file, leaving `latest`/`checked_at` alone, and while `now < failed_at + 15m` no helper is spawned at all; any success clears the stamp. Without it a failed fetch — which writes no `checked_at` — would leave the cache permanently stale and spawn a doomed process on every single command. With it an unreachable registry costs four short-lived processes an hour.
+- **Cache writes are atomic** (temp file in the same directory, then rename). Two builds started at once each spawn a helper, so concurrent writers are the normal case; a reader must never catch a half-written file and conclude the cache is corrupt. Duplicating the helper is cheap — it is one GET — so nothing coordinates or locks.
+- The gates (`CI`, `PUZZLE_NO_UPDATE_CHECK`, non-TTY stdout) are still evaluated in `printUpdateNotice` before anything else, so a gated invocation neither reads nor spawns. The helper re-evaluates `CI`/`PUZZLE_NO_UPDATE_CHECK` itself, because the subcommand is reachable from a shell.
+- `puzzle upgrade` never touches its own files. It detects the install context and shells out to the exact command a careful user would have typed. package.json, the lockfile, and the exact-pinned platform binary packages therefore stay consistent by construction. It fetches synchronously with its own 5 s budget — there a failure *is* an error, unlike the passive path.
 - **The install context is a property of the running executable, not of the current directory.** `puzzle upgrade` upgrades the CLI you invoked — resolved from `os.Executable()` — and nothing else. A project you happen to be standing in is never upgraded as a side effect; bumping a project's dependency is `npm install`'s job, and the CLI does not duplicate it. See [[DOC-SPEC-BUILD]] §41 for the resolution rules (pnpm-global, project, global, manual).
 - The result is verified, not assumed: the installed package's version must equal the fetched target or the command fails. Because the checked, upgraded, and reported install are the same one, that confirmation is meaningful — it cannot pass by reading a package the command never wrote.
 
 ## Alternatives rejected
 
+- **A bounded synchronous fetch before printing** (a 500 ms cap on a cold or stale cache, falling back to a background refresh past the cap): the direct attempt at "tell me about the release on the run that asks". It was tried, and it is the wrong trade. It makes `build` — the command in every CI-adjacent script and every watch loop — pay registry latency for a courtesy line nothing depends on, and the cap is a number with no good value: low enough to be invisible and it rarely beats the network, high enough to usually succeed and half a second is on the critical path of a 70 ms build. Worse, the failure modes are the ones that hurt most: a captive-portal or blackholing network burns the entire cap on every miss, and the fallback that was supposed to rescue the case never lands for a process that exits immediately after. The 15-minute failure backoff bounded the damage but did not change the shape of it. Refreshing out of band removes the question entirely — there is no cap to tune when nothing waits.
+- **An unbounded blocking version check on every run**: adds full registry latency to every build and fails ugly offline. Rejected for the same reason as the bounded version, only more so.
+- **A goroutine for the background refresh, as the notice originally shipped**: correct for `dev`, useless for `build` — the process exits long before the request completes, so `build` users' caches only ever advanced when they happened to run `dev`. That is what made the notice arrive two conditions late and prompted the whole revision. The detached helper is that same fire-and-forget design with the one flaw fixed.
+- **Keeping the goroutine for `dev` and the helper for `build`**: two mechanisms for one behavior, with the goroutine path exercised only by whoever leaves a dev server running. The helper works in a long-lived process too, so there is nothing to buy.
+- **A 24-hour TTL** (the original): sensible when a refresh was something to be economical with. Now that a refresh costs the command nothing, an hour is affordable and cuts the "release published, still unmentioned" window by a factor of 24.
+- **A lock or single-flight around the refresh** so two parallel builds cannot both spawn one: the thing being guarded is a single small GET and a rename. The lock would be more code, more failure modes and more state on disk than the duplication it prevents; an atomic cache write is the whole of what concurrency actually requires here.
 - **Self-replacing binary download** (rustup/deno-style): desyncs npm's ledger — package.json and the lockfile would still pin the old version, and the next `npm install` would silently roll the binary back. Wrong ownership model for an npm-distributed tool.
 - **Deriving the install context from cwd** (walk up to the first `package.json` listing the package): plausible, since inside a Puzzle project the CLI usually *is* the project's local one — but only usually. Type `puzzle` in a project and hit a global shim and the two diverge: the command compares the global binary's version against the registry, runs the package manager against the project, and confirms success by reading the project's package.json. It can then report an upgrade for a package it never wrote, while the CLI that was actually stale stays stale and re-offers the same upgrade forever. Keying off the executable makes that class of mismatch unrepresentable.
 - **Upgrading both the CLI and the surrounding project's dependency**: two installs with independent lifecycles and one confirmation step between them. The project dependency is npm's to manage.
 - **Update logic in the `bin/puzzle.js` shim**: keeps the Go binary pure, but the shim is deliberately a dumb forwarder (§35) and Node-side logic there would run on every invocation for every user, TTY or not.
-- **A purely passive, cache-only notice** (the original update-notifier pattern): the notice prints only from cache and a stale cache refreshes in the background for *next* time. Nothing ever waits on the network, which is the appeal — but it makes the notice arrive two conditions late. After a release a user had to wait out the TTL *and then run the command twice* before anything was said, and a `puzzle dev` left running for days never re-checked at all. The point of the notice is to be seen; a bounded foreground fetch buys that for a worst case of 500 ms on the ~one run in six hours that misses the cache, with the fire-and-forget refresh still there as the fallback whenever the cap is hit.
-- **An unbounded blocking version check on every run**: adds full registry latency to every build and fails ugly offline. The cap plus the 6h cache keeps the cost bounded and rare instead.
 - **A `latest` dist-tag install** instead of the exact fetched version: races the registry between check and install; the exact version makes the confirmation step meaningful.
 
 ## Consequences
 
-Purely additive CLI surface; runtime, compiler, and template grammar are untouched. New `compiler/internal/update` package (registry fetch, a 6h cache with a bounded foreground refresh, a 15-minute failure backoff, and an async fallback, minimal semver — stdlib only, no new Go dependencies); `compiler/cmd/puzzle/upgrade.go` (context detection, package-manager exec, confirmation); an `OnReady` hook on `dev.Options` so the notice lands after the ready banner; `ui.IsTerminal` helper. The passive path is the CLI's only unprompted network call — gated to interactive TTY sessions and disableable, which is the privacy/CI posture the notice ships with; the gates are evaluated before `CheckPassive`, so a gated invocation still touches nothing. Tests cover semver ordering, cache staleness, the fresh-cache path making no request at all, the stale-cache same-run refresh, the over-the-cap fallback (bounded elapsed time plus an eventual async cache write), the failure backoff (a failed fetch stamps `failed_at`; the next call inside the window makes zero requests and returns well under the cap; past the window it retries and the success clears the stamp; an old-format file without the field still loads), registry fetch (httptest via `PUZZLE_REGISTRY`), lockfile/dep-field detection over fixture trees, and end-to-end upgrades against stub `npm`/`pnpm` binaries on PATH.
+Purely additive CLI surface; runtime, compiler, and template grammar are untouched. `compiler/internal/update` holds the registry fetch, the 1h cache (atomic temp-file + rename writes, a 15-minute failure backoff), the detached-spawn seam (`spawn.go` plus build-tagged `spawn_unix.go` / `spawn_windows.go`), and the minimal semver — stdlib only, no new Go dependencies. `compiler/cmd/puzzle/updatecheck.go` registers the hidden `update-check` subcommand; `compiler/cmd/puzzle/upgrade.go` holds context detection, package-manager exec and confirmation; `dev.Options.OnReady` lands the notice after the ready banner; `ui.IsTerminal` gates it.
+
+The visible cost is that the notice is one run late — a release published in the last hour is announced by the run after the one that noticed. That is the trade taken deliberately: no `puzzle build` anywhere ever waits on the registry, and there is no timeout on the passive path to tune, breach, or explain. The visible artifact is a second short-lived `puzzle` process appearing for a fraction of a second every hour or so; it is detached and null-streamed, so it cannot write over a prompt or be killed by a Ctrl-C aimed at the build.
+
+The passive path is still the CLI's only unprompted network call — gated to interactive TTY sessions and disableable — and the gates are evaluated before `CheckPassive`, so a gated invocation neither reads the cache nor spawns anything. The helper re-checks `CI`/`PUZZLE_NO_UPDATE_CHECK` itself, since the subcommand is reachable from a shell, and refuses to spawn a helper of its own.
+
+Tests cover semver ordering; cache staleness against the 1h TTL; the fresh-cache path making no request and no spawn; a stale cache spawning exactly one refresh, returning in microseconds and leaving the cache untouched; an absent cache spawning one refresh and answering nothing; the backoff window suppressing the spawn and an expired window restoring it; the helper body against an httptest registry (success writes the cache and clears `failed_at`, failure stamps `failed_at` and leaves `latest`/`checked_at` alone, either gate makes it a no-op); an old-format file without `failed_at` still loading; concurrent writers never producing a torn read or a stray temp file; registry fetch via `PUZZLE_REGISTRY`; lockfile/dep-field detection over fixture trees; and end-to-end upgrades against stub `npm`/`pnpm` binaries on PATH. One test forks for real: it builds the CLI, has a process spawn the helper and exit at once, and watches the cache file appear afterwards — the only check that would catch a detach that silently kills the child with its parent.

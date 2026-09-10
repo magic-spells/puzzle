@@ -571,15 +571,15 @@ is never cached, so the next attempt loads again — and once the client reloads
 it asks for the chunk names the current build wrote.
 
 On an interactive terminal, `build` and `dev` also mention newer Puzzle releases.
-The answer is cached for six hours; when that cache is cold the CLI checks the
-registry before printing, capped at half a second, so a release published since
-your last check shows up on that run rather than the next one. Past the cap it
-gives up and refreshes in the background instead, never delaying the command
-further — though a short-lived `build` exits before that background refresh
-lands, so there the notice appears on a later run. A failed check is not
-retried for fifteen minutes, so an unreachable registry costs the cap once
-rather than on every command. Set `PUZZLE_NO_UPDATE_CHECK=1` to disable it; the
-check is skipped automatically when `CI` is set or output is not a terminal.
+The notice is printed from a cached answer and **never waits on the network** —
+no build pays registry latency, ever. When that answer is more than an hour old
+the command starts a detached background process to refresh it and exits without
+waiting, so a release published since your last check is mentioned on the run
+after the refresh lands rather than on the run that fetched it. A failed refresh
+is not retried for fifteen minutes, so an unreachable registry costs one
+short-lived process every quarter hour rather than one per command. Set
+`PUZZLE_NO_UPDATE_CHECK=1` to disable it; the check is skipped automatically
+when `CI` is set or output is not a terminal.
 
 `puzzle preview` serves a build you already produced, with no watcher, no live
 reload, and no `dev.proxy` — the artifact is checked exactly as it sits on disk.
