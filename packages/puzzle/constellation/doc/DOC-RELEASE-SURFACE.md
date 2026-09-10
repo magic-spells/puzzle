@@ -365,8 +365,6 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## CLI
 
-
-
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
 - `puzzle check [dir]` (D165): type-checks the app's `.pzl` script bodies and
@@ -418,7 +416,14 @@ second specification. Decision cards hold rationale and git holds chronology.
   `lib/` registryDependencies) must be a clean relative slash path — no `..`,
   absolute, `./`, backslash, or empty segments — validated by piece and entry
   name before anything is written; the overwrite pre-flight stays
-  all-or-nothing and names the full nested path of a conflict.
+  all-or-nothing and names the full nested path of a conflict. A manifest
+  `dependencies` entry is an npm install spec carrying a version FLOOR (D169) —
+  `"@magic-spells/collapsible-content@^1.2.0"` — and the printed next step is
+  `npm install <name>@<range> …`, sorted by package name, merged by package
+  name across the resolved set with the HIGHEST floor winning; a bare name
+  still parses and still prints bare, so a third-party registry on the older
+  shape keeps working. The line is unconditional — the app's package.json is
+  never read to suppress an already-satisfied dependency.
 - `puzzle add skills` (alias `skill`, D78): installs the `go:embed`-ed agent
   skill into detected `~/.claude` / `~/.codex` / `~/.cursor` config dirs;
   `--skill-root <dir>` (repeatable, D97) pins them instead. Installs carry a

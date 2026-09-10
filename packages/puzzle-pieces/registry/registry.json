@@ -58,7 +58,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dialog-panel"
+        "@magic-spells/dialog-panel@^2.0.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -136,8 +136,8 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/bottom-sheet",
-        "@magic-spells/dialog-panel"
+        "@magic-spells/bottom-sheet@^2.0.2",
+        "@magic-spells/dialog-panel@^2.0.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -254,7 +254,7 @@
         "lib/puzzle-lang.js"
       ],
       "dependencies": [
-        "highlight.js"
+        "highlight.js@^11.11.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -269,7 +269,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/collapsible-content"
+        "@magic-spells/collapsible-content@^1.2.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -340,7 +340,7 @@
         "lib/date-math.js"
       ],
       "dependencies": [
-        "@magic-spells/morph-engine"
+        "@magic-spells/morph-engine@^0.1.2"
       ],
       "targetDir": "app/components/ui"
     },
@@ -375,7 +375,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dialog-panel"
+        "@magic-spells/dialog-panel@^2.0.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -412,7 +412,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dropdown-panel"
+        "@magic-spells/dropdown-panel@^2.1.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -439,7 +439,7 @@
         "lib/emoji-keywords.js"
       ],
       "dependencies": [
-        "@magic-spells/morph-engine"
+        "@magic-spells/morph-engine@^0.1.2"
       ],
       "targetDir": "app/components/ui"
     },
@@ -453,7 +453,7 @@
         "lib/emoji-data.js"
       ],
       "dependencies": [
-        "@magic-spells/morph-engine"
+        "@magic-spells/morph-engine@^0.1.2"
       ],
       "targetDir": "app/components/ui"
     },
@@ -577,7 +577,7 @@
         "lib/markdown-doc.js"
       ],
       "dependencies": [
-        "marked"
+        "marked@^17.0.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -592,12 +592,12 @@
         "lib/markdown-doc.js"
       ],
       "dependencies": [
-        "@tiptap/core",
-        "@tiptap/pm",
-        "@tiptap/starter-kit",
-        "@tiptap/extension-list",
-        "@tiptap/extension-table",
-        "@tiptap/markdown"
+        "@tiptap/core@^3.30.0",
+        "@tiptap/pm@^3.30.0",
+        "@tiptap/starter-kit@^3.30.0",
+        "@tiptap/extension-list@^3.30.0",
+        "@tiptap/extension-table@^3.30.0",
+        "@tiptap/markdown@^3.30.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -609,7 +609,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/scrolling-content"
+        "@magic-spells/scrolling-content@^2.1.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -711,7 +711,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/panel-stack"
+        "@magic-spells/panel-stack@^0.2.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -792,7 +792,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/quantity-input"
+        "@magic-spells/quantity-input@^1.1.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -839,10 +839,10 @@
         "lib/rich-text-doc.js"
       ],
       "dependencies": [
-        "@tiptap/core",
-        "@tiptap/pm",
-        "@tiptap/starter-kit",
-        "@tiptap/extension-text-align"
+        "@tiptap/core@^3.30.0",
+        "@tiptap/pm@^3.30.0",
+        "@tiptap/starter-kit@^3.30.0",
+        "@tiptap/extension-text-align@^3.30.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -864,7 +864,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/scroll-stack"
+        "@magic-spells/scroll-stack@^0.1.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -890,7 +890,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/select-dropdown"
+        "@magic-spells/select-dropdown@^0.3.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -912,8 +912,8 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/sheet",
-        "@magic-spells/dialog-panel"
+        "@magic-spells/sheet@^0.1.1",
+        "@magic-spells/dialog-panel@^2.0.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -997,7 +997,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/split-panel"
+        "@magic-spells/split-panel@^0.2.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -1055,7 +1055,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/tab-group"
+        "@magic-spells/tab-group@^1.2.0"
       ],
       "targetDir": "app/components/ui"
     },

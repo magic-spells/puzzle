@@ -6,7 +6,7 @@
   ],
   "registryDependencies": [],
   "dependencies": [
-    "@magic-spells/dialog-panel"
+    "@magic-spells/dialog-panel@^2.0.1"
   ],
   "targetDir": "app/components/ui"
 }

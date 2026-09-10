@@ -770,7 +770,10 @@ Copy-in registry, shadcn-style: the files land in your app; nothing imports
 the registry package at runtime. Use `puzzle add piece <name…>` (copies each
 piece + its transitive piece/lib dependencies verbatim, records hashes in
 `pieces.lock`; `--overwrite` to refresh; required npm packages and the theme
-merge are printed as next steps). The default source is the
+merge are printed as next steps). The printed install line carries each
+package's version floor — `npm install @magic-spells/collapsible-content@^1.2.0`
+— so a piece never resolves against an npm `latest` older than the component it
+wraps; run it as printed. The default source is the
 `@magic-spells/puzzle-pieces` npm package, version-locked to the CLI's
 major.minor (falls back to the newest OLDER release with a printed note).
 `--pieces-version` pins a release; `--registry` (or `$PUZZLE_PIECES_REGISTRY`)

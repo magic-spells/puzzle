@@ -10,7 +10,7 @@
   ],
   "registryDependencies": [],
   "dependencies": [
-    "@magic-spells/tab-group"
+    "@magic-spells/tab-group@^1.2.0"
   ],
   "targetDir": "app/components/ui"
 }

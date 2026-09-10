@@ -9,7 +9,7 @@
   ],
   "registryDependencies": [],
   "dependencies": [
-    "@magic-spells/dropdown-panel"
+    "@magic-spells/dropdown-panel@^2.1.0"
   ],
   "targetDir": "app/components/ui"
 }

@@ -10,6 +10,9 @@ import { readFile, access } from 'node:fs/promises';
 // barrels, and the four rules a wrapper piece has to keep.
 
 const PACKAGE = '@magic-spells/dropdown-panel';
+// The manifest carries the version FLOOR the family was built against (D169);
+// the .pzl still imports the BARE specifier.
+const DEP = `${PACKAGE}@^2.1.0`;
 const SPECIFIER = PACKAGE.replace('/', '\\/');
 
 const readText = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -86,7 +89,7 @@ const PIECES = [
 		manifest: '../registry/ui/dropdown-panel/piece.json',
 		files: BASE_FILES,
 		registryDependencies: [],
-		dependencies: [PACKAGE],
+		dependencies: [DEP],
 	},
 	{
 		piece: 'navigation-menu',
