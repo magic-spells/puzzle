@@ -125,9 +125,9 @@ func TestStaticCacheInsideRowUsesRowScope(t *testing.T) {
 	}
 }
 
-// An island's children are seeded once at mount and never reconciled again, so
-// the array is cached as a unit at any size and WHATEVER IT CONTAINS, even when
-// the element itself is dynamic (D44 + D170 static subtree caches).
+// A STATIC island seed is cached as a unit at any size — the size threshold does
+// not apply, because a seed that is rebuilt and thrown away is pure waste however
+// small it is — even when the element itself is dynamic (D44 + D170).
 func TestStaticCacheIslandChildrenArray(t *testing.T) {
 	got := compileSrc(t, cacheSrc(`  <div island class={ cls }><p>one</p><em>two</em></div>`))
 	if !strings.Contains(got, "}, (this.__c[0] ??= [\n") {
@@ -158,25 +158,22 @@ func TestStaticCacheIslandChildrenArray(t *testing.T) {
 	}
 }
 
-// The island seed is a MOUNT-TIME value, so an interpolation inside one is
-// cached with everything else: it is documented as read once, and the patcher is
-// contractually forbidden from ever updating it (D44).
+// A DYNAMIC island seed is not cached. `this.__c[n] ??=` is per view INSTANCE,
+// not per mount, while D44 says an island re-seeds from the template on a
+// key-reset or hide/show remount — a cached dynamic seed would hand the remount
+// the first render's values and display them forever.
 func TestStaticCacheIslandChildrenInterpolation(t *testing.T) {
 	got := compileSrc(t, cacheSrc(`  <div island class={ cls }>{ text }</div>`))
-	if !strings.Contains(got, "}, (this.__c[0] ??= [\n") {
-		t.Errorf("an island's interpolated seed must still be cached as a unit:\n%s", got)
+	if strings.Contains(got, "this.__c[") {
+		t.Errorf("an island's interpolated seed must not be cached:\n%s", got)
 	}
 	if !strings.Contains(got, "new ViewNode('text', { value: __s(__d.text") {
-		t.Errorf("the interpolation must still be emitted inside the cached array:\n%s", got)
-	}
-	if strings.Count(got, "this.__c[") != 1 {
-		t.Errorf("exactly one wrapper, on the children array:\n%s", got)
+		t.Errorf("the interpolation must still be emitted:\n%s", got)
 	}
 }
 
-// The shape the stress example measures: an island whose sole child is a
-// `{#for}`. The lowered list call IS the children argument, so the wrapper goes
-// round the call — the block runs once and the seed is allocated once.
+// The same rule one level in: an island whose sole child is a `{#for}` has a
+// dynamic seed, so the list call is not wrapped — at row level or view level.
 func TestStaticCacheIslandChildrenLoop(t *testing.T) {
 	got := compileSrc(t, cacheSrc(
 		"  {#for isle in islands}\n"+
@@ -185,22 +182,18 @@ func TestStaticCacheIslandChildrenLoop(t *testing.T) {
 			"    </div>\n"+
 			"  {/for}",
 	))
-	if !strings.Contains(got, "(s.c[0] ??= __l(this, s, 1, s.item.items, (s1) =>") {
-		t.Errorf("an island's sole-{#for} seed must be cached around the list call:\n%s", got)
+	if strings.Contains(got, ".c[") || strings.Contains(got, "this.__c[") {
+		t.Errorf("an island's sole-{#for} seed must not be cached:\n%s", got)
 	}
-	if !strings.Contains(got, "        , __L1))\n") {
-		t.Errorf("the wrapper must close on the list call's closing line:\n%s", got)
+	if !strings.Contains(got, "__l(this, s, 1, s.item.items, (s1) =>") {
+		t.Errorf("the nested list call must still be emitted:\n%s", got)
 	}
-	// Nothing inside the cached array takes a wrapper of its own.
-	if strings.Count(got, ".c[") != 1 {
-		t.Errorf("exactly one wrapper for the island seed:\n%s", got)
-	}
-	// A view-level island over a loop caches on the view instead.
+	// A view-level island over a loop is the same shape one level out.
 	top := compileSrc(t, cacheSrc(
 		"  <div class=\"isle\" island>{#for item in items}<span>{ item.label }</span>{/for}</div>",
 	))
-	if !strings.Contains(top, "(this.__c[0] ??= __l(this, this, 0, __d.items, (s) =>") {
-		t.Errorf("a view-level island seed must cache on the view:\n%s", top)
+	if strings.Contains(top, "this.__c[") {
+		t.Errorf("a view-level island's dynamic seed must not be cached:\n%s", top)
 	}
 }
 
@@ -252,8 +245,8 @@ func TestStaticCacheNeverInsideSnippetBody(t *testing.T) {
 // A range {#for} still emits `.map`, so its body owns no row scope. A static
 // subtree inside one would take a VIEW-level slot and hand the same vnode to
 // every iteration — one object mounted at N DOM positions, with `el`, `ref=`
-// and `outside:` teardown all pointing at the last row. Nothing inside a range
-// body is cached.
+// and `outside:` teardown all pointing at the last row. Nothing inside a
+// non-lowered loop body is cached.
 func TestStaticCacheNeverInsideRangeBody(t *testing.T) {
 	got := compileSrc(t, cacheSrc(
 		"  {#for 1...3, n}\n"+
@@ -265,8 +258,8 @@ func TestStaticCacheNeverInsideRangeBody(t *testing.T) {
 	}
 }
 
-// The island children array is the one cache site with no static requirement,
-// so it needs the same range exclusion — at view level AND at row level.
+// A static island seed has no size threshold, so it needs the same non-lowered
+// body exclusion — at view level AND at row level.
 func TestStaticCacheNeverInsideRangeBodyIsland(t *testing.T) {
 	got := compileSrc(t, cacheSrc(
 		"  {#for 1...3, n}\n"+
@@ -304,9 +297,11 @@ func TestStaticCacheRangeInsideLoweredRowTakesNoRowSlot(t *testing.T) {
 	}
 }
 
-// rangeDepth gates CACHING only — list lowering is untouched, so an item-form
-// loop nested inside a range body still becomes a persistent list block.
-func TestStaticCacheRangeStillLowersNestedItemLoop(t *testing.T) {
+// mapDepth gates LOWERING as well as caching: a range body is emitted once and
+// evaluated per iteration, so an item-form loop inside it would take one site id
+// and one block for every iteration — the same row vnode objects mounted at N
+// DOM positions. It keeps `.map`.
+func TestStaticCacheRangeDoesNotLowerNestedItemLoop(t *testing.T) {
 	got := compileSrc(t, cacheSrc(
 		"  {#for 1...3, n}\n"+
 			"    <ul key={ n }>\n"+
@@ -316,8 +311,11 @@ func TestStaticCacheRangeStillLowersNestedItemLoop(t *testing.T) {
 			"    </ul>\n"+
 			"  {/for}",
 	))
-	if !strings.Contains(got, "__l(") {
-		t.Errorf("an item-form loop inside a range body must still lower to a list block:\n%s", got)
+	if strings.Contains(got, "__l(") || strings.Contains(got, "__L0") {
+		t.Errorf("an item-form loop inside a range body must not lower:\n%s", got)
+	}
+	if !strings.Contains(got, "__d.todos.map((todo) =>") {
+		t.Errorf("it must keep the .map emission:\n%s", got)
 	}
 }
 

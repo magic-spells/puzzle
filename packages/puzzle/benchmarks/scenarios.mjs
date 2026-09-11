@@ -473,17 +473,20 @@ export const OPS = [
 			// THE assertion. Not "few", not "hopefully none" — exactly zero DOM
 			// mutations below an island boundary, measured with a MutationObserver.
 			islandViolations: 0,
-			// And the cost of that guarantee, now paid once: an island's children
-			// array is a compiler cache site (D170), so the 20,000 descendant
-			// vnodes are built on the FIRST render and never again. Exactly zero
-			// per shell render, measured by read-counting getters on each
-			// descendant rather than inferred from the source.
-			islandChildVnodesPerRender: 0,
+			// And the cost of that guarantee, still paid on every render: an
+			// island's seed is only a compiler cache site when it is STATIC
+			// (D170). A dynamic seed is re-evaluated per render and thrown away
+			// in patch(), because `this.__c[n] ??=` is per view instance while
+			// D44 re-seeds from the template on a key-reset or hide/show
+			// remount — caching it would display the first render's values
+			// forever. Measured by read-counting getters on each descendant
+			// rather than inferred from the source.
+			islandChildVnodesPerRender: 20000,
 			// The control. Zero island mutations means nothing if the shell never
 			// mutated either.
 			shellDidMutate: 1,
 		},
-		note: 'shell-renders re-renders the surrounding view 60 times. islandViolations must be 0 (island holds) AND islandChildVnodesPerRender must be 0: D170 made the island children array a cache site, so the freeze now saves allocation as well as patching — the 20,000 descendant vnodes are built once at mount and returned by reference forever after. It was 20,000 per render before D170, which is 1,200,000 across this window. The 5-second shell-churn arm measures the same thing on a clock and is deliberately not timed here.',
+		note: 'shell-renders re-renders the surrounding view 60 times. islandViolations must be 0 (island holds), and islandChildVnodesPerRender stays at 20,000 — 1,200,000 across this window — because this island\'s seed is DYNAMIC. D170 caches an island children array only when it is static: a cached dynamic seed would survive the remount D44 promises re-seeds from the template, so the key-reset and hide/show arms would show the OLD seed. Winning those allocations back needs the runtime to own the seed\'s lifetime — emit the seed as a per-render thunk the runtime evaluates at mount only, one closure instead of N vnodes, correct on remount. Deferred, not built (D170 deviation note). The 5-second shell-churn arm measures the same thing on a clock and is deliberately not timed here.',
 	},
 
 	// ── formatters: the A/B that prices the built-in registry ───────────────

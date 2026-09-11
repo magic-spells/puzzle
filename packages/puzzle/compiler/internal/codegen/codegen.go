@@ -503,11 +503,14 @@ type compiler struct {
 	// staticCacheDepth > 0 while emitting inside an already-wrapped static
 	// subtree, so only the MAXIMAL qualifying subtree gets a wrapper.
 	staticCacheDepth int
-	// rangeDepth > 0 inside a range {#for} body: a range still emits `.map`, so
-	// it owns no row scope, and the one cache slot its body would take is shared
-	// by every iteration — one vnode mounted at N DOM positions. Nothing inside
-	// one is cached, at any nesting depth.
-	rangeDepth int
+	// mapDepth > 0 inside a NON-LOWERED loop body — a range {#for}, or an
+	// item-form loop that fell back to `.map` because its explicit key reads
+	// render scope. Such a body owns no row scope, and it is emitted ONCE but
+	// evaluated per iteration, so anything inside it that keys off a site id or
+	// a cache slot would be shared by every iteration: one static vnode mounted
+	// at N DOM positions, or one list block serving N lists. Nothing inside one
+	// is cached, and no loop inside one is lowered, at any nesting depth.
+	mapDepth int
 }
 
 // item is a processed child: either a coalesced text run (textOK), a structural
@@ -641,35 +644,26 @@ func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []pa
 		return "", err
 	}
 
-	// An island's children array is cached as a unit at any size and whatever it
-	// contains (D44 + D170): the element's own attrs and listeners still patch,
-	// but the seed it freezes after mount must never be allocated twice. The
-	// depth guard keeps anything inside the array from taking a wrapper of its
-	// own — including a lowered {#for}, whose block simply runs once.
-	islandCache := c.islandChildrenCache(attrs, len(processed) > 0, isComponent)
-	if islandCache != "" {
-		c.staticCacheDepth++
-	}
-
 	// Sole-{#for} child: pass the .map()/list array directly as the children
 	// argument (no [] wrapper), matching the fixture's list <div>.
 	if len(processed) == 1 && processed[0].node != nil {
 		if f, ok := processed[0].node.(*parser.For); ok {
 			mapExpr, err := c.emitFor(f, ind+2, scope)
-			if islandCache != "" {
-				c.staticCacheDepth--
-			}
 			if err != nil {
 				return "", err
-			}
-			if islandCache != "" {
-				mapExpr = islandCache + mapExpr + ")"
 			}
 			return "new ViewNode(" + tagStr + ", " + attrsSeg + ",\n" +
 				sp(ind+2) + mapExpr + "\n" + sp(ind) + ")", nil
 		}
 	}
 
+	// A STATIC island children array is cached as a unit at any size (D44 +
+	// D170): the element's own attrs and listeners still patch, but a seed that
+	// is identical on every mount need only be allocated once.
+	islandCache := c.islandChildrenCache(attrs, children, isComponent, scope)
+	if islandCache != "" {
+		c.staticCacheDepth++
+	}
 	childrenArr, err := c.emitArray(processed, ind+2, scope)
 	if islandCache != "" {
 		c.staticCacheDepth--
@@ -808,8 +802,17 @@ func (c *compiler) emitSlot(n *parser.Slot, ind int, scope scopeMap) (string, er
 // declared parameter is added to the body scope and shadows outer bindings.
 func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (string, error) {
 	bodyScope := scope
-	for _, param := range n.Params {
-		bodyScope = scopeAdd(bodyScope, param)
+	// A parameter is destructured by its AUTHORED name (the marker-argument
+	// contract), but the identifier it binds locally is mangled when it would
+	// shadow an enclosing row scope object — `<Snippet s>` inside a lowered row.
+	decls := make([]string, len(n.Params))
+	for i, param := range n.Params {
+		var local string
+		bodyScope, local = c.bareBinding(bodyScope, param)
+		decls[i] = param
+		if local != param {
+			decls[i] = param + ": " + local
+		}
 	}
 	// A snippet body is stamped fresh at every expansion, so it owns no cache to
 	// key by site id: loops inside keep today's `.map(…)`, static subtrees are
@@ -827,10 +830,8 @@ func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (stri
 		return "", err
 	}
 	params := make([]string, len(n.Params))
-	decls := make([]string, len(n.Params))
 	for i, param := range n.Params {
 		params[i] = jsString(param)
-		decls[i] = param
 	}
 	destructure := "{}"
 	if len(decls) > 0 {
@@ -1139,13 +1140,14 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		to := "(" + c.resolve(f.RangeTo, scope) + ")"
 		gen := "Array.from({ length: " + to + " - " + from + " + 1 }, (_, __i) =>"
 		if f.Counter != "" {
-			c.rangeDepth++
-			body, err := c.forBody(f, scopeAdd(scope, f.Counter), f.Counter, ind+2, nil)
-			c.rangeDepth--
+			bodyScope, counter := c.bareBinding(scope, f.Counter)
+			c.mapDepth++
+			body, err := c.forBody(f, bodyScope, f.Counter, ind+2, nil)
+			c.mapDepth--
 			if err != nil {
 				return "", err
 			}
-			return gen + " " + from + " + __i).map((" + f.Counter + ") =>\n" +
+			return gen + " " + from + " + __i).map((" + counter + ") =>\n" +
 				sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 		}
 		// Counterless range: key by the generated VALUE, not the 0-based __i. The
@@ -1153,9 +1155,9 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		// attribute emitter, which runs resolveExpr on it exactly once (resolving a
 		// second time would produce `__d.__d.x`), so it lands as the same
 		// `(<from>) + __i` the counter form emits as its value.
-		c.rangeDepth++
+		c.mapDepth++
 		body, err := c.forBody(f, scopeAdd(scope, "__i"), "("+f.RangeFrom+") + __i", ind+2, nil)
-		c.rangeDepth--
+		c.mapDepth--
 		if err != nil {
 			return "", err
 		}
@@ -1163,10 +1165,12 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 			sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 	}
 	// Item form lowers to a persistent list block (D170, list blocks) unless the
-	// site cannot own one: a <Snippet> body is stamped fresh per expansion, and
-	// an explicit key that reads render-scope state cannot become a module-scope
-	// arrow. Both keep today's `.map(…)`.
-	if c.snippetDepth == 0 {
+	// site cannot own one: a <Snippet> body is stamped fresh per expansion, a
+	// non-lowered loop body is emitted once and evaluated per iteration (so one
+	// block would serve every iteration's list), and an explicit key that reads
+	// render-scope state cannot become a module-scope arrow. All three keep
+	// today's `.map(…)`.
+	if c.snippetDepth == 0 && c.mapDepth == 0 {
 		keyArrow, lowerable, err := c.listKeyArrow(f, scope)
 		if err != nil {
 			return "", err
@@ -1177,17 +1181,22 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 	}
 
 	coll := c.resolve(f.Collection, scope)
-	params := f.Item
-	bodyScope := scopeAdd(scope, f.Item)
+	bodyScope, itemParam := c.bareBinding(scope, f.Item)
+	params := itemParam
 	if f.Counter != "" {
-		params += ", " + f.Counter
-		bodyScope = scopeAdd(bodyScope, f.Counter)
+		var counterParam string
+		bodyScope, counterParam = c.bareBinding(bodyScope, f.Counter)
+		params += ", " + counterParam
 	}
 	// The synthetic auto-key is `ViewNode.keyOf(<item>)`; ViewNode is a module
 	// identifier (always imported), so mark it in-scope to keep the expression
 	// resolver from rewriting it to `__d.ViewNode` (D58).
 	bodyScope = scopeAdd(bodyScope, "ViewNode")
+	// This body is NOT lowered: nothing inside it may take a site id or a cache
+	// slot, because the one it took would be shared by every iteration.
+	c.mapDepth++
 	body, err := c.forBody(f, bodyScope, "ViewNode.keyOf("+f.Item+")", ind+2, nil)
+	c.mapDepth--
 	if err != nil {
 		return "", err
 	}
@@ -1557,7 +1566,7 @@ func (c *compiler) emitMixedFacts(parts []parser.Part, scope scopeMap, facts *ex
 		case *parser.StaticPart:
 			b.WriteString(tplEscape(pp.Text))
 		case *parser.InterpPart:
-			resolved, _ := resolveExprScan(pp.Interp.Expr, scope, nil, facts)
+			resolved := c.resolveInterpBase(pp.Interp.Expr, pp.Interp.Formatters, scope, facts)
 			expr := c.applyFormatters(resolved, pp.Interp.Formatters, scope, facts)
 			b.WriteString("${")
 			b.WriteString(c.displayValue(expr, pp.Interp.Expr))
@@ -1591,7 +1600,7 @@ func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprF
 		case *parser.StaticPart:
 			segs = append(segs, jsString(pp.Text))
 		case *parser.InterpPart:
-			resolved, _ := resolveExprScan(pp.Interp.Expr, scope, nil, facts)
+			resolved := c.resolveInterpBase(pp.Interp.Expr, pp.Interp.Formatters, scope, facts)
 			expr := c.applyFormatters(resolved, pp.Interp.Formatters, scope, facts)
 			segs = append(segs, c.displayValue(expr, pp.Interp.Expr))
 		case *parser.InlineIfPart:
@@ -1711,7 +1720,7 @@ func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftBlock, ri
 			if startsWithObjectLiteral(t.Expr) {
 				return "", false, c.cgErr(t.Pos, objectLiteralMsg)
 			}
-			resolved, _ := resolveExprScan(t.Expr, scope, nil, facts)
+			resolved := c.resolveInterpBase(t.Expr, t.Formatters, scope, facts)
 			expr := c.applyFormatters(resolved, t.Formatters, scope, facts)
 			segs = append(segs, seg{js: c.displayValue(expr, t.Expr), static: false})
 		}
@@ -1804,6 +1813,11 @@ func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, sco
 	c.usesFormatters = true
 	out := base
 	for _, fc := range fmts {
+		if facts != nil && clockFormatters[fc.Name] {
+			// A built-in that reads the clock is not a pure function of its
+			// input, so a cached row would freeze its output (D170 volatile).
+			facts.volatileRead = true
+		}
 		name := strconv.Quote(fc.Name)
 		var b strings.Builder
 		b.WriteString("(__f[")
@@ -1820,6 +1834,28 @@ func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, sco
 		b.WriteString(")")
 		out = b.String()
 	}
+	return out
+}
+
+// resolveInterpBase resolves an interpolation's base expression into facts. A
+// FORMATTER PIPE makes a whole-value read of a loop local OPAQUE: the formatter
+// is handed the record itself and may read anything off it (`{ post |
+// authorName }` reaching `post.author.name`), which the row revision cannot
+// cover, so the site goes conservative exactly as a relation read makes it.
+// `{ post }` alone — the display of the record — stays on identity.
+func (c *compiler) resolveInterpBase(expr string, fmts []parser.FormatterCall, scope scopeMap, facts *exprFacts) string {
+	if facts == nil || len(fmts) == 0 {
+		out, _ := resolveExprScan(expr, scope, nil, facts)
+		return out
+	}
+	sub := &exprFacts{}
+	out, _ := resolveExprScan(expr, scope, nil, sub)
+	for _, read := range sub.locals {
+		if read.whole {
+			read.opaque = true
+		}
+	}
+	facts.merge(sub)
 	return out
 }
 

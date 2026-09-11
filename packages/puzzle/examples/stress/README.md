@@ -552,11 +552,9 @@ the throttled renderer that guard exists to catch. Bounding by render count
 measures the same code path and asserts the same counters while leaving the clock
 free to say something.
 
-Measured over 600 shell renders, **before D170** — the allocation half of this
-table is what D170 changed, and the post-D170 numbers are being measured (see
-"And the allocation cost is closed" below):
+Measured over 600 shell renders:
 
-| measurement | result (pre-D170) |
+| measurement | result |
 | --- | ---: |
 | DOM mutations below an island boundary | **0** |
 | shell mutations in the same window (control) | 600 |
@@ -576,25 +574,24 @@ same assertions hold in the minified production bundle — `islandViolations` 0,
 `islandChildVnodesPerRender` 20,000, `shellDidMutate` 1 — which matters, because
 that bundle takes a different code path through the DCE'd devperf branches.
 
-**And the allocation cost is closed.** `island` used to save *patching* but not
-*allocation*: `viewManager.js`'s island branch runs inside `patch()`, which is
-only reached **after** `render()` has built the new tree, so all 20,000 child
-vnodes were constructed on every single render and then thrown away
+**The allocation cost is still open, deliberately.** `island` saves *patching*
+but not *allocation*: `viewManager.js`'s island branch runs inside `patch()`,
+which is only reached **after** `render()` has built the new tree, so all 20,000
+child vnodes are constructed on every single render and then thrown away
 (`newVnode.children = oldVnode.children`). Each descendant's `label` is a getter
 that counts its own reads, so the 20,000-per-render figure above is a measured
-number rather than an inference from the source — and it is what put island
-children on the compiler's build-once list. D170 emits an `island` element's
-children **array** as a cache site (`this.__c[n] ??= [ … ]`, or `s.c[n]` inside
-a loop row) — at any size, with no three-vnode threshold and **no static
-requirement at all**, because D44 already says the seed is built once at mount
-and never reconciled again. That last part is what this scenario needed: its
-island children are a nested `{#for}` over plain objects, so a static-only rule
-would have left exactly the measured shape paying full price. The seed is
-allocated once per island and every later render returns the same array, which
-`patch()` then skips by identity. The element itself stays dynamic — its own
-attrs and listeners still patch. **Re-measured: `islandChildVnodesPerRender` is
-0**, down from 20,000, with `islandViolations` still 0 and `shellDidMutate`
-still 1. The gate was 0 island child vnodes per render; the gate is met.
+number rather than an inference from the source. D170 emits an `island`
+element's children **array** as a cache site (`this.__c[n] ??= [ … ]`, or
+`s.c[n]` inside a loop row) at any size, with no three-vnode threshold — but
+only when the seed is **static**, and this scenario's island children are a
+nested `{#for}` over plain objects, so they do not qualify. The static-only rule
+is not timidity: `??=` is per view instance, while D44 says an island re-seeds
+from the template on a key-reset or hide/show remount, so a cached DYNAMIC seed
+would hand the remount the first render's values and show them forever. Closing
+this properly needs the runtime to own the seed's lifetime — emit the seed as a
+per-render thunk (`() => [ … ]`) the runtime evaluates at mount only, which
+allocates one closure per render instead of N vnodes and re-seeds correctly.
+Deferred, not built (D170's deviation note).
 
 **What a bad result looks like:** any non-zero `islandViolations` (the island
 contract is broken, and `validate()` fails), or `shellDidMutate` reading 0 —

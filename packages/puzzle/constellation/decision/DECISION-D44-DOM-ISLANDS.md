@@ -31,20 +31,20 @@ notes:
       the contract wording.
   - kind: state
     text: >-
-      2026-09-10 (0.8.0, D170) — the freeze now saves ALLOCATION as well as patching, and this
-      card's contract is what makes that legal. An island element's children array is a compiler
-      cache site: `(this.__c[n] ??= [ … ])` at view level, `(s.c[n] ??= [ … ])` inside a loop row,
-      and when the island's sole child is a `{#for}` the wrapper goes round the lowered list call
-      itself. It fires at ANY size and WHATEVER the children contain — this is the one static-cache
-      site with no static requirement — because D44 already says the seed is built once at mount and
-      the patcher may never reconcile it again. Read as consequences of that: a `{#for}` inside an
-      island evaluates once; an interpolation inside one is a mount-time value; a handler on a
-      seeded child is wired once; and a component, `<Children>` or `<Slot>` inside an island is
-      already a compile error, so nothing in a seed can own a lifecycle. The island ELEMENT itself
-      is unchanged — its own attrs and listeners still patch, and it is wrapped as a whole element
-      only when it is fully static. Measured on `examples/stress` `islands/shell-renders/20000`:
-      island child vnodes per shell render went 20,000 → 0 while islandViolations stayed 0 and the
-      shell provably mutated.
+      2026-09-11 (0.8.0, D170) — the freeze saves allocation too, but only for a STATIC seed. An
+      island element's children array is a compiler cache site — `(this.__c[n] ??= [ … ])` at view
+      level, `(s.c[n] ??= [ … ])` inside a loop row — at ANY size, with no three-vnode threshold,
+      because a seed that is rebuilt and thrown away is pure waste however small it is. The seed
+      must still be fully static, and THIS CARD is why: `??=` is per view instance (or per row),
+      while the Identity & reset rule above re-seeds an island from the template on a key change,
+      and a hide/show remount does the same. A cached DYNAMIC seed would hand every later mount the
+      FIRST render's values — `<div island key={reset}><b>{seed}</b></div>` would show the old seed
+      forever. A static seed is identical on every mount, so caching it is exact. Winning the
+      dynamic case back needs the RUNTIME to own the seed's lifetime: emit it as a per-render thunk
+      (`() => [ … ]`) the runtime evaluates at mount only, one closure per render instead of N
+      vnodes, re-seeding correctly on remount. Deferred, not built. Cost as measured on
+      `examples/stress` `islands/shell-renders/20000`, whose seed is a `{#for}` over plain objects:
+      island child vnodes per shell render stays at 20,000, with islandViolations 0.
 code_refs:
   - client-runtime/views/viewManager.js
 ---

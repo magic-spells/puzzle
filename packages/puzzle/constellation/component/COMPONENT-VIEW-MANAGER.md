@@ -88,6 +88,19 @@ notes:
       call but the bookkeeping ran on every keyed patch with no reader). `ViewNode.keyOf`'s
       `warnNullKey` and animate.js's `warnOnce` / PuzzleView's six `warnOnceForSpec` sites carry the
       same probe. `oldKeyed` is unchanged and still production.
+  - kind: gotcha
+    text: >-
+      2026-09-11 — patch()'s REPLACE arm unmounts before it mounts. Vnodes stopped being single-use
+      with D170: a list-block row and a `this.__c[n]` static subtree are the SAME OBJECT in the
+      outgoing and the incoming tree, so mounting first overwrote that object's `component`/`el`
+      with the new instance and element, and the outgoing unmount then destroyed the NEW child
+      (leaking the old one's subscriptions) and swept the NEW element's document-level `outside`
+      listeners. The insertion ref is captured before the unmount (`anchor` = the live component
+      element or `vnode.el`, plus its `nextSibling`) and resolved after it: a still-connected anchor
+      is used, which keeps an element animating out (D58/D85 `destroyAnimated`, in `leavingEls`)
+      receiving the replacement BEFORE it exactly as before, and a synchronous removal falls back to
+      the captured next sibling when it is still under the same parent. The keyed patcher already
+      unmounted first and is untouched. Pinned by tests/patch-replace-ordering.test.js.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -296,7 +309,6 @@ next vnode tree so repeated patches remain live.
 
 ## Measured: `island` freezes patching, and now allocation too
 
-
 The island branch runs inside `patch()`, so an island's children were built by
 `render()` before the patcher ever got the chance to ignore them.
 [[DOC-STRESS-EXAMPLE]]'s `islands` scenario put a number on both halves over 600
@@ -312,23 +324,25 @@ devperf branches.
 
 The zero-mutation half is the [[DECISION-D44-DOM-ISLANDS]] contract and is
 unchanged. The allocation half is what [[DECISION-D170-INCREMENTAL-VDOM-LISTS]]
-closed: **an island's children array is a compiler cache site**
-(`this.__c[n] ??= [ … ]`, or `s.c[n] ??= [ … ]` inside a loop row) at any size
-**and whatever the children contain** — the one cache site with no static
-requirement, because D44 already says the seed is built once at mount and never
-reconciled again. The element itself may stay dynamic — its own attrs and
-listeners still patch. So the seed is built once per instance and returned by
-reference on every later render, and `patch()`'s identity short-circuit skips
-it. A dev counter (`staticSitesBuilt` in [[FILE-DEVPERF]]) reports how many
-cache sites a render had to allocate; zero on a steady-state render is the claim
-worth watching.
+closes **only for a static seed**: an island's children array is a compiler
+cache site (`this.__c[n] ??= [ … ]`, or `s.c[n] ??= [ … ]` inside a loop row)
+at any size — no three-vnode threshold — when every child is static, because a
+static seed is identical on every mount. A DYNAMIC seed (an interpolation, a
+`{#for}`, anything reading render state) is still rebuilt every render: `??=`
+is per view instance, while D44 re-seeds an island from the template on a
+key-reset or hide/show remount, so caching one displayed the first render's
+values forever (found by the 2026-09-11 Codex review and reverted the same
+day). The element itself may stay dynamic — its own attrs and listeners still
+patch. A dev counter (`staticSitesBuilt` in [[FILE-DEVPERF]]) reports how many
+cache sites a render had to allocate.
 
-**Re-measured 2026-09-10 on the D170 branch** (`islands/shell-renders/20000`, 60
-shell renders, production bundle): `islandChildVnodesPerRender` is **0**, down
-from 20,000, while `islandViolations` stays 0 and `shellDidMutate` stays 1 —
-the shell provably churned, so the zeros mean something. That is the D170 island
-gate met exactly — the gates are the expects in `benchmarks/scenarios.mjs` plus
-the measured numbers in D170's verified note. The stress scenario's children are
-a nested `{#for}` over plain objects, which is why the cache had to drop its
-static requirement: a static-only rule left the shape the measurement was built
-from paying full price.
+**Measured on the D170 branch** (`islands/shell-renders/20000`, 60 shell
+renders, production bundle): `islandChildVnodesPerRender` stays **20,000**, the
+pre-D170 number, because the stress scenario's island children are a nested
+`{#for}` over plain objects — a dynamic seed. `islandViolations` stays 0 and
+`shellDidMutate` stays 1. The bench expect in `benchmarks/scenarios.mjs` records
+that number with the reason. Getting it to 0 correctly needs the runtime to own
+the seed's lifetime — emit a dynamic island seed as a per-render thunk
+(`() => [ … ]`) the runtime evaluates at mount only, one closure per render
+instead of N vnodes, re-seeded on every remount; recorded as the follow-up on
+D170, not built.

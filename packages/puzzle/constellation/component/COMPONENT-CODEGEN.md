@@ -97,12 +97,12 @@ imports are not template scope.
 
 The same single scan also **classifies** what an expression read — the data
 roots it touched, the loop item's members at depth one, whether it reached
-deeper or through a call, and whether it used `this` — so a loop site's meta is
-derived from exactly the lexical rules that rewrote it, with no second pass and
-no second scanner to keep in sync. Facts are collected only inside a lowered
-loop body and never during a look-ahead pass (conditional arity, `{#for}` root
-extraction), which re-resolve expressions in a scope they will not be emitted
-in.
+deeper or through a call, whether it used `this`, and whether it read a mutable
+global — so a loop site's meta is derived from exactly the lexical rules that
+rewrote it, with no second pass and no second scanner to keep in sync. Facts are
+collected only inside a lowered loop body and never during a look-ahead pass
+(conditional arity, `{#for}` root extraction), which re-resolve expressions in a
+scope they will not be emitted in.
 
 A second out-of-band diagnostic family (D82, `a11y.go`) walks the fresh template
 + skeleton ASTs before `{#svg}` resolution and warns — never errors — on five
@@ -151,9 +151,43 @@ having become the meta's function), loop locals resolve through the scope map,
 nested loops take the enclosing row as owner and shadow as `s1`, `s2`, … by
 depth, and `Class.__roots = […]` is stamped after the module marker when any
 site carries a root mask — capped at 31 entries, past which a site degrades to
-`volatile`. Range loops and loops inside a `<Snippet>` body are not lowered:
-a snippet body is stamped fresh per expansion, so a block keyed by site id
-would be shared between stamps.
+`volatile`.
+
+Three body kinds are not lowered, and nothing nested inside one is lowered or
+cached either: a `<Snippet>` body (stamped fresh per expansion, so a block keyed
+by site id would be shared between stamps), a range `{#for}` body, and an
+item-form body that fell back to `.map` because its explicit `key=` reads render
+state. The last two are one rule, tracked as `mapDepth`: a non-lowered loop body
+is emitted ONCE and evaluated per iteration, so a block or a cache slot taken
+inside it is shared by every iteration — the same row vnode objects mounted at N
+DOM positions, where a change to the source array reaches only the last one.
+
+A site's meta is conservative wherever the compiler cannot see through a read. A
+bare record local is on identity ONLY as a direct member access (`todo.text`) or
+as the whole expression (`{ todo }`, `todo={ todo }`, a handler argument); used
+any other way — piped through a formatter, passed into a call, interpolated into
+a template literal, reached through parens or a comment — it is opaque and marks
+the site `deep`, the same path a relation read takes. A read of a mutable global
+(`Date`, `Math.random`, `window`, `document`, `globalThis`, …) or of a
+clock-reading built-in formatter (`timeago`) marks the site `volatile`: user
+formatters are pure functions of their input by contract, but those are not.
+
+A read of a loop local owned by an ENCLOSING site marks the reading site
+`volatile`, and every site between it and the owner with it. A nested block only
+runs when its enclosing row runs, so "this body depends on what the outer row
+supplies" is exact rather than an over-approximation, and a middle site that
+cached its rows would otherwise never re-invoke the inner block. Handler
+ARGUMENTS are exempt everywhere above: they are re-read at fire time off the
+live row scope, the same carve-out `this` in a handler argument already has.
+
+Because the row scope objects are named `s`, `s1`, …, an authored binding
+spelled the same way is mangled to `__pzl<name>` wherever it would stay BARE
+inside a lowered body — a range counter, a non-lowered loop's item or counter, a
+`<Snippet>` parameter — and its reads are rewritten through the scope map like
+any loop local. (A snippet still declares its AUTHORED parameter name in
+`params` and destructures it to the mangled local.) The row scope names
+themselves never move: `s` is the byte contract in the todos fixtures. This is
+the same mechanism that renames the DOM event parameter to `__ev` on collision.
 
 **Maximal static subtrees are cache sites** (`staticcache.go`): a subtree whose
 every vnode has only static attributes (`ref`, `key`, `island` and `flip`
@@ -161,19 +195,18 @@ included — per-instance stable — plus `@event` values the D62 rule already
 caches), literal text and static element children emits as
 `(this.__c[n] ??= new ViewNode(…))` at view level or `(s.c[n] ??= …)` inside a
 row, so it is allocated once per owner. The threshold is three or more vnodes —
-**or an `island` element's children array at any size, whatever it contains.**
-The island case is the one cache site with no static requirement, because
+**or a STATIC `island` element's children array at any size**, since
 [[DECISION-D44-DOM-ISLANDS]] seeds those children once at mount and forbids the
-patcher from ever reconciling them again; a `{#for}`, an interpolation or a
-handler inside a seed is a mount-time value by that contract, and a component or
-composition marker inside an island is already a compile error. When the
-island's sole child is a `{#for}`, the wrapper goes round the lowered list call
-itself and the block runs once. Excluded: anything inside an already-wrapped
-subtree (only the maximal one is cached — the depth guard keeps a lowered loop
-inside a cached island seed from taking a wrapper of its own), snippet bodies
-(no owner to cache on), a subtree holding a controlled `value`/`checked` (the
-runtime re-asserts those against the live DOM every pass), and the render root,
-which the root emitters never route through the wrapper. The wrapper is a pure
+patcher from ever reconciling them again, so rebuilding them is pure waste
+however small the seed is. The seed must still be static: `??=` is per view
+instance (or per row), while D44 re-seeds an island from the template on a
+key-reset or hide/show remount, so a cached DYNAMIC seed would hand every later
+mount the first render's values. Excluded: anything inside an already-wrapped
+subtree (only the maximal one is cached), snippet bodies (no owner to cache on),
+non-lowered loop bodies (the `mapDepth` rule above — one slot shared by every
+iteration), a subtree holding a controlled `value`/`checked` (the runtime
+re-asserts those against the live DOM every pass), and the render root, which
+the root emitters never route through the wrapper. The wrapper is a pure
 prefix on the subtree's first line with a `)` suffix on its closing line, and
 the prefix counts toward `startCol` in the `attrsMultiline` width decision, so
 a wrapped element wraps its attributes exactly as the fixture does.
@@ -245,6 +278,7 @@ unequal branch behavior plus the stability gate (item-form loops, explicit-key
 range loops, and slot markers disable padding); `listblock_test.go` and
 `static_cache_test.go` pin the lowering — item/explicit-key/counter/nested/
 conservative meta, the `listRows as __l` import appearing only for a file that
-lowers a site, the cache threshold, the island-seed cases and every exclusion —
+lowers a site, the `mapDepth` exclusions, the row-scope shadow mangling, the
+cache threshold, the static island-seed case and every exclusion —
 and the todos fixtures remain the byte contract the emitter is matched to, not
 the other way round.

@@ -367,3 +367,317 @@ func TestListBlockKeyReadingSnippetParamKeepsMap(t *testing.T) {
 		t.Errorf("a snippet body must produce no list block at all:\n%s", got)
 	}
 }
+
+// --- C1: nothing inside a NON-LOWERED loop body may lower ---
+
+// A range body is emitted once and evaluated per iteration, so an item-form loop
+// inside it would take one site id and one block shared by every iteration — the
+// same row vnode objects mounted at two DOM positions, so updating the source
+// array only reaches the last one.
+func TestListBlockNeverLowersInsideRangeBody(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for 1...2, n}\n"+
+			"    <ul key={ n }>\n"+
+			"      {#for item in items}<li>{ item.name }</li>{/for}\n"+
+			"    </ul>\n"+
+			"  {/for}",
+	))
+	if strings.Contains(got, "__l(") || strings.Contains(got, "__L0") {
+		t.Errorf("a loop inside a range body must not lower:\n%s", got)
+	}
+	if !strings.Contains(got, "__d.items.map((item) =>") {
+		t.Errorf("it must keep the .map emission:\n%s", got)
+	}
+	if strings.Contains(got, "listRows") {
+		t.Errorf("a file that lowers nothing must not import the list block:\n%s", got)
+	}
+}
+
+// The explicit-key `.map` fallback is a non-lowered body for exactly the same
+// reason — it is emitted once and evaluated per iteration — so a loop nested
+// inside one keeps `.map` too, and no static subtree inside it takes a slot.
+func TestListBlockNeverLowersInsideMapFallbackBody(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for group in groups}\n"+
+			"    <section key={ prefix + group.id }>\n"+
+			"      <div class=\"chrome\"><span>A</span><b>B</b></div>\n"+
+			"      {#for item in group.items}<li>{ item.name }</li>{/for}\n"+
+			"    </section>\n"+
+			"  {/for}",
+	))
+	if strings.Contains(got, "__l(") || strings.Contains(got, "__L0") {
+		t.Errorf("neither loop may lower (the outer key reads render scope):\n%s", got)
+	}
+	if !strings.Contains(got, "group.items.map((item) =>") {
+		t.Errorf("the nested loop must keep the .map emission:\n%s", got)
+	}
+	if strings.Contains(got, "this.__c[") || strings.Contains(got, ".c[") {
+		t.Errorf("a static subtree inside a .map fallback body must take no slot:\n%s", got)
+	}
+}
+
+// A range nested inside a LOWERED row is the same hazard one level in: the range
+// body is still emitted once and evaluated per iteration, so an item loop inside
+// it must not lower even though a row scope is available to own it.
+func TestListBlockRangeInsideRowDoesNotLowerNestedItemLoop(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for todo in todos}\n"+
+			"    <li>\n"+
+			"      {#for 1...2, n}\n"+
+			"        <ul key={ n }>\n"+
+			"          {#for tag in todo.tags}<em>{ tag.name }</em>{/for}\n"+
+			"        </ul>\n"+
+			"      {/for}\n"+
+			"    </li>\n"+
+			"  {/for}",
+	))
+	if n := strings.Count(got, "__l(this,"); n != 1 {
+		t.Errorf("exactly one lowered site (the outer loop), got %d:\n%s", n, got)
+	}
+	if strings.Contains(got, "__L1") {
+		t.Errorf("the loop inside the range must produce no site meta:\n%s", got)
+	}
+	if !strings.Contains(got, "s.item.tags.map((tag) =>") {
+		t.Errorf("it must keep the .map emission, reading the row through the scope:\n%s", got)
+	}
+}
+
+// --- C2: an authored bare binding must never shadow the row scope object ---
+
+// The row scope object is `s`, so a range counter spelled `s` inside a row used
+// to emit `.map((s) => … s.item.text …)` — a TypeError on the first iteration.
+// The authored binding is mangled instead; the row scope name never moves.
+func TestListBlockRangeCounterShadowingRowScope(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for todo in todos}\n"+
+			"    <li>{#for 1...2, s}<i key={ s }>{ s }: { todo.text }</i>{/for}</li>\n"+
+			"  {/for}",
+	))
+	if strings.Contains(got, ".map((s) =>") {
+		t.Errorf("a range counter must not shadow the row scope object:\n%s", got)
+	}
+	if !strings.Contains(got, ".map((__pzls) =>") {
+		t.Errorf("the colliding counter must be mangled:\n%s", got)
+	}
+	if !strings.Contains(got, "key: __pzls") {
+		t.Errorf("the counter's reads must be rewritten to the mangled name:\n%s", got)
+	}
+	if !strings.Contains(got, "s.item.text") {
+		t.Errorf("the row local must still read off the row scope:\n%s", got)
+	}
+}
+
+// The `.map` fallback binds its item and counter bare too.
+func TestListBlockFallbackItemShadowingRowScope(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for todo in todos}\n"+
+			"    <ul>{#for s in todo.tags}<li key={ prefix + s.id }>{ s.name }{ todo.text }</li>{/for}</ul>\n"+
+			"  {/for}",
+	))
+	if strings.Contains(got, ".map((s) =>") {
+		t.Errorf("a fallback loop item must not shadow the row scope object:\n%s", got)
+	}
+	if !strings.Contains(got, "s.item.tags.map((__pzls) =>") {
+		t.Errorf("the colliding item must be mangled:\n%s", got)
+	}
+	if !strings.Contains(got, "__pzls.name") {
+		t.Errorf("the item's reads must be rewritten to the mangled name:\n%s", got)
+	}
+	if !strings.Contains(got, "s.item.text") {
+		t.Errorf("the row local must still read off the row scope:\n%s", got)
+	}
+}
+
+// Nested rows are `s`, `s1`, …, so the collision test is per live scope name.
+func TestListBlockNestedRangeCounterShadowingInnerRowScope(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for group in groups}\n"+
+			"    <ul>{#for item in group.items}\n"+
+			"      <li>{#for 1...2, s1}<i key={ s1 }>{ s1 }{ item.name }</i>{/for}</li>\n"+
+			"    {/for}</ul>\n"+
+			"  {/for}",
+	))
+	if strings.Contains(got, ".map((s1) =>") {
+		t.Errorf("a range counter must not shadow the inner row scope object:\n%s", got)
+	}
+	if !strings.Contains(got, ".map((__pzls1) =>") {
+		t.Errorf("the colliding counter must be mangled:\n%s", got)
+	}
+	if !strings.Contains(got, "s1.item.name") {
+		t.Errorf("the inner row local must still read off `s1`:\n%s", got)
+	}
+}
+
+// A <Snippet> parameter is destructured by its AUTHORED name — the marker
+// argument contract — but binds a mangled local when it would shadow a row.
+func TestListBlockSnippetParamShadowingRowScope(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for todo in todos}<li><Row><Snippet s>{ s }{ todo.text }</Snippet></Row></li>{/for}",
+	))
+	if !strings.Contains(got, "params: ['s']") {
+		t.Errorf("the snippet's declared parameter name must stay authored:\n%s", got)
+	}
+	if !strings.Contains(got, "fn: ({ s: __pzls }) =>") {
+		t.Errorf("the colliding parameter must bind a mangled local:\n%s", got)
+	}
+	if !strings.Contains(got, "__s(__pzls,") {
+		t.Errorf("the parameter's reads must be rewritten to the mangled name:\n%s", got)
+	}
+	if !strings.Contains(got, "s.item.text") {
+		t.Errorf("the row local must still read off the row scope:\n%s", got)
+	}
+}
+
+// --- C3: an inner row rebuilds when the enclosing row's item or counter moves ---
+
+// A nested block only runs at all when its enclosing row runs, so "this body
+// reads something the outer row supplies" is exact. Without it the inner rows
+// come back cached (their own item did not change) while `group.label` moved.
+func TestListMetaEnclosingLocalMakesInnerVolatile(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for group in groups}\n"+
+			"    <section>\n"+
+			"      {#for item in group.items}<p>{ group.label }: { item.name }</p>{/for}\n"+
+			"    </section>\n"+
+			"  {/for}",
+	))
+	if !strings.Contains(got, "const __L1 = { key: (item) => ViewNode.keyOf(item), fields: ['name'], volatile: true };") {
+		t.Errorf("the inner site must be volatile:\n%s", got)
+	}
+	if !strings.Contains(got, "const __L0 = { key: (group) => ViewNode.keyOf(group), fields: ['items', 'label'] };") {
+		t.Errorf("the owning site records the read as its own field and stays non-volatile:\n%s", got)
+	}
+}
+
+// An enclosing COUNTER read is the same dependency by another name.
+func TestListMetaEnclosingCounterMakesInnerVolatile(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for group in groups, gi}\n"+
+			"    <section>{#for item in group.items}<p>{ gi }: { item.name }</p>{/for}</section>\n"+
+			"  {/for}",
+	))
+	if !strings.Contains(got, "const __L1 = { key: (item) => ViewNode.keyOf(item), fields: ['name'], volatile: true };") {
+		t.Errorf("a site reading the enclosing counter must be volatile:\n%s", got)
+	}
+	if !strings.Contains(got, "const __L0 = { key: (group) => ViewNode.keyOf(group), counter: true, fields: ['items'] };") {
+		t.Errorf("the owning site records the counter read:\n%s", got)
+	}
+}
+
+// The mark propagates to EVERY site between the reader and the owner: a middle
+// site that cached its rows would never re-invoke the innermost block.
+func TestListMetaEnclosingLocalPropagatesThroughMiddleSite(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for a in as}\n"+
+			"    <ul>{#for b in a.bs}\n"+
+			"      <li>{#for c in b.cs}<em>{ a.label }{ c.n }</em>{/for}</li>\n"+
+			"    {/for}</ul>\n"+
+			"  {/for}",
+	))
+	if !strings.Contains(got, "const __L1 = { key: (b) => ViewNode.keyOf(b), fields: ['cs'], volatile: true };") {
+		t.Errorf("the middle site must be volatile too:\n%s", got)
+	}
+	if !strings.Contains(got, "const __L2 = { key: (c) => ViewNode.keyOf(c), fields: ['n'], volatile: true };") {
+		t.Errorf("the reading site must be volatile:\n%s", got)
+	}
+	if strings.Contains(got, "const __L0 = { key: (a) => ViewNode.keyOf(a), fields: ['bs', 'label'], volatile: true };") {
+		t.Errorf("the owner must not be marked volatile by its own local:\n%s", got)
+	}
+}
+
+// A nested site reading only its OWN locals stays non-volatile, and a handler
+// ARGUMENT reading an enclosing local is a fire-time read that does not count —
+// the same carve-out `this` in a handler argument already has.
+func TestListMetaOwnLocalsStayNonVolatile(t *testing.T) {
+	got := compileSrc(t, listSrc(
+		"  {#for group in groups}\n"+
+			"    <section>{#for item in group.items}<p @click={ pick(item, group) }>{ item.name }</p>{/for}</section>\n"+
+			"  {/for}",
+	))
+	if strings.Contains(got, "volatile: true") {
+		t.Errorf("no site here may be volatile:\n%s", got)
+	}
+}
+
+// --- C4: opaque whole-value reads are conservative ---
+
+// A bare record local is on identity ONLY as a direct member access or as the
+// whole expression. Anywhere else the compiler cannot see what the value reaches.
+func TestListMetaOpaqueRecordReads(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantDeep bool
+	}{
+		{"formatter pipe", "<li>{ post | authorName }</li>", true},
+		{"parenthesised member access", "<li>{ (post).author.name }</li>", true},
+		{"comment-separated member access", "<li>{ post /* c */ .author.name }</li>", true},
+		{"template-literal interpolation", "<li>{ `by ${post}` }</li>", true},
+		{"call argument", "<li>{ fmt(post) }</li>", true},
+		{"operand of a larger expression", "<li>{ 'by ' + post }</li>", true},
+		{"deep path", "<li>{ post.author.name }</li>", true},
+		{"display of the record", "<li>{ post }</li>", false},
+		{"depth-one member", "<li>{ post.title }</li>", false},
+		{"formatted member", "<li>{ post.title | upcase }</li>", false},
+		{"whole record as a prop", "<Row post={ post } />", false},
+		{"whole record as a handler arg", "<li @click={ del(post) }>x</li>", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := compileSrc(t, listSrc("  {#for post in posts}"+tc.body+"{/for}"))
+			if strings.Contains(got, "deep: true") != tc.wantDeep {
+				t.Errorf("deep: true = %v, want %v:\n%s", !tc.wantDeep, tc.wantDeep, got)
+			}
+		})
+	}
+}
+
+// --- C5: mutable globals and clock-reading built-ins make a site volatile ---
+
+// A cached row holding `{ window.location.hash }` would show `#old` forever.
+func TestListMetaVolatileGlobals(t *testing.T) {
+	cases := []struct {
+		name         string
+		body         string
+		wantVolatile bool
+	}{
+		{"window", "<li>{ window.location.hash }{ todo.text }</li>", true},
+		{"document", "<li>{ document.title }{ todo.text }</li>", true},
+		{"Date.now", "<li>{ Date.now() }{ todo.text }</li>", true},
+		{"new Date", "<li>{ new Date().getFullYear() }{ todo.text }</li>", true},
+		{"Math.random", "<li>{ Math.random() }{ todo.text }</li>", true},
+		{"globalThis", "<li>{ globalThis.x }{ todo.text }</li>", true},
+		{"Math.max stays pure", "<li>{ Math.max(todo.a, 1) }</li>", false},
+		{"JSON stays pure", "<li>{ JSON.stringify(todo.a) }</li>", false},
+		{"Number stays pure", "<li>{ Number(todo.a) }</li>", false},
+		{"Intl stays pure", "<li>{ Intl.NumberFormat }{ todo.text }</li>", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := compileSrc(t, listSrc("  {#for todo in todos}"+tc.body+"{/for}"))
+			if strings.Contains(got, "volatile: true") != tc.wantVolatile {
+				t.Errorf("volatile: true = %v, want %v:\n%s", !tc.wantVolatile, tc.wantVolatile, got)
+			}
+		})
+	}
+	// A mutable global in a HANDLER ARGUMENT is read at fire time, so it does
+	// not make the row volatile — the same rule `this` already follows.
+	handler := compileSrc(t, listSrc("  {#for todo in todos}<li @click={ go(window.scrollY) }>{ todo.text }</li>{/for}"))
+	if strings.Contains(handler, "volatile: true") {
+		t.Errorf("a global inside a handler argument must not mark the site volatile:\n%s", handler)
+	}
+}
+
+// A built-in formatter that reads the clock is not a pure function of its input,
+// so a cached row would freeze its output at "1 second ago".
+func TestListMetaClockFormatterIsVolatile(t *testing.T) {
+	got := compileSrc(t, listSrc("  {#for todo in todos}<li>{ todo.createdAt | timeago }</li>{/for}"))
+	if !strings.Contains(got, "volatile: true") {
+		t.Errorf("a row piping through timeago must be volatile:\n%s", got)
+	}
+	// Every other shipped built-in is a pure function of its input.
+	pure := compileSrc(t, listSrc("  {#for todo in todos}<li>{ todo.createdAt | date }</li>{/for}"))
+	if strings.Contains(pure, "volatile: true") {
+		t.Errorf("a pure built-in must not make the site volatile:\n%s", pure)
+	}
+}

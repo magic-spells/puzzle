@@ -32,7 +32,6 @@
  * parent render (D62's measured cost, now removed at the source).
  */
 
-import { PORTAL_TAG } from './ViewNode.js';
 import { RENDER_REV } from '../renderRev.js';
 import { devperfListRows } from '../devperf.js';
 
@@ -53,9 +52,21 @@ import { devperfListRows } from '../devperf.js';
  */
 export function listRows(view, owner, id, items, factory, meta) {
 	const blocks = (owner.__lists ??= []);
-	const block = (blocks[id] ??= { rows: new Map(), gen: 0, verdicts: null });
+	const block = (blocks[id] ??= { rows: new Map(), gen: 0, seen: 0, verdicts: null });
 	const rows = block.rows;
 	const gen = ++block.gen;
+
+	// A block that MISSED a render cannot trust the root mask (D170). `view.__dirty`
+	// is a per-render DELTA: a site whose `{#if}` was false — or whose enclosing row
+	// was cached, which is exactly "not invoked" for a nested block — never sees the
+	// bits that flipped while it was away, and by the time it runs again the mask is
+	// clean and its rows would hand back stale vnodes. So if this view rendered more
+	// than once since this block last ran, every row is dirty for this pass; the row
+	// STATE survives, so handlers and nested blocks stay stable. A view that renders
+	// outside the counter (prerender, takeover) leaves `__rgen` at 0 and this false.
+	const rgen = view.__rgen;
+	const missedRender = rgen - block.seen > 1;
+	block.seen = rgen;
 
 	const key = meta.key;
 	const counter = meta.counter === true;
@@ -138,6 +149,7 @@ export function listRows(view, owner, id, items, factory, meta) {
 					: rev === NOT_CACHEABLE) ||
 				(counter && row.i !== i) ||
 				rootsDirty ||
+				missedRender ||
 				volatile;
 			row.item = item;
 			row.i = i;
@@ -276,8 +288,15 @@ function isConservativeSite(block) {
  *
  * Skipped: component vnodes (a child owns its own subtree and re-asserts its own
  * controls when it patches), string children (an inline-SVG seed is verbatim
- * markup, never vnodes), and portals (their children live in the outlet, and
- * patchPortal reconciles them).
+ * markup, never vnodes), and an ISLAND element's children — the D44 contract is
+ * that the patcher never reconciles them after the seed, so replaying identity
+ * into one would reset a user-edited input inside a third-party widget back to
+ * its mount-time value. The island ELEMENT's own `value`/`checked` still counts.
+ *
+ * PORTALS are walked through: their children are reconciled by patchPortal only
+ * when the patch actually reaches the portal vnode, and a cached ancestor returns
+ * before that ever happens. The portaled vnodes keep usable `el` links (they live
+ * in the outlet), so re-asserting from here is the same work patchAttrs would do.
  */
 function collectControls(vnode) {
 	const out = [];
@@ -287,11 +306,12 @@ function collectControls(vnode) {
 
 function collectInto(vnode, out) {
 	const tag = vnode.tag;
-	if (typeof tag !== 'string' || tag === PORTAL_TAG) return;
+	if (typeof tag !== 'string') return;
+	const attrs = vnode.attrs;
 	if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-		const attrs = vnode.attrs;
 		if ('value' in attrs || 'checked' in attrs) out.push(vnode);
 	}
+	if ('island' in attrs) return;
 	const children = vnode.children;
 	if (typeof children === 'string') return;
 	for (let i = 0; i < children.length; i++) collectInto(children[i], out);

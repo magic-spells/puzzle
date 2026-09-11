@@ -868,7 +868,17 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		const live = newVnode.component;
 		if (live !== null ? !live.isDestroyed : typeof newVnode.tag !== 'function') {
 			if (live !== null) newVnode.el = live.element;
+			// The `controls` list is what reaches controls under a cached ROW ROOT.
+			// It collects from the row vnode down, so a controlled row root is in its
+			// own list — hence `else`, never both. A cached control reached through an
+			// ORDINARY patch has no list of its own (slot expansion clones the row
+			// vnode, and the clone carries no `controls`), so it re-asserts itself
+			// here; a fresh row would have restored it through patchAttrs.
 			if (newVnode.controls) reassertControls(newVnode.controls, owner);
+			else if (isControlTag(newVnode.tag) && newVnode.el) {
+				const attrs = newVnode.attrs;
+				if ('value' in attrs || 'checked' in attrs) syncControl(newVnode.el, attrs, owner);
+			}
 			return;
 		}
 	}
@@ -881,9 +891,29 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// against a detached node throws NotFoundError and empties the container. The
 		// child's element getter always tracks its current root, so prefer it; fall
 		// back to vnode.el for non-component (or not-yet-mounted) vnodes.
-		const ref = (oldVnode.isComponent && oldVnode.component?.element) || oldVnode.el;
-		mount(newVnode, parent, ref, ctx, owner);
+		const anchor = (oldVnode.isComponent && oldVnode.component?.element) || oldVnode.el;
+		// UNMOUNT FIRST (D170). Vnodes are no longer single-use: a list block's
+		// cached row and a `this.__c[n]` static subtree are the SAME OBJECT in the
+		// outgoing and the incoming tree. Mounting first would overwrite that
+		// object's `component`/`el` with the new instance and the new element, and
+		// the outgoing unmount would then destroy the vnode it finds — the NEW child
+		// — while the old one leaks its subscriptions, and releaseSubtree would sweep
+		// the NEW element's document-level `outside` listeners.
+		//
+		// The insertion reference is captured BEFORE the unmount and resolved after
+		// it, so both removal shapes keep today's placement: an element animating out
+		// (D58/D85 destroyAnimated, registered in leavingEls) is still in the DOM, so
+		// the new element is inserted before it exactly as it was; a synchronous
+		// removal leaves the captured next sibling as the ref.
+		const next = anchor?.nextSibling ?? null;
 		unmount(oldVnode);
+		const ref =
+			anchor && anchor.isConnected
+				? anchor
+				: next && next.parentNode === parent
+					? next
+					: null;
+		mount(newVnode, parent, ref, ctx, owner);
 		return;
 	}
 
@@ -1050,6 +1080,16 @@ function syncControlChecked(el, value, owner) {
  * not during the attr pass. A cached subtree has no attr pass and no children
  * pass at all, so for it the order is this function's order.
  */
+/**
+ * The three form tags whose `value`/`checked` the patcher re-asserts against the
+ * LIVE DOM. The same predicate listBlock's `collectControls` walks with — a
+ * `<li value="3">` or a `<progress value=…>` is not a control and keeps the
+ * ordinary vnode compare.
+ */
+function isControlTag(tag) {
+	return tag === 'input' || tag === 'textarea' || tag === 'select';
+}
+
 function syncControl(el, attrs, owner) {
 	const node = el.nodeName;
 	if (node === 'INPUT') {

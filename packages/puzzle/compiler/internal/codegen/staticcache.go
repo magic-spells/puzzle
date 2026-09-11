@@ -29,13 +29,13 @@ import (
 //
 // Only the MAXIMAL qualifying subtree is wrapped (the emitter stops analysing
 // once it is inside one), and only when it is worth the wrapper bytes: three or
-// more vnodes — or an `island` element's children array at any size and whatever
-// it contains, since an island's children are seeded once at mount and never
-// reconciled again, so they must never be allocated twice. Two body kinds are
-// excluded outright: a snippet body, stamped per expansion and owning no cache,
-// and a range {#for} body — a range still emits `.map`, so it owns no row
-// scope, and the one slot its body would take is shared by every iteration,
-// mounting a single vnode at N DOM positions.
+// more vnodes — or a STATIC `island` element's children array at any size, since
+// an island's children are seeded once at mount, so rebuilding them is pure
+// waste however small the seed is. Two body kinds are excluded outright: a
+// snippet body, stamped per expansion and owning no cache, and a NON-LOWERED
+// loop body (a range {#for}, or an item loop that fell back to `.map`) — such a
+// body owns no row scope, so the one slot it would take is shared by every
+// iteration, mounting a single vnode at N DOM positions.
 
 // minCachedVnodes is the D170 static-subtree-cache size threshold: a lone
 // static text or leaf element costs more in wrapper bytes than it saves in
@@ -65,11 +65,11 @@ func (c *compiler) staticCachePrefix(n *parser.Element, scope scopeMap) string {
 
 // cachingAllowed reports whether a cache wrapper may be emitted here at all:
 // not inside an already-wrapped subtree (maximality), not inside a snippet body
-// (no owner to cache on), and not inside a range {#for} body (no row scope, so
-// the one slot would be shared by every iteration and the vnode mounted at N
-// DOM positions).
+// (no owner to cache on), and not inside a NON-LOWERED loop body — a range
+// {#for} or a `.map` fallback — where the one slot would be shared by every
+// iteration and the vnode mounted at N DOM positions.
 func (c *compiler) cachingAllowed() bool {
-	return c.staticCacheDepth == 0 && c.snippetDepth == 0 && c.rangeDepth == 0
+	return c.staticCacheDepth == 0 && c.snippetDepth == 0 && c.mapDepth == 0
 }
 
 // nextCacheSlot allocates the next cache index on the current owner: the view
@@ -89,24 +89,25 @@ func (c *compiler) nextCacheSlot() string {
 
 // islandChildrenCache returns the wrapper for an `island` element's children
 // array, or "". The element itself may be dynamic — its attrs and listeners
-// still patch (D44) — but its children are SEEDED ONCE at mount and never
-// reconciled again, so the array is correct to build once whatever it holds
-// (D170, static subtree caches).
+// still patch (D44) — but its children are seeded once at mount, so a STATIC
+// seed is allocated once at any size: the size threshold does not apply, since
+// a seed that is rebuilt and thrown away is pure waste however small it is.
 //
-// This is the one cache site with no static requirement, and the D44 contract is
-// what licenses that: a `{#for}` inside an island evaluates once, an
-// interpolation inside one is documented as its mount-time value, a handler on a
-// seeded child is wired once, and a component or composition marker inside an
-// island is already a compile error. Demanding a STATIC seed would have left the
-// common island — a loop or an interpolation over frozen data — rebuilding its
-// whole subtree on every parent render and throwing it away in patch(), which is
-// exactly the 20,000-vnodes-per-render cost the stress example measured.
+// The seed must still be static. `this.__c[n] ??=` is per VIEW INSTANCE (and
+// `s.c[n]` per row), not per mount, while D44 says an island re-seeds from the
+// template on a key-reset remount or a hide/show remount. A cached DYNAMIC seed
+// would hand the remount the FIRST render's values — `<div island key={reset}>
+// <b>{seed}</b></div>` would show the old seed forever. Making that win safe
+// needs the runtime to own the seed's lifetime, which is not built (see D170's
+// deviation note on the per-render thunk).
 //
-// The element itself is still wrapped only when it is fully static
-// (staticCachePrefix), and a fully static island is wrapped as a whole element
-// instead — cachingAllowed() keeps the two from nesting.
-func (c *compiler) islandChildrenCache(attrs []parser.Attr, hasChildren bool, isComponent bool) string {
-	if isComponent || !c.cachingAllowed() || !hasChildren || !hasIslandAttr(attrs) {
+// A fully static island is wrapped as a whole element instead
+// (staticCachePrefix) — cachingAllowed() keeps the two from nesting.
+func (c *compiler) islandChildrenCache(attrs []parser.Attr, children []parser.Node, isComponent bool, scope scopeMap) string {
+	if isComponent || !c.cachingAllowed() || len(children) == 0 || !hasIslandAttr(attrs) {
+		return ""
+	}
+	if ok, count := c.staticChildren(children, scope); !ok || count == 0 {
 		return ""
 	}
 	return c.nextCacheSlot()

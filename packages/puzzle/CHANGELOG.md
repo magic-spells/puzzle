@@ -173,18 +173,32 @@ rebuilding the parts of its tree that could not have changed (D170).
   inputs changed; the patcher skips a returned-by-reference subtree outright.
   Keys, the shared sibling key namespace, mixed keyed/unkeyed pairing, leaving
   rows, out animations and FLIP all behave exactly as before. Range loops and
-  loops inside a `<Snippet>` body are unchanged.
+  loops inside a `<Snippet>` body are unchanged. A loop that did not run in a
+  render — its `{#if}` was false, or its enclosing row was cached — rebuilds
+  every row the next time it does, since the per-render root mask it consults
+  says nothing about the renders it sat out; an `errorView` retry forces the same
+  rebuild, so a failed child sitting under an untouched row is reached and
+  remounted rather than left as a blank position. Controlled `value`/`checked`
+  inside a cached row re-assert through `<Portal>` content and stop at an
+  `island` element's children (the patcher never reconciles those, so replaying
+  into one would reset a widget's own input), and a cached control reached
+  through an ordinary patch — slot expansion clones the row vnode around it —
+  re-asserts itself. Because one vnode object can now appear in both the
+  outgoing and the incoming tree, a replaced position unmounts before it mounts,
+  which leaves placement during a leave animation exactly where it was.
 - **Static markup is allocated once.** A template subtree that cannot change is
   built once per view instance (or once per loop row) instead of on every render
-  — except inside a range `{#for}` body or a `<Snippet>` body, which own no row
-  scope, so a cached subtree there would be one vnode shared by every iteration
-  and mounted at N DOM positions.
-  An `island` element's children go further: because D44 seeds them once at mount
-  and the patcher may never reconcile them again, the whole children array is
-  built once at any size **whatever it contains** — a `{#for}`, an interpolation
-  or a handler inside an island seed is a mount-time value by contract, so the
-  stress example's 20,000 frozen nodes are now allocated on the first render and
-  never again.
+  — except inside a `<Snippet>` body or a non-lowered loop body (a range
+  `{#for}`, or an item loop whose explicit `key=` reads render state and so kept
+  `.map`). Those own no row scope, so a cached subtree there would be one vnode
+  shared by every iteration and mounted at N DOM positions; for the same reason
+  no loop nested inside one is lowered to a list block either.
+  An `island` element's **static** children array goes a little further: because
+  D44 seeds it once at mount and the seed is identical on every mount, the whole
+  array is built once at any size, with no three-vnode threshold. A DYNAMIC
+  island seed is still rebuilt every render — `??=` is per view instance, while
+  D44 re-seeds an island from the template on a key-reset or hide/show remount,
+  so caching one would display the first render's values forever.
 - **Contract worth knowing: assigning a field directly on a record
   (`todo.title = 'x'`) is not observed.** It never notified anything before
   either — nothing re-rendered for it — but row caching now makes that explicit.
@@ -192,8 +206,16 @@ rebuilding the parts of its tree that could not have changed (D170).
   never cached (they can be mutated in place, so their rows rebuild every render
   as before), and a loop body that reads a relation, a computed getter, or a path
   deeper than one level off the item never caches its record rows.
-- **New reserved names.** A compiled view uses `__lists`, `__c`, `__dirty` and
-  `__propRevs` on the instance and `__roots` on the class; a template with an
+- **A formatter must be a pure function of its input.** Row caching now relies on
+  it: a cached row does not re-run its formatters, so a formatter that reads the
+  clock or any other ambient value would freeze its output. The built-ins that do
+  (`timeago` today) are known to the compiler and make the site re-evaluate every
+  render; a user-defined formatter is pure by contract. A row that must
+  re-evaluate every render should read through `this` — `{ this.ago(createdAt) }`
+  — which is already treated as volatile. Reading a mutable global in a row body
+  (`Date`, `Math.random`, `window`, `document`, `globalThis`, …) does the same.
+- **New reserved names.** A compiled view uses `__lists`, `__c`, `__dirty`,
+  `__rgen` and `__propRevs` on the instance and `__roots` on the class; a template with an
   item-form `{#for}` also declares `__L0`, `__L1`, … at module scope and imports
   the list runtime as `__l`. Binding `__l` or one of the `__L<n>` names in a
   `<script>` is a positioned compile error, the way binding `ViewNode` already

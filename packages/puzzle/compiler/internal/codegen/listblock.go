@@ -136,10 +136,19 @@ func (c *compiler) factSink() *exprFacts {
 }
 
 // absorb distributes one expression's facts to every enclosing lowered loop.
-// Roots and `this` reach all of them (the read happens inside every enclosing
-// body). An item/counter read is attributed by matching the name's CURRENT
-// resolution against the site's own rewrite, so a <Snippet> parameter or an
-// inner range variable that shadows a row local is not mistaken for it.
+// Roots, `this` and mutable-global reads reach all of them (the read happens
+// inside every enclosing body). An item/counter read is attributed by matching
+// the name's CURRENT resolution against the site's own rewrite, so a <Snippet>
+// parameter or an inner range variable that shadows a row local is not mistaken
+// for it.
+//
+// A read of a local owned by an ENCLOSING site makes the READING site volatile,
+// and every site between it and the owner with it: a nested block only runs at
+// all when its enclosing row runs, so "this body depends on something the outer
+// row supplies" is exact, not an over-approximation. Without it an inner row
+// whose own item did not change comes back cached while the outer row's item or
+// counter changed underneath it. A middle site that cached its rows would never
+// re-invoke the inner block, which is why the mark propagates the whole way up.
 func (c *compiler) absorb(f *exprFacts, scope scopeMap) {
 	if f == nil || len(c.loops) == 0 {
 		return
@@ -150,26 +159,32 @@ func (c *compiler) absorb(f *exprFacts, scope scopeMap) {
 			site.addRoot(bit)
 		}
 	}
-	if f.usesThis {
+	if f.usesThis || f.volatileRead {
 		for _, site := range c.loops {
 			site.volatile = true
 		}
 	}
 	for name, read := range f.locals {
-		site := siteOwning(c.loops, scope, name)
-		if site == nil {
+		owner := siteIndexOwning(c.loops, scope, name)
+		if owner < 0 {
 			continue
 		}
+		site := c.loops[owner]
 		if name == site.item {
 			for _, field := range read.fields {
 				site.fields[field] = true
 			}
-			if read.deep || read.bareInCall {
+			if read.deep || read.bareInCall || read.opaque {
 				site.deep = true
 			}
-			continue
+		} else {
+			site.counterRead = true
 		}
-		site.counterRead = true
+		if read.renderRead {
+			for i := owner + 1; i < len(c.loops); i++ {
+				c.loops[i].volatile = true
+			}
+		}
 	}
 }
 
@@ -177,20 +192,51 @@ func (c *compiler) absorb(f *exprFacts, scope scopeMap) {
 // resolves to, or nil when the binding is something else (a range variable, a
 // snippet parameter, `ViewNode`, `event`).
 func siteOwning(loops []*loopSite, scope scopeMap, name string) *loopSite {
+	if i := siteIndexOwning(loops, scope, name); i >= 0 {
+		return loops[i]
+	}
+	return nil
+}
+
+// siteIndexOwning is siteOwning by index, so a caller can tell an enclosing
+// site's local from the innermost one's. -1 when nothing owns the name.
+func siteIndexOwning(loops []*loopSite, scope scopeMap, name string) int {
 	js, bound := scope[name]
 	if !bound || js == "" {
-		return nil
+		return -1
 	}
 	for i := len(loops) - 1; i >= 0; i-- {
 		site := loops[i]
 		if name == site.item && js == site.scope+".item" {
-			return site
+			return i
 		}
 		if site.counter != "" && name == site.counter && js == site.scope+".i" {
-			return site
+			return i
 		}
 	}
-	return nil
+	return -1
+}
+
+// bareBinding binds an AUTHORED name that stays BARE in the emitted JS and
+// returns the identifier to emit for it. Inside a lowered {#for} body the row
+// scope objects are named `s`, `s1`, … , so an authored binding spelled the same
+// way (a range counter, a non-lowered loop's item or counter, a <Snippet>
+// parameter) would shadow the object the surrounding row reads its locals off
+// — `{#for 1...2, s}` inside a row emits `.map((s) => … s.item.text …)`, a
+// TypeError on the first iteration. The colliding binding is mangled to a
+// `__`-prefixed identifier (authored names cannot start with `__`, and no
+// emitted name is spelled this way) and its reads are rewritten through the
+// scope map exactly as a loop local's are. The row scope names themselves never
+// move: `s` is the byte contract in the todos fixtures.
+func (c *compiler) bareBinding(scope scopeMap, name string) (scopeMap, string) {
+	for _, site := range c.loops {
+		if site.scope != name {
+			continue
+		}
+		mangled := "__pzl" + name
+		return scopeAddAs(scope, name, mangled), mangled
+	}
+	return scopeAdd(scope, name), name
 }
 
 // resolve is resolveExpr plus fact collection. Every template expression the

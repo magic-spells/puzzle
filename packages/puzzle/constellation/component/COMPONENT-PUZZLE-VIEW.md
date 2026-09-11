@@ -55,6 +55,20 @@ notes:
       already rendered; anything a second writer queues during that pass sorts above it and still
       refreshes. Called with no argument (the settle loop handing a folded notification back, a
       manual invocation) it never skips.
+  - kind: state
+    text: >-
+      2026-09-11 — `__rgen`, a per-instance render counter, joins
+      `__c`/`__dirty`/`__lists`/`__propRevs` as an internal reserved name (declared as a field so
+      every view keeps one hidden class). It is bumped once per render pass at the top of
+      #computeDirty — BEFORE the `Class.__roots` bail-out, because a template whose loops read no
+      parent root still has list blocks — and it is the one signal a block has that it missed a
+      render (see [[FILE-LIST-BLOCK]]); the root dirty mask alone is a per-render delta and cannot
+      say what changed while a block was not invoked. A view that builds a tree outside
+      #renderNowInner (the SSG prerender pass, a takeover-prepared tree) leaves it at 0, so those
+      paths are unaffected. #makeRetry's component arm bumps the OWNER's counter before
+      `owner.refresh()`: a failed child under a cached list row is otherwise unreachable — the row's
+      inputs did not change, the owner's patch short-circuits at the row root, the face is already
+      destroyed and the position would be handed back empty with a spent closure.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -239,7 +253,7 @@ convention — internal, adapter-installed, never author-facing.
 
 ## Compiler-facing internals for the incremental render (D170)
 
-Three more members belong to the emitter, alongside `__h`, `__ref` and `__bind`:
+Four more members belong to the emitter, alongside `__h`, `__ref` and `__bind`:
 never spelled in a template, not part of the public typed API, and reserved as
 property names in SPEC §4.
 
@@ -248,8 +262,10 @@ property names in SPEC §4.
   cache sites. The compiler wraps each maximal static subtree in
   `(this.__c[n] ??= new ViewNode(…))`, so a template's unchanging markup is
   allocated once per instance and the patcher skips it by identity. An `island`
-  element's children array is wrapped the same way, at any size and whatever it
-  contains.
+  element's children array is wrapped the same way at any size — but only when
+  the seed is static; a dynamic seed is rebuilt every render, because D44
+  re-seeds an island from the template on a key-reset or hide/show remount and a
+  per-instance `??=` would show the first render's values forever.
 - **`__dirty`** is the per-render mask of which of `constructor.__roots` — the
   top-level `data()` keys some loop body in this template reads — changed since
   the last render. It is computed after `beforeUpdate()` (user code that may
@@ -260,6 +276,16 @@ property names in SPEC §4.
   case. The mask is 32 bits, so a template reading more than 31 loop-visible
   roots wraps and reports extra rows dirty — conservative in the only safe
   direction.
+- **`__rgen`** is the render counter, bumped once per render pass in
+  `#computeDirty` before the `__roots` bail-out. The root mask is a per-render
+  DELTA, so a list block that was not invoked in the immediately preceding
+  render (its `{#if}` was false, or its enclosing row was cached) never saw the
+  bits that flipped meanwhile; each block records the counter at every
+  invocation and rebuilds every row when it finds it skipped a render. An
+  `errorView` retry bumps it once more before `refresh()`, which forces that
+  same rebuild so a failed child under an untouched cached row is reached and
+  remounted. A view that renders outside `#renderNowInner` (prerender, takeover)
+  leaves it at 0 and changes nothing for the blocks it runs.
 - **`__propRevs`** is the snapshot of the render revisions of this view's
   current record props, written at mount (from the COMMITTED props, so a
   preloaded view whose props were set in `preload()` is covered) and at every
@@ -274,7 +300,7 @@ not a `PuzzleView` method, because a method would make `views/listBlock.js` an
 unconditional import of `PuzzleView` and every loop-free app would carry ~1 KB
 gzip it never runs. `PuzzleView` must never import that module. What the view
 still owns for the block is the state the block reads off it: `__dirty` (the
-root mask), the dev counters, and `__lists` — the per-owner block registry the
-block itself allocates on first visit, on the view for a top-level loop and on
-the enclosing ROW STATE for a nested one, so inner blocks are keyed per outer
-row and die with it.
+root mask), `__rgen` (the render counter), the dev counters, and `__lists` — the
+per-owner block registry the block itself allocates on first visit, on the view
+for a top-level loop and on the enclosing ROW STATE for a nested one, so inner
+blocks are keyed per outer row and die with it.

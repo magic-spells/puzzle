@@ -60,6 +60,10 @@ type exprFacts struct {
 	locals map[string]*localRead
 	// usesThis is set by a bare `this` reference (not a property named "this").
 	usesThis bool
+	// volatileRead is set by a read of a mutable global or a clock-reading
+	// built-in formatter — a value that can differ between two renders with no
+	// data mutation at all, so a cached row would freeze it (D170 volatile).
+	volatileRead bool
 }
 
 // localRead is how one in-scope binding was used inside an expression.
@@ -76,6 +80,23 @@ type localRead struct {
 	// identity. A whole read outside call parens (a component prop, a handler
 	// argument) is not recorded here: those re-read the live row at use time.
 	bareInCall bool
+	// whole marks a whole-value read that IS the entire expression — `{ todo }`,
+	// `todo={ todo }`, `del(todo)`'s argument. Such a read depends on the item's
+	// identity alone, which the row revision covers exactly.
+	whole bool
+	// opaque marks a whole-value read that is NOT the entire expression: a
+	// parenthesised or comment-separated member access (`(post).author.name`), a
+	// template-literal interpolation, an operand of a larger expression, a call
+	// argument. The compiler cannot see which members the value reaches, so the
+	// site is conservative (`deep`) exactly as a relation read is. A formatter
+	// pipe marks a `whole` read opaque for the same reason (the formatter is
+	// handed the record itself).
+	opaque bool
+	// renderRead marks a read evaluated during RENDER. A handler ARGUMENT is
+	// not one: it is re-read at fire time against the live row scope, so it
+	// neither makes an enclosing-local read volatile nor counts as opaque —
+	// the same carve-out `this` in a handler argument already has.
+	renderRead bool
 }
 
 func (f *exprFacts) addRoot(name string) {
@@ -119,6 +140,9 @@ func (f *exprFacts) merge(other *exprFacts) {
 	if other.usesThis {
 		f.usesThis = true
 	}
+	if other.volatileRead {
+		f.volatileRead = true
+	}
 	for name, read := range other.locals {
 		dst := f.local(name)
 		for _, fl := range read.fields {
@@ -126,8 +150,60 @@ func (f *exprFacts) merge(other *exprFacts) {
 		}
 		dst.deep = dst.deep || read.deep
 		dst.bareInCall = dst.bareInCall || read.bareInCall
+		dst.whole = dst.whole || read.whole
+		dst.opaque = dst.opaque || read.opaque
+		dst.renderRead = dst.renderRead || read.renderRead
 	}
 }
+
+// volatileGlobals are globals whose value can change between two renders with
+// no data mutation at all: the clock, the URL, storage, the RNG. A row body
+// reading one must re-evaluate every pass, so its site is `volatile` (D170).
+// Only the names that are ALSO in jsGlobals are reachable here — the rest
+// (`performance`, `location`, `history`, `navigator`, `localStorage`,
+// `sessionStorage`, `crypto`, `self`) resolve to `__d.<name>` and are already
+// tracked through the site's roots mask; they are listed so the rule is
+// complete if one of them ever joins jsGlobals.
+var volatileGlobals = map[string]bool{
+	"Date": true, "performance": true, "window": true, "document": true,
+	"location": true, "history": true, "navigator": true,
+	"localStorage": true, "sessionStorage": true, "crypto": true,
+	"globalThis": true, "self": true,
+}
+
+// volatileGlobalRead reports whether the global `name` read at src[..at] is a
+// mutable one. `Math` is pure except for `Math.random`, so it is the one global
+// classified by the member that follows it; every other pure global (`JSON`,
+// `Number`, `Intl`, …) is pure whatever is read off it.
+func volatileGlobalRead(name, src string, at int) bool {
+	if volatileGlobals[name] {
+		return true
+	}
+	if name != "Math" {
+		return false
+	}
+	k := skipExprSpace(src, at)
+	if k < len(src) && src[k] == '?' && k+1 < len(src) && src[k+1] == '.' {
+		k++
+	}
+	if k >= len(src) || src[k] != '.' {
+		return false
+	}
+	m := skipExprSpace(src, k+1)
+	e := m
+	for e < len(src) && isIdentChar(src[e]) {
+		e++
+	}
+	return src[m:e] == "random"
+}
+
+// clockFormatters are the shipped built-in formatters whose output depends on
+// the current time rather than on their input alone, so a cached row using one
+// would display a frozen value ("1 second ago", forever). A site whose body
+// pipes through one is `volatile`. USER-defined formatters are pure functions of
+// their input by contract (SPEC §6); a row that must re-evaluate every render
+// reads through `this`, which is already volatile.
+var clockFormatters = map[string]bool{"timeago": true}
 
 // jsKeywords are identifier ROOTS that must never be rewritten to __d.<name>:
 // JS literals and operator-keywords that can appear in a template expression.
@@ -287,6 +363,13 @@ func resolveExprTrackingScope(expr string, scope, trackedScope scopeMap) (string
 // lexical rules: property names and literal/comment/regex text do not count,
 // while identifiers inside template-literal interpolations do.
 func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts) (string, bool) {
+	return resolveExprScanIn(expr, scope, trackedScope, facts, false)
+}
+
+// resolveExprScanIn is resolveExprScan with the nesting flag the template-literal
+// recursion sets. A read inside `${…}` is never "the entire expression", however
+// it is spelled, so it can never be the identity-only whole-value read.
+func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFacts, nested bool) (string, bool) {
 	var b strings.Builder
 	referencesTrackedScope := false
 	n := len(expr)
@@ -354,7 +437,7 @@ func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts
 						break
 					}
 					inner := expr[j+2 : end]
-					resolved, referencesScope := resolveExprScan(inner, scope, trackedScope, facts)
+					resolved, referencesScope := resolveExprScanIn(inner, scope, trackedScope, facts, true)
 					b.WriteString("${")
 					b.WriteString(resolved)
 					b.WriteByte('}')
@@ -433,7 +516,7 @@ func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts
 				// `{#for document in documents}` row must read `s.item`, not the
 				// window's document.
 				if facts != nil {
-					noteLocalRead(facts, name, expr, j, callDepth)
+					noteLocalRead(facts, name, expr, j, callDepth, !nested && spansExpr(expr, i, j))
 				}
 				b.WriteString(local)
 			case jsKeywords[name]:
@@ -442,6 +525,9 @@ func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts
 				}
 				b.WriteString(name)
 			case jsGlobals[name]:
+				if facts != nil && volatileGlobalRead(name, expr, j) {
+					facts.volatileRead = true
+				}
 				b.WriteString(name)
 			default:
 				if facts != nil {
@@ -531,8 +617,15 @@ func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts
 //	fmt(todo)        → the whole item into a call whose result is displayed
 //	todo             → a whole-value read (component prop, handler argument):
 //	                   neither a field nor deep — those re-read the live row
-func noteLocalRead(facts *exprFacts, name, src string, at, callDepth int) {
+//
+// `whole` reports that the identifier spans the ENTIRE expression being scanned.
+// A whole-value read that does not (an operand, a template-literal
+// interpolation, a call argument, a member access reached through parens or a
+// comment) is OPAQUE: the compiler cannot see which members the value reaches,
+// so the site must be conservative exactly as a relation read makes it.
+func noteLocalRead(facts *exprFacts, name, src string, at, callDepth int, whole bool) {
 	read := facts.local(name)
+	read.renderRead = true
 	k := skipExprSpace(src, at)
 	// Optional chaining reads the same member the plain '.' does.
 	if k < len(src) && src[k] == '?' && k+1 < len(src) && src[k+1] == '.' {
@@ -566,7 +659,32 @@ func noteLocalRead(facts *exprFacts, name, src string, at, callDepth int) {
 		if callDepth > 0 {
 			read.bareInCall = true
 		}
+		if whole {
+			read.whole = true
+		} else {
+			read.opaque = true
+		}
 	}
+}
+
+// spansExpr reports whether src[start:end] is the whole expression apart from
+// surrounding whitespace.
+func spansExpr(src string, start, end int) bool {
+	for i := 0; i < start; i++ {
+		switch src[i] {
+		case ' ', '\t', '\n', '\r':
+		default:
+			return false
+		}
+	}
+	for i := end; i < len(src); i++ {
+		switch src[i] {
+		case ' ', '\t', '\n', '\r':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func skipExprSpace(s string, i int) int {
@@ -893,6 +1011,15 @@ func compileEventHandler(expr string, scope scopeMap, eventParam string, bareAsR
 	// argument is different: it is captured from the render's snapshot, so its
 	// roots stay in the mask and keep the row rebuilding.
 	argFacts.usesThis = false
+	argFacts.volatileRead = false
+	// Loop locals in an argument are read at fire time off the LIVE row scope
+	// too, so they neither count as opaque whole-value reads nor make a site
+	// reading an enclosing row's local volatile — the same carve-out as `this`.
+	for _, read := range argFacts.locals {
+		read.opaque = false
+		read.whole = false
+		read.renderRead = false
+	}
 	facts.merge(argFacts)
 	refs := make([]string, 0, len(argFacts.locals))
 	for name := range argFacts.locals {
