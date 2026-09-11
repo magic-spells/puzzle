@@ -147,12 +147,13 @@ export class Store {
 		this._pendingKeys = new Map();
 		this._notifySeq = 0;
 		// The highest sequence in the batch currently being DELIVERED, or 0 outside
-		// delivery (plan §3.7, D170). A refresh started while this is non-zero — a
-		// parent's applyParentUpdate reaching a child that also subscribes to the
-		// same record — commits a model that already reflects every mutation in the
-		// batch, so it stamps this onto its own `_settleMark` and the child's own
-		// onStoreChange(seq) for that batch takes the existing `seq <= _settleMark`
-		// early return. One flush, one data() run.
+		// delivery (D170, flush-sequence dedupe). A refresh started while this is
+		// non-zero — a parent's applyParentUpdate reaching a child that also
+		// subscribes to the same record — commits a model that already reflects
+		// every mutation in the batch, so it stamps this onto its own
+		// `_settleMark` and the child's own onStoreChange(seq) for that batch
+		// takes the existing `seq <= _settleMark` early return. One flush, one
+		// data() run.
 		this._flushSeq = 0;
 		this._flushScheduled = false;
 		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
@@ -344,7 +345,7 @@ export class Store {
 			enumerable: false,
 			configurable: true,
 		});
-		// Render revision (plan §3.4, D170). Defined HERE, beside `_type`, so every
+		// Render revision (D170). Defined HERE, beside `_type`, so every
 		// record leaves this method with the same hidden class — a lazily added
 		// property on first mutation would fragment it across the collection. 0 means
 		// "never mutated since instantiation"; `_notify` writes the notification
@@ -740,7 +741,7 @@ export class Store {
 		const seq = ++this._notifySeq;
 		this._pendingKeys.set(type, seq);
 		this._pendingKeys.set(type + REC_SEP + id, seq);
-		// Stamp the record with this sequence (plan §3.4, D170): it is the one
+		// Stamp the record with this sequence (D170, record render revision): it is the one
 		// number that says "this record's data changed" to a reader holding the same
 		// reference — row caches in list blocks and the component prop comparison.
 		// EVERY observable mutation path funnels through here (createRecord,
@@ -845,7 +846,7 @@ export class Store {
 		const targets = new Map();
 		// The batch's highest sequence, tracked in the pass that already walks it
 		// (one comparison per key, no allocation). Published as `_flushSeq` for the
-		// duration of delivery — see the field's note and plan §3.7.
+		// duration of delivery — see the field's note and D170 (flush-sequence dedupe).
 		let flushSeq = 0;
 		for (const [key, seq] of pending) {
 			if (seq > flushSeq) flushSeq = seq;
@@ -866,10 +867,11 @@ export class Store {
 			keys = pending.map(([key]) => key);
 			notified = new Set();
 		}
-		// Publish the delivering sequence around the loop ONLY (plan §3.7): a
-		// refresh started from inside delivery — a parent's applyParentUpdate, a
-		// subscriber calling refresh() on someone else — is what reads it, and a
-		// refresh outside delivery must read 0 and stamp nothing. Reset in a
+		// Publish the delivering sequence around the loop ONLY (D170,
+		// flush-sequence dedupe): a refresh started from inside delivery — a
+		// parent's applyParentUpdate, a subscriber calling refresh() on someone
+		// else — is what reads it, and a refresh outside delivery must read 0 and
+		// stamp nothing. Reset in a
 		// `finally` because a subscriber's synchronous throw is caught per
 		// subscriber INSIDE the loop, but the devperf/devtools tail below and every
 		// later flush still have to see a clean slot. A re-entrant flush() (a

@@ -125,7 +125,7 @@ func TestInlineSVGKeyDoesNotSuppressSyntheticKey(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	// The synthetic key now lives in the site meta; the row root carries the
-	// block's resolved key (D170, plan §4.3).
+	// block's resolved key (D170 emission contract).
 	if !strings.Contains(res.JS, "const __L0 = { key: (row) => ViewNode.keyOf(row) };") {
 		t.Errorf("synthetic {#for} key was suppressed by a literal SVG root key:\n%s", res.JS)
 	}

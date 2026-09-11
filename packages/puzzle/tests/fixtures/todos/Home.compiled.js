@@ -115,7 +115,7 @@ export default class TodoHome extends PuzzleView {
   }
 }
 
-import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
 const __L0 = { key: (todo) => ViewNode.keyOf(todo) };
 
@@ -218,7 +218,7 @@ TodoHome.prototype.render = function () {
               ]),
             ]),
             new ViewNode('div', { class: 'max-h-96 overflow-y-auto' },
-              this.__list(this, 0, __d.filteredTodos, (s) =>
+              __l(this, this, 0, __d.filteredTodos, (s) =>
                 new ViewNode(TodoItem, {
                   key: s.k,
                   todo: s.item,

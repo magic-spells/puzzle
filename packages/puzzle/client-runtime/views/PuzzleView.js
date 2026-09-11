@@ -19,7 +19,6 @@
  */
 
 import { ViewManager } from './viewManager.js';
-import { listRows } from './listBlock.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
@@ -222,7 +221,7 @@ export class PuzzleView {
 	refs = {};
 
 	/**
-	 * Per-instance static-subtree cache (plan §3.3, D170). The compiler wraps every
+	 * Per-instance static-subtree cache (D170). The compiler wraps every
 	 * maximal static subtree worth caching in `(this.__c[n] ??= new ViewNode(…))`,
 	 * so a template's unchanging markup is allocated ONCE per instance instead of
 	 * on every render — and `patch()`'s identity short-circuit then skips it
@@ -235,9 +234,9 @@ export class PuzzleView {
 	__c = [];
 
 	// Previous values of `constructor.__roots` — the top-level data() keys some
-	// loop body in this template reads (plan §3.6). Null until the first render,
-	// which reports every root dirty. Only a view whose compiled class carries
-	// __roots ever allocates it.
+	// loop body in this template reads (D170, root dirty mask). Null until the
+	// first render, which reports every root dirty. Only a view whose compiled
+	// class carries __roots ever allocates it.
 	#prevRoots = null;
 
 	/** @param {object} ctx exactly { store, router, formatters } (SPEC §10) */
@@ -405,22 +404,8 @@ export class PuzzleView {
 	}
 
 	/**
-	 * INTERNAL — one item-form `{#for}` site (plan §3.2, D170). The compiler emits
-	 * `this.__list(this, 0, __d.filteredTodos, (s) => …, __L0)` where the `.map()`
-	 * used to be; inside a loop body the owner argument is the enclosing ROW STATE
-	 * (`this.__list(s, 1, …)`), so nested blocks are keyed per outer row and die
-	 * with it. `this` is always the view — it owns the `__dirty` root mask and the
-	 * dev counters — while `owner` is only where the block's rows are kept.
-	 *
-	 * INTERNAL — underscore-prefixed like the rest of the compiler-facing surface;
-	 * never spelled in a template. Not part of the public typed API.
-	 */
-	__list(owner, id, items, factory, meta) {
-		return listRows(this, owner, id, items, factory, meta);
-	}
-
-	/**
-	 * Snapshot the render revisions of the record props just applied (plan §3.4).
+	 * Snapshot the render revisions of the record props just applied
+	 * (D170, record render revision).
 	 *
 	 * `propsEqual` compares a record prop against THIS snapshot rather than
 	 * against the old prop object, because a record mutates in place: after an
@@ -896,11 +881,11 @@ export class PuzzleView {
 			this.#params = params;
 			this.#props = props;
 		}
-		// Record-prop revisions as of this mount (plan §3.4). Read from the
-		// COMMITTED props rather than the argument so a preloaded view — whose props
-		// were set in preload(), not here — is snapshotted too; without an entry a
-		// record prop would compare unequal on every later patch and re-run the
-		// child's data() for nothing.
+		// Record-prop revisions as of this mount (D170, record render revision).
+		// Read from the COMMITTED props rather than the argument so a preloaded
+		// view — whose props were set in preload(), not here — is snapshotted too;
+		// without an entry a record prop would compare unequal on every later
+		// patch and re-run the child's data() for nothing.
 		this.#snapshotPropRevs(this.#props);
 		this.#children = children;
 		this.#vm.anchorAt(ref);
@@ -1035,10 +1020,11 @@ export class PuzzleView {
 		}
 		if (props !== undefined) {
 			// The props the patcher just handed down are now this view's current
-			// props, so re-stamp their record revisions (plan §3.4) BEFORE the refresh
-			// that will render them. Doing it here rather than inside #refreshInner
-			// keeps it to the one path where props are APPLIED — a router refresh
-			// carrying params only must not rewrite a snapshot it knows nothing about.
+			// props, so re-stamp their record revisions (D170, record render
+			// revision) BEFORE the refresh that will render them. Doing it here
+			// rather than inside #refreshInner keeps it to the one path where props
+			// are APPLIED — a router refresh carrying params only must not rewrite
+			// a snapshot it knows nothing about.
 			this.#snapshotPropRevs(props);
 			// Fire-and-forget: a data() failure is logged rather than escaping into
 			// the parent's patch path (mount's skeleton-path style). #refreshContained
@@ -1121,7 +1107,7 @@ export class PuzzleView {
 				return;
 		}
 		const token = ++this.#runToken;
-		// Flush-sequence dedupe (plan §3.7, D170). A child that both receives a
+		// Flush-sequence dedupe (D170). A child that both receives a
 		// record prop and queries that record gets TWO wake-ups from one store
 		// flush: the parent's applyParentUpdate during delivery, and its own
 		// onStoreChange later in the same delivery loop. Capture the sequence the
@@ -2186,7 +2172,7 @@ export class PuzzleView {
 		// superseded, torn down, or LEAVING — see #completeMount for why removal is
 		// now asynchronous for any view declaring a hide hook (D136 §3).
 		if (token !== this.#runToken || this.#destroyed || this.#leaving) return;
-		// Flush-sequence stamp (plan §3.7). This run evaluated data() while the
+		// Flush-sequence stamp (D170). This run evaluated data() while the
 		// store was delivering the batch ending at `mark`, and it is committing, so
 		// every notification in that batch is already on screen. MAX, never plain
 		// assignment: the D161 settle loop has already stamped its own (higher)
@@ -2429,7 +2415,7 @@ export class PuzzleView {
 		const isUpdate = this.#mounted;
 
 		if (isUpdate) this.beforeUpdate();
-		// Root dirty mask (plan §3.6, D170) — computed AFTER beforeUpdate(), which is
+		// Root dirty mask (D170) — computed AFTER beforeUpdate(), which is
 		// user code that may setData() into #data, and before render() reads it.
 		// `Class.__roots` is emitted only when some loop body in this template reads
 		// a top-level data() key, so a template without loops (or whose loops read
@@ -2464,8 +2450,8 @@ export class PuzzleView {
 
 	/**
 	 * Which of this template's loop-read roots changed since the last render
-	 * (plan §3.6). Bit `i` is index `i` of `Class.__roots`; the list blocks are the
-	 * only consumers, through `(view.__dirty & meta.roots) !== 0`.
+	 * (D170, root dirty mask). Bit `i` is index `i` of `Class.__roots`; the list
+	 * blocks are the only consumers, through `(view.__dirty & meta.roots) !== 0`.
 	 *
 	 * Primitives compare by `!==`. Anything object-typed (or a function) counts as
 	 * dirty unconditionally: it can be mutated in place, and a loop body reading

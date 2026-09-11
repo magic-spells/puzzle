@@ -22,7 +22,7 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 </script>
 `)
 	// The synthetic key is hoisted into the site meta; the row root carries the
-	// block's resolved key (D170, plan §4.3). The RESOLVER is unchanged.
+	// block's resolved key (D170 emission contract). The RESOLVER is unchanged.
 	if !strings.Contains(got, "const __L0 = { key: (item) => ViewNode.keyOf(item)") {
 		t.Errorf("item-form site meta must carry ViewNode.keyOf(item):\n%s", got)
 	}
@@ -45,7 +45,7 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 		t.Errorf("explicit key on element root must suppress the synthetic keyOf:\n%s", got)
 	}
 	// The author's expression MOVES into the site meta with the loop local left
-	// bare; the row root carries `key: s.k` (D170, plan §4.3).
+	// bare; the row root carries `key: s.k` (D170 emission contract).
 	if !strings.Contains(got, "const __L0 = { key: (item) => item.slug") {
 		t.Errorf("author's explicit key expression must stand verbatim in the meta:\n%s", got)
 	}

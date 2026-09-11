@@ -92,7 +92,7 @@ export default class Icons extends PuzzleView { data() { return { items: [] }; }
 		t.Fatalf("compile: %v", err)
 	}
 	// Lowered to a list block: the key is the block's `s.k`, and the site meta
-	// carries the keyOf resolver (D170, plan §4.3).
+	// carries the keyOf resolver (D170 emission contract).
 	if !strings.Contains(res.JS, "__svg_0(s.k)") {
 		t.Errorf("{#svg} as {#for}-body root must thread the key as the factory arg:\n%s", res.JS)
 	}

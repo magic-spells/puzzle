@@ -78,7 +78,7 @@ func TestHandlerCacheLoopVariable(t *testing.T) {
 	))
 	// Loop-var capture → the ROW cache, not the per-instance one: the closure is
 	// stable for the life of the row because it reads the item at fire time
-	// (D62 amended by D170, plan §3.5).
+	// (D62 amended by D170, stable loop handlers).
 	if !strings.Contains(got, "'@click': (s.h0 ??= (event) => this.events.h(s.item.id))") {
 		t.Errorf("loop-var handler must cache on the row scope:\n%s", got)
 	}
@@ -143,7 +143,7 @@ func TestHandlerCacheComponentCallbackProp(t *testing.T) {
 	}
 }
 
-// --- Row handler caches (D62 amended by D170, plan §3.5) ---
+// --- Row handler caches (D62 amended by D170, stable loop handlers) ---
 //
 // A handler capturing ONLY loop locals is not data-independent, so it cannot
 // ride `__h` — but once the locals are read off the row scope it is stable for

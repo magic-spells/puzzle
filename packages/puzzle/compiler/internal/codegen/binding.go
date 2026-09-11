@@ -159,7 +159,7 @@ func autoBindKV(bind *autoBind, scope scopeMap) string {
 		target = "__d." + bind.target
 		if local, ok := scopeRef(scope, bind.target); ok {
 			// A {#for} local resolves through its scope map entry, so a row
-			// inside a lowered list block binds `s.item` (0.8.0 plan §4.3).
+			// inside a lowered list block binds `s.item` (D170 emission contract).
 			target = local
 		}
 	}

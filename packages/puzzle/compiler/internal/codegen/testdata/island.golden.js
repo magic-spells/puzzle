@@ -25,9 +25,9 @@ Editor.prototype.render = function () {
       '@keydown:backspace': ((this.__h ??= {})[0] ??= (event) => this.events.onBackspace(event)),
       '@keydown:delete': ((this.__h ??= {})[1] ??= (event) => this.events.onDelete(event)),
       '@input': ((this.__h ??= {})[2] ??= (event) => this.events.syncText(event)),
-    }, [
+    }, (this.__c[0] ??= [
       new ViewNode('text', { value: __s(__d.block.text, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'block.text' : 0) }),
-    ]),
+    ])),
   ]);
 };
 Editor.__pzlModule = 'island.pzl';

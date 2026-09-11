@@ -12,7 +12,7 @@
 // silently reverts to re-running `data()` for every mounted child on every
 // parent render. There would be no failure — only a slowdown.
 //
-// UPDATED for D170 (plan/Puzzle-Render-Upgrade.md §7.1). D62's finding was that
+// UPDATED for D170 (see its Consequences). D62's finding was that
 // the canonical Puzzle list idiom hands the patcher a brand-new callback per row
 // per render, so the bailout never fires and the whole list re-runs `data()`.
 // That is no longer what a compiled `{#for}` emits: a loop handler is cached on
@@ -30,6 +30,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PuzzleView, ViewNode } from '../client-runtime/index.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+import { listRows } from '../client-runtime/views/listBlock.js';
 import { measureRenders, mountView, settled } from '../client-runtime/testing/index.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -129,7 +130,8 @@ function makeList(rowClasses, { stableHandlers }) {
 
 /**
  * The D170 arm: records in the store, rows through a list block, and the row's
- * callback cached on the row state — what a compiled `{#for}` emits (plan §4.1).
+ * callback cached on the row state — what a compiled `{#for}` emits
+ * (D170, stable loop handlers).
  */
 class Todo extends PuzzleModel {
 	static schema = {
@@ -178,7 +180,8 @@ function makeRecordList(rowClasses) {
 				return h(
 					'div',
 					{ class: 'list' },
-					this.__list(
+					listRows(
+						this,
 						this,
 						0,
 						this.getData().todos,

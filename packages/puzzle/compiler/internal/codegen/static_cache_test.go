@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// static_cache_test.go — build-once static subtrees (D170, plan §3.3/§4.3).
+// static_cache_test.go — build-once static subtrees (D170).
 // A maximal static subtree of three or more vnodes — or an island's children
 // array at any size — is wrapped in the owner's cache so it is allocated once
 // per instance (or once per row) instead of on every render.
@@ -125,8 +125,9 @@ func TestStaticCacheInsideRowUsesRowScope(t *testing.T) {
 	}
 }
 
-// An island's children are frozen after mount, so the array is cached as a unit
-// at any size even when the element itself is dynamic (D44 + plan §3.3).
+// An island's children are seeded once at mount and never reconciled again, so
+// the array is cached as a unit at any size and WHATEVER IT CONTAINS, even when
+// the element itself is dynamic (D44 + D170 static subtree caches).
 func TestStaticCacheIslandChildrenArray(t *testing.T) {
 	got := compileSrc(t, cacheSrc(`  <div island class={ cls }><p>one</p><em>two</em></div>`))
 	if !strings.Contains(got, "}, (this.__c[0] ??= [\n") {
@@ -150,10 +151,56 @@ func TestStaticCacheIslandChildrenArray(t *testing.T) {
 	if strings.Count(whole, "this.__c[") != 1 {
 		t.Errorf("a cached island element must not also cache its children array:\n%s", whole)
 	}
-	// Dynamic children are not cacheable at all, island or not.
-	dynamic := compileSrc(t, cacheSrc(`  <div island class={ cls }>{ text }</div>`))
-	if strings.Contains(dynamic, "this.__c[") {
-		t.Errorf("an island with interpolated children must not be cached:\n%s", dynamic)
+	// A childless island has no array to cache.
+	empty := compileSrc(t, cacheSrc(`  <div island class={ cls }></div>`))
+	if strings.Contains(empty, "this.__c[") {
+		t.Errorf("an island with no children must emit no wrapper:\n%s", empty)
+	}
+}
+
+// The island seed is a MOUNT-TIME value, so an interpolation inside one is
+// cached with everything else: it is documented as read once, and the patcher is
+// contractually forbidden from ever updating it (D44).
+func TestStaticCacheIslandChildrenInterpolation(t *testing.T) {
+	got := compileSrc(t, cacheSrc(`  <div island class={ cls }>{ text }</div>`))
+	if !strings.Contains(got, "}, (this.__c[0] ??= [\n") {
+		t.Errorf("an island's interpolated seed must still be cached as a unit:\n%s", got)
+	}
+	if !strings.Contains(got, "new ViewNode('text', { value: __s(__d.text") {
+		t.Errorf("the interpolation must still be emitted inside the cached array:\n%s", got)
+	}
+	if strings.Count(got, "this.__c[") != 1 {
+		t.Errorf("exactly one wrapper, on the children array:\n%s", got)
+	}
+}
+
+// The shape the stress example measures: an island whose sole child is a
+// `{#for}`. The lowered list call IS the children argument, so the wrapper goes
+// round the call — the block runs once and the seed is allocated once.
+func TestStaticCacheIslandChildrenLoop(t *testing.T) {
+	got := compileSrc(t, cacheSrc(
+		"  {#for isle in islands}\n"+
+			"    <div class=\"isle\" island>\n"+
+			"      {#for item in isle.items}<span>{ item.label }</span>{/for}\n"+
+			"    </div>\n"+
+			"  {/for}",
+	))
+	if !strings.Contains(got, "(s.c[0] ??= __l(this, s, 1, s.item.items, (s1) =>") {
+		t.Errorf("an island's sole-{#for} seed must be cached around the list call:\n%s", got)
+	}
+	if !strings.Contains(got, "        , __L1))\n") {
+		t.Errorf("the wrapper must close on the list call's closing line:\n%s", got)
+	}
+	// Nothing inside the cached array takes a wrapper of its own.
+	if strings.Count(got, ".c[") != 1 {
+		t.Errorf("exactly one wrapper for the island seed:\n%s", got)
+	}
+	// A view-level island over a loop caches on the view instead.
+	top := compileSrc(t, cacheSrc(
+		"  <div class=\"isle\" island>{#for item in items}<span>{ item.label }</span>{/for}</div>",
+	))
+	if !strings.Contains(top, "(this.__c[0] ??= __l(this, this, 0, __d.items, (s) =>") {
+		t.Errorf("a view-level island seed must cache on the view:\n%s", top)
 	}
 }
 
@@ -199,6 +246,78 @@ func TestStaticCacheNeverInsideSnippetBody(t *testing.T) {
 	got := compileSrc(t, cacheSrc(`  <List><Snippet a><div class="q"><span>x</span><b>y</b></div></Snippet></List>`))
 	if strings.Contains(got, "__c[") || strings.Contains(got, ".c[") {
 		t.Errorf("a snippet body must emit no cache wrapper:\n%s", got)
+	}
+}
+
+// A range {#for} still emits `.map`, so its body owns no row scope. A static
+// subtree inside one would take a VIEW-level slot and hand the same vnode to
+// every iteration — one object mounted at N DOM positions, with `el`, `ref=`
+// and `outside:` teardown all pointing at the last row. Nothing inside a range
+// body is cached.
+func TestStaticCacheNeverInsideRangeBody(t *testing.T) {
+	got := compileSrc(t, cacheSrc(
+		"  {#for 1...3, n}\n"+
+			"    <li key={ n }><div class=\"wrap\"><span class=\"a\">x</span><b>y</b></div></li>\n"+
+			"  {/for}",
+	))
+	if strings.Contains(got, "this.__c[") {
+		t.Errorf("a range body must emit no cache wrapper:\n%s", got)
+	}
+}
+
+// The island children array is the one cache site with no static requirement,
+// so it needs the same range exclusion — at view level AND at row level.
+func TestStaticCacheNeverInsideRangeBodyIsland(t *testing.T) {
+	got := compileSrc(t, cacheSrc(
+		"  {#for 1...3, n}\n"+
+			"    <li key={ n }><div island><b>seed</b></div></li>\n"+
+			"  {/for}",
+	))
+	if strings.Contains(got, "this.__c[") || strings.Contains(got, ".c[") {
+		t.Errorf("an island inside a range body must emit no cache wrapper:\n%s", got)
+	}
+}
+
+// A range nested inside a lowered item-form loop is the same bug one level in:
+// the row scope is per-row but still shared by every iteration of the range, so
+// the range body takes no `s.c[` slot either. A static subtree in the row but
+// OUTSIDE the range still caches normally.
+func TestStaticCacheRangeInsideLoweredRowTakesNoRowSlot(t *testing.T) {
+	got := compileSrc(t, cacheSrc(
+		"  {#for todo in todos}\n"+
+			"    <li>\n"+
+			"      <div class=\"badge\"><span>A</span><em>B</em></div>\n"+
+			"      {#for 1...3, n}\n"+
+			"        <i key={ n }><div class=\"pip\"><span>x</span><b>y</b></div></i>\n"+
+			"      {/for}\n"+
+			"    </li>\n"+
+			"  {/for}",
+	))
+	if !strings.Contains(got, "(s.c[0] ??= new ViewNode('div', { class: 'badge' }") {
+		t.Errorf("the row's own static subtree must still cache on the row scope:\n%s", got)
+	}
+	if strings.Contains(got, "class: 'pip'") && strings.Contains(got, "??= new ViewNode('div', { class: 'pip' }") {
+		t.Errorf("a subtree inside the nested range must take no cache slot:\n%s", got)
+	}
+	if n := strings.Count(got, "??= "); n != 1 {
+		t.Errorf("expected exactly one cache wrapper in the whole file, got %d:\n%s", n, got)
+	}
+}
+
+// rangeDepth gates CACHING only — list lowering is untouched, so an item-form
+// loop nested inside a range body still becomes a persistent list block.
+func TestStaticCacheRangeStillLowersNestedItemLoop(t *testing.T) {
+	got := compileSrc(t, cacheSrc(
+		"  {#for 1...3, n}\n"+
+			"    <ul key={ n }>\n"+
+			"      {#for todo in todos}\n"+
+			"        <li>{ todo.text }</li>\n"+
+			"      {/for}\n"+
+			"    </ul>\n"+
+			"  {/for}",
+	))
+	if !strings.Contains(got, "__l(") {
+		t.Errorf("an item-form loop inside a range body must still lower to a list block:\n%s", got)
 	}
 }
 

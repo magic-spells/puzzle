@@ -168,8 +168,19 @@ The two arms differed only in spelling: `@select={ selectById }` (a bare method
 reference, per-instance cacheable) against `@select={ selectRow(row) }` (a loop
 capture). A compiled `{#for}` now emits the stable identity for both, so the
 numbers above are the price of the *pattern*, not of the framework — and the
-A/B's inline arm no longer reproduces it from the compiler. Those stress arms
-are being re-measured under D170.
+A/B's inline arm no longer reproduces it from the compiler.
+
+**Re-measured under D170 (2026-09-10).** The two arms are now equal because the
+inline arm compiles to a row-cached closure: `handlers-inline`'s `childDataRuns`
+is **1** for a `select-row`/`click-select` at 1,000 rows (was 1,000), **0** for
+`swap-rows` (was 1,000), and **100** for `update-every-10th` at 1,000 rows (was
+1,000) — exactly the rows whose record changed. The DOM-listener half of the
+cost, measured by `listener-churn/count-listeners` at 10,000 rows over 20
+renders, went from **400,000** `addEventListener` + 400,000
+`removeEventListener` calls in the churn arm to **0**; all three arms now read
+zero. Both A/B arms are kept: their behaviour gates are what prove a row-cached
+handler still fires and still reads the row's CURRENT item, which is the one
+thing row-scope caching could plausibly have broken.
 
 ## Regression cover
 

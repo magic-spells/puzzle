@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// One flush, one data() run (plan/Puzzle-Render-Upgrade.md §3.7, D170).
+// One flush, one data() run (D170, flush-sequence dedupe).
 //
 // A child that both RECEIVES a record prop and QUERIES that record is woken
 // twice by a single store flush: once by its parent's applyParentUpdate (the
@@ -18,6 +18,7 @@ import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { listRows } from '../client-runtime/views/listBlock.js';
 import { mountView, settled } from '../client-runtime/testing/index.js';
 
 class Todo extends PuzzleModel {
@@ -62,7 +63,8 @@ class List extends PuzzleView {
 		return new ViewNode(
 			'ul',
 			{},
-			this.__list(
+			listRows(
+				this,
 				this,
 				0,
 				this.getData().todos,

@@ -175,8 +175,16 @@ rebuilding the parts of its tree that could not have changed (D170).
   rows, out animations and FLIP all behave exactly as before. Range loops and
   loops inside a `<Snippet>` body are unchanged.
 - **Static markup is allocated once.** A template subtree that cannot change is
-  built once per view instance (or once per loop row) instead of on every render,
-  and an `island` element's children are built once at any size.
+  built once per view instance (or once per loop row) instead of on every render
+  — except inside a range `{#for}` body or a `<Snippet>` body, which own no row
+  scope, so a cached subtree there would be one vnode shared by every iteration
+  and mounted at N DOM positions.
+  An `island` element's children go further: because D44 seeds them once at mount
+  and the patcher may never reconcile them again, the whole children array is
+  built once at any size **whatever it contains** — a `{#for}`, an interpolation
+  or a handler inside an island seed is a mount-time value by contract, so the
+  stress example's 20,000 frozen nodes are now allocated on the first render and
+  never again.
 - **Contract worth knowing: assigning a field directly on a record
   (`todo.title = 'x'`) is not observed.** It never notified anything before
   either — nothing re-rendered for it — but row caching now makes that explicit.
@@ -184,12 +192,13 @@ rebuilding the parts of its tree that could not have changed (D170).
   never cached (they can be mutated in place, so their rows rebuild every render
   as before), and a loop body that reads a relation, a computed getter, or a path
   deeper than one level off the item never caches its record rows.
-- **New reserved names.** A compiled view uses `__list`, `__lists`, `__c`,
-  `__dirty` and `__propRevs` on the instance and `__roots` on the class; a
-  template with an item-form `{#for}` also declares `__L0`, `__L1`, … at module
-  scope. Binding one of the `__L<n>` names in a `<script>` is a positioned
-  compile error, the way binding `ViewNode` already is. The others join
-  `__h`/`__ref`/`__bind` as names a component must not define.
+- **New reserved names.** A compiled view uses `__lists`, `__c`, `__dirty` and
+  `__propRevs` on the instance and `__roots` on the class; a template with an
+  item-form `{#for}` also declares `__L0`, `__L1`, … at module scope and imports
+  the list runtime as `__l`. Binding `__l` or one of the `__L<n>` names in a
+  `<script>` is a positioned compile error, the way binding `ViewNode` already
+  is. The instance names join `__h`/`__ref`/`__bind` as names a component must
+  not define.
 
 ## 0.7.1 — Unreleased
 

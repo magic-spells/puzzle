@@ -92,7 +92,7 @@ export class RowOps {
 
 	/**
 	 * Edit exactly ONE record's fields — the D170 single-edit gate
-	 * (plan/Puzzle-Render-Upgrade.md §11, `list-update-1`).
+	 * (`benchmarks/scenarios.mjs`, `list-update-1`).
 	 *
 	 * One `update()` on one record in a list of N. Everything the list block
 	 * claims rests on this op: N-1 rows must come back from the row cache by

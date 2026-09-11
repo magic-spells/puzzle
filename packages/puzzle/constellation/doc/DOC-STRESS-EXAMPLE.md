@@ -81,6 +81,7 @@ driver has already opted in.
 ## The thirteen built scenarios and what each probes
 
 
+
 | scenario | the question | the answer |
 | --- | --- | --- |
 | `keyed-list` | what does a fully-mounted keyed list cost, on the js-framework-benchmark op set? | 7 elements/row, 350k live elements and 50,001 views at 50k records |
@@ -89,10 +90,10 @@ driver has already opted in.
 | `async-waterfall` | do N independent `async data()` evaluations overlap or queue? | **serialized**, `maxInFlight` 1 of 20 |
 | `deep-nest` | is one update proportional to DEPTH, or to the forest? | **neither** — O(1); see "refuted" below |
 | `write-storm` | does the rAF-batched flush hold under mutation pressure, and what does persistence cost? | batching holds unconditionally; persistence is the finding |
-| `islands` | does `island` really freeze its subtree, and what does the freeze still cost? | 0 violations; the seed now allocates once (D170) — being re-measured |
+| `islands` | does `island` really freeze its subtree, and what does the freeze still cost? | 0 violations, and since D170 **0 child vnodes per render** — it was 20,000/render |
 | `formatters` | what does the built-in registry cost across a large re-render? | was 91.4% — priced the Intl cache that cut it to ~23%; `count-intl` now pins 0 constructions |
-| `listener-churn` | what does removing and re-adding a DOM listener on every render actually cost? | `churn` costs 46% more than `stable` at 1k rows and 32% at 10k; `stable` and `none` are within noise of each other |
-| `route-churn` | how many times does a REUSED route ancestor render per committed navigation? | `depth + 2` — 27 ancestor renders per navigation against 6 `data()` runs, 81.5% mutating nothing |
+| `listener-churn` | what does removing and re-adding a DOM listener on every render actually cost? | `churn` cost 46% more than `stable` at 1k rows and 32% at 10k; since D170 the churn arm compiles to a row-cached handler and all three arms report **0** listener calls |
+| `route-churn` | how many times does a REUSED route ancestor render per committed navigation? | was `depth + 2` (27 per navigation, 81.5% mutating nothing); since D170 it is 12, because the bailouts stop the reused-ancestor cascade — O(depth), not O(depth²) |
 | `form-state` | what does a keystroke cost the rest of a 400-control form? | both controlled form properties write only on a real change (0 writes on a clean re-render); one `record.update()` rebuilds the schema descriptor map three times |
 | `flip-churn` | what do N rows cost the D85 FLIP path at once? | flip is **98.8%** of a 500-row reorder — 68.5ms against 0.80ms for the identical rotation with no `flip` attribute |
 | `loop-trap` | does the D121 loop detector actually fire in a browser? | both arms, at exactly the documented thresholds |
@@ -104,12 +105,17 @@ instead ([[DECISION-D128-BENCHMARK-METHODOLOGY]]), which also runs the two
 scenario-specific probe scripts `probe-route-churn.mjs` and
 `probe-listener-churn.mjs` for the counters their matrix rows cannot express.
 
-Every number in the table above was taken **before**
-[[DECISION-D170-INCREMENTAL-VDOM-LISTS]]. The four rows the incremental render
-touches — `keyed-list`, `virtual-list`, `islands`, and the handler A/B — plus
-the new `list-update-1` / `list-update-all` / `list-reorder` / `list-filter`
-scenarios are being re-measured; until those land, read the affected cells as
-the baseline the D170 gates are measured against, not as current behaviour.
+`keyed-list` gained three D170 work-count gates — `update-one`, `update-all` and
+`reorder` — whose counters are asserted exactly at 1,000 rows rather than
+compared as timings, and `KeyedList.watchRows()` runs a real `MutationObserver`
+over the list body in the production bundle to report them.
+
+Timing cells not called out above were taken **before**
+[[DECISION-D170-INCREMENTAL-VDOM-LISTS]]. The structural counters in
+`benchmarks/baseline.json` were re-recorded on the D170 branch and every one of
+them moved in the improving direction; the milliseconds in this card's prose have
+not all been retaken, so read an unannotated figure as the pre-D170 baseline the
+gates were measured against.
 
 ## `keyed-list` is deliberately NOT virtualized
 
@@ -128,6 +134,7 @@ reactive store is O(1) in nodes but O(n log n) in `data()` per scroll bucket.
 ## Findings this app produced
 
 
+
 Recorded here as measurements only; each is reachable from the card it concerns.
 
 - **Formatters are 91.4% of a 10,000-row re-render** — 376.1ms formatted against
@@ -141,15 +148,26 @@ Recorded here as measurements only; each is reachable from the card it concerns.
 - **Async `data()` is fully serialized** — `maxInFlight` 1 of 20 in production,
   from a concurrency census rather than the clock ([[COMPONENT-STORE]],
   [[FLOW-REACTIVITY]]).
-- **A reused route ancestor at depth `d` renders `d + 2` times per committed
-  navigation**, so the reused prefix costs **O(depth²)** renders rather than two
-  per level. Over five ancestor levels that is 27 renders against 6 `data()`
+- **A reused route ancestor at depth `d` rendered `d + 2` times per committed
+  navigation**, so the reused prefix cost **O(depth²)** renders rather than two
+  per level. Over five ancestor levels that was 27 renders against 6 `data()`
   runs, 81.5% of them mutating nothing
   ([[DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL]]).
-- **Rebinding a DOM listener every render is a real cost** — the `churn` arm
-  runs 46% over `stable` at 1,000 rows and 32% over it at 10,000, which is the
-  price an invoker pattern would recover ([[COMPONENT-VIEW-MANAGER]],
-  [[DECISION-D62-HANDLER-CACHING]]).
+  [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] closed it: with the record-revision
+  prop compare and `patch()`'s identity short-circuit both holding, the cascade
+  stops at the first ancestor that did not move, and the same navigation now
+  costs **12** ancestor renders — 2 per level, O(depth). The params-only control
+  fell the same way, 21 → 6, so the gap between the two arms is still exactly
+  the cascade.
+- **Rebinding a DOM listener every render is a real cost** — the `churn` arm ran
+  46% over `stable` at 1,000 rows and 32% over it at 10,000, which is the price
+  an invoker pattern would recover ([[COMPONENT-VIEW-MANAGER]],
+  [[DECISION-D62-HANDLER-CACHING]]). D170 recovered it at the source instead: a
+  loop-capturing handler now caches on the row scope, so the churn arm compiles
+  to the same identity-stable shape as `stable` and reports **0**
+  add/removeEventListener calls across 20 renders of 10,000 rows, where it used
+  to report 400,000. The arm is kept — its click-select behaviour gate is what
+  proves a row-cached handler still fires and still reads the CURRENT row.
 - **Caret safety is emergent, not mechanical** — nothing in `client-runtime/`
   touches `selectionStart` or `document.activeElement`; the patcher compares
   against the live DOM first, so a re-render mid-keystroke writes no `value` and
@@ -162,8 +180,12 @@ Recorded here as measurements only; each is reachable from the card it concerns.
   read-counting getters rather than inferred, which is what put the island's
   children array on the compiler's build-once cache list
   ([[DECISION-D44-DOM-ISLANDS]], [[COMPONENT-VIEW-MANAGER]],
-  [[DECISION-D170-INCREMENTAL-VDOM-LISTS]]). The post-D170 figure — the gate is
-  zero island vnodes per render — is being measured.
+  [[DECISION-D170-INCREMENTAL-VDOM-LISTS]]). Re-measured on the D170 branch:
+  **0 island child vnodes per shell render**, with `islandViolations` still 0
+  and the shell still provably mutating. The gate was zero and the gate is met.
+  Getting there required the children cache to drop its static requirement —
+  this scenario's island children are a nested `{#for}` over plain objects, so a
+  static-only rule would have left the measured shape paying full price.
 
 ### Two hypotheses refuted — do not re-fund these
 
@@ -180,10 +202,12 @@ Recorded here as measurements only; each is reachable from the card it concerns.
   `?handlers=inline|stable` A/B priced it, and
   [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] removed the cause: a compiled
   `{#for}` now caches the row's handler on the row state, so both arms of that
-  A/B emit a stable identity and the arms are being re-measured. The rejection
-  the finding protects still stands — deep-comparing props or exempting
-  function-valued props would fire stale captures, and an authored view that
-  allocates a fresh prop per render still pays the full cost.
+  A/B emit a stable identity. Measured: `handlers-inline`'s `childDataRuns` for
+  a single selection click at 1,000 rows went 1,000 → **1**, and
+  `update-every-10th` went 1,000 → 100 — exactly the rows that changed. The
+  rejection the finding protects still stands — deep-comparing props or
+  exempting function-valued props would fire stale captures, and an authored
+  view that allocates a fresh prop per render still pays the full cost.
 
 ## Durable gotchas
 

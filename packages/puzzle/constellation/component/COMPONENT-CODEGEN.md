@@ -76,8 +76,8 @@ disagree about opaque units — a comment is whitespace to the class-keyword
 adjacency rule (`export default /* x */ class Foo {}` is a declaration) while a
 string or regex breaks it, and the binding scans treat every opaque unit alike.
 The reserved-binding check covers what the compiler **declares** as well as what
-it imports: `ViewNode`, `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `__s` and the
-`{#svg}` shared-asset locals, plus the `__L<n>` list-block meta consts a
+it imports: `ViewNode`, `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `__s`, `__l`
+and the `{#svg}` shared-asset locals, plus the `__L<n>` list-block meta consts a
 template with an item-form `{#for}` hoists to module scope. Each produces a
 positioned error naming the emission and why *this* file makes it.
 
@@ -125,16 +125,21 @@ their ordered `params` plus a fresh `fn({ ...params })` closure whose body keeps
 caller scope while parameters shadow it. `<Portal>` (D144) emits one
 `PORTAL_TAG` vnode carrying the teleported children through that same
 child-emission path; a component template whose ROOT is a `<Portal>` is a
-positioned error steering to a wrapper element. The injected import line is
-built per file from what the file actually needs: `ViewNode` always, `SLOT_TAG`
-when a marker is present, `SNIPPET_TAG` when a Snippet is present,
-`PORTAL_TAG` when a portal is, and `displayValue as __s` when an interpolation
-coerces for display.
+positioned error steering to a wrapper element. **The injected import line is
+built per file from what the file actually needs** — that is the tree-shaking
+contract, not a tidiness preference: `ViewNode` always, `SLOT_TAG` when a marker
+is present, `SNIPPET_TAG` when a Snippet is present, `PORTAL_TAG` when a portal
+is, `displayValue as __s` when an interpolation coerces for display, and
+`listRows as __l` when the file lowers at least one item-form `{#for}` (last in
+that order). A runtime module reachable only through such an import is absent
+from an app whose templates never emit it, which is why `views/listBlock.js`
+must never be imported from inside `client-runtime/` — see [[FILE-LIST-BLOCK]].
 
 **Item-form loops lower to persistent list blocks** (`listblock.go`,
 [[DECISION-D170-INCREMENTAL-VDOM-LISTS]]). The `.map(…)` becomes
-`this.__list(owner, id, coll, (s) => …, __L<id>)` in place, with the same
-surrounding layout, and the site's static facts travel in a module-scope
+`__l(this, owner, id, coll, (s) => …, __L<id>)` in place, with the same
+surrounding layout — first argument the view, second the owner the rows hang off
+— and the site's static facts travel in a module-scope
 `const __L<id> = { key, counter?, ctrl?, roots?, fields?, deep?, volatile? }`
 emitted after the injected import line — non-default fields only, in a fixed
 order, so the common site is one short const. The key function carries D58's
@@ -155,11 +160,18 @@ every vnode has only static attributes (`ref`, `key`, `island` and `flip`
 included — per-instance stable — plus `@event` values the D62 rule already
 caches), literal text and static element children emits as
 `(this.__c[n] ??= new ViewNode(…))` at view level or `(s.c[n] ??= …)` inside a
-row, so it is allocated once per owner. The threshold is three or more vnodes,
-or an `island` element's children **array** at any size — an island's seed is
-frozen after mount and must never be allocated twice. Excluded: anything inside
-an already-wrapped subtree (only the maximal one is cached), snippet bodies (no
-owner to cache on), a subtree holding a controlled `value`/`checked` (the
+row, so it is allocated once per owner. The threshold is three or more vnodes —
+**or an `island` element's children array at any size, whatever it contains.**
+The island case is the one cache site with no static requirement, because
+[[DECISION-D44-DOM-ISLANDS]] seeds those children once at mount and forbids the
+patcher from ever reconciling them again; a `{#for}`, an interpolation or a
+handler inside a seed is a mount-time value by that contract, and a component or
+composition marker inside an island is already a compile error. When the
+island's sole child is a `{#for}`, the wrapper goes round the lowered list call
+itself and the block runs once. Excluded: anything inside an already-wrapped
+subtree (only the maximal one is cached — the depth guard keeps a lowered loop
+inside a cached island seed from taking a wrapper of its own), snippet bodies
+(no owner to cache on), a subtree holding a controlled `value`/`checked` (the
 runtime re-asserts those against the live DOM every pass), and the render root,
 which the root emitters never route through the wrapper. The wrapper is a pure
 prefix on the subtree's first line with a `)` suffix on its closing line, and
@@ -232,6 +244,7 @@ syntax-check emitted JavaScript. The conditional-arity suite pins nested and
 unequal branch behavior plus the stability gate (item-form loops, explicit-key
 range loops, and slot markers disable padding); `listblock_test.go` and
 `static_cache_test.go` pin the lowering — item/explicit-key/counter/nested/
-conservative meta, the cache threshold and every exclusion — and the todos
-fixtures remain the byte contract the emitter is matched to, not the other way
-round.
+conservative meta, the `listRows as __l` import appearing only for a file that
+lowers a site, the cache threshold, the island-seed cases and every exclusion —
+and the todos fixtures remain the byte contract the emitter is matched to, not
+the other way round.

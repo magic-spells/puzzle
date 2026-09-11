@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 //
-// Persistent list blocks (plan/Puzzle-Render-Upgrade.md §3.2, D170).
+// Persistent list blocks (D170).
 //
-// An item-form `{#for}` compiles to `this.__list(owner, id, items, factory,
-// meta)`, which keeps one ROW STATE per key across renders and returns the SAME
+// An item-form `{#for}` compiles to `__l(this, owner, id, items, factory,
+// meta)` — `listRows`, imported from the package root as `__l` only by a module
+// that lowers a loop, so a loop-free app never carries this file. It keeps one
+// ROW STATE per key across renders and returns the SAME
 // vnode subtree for a row whose inputs did not change. These tests drive the
 // block directly (the algorithm) and through a mounted view (the consequences
 // the patcher sees), because the whole value of the feature is an object
@@ -15,6 +17,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { listRows } from '../client-runtime/views/listBlock.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { devperfInstallSink } from '../client-runtime/devperf.js';
@@ -58,7 +61,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-/** A bare view to host blocks — no DOM, no mount: `__list` needs neither. */
+/** A bare view to host blocks — no DOM, no mount: `listRows` needs neither. */
 function host() {
 	const view = new PuzzleView({});
 	view.__dirty = 0;
@@ -81,8 +84,8 @@ describe('list block — the row cache', () => {
 		const view = host();
 		const built = [];
 
-		const first = view.__list(view, 0, [a, b], recorder(built), KEY);
-		const second = view.__list(view, 0, [a, b], recorder(built), KEY);
+		const first = listRows(view, view, 0, [a, b], recorder(built), KEY);
+		const second = listRows(view, view, 0, [a, b], recorder(built), KEY);
 
 		// Both rows built once, on the first pass; the second pass handed back the
 		// very objects the first pass produced — which is what patch() skips.
@@ -97,12 +100,12 @@ describe('list block — the row cache', () => {
 		const b = store.createRecord('todo', { id: 'b', text: 'B' });
 		const view = host();
 		const built = [];
-		const first = view.__list(view, 0, [a, b], recorder(built), KEY);
+		const first = listRows(view, view, 0, [a, b], recorder(built), KEY);
 
 		// The reference never moves — a record mutates in place — so the stored
 		// render revision is the ONLY thing that can report this.
 		a.update({ text: 'A2' });
-		const second = view.__list(view, 0, [a, b], recorder(built), KEY);
+		const second = listRows(view, view, 0, [a, b], recorder(built), KEY);
 
 		expect(built).toEqual(['a', 'b', 'a']);
 		expect(second[0]).not.toBe(first[0]);
@@ -114,12 +117,12 @@ describe('list block — the row cache', () => {
 		let a = store.createRecord('todo', { id: 'a', text: 'A' });
 		const view = host();
 		const built = [];
-		const first = view.__list(view, 0, [a], recorder(built), KEY);
+		const first = listRows(view, view, 0, [a], recorder(built), KEY);
 
 		// Delete + recreate: same key, different object (walkthrough D).
 		a.destroy();
 		a = store.createRecord('todo', { id: 'a', text: 'again' });
-		const second = view.__list(view, 0, [a], recorder(built), KEY);
+		const second = listRows(view, view, 0, [a], recorder(built), KEY);
 
 		expect(built).toEqual(['a', 'a']);
 		expect(second[0]).not.toBe(first[0]);
@@ -132,8 +135,8 @@ describe('list block — the row cache', () => {
 
 		const plain = host();
 		const plainBuilt = [];
-		plain.__list(plain, 0, [a, b], recorder(plainBuilt), KEY);
-		plain.__list(plain, 0, [b, a], recorder(plainBuilt), KEY);
+		listRows(plain, plain, 0, [a, b], recorder(plainBuilt), KEY);
+		listRows(plain, plain, 0, [b, a], recorder(plainBuilt), KEY);
 		// A reorder moves DOM nodes; it does not change what a row RENDERS unless
 		// the body prints the index.
 		expect(plainBuilt).toEqual(['a', 'b']);
@@ -141,8 +144,8 @@ describe('list block — the row cache', () => {
 		const counting = host();
 		const countingBuilt = [];
 		const meta = { ...KEY, counter: true };
-		counting.__list(counting, 0, [a, b], recorder(countingBuilt), meta);
-		counting.__list(counting, 0, [b, a], recorder(countingBuilt), meta);
+		listRows(counting, counting, 0, [a, b], recorder(countingBuilt), meta);
+		listRows(counting, counting, 0, [b, a], recorder(countingBuilt), meta);
 		expect(countingBuilt).toEqual(['a', 'b', 'b', 'a']);
 	});
 
@@ -153,15 +156,15 @@ describe('list block — the row cache', () => {
 		const built = [];
 		const meta = { ...KEY, roots: 0b10 };
 
-		view.__list(view, 0, [a], recorder(built), meta);
+		listRows(view, view, 0, [a], recorder(built), meta);
 		// A root this site does NOT read changed: the row stays cached.
 		view.__dirty = 0b01;
-		view.__list(view, 0, [a], recorder(built), meta);
+		listRows(view, view, 0, [a], recorder(built), meta);
 		expect(built).toEqual(['a']);
 
 		// A root it DOES read changed.
 		view.__dirty = 0b11;
-		view.__list(view, 0, [a], recorder(built), meta);
+		listRows(view, view, 0, [a], recorder(built), meta);
 		expect(built).toEqual(['a', 'a']);
 	});
 
@@ -172,8 +175,8 @@ describe('list block — the row cache', () => {
 		const built = [];
 		const meta = { ...KEY, volatile: true };
 
-		view.__list(view, 0, [a], recorder(built), meta);
-		view.__list(view, 0, [a], recorder(built), meta);
+		listRows(view, view, 0, [a], recorder(built), meta);
+		listRows(view, view, 0, [a], recorder(built), meta);
 
 		// `{ this.ctx.router.current.path }` in a row body depends on state neither
 		// the root mask nor the record revision covers, so the site gives up caching.
@@ -184,15 +187,15 @@ describe('list block — the row cache', () => {
 		const view = host();
 		const built = [];
 		const meta = { key: (item) => item };
-		view.__list(view, 0, ['x', 'y'], recorder(built), meta);
-		view.__list(view, 0, ['x', 'y'], recorder(built), meta);
+		listRows(view, view, 0, ['x', 'y'], recorder(built), meta);
+		listRows(view, view, 0, ['x', 'y'], recorder(built), meta);
 		expect(built).toEqual(['x', 'y']);
 
 		const objects = host();
 		const objectBuilt = [];
 		const items = [{ id: 'p' }];
-		objects.__list(objects, 0, items, recorder(objectBuilt), KEY);
-		objects.__list(objects, 0, items, recorder(objectBuilt), KEY);
+		listRows(objects, objects, 0, items, recorder(objectBuilt), KEY);
+		listRows(objects, objects, 0, items, recorder(objectBuilt), KEY);
 		// Same reference, no revision: a plain object can be mutated in place and
 		// refresh()ed, so it is always dirty — today's cost, unchanged.
 		expect(objectBuilt).toEqual(['p', 'p']);
@@ -209,8 +212,8 @@ describe('list block — the row cache', () => {
 			return new ViewNode('li', { key: s.k }, [s.c[0]]);
 		};
 
-		view.__list(view, 0, items, factory, KEY);
-		view.__list(view, 0, items, factory, KEY);
+		listRows(view, view, 0, items, factory, KEY);
+		listRows(view, view, 0, items, factory, KEY);
 
 		// The ROW is rebuilt (walkthrough E) but its handler and its static subtree
 		// come off the row state, so allocation drops to the dynamic vnodes.
@@ -230,12 +233,12 @@ describe('list block — dev counters', () => {
 			if (event.type === 'list-rows') events.push(event);
 		});
 		try {
-			view.__list(view, 0, [post], recorder([]), KEY);
-			view.__list(view, 0, [post], recorder([]), KEY);
+			listRows(view, view, 0, [post], recorder([]), KEY);
+			listRows(view, view, 0, [post], recorder([]), KEY);
 			// A second site reading a relation can never cache its record rows — the
 			// counter is how an author finds out WHY a list is still slow.
-			view.__list(view, 1, [post], recorder([]), { ...KEY, fields: ['author'] });
-			view.__list(view, 1, [post], recorder([]), { ...KEY, fields: ['author'] });
+			listRows(view, view, 1, [post], recorder([]), { ...KEY, fields: ['author'] });
+			listRows(view, view, 1, [post], recorder([]), { ...KEY, fields: ['author'] });
 		} finally {
 			off();
 		}
@@ -256,8 +259,8 @@ describe('list block — keys', () => {
 		const built = [];
 		const items = [{ name: 'no key here' }];
 
-		view.__list(view, 0, items, recorder(built), KEY);
-		view.__list(view, 0, items, recorder(built), KEY);
+		listRows(view, view, 0, items, recorder(built), KEY);
+		listRows(view, view, 0, items, recorder(built), KEY);
 
 		// Positional diffing, today's semantics — and no second voice: keyOf owns
 		// the diagnostic and warns once per session.
@@ -274,8 +277,8 @@ describe('list block — keys', () => {
 		const view = host();
 		const built = [];
 
-		const first = view.__list(view, 0, [a, a], recorder(built), KEY);
-		const second = view.__list(view, 0, [a, a], recorder(built), KEY);
+		const first = listRows(view, view, 0, [a, a], recorder(built), KEY);
+		const second = listRows(view, view, 0, [a, a], recorder(built), KEY);
 
 		// The first occurrence owns the row state; the second can never be cached
 		// (one state cannot describe two positions), so it is rebuilt every pass.
@@ -303,8 +306,8 @@ describe('list block — conservative sites', () => {
 			const built = [];
 			const meta = { ...KEY, ...extra };
 
-			view.__list(view, 0, [post], recorder(built), meta);
-			view.__list(view, 0, [post], recorder(built), meta);
+			listRows(view, view, 0, [post], recorder(built), meta);
+			listRows(view, view, 0, [post], recorder(built), meta);
 
 			// The record's own revision says nothing about a related record or a
 			// getter's inputs, so the row cache may not speak for them.
@@ -319,8 +322,8 @@ describe('list block — conservative sites', () => {
 		const built = [];
 		const meta = { ...KEY, fields: ['title', 'id'] };
 
-		view.__list(view, 0, [post], recorder(built), meta);
-		view.__list(view, 0, [post], recorder(built), meta);
+		listRows(view, view, 0, [post], recorder(built), meta);
+		listRows(view, view, 0, [post], recorder(built), meta);
 
 		expect(built).toEqual(['p1']);
 	});
@@ -334,11 +337,11 @@ describe('list block — row lifetime', () => {
 		const view = host();
 		const built = [];
 
-		view.__list(view, 0, [a, b], recorder(built), KEY);
-		view.__list(view, 0, [a], recorder(built), KEY);
+		listRows(view, view, 0, [a, b], recorder(built), KEY);
+		listRows(view, view, 0, [a], recorder(built), KEY);
 		expect(view.__lists[0].rows.size).toBe(1);
 
-		view.__list(view, 0, [a, b], recorder(built), KEY);
+		listRows(view, view, 0, [a, b], recorder(built), KEY);
 		expect(built).toEqual(['a', 'b', 'b']);
 	});
 
@@ -348,17 +351,17 @@ describe('list block — row lifetime', () => {
 		const view = host();
 		const built = [];
 		const other = [];
-		const first = view.__list(view, 0, [a], recorder(built), KEY);
+		const first = listRows(view, view, 0, [a], recorder(built), KEY);
 
 		// Two renders in which the enclosing branch was false: site 0 is not called
 		// at all while the rest of the template renders (site 1 stands in for it),
 		// so nothing expires (walkthrough G). Dropping happens only inside a pass,
 		// and memory stays bounded by what the site last showed.
-		view.__list(view, 1, [{ id: 'z' }], recorder(other), KEY);
-		view.__list(view, 1, [{ id: 'z' }], recorder(other), KEY);
+		listRows(view, view, 1, [{ id: 'z' }], recorder(other), KEY);
+		listRows(view, view, 1, [{ id: 'z' }], recorder(other), KEY);
 		expect(view.__lists[0].rows.size).toBe(1);
 
-		const revisited = view.__list(view, 0, [a], recorder(built), KEY);
+		const revisited = listRows(view, view, 0, [a], recorder(built), KEY);
 
 		expect(built).toEqual(['a']);
 		expect(revisited[0]).toBe(first[0]);
@@ -373,14 +376,15 @@ describe('list block — row lifetime', () => {
 		const rows = new Map();
 
 		const render = (items) =>
-			view.__list(
+			listRows(
+				view,
 				view,
 				0,
 				items,
 				(s) => {
 					rows.set(s.k, s);
 					// The compiler passes the ROW as the owner for a nested site.
-					const kids = view.__list(s, 1, [{ id: s.k + '-1' }], (t) => {
+					const kids = listRows(view, s, 1, [{ id: s.k + '-1' }], (t) => {
 						inner.push(t.k);
 						return new ViewNode('li', { key: t.k }, []);
 					}, KEY);
@@ -416,7 +420,8 @@ describe('list block — controlled values in a cached row', () => {
 				return new ViewNode(
 					'form',
 					{},
-					this.__list(
+					listRows(
+						this,
 						this,
 						0,
 						this.getData().todos,
@@ -473,7 +478,8 @@ describe('list block — component rows', () => {
 			return new ViewNode(
 				'ul',
 				{},
-				this.__list(
+				listRows(
+					this,
 					this,
 					0,
 					this.getData().todos,

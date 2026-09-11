@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Static subtree caching (plan/Puzzle-Render-Upgrade.md §3.3, D170).
+// Static subtree caching (D170).
 //
 // The compiler wraps every maximal static subtree worth caching in
 // `(this.__c[n] ??= new ViewNode(…))`, so a template's unchanging markup is

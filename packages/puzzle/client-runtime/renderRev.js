@@ -1,5 +1,5 @@
 /**
- * The record render revision (plan/Puzzle-Render-Upgrade.md §3.4, D170).
+ * The record render revision (DECISION-D170-INCREMENTAL-VDOM-LISTS).
  *
  * `Store._notify` stamps the notification sequence of the last observable
  * mutation onto the record under this Symbol, so two readers that hold the SAME

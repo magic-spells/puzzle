@@ -6,8 +6,8 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/parser"
 )
 
-// staticcache.go — build-once static subtrees (plan/Puzzle-Render-Upgrade.md
-// §3.3/§4.3, D170).
+// staticcache.go — build-once static subtrees
+// (DECISION-D170-INCREMENTAL-VDOM-LISTS).
 //
 // A static-heavy template rebuilds thousands of identical vnodes per render and
 // produces zero DOM writes from them. A subtree whose every vnode is fully
@@ -29,13 +29,17 @@ import (
 //
 // Only the MAXIMAL qualifying subtree is wrapped (the emitter stops analysing
 // once it is inside one), and only when it is worth the wrapper bytes: three or
-// more vnodes, or an `island` element's children array at any size, since an
-// island's children are frozen after mount and must never be allocated twice.
-// Snippet bodies are excluded outright — they are stamped per expansion and own
-// no cache.
+// more vnodes — or an `island` element's children array at any size and whatever
+// it contains, since an island's children are seeded once at mount and never
+// reconciled again, so they must never be allocated twice. Two body kinds are
+// excluded outright: a snippet body, stamped per expansion and owning no cache,
+// and a range {#for} body — a range still emits `.map`, so it owns no row
+// scope, and the one slot its body would take is shared by every iteration,
+// mounting a single vnode at N DOM positions.
 
-// minCachedVnodes is the size threshold from plan §3.3: a lone static text or
-// leaf element costs more in wrapper bytes than it saves in allocation.
+// minCachedVnodes is the D170 static-subtree-cache size threshold: a lone
+// static text or leaf element costs more in wrapper bytes than it saves in
+// allocation.
 const minCachedVnodes = 3
 
 // staticCachePrefix returns the cache wrapper's opening text for an element
@@ -45,7 +49,9 @@ const minCachedVnodes = 3
 // The wrapper is a pure PREFIX on the subtree's first line with a single ')'
 // suffix on its closing line; inner lines keep their indentation, and the
 // prefix counts toward startCol in the attrsMultiline width decision, so the
-// wrapped element wraps its attributes exactly as the fixture does (plan §4.3).
+// wrapped element wraps its attributes exactly as the fixture does — the D170
+// emission contract; the hand-written todos fixtures under tests/fixtures/todos/
+// are the byte contract.
 func (c *compiler) staticCachePrefix(n *parser.Element, scope scopeMap) string {
 	if !c.cachingAllowed() {
 		return ""
@@ -58,10 +64,12 @@ func (c *compiler) staticCachePrefix(n *parser.Element, scope scopeMap) string {
 }
 
 // cachingAllowed reports whether a cache wrapper may be emitted here at all:
-// not inside an already-wrapped subtree (maximality) and not inside a snippet
-// body (no owner to cache on).
+// not inside an already-wrapped subtree (maximality), not inside a snippet body
+// (no owner to cache on), and not inside a range {#for} body (no row scope, so
+// the one slot would be shared by every iteration and the vnode mounted at N
+// DOM positions).
 func (c *compiler) cachingAllowed() bool {
-	return c.staticCacheDepth == 0 && c.snippetDepth == 0
+	return c.staticCacheDepth == 0 && c.snippetDepth == 0 && c.rangeDepth == 0
 }
 
 // nextCacheSlot allocates the next cache index on the current owner: the view
@@ -81,13 +89,24 @@ func (c *compiler) nextCacheSlot() string {
 
 // islandChildrenCache returns the wrapper for an `island` element's children
 // array, or "". The element itself may be dynamic — its attrs and listeners
-// still patch (D44) — but its children are frozen after mount, so the seed is
-// allocated once at any size (plan §3.3).
-func (c *compiler) islandChildrenCache(attrs []parser.Attr, children []parser.Node, isComponent bool, scope scopeMap) string {
-	if isComponent || !c.cachingAllowed() || len(children) == 0 || !hasIslandAttr(attrs) {
-		return ""
-	}
-	if ok, count := c.staticChildren(children, scope); !ok || count == 0 {
+// still patch (D44) — but its children are SEEDED ONCE at mount and never
+// reconciled again, so the array is correct to build once whatever it holds
+// (D170, static subtree caches).
+//
+// This is the one cache site with no static requirement, and the D44 contract is
+// what licenses that: a `{#for}` inside an island evaluates once, an
+// interpolation inside one is documented as its mount-time value, a handler on a
+// seeded child is wired once, and a component or composition marker inside an
+// island is already a compile error. Demanding a STATIC seed would have left the
+// common island — a loop or an interpolation over frozen data — rebuilding its
+// whole subtree on every parent render and throwing it away in patch(), which is
+// exactly the 20,000-vnodes-per-render cost the stress example measured.
+//
+// The element itself is still wrapped only when it is fully static
+// (staticCachePrefix), and a fully static island is wrapped as a whole element
+// instead — cachingAllowed() keeps the two from nesting.
+func (c *compiler) islandChildrenCache(attrs []parser.Attr, hasChildren bool, isComponent bool) string {
+	if isComponent || !c.cachingAllowed() || !hasChildren || !hasIslandAttr(attrs) {
 		return ""
 	}
 	return c.nextCacheSlot()
@@ -173,7 +192,7 @@ func (c *compiler) staticElementAttrs(el *parser.Element, scope scopeMap) bool {
 		switch at := a.(type) {
 		case *parser.StaticAttr:
 			// Includes `ref`, `key`, `island` and `flip`: framework-owned, but
-			// per-instance stable, so they survive caching (plan §3.3).
+			// per-instance stable, so they survive caching (D170, static subtree caches).
 		case *parser.EventAttr:
 			ev, err := compileEventValue(at.Expr, scope, nil)
 			if err != nil || !ev.cacheable {

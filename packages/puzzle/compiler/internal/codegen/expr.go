@@ -19,9 +19,9 @@ import (
 // name bare" — an ordinary binding (a range-loop variable, a snippet param,
 // `event`, the imported `ViewNode`). A NON-empty value is a rewrite, which is
 // how a persistent list block's row locals reach their scope object
-// (0.8.0 plan §4.3: `todo` → `s.item`, the counter → `s.i`). Membership alone
-// still decides "do not prefix with __d."; the value only decides what is
-// written in the identifier's place.
+// (the D170 emission contract: `todo` → `s.item`, the counter → `s.i`).
+// Membership alone still decides "do not prefix with __d."; the value only
+// decides what is written in the identifier's place.
 type scopeMap map[string]string
 
 // scopeRef reports the JS an in-scope identifier resolves to.
@@ -47,7 +47,7 @@ func boolScope(names map[string]bool) scopeMap {
 }
 
 // exprFacts is what one resolved expression READ, classified by the same
-// lexical pass that rewrites it (0.8.0 plan §5). A list block needs three
+// lexical pass that rewrites it (D170, compiler lowering). A list block needs three
 // things from a loop body — which parent data roots it reads (the `roots`
 // dirty mask), which members it reads off the row item (`fields`/`deep`), and
 // whether it touches `this` (`volatile`) — and deriving them from a second
@@ -295,7 +295,7 @@ func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts
 	// callDepth counts the open parens that FOLLOW a value-ending token, i.e.
 	// call argument lists rather than grouping parens. A whole-value read of a
 	// loop local inside one is `fmt(todo)` — the row then depends on more than
-	// the item's identity (plan §4.3 `deep`).
+	// the item's identity (the D170 emission contract's `deep`).
 	callDepth := 0
 	var parens []bool
 	// prevEndsExpr tracks whether the previous significant token can END an
@@ -773,7 +773,7 @@ type eventValue struct {
 	// rowCacheable marks a handler that captures loop bindings and nothing
 	// else: not `__h`-cacheable (its capture differs per row), but stable for
 	// the LIFE of a row, so a persistent list block caches it on the row scope
-	// (`s.h0 ??= …`, 0.8.0 plan §3.5). The emitter still checks that every
+	// (`s.h0 ??= …`, D170 stable loop handlers). The emitter still checks that every
 	// captured binding belongs to a lowered loop before using it.
 	rowCacheable bool
 	// refs are the in-scope binding names the handler ARGUMENTS referenced,
@@ -786,7 +786,7 @@ type eventValue struct {
 // It accepts the two SPEC §5 handler forms plus the D86 handler-valued
 // conditional whose branches are each a handler form or null. A literal null
 // emits no handler. facts, when non-nil, collects what the handler arguments
-// read (the row's `roots` mask includes handler reads — plan §4.3).
+// read (the row's `roots` mask includes handler reads — D170 emission contract).
 func compileEventValue(expr string, scope scopeMap, facts *exprFacts) (eventValue, error) {
 	return compileEventValueMode(expr, scope, false, facts)
 }

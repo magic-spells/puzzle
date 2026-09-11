@@ -239,7 +239,7 @@ convention — internal, adapter-installed, never author-facing.
 
 ## Compiler-facing internals for the incremental render (D170)
 
-Four more members belong to the emitter, alongside `__h`, `__ref` and `__bind`:
+Three more members belong to the emitter, alongside `__h`, `__ref` and `__bind`:
 never spelled in a template, not part of the public typed API, and reserved as
 property names in SPEC §4.
 
@@ -247,13 +247,9 @@ property names in SPEC §4.
   lazily) so every view keeps one hidden class whether or not its template has
   cache sites. The compiler wraps each maximal static subtree in
   `(this.__c[n] ??= new ViewNode(…))`, so a template's unchanging markup is
-  allocated once per instance and the patcher skips it by identity.
-- **`__list(owner, id, items, factory, meta)`** renders one `{#for}` site,
-  delegating to `views/listBlock.js`. `this` is always the view — it owns the
-  root mask and the dev counters — while `owner` is only where the site's rows
-  are kept: the view for a top-level loop, the enclosing ROW STATE for a nested
-  one, so inner blocks are keyed per outer row and die with it. Blocks live in
-  `__lists`, allocated on first visit.
+  allocated once per instance and the patcher skips it by identity. An `island`
+  element's children array is wrapped the same way, at any size and whatever it
+  contains.
 - **`__dirty`** is the per-render mask of which of `constructor.__roots` — the
   top-level `data()` keys some loop body in this template reads — changed since
   the last render. It is computed after `beforeUpdate()` (user code that may
@@ -271,3 +267,14 @@ property names in SPEC §4.
   current. It is replaced wholesale, never merged, and is null when no prop
   carries a revision, which allocates nothing in the common case. `propsEqual`
   reads it with `?.`.
+
+**There is no `__list` method, deliberately.** A `{#for}` site calls
+`listRows` — imported by the compiled module as `__l` from the package root —
+not a `PuzzleView` method, because a method would make `views/listBlock.js` an
+unconditional import of `PuzzleView` and every loop-free app would carry ~1 KB
+gzip it never runs. `PuzzleView` must never import that module. What the view
+still owns for the block is the state the block reads off it: `__dirty` (the
+root mask), the dev counters, and `__lists` — the per-owner block registry the
+block itself allocates on first visit, on the view for a top-level loop and on
+the enclosing ROW STATE for a nested one, so inner blocks are keyed per outer
+row and die with it.

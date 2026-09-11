@@ -103,6 +103,10 @@ notes:
       passes no mark at all. Adapter-free apps get this too: it is in core `#commit`, not in the
       adapter-installed loop.
     sha: bdf7e9d9008a44f1cf0679002fb12007259ecbe4
+  - kind: state
+    text: >-
+      The plan §3.7 mentioned above is now [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] Decision item 6
+      (flush-sequence dedupe); the planning document was removed 2026-09-11.
 verified_at: '2026-08-24T05:28:09.597Z'
 verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
 code_refs:

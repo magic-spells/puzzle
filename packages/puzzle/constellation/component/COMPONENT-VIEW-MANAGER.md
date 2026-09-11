@@ -296,6 +296,7 @@ next vnode tree so repeated patches remain live.
 
 ## Measured: `island` freezes patching, and now allocation too
 
+
 The island branch runs inside `patch()`, so an island's children were built by
 `render()` before the patcher ever got the chance to ignore them.
 [[DOC-STRESS-EXAMPLE]]'s `islands` scenario put a number on both halves over 600
@@ -312,15 +313,22 @@ devperf branches.
 The zero-mutation half is the [[DECISION-D44-DOM-ISLANDS]] contract and is
 unchanged. The allocation half is what [[DECISION-D170-INCREMENTAL-VDOM-LISTS]]
 closed: **an island's children array is a compiler cache site**
-(`this.__c[n] ??= [ … ]`, or `s.c[n]` inside a loop row) at any size, because an
-island's seed is frozen after mount and must never be allocated twice. The
-element itself may stay dynamic — its own attrs and listeners still patch. So
-the seed is built once per instance and returned by reference on every later
-render, and `patch()`'s identity short-circuit skips it. A dev counter
-(`staticSitesBuilt` in [[FILE-DEVPERF]]) reports how many cache sites a render
-had to allocate; zero on a steady-state render is the claim worth watching.
+(`this.__c[n] ??= [ … ]`, or `s.c[n] ??= [ … ]` inside a loop row) at any size
+**and whatever the children contain** — the one cache site with no static
+requirement, because D44 already says the seed is built once at mount and never
+reconciled again. The element itself may stay dynamic — its own attrs and
+listeners still patch. So the seed is built once per instance and returned by
+reference on every later render, and `patch()`'s identity short-circuit skips
+it. A dev counter (`staticSitesBuilt` in [[FILE-DEVPERF]]) reports how many
+cache sites a render had to allocate; zero on a steady-state render is the claim
+worth watching.
 
-**The per-render figure above is being re-measured** by the D170 verification
-pass against `examples/stress`. Until those numbers land, treat 20,000/render
-as the pre-D170 baseline the gate is measured against (the gate is 0 island
-vnodes per render), not as current behaviour.
+**Re-measured 2026-09-10 on the D170 branch** (`islands/shell-renders/20000`, 60
+shell renders, production bundle): `islandChildVnodesPerRender` is **0**, down
+from 20,000, while `islandViolations` stays 0 and `shellDidMutate` stays 1 —
+the shell provably churned, so the zeros mean something. That is the D170 island
+gate met exactly — the gates are the expects in `benchmarks/scenarios.mjs` plus
+the measured numbers in D170's verified note. The stress scenario's children are
+a nested `{#for}` over plain objects, which is why the cache had to drop its
+static requirement: a static-only rule left the shape the measurement was built
+from paying full price.

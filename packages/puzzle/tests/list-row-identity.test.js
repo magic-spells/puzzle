@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
-// What a CACHED row must still behave like (plan/Puzzle-Render-Upgrade.md §10,
-// the browser-identity checks).
+// What a CACHED row must still behave like (D170 Consequences — the
+// browser-identity checks).
 //
 // A reorder that returns every row from the list block's cache is the sharpest
 // test of the identity short-circuit: the patcher does nothing below a row, so
@@ -24,6 +24,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { listRows } from '../client-runtime/views/listBlock.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { devperfInstallSink } from '../client-runtime/devperf.js';
@@ -63,7 +64,8 @@ class Rows extends PuzzleView {
 		return new ViewNode(
 			'ul',
 			{},
-			this.__list(
+			listRows(
+				this,
 				this,
 				0,
 				this.getData().rows,

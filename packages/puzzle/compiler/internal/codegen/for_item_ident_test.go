@@ -23,11 +23,11 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 `)
 	// Collection resolves against the model; the lambda param is the intact
 	// identifier (not split on any character).
-	if !strings.Contains(got, "this.__list(this, 0, __d.items, (s) =>") {
+	if !strings.Contains(got, "__l(this, this, 0, __d.items, (s) =>") {
 		t.Errorf("expected the item-form loop to lower to a list block, got:\n%s", got)
 	}
 	// The identifier survives intact in the site meta's key arrow, which is
-	// where the loop variable is still spelled out (D170, plan §4.3).
+	// where the loop variable is still spelled out (D170 emission contract).
 	if !strings.Contains(got, "const __L0 = { key: ($foo) => ViewNode.keyOf($foo) };") {
 		t.Errorf("expected the key arrow to keep the intact identifier, got:\n%s", got)
 	}
@@ -63,7 +63,7 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 			if !strings.Contains(got, "key: ("+tc.item+") => ViewNode.keyOf("+tc.item+")") {
 				t.Errorf("allowed loop identifiers did not compile intact:\n%s", got)
 			}
-			if !strings.Contains(got, "this.__list(this, 0, __d.items, (s) =>") {
+			if !strings.Contains(got, "__l(this, this, 0, __d.items, (s) =>") {
 				t.Errorf("allowed loop identifiers did not lower to a list block:\n%s", got)
 			}
 		})

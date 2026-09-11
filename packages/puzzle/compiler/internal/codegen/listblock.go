@@ -9,18 +9,26 @@ import (
 )
 
 // listblock.go — item-form {#for} lowering to a persistent list block
-// (plan/Puzzle-Render-Upgrade.md §3.2/§4.3, D170).
+// (DECISION-D170-INCREMENTAL-VDOM-LISTS).
 //
 // Today an item-form loop compiles to `<coll>.map((todo) => <row>)`, so every
 // parent render allocates and diffs N rows whether or not any row changed. It
 // now compiles to a call into a per-site block that returns the same kind of
 // array — cached row vnodes for rows whose inputs did not change:
 //
+//	import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
 //	const __L0 = { key: (todo) => ViewNode.keyOf(todo) };
 //	…
-//	this.__list(this, 0, __d.filteredTodos, (s) =>
+//	__l(this, this, 0, __d.filteredTodos, (s) =>
 //	  new ViewNode(TodoItem, { key: s.k, todo: s.item, … }, [])
 //	, __L0)
+//
+// `listRows as __l` joins the injected import line only when the file lowers at
+// least one site, the way `displayValue as __s` does — a loop-free module must
+// not drag views/listBlock.js into the bundle. The call's first argument is
+// always the VIEW (it owns the `__dirty` root mask and the dev counters); the
+// second is the owner the block's rows hang off: `this` at depth 0, the
+// enclosing row scope inside a row body.
 //
 // The block only decides WHICH vnode objects appear in that array; the array is
 // spliced exactly where the `.map()` result was, so keyed reconciliation, mixed
@@ -36,9 +44,9 @@ import (
 // common site is one short const.
 //
 // Two loops are deliberately NOT lowered:
-//   - range loops, whose rows are cheap and keyed by value (plan §3.2);
+//   - range loops, whose rows are cheap and keyed by value (D170, list blocks);
 //   - loops inside a <Snippet> body, which is stamped fresh per expansion, so a
-//     block keyed by site id would be shared between stamps (plan §4.3).
+//     block keyed by site id would be shared between stamps (D170 emission contract).
 
 // maxRootBits caps the file-level `__roots` array. The runtime tests the mask
 // with a JS bitwise AND, which is 32-bit signed, so bit 31 is out of reach;
@@ -78,7 +86,7 @@ type loopSite struct {
 
 // scopeName is the factory parameter at a given lowering depth: `s` at depth 0
 // and `s1`, `s2`, … below it, so an inner row body can still reach an enclosing
-// row's locals by name (plan §4.3).
+// row's locals by name (D170 emission contract).
 func scopeName(depth int) string {
 	if depth == 0 {
 		return "s"
@@ -188,7 +196,7 @@ func siteOwning(loops []*loopSite, scope scopeMap, name string) *loopSite {
 // resolve is resolveExpr plus fact collection. Every template expression the
 // emitter resolves goes through it, so a loop body's roots/fields/`this` reads
 // are gathered by the SAME pass that rewrites them — handler arguments and
-// interpolations inside template literals included (plan §5).
+// interpolations inside template literals included (D170, compiler lowering).
 func (c *compiler) resolve(expr string, scope scopeMap) string {
 	f := c.factSink()
 	out, _ := resolveExprScan(expr, scope, nil, f)
@@ -221,7 +229,7 @@ func (c *compiler) rowStableRefs(refs []string, scope scopeMap) bool {
 
 // emitListCall emits the lowered item-form loop. The call replaces the `.map(…)`
 // expression in place and keeps its surrounding layout: the body at ind+2 and
-// the `, __L<id>)` closer at the call's own column (plan §4.3).
+// the `, __L<id>)` closer at the call's own column (D170 emission contract).
 func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow string) (string, error) {
 	depth := len(c.loops)
 	owner := "this"
@@ -259,7 +267,7 @@ func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow
 		return "", err
 	}
 
-	return "this.__list(" + owner + ", " + strconv.Itoa(site.id) + ", " + coll +
+	return "__l(this, " + owner + ", " + strconv.Itoa(site.id) + ", " + coll +
 		", (" + name + ") =>\n" +
 		sp(ind+2) + body + "\n" +
 		sp(ind) + ", __L" + strconv.Itoa(site.id) + ")", nil
@@ -378,7 +386,7 @@ func isExplicitKeyAttr(a parser.Attr) bool {
 // forBodyHasControl reports whether a loop body contains a form control with a
 // `value`/`checked` attribute, static or dynamic (`ctrl: true`). A cached row
 // must still re-assert those against the live DOM on a clean pass, which the
-// block does from a collected control list rather than by diffing (plan §3.2).
+// block does from a collected control list rather than by diffing (D170, list blocks).
 func forBodyHasControl(nodes []parser.Node) bool {
 	for _, n := range nodes {
 		switch t := n.(type) {
@@ -463,8 +471,8 @@ func (c *compiler) emitListMetaConsts() string {
 		b.WriteString(strconv.Itoa(site.id))
 		b.WriteString(" = { key: ")
 		b.WriteString(site.keyArrow)
-		// Non-default fields only, in the fixed order of plan §4.3; the runtime
-		// reads the rest with defaults (false, 0, []).
+		// Non-default fields only, in the fixed order of the D170 emission
+		// contract; the runtime reads the rest with defaults (false, 0, []).
 		if site.counterRead {
 			b.WriteString(", counter: true")
 		}
@@ -504,7 +512,7 @@ func (c *compiler) emitListMetaConsts() string {
 // emitRootsStamp emits `Class.__roots = […];` — the file-level array a site's
 // `roots` mask indexes into. Emitted only when some site carries a mask, so a
 // view whose loops read no parent root pays nothing and PuzzleView skips the
-// dirty-mask computation entirely (plan §3.6).
+// dirty-mask computation entirely (D170, root dirty mask).
 func (c *compiler) emitRootsStamp(className string) string {
 	if len(c.rootOrder) == 0 {
 		return ""

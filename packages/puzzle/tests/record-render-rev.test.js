@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The record render revision (plan/Puzzle-Render-Upgrade.md §3.4, D170).
+// The record render revision (D170).
 //
 // A record mutates IN PLACE, so two readers holding the same reference cannot
 // tell "unchanged" from "changed since I last looked". `Store._notify` stamps

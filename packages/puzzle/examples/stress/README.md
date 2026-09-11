@@ -137,8 +137,11 @@ same ops, same `ListRow`.
   `data()` and re-rendered. **Since D170 the compiler caches a loop capture on
   the row scope** (`(s.h0 ??= …)`, reading the row's current item at fire time),
   so this arm now emits a stable identity too and the A/B no longer contrasts
-  what it was built to contrast. Both arms are being re-measured; the numbers
-  below are the pre-D170 baseline.
+  what it was built to contrast. Re-measured: `handlers-inline`'s
+  `childDataRuns` for one selection click at 1,000 rows is **1** (it was 1,000),
+  and `update-every-10th` runs 100 child `data()`s (it was 1,000) — exactly the
+  rows that changed, the same as the `stable` arm. The milliseconds below are
+  the pre-D170 baseline.
 - `stable` — `@select={ selectById }`. A bare method reference is cacheable per
   instance, so codegen emits one function object per site per view instance. An
   untouched row's props then compare fully equal and the child bails out without
@@ -581,12 +584,17 @@ vnodes were constructed on every single render and then thrown away
 that counts its own reads, so the 20,000-per-render figure above is a measured
 number rather than an inference from the source — and it is what put island
 children on the compiler's build-once list. D170 emits an `island` element's
-children **array** as a cache site (`this.__c[n] ??= [ … ]`, at any size, no
-three-vnode threshold), so the seed is allocated once per instance and every
-later render returns the same array, which `patch()` then skips by identity.
-The element itself stays dynamic — its own attrs and listeners still patch. The
-gate is **0 island child vnodes per render**, and this arm is being re-measured
-against it.
+children **array** as a cache site (`this.__c[n] ??= [ … ]`, or `s.c[n]` inside
+a loop row) — at any size, with no three-vnode threshold and **no static
+requirement at all**, because D44 already says the seed is built once at mount
+and never reconciled again. That last part is what this scenario needed: its
+island children are a nested `{#for}` over plain objects, so a static-only rule
+would have left exactly the measured shape paying full price. The seed is
+allocated once per island and every later render returns the same array, which
+`patch()` then skips by identity. The element itself stays dynamic — its own
+attrs and listeners still patch. **Re-measured: `islandChildVnodesPerRender` is
+0**, down from 20,000, with `islandViolations` still 0 and `shellDidMutate`
+still 1. The gate was 0 island child vnodes per render; the gate is met.
 
 **What a bad result looks like:** any non-zero `islandViolations` (the island
 contract is broken, and `validate()` fails), or `shellDidMutate` reading 0 —
@@ -698,10 +706,22 @@ The `inline` row at n=10,000 is the decisive one: **all 10,000 rows re-ran
 `data()` and re-rendered, and not one listener was rebound.** So the honest
 first answer is that there is nothing here to optimise in idiomatic code.
 
-Churn requires a data-capturing call on a DOM **element** inside a loop —
+Churn required a data-capturing call on a DOM **element** inside a loop —
 `@click={ selectRow(row) }` on a `<button>` — where `row` is a loop variable and
-codegen cannot cache the closure. That is the `churn` arm, and it is the only
-shape that pays.
+codegen could not cache the closure. That was the `churn` arm, and it was the
+only shape that paid.
+
+> **Since D170 nothing pays.** A handler whose arguments capture only lowered-loop
+> locals is rewritten onto the row scope and cached there —
+> `(s.h0 ??= (event) => this.events.selectRow(s.item))` — so it is
+> identity-stable across renders and reads the row's CURRENT item when it fires.
+> Re-measured on the D170 branch, all three arms report **0**
+> `addEventListener` and **0** `removeEventListener` calls: the churn arm is
+> compiled into the same shape as `stable`. The tables in the rest of this
+> section are the **pre-D170 baseline**, kept because they are what priced the
+> problem. The arm stays in the matrix — its `click-select` behaviour gate is
+> the thing that proves a row-cached handler still fires and still sees the row
+> it is standing on, which is exactly what row-scope caching could have broken.
 
 | arm | binding | listener calls per row per render |
 | --- | --- | ---: |
@@ -713,7 +733,8 @@ Exact totals over 20 renders of 10,000 rows:
 
 | arm | `addEventListener` | `removeEventListener` | per render |
 | --- | ---: | ---: | ---: |
-| `churn` | 400,000 | 400,000 | **40,000** |
+| `churn` (pre-D170) | 400,000 | 400,000 | **40,000** |
+| `churn` (since D170) | **0** | **0** | **0** |
 | `stable` | **0** | **0** | **0** |
 | `none` | **0** | **0** | **0** |
 
@@ -810,6 +831,16 @@ Production, 100 leaf-divergence navigations, exact counters:
 2,200 of the 2,700 renders (81.5%) mutate nothing.** A reused ancestor at depth
 `d` renders `d + 2` times — the reused prefix costs **O(depth²)** renders, not
 two per level.
+
+> **Re-measured since D170: 12 ancestor renders per navigation, not 27** (and
+> the params-only control fell 21 → 6). The cascade described below still
+> *starts* the same way, but it no longer propagates: a descendant whose props
+> and records did not move now bails out of `applyParentUpdate` on the
+> record-revision prop compare, and its subtree is skipped outright by `patch()`'s
+> identity short-circuit. The reused prefix is O(depth) again — 2 renders per
+> level. Everything from here to the end of this section is the **pre-D170**
+> analysis, kept because it is what identified the cascade; the counters the
+> benchmark now asserts are in `benchmarks/scenarios.mjs`.
 
 The mechanism is three cascades, and the arithmetic matches the code exactly:
 

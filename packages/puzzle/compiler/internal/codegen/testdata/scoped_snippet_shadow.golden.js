@@ -6,7 +6,7 @@ export default class ScopedSnippetShadow extends PuzzleView {
   data() { return { users: [], user: { name: 'data user' }, title: 'People' }; }
 }
 
-import { ViewNode, SNIPPET_TAG, displayValue as __s } from '@magic-spells/puzzle';
+import { ViewNode, SNIPPET_TAG, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
 const __L0 = { key: (user) => user.id, roots: 1 };
 
@@ -14,7 +14,7 @@ ScopedSnippetShadow.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', {},
-    this.__list(this, 0, __d.users, (s) =>
+    __l(this, this, 0, __d.users, (s) =>
       new ViewNode(UserList, { key: s.k }, [
         new ViewNode(SNIPPET_TAG, {
           fits: '',

@@ -1,18 +1,23 @@
 /**
  * Persistent list blocks — the incremental half of the virtual DOM
- * (plan/Puzzle-Render-Upgrade.md §3.2, D170).
+ * (DECISION-D170-INCREMENTAL-VDOM-LISTS).
  *
  * An item-form `{#for}` no longer compiles to `items.map(item => new ViewNode(…))`.
  * It compiles to one call into a per-site block that keeps ONE row state per key
  * across renders and returns the SAME vnode subtree for a row whose inputs did
  * not change:
  *
+ *   import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
  *   const __L0 = { key: (todo) => ViewNode.keyOf(todo) };
  *   …
- *   this.__list(this, 0, __d.filteredTodos, (s) =>
+ *   __l(this, this, 0, __d.filteredTodos, (s) =>
  *     new ViewNode(TodoItem, { key: s.k, todo: s.item,
  *       remove: (s.h0 ??= (event) => this.events.deleteTodo(s.item)) }, [])
  *   , __L0)
+ *
+ * The import is injected only by a module that actually lowers a loop, exactly
+ * the way `displayValue as __s` is — so a loop-free app never pulls this module
+ * into its bundle.
  *
  * The returned array is spliced exactly where the `.map()` result was, so keyed
  * reconciliation, mixed keyed/unkeyed pairing, leaving rows, FLIP and the shared

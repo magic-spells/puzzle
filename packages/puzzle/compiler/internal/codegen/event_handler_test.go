@@ -23,7 +23,7 @@ func TestEventHandlerLoopItemNamedEvent(t *testing.T) {
 			"    <button @click={ select(event) }>select</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "this.__list(this, 0, __d.events, (s) =>") {
+	if !strings.Contains(got, "__l(this, this, 0, __d.events, (s) =>") {
 		t.Fatalf("loop item event was not lowered to a list block:\n%s", got)
 	}
 	// The loop item reads off the row scope; the DOM parameter still renames to
@@ -43,7 +43,7 @@ func TestEventHandlerLoopCounterNamedEvent(t *testing.T) {
 			"    <button @click={ select(event) }>select</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "this.__list(this, 0, __d.items, (s) =>") {
+	if !strings.Contains(got, "__l(this, this, 0, __d.items, (s) =>") {
 		t.Fatalf("loop counter event was not lowered to a list block:\n%s", got)
 	}
 	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.select(s.i))") {
@@ -60,7 +60,7 @@ func TestEventHandlerGlobalNamedLoopVarNotCached(t *testing.T) {
 			"    <button @click={ open(document) }>open</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "this.__list(this, 0, __d.documents, (s) =>") {
+	if !strings.Contains(got, "__l(this, this, 0, __d.documents, (s) =>") {
 		t.Fatalf("document loop item was not lowered to a list block:\n%s", got)
 	}
 	// A loop binding SHADOWS the same-named JS global: the handler must read the

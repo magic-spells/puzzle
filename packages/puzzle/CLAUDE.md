@@ -345,7 +345,10 @@ GitHub, never deleted.
 - `views/listBlock.js`: one persistent row state per key for an item-form
   `{#for}` site — the row's item, index, stored record revision, live handler
   scope, cached vnode subtree and nested blocks; returns the cached subtree for
-  a row whose inputs did not change (D170).
+  a row whose inputs did not change (D170). Reached through the package root's
+  `listRows` compiler-support export, which a compiled module imports as `__l`
+  only when it lowers a loop — `PuzzleView` must never import it, or a loop-free
+  app pays for the module.
 - `renderRev.js`: the `RENDER_REV` Symbol alone, with no imports — `store.js`
   stamps a record's last notification sequence onto it, `views/` compares
   against it, and neither side may import the other.

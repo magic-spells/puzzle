@@ -312,6 +312,13 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if c.usesDisplayValue {
 		imports = append(imports, "displayValue as __s")
 	}
+	// The list block is imported ONLY by a module that lowered at least one
+	// item-form {#for} (D170), exactly as displayValue is imported only by a
+	// module that emits a display coercion: a loop-free app must not pay for
+	// views/listBlock.js in its bundle.
+	if len(c.listSites) > 0 {
+		imports = append(imports, "listRows as __l")
+	}
 	importLine := "import { " + strings.Join(imports, ", ") + " } from '@magic-spells/puzzle';"
 
 	// Reserved module-scope names: everything the import line above binds locally,
@@ -379,7 +386,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	b.WriteString(".__pzlModule = ")
 	b.WriteString(jsString(moduleStampPath(opts)))
 	b.WriteString(";\n")
-	// 3c. root dirty-mask names (D170, plan §3.6): the parent data roots some
+	// 3c. root dirty-mask names (D170, root dirty mask): the parent data roots some
 	//     loop body reads, indexed by the `roots` bit each site meta carries.
 	//     Absent when no site carries a mask, which is the common case — a view
 	//     with no `__roots` skips the mask computation entirely.
@@ -469,7 +476,7 @@ type compiler struct {
 	svgOrder []string
 	svgIdent map[string]string
 
-	// --- persistent list blocks + static subtree caches (D170, plan §4.3) ---
+	// --- persistent list blocks + static subtree caches (D170 emission contract) ---
 
 	// loops is the stack of LOWERED {#for} sites being emitted, innermost last.
 	// Range loops and loops inside a <Snippet> body never push.
@@ -496,6 +503,11 @@ type compiler struct {
 	// staticCacheDepth > 0 while emitting inside an already-wrapped static
 	// subtree, so only the MAXIMAL qualifying subtree gets a wrapper.
 	staticCacheDepth int
+	// rangeDepth > 0 inside a range {#for} body: a range still emits `.map`, so
+	// it owns no row scope, and the one cache slot its body would take is shared
+	// by every iteration — one vnode mounted at N DOM positions. Nothing inside
+	// one is cached, at any nesting depth.
+	rangeDepth int
 }
 
 // item is a processed child: either a coalesced text run (textOK), a structural
@@ -629,26 +641,35 @@ func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []pa
 		return "", err
 	}
 
-	// Sole-{#for} child: pass the .map() array directly as the children
+	// An island's children array is cached as a unit at any size and whatever it
+	// contains (D44 + D170): the element's own attrs and listeners still patch,
+	// but the seed it freezes after mount must never be allocated twice. The
+	// depth guard keeps anything inside the array from taking a wrapper of its
+	// own — including a lowered {#for}, whose block simply runs once.
+	islandCache := c.islandChildrenCache(attrs, len(processed) > 0, isComponent)
+	if islandCache != "" {
+		c.staticCacheDepth++
+	}
+
+	// Sole-{#for} child: pass the .map()/list array directly as the children
 	// argument (no [] wrapper), matching the fixture's list <div>.
 	if len(processed) == 1 && processed[0].node != nil {
 		if f, ok := processed[0].node.(*parser.For); ok {
 			mapExpr, err := c.emitFor(f, ind+2, scope)
+			if islandCache != "" {
+				c.staticCacheDepth--
+			}
 			if err != nil {
 				return "", err
+			}
+			if islandCache != "" {
+				mapExpr = islandCache + mapExpr + ")"
 			}
 			return "new ViewNode(" + tagStr + ", " + attrsSeg + ",\n" +
 				sp(ind+2) + mapExpr + "\n" + sp(ind) + ")", nil
 		}
 	}
 
-	// An island's children array is cached as a unit at any size (D44 + D170):
-	// the element's own attrs and listeners still patch, but the seed it freezes
-	// after mount must never be allocated twice.
-	islandCache := c.islandChildrenCache(attrs, children, isComponent, scope)
-	if islandCache != "" {
-		c.staticCacheDepth++
-	}
 	childrenArr, err := c.emitArray(processed, ind+2, scope)
 	if islandCache != "" {
 		c.staticCacheDepth--
@@ -699,7 +720,7 @@ func (c *compiler) emitItem(it item, ind int, scope scopeMap) (string, error) {
 			return c.emitRawSVG(n, ind, ind, scope)
 		}
 		// A maximal static subtree is built once per owner and returned by
-		// reference afterwards (D170, plan §3.3). The wrapper is a prefix, so the
+		// reference afterwards (D170, static subtree caches). The wrapper is a prefix, so the
 		// element's own layout is untouched apart from the width decision, which
 		// sees the prefix through startCol.
 		if prefix := c.staticCachePrefix(n, scope); prefix != "" {
@@ -793,7 +814,7 @@ func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (stri
 	// A snippet body is stamped fresh at every expansion, so it owns no cache to
 	// key by site id: loops inside keep today's `.map(…)`, static subtrees are
 	// not wrapped, and a row handler is not cached on the enclosing row scope
-	// (D170, plan §4.3). The surrounding depth is restored after the body.
+	// (D170 emission contract). The surrounding depth is restored after the body.
 	c.snippetDepth++
 	items, err := c.processChildren(n.Body, bodyScope)
 	if err != nil {
@@ -1118,7 +1139,9 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		to := "(" + c.resolve(f.RangeTo, scope) + ")"
 		gen := "Array.from({ length: " + to + " - " + from + " + 1 }, (_, __i) =>"
 		if f.Counter != "" {
+			c.rangeDepth++
 			body, err := c.forBody(f, scopeAdd(scope, f.Counter), f.Counter, ind+2, nil)
+			c.rangeDepth--
 			if err != nil {
 				return "", err
 			}
@@ -1130,14 +1153,16 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		// attribute emitter, which runs resolveExpr on it exactly once (resolving a
 		// second time would produce `__d.__d.x`), so it lands as the same
 		// `(<from>) + __i` the counter form emits as its value.
+		c.rangeDepth++
 		body, err := c.forBody(f, scopeAdd(scope, "__i"), "("+f.RangeFrom+") + __i", ind+2, nil)
+		c.rangeDepth--
 		if err != nil {
 			return "", err
 		}
 		return gen + "\n" +
 			sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 	}
-	// Item form lowers to a persistent list block (D170, plan §3.2) unless the
+	// Item form lowers to a persistent list block (D170, list blocks) unless the
 	// site cannot own one: a <Snippet> body is stamped fresh per expansion, and
 	// an explicit key that reads render-scope state cannot become a module-scope
 	// arrow. Both keep today's `.map(…)`.
@@ -1178,7 +1203,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 // A LOWERED site (site != nil) inverts that: the row's key is always the
 // block's resolved `key: s.k`, because an explicit key has already moved into
 // the site meta's key function, so the author's attribute is dropped from the
-// root instead of suppressing the prepend (plan §4.3).
+// root instead of suppressing the prepend (D170 emission contract).
 func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr string, ind int, site *loopSite) (string, error) {
 	only, explicitKey, err := c.forBodyRoot(f, scope)
 	if err != nil {
@@ -1461,7 +1486,7 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 		}
 		// A row handler's arguments are part of the loop body: the roots they
 		// read must dirty the row, because a fresh closure over `__d` is exactly
-		// what keeps them correct (plan §4.3).
+		// what keeps them correct (D170 emission contract).
 		c.absorb(facts, scope)
 		val, cacheable := ev.js, ev.cacheable
 		// A data-independent handler is the same function object on every render, so
@@ -1481,7 +1506,7 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 			// A handler capturing ONLY loop locals is identity-stable for the
 			// life of the row once the locals are read off the row scope at fire
 			// time, so it caches there instead of being rebuilt per render
-			// (D62 amended by D170, plan §3.5). Numbering is per loop site, an
+			// (D62 amended by D170, stable loop handlers). Numbering is per loop site, an
 			// independent counter from `__h`. Component callback props ride the
 			// same path — that is what stops a row's child re-running data() on
 			// every parent render.
@@ -2054,7 +2079,8 @@ func scopeAdd(scope scopeMap, name string) scopeMap {
 }
 
 // scopeAddAs binds name to the JS it resolves to — "" for an ordinary binding,
-// or a rewrite such as "s.item" for a lowered {#for} row local (plan §4.3).
+// or a rewrite such as "s.item" for a lowered {#for} row local (the D170
+// emission contract).
 func scopeAddAs(scope scopeMap, name, js string) scopeMap {
 	out := cloneScope(scope)
 	if name != "" {

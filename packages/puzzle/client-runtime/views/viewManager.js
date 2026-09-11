@@ -741,12 +741,13 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 			devperfMutation();
 		return placeholder;
 	}
-	// A pinned instance that is already DESTROYED counts as absent (plan §3.1,
-	// D170). Vnodes are reusable now: a cached row vnode (or a takeover-preloaded
-	// one, which is where a non-routed `instance` pin comes from) can be unmounted
-	// by a branch toggle — destroying its instance — and returned by the cache and
-	// mounted again later. Adopting the corpse would mount a view whose #destroyed
-	// latch makes mounted(), setData() and every refresh inert, with no diagnostic.
+	// A pinned instance that is already DESTROYED counts as absent (D170,
+	// identity short-circuit). Vnodes are reusable now: a cached row vnode (or a
+	// takeover-preloaded one, which is where a non-routed `instance` pin comes
+	// from) can be unmounted by a branch toggle — destroying its instance — and
+	// returned by the cache and mounted again later. Adopting the corpse would
+	// mount a view whose #destroyed latch makes mounted(), setData() and every
+	// refresh inert, with no diagnostic.
 	// Construct fresh instead; `preloaded` follows, so the fresh instance runs its
 	// own created()/data() exactly as a first mount does.
 	const pinned = vnode.instance != null && !vnode.instance.isDestroyed ? vnode.instance : null;
@@ -825,7 +826,7 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
  * Falls back to replace when tag or key differ.
  */
 export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
-	// Identity short-circuit (plan §3.1, D170). The SAME vnode object on both
+	// Identity short-circuit (D170). The SAME vnode object on both
 	// sides means the same `el`, the same attrs object, the same children array
 	// and the same component instance: there is nothing to compare, and the DOM
 	// already matches — the only way this position held this exact object last
@@ -997,7 +998,8 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
  * The two controlled property-backed attrs, each compared against the LIVE DOM
  * rather than against the old vnode. Extracted from patchAttrs verbatim so the
  * identity short-circuit's `reassertControls` runs the SAME comparison the
- * ordinary patch path runs (plan §3.1) — one implementation, one contract.
+ * ordinary patch path runs (D170, identity short-circuit) — one
+ * implementation, one contract.
  *
  * `value` on an input/textarea and `checked` on a checkbox/radio drift from the
  * live DOM through user interaction the app never mirrored back into state:
@@ -1063,7 +1065,7 @@ function syncControl(el, attrs, owner) {
 }
 
 /**
- * The identity short-circuit's one piece of work (plan §3.1/§3.2): a cached
+ * The identity short-circuit's one piece of work (D170): a cached
  * subtree that was NOT rebuilt still has to re-assert its controlled form values
  * against the live DOM, exactly as a full patch would. The list block collected
  * these vnodes when it built the row, so the cost is O(controls), not O(row). A
@@ -1153,13 +1155,13 @@ function sameNode(a, b) {
  * `sameNode`, which compares KEYS by SameValueZero on purpose), `+0` and `-0` do,
  * and key SETS are never compared.
  *
- * What is new (plan §3.4, D170) is the second test on each value: a store record
- * mutates IN PLACE, so `!==` can never see it change. A value carrying a numeric
- * RENDER_REV therefore also compares against the SNAPSHOT the child wrote the
- * last time props were applied (`child.__propRevs`), and an advanced revision
- * counts as a changed prop. That is what finally makes `<TodoItem todo={todo}/>`
- * refresh on the record's own mutations instead of relying on a freshly
- * allocated callback prop to do it by accident.
+ * What is new (D170, record render revision) is the second test on each value:
+ * a store record mutates IN PLACE, so `!==` can never see it change. A value
+ * carrying a numeric RENDER_REV therefore also compares against the SNAPSHOT
+ * the child wrote the last time props were applied (`child.__propRevs`), and an
+ * advanced revision counts as a changed prop. That is what finally makes
+ * `<TodoItem todo={todo}/>` refresh on the record's own mutations instead of
+ * relying on a freshly allocated callback prop to do it by accident.
  *
  * The snapshot lives on the CHILD and is never read off the old prop object:
  * after a mutation, old and new hold the same live record, so both sides read
@@ -1275,13 +1277,13 @@ function unmount(vnode) {
 		} else {
 			child?.destroy();
 		}
-		// Drop the links to the instance this vnode just gave up (plan §3.1, D170).
-		// A vnode is no longer single-use: the same object can come back from a list
-		// block's row cache or a static cache and be MOUNTED again, and mountComponent
-		// must then construct a fresh instance rather than adopt the destroyed one it
-		// carried out. Nulling here is the cheap half of that contract (the
-		// destroyed-instance guard in mountComponent is the half that also covers a
-		// vnode nothing unmounted).
+		// Drop the links to the instance this vnode just gave up (D170, identity
+		// short-circuit). A vnode is no longer single-use: the same object can come
+		// back from a list block's row cache or a static cache and be MOUNTED
+		// again, and mountComponent must then construct a fresh instance rather
+		// than adopt the destroyed one it carried out. Nulling here is the cheap
+		// half of that contract (the destroyed-instance guard in mountComponent is
+		// the half that also covers a vnode nothing unmounted).
 		//
 		// Deliberately NOT done on the two branches above: the instance-less
 		// takeoverFailed placeholder has nothing to null, and the `isDestroyed`

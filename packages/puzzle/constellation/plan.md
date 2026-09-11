@@ -45,6 +45,18 @@ notes:
       `plan/rejected/Puzzle-Direct-DOM-Rendering.md`; [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] carries
       the reason. Cards truthed through D170. **The next free decision number is D171.**
     sha: ff9454a1857e785d8c8590e5d47f2a6030f107e8
+  - kind: state
+    text: >-
+      2026-09-11 — the two 0.8.0 planning documents under `packages/puzzle/plan/`
+      (`Puzzle-Render-Upgrade.md` and `rejected/Puzzle-Direct-DOM-Rendering.md`) were removed from
+      the `feat/render-lists` branch at Cory's request: "don't commit the .md plan files we made, we
+      don't need those." The notes above that name those paths are history and stay as written. The
+      record is now [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] — its `## Decision` items 1–6 and `##
+      Consequences` hold the full design — plus the hand-written todos fixtures under
+      `tests/fixtures/todos/` (the byte contract for what the compiler emits) and the expects in
+      `benchmarks/scenarios.mjs` with the measured numbers in D170's verified note (the gates).
+      Every code, test and benchmark comment that cited a plan section was re-pointed at D170 plus
+      the mechanism's name in the same sweep.
 ---
 
 # Puzzle project map

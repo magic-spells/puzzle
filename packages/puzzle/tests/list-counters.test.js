@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 //
 // The D170 WORK COUNT, measured on the canonical app rather than on a fixture
-// (plan/Puzzle-Render-Upgrade.md §11).
+// (the D170 gates: `benchmarks/scenarios.mjs` expects and the measured numbers
+// recorded on the D170 card).
 //
 // `tests/list-block.test.js` proves the block's algorithm and
 // `tests/static-cache.test.js` proves the `__c` contract. This file asks the

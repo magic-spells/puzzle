@@ -34,7 +34,7 @@ export default class Binding extends PuzzleView {
   };
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
 
 const __L0 = { key: (todo) => ViewNode.keyOf(todo), ctrl: true, fields: ['completed'] };
 
@@ -57,7 +57,7 @@ Binding.prototype.render = function () {
       '@input:bind': this.__bind(null, 'volume', 'vn'),
     }, []),
     new ViewNode('ul', {},
-      this.__list(this, 0, __d.todos, (s) =>
+      __l(this, this, 0, __d.todos, (s) =>
         new ViewNode('input', {
           key: s.k,
           type: 'checkbox',

@@ -6,7 +6,7 @@ import (
 )
 
 // listblock_test.go — item-form {#for} lowering to a persistent list block
-// (D170, plan §3.2/§4.3). The site meta const is the contract between the
+// (D170, list blocks). The site meta const is the contract between the
 // compiler and the runtime block, so each field is pinned here: it is emitted
 // only when non-default, in a fixed order, and it says exactly what the body
 // reads.
@@ -27,7 +27,7 @@ func TestListBlockSyntheticKey(t *testing.T) {
 	if !strings.Contains(got, "const __L0 = { key: (todo) => ViewNode.keyOf(todo), fields: ['text'] };") {
 		t.Errorf("expected the synthetic-key site meta:\n%s", got)
 	}
-	if !strings.Contains(got, "this.__list(this, 0, __d.todos, (s) =>") {
+	if !strings.Contains(got, "__l(this, this, 0, __d.todos, (s) =>") {
 		t.Errorf("expected the list call with `this` as owner and site 0:\n%s", got)
 	}
 	if !strings.Contains(got, "new ViewNode('li', { key: s.k }") {
@@ -38,6 +38,26 @@ func TestListBlockSyntheticKey(t *testing.T) {
 	}
 	if strings.Contains(got, ".map((todo)") {
 		t.Errorf("an item-form loop must not keep the .map emission:\n%s", got)
+	}
+}
+
+// The block is reached through an IMPORT, not through a PuzzleView method, so a
+// module that lowers no loop never names views/listBlock.js and the bundler
+// drops it — the same tree-shaking contract `displayValue as __s` carries.
+func TestListBlockImportOnlyWhenLowered(t *testing.T) {
+	got := compileSrc(t, listSrc("  {#for todo in todos}<li>{ todo.text }</li>{/for}"))
+	if !strings.Contains(got, "import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';") {
+		t.Errorf("a lowered loop must add `listRows as __l` after `displayValue as __s`:\n%s", got)
+	}
+	// No loop at all: the import line is byte-identical to pre-D170 output.
+	none := compileSrc(t, listSrc("  <li>plain</li>"))
+	if strings.Contains(none, "listRows") || strings.Contains(none, "__l(") {
+		t.Errorf("a loop-free module must not import the list block:\n%s", none)
+	}
+	// A loop that is NOT lowered (range form) must not import it either.
+	ranged := compileSrc(t, listSrc("  {#for 1...3, n}<span>{ n }</span>{/for}"))
+	if strings.Contains(ranged, "listRows") || strings.Contains(ranged, "__l(") {
+		t.Errorf("a range loop must not import the list block:\n%s", ranged)
 	}
 }
 
@@ -73,7 +93,7 @@ func TestListBlockKeyReadingDataKeepsMap(t *testing.T) {
 	if !strings.Contains(got, "__d.todos.map((todo) =>") {
 		t.Errorf("a data-reading explicit key must keep the .map emission:\n%s", got)
 	}
-	if strings.Contains(got, "__L0") || strings.Contains(got, "this.__list(") {
+	if strings.Contains(got, "__L0") || strings.Contains(got, "__l(") {
 		t.Errorf("a data-reading explicit key must not produce a list block:\n%s", got)
 	}
 	if !strings.Contains(got, "key: __d.prefix + todo.id") {
@@ -236,8 +256,8 @@ func TestListBlockNestedLoops(t *testing.T) {
 	for _, want := range []string{
 		"const __L0 = { key: (group) => ViewNode.keyOf(group), fields: ['items'] };",
 		"const __L1 = { key: (item) => ViewNode.keyOf(item), fields: ['name'] };",
-		"this.__list(this, 0, __d.groups, (s) =>",
-		"this.__list(s, 1, s.item.items, (s1) =>",
+		"__l(this, this, 0, __d.groups, (s) =>",
+		"__l(this, s, 1, s.item.items, (s1) =>",
 		"new ViewNode('p', {\n            key: s1.k,",
 		"'@click': (s1.h0 ??= (event) => this.events.pick(s1.item, s.item)),",
 	} {
@@ -255,7 +275,7 @@ func TestListBlockSnippetBodyKeepsMap(t *testing.T) {
 	if !strings.Contains(got, "rows.map((r) =>") {
 		t.Errorf("a loop inside a snippet body must keep the .map emission:\n%s", got)
 	}
-	if strings.Contains(got, "__L0") || strings.Contains(got, "this.__list(") {
+	if strings.Contains(got, "__L0") || strings.Contains(got, "__l(") {
 		t.Errorf("a snippet body must produce no list block:\n%s", got)
 	}
 	if !strings.Contains(got, "key: ViewNode.keyOf(r)") {
@@ -269,7 +289,7 @@ func TestListBlockRangeUnchanged(t *testing.T) {
 	if !strings.Contains(got, "Array.from({ length: (__d.count) - (1) + 1 }") {
 		t.Errorf("range form must keep Array.from:\n%s", got)
 	}
-	if strings.Contains(got, "__L0") || strings.Contains(got, "this.__list(") {
+	if strings.Contains(got, "__L0") || strings.Contains(got, "__l(") {
 		t.Errorf("a range loop must produce no list block:\n%s", got)
 	}
 }
@@ -343,7 +363,7 @@ func TestListBlockKeyReadingSnippetParamKeepsMap(t *testing.T) {
 	got := compileSrc(t, listSrc(
 		"  <Row><Snippet prefix>{#for todo in todos}<li key={ prefix + todo.id }>{ todo.text }</li>{/for}</Snippet></Row>",
 	))
-	if strings.Contains(got, "this.__list(") {
+	if strings.Contains(got, "__l(") {
 		t.Errorf("a snippet body must produce no list block at all:\n%s", got)
 	}
 }

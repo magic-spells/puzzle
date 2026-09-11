@@ -7,7 +7,7 @@ export default class IndexedFor extends PuzzleView {
   }
 }
 
-import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
 const __L0 = { key: (item) => ViewNode.keyOf(item), counter: true, fields: ['name'] };
 
@@ -16,7 +16,7 @@ IndexedFor.prototype.render = function () {
 
   return new ViewNode('puzzle-view', { class: 'list' }, [
     new ViewNode('ul', { class: 'items' },
-      this.__list(this, 0, __d.items, (s) =>
+      __l(this, this, 0, __d.items, (s) =>
         new ViewNode('li', {
           key: s.k,
           class: 'item',

@@ -29,6 +29,22 @@ notes:
       patched stale carried-forward seed vnodes against DOM the island's owner had rewritten,
       leaving currentTree pointing at detached nodes permanently. SPEC §17's Identity bullet carries
       the contract wording.
+  - kind: state
+    text: >-
+      2026-09-10 (0.8.0, D170) — the freeze now saves ALLOCATION as well as patching, and this
+      card's contract is what makes that legal. An island element's children array is a compiler
+      cache site: `(this.__c[n] ??= [ … ])` at view level, `(s.c[n] ??= [ … ])` inside a loop row,
+      and when the island's sole child is a `{#for}` the wrapper goes round the lowered list call
+      itself. It fires at ANY size and WHATEVER the children contain — this is the one static-cache
+      site with no static requirement — because D44 already says the seed is built once at mount and
+      the patcher may never reconcile it again. Read as consequences of that: a `{#for}` inside an
+      island evaluates once; an interpolation inside one is a mount-time value; a handler on a
+      seeded child is wired once; and a component, `<Children>` or `<Slot>` inside an island is
+      already a compile error, so nothing in a seed can own a lifecycle. The island ELEMENT itself
+      is unchanged — its own attrs and listeners still patch, and it is wrapped as a whole element
+      only when it is fully static. Measured on `examples/stress` `islands/shell-renders/20000`:
+      island child vnodes per shell render went 20,000 → 0 while islandViolations stayed 0 and the
+      shell provably mutated.
 code_refs:
   - client-runtime/views/viewManager.js
 ---

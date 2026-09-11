@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
-// The identity short-circuit in patch() (plan/Puzzle-Render-Upgrade.md §3.1,
-// D170): the same vnode OBJECT on both sides of a patch means the same `el`, the
+// The identity short-circuit in patch() (D170): the
+// same vnode OBJECT on both sides of a patch means the same `el`, the
 // same attrs object, the same children array and the same component instance, so
 // the subtree is skipped entirely. It is the one line that makes a list block's
 // cached rows and the compiler's cached static subtrees free to reconcile.

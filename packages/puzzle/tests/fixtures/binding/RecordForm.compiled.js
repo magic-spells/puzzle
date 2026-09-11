@@ -10,7 +10,7 @@ export default class RecordForm extends PuzzleView {
 	}
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
 
 const __L0 = { key: (todo) => ViewNode.keyOf(todo), ctrl: true, fields: ['completed', 'rank', 'text'] };
 
@@ -18,7 +18,7 @@ RecordForm.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', { class: 'record-form' },
-    this.__list(this, 0, __d.todos, (s) =>
+    __l(this, this, 0, __d.todos, (s) =>
       new ViewNode('div', {
         key: s.k,
         class: 'row',
