@@ -91,7 +91,6 @@ export default class MyComponent extends PuzzleView { ... }
 
 ## 4. `<script>` blocks are real JavaScript
 
-
 This is the most consequential rule in the spec. The contents of `<script>` must parse as standard JavaScript — no custom dialect. The compiler extracts the block and hands it to esbuild **untouched**; the Go compiler never parses JS. Editors, ESLint, Prettier, and TypeScript work with zero special tooling. (TypeScript shipped in v1.22 via `<script lang="ts">`, transpile-only — the Go compiler still treats the body as an opaque string; see §25.)
 
 Concretely, compared to older examples:
@@ -150,11 +149,13 @@ export default class TodoHome extends PuzzleView {
 | `animations` | class field | Declarative enter/leave animations (v1.1) — see §12. |
 | anything else | methods/fields | Plain JS helpers, called internally. |
 
-**Reserved names (§35).** `PuzzleView` owns these member names; a subclass member with the same name overrides framework behavior silently, so treat the list as off-limits for helpers:
+**Reserved names (§35; amended, D170).** `PuzzleView` owns these member names; a subclass member with the same name overrides framework behavior silently, so treat the list as off-limits for helpers:
 
 - **Override points** (the contract — implement these): `data`, `render` (compiler-attached), `events`, `animations`, `transitionMode` (§33), `renderSkeleton`/`skeletonMinDuration` (§16, compiler-attached), and the hooks `created`, `mounted`, `beforeUpdate`, `afterUpdate`, `destroyed`, `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` (§12).
 - **Read-only API** (call, never redefine): `getData`, `setData`, `memo` (§32), `ctx`, and the getters `element`, `loaded`, `isDestroyed`, `params`, `props`, `route` (§19).
-- **Framework-called internals** (never touch): `mount`, `preload`, `refresh`, `applyParentUpdate`, `onStoreChange`, `flushUpdates`, `destroy`, `playIn`, `playOut`, `skipEnter`, `destroyAnimated`, `_localState`, and the compiler-reserved `__h` (§31), `__ref` (§38), and `__bind` (§6). `refs` is the framework-owned element-ref map (§38) — read it, never assign it.
+- **Framework-called internals** (never touch): `mount`, `preload`, `refresh`, `applyParentUpdate`, `onStoreChange`, `flushUpdates`, `destroy`, `playIn`, `playOut`, `skipEnter`, `destroyAnimated`, `_localState`, and the compiler-reserved `__h` (§31), `__ref` (§38), `__bind` (§6), `__list`/`__lists` (the `{#for}` list blocks, §28), `__c` (the per-instance static-subtree cache), `__dirty` (the per-render root mask) and `__propRevs` (the record render-revision snapshot). `refs` is the framework-owned element-ref map (§38) — read it, never assign it.
+- **On the class, not the instance:** `__roots` — the ordered list of top-level `data()` keys some loop body in this template reads, stamped after the module marker (§28).
+- **At module scope:** `__L0`, `__L1`, … — one list-block meta const per item-form `{#for}` site in the file, hoisted beside the compiler's injected imports. This is the one reserved name a `<script>` can actually collide with, so binding one at module scope is a **positioned compile error** naming the collision, exactly as binding `ViewNode` or `SLOT_TAG` is. The instance and class names above are reservations by convention: nothing enforces them, and shadowing one silently breaks rendering.
 
 ### Runtime/compiler implementation rules
 

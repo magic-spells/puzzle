@@ -342,6 +342,13 @@ GitHub, never deleted.
   lifecycle, refs, memoization, skeletons, animation hooks.
 - `views/ViewNode.js` + `views/viewManager.js`: vnode representation, DOM
   mount/patch, keyed reconciliation, components, slots, islands, refs, events.
+- `views/listBlock.js`: one persistent row state per key for an item-form
+  `{#for}` site — the row's item, index, stored record revision, live handler
+  scope, cached vnode subtree and nested blocks; returns the cached subtree for
+  a row whose inputs did not change (D170).
+- `renderRev.js`: the `RENDER_REV` Symbol alone, with no imports — `store.js`
+  stamps a record's last notification sequence onto it, `views/` compares
+  against it, and neither side may import the other.
 - `views/animate.js` + `views/visibility.js`: WAAPI animation normalization and
   shared IntersectionObserver scheduling for visible-trigger enters.
 - `datastore/store.js` + `model.js`: core records, schema builders, validation,
@@ -392,9 +399,11 @@ GitHub, never deleted.
   local state feeds `data()`-derived values.
 - Store queries inside `data()` auto-subscribe, and on an adapter-backed model a
   tracked `findOne`/`findMany` that misses queues a fetch and re-runs the pass
-  rather than committing (D161). Reads outside `data()` never fetch. Record
-  props carry identity; children that need live record data should re-query by
-  id.
+  rather than committing (D161). Reads outside `data()` never fetch. A record
+  prop carries identity **and a render revision**, so a child refreshes on that
+  record's own mutations through `update()` or any store path (D170); a related
+  record's fields, a computed getter's inputs, and a direct field assignment
+  advance no revision, so a child that needs those must still re-query by id.
 - Navigation loads before commit. URL/title/history, mounted tree, route
   snapshot, outgoing scroll save, and reused-ancestor state (params, snapshot,
   data, subscriptions — D146) commit together. Failed or superseded pushes do

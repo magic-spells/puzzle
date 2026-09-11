@@ -18,15 +18,16 @@ verified_at: '2026-08-24T21:39:15.808Z'
 notes:
   - kind: gotcha
     text: >-
-      Record-as-prop defeats prop reactivity: records mutate IN PLACE, so a record passed as a
-      component prop is always reference-equal and patchComponent's shallowEqual skip means the
-      child's data() never re-runs on record updates (streamed content, flag flips are invisible to
-      it). The child renders fresh only when some OTHER prop differs or it is remounted. Idiomatic
-      fix (see DOC-CHAT-EXAMPLE): the child re-queries findOne(type, props.record.id) inside data(),
-      subscribing itself to the record key — updates then re-render exactly that child. Props carry
-      identity; the store carries live data. If a framework-level answer is ever wanted
-      (always-refresh children, or record versioning), it needs a D-number — SPEC §4's
-      shallow-differ rule is the documented contract.
+      Record props carry identity AND a render revision, but only for the record itself. A record
+      mutates in place, so a record prop is always reference-equal; since D170 `propsEqual` also
+      compares the record's render revision against the snapshot the child stored when props were
+      last applied, so a child receiving `<TodoItem todo={todo}/>` refreshes when THAT record is
+      updated through `update()` or any store path. What still does not reach it: a change to a
+      RELATED record (`todo.author.name`), a computed getter's inputs, or a direct field assignment
+      (`todo.title = 'x'`), none of which advance the record's revision. The idiom for those is
+      unchanged and still the documented answer (see DOC-CHAT-EXAMPLE): the child re-queries
+      `findOne(type, props.record.id)` inside its own `data()`, subscribing itself to the record
+      key. Props carry identity; the store carries live data.
   - kind: verified
     text: >-
       Re-verified against current code in the post-monorepo sweep: every checkable claim on this
@@ -78,9 +79,46 @@ The DOM path is render → diff → keyed patch in [[COMPONENT-VIEW-MANAGER]].
 Conditional placeholders stabilize child arity so toggling a branch does not
 remount unrelated trailing siblings.
 
-Durable caveat: model records mutate in place. Passing a record as a prop alone
-does not defeat shallow prop equality; a child that needs live record changes
-should receive identity and query that record inside its own `data()`.
+**One flush, one `data()` run.** A child that both receives a record prop and
+queries that record would otherwise be woken twice by a single store flush —
+once by the parent's `applyParentUpdate` during delivery, once by its own
+`onStoreChange`. The store publishes the sequence of the batch it is
+delivering; a refresh that starts inside delivery stamps it on `_settleMark` at
+commit, and the child's own notification for that batch takes the existing
+`seq <= _settleMark` early return ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]],
+the D161 mechanism applied to one more case).
+
+## Durable caveats: what a record prop covers, and what a row cache observes
+
+Model records mutate in place, so a record prop is always reference-equal. It
+is not inert: a record prop also compares by **render revision** — the store
+notification sequence of the record's last observable mutation, against the
+snapshot the child stored when its props were last applied — so a child
+receiving `<TodoItem todo={todo}/>` refreshes when that record is updated
+through `update()` or any other store path (D170). What that does **not** cover
+is data the revision cannot describe: a *related* record's fields, a computed
+getter's inputs, or a deep path. For those the idiom is unchanged and is still
+the answer — pass identity and re-query the record inside the child's own
+`data()`, which subscribes the child to exactly the keys it reads.
+
+The same boundary governs `{#for}` row caching, which returns a row's previous
+vnode subtree unless the row's inputs changed:
+
+- **Records** cache on reference + stored revision (plus the index when the body
+  reads the counter, and any parent `data()` root the body reads).
+- **Direct field assignment on a record** (`todo.title = 'x'`) advances no
+  revision and is not observed — by the row cache or by the store, which has
+  never re-rendered anything for it. Mutate records through `update()` or a
+  store path.
+- **Plain objects and arrays never cache.** They can be mutated in place with
+  no revision to compare, so their rows rebuild every render exactly as before
+  (their static subtrees and handlers still come from the row state).
+- **Conservative sites never cache their record rows.** A loop body that reads a
+  relation, a computed getter, or any path deeper than one level depends on
+  data the record's own revision does not cover; the compiler reports the fields
+  the body read and the block checks them once per model class against the
+  schema. Such a site pays the old full-rebuild cost, correctly, and says so
+  through a dev counter.
 
 ## Measured: propagation is O(1) in depth and in forest size
 
@@ -95,14 +133,15 @@ real view instances** and counts node `data()` executions per op:
 | update the shallowest node of one branch | **1 / 1,536** |
 | update the record every node also queries (control) | 1,536 / 1,536 |
 
-One view re-evaluates and re-renders; its child receives shallow-equal props and
-takes the component bailout, so propagation stops dead at the node that changed.
-A branch-root update is also 1, not 24 — depth costs nothing unless the data
-being threaded down actually changes. The third row is the control that makes the
+One view re-evaluates and re-renders; its child receives equal props and takes
+the component bailout, so propagation stops dead at the node that changed. A
+branch-root update is also 1, not 24 — depth costs nothing unless the data being
+threaded down actually changes. The third row is the control that makes the
 other two worth anything: a scenario with quietly broken subscriptions would
 report a very impressive `1` and mean nothing.
 
-Two costs are *not* bounded this way and are recorded on the cards that own them:
-async `data()` evaluations serialize store-wide ([[COMPONENT-STORE]]), and a
-callback prop that captures loop data defeats the bailout above for every row in
-a list ([[DECISION-D62-HANDLER-CACHING]]).
+One cost is *not* bounded this way and is recorded on the card that owns it:
+async `data()` evaluations serialize store-wide ([[COMPONENT-STORE]]). The
+list-update figures — what one changed record costs a 1,000-row list now that
+rows and their handlers are cached — land on [[DOC-STRESS-EXAMPLE]] with the
+rest of the D170 measurements.

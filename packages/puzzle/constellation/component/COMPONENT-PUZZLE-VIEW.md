@@ -132,6 +132,18 @@ restore consults `isDestroyed`, not a flag. `refresh()`,
 `prepareRefresh().ready` therefore resolve only after settlement, and a
 previously-sync `data()` may return a promise when it misses.
 
+A refresh also carries the store's **delivering flush sequence** when there is
+one ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]). `Store._flushSeq` is non-zero
+only inside the notification-delivery loop, so a refresh started from within it
+— a parent's `applyParentUpdate` reaching a child that also subscribes to the
+same record — captures that number before `data()` runs and `#commit` stamps it
+onto `_settleMark` (as a MAX, never an assignment: the D161 settle loop stamps
+its own higher `_notifySeq`-based mark, and a prepared D146 commit passes none).
+The child's own `onStoreChange(seq)` for that batch then takes the existing
+`seq <= _settleMark` early return. One flush, one `data()` run. Every mutation
+in the batch landed in the store before delivery began, so the model that pass
+commits already reflects all of them.
+
 Lifecycle: `created` → awaited/tracked `data` → render → `mounted`, with
 `beforeUpdate`/`afterUpdate` around later patches and idempotent `destroyed`
 teardown. `preload()` performs created/data off-DOM for the router, and a later
@@ -165,7 +177,10 @@ per-view ctx described above — the documented way to reach the store, and on a
 adapter app the only way a read fetches. `this.route` is the
 frozen per-navigation snapshot that is safe inside the pre-commit data gate.
 `memo(key, deps, factory)` compares deps with `Object.is` and keeps
-reference-stable derived props.
+reference-stable derived props. A store record is the one prop kind that does
+not need that treatment: it also compares by render revision (D170), so passing
+a record is live, while any other object literal rebuilt per run still needs
+`memo` to keep its identity.
 
 Static `ref="name"` bindings use cached `__ref` callbacks. Replacements repoint
 the ref; removals and destroy clear it. Development builds register mounted
@@ -204,10 +219,13 @@ false-positiving; record writes never arm it, so store-record replacement stays
 silent.
 
 D121 adds development-only attribution around `data()`, render-tree
-construction, patching, memo, slot-only updates, and scheduled causes. All
-profiler state remains in [[FILE-DEVPERF]] WeakMaps: PuzzleView has no profiler
-field or private helper, and every class-method call site uses the inline
-positive `__PUZZLE_DEV__` probe required for production DCE.
+construction, patching, memo, slot-only updates, and scheduled causes; D170 adds
+two counters to that set — list rows cached/rebuilt/conservative per site, and
+static cache sites allocated per render (zero on a steady-state render is the
+claim worth watching). All profiler state remains in [[FILE-DEVPERF]] WeakMaps:
+PuzzleView has no profiler field or private helper, and every class-method call
+site uses the inline positive `__PUZZLE_DEV__` probe required for production
+DCE.
 
 Two underscore-prefixed **internal** readers exist for dev tooling and are not
 public API (never spelled in a template): `_modelState()` returns just the model
@@ -219,12 +237,37 @@ D100). `_localState()` predates them and serves the same convention.
 `_settleData`/`_settlingToken`/`_settleDirty` follow the same underscore
 convention — internal, adapter-installed, never author-facing.
 
-Enter/leave specs and the four show/hide hooks delegate to
-[[COMPONENT-ANIMATIONS]]. Teardown catches leave-hook failures and still removes
-the subtree, and the `destroyed()` hook itself is guarded — a throw is logged
-and never wedges the surrounding cascade (parent destroys, `Router.stop()`,
-`PuzzleApp.unmount()`; D118). A hand-written `render()` returning null after a
-tree clears the DOM and re-anchors its position — compiled templates always
-emit a root, so this is authored-view territory (D118). The compiler attaches
-`render()` to the prototype after the user class and reads class-field `events`
-lazily at render time.
+## Compiler-facing internals for the incremental render (D170)
+
+Four more members belong to the emitter, alongside `__h`, `__ref` and `__bind`:
+never spelled in a template, not part of the public typed API, and reserved as
+property names in SPEC §4.
+
+- **`__c`** is the per-instance static-subtree cache, declared as a field (not
+  lazily) so every view keeps one hidden class whether or not its template has
+  cache sites. The compiler wraps each maximal static subtree in
+  `(this.__c[n] ??= new ViewNode(…))`, so a template's unchanging markup is
+  allocated once per instance and the patcher skips it by identity.
+- **`__list(owner, id, items, factory, meta)`** renders one `{#for}` site,
+  delegating to `views/listBlock.js`. `this` is always the view — it owns the
+  root mask and the dev counters — while `owner` is only where the site's rows
+  are kept: the view for a top-level loop, the enclosing ROW STATE for a nested
+  one, so inner blocks are keyed per outer row and die with it. Blocks live in
+  `__lists`, allocated on first visit.
+- **`__dirty`** is the per-render mask of which of `constructor.__roots` — the
+  top-level `data()` keys some loop body in this template reads — changed since
+  the last render. It is computed after `beforeUpdate()` (user code that may
+  `setData`) and before `render()` reads it. Primitives compare by `!==`;
+  anything object- or function-typed counts as dirty unconditionally, because it
+  can be mutated in place; the first render reports every bit set. A class with
+  no `__roots` skips the computation and leaves the mask 0, which is the common
+  case. The mask is 32 bits, so a template reading more than 31 loop-visible
+  roots wraps and reports extra rows dirty — conservative in the only safe
+  direction.
+- **`__propRevs`** is the snapshot of the render revisions of this view's
+  current record props, written at mount (from the COMMITTED props, so a
+  preloaded view whose props were set in `preload()` is covered) and at every
+  `applyParentUpdate` that carries props — the two moments a view's props become
+  current. It is replaced wholesale, never merged, and is null when no prop
+  carries a revision, which allocates nothing in the common case. `propsEqual`
+  reads it with `?.`.

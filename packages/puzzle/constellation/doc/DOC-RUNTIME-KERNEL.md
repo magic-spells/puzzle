@@ -46,10 +46,20 @@ may opt into a minimum visible duration.
 
 ## Rendering and composition
 
+
 [[COMPONENT-VIEW-MANAGER]] mounts, diffs, and patches ViewNode trees. It owns
 keyed moves, controlled form properties, events/modifiers, SVG namespaces,
 inline component instances, default/named composition, router outlets, refs,
 islands, and deterministic teardown.
+
+The tree handed to it is only partly rebuilt each render. A maximal static
+subtree is allocated once per view instance (or once per list row) and returned
+by reference afterwards; an item-form `{#for}` is a persistent list block that
+keeps one row state per key and returns the row's previous vnode subtree unless
+that row's inputs changed. `patch()` short-circuits when both sides are the
+same object, so a cached subtree costs a pointer comparison — with two
+carve-outs: a live component's element link is refreshed, and controlled form
+values inside a cached row are re-asserted against the live DOM.
 
 Compiled conditionals preserve sibling positions with invisible placeholders.
 Children passed into a component execute in the parent scope; the child decides
@@ -87,8 +97,12 @@ behavior, sequential or overlapping transitions, and failure-safe cancellation.
 
 - Store/prop/route refreshes rerun `data()`; `setData()` alone does not.
 - A stale async evaluation or navigation token never commits.
-- Component prop diffing is shallow; pass stable identities or query records in
-  the child.
+- Component prop diffing is shallow, with one addition: a store record also
+  compares by render revision against the snapshot the child stored when props
+  were last applied, so a record prop invalidates its child on that record's own
+  mutations. Everything else compares by reference — pass stable identities, and
+  query in the child for a related record, a computed getter, or anything a
+  direct field assignment changed.
 - Framework-owned fields and prototype-pollution keys cannot be assigned from
   server or persisted data.
 - Destroy removes listeners, observers, subscriptions, refs, animations, and

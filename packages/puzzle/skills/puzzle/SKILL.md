@@ -557,10 +557,14 @@ The reactivity contract — the three methods are not interchangeable:
   It rerenders WITHOUT re-running `data()` and survives it.
 - **`refresh()`** re-runs `data()` — use it when local state feeds
   `data()`-derived values.
-- **Record props carry identity, not liveness.** Records mutate in place, so a
-  child receiving a record prop won't re-render on that record's internal
-  changes. Pass the id and re-query inside the child's own `data()` for a live
-  subscription.
+- **A record prop tracks that record, and only that record.** Records mutate in
+  place, so a record prop is always reference-equal — but it also carries a
+  render revision, so a child receiving `todo={ todo }` DOES re-run `data()`
+  when that record is updated through `update()` or any store path. What it
+  cannot see: a change to a RELATED record (`todo.author.name`), a computed
+  getter's inputs, or a field assigned directly (`todo.title = 'x'`, which
+  notifies nothing and re-renders nothing). For those, pass the id and re-query
+  inside the child's own `data()` for a live subscription.
 
 Persistence: give the app config a `storage` (e.g. localStorage-backed); the
 store hydrates at startup and persists snapshots after changes, fail-soft.

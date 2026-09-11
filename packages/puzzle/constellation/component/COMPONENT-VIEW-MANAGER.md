@@ -111,24 +111,69 @@ toggle cannot shift and remount unrelated trailing siblings. Controlled form
 properties sync from the new value every patch, including browser-drifted
 values.
 
+**A vnode is reusable, and `patch()` short-circuits on identity.** When the old
+and new vnode are the **same object** there is nothing to compare — same `el`,
+same attrs object, same children array, same instance — so the subtree is
+skipped whole. That line is what makes a list block's cached rows and the
+compiler's cached static subtrees free to reconcile
+([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]). Three things ride with it:
+
+- **A live component's `el` is refreshed** from the instance before returning.
+  `patchComponent` re-reads it on every parent render because a child can
+  replace its root between renders (a component-mode skeleton whose real root
+  has a different tag is the common case), and `patchKeyedChildren` uses
+  `newChild.el` as both its move guard and its next insertion ref.
+- **A component vnode with no LIVE instance falls through** to the ordinary
+  path. A destroyed instance (a failed position holding a placeholder or an
+  error view, D115/D145) or a null one (`mountComponent`'s takeover-failed arm)
+  is not describing the DOM, and its recovery lives further down `patch()`;
+  returning early would strand it forever — a retry could never mount a fresh
+  child, and a takeover-failed row would stay blank until its record changed.
+- **Controlled form values are re-asserted** from a `controls` list the list
+  block collects when it builds a row. `syncControl` is the same live-DOM
+  comparison `patchAttrs` and `reassertSelectValue` run, factored out so there
+  is one implementation and one contract; a cached subtree without controls
+  reads `undefined` and does nothing. Cost is O(controls), not O(row).
+
+Because a vnode can be unmounted and mounted again, `mountComponent` treats a
+pinned `vnode.instance` that is already **destroyed** as absent and constructs
+fresh (adopting the corpse would mount a view whose destroyed latch makes
+`mounted()`, `setData()` and every refresh silently inert), and `unmount` nulls
+`vnode.component`/`vnode.instance` on the ordinary teardown branch. The two
+error branches deliberately keep their links: the instance-less takeover
+placeholder has nothing to null, and a destroyed instance on a FAILED position
+is the D115 record of what happened there, which `patch()`'s recovery arms read.
+
 Component vnodes render inline with no wrapper. Same class+key reuses the
-instance; shallow-different props rerun `data()`, while slot-only changes only
+instance; different props rerun `data()`, while slot-only changes only
 rerender. Async mounts use comment anchors and resolve insertion references from
 the live element to survive parent updates.
 
-`patchComponent`'s `shallowEqual` bailout is regression-covered by
-`tests/component-prop-bailout.test.js`, which pins both directions of the
-[[DECISION-D62-HANDLER-CACHING]] measurement at test scale: with stable props
-one changed child re-renders and its siblings do not; with a freshly allocated
-callback prop per row every child re-runs `data()` for the same single DOM
-mutation. Before those tests nothing asserted the bailout fired, so weakening it
-would have been invisible — green suite, slower apps. The comparator's exact
-contract is pinned too, through the real patch path rather than a direct import:
-the key-COUNT guard is what makes a present-but-`undefined` key differ from an
+`patchComponent`'s prop bailout is regression-covered by
+`tests/component-prop-bailout.test.js`, which pins the
+[[DECISION-D62-HANDLER-CACHING]] measurement at test scale: one changed record
+wakes exactly one child while its siblings return cached vnodes and never reach
+`patchComponent` at all, and a hand-written freshly-allocated callback prop
+still makes every child re-run `data()` for the same single DOM mutation.
+Before those tests nothing asserted the bailout fired, so weakening it would
+have been invisible — green suite, slower apps. The comparator's exact contract
+is pinned too, through the real patch path rather than a direct import: the
+key-COUNT guard is what makes a present-but-`undefined` key differ from an
 absent one; values compare by strict `!==`, so a `NaN` prop never bails out
 (unlike `sameNode`, which compares keys by SameValueZero on purpose) while `+0`
 and `-0` do bail out; and equal key counts with disjoint all-`undefined` key
 sets compare equal, because key sets themselves are never compared.
+
+`propsEqual` adds one test on top of that shallow compare: a value carrying a
+numeric `RENDER_REV` (a store record) is also compared against the **snapshot**
+the child wrote the last time props were applied (`child.__propRevs`), and an
+advanced revision counts as a changed prop. Records mutate in place, so `!==`
+can never see them change; the snapshot lives on the child and is never read off
+the old prop object, because after a mutation both sides hold the same
+already-advanced record. That is what makes `<TodoItem todo={todo}/>` refresh on
+its record's own mutations instead of relying on a freshly allocated callback
+prop to do it by accident. A related record or a computed getter's inputs still
+require the child to query in its own `data()` ([[FLOW-REACTIVITY]]).
 
 `mountComponent` chains the enter animation onto the mount promise with a
 **two-argument** `then(onFulfilled, onRejected)`, not a trailing `.catch()`. The
@@ -185,7 +230,9 @@ expanding it again, preserving pinned component instances; that `slotsExpanded`
 branch of `render()` sits behind the inline `__PUZZLE_TAKEOVER__` probe, and
 `renderFresh()` — recovery only, never handed a prepared tree — always expands.
 Buckets are null-prototype objects and forwarding descends through component
-call-site children while preserving pinned routed instances. Any reserved
+call-site children while preserving pinned routed instances. A composition
+marker makes its subtree dynamic, so `expandSlots` never clones a cached static
+subtree — it clones only the path down to a marker. Any reserved
 `#`-prefixed metadata tag that survives expansion and reaches element creation
 (or the SSG serializer) throws the shared `metadataTagError` diagnostic, ungated
 in every build: the only way one gets there is a vnode from a build the D89
@@ -219,7 +266,10 @@ First-measures retained candidates before its removal pass (rects capture
 mid-flight transforms; prior Puzzle-owned flips cancel AFTER measuring, via a
 WeakMap — never `getAnimations()`), patches unchanged, then Last-measures and
 plays a no-fill translate to rest. Reduced motion, missing WAAPI, flip-free
-lists, and unchanged order cost no measurements; unkeyed `flip` warns once.
+lists, and unchanged order cost no measurements; unkeyed `flip` warns once. A
+list block's cached rows change none of this: a reorder hands the patcher the
+same vnode objects in a new order, so the moves and the flight are what they
+always were.
 
 `flip.js` is bundled only when used (D89): the `beginFlip` and `playFlip` call
 sites — the two that reference the import — sit behind an inlined
@@ -244,22 +294,33 @@ Teardown destroys nested component instances, unsubscribes views, removes
 listeners/refs, and tolerates failing leave hooks. All DOM links transfer to the
 next vnode tree so repeated patches remain live.
 
-## Measured: `island` saves patching, not allocation
+## Measured: `island` freezes patching, and now allocation too
 
-The island branch runs inside `patch()`, which is reached only **after**
-`render()` has already built the entire new tree — so an island's children are
-constructed on every render and then thrown away
-(`newVnode.children = oldVnode.children`). [[DOC-STRESS-EXAMPLE]]'s `islands`
-scenario puts a number on both halves over 600 shell renders across 100 islands
-of 200 descendants each: **0** DOM mutations below an island boundary (measured
-with a real `MutationObserver`, with the shell's own 600 mutations as the
-control, so the zero means something), and **20,000 of 20,000 child vnodes
-rebuilt per render** — 12,000,000 across the window, counted by read-counting
-getters on each descendant rather than inferred from the source. Cost is ~8.7ms
-per shell render in a production bundle while holding 20,000 frozen nodes, and
-the same assertions hold in the minified bundle, which matters because it takes
-a different path through the DCE'd devperf branches.
+The island branch runs inside `patch()`, so an island's children were built by
+`render()` before the patcher ever got the chance to ignore them.
+[[DOC-STRESS-EXAMPLE]]'s `islands` scenario put a number on both halves over 600
+shell renders across 100 islands of 200 descendants each: **0** DOM mutations
+below an island boundary (measured with a real `MutationObserver`, with the
+shell's own 600 mutations as the control, so the zero means something), and
+**20,000 of 20,000 child vnodes rebuilt per render** — 12,000,000 across the
+window, counted by read-counting getters on each descendant rather than inferred
+from the source. Cost was ~8.7ms per shell render in a production bundle while
+holding 20,000 frozen nodes, and the same assertions held in the minified
+bundle, which matters because it takes a different path through the DCE'd
+devperf branches.
 
-So the [[DECISION-D44-DOM-ISLANDS]] contract holds exactly, and its price is
-allocation: islanding a large subtree to avoid patch cost still pays full
-construction every render.
+The zero-mutation half is the [[DECISION-D44-DOM-ISLANDS]] contract and is
+unchanged. The allocation half is what [[DECISION-D170-INCREMENTAL-VDOM-LISTS]]
+closed: **an island's children array is a compiler cache site**
+(`this.__c[n] ??= [ … ]`, or `s.c[n]` inside a loop row) at any size, because an
+island's seed is frozen after mount and must never be allocated twice. The
+element itself may stay dynamic — its own attrs and listeners still patch. So
+the seed is built once per instance and returned by reference on every later
+render, and `patch()`'s identity short-circuit skips it. A dev counter
+(`staticSitesBuilt` in [[FILE-DEVPERF]]) reports how many cache sites a render
+had to allocate; zero on a steady-state render is the claim worth watching.
+
+**The per-render figure above is being re-measured** by the D170 verification
+pass against `examples/stress`. Until those numbers land, treat 20,000/render
+as the pre-D170 baseline the gate is measured against (the gate is 0 island
+vnodes per render), not as current behaviour.

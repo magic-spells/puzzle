@@ -30,6 +30,21 @@ notes:
       [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] and rewritten in place (status planned). The rejected
       plan is archived at packages/puzzle/plan/rejected/Puzzle-Direct-DOM-Rendering.md for its
       measurements. Nothing in the tree is built yet; plan §14 questions wait on Cory.
+  - kind: state
+    text: >-
+      2026-09-10 — **0.8.0's render change is BUILT, not verified.**
+      [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] landed on `feat/render-lists` in three commits: the
+      plan (`plan/Puzzle-Render-Upgrade.md`), the runtime (bdf7e9d — `views/listBlock.js`,
+      `renderRev.js`, the patch identity short-circuit, `propsEqual` revision snapshots,
+      PuzzleView's `__c`/`__list`/`__dirty`/`__propRevs`, the flush-sequence dedupe), and the
+      compiler (ff9454a — item-form `{#for}` lowering to `this.__list(…, __L<n>)`, row-scope handler
+      caches, static-subtree cache sites, the `Class.__roots` stamp, `__L<n>` reserved). Both suites
+      green at those shas; the plan §11 byte and work gates are being measured by a verification
+      pass, and D170 goes `verified` only when those numbers land. The direct-DOM rewrite that was
+      0.8.0's first direction is rejected on measurement and archived at
+      `plan/rejected/Puzzle-Direct-DOM-Rendering.md`; [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] carries
+      the reason. Cards truthed through D170. **The next free decision number is D171.**
+    sha: ff9454a1857e785d8c8590e5d47f2a6030f107e8
 ---
 
 # Puzzle project map

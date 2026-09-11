@@ -88,6 +88,21 @@ notes:
       path; loopback build server removed, prerender rule is absolute apiURL | endpoint-less+seed |
       diagnostic — PRs #83/#84.
     sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+  - kind: state
+    text: >-
+      `_settleMark` takes one more kind of stamp since D170 (plan §3.7). Besides the settle loop's
+      own `_notifySeq`-based mark, a refresh that BEGINS while the store is delivering a batch
+      captures `Store._flushSeq` — non-zero only inside `_deliverNotifications`'s subscriber loop —
+      and `#commit` stamps it on commit. The case it closes: a child that both receives a record
+      prop and queries that record is woken twice by one flush, once by the parent's
+      `applyParentUpdate` during delivery and once by its own `onStoreChange`; the stamp makes the
+      second wake-up take this decision's existing `seq <= _settleMark` early return. Safe because
+      every mutation in the batch landed in the store before delivery started, so the model that
+      pass commits already reflects all of them. The stamp is a MAX, never an assignment — the
+      settle loop's mark is higher and must not be walked backwards, and a prepared D146 commit
+      passes no mark at all. Adapter-free apps get this too: it is in core `#commit`, not in the
+      adapter-installed loop.
+    sha: bdf7e9d9008a44f1cf0679002fb12007259ecbe4
 verified_at: '2026-08-24T05:28:09.597Z'
 verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
 code_refs:

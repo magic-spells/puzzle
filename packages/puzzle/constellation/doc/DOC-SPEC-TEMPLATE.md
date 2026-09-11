@@ -206,14 +206,31 @@ Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retire
 
 ## 28. List keying (v1.26)
 
-How `{#for}` rows get their reconciliation keys. Shipped in v1.26 (D58); codegen + one ViewNode static, byte-identical emission for range-form loops and for `key` attributes outside loop roots.
+
+How `{#for}` rows get their reconciliation keys, and what a key buys a row besides identity. Shipped in v1.26 (D58); **amended, D170** (0.8.0 — rows are cached between renders, and the key is where the cache is kept). Codegen + one ViewNode static; byte-identical emission for range-form loops and for `key` attributes outside loop roots.
 
 - **Auto-key is primary-key-aware.** An item-form `{#for item in items}` body root gets a synthetic `key: ViewNode.keyOf(item)` (previously the hardcoded `item.id`). `ViewNode.keyOf` resolves at render time: a store record (a `PuzzleModel` instance) keys by its model's `primaryKey()` field — so `Puzzle.string().primary()` on `main_id` keys lists by `main_id` with no template change — and any other value keys by `.id` exactly as before. `keyOf` is internal surface (like `SLOT_TAG`): compiled output calls it; app code shouldn't.
 - **Explicit key overrides.** A `key={ … }` attribute written on the `{#for}` body root (element or component, item or range form) **replaces** the synthetic key — the compiler skips its prepend; the author's expression is used verbatim (`keyOf` is not applied). This is the sanctioned escape hatch for non-record data with a different identity field. Keys must be stable and unique across the collection. (Previously an explicit key silently emitted a **duplicate** `key:` property alongside the synthetic one — that hazard is gone.)
 - **Null keys warn.** When `keyOf` resolves `null`/`undefined` (no `.id`, unmodeled data), it warns once — naming the offending item shape — and returns null, so the list degrades to positional diffing **diagnosed** instead of silently. The existing duplicate-key warning (§ v1.23 review pass) is unchanged and covers the colliding-values case. Production builds already strip `console.*`; the warning is dev-only in effect.
 - **Range form unchanged:** range/counter loops key by the generated number (unique by construction) with byte-identical emission to v1.25.
 
+**Row state and the caching contract (amended, D170).** An item-form `{#for}` keeps one **row state per key** for as long as the site keeps showing that key. The row holds the item, the index, the record's stored render revision, the live scope object the row's handlers close over, the row's last rendered vnode subtree, its static-subtree caches and its nested loop blocks. On a parent render the site returns the **same vnode subtree** for a row whose inputs did not change, and the patcher skips it whole. What counts as changed:
+
+- **Records** — a different reference, or an advanced **render revision**: the store's notification sequence for that record's last observable mutation. Every mutation that notifies advances it (`createRecord`, `update()`, `removeRecord`, adapter upserts and save reconciliation).
+- **Plain objects and arrays** — always. They can be mutated in place with no revision to observe, so their rows rebuild every render, exactly as before. Primitive items compare by value.
+- **The index** — only when the body reads the loop counter.
+- **A parent `data()` root the body reads** (`selectedId === todo.id`), when that root changed this render. An object-valued root counts as changed every render, because it can be mutated in place.
+- **An unanalysable body** — one whose expressions reach through `this`, or a **conservative** site: one whose body reads a relation, a computed getter, or any path deeper than one level off the loop item. A record's revision describes its own fields and nothing further, so such a site never caches its record rows. The check runs once per model class against the model's schema and relationship names.
+
+Two rules follow, and they are contract, not implementation detail:
+
+- **A record mutated by direct field assignment (`todo.title = 'x'`) is not observed.** It advances no revision and notifies nobody — the store has never re-rendered anything for it either. Mutate records through `update()` or a store path.
+- **Duplicate keys within one pass are uncached.** Both rows build fresh (today's positional semantics) and development warns once; a shared key would otherwise alias two logical rows onto one row state. A **null** key is uncached for the same reason, and keeps `keyOf`'s existing warning.
+
+Everything else about a keyed list is unchanged: the shared sibling key namespace, mixed keyed/unkeyed pairing, leaving rows and their out animations, FLIP (§46), and the duplicate-key warning the patcher already emits. Controlled form values inside a cached row are re-asserted against the live DOM on every pass, as §6's binding contract requires. Range loops and loops inside a `<Snippet>` body are not cached — a snippet body is stamped fresh per expansion — and emit as they did before.
+
 ## 31. Cached event handlers (v1.29)
+
 
 Every `@event` site whose handler is **data-independent** — the bare form `@click={ h }`, or the call form when its arguments reference nothing from the render scope beyond `event` (literals, `event`, `this.…`, and JS globals are all fine: they're evaluated at fire time *inside* the closure) — compiles to a per-instance cached closure (D62):
 
@@ -223,11 +240,19 @@ Every `@event` site whose handler is **data-independent** — the bare form `@cl
 
 instead of a fresh arrow per render. Handler *semantics* are unchanged (`this.events` lookup still happens at fire time); what changes is **identity** — the same function object is passed on every render of the instance. Consequences:
 
-- **Component callback props now shallow-compare equal across parent re-renders.** A child whose props are all static, cached, or memoized (§32) no longer re-runs `data()` on every parent render — this restores §4's prop-reactivity rule (`data()` re-runs when props *change*), which fresh-closure callback props had made fire on phantom changes since v1.
+- **Component callback props now compare equal across parent re-renders.** A child whose props are all static, cached, or memoized (§32) no longer re-runs `data()` on every parent render — this restores §4's prop-reactivity rule (`data()` re-runs when props *change*), which fresh-closure callback props had made fire on phantom changes since v1.
 - **DOM listeners at cached sites stop rebinding per patch** (`patchAttrs` sees an unchanged value). The `:once` spent flag is unaffected — it lives on the element, not the handler function.
-- **Call forms that capture render data or loop variables** (`save(draft)`, `remove(card.id)`) still emit fresh closures, byte-identical to v1.28 — their captures genuinely change, and a component receiving such a prop still re-runs `data()` per parent render (correct: the prop really is new).
+- **Call forms that capture render data** (`save(draft)` → `__d.draft`) still emit fresh closures, byte-identical to v1.28 — `__d` is a per-render snapshot, so caching such a closure would freeze it, and a component receiving one still re-runs `data()` per parent render (correct: the prop really is new).
 
-Site numbering is per-file and deterministic (`render()` and `renderSkeleton()` share the counter), so recompiling an unchanged file stays byte-stable. `this.__h` joins the emitted `__d`/`__f` as a reserved name on component instances.
+**Loop handlers cache on the row (amended, D170).** Inside an item-form `{#for}`, a handler whose arguments capture only that loop's locals is **not** a fresh closure either. Its locals rewrite to the row's live scope object and the closure caches there:
+
+```js
+remove: (s.h0 ??= (event) => this.events.deleteTodo(s.item)),
+```
+
+`h0` is counted from 0 per loop site. The row scope lives as long as the row does and `s.item` is the row's *current* item, so one function object serves every render of that row and still reads the right record after an update, a reorder, or a replacement under the same key — which is why a list's callback props no longer wake every child on every parent render. Handlers whose arguments read `__d.` keep the fresh-closure emission above, and the parent roots they read count toward the loop site's dirty mask so the row rebuilds when that data changes. A closure over a **range**-loop variable or a `<Snippet>` parameter also stays fresh: those bindings are re-created per iteration or per expansion.
+
+Site numbering is per-file and deterministic (`render()` and `renderSkeleton()` share the counter), so recompiling an unchanged file stays byte-stable. `this.__h` joins the emitted `__d`/`__f` as a reserved name on component instances; the row-scope caches live on the list block's row state and reserve nothing (§4).
 
 ## 43. Compiler accessibility warnings (v1.48)
 

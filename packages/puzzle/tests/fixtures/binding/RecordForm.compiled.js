@@ -12,34 +12,36 @@ export default class RecordForm extends PuzzleView {
 
 import { ViewNode } from '@magic-spells/puzzle';
 
+const __L0 = { key: (todo) => ViewNode.keyOf(todo), ctrl: true, fields: ['completed', 'rank', 'text'] };
+
 RecordForm.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', { class: 'record-form' },
-    __d.todos.map((todo) =>
+    this.__list(this, 0, __d.todos, (s) =>
       new ViewNode('div', {
-        key: ViewNode.keyOf(todo),
+        key: s.k,
         class: 'row',
       }, [
         new ViewNode('input', {
           class: 'text',
-          value: todo.text,
-          '@input:bind': this.__bind(todo, 'text', 'v'),
+          value: s.item.text,
+          '@input:bind': this.__bind(s.item, 'text', 'v'),
         }, []),
         new ViewNode('input', {
           class: 'done',
           type: 'checkbox',
-          checked: todo.completed,
-          '@change:bind': this.__bind(todo, 'completed', 'c'),
+          checked: s.item.completed,
+          '@change:bind': this.__bind(s.item, 'completed', 'c'),
         }, []),
         new ViewNode('input', {
           class: 'rank',
           type: 'number',
-          value: todo.rank,
-          '@change:bind': this.__bind(todo, 'rank', 'vn'),
+          value: s.item.rank,
+          '@change:bind': this.__bind(s.item, 'rank', 'vn'),
         }, []),
       ])
-    )
+    , __L0)
   );
 };
 RecordForm.__pzlModule = 'RecordForm.pzl';

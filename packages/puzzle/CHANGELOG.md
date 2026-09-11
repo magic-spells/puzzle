@@ -142,6 +142,55 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
+## 0.8.0 — Unreleased
+
+Rendering gets incremental. `.pzl` syntax is unchanged — no template, `data()`,
+`setData()`, `refresh()`, event, binding, slot, snippet, portal, animation, key,
+skeleton, SSG, hybrid, router, DevTools or HMR contract moves — but what the
+compiler emits for `{#for}` bodies and static markup does, and a view stops
+rebuilding the parts of its tree that could not have changed (D170).
+
+### Changed
+
+- **A record prop now refreshes its child when that record changes.** Records
+  mutate in place, so a record passed as a prop was always reference-equal and a
+  child displaying it only re-rendered when some *other* prop happened to differ.
+  Every record now carries a render revision — the store's notification sequence
+  for its last mutation — and a component's prop compare checks it against the
+  snapshot the child stored when its props were last applied. `<TodoItem
+  todo={todo}/>` refreshes on `todo.update(…)`, and on nothing else. The
+  documented re-query idiom is unchanged and is still the answer for a *related*
+  record's fields or a computed getter's inputs, which no revision can cover.
+- **A `{#for}` row's event handler is identity-stable.** A handler capturing a
+  loop variable (`@remove={ deleteTodo(todo) }`) used to compile to a fresh
+  closure per row per render, which defeated the prop bailout for every child in
+  the list. It now caches on the row and reads the current item when it fires, so
+  one record edit in a 1,000-row list wakes one child instead of all of them.
+  Handlers that read `data()` values keep their fresh closures — their captures
+  genuinely change.
+- **`{#for}` rows are cached between renders.** Each item-form loop keeps one row
+  state per key and returns the row's previous vnode subtree unless that row's
+  inputs changed; the patcher skips a returned-by-reference subtree outright.
+  Keys, the shared sibling key namespace, mixed keyed/unkeyed pairing, leaving
+  rows, out animations and FLIP all behave exactly as before. Range loops and
+  loops inside a `<Snippet>` body are unchanged.
+- **Static markup is allocated once.** A template subtree that cannot change is
+  built once per view instance (or once per loop row) instead of on every render,
+  and an `island` element's children are built once at any size.
+- **Contract worth knowing: assigning a field directly on a record
+  (`todo.title = 'x'`) is not observed.** It never notified anything before
+  either — nothing re-rendered for it — but row caching now makes that explicit.
+  Mutate records through `update()` or a store path. Plain objects and arrays are
+  never cached (they can be mutated in place, so their rows rebuild every render
+  as before), and a loop body that reads a relation, a computed getter, or a path
+  deeper than one level off the item never caches its record rows.
+- **New reserved names.** A compiled view uses `__list`, `__lists`, `__c`,
+  `__dirty` and `__propRevs` on the instance and `__roots` on the class; a
+  template with an item-form `{#for}` also declares `__L0`, `__L1`, … at module
+  scope. Binding one of the `__L<n>` names in a `<script>` is a positioned
+  compile error, the way binding `ViewNode` already is. The others join
+  `__h`/`__ref`/`__bind` as names a component must not define.
+
 ## 0.7.1 — Unreleased
 
 ### Added

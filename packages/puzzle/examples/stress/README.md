@@ -130,15 +130,19 @@ same ops, same `ListRow`.
 /?scenario=keyed-list&n=10000&handlers=stable
 ```
 
-- `inline` — `@select={ selectRow(row) }`. `row` is a loop variable, so the
-  compiler cannot cache the closure and mints a fresh arrow per row per parent
-  render. Callback props take part in `shallowEqual`, a fresh function object
-  never compares equal, and every mounted row therefore re-runs `data()` and
-  re-renders.
-- `stable` — `@select={ selectById }`. A bare method reference *is* cacheable,
-  so codegen emits one function object per site per view instance. An untouched
-  row's props then compare fully equal and the child bails out without running
-  `data()` or rendering at all.
+- `inline` — `@select={ selectRow(row) }`. `row` is a loop variable. Before
+  D170 the compiler could not cache that closure and minted a fresh arrow per
+  row per parent render; callback props take part in the prop compare, a fresh
+  function object never compares equal, and every mounted row therefore re-ran
+  `data()` and re-rendered. **Since D170 the compiler caches a loop capture on
+  the row scope** (`(s.h0 ??= …)`, reading the row's current item at fire time),
+  so this arm now emits a stable identity too and the A/B no longer contrasts
+  what it was built to contrast. Both arms are being re-measured; the numbers
+  below are the pre-D170 baseline.
+- `stable` — `@select={ selectById }`. A bare method reference is cacheable per
+  instance, so codegen emits one function object per site per view instance. An
+  untouched row's props then compare fully equal and the child bails out without
+  running `data()` or rendering at all.
 
 The capture moves into the child: `ListRow` reports `props.id` and the parent
 re-queries the record by it. `ListRow` is shared with `virtual-list` and is
@@ -545,9 +549,11 @@ the throttled renderer that guard exists to catch. Bounding by render count
 measures the same code path and asserts the same counters while leaving the clock
 free to say something.
 
-Measured over 600 shell renders:
+Measured over 600 shell renders, **before D170** — the allocation half of this
+table is what D170 changed, and the post-D170 numbers are being measured (see
+"And the allocation cost is closed" below):
 
-| measurement | result |
+| measurement | result (pre-D170) |
 | --- | ---: |
 | DOM mutations below an island boundary | **0** |
 | shell mutations in the same window (control) | 600 |
@@ -567,13 +573,20 @@ same assertions hold in the minified production bundle — `islandViolations` 0,
 `islandChildVnodesPerRender` 20,000, `shellDidMutate` 1 — which matters, because
 that bundle takes a different code path through the DCE'd devperf branches.
 
-**And the cost is confirmed too.** `island` saves *patching*, not *allocation*.
-`viewManager.js`'s island branch runs inside `patch()`, which is only reached
-**after** `render()` has already built the entire new tree — so all 20,000 child
-vnodes are constructed on every single render and then thrown away
+**And the allocation cost is closed.** `island` used to save *patching* but not
+*allocation*: `viewManager.js`'s island branch runs inside `patch()`, which is
+only reached **after** `render()` has built the new tree, so all 20,000 child
+vnodes were constructed on every single render and then thrown away
 (`newVnode.children = oldVnode.children`). Each descendant's `label` is a getter
-that counts its own reads, so this is a measured number rather than an inference
-from the source: 20,000 per render, the full frozen count, every time.
+that counts its own reads, so the 20,000-per-render figure above is a measured
+number rather than an inference from the source — and it is what put island
+children on the compiler's build-once list. D170 emits an `island` element's
+children **array** as a cache site (`this.__c[n] ??= [ … ]`, at any size, no
+three-vnode threshold), so the seed is allocated once per instance and every
+later render returns the same array, which `patch()` then skips by identity.
+The element itself stays dynamic — its own attrs and listeners still patch. The
+gate is **0 island child vnodes per render**, and this arm is being re-measured
+against it.
 
 **What a bad result looks like:** any non-zero `islandViolations` (the island
 contract is broken, and `validate()` fails), or `shellDidMutate` reading 0 —
@@ -1407,18 +1420,23 @@ counter being measured.
   `swap-rows` two genuine reactive writes at the cost of one O(n log n) sort per
   render. The sort is inside both the measured op and the baseline render, so it
   does not distort comparisons between ops.
-- **Rows are components, and their callback props are data-capturing.**
-  `@select={ selectRow(row) }` compiles to a fresh arrow per parent render, so it
-  always differs under `shallowEqual` and every parent re-render re-evaluates
-  every mounted row. That is the canonical Puzzle list idiom (the same shape
-  `examples/todos` uses), both list scenarios pay it identically, and it is
-  precisely why windowing wins at scale. `?handlers=stable` on `keyed-list`
-  makes the cost of that idiom directly measurable.
-- **`ListRow` takes primitive props, not the record.** Record props carry
-  identity, not liveness: records mutate in place, so passing `row={ record }`
-  would hand the patcher the same reference before and after an update,
-  `shallowEqual` would report "unchanged", and `update-every-10th` would silently
-  fail to repaint.
+- **Rows are components, and their callback props used to be data-capturing.**
+  `@select={ selectRow(row) }` compiled to a fresh arrow per parent render, so it
+  always differed under the prop compare and every parent re-render re-evaluated
+  every mounted row. That was the canonical Puzzle list idiom (the same shape
+  `examples/todos` uses), both list scenarios paid it identically, and it was a
+  large part of why windowing won at scale. **D170 caches a loop capture on the
+  row scope**, so the compiled form is identity-stable and that cost is gone;
+  `?handlers=stable` on `keyed-list` still exists, but both arms now emit the
+  same identity and the comparison is being re-measured.
+- **`ListRow` takes primitive props, not the record.** That used to be a
+  correctness requirement: records mutate in place, so passing `row={ record }`
+  handed the patcher the same reference before and after an update, the prop
+  compare reported "unchanged", and `update-every-10th` silently failed to
+  repaint. Since D170 a record prop also compares by render revision, so passing
+  the record would repaint correctly — the scenario keeps primitive props anyway
+  so that both arms of the `keyed-list` / `virtual-list` A/B keep doing identical
+  per-row work.
 
 ## Not yet implemented
 
