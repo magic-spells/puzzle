@@ -22,6 +22,19 @@ notes:
       Contract text lives in the six DOC-SPEC-* domain cards; all 55 distinct §N citations resolve
       to exactly one heading.
     sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+  - kind: state
+    text: >-
+      D170 (0.8.0, `feat/render-lists`) amends three existing sections rather than adding one — the
+      rendering change is a mechanism change, not new syntax, and no `.pzl` spelling moved.
+      Annotated inline in the sections they change, the way §35's amendments are: **§4** (reserved
+      names — the instance names `__list`/`__lists`/`__c`/`__dirty`/`__propRevs`, the class name
+      `__roots`, and the module-scope `__L<n>` consts, which are the only ones the compiler actually
+      enforces), **§28** (list keying gains row state and the caching contract: what dirties a row,
+      direct field assignment being unobserved, plain objects never caching, conservative sites),
+      and **§31** (cached event handlers gain the row-scope cache for loop captures). The
+      section-index rows above still carry each section's original version label; the `(amended,
+      D170)` marks are in the domain cards' section text. No new §N was allocated.
+    sha: ff9454a1857e785d8c8590e5d47f2a6030f107e8
 ---
 
 The enforceable v1 contract: exports/naming, config surface, .pzl anatomy, real-JS scripts rule, event conventions, template grammar, models/store/router surfaces, and the deferred-features cut list. When docs conflict, SPEC.md wins.

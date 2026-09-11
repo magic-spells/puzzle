@@ -130,7 +130,7 @@ export default class KeyedList extends PuzzleView {
     this.unregister = null;
     // Counters for the LAST measured op, captured once the op has fully settled
     // so a later stray render cannot perturb what stats() reports.
-    this.lastCounters = { childDataRuns: 0, perf: null };
+    this.lastCounters = { childDataRuns: 0, perf: null, dom: null };
     this.rowOps.freshSeed(this.autoSeedCount());
   }
 
@@ -226,6 +226,51 @@ export default class KeyedList extends PuzzleView {
 
   // ---- ops ----------------------------------------------------------------
 
+  /**
+   * Watch the list body for the duration of one op and report WHICH ROWS the
+   * patcher actually touched.
+   *
+   * `perf.domMutations` is the framework's own counter and is dev-only; this is
+   * a real MutationObserver over the rendered list, so it survives into the
+   * production bundle the benchmark measures — which is the only build where
+   * the D170 claim is worth checking. Two numbers come out:
+   *
+   * - `klDomMutations`: every record delivered, moves included.
+   * - `klRowsTouched`: DISTINCT `.kl-row` elements that saw a mutation inside
+   *   them. This is the gate. A single-record edit must touch exactly ONE row
+   *   however many rows are mounted, and a pure reorder must touch NONE (its
+   *   records are childList moves whose target is the body, not a row).
+   */
+  watchRows() {
+    const body = viewRoot(this)?.querySelector('.kl-body');
+    if (!body || typeof MutationObserver !== 'function') return null;
+
+    let mutations = 0;
+    const touched = new Set();
+    const classify = (records) => {
+      for (const record of records) {
+        mutations += 1;
+        const target = record.target;
+        const element = target.nodeType === 1 ? target : target.parentElement;
+        const row = element?.closest?.('.kl-row');
+        if (row) touched.add(row);
+      }
+    };
+
+    const observer = new MutationObserver(classify);
+    observer.observe(body, { childList: true, subtree: true, characterData: true, attributes: true });
+    return {
+      stop() {
+        // Drain what is still queued: observer callbacks are microtasks, so the
+        // final records may not have been delivered and would read as a clean
+        // zero — the exact failure this counter exists to catch.
+        classify(observer.takeRecords());
+        observer.disconnect();
+        return { mutations, rowsTouched: touched.size };
+      },
+    };
+  }
+
   async opRun(op) {
     const store = this.ctx.store;
 
@@ -233,6 +278,7 @@ export default class KeyedList extends PuzzleView {
     // a frozen snapshot must not land inside scriptMs.
     resetRowMetrics();
     const perfBefore = perfSnapshot();
+    const watcher = this.watchRows();
 
     const t0 = performance.now();
     if (!this.applyOp(op)) {
@@ -246,10 +292,11 @@ export default class KeyedList extends PuzzleView {
     await afterPaint();
     const paintedMs = performance.now() - t0;
     await settleFrames(1);
+    const dom = watcher ? watcher.stop() : { mutations: -1, rowsTouched: -1 };
 
     // Capture only once everything has settled, so the number stats() reports is
     // the number this op actually caused.
-    this.lastCounters = { childDataRuns: rowMetrics.dataRuns, perf: perfDelta(perfBefore) };
+    this.lastCounters = { childDataRuns: rowMetrics.dataRuns, perf: perfDelta(perfBefore), dom };
 
     return {
       op,
@@ -257,7 +304,8 @@ export default class KeyedList extends PuzzleView {
       scriptMs,
       detail:
         `${op} [${this.handlerMode()}]: ${ms1(scriptMs)}ms script / ${ms1(paintedMs)}ms to paint · ` +
-        `${this.ordered.length * 7} live elements · ${this.lastCounters.childDataRuns} row data() runs` +
+        `${this.ordered.length * 7} live elements · ${this.lastCounters.childDataRuns} row data() runs · ` +
+        `${dom.mutations} DOM mutations over ${dom.rowsTouched} rows` +
         this.perfDetail(),
     };
   }
@@ -272,6 +320,15 @@ export default class KeyedList extends PuzzleView {
   applyOp(op) {
     if (op === 'click-select') return this.clickSelect();
     if (op === 'click-remove') return this.clickRemove();
+    if (op === 'reorder') {
+      // The display order is VIEW state, not store state, so flipping it
+      // notifies nobody — the op has to ask for the render itself. That is the
+      // whole point of the op: no record is written, so every row must come back
+      // from the list block's cache and the only work is the patcher's moves.
+      this.rowOps.reorder();
+      this.refresh();
+      return true;
+    }
     return this.rowOps.apply(op, this.ordered, { fallbackCount: this.requestedRows() });
   }
 
@@ -432,6 +489,12 @@ export default class KeyedList extends PuzzleView {
       handlers: this.handlerMode(),
       childDataRuns: this.lastCounters.childDataRuns,
       perf: this.lastCounters.perf,
+      // Merged into the runner's counter bag (benchmarks/runner.mjs
+      // extractCounters), so `expect`/`invariant` can assert them directly.
+      counters: {
+        klDomMutations: this.lastCounters.dom?.mutations ?? -1,
+        klRowsTouched: this.lastCounters.dom?.rowsTouched ?? -1,
+      },
     };
   }
 }

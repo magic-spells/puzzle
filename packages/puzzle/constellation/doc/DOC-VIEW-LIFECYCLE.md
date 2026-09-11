@@ -25,18 +25,21 @@ Internal design doc — see [[DOC-SPEC]] for the product contract. This document
 
 ## 1. Rendering model: a virtual DOM (Vue-style)
 
+
 **Puzzle uses a virtual DOM — the same update mechanism as React and Vue**: render functions return trees of plain objects, the runtime diffs against the previous tree and patches the real DOM. Nothing exotic. What actually differs between frameworks is *where the render function comes from and how much the compiler must understand* — and on that axis Puzzle sits exactly where Vue does (templates compile to render functions; all reactivity stays in the runtime):
 
 | | Web components (shadow DOM) | **Puzzle** | Svelte |
 |---|---|---|---|
 | Template becomes | custom element + shadow root | **a render function returning a ViewNode tree** | imperative DOM update code per binding |
-| Updates via | browser internals | **runtime diff/patch of vdom trees** | compiled fine-grained mutations |
+| Updates via | browser internals | **runtime diff/patch of vdom trees, with cached static subtrees and persistent list rows** | compiled fine-grained mutations |
 | Compiler complexity | low | **low — templates only** | high — per-binding dependency tracking |
 | Styling | scoped by shadow boundary | **Tailwind/global CSS + opt-in native `@scope`** | compiler-scoped CSS |
 
 **No shadow DOM (D17).** `PuzzleView` is a plain class — not an `HTMLElement`, no `customElements.define`, no shadow roots. Rationale: shadow boundaries would break the Tailwind-first styling story (global utility CSS can't pierce shadow roots), complicate event bubbling, and buy nothing — component isolation comes from the vdom (each component renders and patches only its own subtree), not from the DOM.
 
 **Not Svelte-style compiled updates (D17).** Svelte's approach moves reactivity analysis into the compiler — every `{ expr }` needs compile-time dependency tracking to know which DOM node to touch when which variable changes. That is precisely the compiler complexity Puzzle avoids: our Go compiler only parses templates and emits render functions; **all** reactivity lives in the runtime (`data()` re-runs → new tree → diff). The trade is a diff cost per update in exchange for a radically simpler compiler and a runtime that can be tested without any compiler at all (compiler-independent runtime fixture tests depend on this).
+
+**The tree is not rebuilt whole (D170).** The compiler does tell the runtime one thing about a template: which parts of it *cannot* change. A maximal static subtree is wrapped in a per-owner cache (`this.__c[n]` at view level, `s.c[n]` inside a loop row), so it is allocated once and returned by reference on every later render; an item-form `{#for}` compiles to a persistent list block that keeps one row state per key and returns the row's previous vnode subtree unless that row's inputs changed. `patch()` short-circuits when both sides are the same object, which is what makes both free to reconcile. This is still runtime reactivity — nothing tracks a binding to a DOM node — it just stops paying for the parts of the tree that were never going to differ.
 
 **What `<puzzle-view>` is at runtime (D20):** for router-mounted **views and layouts**, it's a real DOM element — the view boundary that navigation swaps, `this.element` points at, and animations run on (v1.1 — `element.animate(...)` needs no custom element). **Reusable components render inline** — no wrapper element — so nested components (`view → <TodoItem> → <Button>`) never stack wrappers or disturb flex/grid layouts. In component files, `<puzzle-view>` is just the template delimiter. Either way the JS class and the DOM stay *paired, not fused*: state lives on the `PuzzleView` instance, which holds the element reference — never on the element itself, where a DOM detach would destroy it.
 
@@ -139,17 +142,20 @@ The ordering decisions, each fixing an audited prototype bug:
 
 ## 5. What triggers a re-render — the complete table
 
+
 | Trigger | `data()` re-runs? | What happens |
 |---|---|---|
 | Store record created/updated/destroyed, matching a query this component made in `data()` | **yes** | batched flush → `withTracking` re-run → new tree → diff/patch |
 | Route params change (navigation to same view, new `:id`) | **yes** | router re-runs `data(params, props)` per §4 — the call also delivers the navigation's route snapshot (`this.route`, v1.15 D47) |
-| Parent re-renders with changed props | **yes** | child `data()` re-runs with new props |
+| Parent re-renders with changed props | **yes** | child `data()` re-runs with new props. Props compare shallowly by reference, with one addition (D170): a prop that is a store **record** also compares by render revision — the store's notification sequence for that record's last mutation — against the snapshot this child stored when its props were last applied, so `<TodoItem todo={todo}/>` re-runs when *that* record is updated even though the reference never moved. A related record, a computed getter's inputs, and a direct field assignment advance no revision and still need the child to query. |
 | `this.setData(...)` | **no** | state merged, re-render scheduled (rAF-batched) with existing model |
 | Anything else (local variables, direct DOM pokes) | no | nothing — not reactive by design |
 
-Two flushes exist and both batch: the **store flush** (many record changes → each subscribed component notified once) and the **view update scheduler** (many `setData` calls → one re-render). A store notification and a `setData` in the same frame produce one `data()` re-run + one patch, not two.
+Two flushes exist and both batch: the **store flush** (many record changes → each subscribed component notified once) and the **view update scheduler** (many `setData` calls → one re-render). A store notification and a `setData` in the same frame produce one `data()` re-run + one patch, not two. A child that both takes a record prop and queries that record is woken once, not twice: a refresh started while the store is delivering a batch stamps that batch's sequence, and the child's own notification for it is skipped (D170, on the D161 settle mark).
 
 Subscriptions reset on every `data()` re-run: the component is subscribed to exactly what its *latest* `data()` actually queried — a filter change that stops querying a record stops those notifications automatically.
+
+**What a `{#for}` costs on a parent render (D170).** An item-form loop is a persistent list block, so the parent pays one key read per item plus a rebuild for each row whose inputs changed; unchanged rows return their previous vnode subtree and `patch()` short-circuits on the spot. A row is dirty when its item reference changed, when a record item's render revision advanced, when the index changed and the body reads the counter, when a parent `data()` root the body reads changed this render, or when the body could not be analysed (it reaches through `this`, or its site reads a relation, a computed getter or a deep path). Plain objects and arrays have no revision, so their rows rebuild every render — they still reuse the row's cached handlers and static subtrees. Rows the pass never visited are dropped and leave through the ordinary unmount path, with leave animations and FLIP unchanged. Range loops and loops inside a `<Snippet>` body keep the old per-render `.map`.
 
 ## 6. Who owns what
 

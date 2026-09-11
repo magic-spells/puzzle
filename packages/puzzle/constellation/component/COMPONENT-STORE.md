@@ -82,6 +82,29 @@ notes:
       longest message literals in every production bundle. Throw order is unchanged (reserved field
       first). The relationship-setter warn-once carries the same probe. Production behavior is
       identical: the runtime `assignSkipping` protection is what guards payloads there.
+  - kind: state
+    text: >-
+      The Store now publishes two numbers the render layer reads (D170,
+      `client-runtime/renderRev.js`). (1) **A record's render revision.** `_notify(type, id)` stamps
+      the notification sequence it just allocated onto the record itself, under the `RENDER_REV`
+      Symbol — the one number that says "this record's data changed" to a reader holding the SAME
+      reference, which is what row caches and `propsEqual` need since records mutate in place. Every
+      observable mutation funnels through `_notify` (createRecord, update() via recordChanged,
+      removeRecord, the adapter's `_upsert` and save reconciliation), so the revision advances with
+      the notification and never independently of it. The slot is defined non-enumerable at
+      `_instantiate` beside `_type`, value 0, so a collection keeps one hidden class; Symbol-keyed,
+      so `toJSON()`, payload merges and the schema-name assertions never see it. Two deliberate
+      details: a REMOVAL misses the lookup (removeRecord deletes from the map before notifying — a
+      record that left the store needs no revision, and reordering would hand subscribers a store
+      that still contains it), and the lookup goes through `recordsByType`, not `_typeMap`, which
+      would create an empty collection as a side effect of a notification. `MUTATION_REVISIONS`
+      (D125) is untouched and answers a different question. (2) **`_flushSeq`**, the highest
+      sequence in the batch currently being DELIVERED, 0 outside delivery. It is set around the
+      subscriber loop only and reset in a `finally`; a view whose refresh starts inside delivery
+      stamps it on `_settleMark` and dedupes its own notification for that batch. A re-entrant
+      `flush()` leaves 0 behind for the outer loop's remaining subscribers, which loses the dedupe
+      but can never suppress a notification.
+    sha: bdf7e9d9008a44f1cf0679002fb12007259ecbe4
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

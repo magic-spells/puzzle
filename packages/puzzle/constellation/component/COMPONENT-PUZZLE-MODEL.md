@@ -14,6 +14,25 @@ notes:
       drop, and the CalendarDate/dates.js revival rule all truthed against model.js, store.js and
       dates.js.
     sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+  - kind: state
+    text: >-
+      Records carry a **render revision** since D170 — a non-enumerable, Symbol-keyed slot the Store
+      defines at `_instantiate` (value 0) and writes in `_notify`. The Symbol lives in
+      `client-runtime/renderRev.js`, deliberately NOT in model.js: both readers
+      (`views/listBlock.js` and `views/viewManager.js`) sit on the far side of the model/view seam,
+      and PuzzleView must keep never importing model.js (D147's duck-typed record test depends on
+      it). Nothing about the model surface moves to accommodate it — a Symbol key is invisible to
+      `toJSON()`, `Object.keys`, payload merges, `safeMerge`'s protected-key checks and the
+      schema-name assertions — and it is not public API: no export mentions it and app code never
+      spells it. What it buys: a reader holding the same record reference can tell "unchanged" from
+      "changed since I last looked", which is what makes a record prop invalidate its child and a
+      `{#for}` row cache safe. Two consequences authors can observe: a field assigned DIRECTLY on a
+      record (`todo.title = 'x'`) advances no revision — it notifies nobody either, so nothing
+      re-renders for it, with or without D170 — and a site reading a RELATION or a computed getter
+      off a loop item depends on data the revision does not cover, so the compiler marks it
+      conservative and the block checks the fields against `normalizedSchema()`/`relationshipDefs()`
+      once per model class.
+    sha: bdf7e9d9008a44f1cf0679002fb12007259ecbe4
 ---
 
 # PuzzleModel and `Puzzle.*`

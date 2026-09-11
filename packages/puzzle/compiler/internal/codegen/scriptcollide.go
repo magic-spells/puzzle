@@ -389,34 +389,38 @@ func checkReservedScriptBindings(scripts string, toks []jsTok, emitted []string,
 			continue
 		}
 		pos := scriptsPos.Advance(scripts[:off])
-		what, why := reservedBindingImport(name)
+		verb, what, why := reservedBindingEmission(name)
 		return &parser.ParseError{
 			File: file, Line: pos.Line, Col: pos.Col,
 			Message: fmt.Sprintf(
-				"<script> binds %q at module scope, a name reserved by the compiler: it imports %s after the <script> (%s), so the two declarations collide — rename the <script> binding",
-				name, what, why),
+				"<script> binds %q at module scope, a name reserved by the compiler: it %s %s after the <script> (%s), so the two declarations collide — rename the <script> binding",
+				name, verb, what, why),
 		}
 	}
 	return nil
 }
 
-// reservedBindingImport names what the compiler imports as `name` and why THIS
-// file imports it, so the error explains a reservation the .pzl cannot see.
-func reservedBindingImport(name string) (what, why string) {
+// reservedBindingEmission names what the compiler emits as `name`, how (an
+// import or a declaration), and why THIS file emits it, so the error explains a
+// reservation the .pzl cannot see.
+func reservedBindingEmission(name string) (verb, what, why string) {
 	switch name {
 	case "ViewNode":
-		return "ViewNode", "every compiled module builds its render tree with it"
+		return "imports", "ViewNode", "every compiled module builds its render tree with it"
 	case "SLOT_TAG":
-		return "SLOT_TAG", "this template contains a slot"
+		return "imports", "SLOT_TAG", "this template contains a slot"
 	case "SNIPPET_TAG":
-		return "SNIPPET_TAG", "this template contains a <Snippet>"
+		return "imports", "SNIPPET_TAG", "this template contains a <Snippet>"
 	case "PORTAL_TAG":
-		return "PORTAL_TAG", "this template contains a <Portal>"
+		return "imports", "PORTAL_TAG", "this template contains a <Portal>"
 	case "__s":
-		return "the display helper as __s", "this template coerces an interpolation for display"
-	default:
-		return name, "the shared module for a {#svg} asset in this template"
+		return "imports", "the display helper as __s", "this template coerces an interpolation for display"
 	}
+	if strings.HasPrefix(name, "__L") {
+		// D170: one module-scope meta const per item-form {#for} site.
+		return "declares", name, "this template has an item-form {#for}, whose list-block meta is hoisted to module scope"
+	}
+	return "imports", name, "the shared module for a {#svg} asset in this template"
 }
 
 // importLocalName returns the local binding a named-import specifier introduces
