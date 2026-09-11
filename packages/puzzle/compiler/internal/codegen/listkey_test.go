@@ -21,8 +21,13 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
 </script>
 `)
-	if !strings.Contains(got, "key: ViewNode.keyOf(item)") {
-		t.Errorf("item-form root without explicit key must emit ViewNode.keyOf(item):\n%s", got)
+	// The synthetic key is hoisted into the site meta; the row root carries the
+	// block's resolved key (D170, plan §4.3). The RESOLVER is unchanged.
+	if !strings.Contains(got, "const __L0 = { key: (item) => ViewNode.keyOf(item)") {
+		t.Errorf("item-form site meta must carry ViewNode.keyOf(item):\n%s", got)
+	}
+	if !strings.Contains(got, "new ViewNode('li', { key: s.k }") {
+		t.Errorf("item-form row root's first attr must be the block key:\n%s", got)
 	}
 }
 
@@ -39,11 +44,16 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 	if strings.Contains(got, "ViewNode.keyOf") {
 		t.Errorf("explicit key on element root must suppress the synthetic keyOf:\n%s", got)
 	}
-	if !strings.Contains(got, "key: item.slug") {
-		t.Errorf("author's explicit key expression must stand verbatim:\n%s", got)
+	// The author's expression MOVES into the site meta with the loop local left
+	// bare; the row root carries `key: s.k` (D170, plan §4.3).
+	if !strings.Contains(got, "const __L0 = { key: (item) => item.slug") {
+		t.Errorf("author's explicit key expression must stand verbatim in the meta:\n%s", got)
 	}
-	if strings.Count(got, "key:") != 1 {
-		t.Errorf("explicit key must not double the key property:\n%s", got)
+	if !strings.Contains(got, "new ViewNode('li', { key: s.k }") {
+		t.Errorf("lowered row root must carry the block key:\n%s", got)
+	}
+	if strings.Count(got, "key:") != 2 {
+		t.Errorf("explicit key must not double the key property on the row root:\n%s", got)
 	}
 }
 
@@ -60,8 +70,8 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 	if strings.Contains(got, "ViewNode.keyOf") {
 		t.Errorf("explicit static key must suppress the synthetic keyOf:\n%s", got)
 	}
-	if !strings.Contains(got, "key: 'row'") {
-		t.Errorf("explicit static key must stand verbatim:\n%s", got)
+	if !strings.Contains(got, "const __L0 = { key: (item) => 'row'") {
+		t.Errorf("explicit static key must stand verbatim in the meta:\n%s", got)
 	}
 }
 
@@ -80,11 +90,11 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 	if strings.Contains(got, "ViewNode.keyOf") {
 		t.Errorf("explicit mixed key must suppress the synthetic keyOf:\n%s", got)
 	}
-	if strings.Count(got, "key:") != 1 {
-		t.Errorf("explicit mixed key must not double the key property:\n%s", got)
+	if strings.Count(got, "key:") != 2 {
+		t.Errorf("explicit mixed key must not double the key property on the row root:\n%s", got)
 	}
-	if !strings.Contains(got, "key: `row-${__s(item.id,") {
-		t.Errorf("author's mixed key must stand as a template literal:\n%s", got)
+	if !strings.Contains(got, "key: (item) => `row-${__s(item.id,") {
+		t.Errorf("author's mixed key must stand as a template literal in the meta:\n%s", got)
 	}
 }
 
@@ -102,11 +112,11 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 	if strings.Contains(got, "ViewNode.keyOf") {
 		t.Errorf("explicit key on component root must suppress the synthetic keyOf:\n%s", got)
 	}
-	if !strings.Contains(got, "key: item.slug") {
-		t.Errorf("author's explicit key on component root must stand verbatim:\n%s", got)
+	if !strings.Contains(got, "const __L0 = { key: (item) => item.slug") {
+		t.Errorf("author's explicit key on component root must stand verbatim in the meta:\n%s", got)
 	}
-	if strings.Count(got, "key:") != 1 {
-		t.Errorf("explicit key must not double the key property:\n%s", got)
+	if strings.Count(got, "key:") != 2 {
+		t.Errorf("explicit key must not double the key property on the row root:\n%s", got)
 	}
 }
 

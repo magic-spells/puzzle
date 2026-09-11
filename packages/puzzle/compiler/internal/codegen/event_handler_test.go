@@ -23,14 +23,17 @@ func TestEventHandlerLoopItemNamedEvent(t *testing.T) {
 			"    <button @click={ select(event) }>select</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "__d.events.map((event) =>") {
-		t.Fatalf("loop item event was not emitted as the row binding:\n%s", got)
+	if !strings.Contains(got, "this.__list(this, 0, __d.events, (s) =>") {
+		t.Fatalf("loop item event was not lowered to a list block:\n%s", got)
 	}
-	if !strings.Contains(got, "'@click': (__ev) => this.events.select(event)") {
+	// The loop item reads off the row scope; the DOM parameter still renames to
+	// __ev so it cannot shadow it (D170 moves WHERE the item is read, not which
+	// binding wins).
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.select(s.item))") {
 		t.Errorf("DOM event parameter must not shadow the loop item:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing the loop item event must not be cached:\n%s", got)
+		t.Errorf("handler capturing the loop item must not use the per-instance cache:\n%s", got)
 	}
 }
 
@@ -40,14 +43,14 @@ func TestEventHandlerLoopCounterNamedEvent(t *testing.T) {
 			"    <button @click={ select(event) }>select</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "__d.items.map((item, event) =>") {
-		t.Fatalf("loop counter event was not emitted as the row binding:\n%s", got)
+	if !strings.Contains(got, "this.__list(this, 0, __d.items, (s) =>") {
+		t.Fatalf("loop counter event was not lowered to a list block:\n%s", got)
 	}
-	if !strings.Contains(got, "'@click': (__ev) => this.events.select(event)") {
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.select(s.i))") {
 		t.Errorf("DOM event parameter must not shadow the loop counter:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing the loop counter event must not be cached:\n%s", got)
+		t.Errorf("handler capturing the loop counter must not use the per-instance cache:\n%s", got)
 	}
 }
 
@@ -57,14 +60,16 @@ func TestEventHandlerGlobalNamedLoopVarNotCached(t *testing.T) {
 			"    <button @click={ open(document) }>open</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "__d.documents.map((document) =>") {
-		t.Fatalf("document loop item was not emitted as the row binding:\n%s", got)
+	if !strings.Contains(got, "this.__list(this, 0, __d.documents, (s) =>") {
+		t.Fatalf("document loop item was not lowered to a list block:\n%s", got)
 	}
-	if !strings.Contains(got, "'@click': (event) => this.events.open(document)") {
-		t.Errorf("each row must emit a fresh closure over its own document value:\n%s", got)
+	// A loop binding SHADOWS the same-named JS global: the handler must read the
+	// row's item, never window.document.
+	if !strings.Contains(got, "'@click': (s.h0 ??= (event) => this.events.open(s.item))") {
+		t.Errorf("a jsGlobals-named loop item must resolve to the row scope:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing a jsGlobals-named loop item must not be cached:\n%s", got)
+		t.Errorf("handler capturing a jsGlobals-named loop item must not use the per-instance cache:\n%s", got)
 	}
 }
 
@@ -74,11 +79,11 @@ func TestEventHandlerLoopEventMemberAccess(t *testing.T) {
 			"    <button @click={ pick(event.id) }>pick</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "'@click': (__ev) => this.events.pick(event.id)") {
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.pick(s.item.id))") {
 		t.Errorf("member access must resolve against the loop item, not the DOM event:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing event.id must not be cached:\n%s", got)
+		t.Errorf("handler capturing the loop item must not use the per-instance cache:\n%s", got)
 	}
 }
 

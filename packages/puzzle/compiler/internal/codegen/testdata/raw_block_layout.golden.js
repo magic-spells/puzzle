@@ -9,29 +9,32 @@ export default class RawBlockLayout extends PuzzleView {
 
 import { ViewNode } from '@magic-spells/puzzle';
 
+const __L0 = { key: (item) => ViewNode.keyOf(item) };
+const __L1 = { key: (item) => ViewNode.keyOf(item) };
+
 RawBlockLayout.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', {}, [
     new ViewNode('ul', {},
-      __d.items.map((item) =>
+      this.__list(this, 0, __d.items, (s) =>
         new ViewNode('li', {
-          key: ViewNode.keyOf(item),
+          key: s.k,
           class: 'sample',
         }, [
           new ViewNode('text', { value: '{ item.title }' }),
         ])
-      )
+      , __L0)
     ),
     new ViewNode('ol', {},
-      __d.items.map((item) =>
+      this.__list(this, 1, __d.items, (s) =>
         new ViewNode('li', {
-          key: ViewNode.keyOf(item),
+          key: s.k,
           class: 'oneline',
         }, [
           new ViewNode('text', { value: '{ item.title }' }),
         ])
-      )
+      , __L1)
     ),
     new ViewNode('pre', {}, [
       new ViewNode('text', { value: '\nconst a = 1;\n  const b = 2;\n' }),

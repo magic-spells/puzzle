@@ -32,6 +32,8 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 	const slotted = "<puzzle-view>\n  <Slot/>\n</puzzle-view>"
 	const portaled = "<puzzle-view>\n  <Portal><p>x</p></Portal>\n</puzzle-view>"
 	const withSnippet = "<puzzle-view>\n  <List><Snippet item>{ item }</Snippet></List>\n</puzzle-view>"
+	// An item-form {#for} emits one module-scope `const __L<n>` per site (D170).
+	const looping = "<puzzle-view>\n  {#for row in rows}<li>{ row.n }</li>{/for}\n</puzzle-view>"
 
 	tests := []struct {
 		name     string
@@ -83,9 +85,33 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 			script:    "const SNIPPET_TAG = 1;",
 			wantIdent: "SNIPPET_TAG",
 		},
+		{
+			name:      "declared __L0 with a lowered {#for}",
+			template:  looping,
+			script:    "const __L0 = 1;",
+			wantIdent: "__L0",
+		},
+		{
+			name:      "imported __L0 with a lowered {#for}",
+			template:  looping,
+			script:    "import { x as __L0 } from './x.js';",
+			wantIdent: "__L0",
+		},
+		// Only the site indices this file actually emits are reserved: one loop
+		// emits __L0, never __L1.
+		{name: "declared __L1 with a single loop", template: looping, script: "const __L1 = 1;"},
+		{name: "declared __L0 with no loop", template: coercing, script: "const __L0 = 1;"},
 		// Negatives: the name is only reserved when this file emits it.
 		{name: "declared __s without a coercing interpolation", template: raw, script: "const __s = 1;"},
 		{name: "declared __f", template: coercing, script: "const __f = 1;"},
+		// D170's other reserved names are INSTANCE/CLASS properties (`this.__c`,
+		// `this.__list`, `this.__lists`, `this.__dirty`, `this.__propRevs`,
+		// `Class.__roots`), never module-scope declarations — exactly like
+		// `__h`/`__d`/`__f`. A module-scope binding of the same spelling cannot
+		// collide, so it stays legal.
+		{name: "declared __c", template: looping, script: "const __c = 1;"},
+		{name: "declared __list", template: looping, script: "const __list = 1;"},
+		{name: "declared __roots", template: looping, script: "const __roots = 1;"},
 		{name: "declared SLOT_TAG without a slot", template: coercing, script: "const SLOT_TAG = 1;"},
 		{name: "declared PORTAL_TAG without a portal", template: coercing, script: "const PORTAL_TAG = 1;"},
 		{name: "declared SNIPPET_TAG without a snippet", template: coercing, script: "const SNIPPET_TAG = 1;"},

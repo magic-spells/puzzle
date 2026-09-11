@@ -76,11 +76,14 @@ func TestHandlerCacheLoopVariable(t *testing.T) {
 		"  {#for item in items}\n    <button @click={ h(item.id) } @mouseover={ g }>x</button>\n  {/for}",
 		plainScripts,
 	))
-	// Loop-var capture → plain arrow, no wrapper, no __d. (item is in scope).
-	if !strings.Contains(got, "'@click': (event) => this.events.h(item.id)") {
-		t.Errorf("loop-var handler must emit the plain arrow:\n%s", got)
+	// Loop-var capture → the ROW cache, not the per-instance one: the closure is
+	// stable for the life of the row because it reads the item at fire time
+	// (D62 amended by D170, plan §3.5).
+	if !strings.Contains(got, "'@click': (s.h0 ??= (event) => this.events.h(s.item.id))") {
+		t.Errorf("loop-var handler must cache on the row scope:\n%s", got)
 	}
-	// Bare handler in the same loop → cached at site 0.
+	// Bare handler in the same loop → still the per-instance cache at site 0
+	// (data-independent by definition, one closure for every row).
 	if !strings.Contains(got, "'@mouseover': ((this.__h ??= {})[0] ??= (event) => this.events.g(event))") {
 		t.Errorf("bare handler in a loop must still be cached:\n%s", got)
 	}
@@ -137,5 +140,109 @@ func TestHandlerCacheComponentCallbackProp(t *testing.T) {
 	got := compileSrc(t, viewSrc(`  <Child @save={ h } />`, scripts))
 	if !strings.Contains(got, "save: ((this.__h ??= {})[0] ??= (event) => this.events.h(event))") {
 		t.Errorf("cacheable component callback prop must be wrapped on its value:\n%s", got)
+	}
+}
+
+// --- Row handler caches (D62 amended by D170, plan §3.5) ---
+//
+// A handler capturing ONLY loop locals is not data-independent, so it cannot
+// ride `__h` — but once the locals are read off the row scope it is stable for
+// the life of the row, and it caches there instead. That stability is what
+// stops a row's child re-running data() on every parent render.
+
+func TestRowHandlerCachedOnRowScope(t *testing.T) {
+	got := compileSrc(t, viewSrc(
+		"  {#for item in items}<button @click={ remove(item) }>x</button>{/for}",
+		plainScripts,
+	))
+	if !strings.Contains(got, "'@click': (s.h0 ??= (event) => this.events.remove(s.item))") {
+		t.Errorf("a loop-capturing handler must cache on the row scope:\n%s", got)
+	}
+	if strings.Contains(got, "this.__h") {
+		t.Errorf("a loop-capturing handler must not take a per-instance slot:\n%s", got)
+	}
+}
+
+// `s.hN` is a per-SITE counter, independent of `__h`, and a non-row-cacheable
+// site consumes no index.
+func TestRowHandlerSiteNumbering(t *testing.T) {
+	got := compileSrc(t, viewSrc(
+		"  {#for item in items}\n"+
+			"    <button @click={ a(item) } @mouseover={ b(count) } @focus={ c(item.id) } @blur={ d }>x</button>\n"+
+			"  {/for}",
+		plainScripts,
+	))
+	for _, want := range []string{
+		"'@click': (s.h0 ??= (event) => this.events.a(s.item))",
+		"'@mouseover': (event) => this.events.b(__d.count)",
+		"'@focus': (s.h1 ??= (event) => this.events.c(s.item.id))",
+		"'@blur': ((this.__h ??= {})[0] ??= (event) => this.events.d(event))",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q:\n%s", want, got)
+		}
+	}
+}
+
+// A component callback prop rides the same path — the Home fixture's `remove:`.
+func TestRowHandlerComponentCallbackProp(t *testing.T) {
+	scripts := "import { PuzzleView } from '@magic-spells/puzzle';\n" +
+		"import Child from './Child.pzl';\n" +
+		"export default class T extends PuzzleView {}"
+	got := compileSrc(t, viewSrc("  {#for todo in todos}<Child todo={ todo } @remove={ del(todo) } />{/for}", scripts))
+	if !strings.Contains(got, "remove: (s.h0 ??= (event) => this.events.del(s.item)),") {
+		t.Errorf("a row callback prop must cache on the row scope:\n%s", got)
+	}
+}
+
+// An argument reading render data keeps the fresh closure: `__d` is a per-render
+// snapshot, so caching the closure would freeze it. The roots it reads go into
+// the site's mask instead, which is what rebuilds the row.
+func TestRowHandlerDataArgStaysFresh(t *testing.T) {
+	got := compileSrc(t, viewSrc(
+		"  {#for item in items}<button @click={ pick(item, count) }>x</button>{/for}",
+		plainScripts,
+	))
+	if !strings.Contains(got, "'@click': (event) => this.events.pick(s.item, __d.count)") {
+		t.Errorf("a data-capturing row handler must stay a fresh closure:\n%s", got)
+	}
+	if strings.Contains(got, "s.h0") {
+		t.Errorf("a data-capturing row handler must not be row-cached:\n%s", got)
+	}
+	if !strings.Contains(got, "roots: 1") {
+		t.Errorf("the handler's root read must dirty the row:\n%s", got)
+	}
+}
+
+// A handler-valued conditional toggles function ↔ null during render, so it is
+// cached by neither mechanism.
+func TestRowHandlerConditionalNeverCached(t *testing.T) {
+	got := compileSrc(t, viewSrc(
+		"  {#for item in items}<button @click={ item.on ? pick : null }>x</button>{/for}",
+		plainScripts,
+	))
+	if !strings.Contains(got, "'@click': (s.item.on) ? ") {
+		t.Errorf("expected the conditional handler value:\n%s", got)
+	}
+	if strings.Contains(got, "s.h0") {
+		t.Errorf("a handler-valued conditional must not be row-cached:\n%s", got)
+	}
+}
+
+// A <Snippet> body inside a row is stamped fresh per expansion, so a closure
+// cached on the enclosing row scope would be shared between stamps.
+func TestRowHandlerNotCachedInsideSnippetBody(t *testing.T) {
+	scripts := "import { PuzzleView } from '@magic-spells/puzzle';\n" +
+		"import Child from './Child.pzl';\n" +
+		"export default class T extends PuzzleView {}"
+	got := compileSrc(t, viewSrc(
+		"  {#for item in items}<Child><Snippet row><button @click={ pick(item) }>x</button></Snippet></Child>{/for}",
+		scripts,
+	))
+	if !strings.Contains(got, "'@click': (event) => this.events.pick(s.item)") {
+		t.Errorf("a handler inside a snippet body must stay a fresh closure:\n%s", got)
+	}
+	if strings.Contains(got, "s.h0") {
+		t.Errorf("a snippet body must not cache on the enclosing row scope:\n%s", got)
 	}
 }

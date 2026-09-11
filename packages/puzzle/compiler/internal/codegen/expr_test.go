@@ -7,10 +7,10 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/parser"
 )
 
-func scope(names ...string) map[string]bool {
-	m := map[string]bool{}
+func scope(names ...string) scopeMap {
+	m := scopeMap{}
 	for _, n := range names {
-		m[n] = true
+		m[n] = ""
 	}
 	return m
 }
@@ -19,7 +19,7 @@ func TestResolveExpr(t *testing.T) {
 	cases := []struct {
 		name  string
 		expr  string
-		scope map[string]bool
+		scope scopeMap
 		want  string
 	}{
 		{"bare root", "newTodoText", nil, "__d.newTodoText"},
@@ -360,7 +360,7 @@ func TestCompileEventValue(t *testing.T) {
 	cases := []struct {
 		name      string
 		expr      string
-		scope     map[string]bool
+		scope     scopeMap
 		want      string
 		wantCache bool // expected D62 cacheability (data-independence)
 		wantErr   bool
@@ -390,21 +390,21 @@ func TestCompileEventValue(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, cacheable, err := compileEventValue(tc.expr, tc.scope)
+			ev, err := compileEventValue(tc.expr, tc.scope, nil)
 			if tc.wantErr {
 				if err == nil {
-					t.Fatalf("compileEventValue(%q) = %q, want error", tc.expr, got)
+					t.Fatalf("compileEventValue(%q) = %q, want error", tc.expr, ev.js)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("compileEventValue(%q) unexpected error: %v", tc.expr, err)
 			}
-			if got != tc.want {
-				t.Errorf("compileEventValue(%q)\n  got  %q\n  want %q", tc.expr, got, tc.want)
+			if ev.js != tc.want {
+				t.Errorf("compileEventValue(%q)\n  got  %q\n  want %q", tc.expr, ev.js, tc.want)
 			}
-			if cacheable != tc.wantCache {
-				t.Errorf("compileEventValue(%q) cacheable = %v, want %v", tc.expr, cacheable, tc.wantCache)
+			if ev.cacheable != tc.wantCache {
+				t.Errorf("compileEventValue(%q) cacheable = %v, want %v", tc.expr, ev.cacheable, tc.wantCache)
 			}
 		})
 	}

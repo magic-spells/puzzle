@@ -188,7 +188,7 @@ func validSVGPath(src string) bool {
 //     the inline path (same tag/attrs, same string children, same island freeze);
 //     an optional loop `key` is threaded through as the factory argument so
 //     `{#svg}` as a `{#for}` body root still reconciles by key.
-func (c *compiler) emitRawSVG(el *parser.Element, ind, startCol int, scope map[string]bool) (string, error) {
+func (c *compiler) emitRawSVG(el *parser.Element, ind, startCol int, scope scopeMap) (string, error) {
 	if c.svgDedup && el.RawSrc != "" {
 		return c.emitSVGRef(el, scope)
 	}
@@ -209,7 +209,7 @@ func (c *compiler) emitRawSVG(el *parser.Element, ind, startCol int, scope map[s
 // import), and threads any injected loop `key` DynamicAttr through as the factory
 // argument. The file's own (static) attrs live in the shared module, not here, so
 // they are stored once regardless of use count.
-func (c *compiler) emitSVGRef(el *parser.Element, scope map[string]bool) (string, error) {
+func (c *compiler) emitSVGRef(el *parser.Element, scope scopeMap) (string, error) {
 	ident := c.svgImportIdent(el.RawSrc)
 
 	// The only dynamic attr a resolved {#svg} element can carry is the synthetic
@@ -218,7 +218,7 @@ func (c *compiler) emitSVGRef(el *parser.Element, scope map[string]bool) (string
 	keyArg := ""
 	for _, a := range el.Attrs {
 		if d, ok := a.(*parser.DynamicAttr); ok && d.Name == "key" {
-			keyArg = resolveExpr(d.Expr, scope)
+			keyArg = c.resolve(d.Expr, scope)
 			break
 		}
 	}
@@ -327,7 +327,7 @@ func (c *compiler) svgAttrsLiteral(attrs []parser.Attr) (string, error) {
 	if len(attrs) == 0 {
 		return "{}", nil
 	}
-	scope := map[string]bool{}
+	scope := scopeMap{}
 	parts := make([]string, 0, len(attrs))
 	for _, a := range attrs {
 		kv, err := c.attrKV(a, scope, false, true)

@@ -9,19 +9,21 @@ export default class IndexedFor extends PuzzleView {
 
 import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
+const __L0 = { key: (item) => ViewNode.keyOf(item), counter: true, fields: ['name'] };
+
 IndexedFor.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', { class: 'list' }, [
     new ViewNode('ul', { class: 'items' },
-      __d.items.map((item, i) =>
+      this.__list(this, 0, __d.items, (s) =>
         new ViewNode('li', {
-          key: ViewNode.keyOf(item),
+          key: s.k,
           class: 'item',
         }, [
-          new ViewNode('text', { value: __s(i + 1, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'i + 1' : 0) + '. ' + __s(item.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
+          new ViewNode('text', { value: __s(s.i + 1, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'i + 1' : 0) + '. ' + __s(s.item.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
         ])
-      )
+      , __L0)
     ),
   ]);
 };
