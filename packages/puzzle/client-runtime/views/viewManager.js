@@ -39,6 +39,7 @@ import {
 import { devperfComponentPatch, devperfMutation } from '../devperf.js';
 import { displayValue as stringify } from '../display.js';
 import { getErrorView, reportError } from '../errors.js';
+import { RENDER_REV } from '../renderRev.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -740,13 +741,22 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 			devperfMutation();
 		return placeholder;
 	}
-	const preloaded = vnode.instance != null;
+	// A pinned instance that is already DESTROYED counts as absent (plan §3.1,
+	// D170). Vnodes are reusable now: a cached row vnode (or a takeover-preloaded
+	// one, which is where a non-routed `instance` pin comes from) can be unmounted
+	// by a branch toggle — destroying its instance — and returned by the cache and
+	// mounted again later. Adopting the corpse would mount a view whose #destroyed
+	// latch makes mounted(), setData() and every refresh inert, with no diagnostic.
+	// Construct fresh instead; `preloaded` follows, so the fresh instance runs its
+	// own created()/data() exactly as a first mount does.
+	const pinned = vnode.instance != null && !vnode.instance.isDestroyed ? vnode.instance : null;
+	const preloaded = pinned != null;
 	// Gated HERE rather than at the `preloaded && !takeoverPreloaded` use below, so
 	// a non-takeover build folds this to `false` and that test collapses to plain
 	// `preloaded` — the pre-takeover behavior, with the property read gone.
 	const takeoverPreloaded =
 		(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
-	const child = vnode.instance ?? new vnode.tag(ctx);
+	const child = pinned ?? new vnode.tag(ctx);
 	child.__retryParent = owner;
 	vnode.component = child;
 	child
@@ -815,6 +825,52 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
  * Falls back to replace when tag or key differ.
  */
 export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
+	// Identity short-circuit (plan §3.1, D170). The SAME vnode object on both
+	// sides means the same `el`, the same attrs object, the same children array
+	// and the same component instance: there is nothing to compare, and the DOM
+	// already matches — the only way this position held this exact object last
+	// render is that this same object described it. This is the line that makes a
+	// list block's cached rows and the compiler's cached static subtrees free to
+	// reconcile (999 of 1,000 rows on a one-record edit).
+	//
+	// COMPONENT vnodes need two things this fast path would otherwise skip.
+	//
+	// (1) A vnode with no LIVE instance is not describing the DOM at all, and must
+	// fall through to the ordinary path. Two shapes reach that state: a destroyed
+	// instance — a failed position holding a bare comment placeholder or an error
+	// view (D115/D145) — and a null one, which is mountComponent's `takeoverFailed`
+	// arm parking a comment without ever constructing a child. Both recover in
+	// patch()'s `dead == null || dead.isDestroyed` arm below, and a CACHED row
+	// vnode is the object that would otherwise strand them: returning here forever
+	// means a retry (which works by asking the parent to re-render) can never mount
+	// a fresh child, and a takeover-failed row stays blank until its record
+	// happens to change. Element vnodes carry `component === null` too, hence the
+	// tag test — one property read on the hot path, with the getter reached only
+	// for components.
+	//
+	// (2) A live component's `el` still has to be refreshed. patchComponent
+	// re-reads `newVnode.el = child.element` on every parent render because a
+	// child can REPLACE its root between renders (a component-mode skeleton whose
+	// real template root has a different tag is the common one), and
+	// patchKeyedChildren uses `newChild.el` both for its move guard and as the
+	// next insertion ref. Skipping the refresh leaves a cached row pointing at a
+	// detached node, which the next reorder then splices back into the list.
+	//
+	// The remaining carve-out is controlled form values — the one thing the
+	// patcher re-asserts on every pass even when nothing changed, because the LIVE
+	// DOM can drift out of band (typing into a change-committed input, clicking a
+	// checkbox, an IME composition the bind guard is holding back). A cached
+	// subtree carrying such controls arrives with the `controls` list the list
+	// block collected when it built the row; everything else has nothing to
+	// re-assert and reads `undefined` here.
+	if (oldVnode === newVnode) {
+		const live = newVnode.component;
+		if (live !== null ? !live.isDestroyed : typeof newVnode.tag !== 'function') {
+			if (live !== null) newVnode.el = live.element;
+			if (newVnode.controls) reassertControls(newVnode.controls, owner);
+			return;
+		}
+	}
 	if (!sameNode(oldVnode, newVnode)) {
 		// Resolve the insertion reference from the LIVE DOM node, not the cached
 		// vnode.el. For a component with async data(), mountComponent cached
@@ -938,6 +994,89 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 }
 
 /**
+ * The two controlled property-backed attrs, each compared against the LIVE DOM
+ * rather than against the old vnode. Extracted from patchAttrs verbatim so the
+ * identity short-circuit's `reassertControls` runs the SAME comparison the
+ * ordinary patch path runs (plan §3.1) — one implementation, one contract.
+ *
+ * `value` on an input/textarea and `checked` on a checkbox/radio drift from the
+ * live DOM through user interaction the app never mirrored back into state:
+ * typing into an input whose write commits on `change` (an author handler, or
+ * D147's synthesized '@change:bind'), clicking such a checkbox, or an in-flight
+ * IME composition whose write the bind guard is deliberately holding back. A
+ * re-render whose BOUND value is unchanged would skip the write on a
+ * vnode-to-vnode compare (`'' === ''`), leaving the stale user text on screen
+ * while component state says otherwise — so compare the property (React/Vue
+ * force-sync it every patch for exactly this reason). The per-keystroke echo
+ * case (bound value already equals the live property) still writes NOTHING, so
+ * the caret is preserved. Non-form elements carrying a plain `value` (<li>,
+ * <progress>, <button>) never reach here and keep the vnode compare.
+ */
+function syncControlValue(el, value, owner) {
+	if (el.value !== stringify(value)) setAttr(el, 'value', value, owner);
+}
+
+function syncControlChecked(el, value, owner) {
+	if (el.checked !== Boolean(value)) setAttr(el, 'checked', value, owner);
+	// The property guard above short-circuits precisely when the USER moved
+	// checkedness, which is also the only path that leaves the content
+	// attribute stale — `el.checked = x` writes the property, never the
+	// attribute (that is defaultChecked). Skipping setAttr therefore breaks
+	// this file's own "keep boolean ATTRIBUTES coherent for CSS selectors"
+	// rule for `checked` alone: `input[checked]` keeps matching an unchecked
+	// box, and form.reset() restores the stale attribute with no change event,
+	// so state and UI diverge with nothing to resync them. Reflect the
+	// attribute on its own rather than falling through to setAttr, which would
+	// re-assign the property and bill two devperfMutation() calls per patch —
+	// moving the D121/D122 counts and the stress form-state baseline.
+	else if (el.hasAttribute('checked') !== Boolean(value)) {
+		if (value) el.setAttribute('checked', '');
+		else el.removeAttribute('checked');
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+	}
+}
+
+/**
+ * Re-assert every controlled value in ONE element's attrs — the element-level
+ * composition of the three live-DOM comparisons the ordinary patch path runs
+ * across patchAttrs and the post-children select re-assert.
+ *
+ * patchAttrs deliberately keeps its own per-attr dispatch instead of calling
+ * this: hoisting the whole element to one call would move the `value`/`checked`
+ * writes out of the attrs iteration order, and <select> must keep asserting its
+ * controlled value AFTER its <option> children patch (see reassertSelectValue),
+ * not during the attr pass. A cached subtree has no attr pass and no children
+ * pass at all, so for it the order is this function's order.
+ */
+function syncControl(el, attrs, owner) {
+	const node = el.nodeName;
+	if (node === 'INPUT') {
+		if ('value' in attrs) syncControlValue(el, attrs.value, owner);
+		if ('checked' in attrs) syncControlChecked(el, attrs.checked, owner);
+		return;
+	}
+	if (node === 'TEXTAREA') {
+		if ('value' in attrs) syncControlValue(el, attrs.value, owner);
+		return;
+	}
+	reassertSelectValue(el, attrs);
+}
+
+/**
+ * The identity short-circuit's one piece of work (plan §3.1/§3.2): a cached
+ * subtree that was NOT rebuilt still has to re-assert its controlled form values
+ * against the live DOM, exactly as a full patch would. The list block collected
+ * these vnodes when it built the row, so the cost is O(controls), not O(row). A
+ * vnode with no live element (its subtree was unmounted) is skipped.
+ */
+function reassertControls(controls, owner) {
+	for (let i = 0; i < controls.length; i++) {
+		const vnode = controls[i];
+		if (vnode.el) syncControl(vnode.el, vnode.attrs, owner);
+	}
+}
+
+/**
  * Re-apply a <select>'s controlled `value` after its <option> children exist.
  * A no-op for any other element or a select without a controlled `value` attr.
  * Uses the same stringify coercion setAttr does; native fallback handles a value
@@ -965,7 +1104,7 @@ function reassertSelectValue(el, attrs) {
  */
 function patchComponent(oldVnode, newVnode) {
 	const child = (newVnode.component = oldVnode.component);
-	const props = shallowEqual(oldVnode.props, newVnode.props) ? undefined : newVnode.props;
+	const props = propsEqual(oldVnode.props, newVnode.props, child) ? undefined : newVnode.props;
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		devperfComponentPatch(child, props === undefined);
 	}
@@ -1006,13 +1145,43 @@ function sameNode(a, b) {
 	);
 }
 
-function shallowEqual(a, b) {
-	if (a === b) return true;
-	if (!a || !b) return false;
+/**
+ * The component prop comparator (SPEC §4's prop-reactivity rule). Shallow, by
+ * strict `!==`, with key COUNT as the shape guard — every boundary
+ * tests/component-prop-bailout.test.js pins is unchanged: a present-but-undefined
+ * key differs from an absent one, a `NaN` prop never bails out (unlike
+ * `sameNode`, which compares KEYS by SameValueZero on purpose), `+0` and `-0` do,
+ * and key SETS are never compared.
+ *
+ * What is new (plan §3.4, D170) is the second test on each value: a store record
+ * mutates IN PLACE, so `!==` can never see it change. A value carrying a numeric
+ * RENDER_REV therefore also compares against the SNAPSHOT the child wrote the
+ * last time props were applied (`child.__propRevs`), and an advanced revision
+ * counts as a changed prop. That is what finally makes `<TodoItem todo={todo}/>`
+ * refresh on the record's own mutations instead of relying on a freshly
+ * allocated callback prop to do it by accident.
+ *
+ * The snapshot lives on the CHILD and is never read off the old prop object:
+ * after a mutation, old and new hold the same live record, so both sides read
+ * the same (already advanced) revision. A change to a RELATED record or to a
+ * computed getter's inputs still requires the child to query in its own data()
+ * — the idiom FLOW-REACTIVITY documents.
+ */
+function propsEqual(a, b, child) {
+	if (!a || !b) return a === b;
+	const same = a === b;
 	const ak = Object.keys(a);
-	if (ak.length !== Object.keys(b).length) return false;
+	if (!same && ak.length !== Object.keys(b).length) return false;
+	const revs = child.__propRevs;
 	for (const k of ak) {
-		if (a[k] !== b[k]) return false;
+		const v = b[k];
+		if (!same && a[k] !== v) return false;
+		// Records are objects; the typeof test keeps the Symbol lookup off
+		// primitives and callbacks, which are the other props a list row hands down.
+		if (v !== null && typeof v === 'object') {
+			const rev = v[RENDER_REV];
+			if (typeof rev === 'number' && rev !== revs?.[k]) return false;
+		}
 	}
 	return true;
 }
@@ -1106,6 +1275,23 @@ function unmount(vnode) {
 		} else {
 			child?.destroy();
 		}
+		// Drop the links to the instance this vnode just gave up (plan §3.1, D170).
+		// A vnode is no longer single-use: the same object can come back from a list
+		// block's row cache or a static cache and be MOUNTED again, and mountComponent
+		// must then construct a fresh instance rather than adopt the destroyed one it
+		// carried out. Nulling here is the cheap half of that contract (the
+		// destroyed-instance guard in mountComponent is the half that also covers a
+		// vnode nothing unmounted).
+		//
+		// Deliberately NOT done on the two branches above: the instance-less
+		// takeoverFailed placeholder has nothing to null, and the `isDestroyed`
+		// branch is a FAILED position whose destroyed instance is the D115 record of
+		// what happened there. patch()'s recovery arms (`dead?.isDestroyed &&
+		// dead.__hasErrorReplacement?.()`, and the `__failedPlaceholder` branch)
+		// read `oldVnode.component` on a vnode that is still IN the tree after a
+		// failed mount — nothing unmounted it — so they never see these nulls.
+		vnode.component = null;
+		vnode.instance = null;
 		return;
 	}
 	releaseSubtree(vnode);
@@ -1243,25 +1429,9 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 		// a plain `value` (<li>, <progress>, <button>) keep the byte-identical vnode
 		// compare — they never drift out of band.
 		if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
-			if (el.value !== stringify(value)) setAttr(el, name, value, owner);
+			syncControlValue(el, value, owner);
 		} else if (name === 'checked' && el.nodeName === 'INPUT') {
-			if (el.checked !== Boolean(value)) setAttr(el, name, value, owner);
-			// The property guard above short-circuits precisely when the USER moved
-			// checkedness, which is also the only path that leaves the content
-			// attribute stale — `el.checked = x` writes the property, never the
-			// attribute (that is defaultChecked). Skipping setAttr therefore breaks
-			// this file's own "keep boolean ATTRIBUTES coherent for CSS selectors"
-			// rule for `checked` alone: `input[checked]` keeps matching an unchecked
-			// box, and form.reset() restores the stale attribute with no change event,
-			// so state and UI diverge with nothing to resync them. Reflect the
-			// attribute on its own rather than falling through to setAttr, which would
-			// re-assign the property and bill two devperfMutation() calls per patch —
-			// moving the D121/D122 counts and the stress form-state baseline.
-			else if (el.hasAttribute('checked') !== Boolean(value)) {
-				if (value) el.setAttribute('checked', '');
-				else el.removeAttribute('checked');
-				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
-			}
+			syncControlChecked(el, value, owner);
 		} else if (oldAttrs[name] !== value) {
 			setAttr(el, name, value, owner);
 		}

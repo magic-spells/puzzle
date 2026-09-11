@@ -1,16 +1,26 @@
 // @vitest-environment jsdom
 //
-// Regression cover for `patchComponent`'s `shallowEqual` prop bailout
+// Regression cover for `patchComponent`'s prop bailout
 // (client-runtime/views/viewManager.js) — the mechanism
 // constellation/decision/DECISION-D62-HANDLER-CACHING.md measured at n=10,000
 // and constellation/doc/DOC-STRESS-EXAMPLE.md drives as the
 // `?handlers=stable|inline` A/B.
 //
 // Nothing else in the suite asserts the bailout FIRES. Without these tests a
-// change to `shallowEqual`, or a newly added prop that is freshly allocated on
+// change to the comparator, or a newly added prop that is freshly allocated on
 // every parent render, would keep the suite green while every list-shaped app
 // silently reverts to re-running `data()` for every mounted child on every
 // parent render. There would be no failure — only a slowdown.
+//
+// UPDATED for D170 (plan/Puzzle-Render-Upgrade.md §7.1). D62's finding was that
+// the canonical Puzzle list idiom hands the patcher a brand-new callback per row
+// per render, so the bailout never fires and the whole list re-runs `data()`.
+// That is no longer what a compiled `{#for}` emits: a loop handler is cached on
+// the ROW state (`(s.h0 ??= …)`) and is identity-stable, so the measurement this
+// file pins moves with it — one changed record now wakes exactly one child, in
+// the shape the compiler actually produces. The hand-written fresh-closure arm
+// stays, because an authored view can still spell it that way and the cost is
+// still real; what changed is that the framework no longer forces it.
 //
 // The oracle is `measureRenders().rendersByView`, which devperf keys by
 // constructor NAME. Each row therefore gets its own generated subclass name
@@ -18,6 +28,8 @@
 // many did.
 import { afterEach, describe, expect, it } from 'vitest';
 import { PuzzleView, ViewNode } from '../client-runtime/index.js';
+import { Store } from '../client-runtime/datastore/store.js';
+import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { measureRenders, mountView, settled } from '../client-runtime/testing/index.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -115,6 +127,83 @@ function makeList(rowClasses, { stableHandlers }) {
 	};
 }
 
+/**
+ * The D170 arm: records in the store, rows through a list block, and the row's
+ * callback cached on the row state — what a compiled `{#for}` emits (plan §4.1).
+ */
+class Todo extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		text: Puzzle.string(),
+	};
+}
+
+class RecordRow extends PuzzleView {
+	data() {
+		const id = this.props.todo.id;
+		dataRuns[id] = (dataRuns[id] ?? 0) + 1;
+		return { text: this.props.todo.text };
+	}
+
+	render() {
+		return h('div', { class: 'row', 'data-id': this.props.todo.id }, [
+			text(this.getData().text),
+		]);
+	}
+}
+
+const recordRowName = (index) => `RecordRow${String(index).padStart(2, '0')}`;
+
+function makeRecordRowClasses(count) {
+	return Array.from({ length: count }, (_, index) =>
+		Object.defineProperty(class extends RecordRow {}, 'name', {
+			value: recordRowName(index),
+		})
+	);
+}
+
+function makeRecordList(rowClasses) {
+	const meta = { key: (todo) => ViewNode.keyOf(todo) };
+	return Object.defineProperty(
+		class extends PuzzleView {
+			selectById = (id) => {
+				this.selected = id;
+			};
+
+			data() {
+				return { todos: this.ctx.store.findMany('todo') };
+			}
+
+			render() {
+				return h(
+					'div',
+					{ class: 'list' },
+					this.__list(
+						this,
+						0,
+						this.getData().todos,
+						(s) =>
+							new ViewNode(
+								rowClasses[Number(s.k)],
+								{
+									key: s.k,
+									todo: s.item,
+									// The cached-handler emission: one closure per row for the
+									// row's whole life, reading the CURRENT item at fire time.
+									select: (s.h0 ??= () => this.selectById(s.item.id)),
+								},
+								[]
+							),
+						meta
+					)
+				);
+			}
+		},
+		'name',
+		{ value: 'RecordList' }
+	);
+}
+
 /** Mount the parent with ROW_COUNT rows already committed. */
 async function mountList({ stableHandlers }) {
 	const rowClasses = makeRowClasses(ROW_COUNT);
@@ -160,17 +249,52 @@ describe('patchComponent prop bailout', () => {
 		expect(view.find(`[data-id="${TARGET_ROW}"]`).textContent).toBe('changed:70');
 	});
 
-	// CHARACTERIZATION of a KNOWN COST, not an endorsement. A prop that is
-	// freshly allocated on every parent render can never compare shallow-equal,
-	// so the bailout is defeated for EVERY child and the whole list re-runs
-	// data(). This is the canonical Puzzle list idiom (examples/todos), and D62
-	// deliberately rejected making `shallowEqual` special-case functions: a
-	// closure capturing a loop variable genuinely IS a new prop, and treating it
-	// as equal would fire stale captures. The test exists so that a later
-	// "improvement" — deep-comparing props, comparing function source, skipping
-	// function-valued props — becomes a loud red test rather than a silent
-	// behaviour change.
-	it('re-runs EVERY child when a freshly-allocated prop defeats the bailout', async () => {
+	// THE D170 MEASUREMENT, in the shape a compiled `{#for}` now emits: rows come
+	// from a list block, the row's callback is cached on the row state, and the
+	// item is the record itself. One record edit wakes one child.
+	//
+	// This case used to pin the opposite number — all 20 children re-running
+	// data() for one DOM mutation — because the framework's own list idiom
+	// allocated a fresh closure per row per render. Both halves of that are gone:
+	// the handler is identity-stable across renders, and the 19 untouched rows
+	// return their CACHED vnode, which patch() short-circuits before it ever
+	// reaches patchComponent. D62's rejection of function-equality hacks in the
+	// comparator stands untouched — the fix landed in what the compiler emits,
+	// not in what equality means.
+	it('wakes only the child whose RECORD changed when the row handler is cached', async () => {
+		const store = new Store({ todo: Todo });
+		const rowClasses = makeRecordRowClasses(ROW_COUNT);
+		for (let index = 0; index < ROW_COUNT; index++) {
+			store.createRecord('todo', { id: String(index), text: `row-${index}` });
+		}
+		const view = await mountView(makeRecordList(rowClasses), { store });
+		handles.push(view);
+		dataRuns = {};
+
+		const profile = await measureRenders(view, () => {
+			store.findOne('todo', String(TARGET_ROW)).update({ text: 'changed' });
+		});
+
+		expect(profile.rendersByView).toEqual({
+			RecordList: 1,
+			[recordRowName(TARGET_ROW)]: 1,
+		});
+		expect(dataRuns).toEqual({ [TARGET_ROW]: 1 });
+		expect(profile.renders).toBe(2);
+		expect(profile.domMutations).toBe(1);
+		expect(view.find(`[data-id="${TARGET_ROW}"]`).textContent).toBe('changed');
+	});
+
+	// CHARACTERIZATION of a KNOWN COST that survives for HAND-WRITTEN views. A
+	// prop that is freshly allocated on every parent render can never compare
+	// equal, so the bailout is defeated for EVERY child and the whole list re-runs
+	// data(). D62 deliberately rejected making the comparator special-case
+	// functions: a closure capturing a loop variable genuinely IS a new prop, and
+	// treating it as equal would fire stale captures. The test exists so that a
+	// later "improvement" — deep-comparing props, comparing function source,
+	// skipping function-valued props — becomes a loud red test rather than a
+	// silent behaviour change.
+	it('still re-runs EVERY child when a hand-written render allocates a fresh prop', async () => {
 		const { view, rows } = await mountList({ stableHandlers: false });
 
 		const profile = await changeOneRow(view, rows);

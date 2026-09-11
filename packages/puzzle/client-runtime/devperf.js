@@ -42,6 +42,19 @@ const totals = {
 	storeNotifications: 0,
 	componentPropBailouts: 0,
 	componentPropReruns: 0,
+	// List blocks (D170): rows returned from the row cache, rows rebuilt, and the
+	// passes over a site that could not cache its record rows at all — a relation,
+	// a computed getter or a deep path in the body (see listBlock.isConservative).
+	// The last one is the answer to "why is this list still rebuilding every row?".
+	listRowsCached: 0,
+	listRowsBuilt: 0,
+	listSitesConservative: 0,
+	// Static subtrees (D170 §3.3) newly allocated into a view's `__c`. A template
+	// whose cached sites are working reports these on the FIRST render of an
+	// instance and zero on every render after it — the counterpart to the island
+	// measurement on COMPONENT-VIEW-MANAGER, which recorded 20,000 child vnodes
+	// rebuilt per render before this existed.
+	staticSitesBuilt: 0,
 	slotRenders: 0,
 	memoHits: 0,
 	memoMisses: 0,
@@ -135,6 +148,14 @@ export function devperfComponentPatch(view, bailedOut) {
 
 export function devperfSlotRender(view) {
 	if (DEV) slotRenderImpl(view);
+}
+
+export function devperfListRows(view, cached, built, conservative) {
+	if (DEV) listRowsImpl(view, cached, built, conservative);
+}
+
+export function devperfStaticCache(view, built, held) {
+	if (DEV) staticCacheImpl(view, built, held);
 }
 
 export function devperfMemo(view, key, hit) {
@@ -633,6 +654,43 @@ function slotRenderImpl(view) {
 	markCauseImpl(view, 'slots');
 	const state = viewState(view);
 	emit('slot-render', { viewId: state.id, viewName: state.name }, view);
+}
+
+/**
+ * One list site's pass (D170). Totals are cumulative like every other counter
+ * here; the event carries the per-pass numbers so a sink can attribute a
+ * rebuild storm to the view that owns the loop.
+ */
+function listRowsImpl(view, cached, built, conservative) {
+	totals.listRowsCached += cached;
+	totals.listRowsBuilt += built;
+	totals.listSitesConservative += conservative;
+	const state = viewState(view);
+	emit(
+		'list-rows',
+		{
+			viewId: state.id,
+			viewName: state.name,
+			cached,
+			built,
+			conservative,
+		},
+		view
+	);
+}
+
+/**
+ * One render's share of a view's static cache (D170): how many `__c` sites this
+ * render ALLOCATED, and how many the instance already held when it began.
+ * Deliberately not phrased as "hits": the compiler emits a bare `(this.__c[n]
+ * ??= …)`, so the runtime never sees which sites a render actually visited —
+ * only which ones it had to build. Zero built on a steady-state render is the
+ * claim worth watching.
+ */
+function staticCacheImpl(view, built, held) {
+	totals.staticSitesBuilt += built;
+	const state = viewState(view);
+	emit('static-cache', { viewId: state.id, viewName: state.name, built, held }, view);
 }
 
 function memoImpl(view, key, hit) {

@@ -463,6 +463,26 @@ bytes (the D14 discipline: the fixture wins, the compiler matches it).
   order across the file.
 - **Counters** `__h` (D62 handler cache), `__L`, view-level `__c` are three
   independent per-file counters; `render()` and `renderSkeleton()` share each.
+- **Wrapper layout:** `(this.__c[n] ??= ` / `(s.c[n] ??= ` is a pure prefix on
+  the subtree's first line and `)` a suffix on its closing line; inner lines
+  keep their indentation. The prefix counts toward `startCol` in the
+  `attrsMultiline` width decision.
+- **Nested loops:** the factory parameter is `s` at nesting depth 0 and `s1`,
+  `s2`, … at depth 1, 2, …; a body reads an enclosing loop's locals through
+  that scope's name (`s.item` from inside `s1`'s body). Handler caches and
+  static caches attach to the innermost enclosing scope (`s1.h0`, `s1.c[0]`);
+  the inner list call's owner is the enclosing scope (`this.__list(s, 1, …)`).
+- **`roots` counts every parent-root read in the body, handlers included.** A
+  row handler that reads `__d.mode` stays a fresh closure over the render's
+  `__d` snapshot, so the row must rebuild when `mode` changes; the compiler
+  adds such roots to the site's mask.
+- **`volatile: true`** when any expression in the body references `this`
+  (`{ this.ctx.router.current.path }`); the block then treats every row as
+  dirty on every pass. Loop-body expressions are otherwise assumed pure.
+- **Loops inside a `<Snippet>` body keep today's `.map(…)` emission.** A
+  snippet is stamped fresh per expansion, so a block keyed by site id would be
+  shared between stamps.
+- **Range loops** keep today's `Array.from` emission everywhere.
 - Reserved on instances: `__list`, `__lists`, `__c`, `__dirty`, `__propRevs`;
   reserved on classes: `__roots`. Module-scope reserved: `__L<n>`.
 

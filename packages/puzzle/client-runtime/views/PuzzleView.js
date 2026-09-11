@@ -19,10 +19,12 @@
  */
 
 import { ViewManager } from './viewManager.js';
+import { listRows } from './listBlock.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
 import { getErrorView, reportError } from '../errors.js';
+import { RENDER_REV } from '../renderRev.js';
 import {
 	devperfCanRender,
 	devperfMarkCause,
@@ -36,6 +38,7 @@ import {
 	devperfRenderTreeBuilt,
 	devperfRunData,
 	devperfSlotRender,
+	devperfStaticCache,
 } from '../devperf.js';
 
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): a live-view registry feeds the
@@ -218,6 +221,25 @@ export class PuzzleView {
 	 */
 	refs = {};
 
+	/**
+	 * Per-instance static-subtree cache (plan §3.3, D170). The compiler wraps every
+	 * maximal static subtree worth caching in `(this.__c[n] ??= new ViewNode(…))`,
+	 * so a template's unchanging markup is allocated ONCE per instance instead of
+	 * on every render — and `patch()`'s identity short-circuit then skips it
+	 * entirely. Declared as a field, not lazily, so every view keeps one hidden
+	 * class whether or not its template has cached sites.
+	 *
+	 * INTERNAL, like `__ref`/`__bind`: part of the compiler-facing surface, never
+	 * spelled in a template, not public typed API.
+	 */
+	__c = [];
+
+	// Previous values of `constructor.__roots` — the top-level data() keys some
+	// loop body in this template reads (plan §3.6). Null until the first render,
+	// which reports every root dirty. Only a view whose compiled class carries
+	// __roots ever allocates it.
+	#prevRoots = null;
+
 	/** @param {object} ctx exactly { store, router, formatters } (SPEC §10) */
 	constructor(ctx = {}) {
 		// D161 tracked-read attribution. On an adapter app this view reads the store
@@ -307,9 +329,11 @@ export class PuzzleView {
 	 * contract; a length change counts as a miss); otherwise runs `factory()`, caches
 	 * `{ deps, value }`, and returns the fresh value.
 	 *
-	 * The blessed way to return object/array props from data(): props compare with
-	 * shallowEqual, so an object prop compares BY REFERENCE — a fresh literal every
+	 * The blessed way to return object/array props from data(): props compare
+	 * shallowly, so an object prop compares BY REFERENCE — a fresh literal every
 	 * data() run makes the child see a changed prop on every unrelated store change.
+	 * (A store RECORD is the exception: it also compares by render revision, so a
+	 * record prop invalidates its child on the record's own mutations — D170.)
 	 * Wrap it here, keyed by the ingredients, and its identity stays stable until an
 	 * ingredient actually changes. Synchronous; no reactivity semantics of its own.
 	 *
@@ -378,6 +402,47 @@ export class PuzzleView {
 			cache.set(name, setter);
 		}
 		return setter;
+	}
+
+	/**
+	 * INTERNAL — one item-form `{#for}` site (plan §3.2, D170). The compiler emits
+	 * `this.__list(this, 0, __d.filteredTodos, (s) => …, __L0)` where the `.map()`
+	 * used to be; inside a loop body the owner argument is the enclosing ROW STATE
+	 * (`this.__list(s, 1, …)`), so nested blocks are keyed per outer row and die
+	 * with it. `this` is always the view — it owns the `__dirty` root mask and the
+	 * dev counters — while `owner` is only where the block's rows are kept.
+	 *
+	 * INTERNAL — underscore-prefixed like the rest of the compiler-facing surface;
+	 * never spelled in a template. Not part of the public typed API.
+	 */
+	__list(owner, id, items, factory, meta) {
+		return listRows(this, owner, id, items, factory, meta);
+	}
+
+	/**
+	 * Snapshot the render revisions of the record props just applied (plan §3.4).
+	 *
+	 * `propsEqual` compares a record prop against THIS snapshot rather than
+	 * against the old prop object, because a record mutates in place: after an
+	 * update both sides hold the same object with the same (already advanced)
+	 * revision, and only a value stored at the time props were last applied can
+	 * say whether this view has seen it. Written at mount and at every
+	 * applyParentUpdate that carries props — the two moments a view's props become
+	 * current — and replaced wholesale, never merged.
+	 *
+	 * Null when no prop carries a revision, which is the overwhelmingly common
+	 * case and allocates nothing; `propsEqual` reads it with `?.`.
+	 */
+	#snapshotPropRevs(props) {
+		let revs = null;
+		for (const name in props) {
+			const value = props[name];
+			if (value !== null && typeof value === 'object') {
+				const rev = value[RENDER_REV];
+				if (typeof rev === 'number') (revs ??= {})[name] = rev;
+			}
+		}
+		this.__propRevs = revs;
 	}
 
 	/**
@@ -831,6 +896,12 @@ export class PuzzleView {
 			this.#params = params;
 			this.#props = props;
 		}
+		// Record-prop revisions as of this mount (plan §3.4). Read from the
+		// COMMITTED props rather than the argument so a preloaded view — whose props
+		// were set in preload(), not here — is snapshotted too; without an entry a
+		// record prop would compare unequal on every later patch and re-run the
+		// child's data() for nothing.
+		this.#snapshotPropRevs(this.#props);
 		this.#children = children;
 		this.#vm.anchorAt(ref);
 
@@ -963,6 +1034,12 @@ export class PuzzleView {
 			if (this.#vm) this.#vm.slotChildren = children;
 		}
 		if (props !== undefined) {
+			// The props the patcher just handed down are now this view's current
+			// props, so re-stamp their record revisions (plan §3.4) BEFORE the refresh
+			// that will render them. Doing it here rather than inside #refreshInner
+			// keeps it to the one path where props are APPLIED — a router refresh
+			// carrying params only must not rewrite a snapshot it knows nothing about.
+			this.#snapshotPropRevs(props);
 			// Fire-and-forget: a data() failure is logged rather than escaping into
 			// the parent's patch path (mount's skeleton-path style). #refreshContained
 			// takes both arms — a rejecting async data() and a sync throw.
@@ -1044,6 +1121,17 @@ export class PuzzleView {
 				return;
 		}
 		const token = ++this.#runToken;
+		// Flush-sequence dedupe (plan §3.7, D170). A child that both receives a
+		// record prop and queries that record gets TWO wake-ups from one store
+		// flush: the parent's applyParentUpdate during delivery, and its own
+		// onStoreChange later in the same delivery loop. Capture the sequence the
+		// store is delivering — non-zero only INSIDE that loop — before data() runs;
+		// #commit stamps it onto `_settleMark`, and the second wake-up then takes
+		// onStoreChange's existing `seq <= _settleMark` early return. The mutations
+		// in that batch already landed in the store before delivery started, so the
+		// model this pass commits reflects every one of them. The D161 settle loop
+		// keeps its own (higher, _notifySeq-based) stamping; #commit takes the max.
+		const mark = this.ctx.store?._flushSeq || 0;
 		const run = () => {
 			const out =
 				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
@@ -1084,14 +1172,14 @@ export class PuzzleView {
 
 		if (result && typeof result.then === 'function') {
 			return result.then(
-				(model) => this.#commit(token, model),
+				(model) => this.#commit(token, model, mark),
 				(err) => {
 					if (token !== this.#runToken || this.#destroyed || this.#leaving) return;
 					throw err;
 				}
 			);
 		}
-		this.#commit(token, result);
+		this.#commit(token, result, mark);
 	}
 
 	/**
@@ -2094,10 +2182,17 @@ export class PuzzleView {
 
 	// ---- internals -----------------------------------------------------------
 
-	#commit(token, model) {
+	#commit(token, model, mark = 0) {
 		// superseded, torn down, or LEAVING — see #completeMount for why removal is
 		// now asynchronous for any view declaring a hide hook (D136 §3).
 		if (token !== this.#runToken || this.#destroyed || this.#leaving) return;
+		// Flush-sequence stamp (plan §3.7). This run evaluated data() while the
+		// store was delivering the batch ending at `mark`, and it is committing, so
+		// every notification in that batch is already on screen. MAX, never plain
+		// assignment: the D161 settle loop has already stamped its own (higher)
+		// _notifySeq-based mark for an adapter app's settled pass, and a prepared
+		// D146 commit passes no mark at all — neither may be walked backwards.
+		if (mark > this._settleMark) this._settleMark = mark;
 		// Two-layer state (Change C, SPEC §4). A successful data() result REPLACES the
 		// model layer wholesale — keys an earlier run returned but this one omits
 		// disappear (unless the local layer still holds them) — then #recompose()
@@ -2334,6 +2429,12 @@ export class PuzzleView {
 		const isUpdate = this.#mounted;
 
 		if (isUpdate) this.beforeUpdate();
+		// Root dirty mask (plan §3.6, D170) — computed AFTER beforeUpdate(), which is
+		// user code that may setData() into #data, and before render() reads it.
+		// `Class.__roots` is emitted only when some loop body in this template reads
+		// a top-level data() key, so a template without loops (or whose loops read
+		// nothing from the parent scope) skips all of this and leaves the mask 0.
+		this.#computeDirty();
 		// Before the first loaded swap, a declared skeleton stands in for the real
 		// template (v1.8, D39) — only created()-seeded state is readable there.
 		// renderSkeleton is compiled from <puzzle-skeleton> and attached by
@@ -2362,12 +2463,62 @@ export class PuzzleView {
 	}
 
 	/**
+	 * Which of this template's loop-read roots changed since the last render
+	 * (plan §3.6). Bit `i` is index `i` of `Class.__roots`; the list blocks are the
+	 * only consumers, through `(view.__dirty & meta.roots) !== 0`.
+	 *
+	 * Primitives compare by `!==`. Anything object-typed (or a function) counts as
+	 * dirty unconditionally: it can be mutated in place, and a loop body reading
+	 * `selected.id` off a rebuilt object must not be cached against a stale row.
+	 * The FIRST render reports every bit set (-1), because no row has been built
+	 * against any of these values yet.
+	 *
+	 * A mask is 32 bits wide; a template reading more than 32 distinct roots from
+	 * loop bodies wraps and reports extra rows dirty, which is conservative in the
+	 * only direction that is safe.
+	 */
+	#computeDirty() {
+		const roots = this.constructor.__roots;
+		if (!Array.isArray(roots)) {
+			this.__dirty = 0;
+			return;
+		}
+		const data = this.#data;
+		const prev = this.#prevRoots;
+		if (prev === null) {
+			const first = new Array(roots.length);
+			for (let i = 0; i < roots.length; i++) first[i] = data[roots[i]];
+			this.#prevRoots = first;
+			this.__dirty = -1;
+			return;
+		}
+		let mask = 0;
+		for (let i = 0; i < roots.length; i++) {
+			const value = data[roots[i]];
+			if (
+				value !== prev[i] ||
+				(value !== null && (typeof value === 'object' || typeof value === 'function'))
+			) {
+				mask |= 1 << i;
+			}
+			prev[i] = value;
+		}
+		this.__dirty = mask;
+	}
+
+	/**
 	 * The instrumented span of one render: build the tree, then patch it in (or
 	 * empty the view's DOM when a hand-written render() returns null). Everything
 	 * between devperfRenderPrepare and devperfRenderEnd lives here so #renderNow can
 	 * close the prepared mark on a throw without duplicating the body.
 	 */
 	#renderSpan(preparedTree, showSkeleton) {
+		// Static-cache accounting (D170 §3.3), dev-only: how many `__c` sites this
+		// instance held before the tree was built, so the span can report how many
+		// this render had to ALLOCATE. Both reads sit inside the probe, so
+		// production keeps neither.
+		let staticHeld = 0;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) staticHeld = this.__c.length;
 		const tree =
 			preparedTree !== undefined
 				? preparedTree
@@ -2375,6 +2526,7 @@ export class PuzzleView {
 					? this.renderSkeleton()
 					: this.render();
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfStaticCache(this, this.__c.length - staticHeld, staticHeld);
 			devperfRenderTreeBuilt(this);
 		}
 		if (tree) {

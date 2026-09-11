@@ -117,6 +117,8 @@ export default class TodoHome extends PuzzleView {
 
 import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
+const __L0 = { key: (todo) => ViewNode.keyOf(todo) };
+
 TodoHome.prototype.render = function () {
   const __d = this.getData();
 
@@ -216,13 +218,13 @@ TodoHome.prototype.render = function () {
               ]),
             ]),
             new ViewNode('div', { class: 'max-h-96 overflow-y-auto' },
-              __d.filteredTodos.map((todo) =>
+              this.__list(this, 0, __d.filteredTodos, (s) =>
                 new ViewNode(TodoItem, {
-                  key: ViewNode.keyOf(todo),
-                  todo: todo,
-                  remove: (event) => this.events.deleteTodo(todo),
+                  key: s.k,
+                  todo: s.item,
+                  remove: (s.h0 ??= (event) => this.events.deleteTodo(s.item)),
                 }, [])
-              )
+              , __L0)
             ),
             new ViewNode('div', { class: 'p-5 flex flex-col sm:flex-row gap-2.5 justify-center' }, [
               ...(__d.completedTodos.length > 0
@@ -252,7 +254,7 @@ TodoHome.prototype.render = function () {
             ]),
           ]
         : [
-            new ViewNode('div', { class: 'py-16 px-8 text-center' }, [
+            (this.__c[0] ??= new ViewNode('div', { class: 'py-16 px-8 text-center' }, [
               new ViewNode('div', { class: 'text-4xl mb-4 opacity-40 grayscale' }, [
                 new ViewNode('text', { value: '📝' }),
               ]),
@@ -262,7 +264,7 @@ TodoHome.prototype.render = function () {
               new ViewNode('p', { class: 'text-sm text-muted' }, [
                 new ViewNode('text', { value: 'Add your first todo above to get started.' }),
               ]),
-            ]),
+            ])),
             new ViewNode('#'),
             new ViewNode('#'),
             new ViewNode('#'),
