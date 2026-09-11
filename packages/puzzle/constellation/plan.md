@@ -11,6 +11,25 @@ notes:
       DevTools framework bridge is merged while the extension repo is unstarted. Added the
       deep-review-round paragraph and the SKILL.md refresh as the named pre-0.2.0 blocker.
     sha: 35e8fd092a8e4559269fd8578a419e69e8371f6c
+  - kind: state
+    text: >-
+      2026-09-10 — 0.8.0 direction PLANNED, not built: compiled direct-DOM rendering + persistent
+      keyed lists, recorded as [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] (status planned) with the
+      working plan in packages/puzzle/plan/Puzzle-Render-Upgrade.md. It replaces the GPT-6 Pro
+      handoff under 0.8.0-plan/ as the working plan (that folder is untracked scratch and should be
+      deleted once D170 is adopted). The next free decision number after this is D171. Nothing in
+      the tree has changed for it yet; 0.7.1 is still the in-progress release.
+  - kind: state
+    text: >-
+      2026-09-10, later — 0.8.0 direction re-scoped with Cory's agreement: the direct-DOM rewrite
+      was measured (five real templates, +25–27% gzip in a bundle even with every emitter lever) and
+      dropped; the plan of record is now packages/puzzle/plan/Puzzle-Render-Upgrade.md — keep the
+      virtual DOM, add persistent list blocks with cached row subtrees, an identity short-circuit in
+      patch(), static subtree caching, a record render revision with snapshot prop compare, stable
+      loop handlers, and a flush-seq dedupe. Card renamed to
+      [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] and rewritten in place (status planned). The rejected
+      plan is archived at packages/puzzle/plan/rejected/Puzzle-Direct-DOM-Rendering.md for its
+      measurements. Nothing in the tree is built yet; plan §14 questions wait on Cory.
 ---
 
 # Puzzle project map
