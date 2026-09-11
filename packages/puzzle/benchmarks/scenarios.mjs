@@ -212,12 +212,91 @@ function handlerGates(variant) {
 	];
 }
 
+// ───────────────────────────────────────────── the D170 work-count gates ────
+//
+// plan/Puzzle-Render-Upgrade.md §11 states the render upgrade's claim as work,
+// not as milliseconds: a single-record edit in a list of 1,000 must rebuild ONE
+// row, and a reorder must rebuild NONE. Timings on a laptop are noise; these
+// counters are not, so they are asserted exactly.
+//
+// Two counters carry it, both production-visible (see the perf note in
+// examples/stress/app/row-metrics.js — the framework's own `domMutations` lives
+// in the dev-only profiler and cannot be read from the bundle this suite
+// measures):
+//
+//   klRowsTouched   distinct .kl-row elements a real MutationObserver saw
+//                   mutate during the op — KeyedList.watchRows()
+//   childDataRuns   ListRow.data() runs, counted in the row component itself
+//
+// A reorder registers its moves as childList records on the list BODY, whose
+// target is not inside any row, so a cached-row reorder reads 0 rows touched
+// while still reporting the moves in klDomMutations.
+const rowsTouchedInvariant = (want, bound) => (stats) =>
+	keyedInvariant(stats) ??
+	(stats.klDomMutations > bound
+		? `${stats.klDomMutations} DOM mutations for ${want} touched row(s) — more than the ${bound} a ${want}-row pass can account for`
+		: null);
+
+/** A reorder must MOVE something; zero mutations would mean the op did nothing. */
+const reorderInvariant = (stats) =>
+	keyedInvariant(stats) ??
+	(stats.klDomMutations > 0 ? null : 'reorder: zero DOM mutations — the list never actually moved');
+
+function renderWorkOps(size = 1000) {
+	const createOp = size === 1000 ? 'create-1k' : 'create-10k';
+	const common = {
+		scenario: 'keyed-list',
+		params: { n: size },
+		size,
+		prepare: ['clear', createOp],
+		preExpect: { records: size },
+	};
+	return [
+		{
+			...common,
+			id: `keyed-list/update-one/${size}`,
+			label: 'update-one',
+			op: 'update-one',
+			// THE gate. One record edited, N-1 rows returned from the row cache and
+			// short-circuited by patch(): exactly one row mutates in the DOM and
+			// exactly one child view re-runs data(), whatever N is.
+			expect: { records: size, klRowsTouched: 1, childDataRuns: 1 },
+			invariant: rowsTouchedInvariant(1, 20),
+			note: 'update-one is the D170 single-edit gate: one record.update() in a list of 1,000 must touch exactly one row in the DOM and re-run exactly one child data().',
+		},
+		{
+			...common,
+			id: `keyed-list/update-all/${size}`,
+			label: 'update-all',
+			op: 'update-all',
+			// The upper bound of the same measurement: every row dirty, every row
+			// rebuilt ONCE — no duplicates, no row rebuilt twice.
+			expect: { records: size, klRowsTouched: size, childDataRuns: size },
+			invariant: rowsTouchedInvariant(size, size * 20),
+			note: 'update-all edits every record: every row must rebuild exactly once (no row counted twice), which is what bounds klDomMutations.',
+		},
+		{
+			...common,
+			id: `keyed-list/reorder/${size}`,
+			label: 'reorder',
+			op: 'reorder',
+			// A pure display-order flip: no record is written, so every row must come
+			// back from the cache. The only work is the patcher's move path.
+			expect: { records: size, klRowsTouched: 0, childDataRuns: 0 },
+			invariant: reorderInvariant,
+			note: 'reorder reverses the DISPLAY order without writing a single record, so every row must come back cached: zero rows touched, zero child data() runs, and the moves alone in klDomMutations.',
+		},
+	];
+}
+
 export const OPS = [
 	// ── keyed-list: every row mounted ───────────────────────────────────────
 	// The control arm. Above 20,000 rows the view deliberately does not
 	// auto-seed on mount (examples/stress/app/row-ops.js HEAVY_ROW_THRESHOLD),
 	// so selecting n=50000 mounts empty and the prepare builds the list.
 	...listOps('keyed-list', 1000, { invariant: keyedInvariant }),
+	// The D170 work-count gates, at the size the plan states them for.
+	...renderWorkOps(1000),
 	...listOps('keyed-list', 10000, { invariant: keyedInvariant }),
 	...listOps('keyed-list', 50000, { invariant: keyedInvariant }),
 
