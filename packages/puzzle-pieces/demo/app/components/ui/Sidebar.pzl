@@ -143,6 +143,12 @@
       <Slot name="footer"/>
     </div>
 
+    <!-- THE EDGE TOGGLE, and only when the rail collapses at all. `collapsible`
+         false takes the whole control out of the DOM rather than hiding it: it
+         is a focusable button with a tooltip, and a hidden one is still in the
+         tab order. The branch is the LAST child of the nav, beside the flyout's,
+         so no preceding row DOM shifts when it is absent. -->
+    {#if collapsible}
     <button
       type="button"
       data-sidebar-toggle
@@ -165,6 +171,7 @@
         </svg>
       </span>
     </button>
+    {/if}
   </nav>
 </puzzle-view>
 
@@ -226,6 +233,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                       surface with a top bar (bg-bar) in all three modes: dark frame
 //                       in dark and medium, light-grey frame in light. The flyout stays a
 //                       surface popover in both variants (it floats over content).
+//   collapsible bool    OPTIONAL, default true. `false` removes the edge toggle from
+//                       the DOM, ignores `collapsed`, and keeps the rail at its full
+//                       width for good — no icon-only mode and no flyouts. For a shell
+//                       whose rail is simply always open; every existing consumer is
+//                       unchanged by the default.
 //   label       string  accessible <nav> label (default 'Main').
 //   class       string  appended to the root <nav>.
 //
@@ -481,13 +493,19 @@ export default class Sidebar extends PuzzleView {
     return this.props.collapsed !== undefined;
   }
 
+  // `collapsible={false}` is checked HERE and not at each call site: every
+  // collapsed behaviour in the piece — the icon-only width, the fading labels,
+  // the flyout, the auto-open suppression — is derived from this one method, so
+  // one gate turns all of them off and none can disagree with the others.
   _collapsed() {
+    if (this.props.collapsible === false) return false;
     return this._collapsedControlled()
       ? !!this.props.collapsed
       : !!this._uncontrolledCollapsed;
   }
 
   _requestCollapsed(next) {
+    if (this.props.collapsible === false) return;
     this.closeFlyout({ refocus: false });
     const { collapse } = this.props;
     if (typeof collapse === 'function') collapse(next);
@@ -557,6 +575,7 @@ export default class Sidebar extends PuzzleView {
   data(params, props) {
     const activePath = props.activePath || '';
     const collapsed = this._collapsed();
+    const collapsible = props.collapsible !== false;
     const v = variantOf(props.variant);
     const items = normalizeItems(props.items, activePath);
     const base = `pieces-sidebar-${this._uid}`;
@@ -629,6 +648,7 @@ export default class Sidebar extends PuzzleView {
     return {
       items,
       collapsed,
+      collapsible,
       labelClass,
       navLabel: props.label || 'Main',
       // Badges ride the same fade as labels — kept mounted, clipped by the row.

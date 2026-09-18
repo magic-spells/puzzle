@@ -63,8 +63,12 @@
          Items come from the docs nav config; the footer holds the live
          scheme × mode switcher. -->
     <div class="hidden min-h-0 shrink-0 lg:flex">
-      <Sidebar variant="rail" items={ navItems } activePath={ activeHref } label="Docs" collapsed={ collapsed } @collapse={ setCollapsed }>
-        <div slot="footer" class={ footerClass }>
+      <!-- `collapsible={false}`: this rail is always open. The docs shell has one
+           nav and no second pane to give room to, and the piece's icon-only mode
+           hid the very labels the site is a list of. The Sidebar docs page still
+           demonstrates collapsing — the prop defaults to true. -->
+      <Sidebar variant="rail" collapsible={ false } items={ navItems } activePath={ activeHref } label="Docs">
+        <div slot="footer">
           <AppearanceSwitcher/>
         </div>
       </Sidebar>
@@ -135,7 +139,6 @@ export default class DefaultLayout extends PuzzleView {
       (this.ctx && this.ctx.router && this.ctx.router.current && this.ctx.router.current.path) ||
       '/';
     const state = this.getData();
-    const collapsed = !!state.collapsed;
     return {
       path,
       activeHref: `#${path}`,
@@ -143,23 +146,12 @@ export default class DefaultLayout extends PuzzleView {
       pieceCount: COMPONENTS.length,
       version: VERSION,
       mobileNavOpen: !!state.mobileNavOpen,
-      collapsed,
-      // The switcher is 4 + 3 buttons wide; in the icon-only rail it would clip
-      // mid-word, so it fades out with the rest of the labels.
-      footerClass: [
-        'transition-opacity duration-200 motion-reduce:transition-none',
-        collapsed ? 'pointer-events-none opacity-0' : '',
-      ].join(' '),
     };
   }
 
   events = {
     toggleMobileNav: () => {
       this.setData({ mobileNavOpen: !this.getData().mobileNavOpen });
-      this.refresh();
-    },
-    setCollapsed: (collapsed) => {
-      this.setData({ collapsed: !!collapsed });
       this.refresh();
     },
   };
