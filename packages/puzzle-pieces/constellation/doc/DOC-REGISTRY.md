@@ -42,7 +42,14 @@ The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing ru
 
 ## theme/pieces.css is the token source
 
-Every piece styles itself exclusively through the semantic utilities these `@theme` tokens generate (`bg-surface`, `text-ink`, `border-border`, `bg-brand`, `text-danger`, …) — no hex inside components. `pieces.css` is a **registry file**: editing token *values* here changes every consumer. It carries a light block plus a `prefers-color-scheme: dark` block (re-tuned to near-black — page `#09090b` — during the docs refactor; that dark re-tune reached every consumer). Consumers merge it into `app/styles/styles.css` after `@import "tailwindcss"`.
+
+Every piece styles itself exclusively through the semantic utilities the `@theme` tokens generate (`bg-surface`, `text-ink`, `border-border`, `bg-brand`, `text-danger`, shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`, …) — no hex inside components. Since 2026-09-18 ([[DECISION-THEMES-IN-PIECES]], [[FEATURE-THEMES]]) `registry/theme/` holds **four hand-written palette files and the runtime**:
+
+- `pieces.css` — the default palette: `:root { color-scheme: light dark }` + `[data-theme]` color-scheme blocks, the Tailwind v4 `@theme` block where every token is a `light-dark(light, dark)` pair, a `[data-theme='medium']` block (only the tokens that differ from dark), and a `[data-scheme='default']` restatement. Line 2 is the CLI's installed-detection marker — do not reword it.
+- `dim.css`, `warm.css`, `void.css` — every token restated inside `[data-scheme='x']`, plus that scheme's medium block. Inert until `data-scheme` selects them.
+- `appearance.js` (export `./appearance`) and `pre-paint.js` (export `./pre-paint`); `registry.json` lists `themes` (`{ name, file, label, description }`) and `modes`.
+
+Two attributes drive it: `data-scheme` = palette, `data-theme` = mode (`light | medium | dark`). Selectors are unanchored so any element can scope a subtree. The files ARE the source of truth (no generator, no JSON); `test/themes.test.mjs` holds the four to one identical token set and `test/contrast.test.mjs` holds every palette × mode to WCAG 2.2 AA over the pairs in `test/lib/roles.mjs`. Token NAMES are what Pyramid and Sites already use and are frozen. Consumers import the package exports (or copy the files) after `@import "tailwindcss"`.
 
 ## lib/ convention
 

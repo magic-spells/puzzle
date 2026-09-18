@@ -142,6 +142,33 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
+## 0.8.0 — Unreleased
+
+### Added
+
+- **puzzle-pieces: four palettes × three modes, shipped as CSS.** The theme
+  files in `packages/puzzle-pieces/registry/theme/` are the single source of
+  colour for every Puzzle app: `pieces.css` (the default palette — cool
+  near-black with a navy tint and an indigo accent) plus `dim.css`, `warm.css`
+  and `void.css`, each restating every token inside `[data-scheme='…']`. A
+  third mode, **medium** ("soft dark": `color-scheme: dark`, grounds lifted to
+  mid grey, type dimmed a stop), joins light and dark; `data-scheme` picks the
+  palette and `data-theme` the mode, and both are unanchored so any element can
+  scope a subtree. New package exports: `@magic-spells/puzzle-pieces/themes/
+  {default,dim,warm,void}.css`, `…/appearance` (read / persist / apply
+  `{ scheme, mode }`, `mode: null` follows the OS, legacy `mixed` reads as
+  `medium`) and `…/pre-paint` (the inline anti-flash `<head>` snippet).
+  `registry.json` gains `modes` and a `themes` array. Every palette × mode is
+  held to WCAG 2.2 AA on every declared pair by `test/contrast.test.mjs`, and
+  the four files are held to one identical token set by `test/themes.test.mjs`.
+  The Sidebar piece gains `variant="rail"` (the shell roles `bg-rail`,
+  `text-rail-ink`, `bg-rail-active`, `border-rail-edge`; the default `surface`
+  variant is unchanged), and the pieces docs site is rebuilt as a frame / rail /
+  panel shell with a live scheme × mode switcher and `/themes/*` panels (per-
+  scheme colour cards from live computed styles, a 4 × 3 compare grid, a
+  labelled shell mock and a pieces gallery). Token NAMES are unchanged from
+  what Pyramid and Sites use today; adopting the package there is a follow-up.
+
 ## 0.7.1 — Unreleased
 
 ### Added

@@ -74,8 +74,56 @@ and Tailwind utility classes against the semantic tokens in
 controlled-component APIs throughout. Sixteen pieces are thin wrappers around a
 `@magic-spells` web component (the sheets, the dialogs, the dropdown-panel family,
 Tabs, Select, …); those declare the package in their `piece.json` and the CLI prints
-the `npm install` for you. Three alternate themes (warm, void, dim) ship alongside
-the default in [`registry/theme/`](./registry/theme/).
+the `npm install` for you.
+
+## Themes
+
+Four palettes × three modes, all in [`registry/theme/`](./registry/theme/), all
+hand-written CSS — the files are the source of truth, there is no generator.
+
+| Scheme    | File                        | Character                                                   |
+| --------- | --------------------------- | ----------------------------------------------------------- |
+| `default` | `theme/pieces.css`          | cool near-black with a navy tint, indigo accent — premium   |
+| `dim`     | `theme/dim.css`             | blue-grey at half chroma, softer type — the low-contrast one |
+| `warm`    | `theme/warm.css`            | ivory, tan and brown with a clay-orange accent              |
+| `void`    | `theme/void.css`            | monochrome, white to true black — high contrast, borderless |
+
+`pieces.css` holds the Tailwind v4 `@theme` block: every token is a
+`light-dark(light, dark)` pair plus a `[data-theme='medium']` block for the third
+mode. The other three files restate every token inside `[data-scheme='dim']` (etc.)
+and are inert until that attribute selects them. Two attributes on `<html>` drive it:
+
+- `data-scheme` — the **palette**: `dim | warm | void`; absent (or `default`) is the default.
+- `data-theme` — the **mode**: `light | medium | dark`; absent follows the OS between
+  light and dark. `color-scheme` follows the mode, so native controls agree. **Medium is
+  "soft dark"**: `color-scheme: dark`, grounds lifted to mid grey, type dimmed a stop.
+
+Put both attributes on any element to render just that subtree in another scheme × mode
+(the docs site's compare grid works this way).
+
+Import from the package or copy the files in:
+
+```css
+@import "tailwindcss";
+@import "@magic-spells/puzzle-pieces/themes/default.css"; /* always — it holds @theme */
+@import "@magic-spells/puzzle-pieces/themes/warm.css";    /* any palettes you offer   */
+```
+
+```js
+import { boot, set, current, subscribe } from '@magic-spells/puzzle-pieces/appearance';
+boot();                                   // first thing in app.js
+set({ scheme: 'warm', mode: 'medium' });  // persists to localStorage['puzzle:appearance']
+set({ mode: null });                      // follow the OS again
+```
+
+Inline `@magic-spells/puzzle-pieces/pre-paint` in `<head>` before the stylesheet
+(`<script data-key="puzzle:appearance" data-default-mode="dark">…</script>`) so a dark
+account never sees a white flash. Every palette × mode passes WCAG 2.2 AA on every
+declared pair (`npm test` — `test/contrast.test.mjs`); the docs site's `/themes/*`
+panels show the live values and ratios. To add a palette: copy a scheme file, rename its
+selectors, retune the values, list it in `registry.json` `themes`, and add it to
+`SCHEMES` in `appearance.js` and `pre-paint.js` (and the demo's `tokenNames.js`); the
+tests enforce identical token sets and AA for the new file.
 
 ## License
 

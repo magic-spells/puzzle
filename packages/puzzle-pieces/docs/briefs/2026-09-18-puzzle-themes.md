@@ -203,16 +203,17 @@ shows the values of each of the color schemes with all of their css vars and col
 - `packages/puzzle-pieces/README.md` and `CLAUDE.md`: the theme model, the exports, how
   to add a palette (write `registry/theme/x.css` restating every token, list it in
   `registry.json`, `appearance.js`, `pre-paint.js` and the two name lists, run the tests), the
-  medium rule, the attribute names.
+  medium rule, the attribute names. Note that the demo imports the registry theme files
+  directly rather than keeping copies.
 - `packages/puzzle/skills/puzzle/SKILL.md` §Styling: one paragraph on `data-scheme` +
   `data-theme` with three modes and the importable exports.
 - `CHANGELOG.md` entry under the package's next version (0.8.0 — a minor: new mode, new
   exports). Do NOT tag or publish.
 - Constellation cards in `packages/puzzle-pieces/constellation/`: a DECISION card for
-  "themes live in pieces, generated from data, three modes" (with Cory's quotes and the
-  rejected alternatives: separate `@magic-spells/puzzle-themes` package; hand-written CSS;
-  soft-light medium), a FEATURE card for this build, and updates to DOC-REGISTRY /
-  DOC-DEMO-DOCS-SITE. Use the constellation MCP tools with `repo` = the worktree path;
+  "themes live in pieces, hand-written CSS, three modes" (with Cory's quotes and the
+  rejected alternatives: separate `@magic-spells/puzzle-themes` package; JS token data +
+  a generator; soft-light medium), a FEATURE card for this build, and updates to
+  DOC-REGISTRY / DOC-DEMO-DOCS-SITE. Use the constellation MCP tools with `repo` = the worktree path;
   never hand-edit card files.
 
 ## 4. Out of scope here (follow-ups, each its own PR)
@@ -241,7 +242,7 @@ shows the values of each of the color schemes with all of their css vars and col
   reports zero console errors. Screenshots into
   `packages/puzzle-pieces/demo/.playwright/themes/` (gitignored) and the paths in the
   report.
-- Pyramid smoke: from a Pyramid worktree, temporarily point `@import`s at the generated
+- Pyramid smoke: from a Pyramid worktree, temporarily point `@import`s at the package theme
   files (do not commit) and confirm `npx puzzle check` + the token/contrast scripts run;
   report what would need to change in Pyramid (that is the phase-2 brief's input).
 

@@ -758,11 +758,21 @@ production-host semantics for any mode (SPA deep-link fallback, static real
 
 Tailwind v4 is the supported pipeline (`styles: { use: ['tailwindcss'] }` — the
 CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`;
-wire it with `puzzle add tailwind`). For puzzle-pieces apps, merge the registry's
-`theme/pieces.css` after `@import "tailwindcss"` and style ONLY via its semantic
-tokens (`bg-surface`, `text-ink`, `bg-brand`, `border-border`…); dark mode is
-`light-dark()` CSS driven by `data-theme` on `<html>` (set it pre-paint in the
-shell).
+wire it with `puzzle add tailwind`). For puzzle-pieces apps, import the theme after
+`@import "tailwindcss"` — `@import "@magic-spells/puzzle-pieces/themes/default.css"`
+(or the copied `theme/pieces.css`) plus any palette you offer
+(`/themes/dim.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via
+its semantic tokens (`bg-surface`, `text-ink`, `bg-brand`, `border-border`,
+shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`…). Two attributes on
+`<html>` drive appearance: `data-scheme` is the palette (`dim | warm | void`;
+absent = default) and `data-theme` is the mode (`light | medium | dark`; absent
+follows the OS — medium is "soft dark"). Tokens are `light-dark()` pairs keyed
+on `color-scheme`, so the same markup is right in every scheme × mode; put both
+attributes on any element to scope a subtree. Persist and apply the choice with
+`@magic-spells/puzzle-pieces/appearance` (`boot()` first thing in app.js,
+`set({ scheme, mode })`, `mode: null` = follow OS) and inline
+`@magic-spells/puzzle-pieces/pre-paint` in `<head>` before the stylesheet so
+the stored choice paints before first paint.
 
 ## puzzle-pieces (component library)
 

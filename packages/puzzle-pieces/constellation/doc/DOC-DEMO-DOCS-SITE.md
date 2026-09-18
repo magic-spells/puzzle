@@ -14,10 +14,16 @@ connections:
 
 ## Shell (docs site)
 
-- **Sticky blurred header** with the "Puzzle Pieces" brand + GitHub link; a quiet `N pieces · v0.1` tag. Navigation lives entirely in the sidebar.
-- **Grouped sidebar** generated from `app/docs/nav.js` — one config module (Getting-started + Forms/Overlays/Feedback/Content sections) that drives the sidebar, the `/components` index, and page metadata from a single list. Active item = soft pill.
-- **Mobile nav** collapses into a Collapsible under the header (a Sheet drawer was the stretch goal, not shipped).
-- **Right "On This Page" column** rendered by `Toc` — one entry per example section.
+
+Rebuilt 2026-09-18 ([[FEATURE-THEMES]]) as the frame / rail / panel composition the theme files are designed around, made from the pieces themselves:
+
+- **Top bar** (`bg-bar text-bar-ink`, 48px): brand, `N pieces · vX` tag, SearchDialog, GitHub link, and a menu button below `lg:`.
+- **Rail** = the Sidebar piece in `variant="rail"` (`bg-rail`, `text-rail-*`, `bg-rail-active`, `border-rail-edge`), items built in `layouts/Default.pzl` from `app/docs/nav.js` (Getting started · a Themes group with the scheme panels as a submenu · one collapsible submenu per component section with a count badge). Hrefs are `#` + path because the demo is hash-routed. The rail's footer holds **AppearanceSwitcher** (`components/docs/AppearanceSwitcher.pzl`): 4 schemes × 3 modes + "Follow system", driven entirely by `app/lib/appearance.js` (a byte-identical copy of `registry/theme/appearance.js`, booted in `app.js`; the inline pre-paint in `public/index.html` equals `registry/theme/pre-paint.js` — both tested).
+- **Panel** = `<main class="bg-surface-panel border-t border-panel-edge shadow-panel lg:rounded-tl-xl">` — the content, footer and every docs page render inside it.
+- **Mobile nav** (below `lg:`): a drawer under the bar painted with the rail roles, holding the old `SideNav` list plus the switcher.
+- `app/styles/styles.css` imports the four `registry/theme/*.css` files DIRECTLY (not copies), so what the site shows is the shipped CSS.
+- **Design-system panels** under `app/views/themes/`: `SchemePanel.pzl` (`/themes/:scheme` — every token as a colour card whose swatches are live probes scoped by `data-scheme` + `data-theme`, values and AA chips from computed styles over the static name list `app/lib/tokenNames.js`, contrast math in `app/lib/contrast.js`; the demo never imports `test/`), `Compare.pzl` (`/themes/compare`, 4 × 3 `ShellMock` tiles), `Shell.pzl` (`/themes/shell`, full mock with role callouts), `Pieces.pzl` (`/themes/pieces`, gallery). `/theming` is the written model. `test/demo-theme-guard.test.mjs` bans colour literals in these files.
+- **Right "On This Page" column** rendered by `Toc` — one entry per section.
 
 ## Docs primitives (`demo/app/components/docs/`)
 
