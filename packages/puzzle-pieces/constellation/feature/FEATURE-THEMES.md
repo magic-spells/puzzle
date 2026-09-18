@@ -7,8 +7,32 @@ connections:
   - DECISION-THEMES-IN-PIECES
   - DOC-REGISTRY
   - DOC-DEMO-DOCS-SITE
+pr: https://github.com/magic-spells/puzzle/pull/137
+notes:
+  - kind: verified
+    text: >-
+      2026-09-18, PR #137 open against release/0.8.0 (head 88ef5f9). npm test 491/491; demo build
+      clean; puzzle check adds nothing beyond the 17 pre-existing piece errors. Headless Chromium
+      (own Playwright 1.63): 12 scheme×mode combos of /themes/compare and /themes/shell
+      screenshotted to demo/.playwright/themes/, computed --color-surface / --color-surface-frame /
+      --color-ink equal the values parsed from the CSS files (36/36), switcher click persists {
+      scheme, mode }, 0 console/page errors. Min AA ratios (light/medium/dark): default
+      3.57/3.11/3.79, dim 3.48/3.46/3.96, warm 3.39/3.56/3.58, void 3.43/3.93/3.89 (the 3.x floors
+      are the 3:1 non-text pairs). Status stays `building` until the PR merges.
+    sha: 88ef5f9
+  - kind: gotcha
+    text: >-
+      Two traps hit in this build. (1) The inline pre-paint in demo/app/public/index.html had a
+      stray second copy of its body after the closing tag — the parity test only compared the first
+      block, so it passed while every page threw "missing ) after argument list"; the test now
+      asserts exactly one inline copy and one </script> in <head>. Also an inline script ends at the
+      first literal `</script>` even inside a comment, so pre-paint.js spells it `<\/script>`. (2)
+      Puzzle drops the whitespace at a line break between an inline element and the next
+      text/element, so "<span>warm</span> or\n<span>void</span>" renders as "warm orvoid" — keep
+      such runs on one line. Also: getComputedStyle().getPropertyValue('--color-x') returns the
+      UNRESOLVED light-dark() text; the demo resolves colours by applying the var to a probe
+      element's background-color and reading that.
 ---
-
 
 # Puzzle themes — four palettes × three modes, appearance runtime, design-system demo
 

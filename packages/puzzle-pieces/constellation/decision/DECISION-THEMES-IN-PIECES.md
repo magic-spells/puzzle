@@ -6,8 +6,19 @@ connections:
   - DOC-DEMO-DOCS-SITE
   - FEATURE-THEMES
   - DECISION-COPY-IN-DISTRIBUTION
+notes:
+  - kind: state
+    text: >-
+      Pyramid smoke (2026-09-18, detached worktree, nothing committed): with the package's four
+      files swapped in for web/app/styles/pieces.css + themes/*.css and Pyramid's 85 app-only tokens
+      appended in a second @theme block, `puzzle check` is clean across 132 .pzl files. Pyramid's
+      own guards fail as expected and are the phase-2 change list: contrast-tokens.test.mjs expects
+      Pyramid-only names (--color-text etc.), appearance-tokens.test.mjs's palette-block regex stops
+      at the first `}` inside a comment-bearing block and expects `mixed`, check-theme.mjs
+      allow-lists literals by path. 34 of the 68 shared tokens carry different values in the package
+      (the re-tune), and the package adds --color-brand-on-tint, --color-danger-on-tint,
+      --color-border-dashed.
 ---
-
 
 # Themes live in pieces as hand-written CSS, four palettes × three modes
 
