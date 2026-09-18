@@ -153,6 +153,13 @@ test('the demo copies of appearance.js and the pre-paint snippet match the regis
 	const inline = html.match(/<script data-key="puzzle:appearance">\n([\s\S]*?)<\/script>/);
 	assert.ok(inline, 'demo index.html has no <script data-key="puzzle:appearance"> block');
 	assert.equal(inline[1], prePaint, 'the inline pre-paint script in demo index.html drifted from registry/theme/pre-paint.js');
+	// Exactly one copy, and exactly one closing tag before the stylesheet: a
+	// stray second body (a paste gone wrong) would sit as text in <head> and
+	// throw a syntax error on every page.
+	assert.equal(html.split(prePaint).length, 2, 'demo index.html inlines pre-paint more than once');
+	const head = html.slice(0, html.indexOf('</head>'));
+	assert.equal(head.split('</script>').length, 2, 'demo index.html <head> has more than one </script>');
+	assert.ok(head.indexOf('</script>') < head.indexOf('<link href="./styles.css"'), 'pre-paint must come before the stylesheet');
 });
 
 test('registry.json lists the four themes truthfully, with the three modes', () => {

@@ -2,6 +2,10 @@ import DefaultLayout from './layouts/Default.pzl';
 import Introduction from './views/Introduction.pzl';
 import ComponentsIndex from './views/ComponentsIndex.pzl';
 import Theming from './views/Theming.pzl';
+import SchemePanel from './views/themes/SchemePanel.pzl';
+import Compare from './views/themes/Compare.pzl';
+import Shell from './views/themes/Shell.pzl';
+import Pieces from './views/themes/Pieces.pzl';
 import AccordionDoc from './views/components/AccordionDoc.pzl';
 import AlertDoc from './views/components/AlertDoc.pzl';
 import AlertDialogDoc from './views/components/AlertDialogDoc.pzl';
@@ -121,6 +125,36 @@ export default [
 		view: Theming,
 		layout: DefaultLayout,
 		meta: { title: 'Theming & tokens — Puzzle Pieces' },
+	},
+	// Design-system panels (FEATURE-THEMES). Static paths first so the router
+	// never reads `compare` / `shell` / `pieces` as a scheme name.
+	{
+		path: '/themes/compare',
+		name: 'themes-compare',
+		view: Compare,
+		layout: DefaultLayout,
+		meta: { title: 'Compare schemes × modes — Puzzle Pieces' },
+	},
+	{
+		path: '/themes/shell',
+		name: 'themes-shell',
+		view: Shell,
+		layout: DefaultLayout,
+		meta: { title: 'Shell composition — Puzzle Pieces' },
+	},
+	{
+		path: '/themes/pieces',
+		name: 'themes-pieces',
+		view: Pieces,
+		layout: DefaultLayout,
+		meta: { title: 'Pieces in the current theme — Puzzle Pieces' },
+	},
+	{
+		path: '/themes/:scheme',
+		name: 'themes-scheme',
+		view: SchemePanel,
+		layout: DefaultLayout,
+		meta: { title: 'Scheme tokens — Puzzle Pieces' },
 	},
 	{
 		path: '/components/accordion',

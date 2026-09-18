@@ -1,0 +1,167 @@
+<puzzle-view class="w-full">
+  <article class="mx-auto w-full max-w-5xl min-w-0">
+    <header class="mb-8">
+      <h1 class="text-3xl font-semibold tracking-tight text-ink">Shell</h1>
+      <p class="mt-2 text-body">
+        The frame / rail / panel composition, drawn in the scheme and mode you are
+        currently using — { schemeLabel } · { modeLabel }. The numbered pills name the role
+        token behind each surface.
+      </p>
+    </header>
+
+    <ShellMock size="full" callouts={ true } scheme={ scheme } mode={ mode }/>
+
+    <section id="roles" class="mt-14 scroll-mt-20">
+      <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">Roles</h2>
+      <p class="mb-5 max-w-2xl text-sm/relaxed text-body">
+        Every surface above is one named role, and the roles that must match are defined as
+        each other in the theme files — <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-sm text-ink">bar</code>
+        and <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-sm text-ink">rail</code>
+        are both <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-sm text-ink">surface-frame</code>,
+        so they cannot drift apart.
+      </p>
+      <dl class="divide-y divide-border">
+        {#for role in roles}
+          <div key={ role.name } class="py-3 sm:flex sm:gap-6">
+            <dt class="w-64 shrink-0 font-mono text-sm text-ink">{ role.util }</dt>
+            <dd class="mt-1 min-w-0 text-sm/relaxed text-body sm:mt-0">{ role.role }</dd>
+          </div>
+        {/for}
+      </dl>
+    </section>
+
+    <section id="composition" class="mt-14 scroll-mt-20">
+      <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Composition rules</h2>
+      <ul class="space-y-2.5">
+        {#for rule in rules}
+          <li key={ rule } class="flex gap-3 text-sm/relaxed text-body">
+            <span class="mt-2 size-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span>
+            <span class="min-w-0">{ rule }</span>
+          </li>
+        {/for}
+      </ul>
+    </section>
+
+    <section id="markup" class="mt-14 scroll-mt-20">
+      <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">The markup</h2>
+      <p class="mb-3 max-w-2xl text-sm/relaxed text-body">
+        The whole composition is four elements and the role utilities. No per-mode class
+        lists: the tokens carry light, medium and dark.
+      </p>
+      <CodeBlock code={ markup } lang="html"/>
+    </section>
+  </article>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ShellMock from '@/components/themes/ShellMock.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import { TOKEN_GROUPS } from '@/lib/tokenNames.js';
+import { SCHEMES, MODES, current, subscribe } from '@/lib/appearance.js';
+
+// Shell — the composition page. One full-size ShellMock in the appearance
+// currently in force (so the page is always showing you your own shell), with
+// the role tokens called out on it and then listed. The role sentences are read
+// out of tokenNames.js (`shell` and `shadows` groups) rather than retyped, so
+// the list here and the token reference can never disagree.
+
+// The roles that make up the shell, in composition order. Only the utility
+// PREFIX is chosen here — the sentence comes from the token contract.
+const ROLE_UTILS = [
+	['surface-frame', 'bg-surface-frame'],
+	['bar', 'bg-bar'],
+	['bar-ink', 'text-bar-ink'],
+	['bar-muted', 'text-bar-muted'],
+	['bar-hover', 'bg-bar-hover'],
+	['bar-line', 'border-bar-line'],
+	['rail', 'bg-rail'],
+	['rail-ink', 'text-rail-ink'],
+	['rail-muted', 'text-rail-muted'],
+	['rail-active', 'bg-rail-active'],
+	['rail-edge', 'border-rail-edge'],
+	['surface-panel', 'bg-surface-panel'],
+	['panel-edge', 'border-panel-edge'],
+	['surface-card', 'bg-surface-card'],
+	['edge-highlight', 'border-edge-highlight'],
+	['edge-highlight-strong', 'border-edge-highlight-strong'],
+	['shadow-panel', 'shadow-panel'],
+	['shadow-card', 'shadow-card'],
+	['shadow-contact', 'shadow-contact'],
+	['shadow-float', 'shadow-float'],
+	['shadow-popover', 'shadow-popover'],
+];
+
+// `shell` first, then `shadows` — the composed box-shadow sentence wins for a
+// name that appears in both (shadow-contact is a colour AND a composed shadow).
+const ROLE_TEXT = new Map();
+for (const id of ['shell', 'shadows']) {
+	const group = TOKEN_GROUPS.find((g) => g.id === id);
+	if (!group) continue;
+	for (const token of group.tokens) ROLE_TEXT.set(token.name, token.role);
+}
+
+const ROLES = ROLE_UTILS.map(([name, util]) => ({ name, util, role: ROLE_TEXT.get(name) || '' }));
+
+const RULES = [
+	'The bar and the rail are one flat L on the frame: bar and rail are both defined as surface-frame, so the two arms are the same colour in every scheme and mode.',
+	'The panel is one step lighter than the frame in dark and medium, and white on light grey in light — the step is what makes the panel read as a surface rather than a region.',
+	'The panel’s top edge is a hairline in light and a light lip in dark: panel-edge resolves to border in light and to edge-highlight-strong in dark, so one border utility covers both.',
+	'Cards sit on the panel with a hairline and shadow-card — never a second background step. Depth on the panel comes from the shadow, not from another grey.',
+	'Popovers and dialogs leave the panel: surface-raised for the ground, shadow-popover for the cast, and edge-highlight for the lip along the top.',
+];
+
+const MARKUP = `<div class="flex h-dvh flex-col bg-surface-frame text-body">
+  <!-- the frame's horizontal arm -->
+  <header class="flex h-12 items-center bg-bar px-3 text-bar-ink">
+    <span class="text-xs text-bar-muted">breadcrumb</span>
+  </header>
+
+  <div class="flex min-h-0 flex-1">
+    <!-- the frame's vertical arm -->
+    <nav class="w-56 shrink-0 border-r border-rail-edge bg-rail p-2">
+      <a class="block rounded-md px-2 py-1.5 text-rail-muted">Inbox</a>
+      <a class="block rounded-md bg-rail-active px-2 py-1.5 text-rail-ink">Today</a>
+    </nav>
+
+    <!-- the work panel, set down inside the frame -->
+    <main class="min-w-0 flex-1 overflow-y-auto rounded-tl-xl border-t border-l
+                 border-panel-edge bg-surface-panel shadow-panel p-8">
+      <h1 class="text-ink">Today</h1>
+
+      <div class="mt-6 rounded-lg border border-border bg-surface-card p-4 shadow-card">
+        <button class="rounded-md bg-brand px-4 py-2 text-brand-ink">Save</button>
+      </div>
+    </main>
+  </div>
+</div>`;
+
+export default class Shell extends PuzzleView {
+	data(params, props) {
+		const live = current();
+		// A null mode follows the OS; resolve it so the mock can name a mode.
+		// Guarded, because data() also runs under Node during prerender.
+		const prefersDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+		const mode = live.mode || (prefersDark ? 'dark' : 'light');
+		const scheme = live.scheme || 'default';
+
+		return {
+			scheme,
+			mode,
+			schemeLabel: (SCHEMES.find((s) => s.value === scheme) || { label: scheme }).label,
+			modeLabel: (MODES.find((m) => m.value === mode) || { label: mode }).label,
+			roles: ROLES,
+			rules: RULES,
+			markup: MARKUP,
+		};
+	}
+
+	mounted() {
+		this._unsubscribe = subscribe(() => this.refresh());
+	}
+
+	destroyed() {
+		if (this._unsubscribe) this._unsubscribe();
+	}
+}
+</script>

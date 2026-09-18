@@ -1,0 +1,251 @@
+<puzzle-view>
+  <div class={ wrapClass }>
+    <!-- THE SCOPED ROOT. `data-scheme` + `data-theme` on one element makes the
+         whole subtree resolve in that palette and mode (the theme files' selectors
+         are unanchored on purpose), and the explicit bg-/text- pair below gives the
+         mock its own grounds instead of inheriting the page's. -->
+    <div class={ rootClass } data-scheme={ scheme } data-theme={ mode }>
+      <!-- TOP BAR — the frame's horizontal arm; bar equals surface-frame, so bar
+           and rail read as one flat L around the panel. -->
+      <div class={ barClass }>
+        {#if callouts}<span class={ c.bar } aria-hidden="true">2</span>{/if}
+        <span class={ t.brandDot } aria-hidden="true"></span>
+        <span class={ t.brandLabel }>Pieces</span>
+        {#for label in t.barLabels}
+          <span key={ label } class={ t.barMuted }>{ label }</span>
+        {/for}
+        <span class={ t.barChip }>Search</span>
+      </div>
+
+      <div class={ t.bodyRow }>
+        <!-- RAIL — the frame's vertical arm, one hairline away from the panel. -->
+        <div class={ railClass }>
+          {#if callouts}<span class={ c.rail } aria-hidden="true">3</span>{/if}
+          {#for row in rows}
+            <div key={ row.label } class={ row.class }>
+              {#if row.active && callouts}<span class={ c.railActive } aria-hidden="true">4</span>{/if}
+              <span class={ t.railDot } aria-hidden="true"></span>
+              <span class="truncate">{ row.label }</span>
+            </div>
+          {/for}
+        </div>
+
+        <!-- PANEL — the work surface set down inside the frame: a step lighter than
+             the frame, a lip along its top edge, the panel shadow seating it. -->
+        <div class={ panelClass }>
+          {#if callouts}<span class={ c.panelEdge } aria-hidden="true">5</span>{/if}
+          {#if callouts}<span class={ c.panel } aria-hidden="true">6</span>{/if}
+
+          <p class={ t.heading }>{ t.headingText }</p>
+          <p class={ t.body }>{ t.bodyText }</p>
+          <p class={ t.muted }>{ t.mutedText }</p>
+
+          <!-- CARD — sits on the panel with its own hairline and shadow. -->
+          <div class={ cardClass }>
+            {#if callouts}<span class={ c.card } aria-hidden="true">7</span>{/if}
+            <div class={ t.cardRow }>
+              <div class={ t.primaryBtn }>
+                {#if callouts}<span class={ c.brand } aria-hidden="true">8</span>{/if}
+                <span>{ t.buttonText }</span>
+              </div>
+              <div class={ t.well }>
+                {#if callouts}<span class={ c.well } aria-hidden="true">9</span>{/if}
+                <span class={ t.muted }>{ t.wellText }</span>
+              </div>
+            </div>
+            <div class={ t.chipRow }>
+              <span class={ t.dangerChip }>{ t.dangerText }</span>
+              <span class={ t.successChip }>{ t.successText }</span>
+              <span class={ t.ringSample }>{ t.focusText }</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {#if callouts}<span class={ c.frame } aria-hidden="true">1</span>{/if}
+    </div>
+
+    <!-- The legend sits OUTSIDE the scoped root, so it reads in the page's own
+         appearance rather than the mock's. -->
+    {#if callouts}
+      <ol class="mt-4 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+        {#for item in legend}
+          <li key={ item.token } class="flex items-baseline gap-2">
+            <span class="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-ink font-mono text-xs font-semibold text-page">{ item.n }</span>
+            <span class="font-mono text-sm text-ink">{ item.token }</span>
+            <span class="text-xs text-muted">{ item.role }</span>
+          </li>
+        {/for}
+      </ol>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ShellMock — a miniature of the docs shell (frame / bar / rail / panel / card)
+// rendered in ONE scheme × mode, whatever the page around it is set to. The
+// trick is a single element carrying both `data-scheme` and `data-theme`: every
+// theme file's selectors are written unanchored (`[data-scheme='warm']`, not
+// `:root[data-scheme='warm']`) precisely so a preview can scope itself, and the
+// medium blocks include `[data-scheme='x'][data-theme='medium']` so an element
+// naming both still lands in the soft-dark ladder. `data-scheme="default"` is
+// spelled out rather than omitted, so a mock of the default palette stays the
+// default palette on a page currently showing dim, warm or void.
+//
+//   <ShellMock scheme="warm" mode="medium" size="mini"/>
+//   <ShellMock scheme={ scheme } mode={ mode } size="full" callouts={ true }/>
+//
+// Props
+//   scheme    'default' | 'dim' | 'warm' | 'void'   (default 'default')
+//   mode      'light' | 'medium' | 'dark'           (default 'dark')
+//   size      'mini' (fixed-aspect tile) | 'full'   (default 'mini')
+//   callouts  boolean — numbered role pills + a legend; full size only
+//   class     extra utilities on the outer wrapper
+//
+// Tailwind v4 scans source TEXT, so every utility below is spelled out verbatim
+// here and composed with .map()/string concatenation — never generated.
+
+const SCHEMES = ['default', 'dim', 'warm', 'void'];
+const MODES = ['light', 'medium', 'dark'];
+
+// The two typography/geometry sets. Same keys, different scale and different
+// copy: the mini tile is a ~280×180 thumbnail, so it keeps the smallest scale
+// utility and the shortest strings; the full mock can breathe.
+const MINI = {
+	root: 'aspect-14/9 w-full',
+	bar: 'flex h-6 shrink-0 items-center gap-1.5 bg-bar px-2 text-bar-ink',
+	bodyRow: 'flex min-h-0 flex-1',
+	rail: 'relative flex w-20 shrink-0 flex-col gap-0.5 border-r border-rail-edge bg-rail p-1',
+	railRow: 'relative flex items-center gap-1 rounded px-1 py-0.5 text-xs',
+	railIdle: 'text-rail-muted',
+	railActive: 'bg-rail-active text-rail-ink',
+	railDot: 'size-1 shrink-0 rounded-full bg-current opacity-60',
+	panel: 'relative min-w-0 flex-1 rounded-tl-lg border-t border-l border-panel-edge bg-surface-panel p-2 shadow-panel',
+	brandDot: 'size-2.5 shrink-0 rounded bg-brand',
+	brandLabel: 'text-xs font-semibold text-bar-ink',
+	barMuted: 'text-xs text-bar-muted',
+	barChip: 'ml-auto rounded bg-bar-hover px-1.5 py-0.5 text-xs text-bar-muted',
+	heading: 'text-xs font-semibold text-ink',
+	body: 'mt-0.5 text-xs text-body',
+	muted: 'text-xs text-muted',
+	card: 'relative mt-1.5 rounded-lg border border-border bg-surface-card p-1.5 shadow-card',
+	cardRow: 'flex items-stretch gap-1.5',
+	primaryBtn: 'relative flex flex-1 items-center justify-center rounded bg-brand px-2 py-1 text-xs font-medium text-brand-ink',
+	well: 'relative flex flex-1 items-center justify-center rounded bg-surface-sunken px-2 py-1',
+	chipRow: 'mt-1.5 flex flex-wrap items-center gap-1',
+	dangerChip: 'rounded bg-danger-tint px-1.5 py-0.5 text-xs text-danger-on-tint',
+	successChip: 'rounded bg-success-tint px-1.5 py-0.5 text-xs text-success',
+	ringSample: 'rounded bg-surface px-1.5 py-0.5 text-xs text-ink ring-2 ring-ring ring-offset-1 ring-offset-surface-card',
+	barLabels: ['Overview'],
+	headingText: 'Appearance',
+	bodyText: 'Two attributes.',
+	mutedText: 'Palette · mode',
+	buttonText: 'Save',
+	wellText: 'Well',
+	dangerText: 'Late',
+	successText: 'Done',
+	focusText: 'Focus',
+};
+
+const FULL = {
+	root: 'min-h-128 w-full',
+	bar: 'flex h-11 shrink-0 items-center gap-3 bg-bar px-3 text-bar-ink',
+	bodyRow: 'flex min-h-0 flex-1',
+	rail: 'relative flex w-40 shrink-0 flex-col gap-1 border-r border-rail-edge bg-rail p-2',
+	railRow: 'relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+	railIdle: 'text-rail-muted',
+	railActive: 'bg-rail-active text-rail-ink font-medium',
+	railDot: 'size-1.5 shrink-0 rounded-full bg-current opacity-60',
+	panel: 'relative min-w-0 flex-1 rounded-tl-lg border-t border-l border-panel-edge bg-surface-panel p-6 shadow-panel',
+	brandDot: 'size-5 shrink-0 rounded-md bg-brand',
+	brandLabel: 'text-sm font-semibold text-bar-ink',
+	barMuted: 'text-xs text-bar-muted',
+	barChip: 'ml-auto rounded-md bg-bar-hover px-2.5 py-1 text-xs text-bar-muted',
+	heading: 'text-lg font-semibold tracking-tight text-ink',
+	body: 'mt-1 text-sm text-body',
+	muted: 'text-xs text-muted',
+	card: 'relative mt-5 rounded-lg border border-border bg-surface-card p-4 shadow-card',
+	cardRow: 'flex items-stretch gap-3',
+	primaryBtn: 'relative flex flex-1 items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink',
+	well: 'relative flex flex-1 items-center justify-center rounded-md bg-surface-sunken px-4 py-2',
+	chipRow: 'mt-4 flex flex-wrap items-center gap-2',
+	dangerChip: 'rounded-md bg-danger-tint px-2 py-1 text-xs text-danger-on-tint',
+	successChip: 'rounded-md bg-success-tint px-2 py-1 text-xs text-success',
+	ringSample: 'rounded-md bg-surface px-2 py-1 text-xs text-ink ring-2 ring-ring ring-offset-2 ring-offset-surface-card',
+	barLabels: ['Overview', 'Tokens'],
+	headingText: 'Appearance',
+	bodyText: 'Two attributes, twelve results.',
+	mutedText: 'Palette and mode are independent.',
+	buttonText: 'Save changes',
+	wellText: 'Well',
+	dangerText: 'Overdue',
+	successText: 'Shipped',
+	focusText: 'Focus ring',
+};
+
+const ROOT_BASE = 'relative flex flex-col overflow-hidden rounded-lg bg-surface-frame text-body';
+
+// The numbered pills. One literal position per callout so nothing is generated.
+const PILL = 'absolute z-10 inline-flex size-5 items-center justify-center rounded-full bg-ink font-mono text-xs font-semibold text-page';
+
+const CALLOUT_CLASS = {
+	frame: PILL + ' bottom-2 left-2',
+	bar: PILL + ' top-3 right-3',
+	rail: PILL + ' bottom-2 left-2',
+	railActive: PILL + ' -top-2 -right-2',
+	panelEdge: PILL + ' -top-2 left-4',
+	panel: PILL + ' top-4 right-4',
+	card: PILL + ' -top-2 -left-2',
+	brand: PILL + ' -top-2 -right-2',
+	well: PILL + ' -top-2 -right-2',
+};
+
+// Legend order matches the pill numbers above.
+const LEGEND = [
+	{ n: 1, token: 'surface-frame', role: 'the window ground the whole shell sits on' },
+	{ n: 2, token: 'bar', role: 'the top bar — equals surface-frame' },
+	{ n: 3, token: 'rail', role: 'the side rail — also equals surface-frame' },
+	{ n: 4, token: 'rail-active', role: 'the selected rail row' },
+	{ n: 5, token: 'panel-edge', role: 'the panel’s top edge: hairline in light, lip in dark' },
+	{ n: 6, token: 'surface-panel', role: 'the work panel, one step off the frame' },
+	{ n: 7, token: 'surface-card', role: 'a card resting on the panel' },
+	{ n: 8, token: 'brand', role: 'the one accent, with brand-ink on it' },
+	{ n: 9, token: 'surface-sunken', role: 'a well pressed into the card' },
+];
+
+const RAIL_LABELS = ['Overview', 'Tokens', 'Schemes', 'Shell', 'Pieces'];
+const ACTIVE_INDEX = 1;
+
+export default class ShellMock extends PuzzleView {
+	data(params, props) {
+		const size = props.size === 'full' ? 'full' : 'mini';
+		const t = size === 'full' ? FULL : MINI;
+		const scheme = SCHEMES.includes(props.scheme) ? props.scheme : 'default';
+		const mode = MODES.includes(props.mode) ? props.mode : 'dark';
+		// Callout pills only have room (and only make sense) at full size.
+		const callouts = size === 'full' && !!props.callouts;
+
+		return {
+			scheme,
+			mode,
+			callouts,
+			t,
+			c: CALLOUT_CLASS,
+			legend: LEGEND,
+			wrapClass: ['w-full', props.class || ''].join(' '),
+			rootClass: [ROOT_BASE, t.root].join(' '),
+			barClass: t.bar,
+			railClass: t.rail,
+			panelClass: t.panel,
+			cardClass: t.card,
+			rows: RAIL_LABELS.map((label, i) => ({
+				label,
+				active: i === ACTIVE_INDEX,
+				class: [t.railRow, i === ACTIVE_INDEX ? t.railActive : t.railIdle].join(' '),
+			})),
+		};
+	}
+}
+</script>

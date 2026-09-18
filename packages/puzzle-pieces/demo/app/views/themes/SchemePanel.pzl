@@ -1,0 +1,322 @@
+<puzzle-view class="w-full">
+  {#if known}
+    <div class="flex gap-12">
+      <article class="mx-auto w-full max-w-5xl min-w-0">
+        <header class="mb-8">
+          <h1 class="text-3xl font-semibold tracking-tight text-ink">{ label }</h1>
+          <p class="mt-2 text-body">{ description }</p>
+        </header>
+
+        <div class="mb-6 flex flex-wrap items-center gap-2">
+          {#for p in pills}
+            <a key={ p.value } href={ p.href } class={ p.class }>{ p.label }</a>
+          {/for}
+          <Button variant="secondary" size="sm" @press={ applyScheme }>Apply this scheme</Button>
+        </div>
+
+        <p class="mb-8 max-w-3xl text-sm/relaxed text-muted">
+          Every value below is read from the live computed styles of the shipped
+          stylesheet — each swatch is a real element scoped to this palette and that
+          mode, and the hex under it is what the browser resolved.
+        </p>
+
+        <div class="mb-12 grid gap-3 sm:grid-cols-3">
+          {#for s in summary}
+            <div key={ s.mode } class={ s.class }>
+              <p class="text-[10px] font-medium uppercase tracking-wide text-muted">{ s.label }</p>
+              <p class="mt-1 font-mono text-lg text-ink">{ s.min }</p>
+              <p class="mt-0.5 text-xs text-muted">{ s.counts }</p>
+            </div>
+          {/for}
+        </div>
+
+        {#for g in groups}
+          <section id={ g.id } key={ g.id } class="mt-12 scroll-mt-20">
+            <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">{ g.title }</h2>
+            <p class="mb-5 max-w-2xl text-sm/relaxed text-body">{ g.description }</p>
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {#for t in g.tokens}
+                <TokenCard
+                  key={ t.prop }
+                  token={ t }
+                  scheme={ scheme }
+                  values={ t.values }
+                  contrast={ t.contrast }
+                  mode={ mode }/>
+              {/for}
+            </div>
+          </section>
+        {/for}
+
+        <div ref="probes" class="sr-only" aria-hidden="true">
+          {#for w in probeWrappers}
+            <div key={ w.mode } data-scheme={ w.scheme } data-theme={ w.mode }>
+              {#for p in w.probes}
+                <span key={ p.key } data-token={ p.prop } data-mode={ p.mode } style={ p.style }></span>
+              {/for}
+            </div>
+          {/for}
+        </div>
+      </article>
+
+      <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+    </div>
+  {:else}
+    <article class="mx-auto w-full max-w-2xl min-w-0">
+      <header class="mb-6">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Unknown scheme</h1>
+        <p class="mt-2 text-body">There is no palette by that name. Pick one of the four:</p>
+      </header>
+      <div class="flex flex-wrap gap-2">
+        {#for p in pills}
+          <a key={ p.value } href={ p.href } class={ p.class }>{ p.label }</a>
+        {/for}
+      </div>
+    </article>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import TokenCard from '@/components/themes/TokenCard.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import Button from '@/components/ui/Button.pzl';
+import { TOKEN_GROUPS, MODES } from '@/lib/tokenNames.js';
+import { SCHEMES, current, set, subscribe } from '@/lib/appearance.js';
+import { contrastRatio, formatValue } from '@/lib/contrast.js';
+
+// SchemePanel — route /themes/:scheme. One page per palette: every token in
+// the package, shown in light, medium and dark side by side, with the AA
+// result for the tokens that carry a ground.
+//
+// NOTHING here is a hardcoded colour. In mounted() the view renders a
+// visually-hidden probe area: one wrapper per mode carrying
+// `data-scheme` + `data-theme`, and inside it one <span> per token whose
+// inline style applies that token's var to `background-color` (or `box-shadow`
+// for the composed shadows). `getComputedStyle(probe).backgroundColor` is then
+// the resolved value — reading the custom property directly would hand back
+// the unresolved `light-dark(…)` text. The grounds each foreground is measured
+// on are probed the same way in the SAME wrapper, so a ratio is always
+// palette-and-mode correct. The worst ground wins: a token that fails on any
+// of its declared grounds fails here.
+//
+// The probe area stays `sr-only` rather than `display: none` — a display:none
+// subtree still computes, but keeping it laid out is the safe spelling and
+// costs nothing at this size.
+const PILL_ON = 'inline-flex h-8 items-center rounded-lg px-3 text-sm font-medium transition-colors bg-brand-tint text-brand-on-tint';
+const PILL_OFF = 'inline-flex h-8 items-center rounded-lg px-3 text-sm font-medium transition-colors text-muted hover:bg-surface-sunken hover:text-ink';
+
+const SUMMARY_CARD = 'rounded-xl border border-border bg-surface-card p-3 shadow-card';
+const SUMMARY_CARD_ON = 'rounded-xl border border-border bg-surface-card p-3 shadow-card ring-1 ring-border-strong';
+
+const MODE_VALUES = MODES.map((m) => (typeof m === 'string' ? m : m.value));
+const SCHEME_VALUES = SCHEMES.map((s) => s.value);
+const DEFAULT_SCHEME = 'default';
+
+/** Every property that needs probing, tokens plus the grounds they sit on. */
+const PROBE_PROPS = (() => {
+	const seen = new Map();
+	for (const group of TOKEN_GROUPS) {
+		for (const token of group.tokens) {
+			if (!seen.has(token.prop)) seen.set(token.prop, !!token.shadow);
+			for (const ground of token.on) if (!seen.has(ground)) seen.set(ground, false);
+		}
+	}
+	return [...seen].map(([prop, shadow]) => ({ prop, shadow }));
+})();
+
+/** The mode the page is actually painted in, resolving "follow the OS". */
+function liveMode() {
+	const chosen = current().mode;
+	if (chosen) return chosen;
+	if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'light';
+	return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+export default class SchemePanel extends PuzzleView {
+	created() {
+		this._unsubscribe = null;
+		this._probedScheme = null;
+		this._scheduled = false;
+	}
+
+	data(params, props) {
+		const requested = (params && params.scheme) || props.scheme || DEFAULT_SCHEME;
+		const known = SCHEME_VALUES.includes(requested);
+		const scheme = requested;
+		const meta = SCHEMES.find((s) => s.value === scheme) || null;
+
+		const state = this.getData() || {};
+		const values = state.values || {};
+		const contrast = state.contrast || {};
+		const summary = state.summary || {};
+		const mode = state.mode || null;
+
+		// A scheme change on a reused instance: re-probe once the new markup is
+		// on screen. data() stays a pure derivation — this only queues work.
+		if (known && this._probedScheme !== null && this._probedScheme !== scheme) this.scheduleProbe();
+
+		return {
+			known,
+			scheme,
+			mode,
+			label: meta ? meta.label : requested,
+			description: meta ? meta.description : '',
+			pills: SCHEMES.map((s) => ({
+				value: s.value,
+				label: s.label,
+				href: '#/themes/' + s.value,
+				class: s.value === scheme && known ? PILL_ON : PILL_OFF,
+			})),
+			summary: MODE_VALUES.map((m) => {
+				const row = summary[m] || null;
+				return {
+					mode: m,
+					label: m,
+					class: m === mode ? SUMMARY_CARD_ON : SUMMARY_CARD,
+					min: row && row.measured ? row.min.toFixed(2) + ':1 min' : 'not measured',
+					counts: row && row.measured ? row.pass + ' of ' + row.measured + ' pairs pass' : 'reading live styles…',
+				};
+			}),
+			groups: TOKEN_GROUPS.map((g) => ({
+				id: g.id,
+				title: g.title,
+				description: g.description,
+				tokens: g.tokens.map((t) => ({
+					...t,
+					values: valuesFor(values, t.prop),
+					contrast: valuesFor(contrast, t.prop),
+				})),
+			})),
+			toc: TOKEN_GROUPS.map((g) => ({ label: g.title, href: '#' + g.id })),
+			probeWrappers: known
+				? MODE_VALUES.map((m) => ({
+						mode: m,
+						scheme,
+						probes: PROBE_PROPS.map((p) => ({
+							key: m + '|' + p.prop,
+							prop: p.prop,
+							mode: m,
+							style: p.shadow ? 'box-shadow: var(' + p.prop + ')' : 'background-color: var(' + p.prop + ')',
+						})),
+					}))
+				: [],
+		};
+	}
+
+	events = {
+		// Make the page's own palette the app's palette. appearance.set writes the
+		// attributes on <html> and notifies our subscription, which re-renders the
+		// mode highlight; the probes are scoped per card so they never change.
+		applyScheme: () => {
+			const { scheme, known } = this.getData();
+			if (known) set({ scheme });
+		},
+	};
+
+	mounted() {
+		this.setData({ mode: liveMode() });
+		this._unsubscribe = subscribe(() => {
+			this.setData({ mode: liveMode() });
+			this.refresh();
+		});
+		this.probe();
+	}
+
+	destroyed() {
+		if (this._unsubscribe) this._unsubscribe();
+		this._unsubscribe = null;
+	}
+
+	/** Queue one probe pass for after the next paint (idempotent). */
+	scheduleProbe() {
+		if (this._scheduled) return;
+		if (typeof requestAnimationFrame !== 'function') return;
+		this._scheduled = true;
+		requestAnimationFrame(() => {
+			this._scheduled = false;
+			this.probe();
+		});
+	}
+
+	/**
+	 * Read every token, in every mode, out of the live probe area, then compute
+	 * the AA result for every token that declares a ground.
+	 */
+	probe() {
+		const root = this.refs && this.refs.probes;
+		if (!root || typeof getComputedStyle !== 'function') return;
+
+		const scheme = this.getData().scheme || DEFAULT_SCHEME;
+
+		// Raw resolved strings, keyed `<mode>|<prop>`.
+		const raw = new Map();
+		for (const node of root.querySelectorAll('[data-token]')) {
+			const prop = node.getAttribute('data-token');
+			const mode = node.getAttribute('data-mode');
+			const computed = getComputedStyle(node);
+			const value = prop.startsWith('--shadow-') ? computed.boxShadow : computed.backgroundColor;
+			raw.set(mode + '|' + prop, value);
+		}
+		if (!raw.size) return;
+
+		const values = {};
+		const contrast = {};
+		const summary = {};
+
+		for (const mode of MODE_VALUES) {
+			summary[mode] = { min: Infinity, pass: 0, measured: 0 };
+		}
+
+		for (const group of TOKEN_GROUPS) {
+			for (const token of group.tokens) {
+				values[token.prop] = values[token.prop] || {};
+				contrast[token.prop] = contrast[token.prop] || {};
+
+				for (const mode of MODE_VALUES) {
+					const resolved = raw.get(mode + '|' + token.prop);
+					values[token.prop][mode] = formatValue(resolved);
+
+					if (!token.on.length || !token.min) {
+						contrast[token.prop][mode] = null;
+						continue;
+					}
+
+					// Worst ground wins — one failing pair fails the token.
+					let worst = null;
+					for (const ground of token.on) {
+						const ratio = contrastRatio(resolved, raw.get(mode + '|' + ground));
+						if (!Number.isFinite(ratio)) continue;
+						if (!worst || ratio < worst.ratio) worst = { ratio, ground };
+					}
+					if (!worst) {
+						contrast[token.prop][mode] = null;
+						continue;
+					}
+
+					const pass = worst.ratio >= token.min;
+					contrast[token.prop][mode] = { ratio: worst.ratio, ground: worst.ground, pass };
+
+					const row = summary[mode];
+					row.measured += 1;
+					if (pass) row.pass += 1;
+					if (worst.ratio < row.min) row.min = worst.ratio;
+				}
+			}
+		}
+
+		for (const mode of MODE_VALUES) {
+			if (!summary[mode].measured) summary[mode] = { min: 0, pass: 0, measured: 0 };
+		}
+
+		this._probedScheme = scheme;
+		this.setData({ values, contrast, summary, ready: true });
+		this.refresh();
+	}
+}
+
+/** The `{ light, medium, dark }` slice for one property, never undefined. */
+function valuesFor(bag, prop) {
+	return bag[prop] || {};
+}
+</script>
