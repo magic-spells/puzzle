@@ -9,7 +9,14 @@
          centre track is `minmax(0,36rem)` rather than the template's `auto`
          because the trigger here is content-sized: on `auto` the pill collapses
          to 149px and reads as a chip instead of a field. It still shrinks. -->
-    <div class="flex min-w-0 items-center gap-3">
+    <!-- THE LEFT WING IS THE RAIL'S COLUMN, and `-ml-1` is arithmetic, not taste:
+         the bar pads `px-3` (12) and the rail's list pads `p-2` (8), so pulling
+         the wing back 4px puts the brand link's BOX on the rows' box. The link
+         then wears a row's own `px-3 gap-3` with a `size-5` mark, which lands
+         the "P" tile on the rows' icon column (x=20) and the wordmark on their
+         label column (x=52) — one edge down the left of the window instead of
+         two that nearly line up. -->
+    <div class="-ml-1 flex min-w-0 items-center gap-3">
       <button
         type="button"
         class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-bar-muted transition-colors hover:bg-bar-hover hover:text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 lg:hidden"
@@ -22,8 +29,8 @@
       </button>
       <a
         href="#/"
-        class="flex items-center gap-2 rounded-md text-brand font-semibold tracking-tight text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-4">
-        <span class="flex size-6 items-center justify-center rounded-md bg-brand text-xs font-bold text-brand-ink" aria-hidden="true">P</span>
+        class="flex items-center gap-3 rounded-md px-3 py-1.5 text-brand font-semibold tracking-tight text-bar-ink transition-colors hover:bg-bar-hover outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+        <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-brand text-2xs font-bold text-brand-ink" aria-hidden="true">P</span>
         <span class="truncate">Puzzle Pieces</span>
       </a>
       <span class="hidden text-xs text-bar-muted md:inline">{ pieceCount } pieces · v{ version }</span>
