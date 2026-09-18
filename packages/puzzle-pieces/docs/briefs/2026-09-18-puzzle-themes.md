@@ -39,7 +39,12 @@ Decisions taken (2026-09-18):
 - The demo app inside the package IS the design-system showcase. Cory: "should we maybe
   include a demo puzzle app in the puzzle-themes repo?" — yes, and pieces already has one
   at `packages/puzzle-pieces/demo/`, so it grows there.
-- The `design-system/` folder stays empty for now.
+- The internal Puzzle app template lives at `org/design-system/` (Cory moved it there
+  2026-09-18: "it's now an official internal org template"). It is a CONSUMER of this
+  package, built in phase 2: "a sidebar, main panel, top header bar, right details panel
+  like we use in pyramid for the agent chatting." Nothing in this build goes there, but
+  the shell roles and the demo's shell view must cover exactly those four regions so the
+  template can be styled from the package alone.
 
 ## 2. The palettes, in Cory's words
 
@@ -215,6 +220,8 @@ shows the values of each of the color schemes with all of their css vars and col
 - Sites web / Sites admin: same, plus the attribute rename (`data-theme`→`data-scheme`,
   `data-mode`→`data-theme`).
 - Constellation viewer, account apps, magicspells.io: adopt when touched.
+- `org/design-system/`: the internal Puzzle app template (sidebar + top bar + main +
+  right details panel), importing this package's themes and appearance helper.
 
 ## 5. Verification the builder owes
 
