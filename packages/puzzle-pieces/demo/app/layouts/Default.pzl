@@ -1,7 +1,14 @@
 <puzzle-view class="flex h-dvh flex-col bg-surface-frame text-body">
   <!-- TOP BAR — the frame's horizontal arm. bg-bar equals surface-frame in every
        theme file, so the bar and the rail read as one flat L around the panel. -->
-  <header class="flex h-12 shrink-0 items-center justify-between gap-4 bg-bar px-3 text-bar-ink">
+  <header class="grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,36rem)_minmax(0,1fr)] items-center gap-3 bg-bar px-3 text-bar-ink">
+    <!-- THREE COLUMNS, not a flex row with a `justify-between`. The wings are
+         equal `1fr` tracks and the search sits in the `auto` one between them,
+         which is what centres it on the WINDOW rather than on whatever is left
+         over after the right cluster (the app template's TopBar grid). The
+         centre track is `minmax(0,36rem)` rather than the template's `auto`
+         because the trigger here is content-sized: on `auto` the pill collapses
+         to 149px and reads as a chip instead of a field. It still shrinks. -->
     <div class="flex min-w-0 items-center gap-3">
       <button
         type="button"
@@ -21,8 +28,14 @@
       </a>
       <span class="hidden text-xs text-bar-muted md:inline">{ pieceCount } pieces · v{ version }</span>
     </div>
-    <div class="flex items-center gap-2">
+    <!-- THE SEARCH, centred on the window: the docs SearchDialog's trigger,
+         dressed as the template's search field. The dialog still morphs out of
+         it — the trigger is the morph source, whatever its box. -->
+    <div class="flex min-w-0 items-center justify-center">
       <SearchDialog/>
+    </div>
+
+    <div class="flex min-w-0 items-center justify-end gap-2">
       <a
         href="https://github.com/magic-spells/puzzle-pieces"
         target="_blank"
