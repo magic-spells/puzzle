@@ -4,9 +4,10 @@ import { readFile } from 'node:fs/promises';
 
 const copies = [
 	['Sidebar.pzl', '../registry/ui/sidebar/Sidebar.pzl', '../demo/app/components/ui/Sidebar.pzl'],
+	['AppearancePicker.pzl', '../registry/ui/appearance-picker/AppearancePicker.pzl', '../demo/app/components/ui/AppearancePicker.pzl'],
 ];
 
-test('registry and demo Sidebar copies stay byte-identical', async () => {
+test('registry and demo Sidebar / AppearancePicker copies stay byte-identical', async () => {
 	for (const [name, registryPath, demoPath] of copies) {
 		const [registrySource, demoSource] = await Promise.all([
 			readFile(new URL(registryPath, import.meta.url)),

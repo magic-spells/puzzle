@@ -181,3 +181,17 @@ test('package.json exports the theme files, appearance and pre-paint', () => {
 	assert.equal(pkg.exports['./pre-paint'], './registry/theme/pre-paint.js');
 	assert.deepEqual(pkg.files, ['registry']);
 });
+
+test('AppearancePicker\'s built-in scheme and mode lists equal the appearance module\'s', () => {
+	// The piece is copy-in and may not import registry/theme/appearance.js, so it
+	// carries its own DEFAULT_SCHEMES / DEFAULT_MODES; they must not drift.
+	const piece = readFileSync(new URL('../registry/ui/appearance-picker/AppearancePicker.pzl', import.meta.url), 'utf8');
+	const appearance = readFileSync(new URL('../registry/theme/appearance.js', import.meta.url), 'utf8');
+	const list = (src, name) => {
+		const m = src.match(new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\n\\];`));
+		assert.ok(m, `${name} not found`);
+		return m[1].trim().split('\n').map((l) => l.trim()).filter(Boolean);
+	};
+	assert.deepEqual(list(piece, 'DEFAULT_SCHEMES'), list(appearance, 'SCHEMES'));
+	assert.deepEqual(list(piece, 'DEFAULT_MODES'), list(appearance, 'MODES'));
+});

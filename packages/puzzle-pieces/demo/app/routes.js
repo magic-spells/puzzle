@@ -8,6 +8,7 @@ import Shell from './views/themes/Shell.pzl';
 import Pieces from './views/themes/Pieces.pzl';
 import AccordionDoc from './views/components/AccordionDoc.pzl';
 import AlertDoc from './views/components/AlertDoc.pzl';
+import AppearancePickerDoc from './views/components/AppearancePickerDoc.pzl';
 import AlertDialogDoc from './views/components/AlertDialogDoc.pzl';
 import AreaChartDoc from './views/components/AreaChartDoc.pzl';
 import AspectRatioDoc from './views/components/AspectRatioDoc.pzl';
@@ -176,6 +177,13 @@ export default [
 		view: AlertDialogDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Alert Dialog — Puzzle Pieces' },
+	},
+	{
+		path: '/components/appearance-picker',
+		name: 'appearance-picker',
+		view: AppearancePickerDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Appearance Picker — Puzzle Pieces' },
 	},
 	{
 		path: '/components/area-chart',
