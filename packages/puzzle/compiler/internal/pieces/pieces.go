@@ -1,7 +1,6 @@
 package pieces
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -78,34 +77,12 @@ type plannedUnit struct {
 // all-or-nothing on conflicts: if any destination exists and Overwrite is false,
 // nothing is written.
 func Add(opts Options) (*Result, error) {
-	regData, err := opts.Fetcher.Fetch("registry.json")
+	reg, err := fetchRegistry(opts.Fetcher)
 	if err != nil {
-		// A dead default source is almost always "no pieces release matches this
-		// CLI's major.minor yet / npm is unreachable" — name the three overrides,
-		// or the user is stuck staring at a bare error about a source they never
-		// chose.
-		if opts.Fetcher.Source() == defaultRegistry {
-			return nil, fmt.Errorf(
-				"%w\n  (the default npm registry didn't yield a matching pieces release — pin one with --pieces-version, or point at a registry with --registry <path|url|npm:pkg[@version]> or the PUZZLE_PIECES_REGISTRY env var)", err)
-		}
 		return nil, err
 	}
-	var reg Registry
-	if err := json.Unmarshal(regData, &reg); err != nil {
-		return nil, fmt.Errorf("parsing registry.json: %w", err)
-	}
-	// The registry's theme path is untrusted manifest input like files/targetDir/
-	// registryDependencies, so validate it the same way and BEFORE any write —
-	// a `"theme": "../../.env"` would otherwise be read outside the registry and
-	// copied into app/styles/pieces.css (applyTheme, state b). An empty theme uses
-	// the built-in "theme/pieces.css" default and needs no check.
-	if reg.Theme != "" {
-		if err := validateManifestPath("registry", "theme", reg.Theme); err != nil {
-			return nil, err
-		}
-	}
 
-	resolvedPieces, libs, err := resolveAll(&reg, opts.Names)
+	resolvedPieces, libs, err := resolveAll(reg, opts.Names)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +104,7 @@ func Add(opts Options) (*Result, error) {
 	// Theme fetches and existing-lock parsing can both fail. Complete them after
 	// the conflict pre-flight but before the first destination write so either
 	// error leaves the app tree untouched.
-	theme, advisory, err := planTheme(&opts, &reg)
+	theme, advisory, err := planTheme(&opts, reg)
 	if err != nil {
 		return nil, err
 	}
@@ -434,10 +411,7 @@ type plannedTheme struct {
 // when pieces.css exists, so it deliberately sits OUTSIDE the piece/lib overwrite
 // pre-flight — an existing pieces.css is state (c), not a conflict.
 func planTheme(opts *Options, reg *Registry) (theme *plannedTheme, advisory string, err error) {
-	themePath := reg.Theme
-	if themePath == "" {
-		themePath = "theme/pieces.css"
-	}
+	regPath := themePath(reg)
 
 	stylesPath := filepath.Join(opts.AppRoot, "app", "styles", "styles.css")
 	styles := ""
@@ -448,8 +422,12 @@ func planTheme(opts *Options, reg *Registry) (theme *plannedTheme, advisory stri
 		return nil, "", fmt.Errorf("reading %s: %w", stylesPath, readErr)
 	}
 
-	// (a) Already wired — a hand-merged token block, or an import pulling pieces.css in.
-	if strings.Contains(styles, themeMarker) || strings.Contains(styles, "pieces.css") {
+	// (a) Already wired — a hand-merged token block, an import pulling pieces.css
+	// in, or the palette imported straight from the npm package (an app that does
+	// that owns its tokens through the package; copying pieces.css beside it would
+	// only start the drift `add theme` exists to stop).
+	if strings.Contains(styles, themeMarker) || strings.Contains(styles, "pieces.css") ||
+		themeImportedFromPackage(styles, defaultThemeName) {
 		return nil, "", nil
 	}
 
@@ -463,7 +441,7 @@ func planTheme(opts *Options, reg *Registry) (theme *plannedTheme, advisory stri
 	}
 
 	// (b) Copy the registry theme verbatim, then lock it like any other unit.
-	data, err := opts.Fetcher.Fetch(themePath)
+	data, err := opts.Fetcher.Fetch(regPath)
 	if err != nil {
 		return nil, "", err
 	}
@@ -472,7 +450,7 @@ func planTheme(opts *Options, reg *Registry) (theme *plannedTheme, advisory stri
 	return &plannedTheme{
 		file: plannedFile{rel: rel, abs: piecesPath, data: data},
 		// Keyed by its registry path ("theme/pieces.css"), same lock shape as a lib.
-		unit: Unit{Name: themePath, Files: []FileWrite{file}},
+		unit: Unit{Name: regPath, Files: []FileWrite{file}},
 	}, themeImportAdvisory, nil
 }
 

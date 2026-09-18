@@ -39,6 +39,20 @@ Existing files are never overwritten unless you pass `--overwrite`, and a
 `pieces.lock` of content hashes is kept so a future `diff`/`update` command can tell
 upstream changes from your local edits.
 
+The alternate palettes copy in the same way:
+
+```sh
+puzzle add theme dim
+```
+
+`puzzle add theme` with no name lists the palettes (`default`, `dim`, `warm`,
+`void`) with your app's state for each. The default one is the `pieces.css` that
+`add piece` already copies; the others land in `app/styles/themes/<name>.css`,
+are recorded in `pieces.lock` like any piece, and print the `@import` and
+`data-scheme` lines for you to wire — a palette your `styles.css` already
+imports from this package (`@magic-spells/puzzle-pieces/themes/dim.css`) is
+reported and skipped rather than copied beside it.
+
 A **family** piece imports as one unit and invokes with dot notation:
 
 ```js

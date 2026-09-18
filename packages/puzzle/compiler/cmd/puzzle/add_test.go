@@ -1010,3 +1010,106 @@ func TestAddPiecesVersionRequiresNpmSource(t *testing.T) {
 		t.Fatalf("want the PinNpmSource error, got %v", err)
 	}
 }
+
+// writeThemeFixtureRegistry is writeCmdFixtureRegistry plus the `themes` array
+// the CLI's `add theme` reads.
+func writeThemeFixtureRegistry(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeFixtureFile(t, root, "registry.json", `{"version":1,"theme":"theme/pieces.css",`+
+		`"modes":["light","medium","dark"],"themes":[`+
+		`{"name":"default","file":"theme/pieces.css","label":"Default","description":"The default palette."},`+
+		`{"name":"dim","file":"theme/dim.css","label":"Dim","description":"The low-contrast palette."}],`+
+		`"pieces":[]}`)
+	writeFixtureFile(t, root, "theme/pieces.css", "/* puzzle-pieces design tokens */\n")
+	writeFixtureFile(t, root, "theme/dim.css", "/* dim */\n")
+	return root
+}
+
+// newThemeApp is an app root the walk-up finds, with an unwired styles.css.
+func newThemeApp(t *testing.T) string {
+	t.Helper()
+	app := t.TempDir()
+	if err := os.WriteFile(filepath.Join(app, "package.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(app, "app", "styles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(app, "app", "styles", "styles.css"), []byte("@import \"tailwindcss\";\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return app
+}
+
+// TestAddThemeDispatchCopies drives the full cmd path: theme dispatch →
+// app-root walk-up → copy → lock → summary.
+func TestAddThemeDispatchCopies(t *testing.T) {
+	reg := writeThemeFixtureRegistry(t)
+	app := newThemeApp(t)
+
+	var buf bytes.Buffer
+	if err := runAdd(&buf, plainPrinter(), app, []string{"theme", "dim"}, reg, false); err != nil {
+		t.Fatalf("add theme: %v", err)
+	}
+	if !fsFileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+		t.Error("expected dim.css copied into app/styles/themes")
+	}
+	if !fsFileExists(filepath.Join(app, "pieces.lock")) {
+		t.Error("expected pieces.lock written")
+	}
+	out := buf.String()
+	if !strings.Contains(out, "@import './themes/dim.css';") || !strings.Contains(out, `data-scheme="dim"`) {
+		t.Errorf("summary should print both manual steps, got:\n%s", out)
+	}
+}
+
+// The plural selector is accepted too.
+func TestAddThemesAliasAccepted(t *testing.T) {
+	reg := writeThemeFixtureRegistry(t)
+	app := newThemeApp(t)
+	var buf bytes.Buffer
+	if err := runAdd(&buf, plainPrinter(), app, []string{"themes", "dim"}, reg, false); err != nil {
+		t.Fatalf("add themes: %v", err)
+	}
+	if !fsFileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+		t.Error("expected the themes alias to copy dim.css")
+	}
+}
+
+// `add theme` with no name lists the registry's palettes and writes nothing.
+func TestAddThemeWithoutNameLists(t *testing.T) {
+	reg := writeThemeFixtureRegistry(t)
+	app := newThemeApp(t)
+
+	var buf bytes.Buffer
+	if err := runAdd(&buf, plainPrinter(), app, []string{"theme"}, reg, false); err != nil {
+		t.Fatalf("add theme listing: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"default", "dim", "The low-contrast palette.", "puzzle add theme <name…>", `data-theme="light|medium|dark"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("listing missing %q, got:\n%s", want, out)
+		}
+	}
+	if fsFileExists(filepath.Join(app, "pieces.lock")) {
+		t.Error("listing must not write pieces.lock")
+	}
+}
+
+func TestAddThemeUnknownNameSurfacesAvailable(t *testing.T) {
+	reg := writeThemeFixtureRegistry(t)
+	var buf bytes.Buffer
+	err := runAdd(&buf, plainPrinter(), newThemeApp(t), []string{"theme", "nope"}, reg, false)
+	if err == nil || !strings.Contains(err.Error(), "available: default, dim") {
+		t.Fatalf("expected the available list in the error, got: %v", err)
+	}
+}
+
+func TestAddUnknownIntegrationListsTheme(t *testing.T) {
+	var buf bytes.Buffer
+	err := runAdd(&buf, plainPrinter(), t.TempDir(), []string{"sass"}, "", false)
+	if err == nil || !strings.Contains(err.Error(), "theme") {
+		t.Fatalf("expected supported set to include theme, got: %v", err)
+	}
+}

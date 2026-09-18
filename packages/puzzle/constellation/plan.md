@@ -57,6 +57,10 @@ notes:
       `benchmarks/scenarios.mjs` with the measured numbers in D170's verified note (the gates).
       Every code, test and benchmark comment that cited a plan section was re-pointed at D170 plus
       the mechanism's name in the same sweep.
+  - kind: state
+    text: >-
+      2026-09-18 — D171 is taken ([[DECISION-D171-ADD-THEME]], `puzzle add theme <name…>`, built on
+      feat/add-theme for 0.8.0). **The next free decision number is D172.**
 ---
 
 # Puzzle project map
