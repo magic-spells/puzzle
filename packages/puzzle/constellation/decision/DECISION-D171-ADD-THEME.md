@@ -6,6 +6,22 @@ connections:
   - DECISION-D32-CLI-TOOLING
   - DECISION-D03-SCRIPTS-REAL-JS
   - COMPONENT-COMPILER-CLI
+notes:
+  - kind: decision
+    text: >-
+      2026-09-18, review round on PR #138 — two amendments. (1) `planTheme`'s state (c)
+      (app/styles/pieces.css present but unwired) reported "up to date" without ever hashing the
+      file, so a locally edited pieces.css read as current and `--overwrite` was a no-op on it,
+      while the help text promised the opposite. `add theme default` now applies the SAME
+      already-installed rules every other palette gets to app/styles/pieces.css — identical bytes or
+      a copy matching the lock hash is up to date, anything else is refused unless `--overwrite`,
+      which replaces and re-locks it. `add piece` itself is untouched: it still goes through
+      planTheme and never rewrites pieces.css. (2) "wired via package" matched anywhere in
+      styles.css, so a commented-out `/* @import "@magic-spells/puzzle-pieces/themes/dim.css"; */` —
+      a palette the app deliberately turned OFF — suppressed the copy. The match is now made against
+      comment-stripped CSS and has to sit inside an `@import` statement; an unterminated `/*`
+      swallows the rest of the file, as a browser parses it. Both rules are covered by tests,
+      including the commented-out case for a named palette and for the default through `add piece`.
 ---
 
 # D171 — `puzzle add theme <name…>`

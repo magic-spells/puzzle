@@ -490,8 +490,8 @@ func TestAddThemeRejectsUnsafeThemeName(t *testing.T) {
 				`{"name":"` + bad + `","file":"theme/dim.css","label":"","description":""}],"pieces":[]}`
 			reg := buildRegistry(t, regJSON, fixtureFile{"theme/dim.css", dimThemeCSS})
 			if _, err := AddThemes(themeOpts(reg, newApp(t, false), "dim")); err == nil ||
-				!strings.Contains(err.Error(), "themes[].name") {
-				t.Fatalf("expected a themes[].name rejection, got: %v", err)
+				!strings.Contains(err.Error(), "invalid theme name") {
+				t.Fatalf("expected a theme-name rejection, got: %v", err)
 			}
 		})
 	}
@@ -583,5 +583,148 @@ func TestListThemesFallsBackToDefaultModes(t *testing.T) {
 	}
 	if strings.Join(listing.Modes, "|") != "light|medium|dark" {
 		t.Errorf("modes = %v, want the built-in three", listing.Modes)
+	}
+}
+
+// --- the default palette obeys the same already-installed rules -------------------
+
+// planTheme state (c) — pieces.css present but unwired — used to report "up to
+// date" without ever hashing it, so a locally edited pieces.css read as current
+// and --overwrite did nothing. `add theme default` now behaves like `add theme
+// dim`: refuse the modified copy, replace it under --overwrite.
+func TestAddThemeDefaultModifiedRefusesThenOverwrites(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/pieces.css", "/* my tokens */\n")
+
+	_, err := AddThemes(themeOpts(reg, app, "default"))
+	if err == nil {
+		t.Fatal("expected a refusal for a modified pieces.css")
+	}
+	if !strings.Contains(err.Error(), "app/styles/pieces.css") || !strings.Contains(err.Error(), "--overwrite") {
+		t.Errorf("refusal should name the file and --overwrite, got: %v", err)
+	}
+	dest := filepath.Join(app, "app", "styles", "pieces.css")
+	if got, _ := os.ReadFile(dest); string(got) != "/* my tokens */\n" {
+		t.Errorf("the refused run must not touch pieces.css, got %q", got)
+	}
+
+	opts := themeOpts(reg, app, "default")
+	opts.Overwrite = true
+	res, err := AddThemes(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != defaultThemeCSS {
+		t.Errorf("--overwrite should restore the registry copy, got %q", got)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q", st, ThemeCopied)
+	}
+	// The replacement is locked like any other copy.
+	if lock := readLockFile(t, app); lock.Pieces["theme/pieces.css"].Files["app/styles/pieces.css"] != sha(defaultThemeCSS) {
+		t.Errorf("lock not updated after --overwrite: %+v", lock.Pieces)
+	}
+}
+
+// A hand-copied pieces.css that happens to be byte-identical is up to date even
+// with no lock entry to vouch for it — there is nothing to write and nothing of
+// the user's to lose.
+func TestAddThemeDefaultIdenticalWithoutLockIsUpToDate(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/pieces.css", defaultThemeCSS)
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeUpToDate {
+		t.Errorf("state = %q, want %q", st, ThemeUpToDate)
+	}
+	if fileExists(filepath.Join(app, LockFileName)) {
+		t.Error("nothing was copied, so nothing should have been locked")
+	}
+	if out := renderThemes(res); !strings.Contains(out, "@import './pieces.css';") {
+		t.Errorf("an unwired pieces.css should still be advised, got:\n%s", out)
+	}
+}
+
+// The same for a named palette: identical bytes, no lock entry, no refusal.
+func TestAddThemeNamedIdenticalWithoutLockIsUpToDate(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/themes/dim.css", dimThemeCSS)
+
+	res, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeUpToDate {
+		t.Errorf("state = %q, want %q", st, ThemeUpToDate)
+	}
+}
+
+// --- a commented-out import is not wiring -------------------------------------------
+
+func TestAddThemeCommentedOutImportIsNotWired(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, "@import \"tailwindcss\";\n"+
+		"/* @import \"@magic-spells/puzzle-pieces/themes/dim.css\"; */\n")
+
+	res, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q — a commented-out import is turned off", st, ThemeCopied)
+	}
+	if !fileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+		t.Error("the palette should have been copied")
+	}
+}
+
+// The same for the DEFAULT palette, through `add piece`: a commented-out package
+// import must not suppress the pieces.css copy.
+func TestAddPieceCommentedOutDefaultImportStillCopiesTheme(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, "@import \"tailwindcss\";\n"+
+		"/* @import '@magic-spells/puzzle-pieces/themes/default.css'; */\n")
+
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(filepath.Join(app, "app", "styles", "pieces.css")) {
+		t.Error("a commented-out import should not suppress the pieces.css copy")
+	}
+	if res.Theme == "" {
+		t.Error("expected the import advisory")
+	}
+}
+
+// A mention outside an @import statement is not wiring either.
+func TestThemeImportedFromPackageRequiresAnImportStatement(t *testing.T) {
+	spec := "@magic-spells/puzzle-pieces/themes/dim.css"
+	for _, tc := range []struct {
+		name  string
+		css   string
+		wired bool
+	}{
+		{"double quotes", `@import "` + spec + `";`, true},
+		{"single quotes", `@import '` + spec + `';`, true},
+		{"layered import", `@import "` + spec + `" layer(theme);`, true},
+		{"block comment", `/* @import "` + spec + `"; */`, false},
+		{"multi-line comment", "/*\n@import \"" + spec + "\";\n*/", false},
+		{"bare mention", `.a { content: "` + spec + `"; }`, false},
+		{"unterminated comment", `/* @import "` + spec + `";`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := themeImportedFromPackage(tc.css, "dim"); got != tc.wired {
+				t.Errorf("themeImportedFromPackage(%q) = %v, want %v", tc.css, got, tc.wired)
+			}
+		})
 	}
 }

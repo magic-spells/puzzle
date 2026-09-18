@@ -77,7 +77,6 @@ type ThemeOutcome struct {
 type ThemeResult struct {
 	AppRoot   string
 	Source    string
-	LockPath  string
 	Themes    []ThemeOutcome
 	NextSteps []string
 }
@@ -170,12 +169,17 @@ func registryThemes(reg *Registry) ([]Theme, error) {
 // check and then rejects any separator, so a name can never contribute a
 // directory — the destination stays one file, exactly where the summary says.
 func validateThemeName(name string) error {
-	if err := validateManifestPath("registry", "themes[].name", name); err != nil {
-		return err
+	invalid := func(reason string) error {
+		return fmt.Errorf("registry has invalid theme name %q: %s", name, reason)
 	}
-	if strings.Contains(name, "/") {
-		return fmt.Errorf("piece %q has invalid %s %q: %s", "registry", "themes[].name", name,
-			"'/' separators are not allowed in a theme name")
+	if name == "" {
+		return invalid("must not be empty")
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return invalid("path separators are not allowed in a theme name")
+	}
+	if err := validateManifestPath("registry", "themes[].name", name); err != nil {
+		return invalid(strings.TrimSpace(err.Error()[strings.LastIndex(err.Error(), ":")+1:]))
 	}
 	return nil
 }
@@ -205,10 +209,58 @@ func themeDestRel(reg *Registry, t Theme) string {
 
 // themeImportedFromPackage reports whether styles.css pulls this palette straight
 // out of the npm package. Both quote styles count — `@import` accepts either, and
-// an app formatted with single quotes is not a different situation.
+// an app formatted with single quotes is not a different situation. The match has
+// to sit in a live `@import` STATEMENT: a commented-out import is a palette the
+// app deliberately turned off, and reading it as wired would silently skip the
+// copy the user just asked for.
 func themeImportedFromPackage(styles, name string) bool {
 	spec := packageThemePrefix + name + ".css"
-	return strings.Contains(styles, `"`+spec+`"`) || strings.Contains(styles, `'`+spec+`'`)
+	for _, stmt := range importStatements(stripCSSComments(styles)) {
+		if strings.Contains(stmt, `"`+spec+`"`) || strings.Contains(stmt, `'`+spec+`'`) {
+			return true
+		}
+	}
+	return false
+}
+
+// stripCSSComments removes /* … */ blocks (CSS has no line comments). An
+// unterminated comment swallows the rest of the file, exactly as a browser
+// parses it.
+func stripCSSComments(css string) string {
+	var b strings.Builder
+	for {
+		open := strings.Index(css, "/*")
+		if open < 0 {
+			b.WriteString(css)
+			return b.String()
+		}
+		b.WriteString(css[:open])
+		rest := css[open+2:]
+		close := strings.Index(rest, "*/")
+		if close < 0 {
+			return b.String()
+		}
+		css = rest[close+2:]
+	}
+}
+
+// importStatements returns the body of each `@import` statement, up to its
+// terminating `;` (or the end of the stylesheet for an unterminated one).
+func importStatements(css string) []string {
+	var stmts []string
+	for {
+		at := strings.Index(css, "@import")
+		if at < 0 {
+			return stmts
+		}
+		rest := css[at+len("@import"):]
+		if end := strings.IndexByte(rest, ';'); end >= 0 {
+			stmts = append(stmts, rest[:end])
+			css = rest[end+1:]
+			continue
+		}
+		return append(stmts, rest)
+	}
 }
 
 // readAppStyles returns app/styles/styles.css, or "" when there is none (a
@@ -310,44 +362,56 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 		return nil, err
 	}
 
-	result := &ThemeResult{AppRoot: opts.AppRoot, Source: opts.Fetcher.Source(), LockPath: lockPath}
+	result := &ThemeResult{AppRoot: opts.AppRoot, Source: opts.Fetcher.Source()}
 	var planned []plannedThemeCopy
 	var refusals []string
 	for _, t := range selected {
 		outcome := ThemeOutcome{Name: t.Name, Label: t.Label, Description: t.Description}
+		rel := themeDestRel(reg, t)
+		advisory := themeImportLine(t.Name)
+		// adviseWhenUpToDate is set only where the stylesheet is KNOWN not to
+		// import the palette (planTheme's state (c)). For every other palette we
+		// don't inspect styles.css for a local import, so repeating the line on an
+		// already-wired app would just be noise.
+		adviseWhenUpToDate := false
+
 		if isDefaultTheme(reg, t) {
-			plan, advisory, perr := planTheme(&Options{AppRoot: opts.AppRoot, Fetcher: opts.Fetcher}, reg)
+			// The default palette's "is it needed at all?" question belongs to
+			// planTheme — the same code `add piece` runs — so the two commands agree
+			// on when pieces.css is wanted. Only its state (c) (pieces.css present
+			// but unwired) continues below, where it gets the SAME already-installed
+			// rules every other palette gets: `add theme default` must behave like
+			// `add theme dim`. `add piece` itself is unchanged and still never
+			// rewrites pieces.css.
+			plan, defaultAdvisory, perr := planTheme(&Options{AppRoot: opts.AppRoot, Fetcher: opts.Fetcher}, reg)
 			if perr != nil {
 				return nil, perr
 			}
-			switch {
-			case plan != nil:
+			if plan != nil { // (b) nothing there yet — copy it
 				outcome.State, outcome.Rel = ThemeCopied, plan.file.rel
 				planned = append(planned, plannedThemeCopy{
-					file: plan.file, unit: plan.unit, advisory: advisory, name: t.Name,
+					file: plan.file, unit: plan.unit, advisory: defaultAdvisory, name: t.Name,
 				})
-			case advisory != "":
-				// pieces.css is there but unwired — never rewritten (same reason we
-				// won't touch styles.css), just advised.
-				outcome.State, outcome.Rel = ThemeUpToDate, themeDestRel(reg, t)
-				result.NextSteps = append(result.NextSteps, advisory)
-			case themeImportedFromPackage(styles, t.Name):
-				outcome.State = ThemeWiredViaPackage
-			default:
-				outcome.State = ThemeWired
+				result.Themes = append(result.Themes, outcome)
+				continue
 			}
-			result.Themes = append(result.Themes, outcome)
-			continue
-		}
-
-		// (1) Provided by the package already — a copy could only drift from it.
-		if themeImportedFromPackage(styles, t.Name) {
+			if defaultAdvisory == "" { // (a) styles.css already carries the tokens
+				if themeImportedFromPackage(styles, t.Name) {
+					outcome.State = ThemeWiredViaPackage
+				} else {
+					outcome.State = ThemeWired
+				}
+				result.Themes = append(result.Themes, outcome)
+				continue
+			}
+			advisory, adviseWhenUpToDate = defaultAdvisory, true
+		} else if themeImportedFromPackage(styles, t.Name) {
+			// Provided by the package already — a copy could only drift from it.
 			outcome.State = ThemeWiredViaPackage
 			result.Themes = append(result.Themes, outcome)
 			continue
 		}
 
-		rel := themeDestRel(reg, t)
 		outcome.Rel = rel
 		abs, err := containedWritePath(resolvedRoot, rel, "registry", "themes[].name", t.Name)
 		if err != nil {
@@ -358,9 +422,9 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			return nil, err
 		}
 
-		// (2) A symlinked destination is a deliberate link (a dev checkout, a
-		// shared palette): report and skip it rather than silently replacing what
-		// it points at. --overwrite is explicit intent and writes THROUGH the link
+		// A symlinked destination is a deliberate link (a dev checkout, a shared
+		// palette): report and skip it rather than silently replacing what it
+		// points at. --overwrite is explicit intent and writes THROUGH the link
 		// (abs is already the resolved target), never over it. The Lstat is on the
 		// UNRESOLVED path — containedWritePath has followed the link by now, so
 		// stat-ing abs would only ever see the target.
@@ -375,9 +439,9 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			return nil, fmt.Errorf("checking %s: %w", rel, lerr)
 		}
 
-		// (3) Already installed: identical bytes, or a copy still matching the hash
+		// Already installed: identical bytes, or a copy still matching the hash
 		// pieces.lock recorded, is up to date. Anything else is the user's own
-		// edit — refuse rather than discard it.
+		// edit, refused rather than discarded.
 		if lerr == nil {
 			existing, rerr := os.ReadFile(abs)
 			if rerr != nil {
@@ -386,6 +450,9 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			locked := lock.Pieces[t.File].Files[rel]
 			if hashBytes(existing) == hashBytes(data) || (locked != "" && hashBytes(existing) == locked) {
 				outcome.State = ThemeUpToDate
+				if adviseWhenUpToDate {
+					result.NextSteps = append(result.NextSteps, advisory)
+				}
 				result.Themes = append(result.Themes, outcome)
 				continue
 			}
@@ -401,7 +468,7 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			// Keyed by its registry path ("theme/dim.css"), same lock shape as the
 			// default theme and a lib.
 			unit:     Unit{Name: t.File, Files: []FileWrite{{Rel: rel, Abs: abs, Hash: hashBytes(data)}}},
-			advisory: themeImportLine(t.Name),
+			advisory: advisory,
 			name:     t.Name,
 		})
 		result.Themes = append(result.Themes, outcome)
