@@ -793,3 +793,26 @@ export declare const SNIPPET_TAG: string;
 
 /** Reserved tag marking a `<Portal>…</Portal>` teleport (D144). */
 export declare const PORTAL_TAG: string;
+
+/**
+ * Render one item-form `{#for}` site (D170). A compiled module imports this as
+ * `__l`, and ONLY when it lowers at least one such loop — the same conditional
+ * import `displayValue as __s` uses, so a loop-free app never carries the list
+ * runtime. Never called from user code.
+ */
+export declare function listRows(
+	view: object,
+	owner: object,
+	id: number,
+	items: ArrayLike<any>,
+	factory: (row: any) => ViewNode,
+	meta: {
+		key: (item: any, index: number) => any;
+		counter?: boolean;
+		ctrl?: boolean;
+		roots?: number;
+		fields?: string[];
+		deep?: boolean;
+		volatile?: boolean;
+	}
+): ViewNode[];

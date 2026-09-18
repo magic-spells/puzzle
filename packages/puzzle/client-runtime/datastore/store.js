@@ -26,6 +26,7 @@ import {
 	safeMerge,
 } from '../model.js';
 import { devtoolsFlush } from '../devtools.js';
+import { RENDER_REV } from '../renderRev.js';
 import {
 	devperfStoreFlushEnd,
 	devperfStoreFlushNotifications,
@@ -145,6 +146,15 @@ export class Store {
 		// one that postdates it — see _deliverNotifications and D161.
 		this._pendingKeys = new Map();
 		this._notifySeq = 0;
+		// The highest sequence in the batch currently being DELIVERED, or 0 outside
+		// delivery (D170, flush-sequence dedupe). A refresh started while this is
+		// non-zero — a parent's applyParentUpdate reaching a child that also
+		// subscribes to the same record — commits a model that already reflects
+		// every mutation in the batch, so it stamps this onto its own
+		// `_settleMark` and the child's own onStoreChange(seq) for that batch
+		// takes the existing `seq <= _settleMark` early return. One flush, one
+		// data() run.
+		this._flushSeq = 0;
 		this._flushScheduled = false;
 		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
 		this._persistPending = false; // dirty flag: storage write is batched into flush()
@@ -332,6 +342,18 @@ export class Store {
 		record._store = this;
 		Object.defineProperty(record, '_type', {
 			value: type,
+			enumerable: false,
+			configurable: true,
+		});
+		// Render revision (D170). Defined HERE, beside `_type`, so every
+		// record leaves this method with the same hidden class — a lazily added
+		// property on first mutation would fragment it across the collection. 0 means
+		// "never mutated since instantiation"; `_notify` writes the notification
+		// sequence from then on. Non-enumerable and Symbol-keyed, so toJSON(),
+		// payload merges and the schema-name assertions never see it.
+		Object.defineProperty(record, RENDER_REV, {
+			value: 0,
+			writable: true,
 			enumerable: false,
 			configurable: true,
 		});
@@ -719,6 +741,22 @@ export class Store {
 		const seq = ++this._notifySeq;
 		this._pendingKeys.set(type, seq);
 		this._pendingKeys.set(type + REC_SEP + id, seq);
+		// Stamp the record with this sequence (D170, record render revision): it is the one
+		// number that says "this record's data changed" to a reader holding the same
+		// reference — row caches in list blocks and the component prop comparison.
+		// EVERY observable mutation path funnels through here (createRecord,
+		// update() via recordChanged, removeRecord, the adapter's _upsert and the
+		// save reconciliation), so the revision advances with the notification and
+		// never independently of it.
+		//
+		// removeRecord deletes from the map BEFORE notifying, so the lookup misses
+		// for a removal — deliberately: a record that left the store needs no
+		// revision, its row leaves the list, and reordering the delete after the
+		// notify would hand subscribers a store that still contains it.
+		// Read through `recordsByType` rather than `_typeMap`, which would CREATE an
+		// empty collection as a side effect of a notification.
+		const record = this.recordsByType.get(type)?.get(recordKey(id));
+		if (record) record[RENDER_REV] = seq;
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfStoreNotify(this, this._tracking);
 		}
@@ -806,7 +844,12 @@ export class Store {
 		// The key that carried that sequence rides along for the membership
 		// re-check below.
 		const targets = new Map();
+		// The batch's highest sequence, tracked in the pass that already walks it
+		// (one comparison per key, no allocation). Published as `_flushSeq` for the
+		// duration of delivery — see the field's note and D170 (flush-sequence dedupe).
+		let flushSeq = 0;
 		for (const [key, seq] of pending) {
+			if (seq > flushSeq) flushSeq = seq;
 			const subs = this.subscribersByKey.get(key);
 			if (!subs) continue;
 			for (const sub of subs) {
@@ -824,38 +867,54 @@ export class Store {
 			keys = pending.map(([key]) => key);
 			notified = new Set();
 		}
-		for (const [sub, [seq, key]] of targets) {
-			// Membership is re-checked at CALL time, not just at gather time: an
-			// earlier subscriber in this same batch may have unsubscribed this one
-			// (a parent's data() destroying a child, an app callback removing
-			// another). Delivering to a subscriber that asked to stop is a bug the
-			// gather pass cannot see — a plain `store.subscribe(fn)` callback has no
-			// destroyed-guard of its own, so this is its only protection. The test
-			// is the set this subscriber was GATHERED from, which is what
-			// unsubscribe() empties, rather than the keysBySubscriber side index.
-			if (!this.subscribersByKey.get(key)?.has(sub)) continue;
-			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) notified.add(sub);
-			// Each subscriber is isolated: a synchronous throw is logged and
-			// delivery CONTINUES to the remaining subscribers. Without this a
-			// single throwing subscriber would both skip every later subscriber
-			// AND lose those notifications for good — _pendingKeys was already
-			// cleared above, so they never come back. Function subscribers may
-			// also return a thenable; a rejection is logged the same way. Object
-			// subscribers route through onStoreChange(), which catches its own
-			// async failures and returns undefined, so only the function path
-			// needs the thenable guard (no double-logging).
-			try {
-				if (typeof sub === 'function') {
-					const result = sub();
-					if (result && typeof result.then === 'function') {
-						result.catch((err) => console.error('[puzzle] store subscriber failed:', err));
+		// Publish the delivering sequence around the loop ONLY (D170,
+		// flush-sequence dedupe): a refresh started from inside delivery — a
+		// parent's applyParentUpdate, a subscriber calling refresh() on someone
+		// else — is what reads it, and a refresh outside delivery must read 0 and
+		// stamp nothing. Reset in a
+		// `finally` because a subscriber's synchronous throw is caught per
+		// subscriber INSIDE the loop, but the devperf/devtools tail below and every
+		// later flush still have to see a clean slot. A re-entrant flush() (a
+		// subscriber calling store.flush() synchronously) leaves 0 behind for the
+		// outer loop's remaining subscribers, which only loses the dedupe — it can
+		// never suppress a notification that should have been delivered.
+		this._flushSeq = flushSeq;
+		try {
+			for (const [sub, [seq, key]] of targets) {
+				// Membership is re-checked at CALL time, not just at gather time: an
+				// earlier subscriber in this same batch may have unsubscribed this one
+				// (a parent's data() destroying a child, an app callback removing
+				// another). Delivering to a subscriber that asked to stop is a bug the
+				// gather pass cannot see — a plain `store.subscribe(fn)` callback has no
+				// destroyed-guard of its own, so this is its only protection. The test
+				// is the set this subscriber was GATHERED from, which is what
+				// unsubscribe() empties, rather than the keysBySubscriber side index.
+				if (!this.subscribersByKey.get(key)?.has(sub)) continue;
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) notified.add(sub);
+				// Each subscriber is isolated: a synchronous throw is logged and
+				// delivery CONTINUES to the remaining subscribers. Without this a
+				// single throwing subscriber would both skip every later subscriber
+				// AND lose those notifications for good — _pendingKeys was already
+				// cleared above, so they never come back. Function subscribers may
+				// also return a thenable; a rejection is logged the same way. Object
+				// subscribers route through onStoreChange(), which catches its own
+				// async failures and returns undefined, so only the function path
+				// needs the thenable guard (no double-logging).
+				try {
+					if (typeof sub === 'function') {
+						const result = sub();
+						if (result && typeof result.then === 'function') {
+							result.catch((err) => console.error('[puzzle] store subscriber failed:', err));
+						}
+					} else {
+						sub.onStoreChange?.(seq);
 					}
-				} else {
-					sub.onStoreChange?.(seq);
+				} catch (err) {
+					console.error('[puzzle] store subscriber failed:', err);
 				}
-			} catch (err) {
-				console.error('[puzzle] store subscriber failed:', err);
 			}
+		} finally {
+			this._flushSeq = 0;
 		}
 
 		// DevTools bridge (constellation/doc/DOC-SPEC.md §27, D100): report the batch

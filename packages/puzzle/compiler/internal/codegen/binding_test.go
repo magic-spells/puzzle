@@ -10,11 +10,11 @@ import (
 func TestClassifyBindExpr(t *testing.T) {
 	t.Parallel()
 
-	scopedTodo := map[string]bool{"todo": true}
+	scopedTodo := scopeMap{"todo": ""}
 	tests := []struct {
 		name   string
 		raw    string
-		scope  map[string]bool
+		scope  scopeMap
 		target string
 		field  string
 		bare   bool
@@ -38,7 +38,7 @@ func TestClassifyBindExpr(t *testing.T) {
 		{name: "keyword", raw: "true"},
 		{name: "global", raw: "window"},
 		{name: "event member", raw: "event.target"},
-		{name: "scoped event member", raw: "event.detail", scope: map[string]bool{"event": true}, target: "event", field: "detail", ok: true},
+		{name: "scoped event member", raw: "event.detail", scope: scopeMap{"event": ""}, target: "event", field: "detail", ok: true},
 		{name: "quoted empty", raw: "''"},
 		{name: "object literal", raw: "{ a: 1 }"},
 		{name: "scoped bare", raw: "todo", scope: scopedTodo},
@@ -80,13 +80,13 @@ func TestDetectAutoBind(t *testing.T) {
 	want := func(event, target, field, spec string) *autoBind {
 		return &autoBind{event: event, target: target, field: field, spec: spec}
 	}
-	loopScope := map[string]bool{"todo": true}
+	loopScope := scopeMap{"todo": ""}
 
 	tests := []struct {
 		name  string
 		tag   string
 		attrs []parser.Attr
-		scope map[string]bool
+		scope scopeMap
 		want  *autoBind
 	}{
 		{
@@ -214,7 +214,7 @@ func TestDetectAutoBind(t *testing.T) {
 			name  string
 			tag   string
 			attrs []parser.Attr
-			scope map[string]bool
+			scope scopeMap
 			want  *autoBind
 		}{
 			name:  "text-ish " + inputType,
@@ -228,7 +228,7 @@ func TestDetectAutoBind(t *testing.T) {
 			name  string
 			tag   string
 			attrs []parser.Attr
-			scope map[string]bool
+			scope scopeMap
 			want  *autoBind
 		}{
 			name:  "date-ish " + inputType,
@@ -242,7 +242,7 @@ func TestDetectAutoBind(t *testing.T) {
 			name  string
 			tag   string
 			attrs []parser.Attr
-			scope map[string]bool
+			scope scopeMap
 			want  *autoBind
 		}{
 			name:  "excluded type " + inputType,

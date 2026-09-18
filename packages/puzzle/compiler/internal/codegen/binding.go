@@ -18,7 +18,7 @@ type autoBind struct {
 // bare==false => target is the ROOT segment (unresolved), field the second.
 // Roots in jsKeywords/jsGlobals never classify. A bare root present in scope
 // (a {#for} variable) never classifies. A scoped root of a member path does.
-func classifyBindExpr(raw string, scope map[string]bool) (target, field string, bare, ok bool) {
+func classifyBindExpr(raw string, scope scopeMap) (target, field string, bare, ok bool) {
 	parts := strings.Split(strings.TrimSpace(raw), ".")
 	if len(parts) < 1 || len(parts) > 2 {
 		return "", "", false, false
@@ -30,12 +30,12 @@ func classifyBindExpr(raw string, scope map[string]bool) (target, field string, 
 	}
 	// `event` is the reserved handler identifier (evScope); unless a scope
 	// explicitly names it, a path rooted on it is never a bindable data path.
-	if root == "event" && !scope[root] {
+	if _, bound := scope[root]; root == "event" && !bound {
 		return "", "", false, false
 	}
 
 	if len(parts) == 1 {
-		if scope[root] {
+		if _, bound := scope[root]; bound {
 			return "", "", false, false
 		}
 		return "", root, true, true
@@ -50,7 +50,7 @@ func classifyBindExpr(raw string, scope map[string]bool) (target, field string, 
 // detectAutoBind inspects the whole element (conditions are sibling-aware) and
 // returns nil when nothing binds. Pure; safe to call from both the width trial
 // and the real pass. Consumes no compiler state.
-func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *autoBind {
+func detectAutoBind(tag string, attrs []parser.Attr, scope scopeMap) *autoBind {
 	tag = strings.ToLower(tag)
 	if tag != "input" && tag != "textarea" && tag != "select" {
 		return nil
@@ -153,12 +153,14 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 // autoBindKV emits the synthesized listener without touching compiler state.
 // Member roots resolve exactly like template expressions: loop bindings stay
 // bare, while data roots read through __d.
-func autoBindKV(bind *autoBind, scope map[string]bool) string {
+func autoBindKV(bind *autoBind, scope scopeMap) string {
 	target := "null"
 	if bind.target != "" {
 		target = "__d." + bind.target
-		if scope[bind.target] {
-			target = bind.target
+		if local, ok := scopeRef(scope, bind.target); ok {
+			// A {#for} local resolves through its scope map entry, so a row
+			// inside a lowered list block binds `s.item` (D170 emission contract).
+			target = local
 		}
 	}
 	return jsKey("@"+bind.event+":bind") + ": this.__bind(" +
