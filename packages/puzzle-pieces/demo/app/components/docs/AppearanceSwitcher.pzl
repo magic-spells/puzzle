@@ -11,8 +11,15 @@
       aria-controls={ panelId }
       title="Appearance — theme and mode"
       @click={ toggle }>
-      <!-- The dot previews the current palette's accent: `data-scheme` scopes it. -->
-      <span class="size-2.5 shrink-0 rounded-full bg-brand ring-1 ring-rail-edge" data-scheme={ scheme } aria-hidden="true"></span>
+      <!-- THE MARK IS A size-5 BOX with the dot centred in it, and the box is
+           what matters: at `px-2` inside the footer's `px-3` gutter it lands on
+           the rail rows' own icon column (x=20, centre 1.875rem) and the label
+           beside it starts where every row label starts. A bare 10px dot would
+           sit on neither. The dot previews the current palette's accent:
+           `data-scheme` scopes it. -->
+      <span class="grid size-5 shrink-0 place-items-center" aria-hidden="true">
+        <span class="size-2.5 rounded-full bg-brand ring-1 ring-rail-edge" data-scheme={ scheme }></span>
+      </span>
       <span class="min-w-0 flex-1 truncate text-left">
         <span class="block truncate text-xs font-medium text-rail-ink">{ schemeLabel }</span>
         <span class="block truncate text-micro text-rail-muted">{ modeLabel }</span>
@@ -74,9 +81,27 @@ import { SCHEMES, MODES, current, set, subscribe } from '../../lib/appearance.js
 // content surface (surface-raised) because it floats over the page.
 let uid = 0;
 
+// THE FOOT ROW IS A RAIL ROW, in a rail row's three states: flat at rest, the
+// idle wash on hover, and the seated fill while its popover is up. No rule above
+// it — the Sidebar piece's footer stopped drawing one, and the air is the seam —
+// so what the eye gets is a detached chip on the rows' column, its bottom edge
+// one 12px inset off the window exactly as the main panel's is.
+//
+// `px-2 gap-3` and a size-5 mark are the ROWS' recipe (Sidebar's ROW_PAD is
+// `px-3` inside a `p-2` list; this sits `px-2` inside the footer's `px-3`), which
+// is what puts the dot on their icon column and the label on theirs.
 const TRIGGER =
-  'flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ' +
-  'hover:bg-rail-active outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2';
+  'flex h-10 w-full cursor-pointer items-center gap-3 rounded-md px-2 text-left transition-colors ' +
+  'outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2';
+// AT REST IT IS A VISIBLE BOX, which is the one place this parts from the app
+// template's account row (flat until hovered). That row has an avatar and a name
+// to give it a shape; this one is a 10px dot and two lines of small type, and
+// flat it read as loose text in the corner rather than as something to click.
+// The rail's own wash at 60% is enough — quieter than a selected row's fill, so
+// it still sits below the rows above it — and hover takes it to full strength.
+const IDLE = 'bg-rail-active/60 hover:bg-rail-active';
+// Held while the popover is up — the seated recipe a selected row wears.
+const OPEN = 'bg-rail-active';
 
 export default class AppearanceSwitcher extends PuzzleView {
   _id = `appearance-${++uid}`;
@@ -90,7 +115,10 @@ export default class AppearanceSwitcher extends PuzzleView {
       open: !!state.open,
       panelId: `${this._id}-panel`,
       titleId: `${this._id}-title`,
-      triggerClass: [TRIGGER, state.open ? 'bg-rail-active' : '', props.class || ''].join(' '),
+      // Exactly ONE of the two variants, never a base plus an override: two
+      // same-specificity utilities on one element are resolved by the
+      // stylesheet's emit order, not by the class attribute's.
+      triggerClass: [TRIGGER, state.open ? OPEN : IDLE, props.class || ''].join(' '),
       scheme: scheme.value,
       mode: live.mode,
       schemeLabel: scheme.label,
