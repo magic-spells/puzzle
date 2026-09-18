@@ -207,7 +207,7 @@ export const SECTIONS = [
 		{ name: "separator", title: "Separator", path: "/components/separator",
 			description: "Hairline divider in horizontal or vertical orientation" },
 		{ name: "sidebar", title: "Sidebar", path: "/components/sidebar",
-			description: "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, and an optional-controlled collapsed icon-only mode with header/footer slots" },
+			description: "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, an optional-controlled collapsed icon-only mode with header/footer slots, and a `rail` variant that paints it with the shell roles (bg-rail, text-rail-ink) as the frame's rail" },
 		{ name: "stepper", title: "Stepper", path: "/components/stepper",
 			description: "Numbered step-progress indicator — horizontal or vertical, complete/current/upcoming states, optional clickable steps" },
 		{ name: "table", title: "Table", path: "/components/table",

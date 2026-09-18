@@ -166,79 +166,23 @@
 }
 
 /*
- * puzzle-pieces design tokens — merged from registry/theme/pieces.css, exactly
- * the way a consuming app would. Every piece styles itself through the semantic
- * utilities these generate (bg-surface, text-ink, border-border, bg-brand, …).
+ * puzzle-pieces design tokens — imported straight from the registry, the way a
+ * consuming app imports them from the package
+ * (`@import "@magic-spells/puzzle-pieces/themes/default.css"`). pieces.css is
+ * the default palette's `@theme` block plus the three mode blocks; the other
+ * three files are `[data-scheme]` overrides, imported AFTER it so their
+ * unlayered rules win. The registry files are the source of truth — there is
+ * no demo-side copy to keep in step.
  *
- * Dark mode: every token is a `light-dark(light, dark)` pair resolved by
- * `color-scheme`. No data-theme attribute → follow the OS; the header switcher
- * sets data-theme="light"/"dark" on <html> (persisted in localStorage, applied
- * pre-paint by an inline script in public/index.html).
+ * Modes: data-theme="light" | "medium" | "dark" on <html>; absent = follow the
+ * OS. Palettes: data-scheme="dim" | "warm" | "void"; absent = default. Both are
+ * set pre-paint by the inline script in public/index.html and at runtime by
+ * app/lib/appearance.js.
  */
-
-:root {
-  color-scheme: light dark;
-}
-:root[data-theme='light'] {
-  color-scheme: light;
-}
-:root[data-theme='dark'] {
-  color-scheme: dark;
-}
-
-@theme {
-  /* Text — darkest to faintest. */
-  --color-ink: light-dark(#1f2933, #f4f4f5);
-  --color-body: light-dark(#52606d, #b4b4bb);
-  --color-muted: light-dark(#7b8794, #7f7f88);
-  --color-faint: light-dark(#cbd2d9, #46464e);
-
-  /* Surfaces. */
-  --color-page: light-dark(#f5f7fa, #09090b);
-  --color-surface: light-dark(#ffffff, #101013);
-  --color-surface-sunken: light-dark(#eef1f6, #18181c);
-
-  /* Brand. */
-  --color-brand: light-dark(#4c6ef5, #5c7cfa);
-  --color-brand-dark: light-dark(#3b5bdb, #748ffc);
-  --color-brand-tint: light-dark(#eef2ff, #1d2440);
-  --color-brand-ink: #ffffff;
-
-  /* Danger. */
-  --color-danger: light-dark(#e03131, #fa5252);
-  --color-danger-dark: light-dark(#c92a2a, #ff6b6b);
-  --color-danger-tint: light-dark(#fff5f5, #271417);
-  --color-danger-ink: #ffffff;
-
-  /* Success — positive deltas, "up is good" indicators (counterpart to danger). */
-  --color-success: light-dark(#006300, #0ca30c);
-  --color-success-tint: light-dark(#ebf7eb, #122616); /* soft positive backgrounds */
-
-  /* Warning — caution band between success and danger (meters, gauges, alerts). */
-  --color-warning: light-dark(#b45309, #f59e0b);
-  --color-warning-tint: light-dark(#fff8eb, #2a1c07); /* soft caution backgrounds */
-
-  /* Charts — categorical series palette, assigned in fixed slot order (1→8), never cycled.
-     Validated for colorblind safety + lightness/chroma bands in both modes
-     (dataviz six-checks validator, 2026-07-17). Light slots 3/4/5 sit below 3:1
-     contrast on white by design — chart pieces mitigate with legends, tooltips,
-     and their built-in accessible table views. */
-  --color-chart-1: light-dark(#2a78d6, #3987e5);
-  --color-chart-2: #008300;
-  --color-chart-3: light-dark(#e87ba4, #d55181);
-  --color-chart-4: light-dark(#eda100, #c98500);
-  --color-chart-5: light-dark(#1baf7a, #199e70);
-  --color-chart-6: light-dark(#eb6834, #d95926);
-  --color-chart-7: light-dark(#4a3aa7, #9085e9);
-  --color-chart-8: light-dark(#e34948, #e66767);
-
-  /* Lines & focus. */
-  --color-border: light-dark(#e4e9f0, #1f1f23);
-  --color-border-strong: light-dark(#c3cfe6, #2e2e35);
-  --color-ring: light-dark(#4c6ef5, #5c7cfa);
-}
-
-@import './schemes.css';
+@import "../../../registry/theme/pieces.css";
+@import "../../../registry/theme/dim.css";
+@import "../../../registry/theme/warm.css";
+@import "../../../registry/theme/void.css";
 
 @layer base {
   body {
