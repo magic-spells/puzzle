@@ -7,6 +7,46 @@ export const GETTING_STARTED = [
 	{ title: 'Theming', path: '/theming' },
 ];
 
+// The design-system panels (hand-maintained — not generated from the registry).
+// /theming is the written model; the rest are the live panels the brief asks
+// for: one scheme panel per palette, the 4×3 compare grid, the labelled shell
+// mock and the pieces gallery. SCHEME_PANELS is derived from the appearance
+// helper's SCHEMES so a fifth palette lands here on its own.
+import { SCHEMES } from '../lib/appearance.js';
+
+export const SCHEME_PANELS = SCHEMES.map((s) => ({
+	title: s.label,
+	path: `/themes/${s.value}`,
+	scheme: s.value,
+	description: s.description,
+}));
+
+export const THEMES = [
+	{ title: 'Compare', path: '/themes/compare', description: 'All four schemes × three modes as mini shells, one screen.' },
+	{ title: 'Shell', path: '/themes/shell', description: 'A full-size frame / rail / panel mock with the roles called out.' },
+	{ title: 'Pieces', path: '/themes/pieces', description: 'The registry pieces in the current scheme and mode.' },
+];
+
+// SVG path `d` strings on a 24×24 stroked grid — the Sidebar piece's icon
+// contract (see registry/ui/sidebar/Sidebar.pzl). One per rail entry so the
+// collapsed rail still reads.
+export const ICONS = {
+	introduction: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5z',
+	components: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+	theming: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.2a2 2 0 0 1-1.8-2.8l.4-.9A2.4 2.4 0 0 0 14.2 3H12zM8.5 7.5h.01M13.5 6.5h.01M17.5 11.5h.01',
+	schemes: 'M12 22a10 10 0 1 0 0-20v20zM2 12h10',
+	compare: 'M3 5h7v14H3zM14 5h7v6h-7zM14 13h7v6h-7z',
+	shell: 'M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 9h18M9 9v12',
+	pieces: 'M14 7h4a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h3V9a2 2 0 0 1 2-2h1V5a2 2 0 1 1 2 0z',
+	Forms: 'M4 6h16M4 12h10M4 18h16M20 10l-3 3-2-2',
+	Overlays: 'M3 7h13v13H3zM8 3h13v13',
+	Feedback: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+	Charts: 'M3 3v18h18M7 15l4-5 4 3 5-7',
+	Chat: 'M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z',
+	Content: 'M4 4h16v16H4zM8 9h8M8 13h8M8 17h5',
+	Layouts: 'M3 3h18v18H3zM3 9h18M9 9v12',
+};
+
 export const SECTIONS = [
 	{
 		label: "Forms",

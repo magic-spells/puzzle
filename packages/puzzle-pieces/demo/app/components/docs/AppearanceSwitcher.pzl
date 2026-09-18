@@ -1,0 +1,103 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    <p class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-rail-muted">Scheme</p>
+    <div class="grid grid-cols-4 gap-1" role="group" aria-label="Color scheme">
+      {#for s in schemes}
+        <button
+          key={ s.value }
+          type="button"
+          class={ s.class }
+          aria-pressed={ s.pressed }
+          title={ s.description }
+          @click={ pickScheme(s.value) }>
+          <span class={ s.dotClass } data-scheme={ s.value } aria-hidden="true"></span>
+          <span class="truncate">{ s.label }</span>
+        </button>
+      {/for}
+    </div>
+
+    <p class="mb-1.5 mt-3 px-1 text-[11px] font-semibold uppercase tracking-wide text-rail-muted">Mode</p>
+    <div class="grid grid-cols-3 gap-1" role="group" aria-label="Mode">
+      {#for m in modes}
+        <button
+          key={ m.value }
+          type="button"
+          class={ m.class }
+          aria-pressed={ m.pressed }
+          title={ m.description }
+          @click={ pickMode(m.value) }>
+          { m.label }
+        </button>
+      {/for}
+    </div>
+    <button
+      type="button"
+      class={ autoClass }
+      aria-pressed={ autoPressed }
+      title="Forget the mode and follow the operating system between light and dark"
+      @click={ followOs }>
+      Follow system
+    </button>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { SCHEMES, MODES, current, set, subscribe } from '../../lib/appearance.js';
+
+// AppearanceSwitcher — the live scheme × mode picker that sits in the docs
+// shell's rail footer. It is painted with the RAIL roles (text-rail-*,
+// bg-rail-active, border-rail-edge) because it lives on the rail, and it owns
+// no state of its own: every click goes through appearance.js (`set`), which
+// writes the attributes on <html>, persists to localStorage and notifies
+// subscribers — this view re-renders from `current()` on each notification,
+// so another tab changing the choice updates this one too.
+//
+// The scheme dots are scoped previews: each `data-scheme` + `data-theme` pair
+// on the dot resolves `bg-brand` to that palette's accent in the CURRENT mode,
+// which is the whole `light-dark()`-in-custom-properties trick on display.
+const BTN =
+  'inline-flex h-7 min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-1.5 text-xs transition-colors ' +
+  'outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2';
+const IDLE = 'text-rail-muted hover:bg-rail-active hover:text-rail-ink';
+const ON = 'bg-rail-active text-rail-ink font-medium ring-1 ring-inset ring-rail-edge';
+
+export default class AppearanceSwitcher extends PuzzleView {
+  data(params, props) {
+    const live = current();
+    const followsOs = live.mode === null;
+    return {
+      rootClass: ['rounded-lg p-1', props.class || ''].join(' '),
+      schemes: SCHEMES.map((s) => ({
+        ...s,
+        pressed: s.value === live.scheme ? 'true' : 'false',
+        class: [BTN, s.value === live.scheme ? ON : IDLE].join(' '),
+        // The dot previews the palette's brand in the CURRENT mode. `data-scheme`
+        // scopes the palette; the surrounding page carries the mode.
+        dotClass: 'size-2.5 shrink-0 rounded-full bg-brand ring-1 ring-rail-edge',
+      })),
+      modes: MODES.map((m) => ({
+        ...m,
+        pressed: m.value === live.mode ? 'true' : 'false',
+        class: [BTN, m.value === live.mode ? ON : IDLE].join(' '),
+      })),
+      autoPressed: followsOs ? 'true' : 'false',
+      autoClass: [BTN, 'mt-1 w-full', followsOs ? ON : IDLE].join(' '),
+    };
+  }
+
+  events = {
+    pickScheme: (value) => set({ scheme: value }),
+    pickMode: (value) => set({ mode: value }),
+    followOs: () => set({ mode: null }),
+  };
+
+  mounted() {
+    this._unsubscribe = subscribe(() => this.refresh());
+  }
+
+  destroyed() {
+    if (this._unsubscribe) this._unsubscribe();
+  }
+}
+</script>
