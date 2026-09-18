@@ -1,90 +1,73 @@
-<puzzle-view class="min-h-screen bg-page text-body">
-  <header class="sticky top-0 z-40 border-b border-border bg-page/85 backdrop-blur">
-    <div class="flex h-14 w-full items-center justify-between px-gutter">
+<puzzle-view class="flex h-dvh flex-col bg-surface-frame text-body">
+  <!-- TOP BAR — the frame's horizontal arm. bg-bar equals surface-frame in every
+       theme file, so the bar and the rail read as one flat L around the panel. -->
+  <header class="flex h-12 shrink-0 items-center justify-between gap-4 bg-bar px-3 text-bar-ink">
+    <div class="flex min-w-0 items-center gap-3">
+      <button
+        type="button"
+        class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-bar-muted transition-colors hover:bg-bar-hover hover:text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 lg:hidden"
+        aria-label="Toggle navigation"
+        aria-expanded={ mobileNavOpen ? 'true' : 'false' }
+        @click={ toggleMobileNav }>
+        <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
       <a
         href="#/"
-        class="rounded-md text-[15px] font-semibold tracking-tight text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
-        Puzzle Pieces
+        class="flex items-center gap-2 rounded-md text-brand font-semibold tracking-tight text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-4">
+        <span class="flex size-6 items-center justify-center rounded-md bg-brand text-xs font-bold text-brand-ink" aria-hidden="true">P</span>
+        <span class="truncate">Puzzle Pieces</span>
       </a>
-      <div class="flex items-center gap-4">
-        <SearchDialog/>
-        <span class="hidden text-xs text-muted sm:inline">{ pieceCount } pieces · v0.7.1</span>
-        <DropdownMenu @select={ setScheme }>
-          <DropdownMenu.Trigger
-            variant="bare"
-            class="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-sunken hover:text-ink">
-            <span class="sr-only">Color scheme</span>
-            <svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="13.5" cy="6.5" r="2.5" />
-              <circle cx="17.5" cy="11.5" r="2.5" />
-              <circle cx="8.5" cy="7.5" r="2.5" />
-              <path d="M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.2a2 2 0 0 1-1.8-2.8l.4-.9A2.4 2.4 0 0 0 14.2 3H12z" />
-            </svg>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end">
-            {#for scheme in schemeItems}
-              <DropdownMenu.Item key={ scheme.value } value={ scheme.value }>{ scheme.label }</DropdownMenu.Item>
-            {/for}
-          </DropdownMenu.Content>
-        </DropdownMenu>
-        <button
-          type="button"
-          aria-label={ themeLabel }
-          @click={ toggleTheme }
-          class="cursor-pointer rounded-md p-1.5 text-muted transition-colors hover:bg-surface-sunken hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-          {#if darkMode}
-            <!-- Moon: currently dark, click for light. -->
-            <svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          {/if}
-          {#if lightMode}
-            <!-- Sun: currently light, click for dark. -->
-            <svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-            </svg>
-          {/if}
-        </button>
-        <a
-          href="https://github.com/magic-spells/puzzle-pieces"
-          target="_blank"
-          rel="noreferrer"
-          aria-label="GitHub repository"
-          class="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-sunken hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-          <svg class="size-4.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
-          </svg>
-        </a>
-      </div>
+      <span class="hidden text-xs text-bar-muted md:inline">{ pieceCount } pieces · v{ version }</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <SearchDialog/>
+      <a
+        href="https://github.com/magic-spells/puzzle-pieces"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="GitHub repository"
+        class="inline-flex size-8 items-center justify-center rounded-md text-bar-muted transition-colors hover:bg-bar-hover hover:text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+        <svg class="size-4.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+        </svg>
+      </a>
     </div>
   </header>
 
-  <!-- Mobile nav: the same SideNav inside our own Collapsible, below lg only. -->
-  <div class="border-b border-border px-gutter py-2 lg:hidden">
-    <Collapsible open={ mobileNavOpen } @change={ setMobileNavOpen }>
-      <Collapsible.Trigger>Menu</Collapsible.Trigger>
-      <Collapsible.Content>
-        <div class="max-h-[60vh] overflow-y-auto pb-2">
-          <SideNav path={ path }/>
+  <!-- MOBILE NAV — below lg the rail is a drawer under the bar, painted with the
+       same rail roles; the switcher rides along so phones can pick a theme too. -->
+  {#if mobileNavOpen}
+    <div class="max-h-[70dvh] overflow-y-auto border-b border-rail-edge bg-rail px-3 pb-3 lg:hidden">
+      <SideNav path={ path } class="py-2"/>
+      <AppearanceSwitcher class="mt-2 border-t border-rail-edge pt-3"/>
+    </div>
+  {/if}
+
+  <div class="flex min-h-0 flex-1">
+    <!-- RAIL — the sidebar piece in its `rail` variant: the frame's vertical arm.
+         Items come from the docs nav config; the footer holds the live
+         scheme × mode switcher. -->
+    <div class="hidden min-h-0 shrink-0 lg:flex">
+      <Sidebar variant="rail" items={ navItems } activePath={ activeHref } label="Docs" collapsed={ collapsed } @collapse={ setCollapsed }>
+        <div slot="footer" class={ footerClass }>
+          <AppearanceSwitcher/>
         </div>
-      </Collapsible.Content>
-    </Collapsible>
-  </div>
+      </Sidebar>
+    </div>
 
-  <div class="flex w-full px-gutter">
-    <!-- -ml-3 cancels the px-3 the nav links carry for their active pill, so the
-         link text lines up with the header logo instead of the pill's edge. -->
-    <aside class="sticky top-14 -ml-3 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 overflow-y-auto py-8 pr-4 lg:block">
-      <SideNav path={ path }/>
-    </aside>
+    <!-- PANEL — the work surface set down inside the frame: one step lighter
+         than the frame, a lip along its top edge (panel-edge: a hairline in
+         light, a light lip in dark), and the panel shadow seating it. -->
+    <main class="min-w-0 flex-1 overflow-y-auto border-t border-panel-edge bg-surface-panel shadow-panel lg:rounded-tl-xl lg:border-l">
+      <div class="px-gutter py-10">
+        <Slot/>
 
-    <main class="min-w-0 flex-1 py-10 lg:pl-10">
-      <Slot/>
-
-      <footer class="mt-16 border-t border-border pt-6 text-sm text-muted">
-        Puzzle Pieces · { pieceCount } copy-in components, rendered live from the registry · built with the Puzzle framework.
-      </footer>
+        <footer class="mt-16 border-t border-border pt-6 text-sm text-muted">
+          Puzzle Pieces · { pieceCount } copy-in components, rendered live from the registry · built with the Puzzle framework.
+        </footer>
+      </div>
     </main>
   </div>
 
@@ -94,29 +77,42 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Toaster from '../components/ui/Toaster.pzl';
-import Collapsible from '../components/ui/Collapsible/index.js';
-import DropdownMenu from '../components/ui/DropdownMenu/index.js';
+import Sidebar from '../components/ui/Sidebar.pzl';
 import SideNav from '../components/docs/SideNav.pzl';
 import SearchDialog from '../components/docs/SearchDialog.pzl';
-import { COMPONENTS } from '../docs/nav.js';
+import AppearanceSwitcher from '../components/docs/AppearanceSwitcher.pzl';
+import { GETTING_STARTED, SECTIONS, COMPONENTS, THEMES, SCHEME_PANELS, ICONS } from '../docs/nav.js';
 
-const SCHEMES = [
-  { label: 'Default', value: 'default' },
-  { label: 'Warm', value: 'warm' },
-  { label: 'Void', value: 'void' },
-  { label: 'Dim', value: 'dim' },
+// Docs shell — the frame / rail / panel composition every theme file is built
+// around, made from the pieces themselves: a top bar (bg-bar), the Sidebar piece
+// as the rail (variant="rail"), and the content as the panel (bg-surface-panel)
+// with the AppearanceSwitcher in the rail's foot. Appearance state lives in
+// app/lib/appearance.js (booted in app.js, pre-painted by the inline script in
+// public/index.html); this layout never touches data-theme / data-scheme itself.
+//
+// Rail items: the Sidebar piece takes hrefs, and the demo is hash-routed, so
+// every href is `#` + path and the active match is `#` + the current path.
+// Shown in the bar; bump with package.json (the bundler has no JSON import).
+const VERSION = '0.7.1';
+
+const KEYS = { '/': 'introduction', '/components': 'components', '/theming': 'theming' };
+
+const link = (item, icon) => ({ label: item.title, href: `#${item.path}`, icon });
+
+const NAV_ITEMS = [
+  ...GETTING_STARTED.map((item) => link(item, ICONS[KEYS[item.path]])),
+  { group: 'Themes' },
+  { label: 'Schemes', icon: ICONS.schemes, children: SCHEME_PANELS.map((s) => ({ label: s.title, href: `#${s.path}` })) },
+  ...THEMES.map((item) => link(item, ICONS[item.title.toLowerCase()])),
+  { group: 'Components' },
+  ...SECTIONS.map((section) => ({
+    label: section.label,
+    icon: ICONS[section.label],
+    badge: String(section.items.length),
+    children: section.items.map((item) => ({ label: item.title, href: `#${item.path}` })),
+  })),
 ];
 
-const schemeItems = (active) =>
-  SCHEMES.map((scheme) => ({
-    ...scheme,
-    label: `${scheme.value === active ? '✓ ' : ''}${scheme.label}`,
-  }));
-
-// Docs shell: sticky blurred header (brand only — the sidebar owns navigation),
-// a 240px sticky component nav from lg: up, and the same nav inside a
-// Collapsible drawer on small screens. Views render the content column and, on
-// component pages, their own "On This Page" Toc.
 export default class DefaultLayout extends PuzzleView {
   data(params, props) {
     // this.route is the per-navigation snapshot (D47), readable here in data();
@@ -125,60 +121,32 @@ export default class DefaultLayout extends PuzzleView {
       (this.route && this.route.path) ||
       (this.ctx && this.ctx.router && this.ctx.router.current && this.ctx.router.current.path) ||
       '/';
-    // Effective theme: explicit data-theme on <html> (set pre-paint from
-    // localStorage by index.html) wins; otherwise the OS preference.
-    const explicit = document.documentElement.dataset.theme;
-    const darkMode = explicit
-      ? explicit === 'dark'
-      : window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const explicitScheme =
-      typeof document !== 'undefined' && document.documentElement.dataset.scheme;
-    const scheme =
-      explicitScheme === 'warm' || explicitScheme === 'void' || explicitScheme === 'dim'
-        ? explicitScheme
-        : 'default';
+    const state = this.getData();
+    const collapsed = !!state.collapsed;
     return {
       path,
+      activeHref: `#${path}`,
+      navItems: NAV_ITEMS,
       pieceCount: COMPONENTS.length,
-      mobileNavOpen: !!this.getData().mobileNavOpen,
-      scheme,
-      schemeItems: schemeItems(scheme),
-      darkMode,
-      lightMode: !darkMode,
-      themeLabel: darkMode ? 'Switch to light mode' : 'Switch to dark mode',
+      version: VERSION,
+      mobileNavOpen: !!state.mobileNavOpen,
+      collapsed,
+      // The switcher is 4 + 3 buttons wide; in the icon-only rail it would clip
+      // mid-word, so it fades out with the rest of the labels.
+      footerClass: [
+        'transition-opacity duration-200 motion-reduce:transition-none',
+        collapsed ? 'pointer-events-none opacity-0' : '',
+      ].join(' '),
     };
   }
 
   events = {
-    setMobileNavOpen: (open) => {
-      this.setData({ mobileNavOpen: open });
+    toggleMobileNav: () => {
+      this.setData({ mobileNavOpen: !this.getData().mobileNavOpen });
       this.refresh();
     },
-    setScheme: (scheme) => {
-      const next =
-        scheme === 'warm' || scheme === 'void' || scheme === 'dim' ? scheme : 'default';
-      if (typeof document !== 'undefined') {
-        if (next === 'default') delete document.documentElement.dataset.scheme;
-        else document.documentElement.dataset.scheme = next;
-      }
-      if (typeof localStorage !== 'undefined') {
-        try {
-          localStorage.setItem('pieces-scheme', next);
-        } catch (e) {}
-      }
-      this.setData({ scheme: next, schemeItems: schemeItems(next) });
-      this.refresh();
-    },
-    toggleTheme: () => {
-      const root = document.documentElement;
-      const dark = root.dataset.theme
-        ? root.dataset.theme === 'dark'
-        : window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const next = dark ? 'light' : 'dark';
-      root.dataset.theme = next;
-      try {
-        localStorage.setItem('pieces-theme', next);
-      } catch (e) {}
+    setCollapsed: (collapsed) => {
+      this.setData({ collapsed: !!collapsed });
       this.refresh();
     },
   };

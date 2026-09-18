@@ -150,6 +150,53 @@ skeleton, SSG, hybrid, router, DevTools or HMR contract moves — but what the
 compiler emits for `{#for}` bodies and static markup does, and a view stops
 rebuilding the parts of its tree that could not have changed (D170).
 
+Folds the never-published 0.7.1 notes (registry version floors, the
+background update notice) into this minor: the themes work re-tunes token
+values every consumer sees and adds a mode and new exports, which is a
+0.x minor, not a patch.
+
+### Added
+
+- **puzzle-pieces: four palettes × three modes, shipped as CSS.** The theme
+  files in `packages/puzzle-pieces/registry/theme/` are the single source of
+  colour for every Puzzle app: `pieces.css` (the default palette — cool
+  near-black with a navy tint and an indigo accent) plus `dim.css`, `warm.css`
+  and `void.css`, each restating every token inside `[data-scheme='…']`. A
+  third mode, **medium** ("soft dark": `color-scheme: dark`, grounds lifted to
+  mid grey, type dimmed a stop), joins light and dark; `data-scheme` picks the
+  palette and `data-theme` the mode, and both are unanchored so any element can
+  scope a subtree. New package exports: `@magic-spells/puzzle-pieces/themes/
+  {default,dim,warm,void}.css`, `…/appearance` (read / persist / apply
+  `{ scheme, mode }`, `mode: null` follows the OS, legacy `mixed` reads as
+  `medium`) and `…/pre-paint` (the inline anti-flash `<head>` snippet).
+  `registry.json` gains `modes` and a `themes` array. Every palette × mode is
+  held to WCAG 2.2 AA on every declared pair by `test/contrast.test.mjs`, and
+  the four files are held to one identical token set by `test/themes.test.mjs`.
+  The Sidebar piece gains `variant="rail"` (the shell roles `bg-rail`,
+  `text-rail-ink`, `bg-rail-active`, `border-rail-edge`; the default `surface`
+  variant is unchanged), and the pieces docs site is rebuilt as a frame / rail /
+  panel shell with a live scheme × mode switcher and `/themes/*` panels (per-
+  scheme colour cards from live computed styles, a 4 × 3 compare grid, a
+  labelled shell mock and a pieces gallery). Token NAMES are unchanged from
+  what Pyramid and Sites use today; adopting the package there is a follow-up.
+- **puzzle-pieces: `appearance-picker` piece.** The palette + mode picker
+  Pyramid and Sites each carried a copy of, as one controlled piece: theme
+  cards that are live miniatures of the shell painted in each palette (scoped
+  `data-scheme`), a Light / Medium / Dark / System radiogroup, and
+  `@change({ scheme, mode })` for the app to persist through the `appearance`
+  export. The pieces docs shell opens it from the rail's foot as a non-modal
+  popover.
+
+- **Registry dependencies carry a version floor (D169).** A piece manifest's
+  `dependencies` entry is now an npm install spec — `"@magic-spells/collapsible-content@^1.2.0"` —
+  and `puzzle add piece` prints `npm install <name>@<range> …` instead of a bare
+  package name, so a fresh app installs a component version that actually has
+  the attributes the piece wraps. When two resolved pieces share a dependency at
+  different floors the higher one wins and the package prints once. A bare name
+  still parses and prints bare, so third-party registries on the old shape are
+  unaffected; neither `registry.json`'s schema version nor `pieces.lock` changed.
+  Every bundled piece manifest now pins the floor it needs.
+
 ### Changed
 
 - **A record prop now refreshes its child when that record changes.** Records
@@ -221,22 +268,6 @@ rebuilding the parts of its tree that could not have changed (D170).
   `<script>` is a positioned compile error, the way binding `ViewNode` already
   is. The instance names join `__h`/`__ref`/`__bind` as names a component must
   not define.
-
-## 0.7.1 — Unreleased
-
-### Added
-
-- **Registry dependencies carry a version floor (D169).** A piece manifest's
-  `dependencies` entry is now an npm install spec — `"@magic-spells/collapsible-content@^1.2.0"` —
-  and `puzzle add piece` prints `npm install <name>@<range> …` instead of a bare
-  package name, so a fresh app installs a component version that actually has
-  the attributes the piece wraps. When two resolved pieces share a dependency at
-  different floors the higher one wins and the package prints once. A bare name
-  still parses and prints bare, so third-party registries on the old shape are
-  unaffected; neither `registry.json`'s schema version nor `pieces.lock` changed.
-  Every bundled piece manifest now pins the floor it needs.
-
-### Changed
 
 - **The update notice never waits on the network (D76).** `puzzle build` and
   `puzzle dev` print "a newer version is available" from a cached answer and

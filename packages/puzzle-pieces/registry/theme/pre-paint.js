@@ -1,17 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light dark">
-  <title>puzzle-pieces demo</title>
-  <!-- APPEARANCE, BEFORE FIRST PAINT. A byte-for-byte copy of
-       registry/theme/pre-paint.js (test/themes.test.mjs checks it). It reads
-       localStorage['puzzle:appearance'] and sets data-scheme / data-theme /
-       color-scheme on <html> before the stylesheet lands, so a dark account
-       never sees a white flash. No data-default-mode: with nothing stored the
-       demo follows the OS between light and dark. -->
-  <script data-key="puzzle:appearance">
 /*
  * puzzle-pieces pre-paint — the anti-flash snippet.
  *
@@ -77,13 +63,3 @@
 		/* storage unavailable — appearance.boot() sorts the attributes out */
 	}
 })();
-</script>
-  <!-- Relative asset paths so the single-page bundle works both at a domain
-       root and under a sub-path (e.g. GitHub Pages project sites). -->
-  <link href="./styles.css" rel="stylesheet">
-</head>
-<body>
-  <div id="app"></div>
-  <script type="module" src="./app.js"></script>
-</body>
-</html>

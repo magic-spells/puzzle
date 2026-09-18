@@ -1,26 +1,35 @@
 {
   "version": 1,
   "theme": "theme/pieces.css",
+  "modes": [
+    "light",
+    "medium",
+    "dark"
+  ],
   "themes": [
     {
       "name": "default",
       "file": "theme/pieces.css",
-      "description": "Balanced cool neutrals with an indigo accent."
-    },
-    {
-      "name": "warm",
-      "file": "theme/warm.css",
-      "description": "Warm greys and ivory with a clay-orange accent."
-    },
-    {
-      "name": "void",
-      "file": "theme/void.css",
-      "description": "Monochrome, borderless surfaces from white to true black."
+      "label": "Default",
+      "description": "Cool near-black with a navy tint and an indigo accent — balanced, classy, premium."
     },
     {
       "name": "dim",
       "file": "theme/dim.css",
-      "description": "Blue-grey mist and medium-dark slate."
+      "label": "Dim",
+      "description": "Blue-grey at half chroma with softer type — the low-contrast palette."
+    },
+    {
+      "name": "warm",
+      "file": "theme/warm.css",
+      "label": "Warm",
+      "description": "Ivory, tan and brown with a clay-orange accent — the Claude palette."
+    },
+    {
+      "name": "void",
+      "file": "theme/void.css",
+      "label": "Void",
+      "description": "Monochrome from white to true black — borderless, high contrast, Vercel-like."
     }
   ],
   "pieces": [
@@ -60,6 +69,16 @@
       "dependencies": [
         "@magic-spells/dialog-panel@^2.0.1"
       ],
+      "targetDir": "app/components/ui"
+    },
+    {
+      "name": "appearance-picker",
+      "description": "Controlled palette + mode picker — theme cards that are live miniatures of the shell painted in each palette (scoped data-scheme), and a Light / Medium / Dark / System radiogroup; fires @change({ scheme, mode }) for the app to persist with the appearance module",
+      "files": [
+        "AppearancePicker.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [],
       "targetDir": "app/components/ui"
     },
     {
@@ -919,7 +938,7 @@
     },
     {
       "name": "sidebar",
-      "description": "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, and an optional-controlled collapsed icon-only mode with header/footer slots",
+      "description": "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, an optional-controlled collapsed icon-only mode with header/footer slots, and a `rail` variant that paints it with the shell roles (bg-rail, text-rail-ink) as the frame's rail",
       "files": [
         "Sidebar.pzl"
       ],

@@ -29,14 +29,18 @@ repo is shaped as a copyable registry.
 ```
 registry/                     # SOURCE OF TRUTH
 ├── registry.json             # aggregated index of every piece manifest
-├── theme/*.css               # @theme design tokens (light + dark): pieces.css default + warm/void/dim alternates
+├── theme/*.css               # hand-written theme files: pieces.css (default palette, @theme + medium) + dim/warm/void overrides
+├── theme/appearance.js       # runtime: read/persist/apply { scheme, mode } (exported as ./appearance)
+├── theme/pre-paint.js        # inline anti-flash snippet for <head> (exported as ./pre-paint)
 ├── lib/*.js                  # shared plain-JS helpers (date-math.js, panel-stack.js, …)
 └── ui/<name>/
     ├── <Name>.pzl            # one or more component files
     └── piece.json            # per-piece manifest
 demo/                         # Puzzle docs-site app (port 3070) — CONSUMES copies
 ├── app/components/ui/*.pzl   # COPIES of registry pieces (downstream)
-├── app/lib/*.js              # COPIES of registry/lib files
+├── app/lib/*.js              # COPIES of registry/lib files (+ appearance.js copy, tokenNames.js name list)
+├── app/styles/styles.css     # imports the four registry/theme/*.css DIRECTLY (not copies)
+├── app/views/themes/*.pzl    # design-system panels: SchemePanel, Compare, Shell, Pieces
 ├── app/views/components/*Doc.pzl  # one docs page per piece
 ├── app/docs/nav.js           # sidebar / index / prev-next config (single source list)
 └── app/routes.js             # route table (kebab piece names, alphabetical)
@@ -147,6 +151,59 @@ CLI — it is unrelated and must not be bumped along with the release.
   `registry/theme/pieces.css` (`bg-surface`, `text-ink`, `border-border`, `bg-brand`,
   `text-danger`, …). **No hex colors** inside components. `pieces.css` is a registry file —
   editing token VALUES there changes every consumer.
+
+## Themes — four palettes × three modes (2026-09-18)
+
+- **The CSS files are the source of truth.** `registry/theme/pieces.css` (default palette:
+  `@theme` block of `light-dark(light, dark)` pairs + a medium block + a
+  `[data-scheme='default']` restatement) and `dim.css` / `warm.css` / `void.css` (every
+  token restated inside `[data-scheme='x']`, plus that scheme's medium block). Hand-written
+  — there is NO generator, NO JS token source and NO `tokens.json` (Cory, 2026-09-18: "we
+  just need a .css theme file with the css vars in it"). Edit values in the files.
+- **Attributes:** `data-scheme` = palette (`dim | warm | void`; absent or `default` = the
+  `@theme` values), `data-theme` = mode (`light | medium | dark`; absent = follow the OS).
+  The `color-scheme` blocks and every scheme/medium block are deliberately UNANCHORED (not
+  `:root`) so any element can scope a subtree: `<div data-scheme="warm" data-theme="medium">`.
+- **Medium is "soft dark"** — `color-scheme: dark`, grounds lifted to mid grey, type dimmed
+  a stop. A medium block lists ONLY tokens whose value differs from the dark half; the
+  medium frame→panel OKLCH lightness step must be the smallest of the three modes
+  (`test/contrast.test.mjs`). Selectors: `[data-scheme='x'][data-theme='medium'],
+  [data-theme='medium'] [data-scheme='x']:not([data-theme])`; pieces.css additionally
+  `[data-theme='medium']:not([data-scheme])`.
+- **Token NAMES are frozen** — they are what Pyramid and Sites already use (`--color-ink`,
+  `--color-surface-frame`, `--color-bar-*`, `--color-rail-*`, `--shadow-panel`, …). All four
+  files must declare the identical set (`test/themes.test.mjs`); aliases (`--color-bar:
+  var(--color-surface-frame)`, `--color-rail-ink: var(--color-bar-ink)`, …) stay aliases.
+- **Marker line:** line 2 of `pieces.css` must stay ` * puzzle-pieces design tokens
+  (Tailwind v4 @theme).` — the Go CLI keys installed-detection on it.
+- **Exports** (`package.json`): `./themes/default.css` → `registry/theme/pieces.css`,
+  `./themes/{dim,warm,void}.css`, `./appearance` (`boot/set/current/subscribe/apply/read`,
+  storage key `puzzle:appearance`, JSON `{ scheme, mode }`, legacy `mixed` → `medium`),
+  `./pre-paint` (inline in `<head>`, params `data-key`, `data-default-mode`,
+  `data-default-scheme`). `registry.json` carries `modes` and a `themes` array
+  (`{ name, file, label, description }`); the Go `Registry` struct ignores both for now.
+- **Contrast:** every palette × mode must pass WCAG 2.2 AA on every declared pair in
+  `test/lib/roles.mjs` (4.5 text, 3 non-text; translucent grounds flattened over
+  `--color-surface`). `border`/`border-strong` are decorative and exempt; `border-dashed`
+  and `ring` are held to 3:1.
+- **Adding a palette:** copy `registry/theme/dim.css` → `x.css`, rename the selectors,
+  retune every value, add `{ name, file, label, description }` to `registry.json.themes`,
+  add it to `SCHEMES` in `appearance.js` AND `pre-paint.js` (they must agree), to
+  `SCHEMES` in `test/lib/parse-theme.mjs` and `demo/app/lib/tokenNames.js`, export it in
+  `package.json`, import it in `demo/app/styles/styles.css`, sync
+  `demo/app/lib/appearance.js` + the inline pre-paint in `demo/app/public/index.html`
+  (byte-equal, tested), run `npm test`.
+- **Demo:** `demo/app/styles/styles.css` imports the four registry files directly (no
+  copies to sync). `demo/app/lib/appearance.js` IS a byte-identical copy (tested) and the
+  inline `<script data-key="puzzle:appearance">` in `public/index.html` must equal
+  `pre-paint.js`. Colour cards read LIVE computed styles over the static name list in
+  `demo/app/lib/tokenNames.js` — no JSON, and the demo never imports `test/`. The docs
+  shell IS the frame/rail/panel composition (Sidebar `variant="rail"`, `bg-bar`,
+  `bg-surface-panel`), with `AppearanceSwitcher` (a non-modal popover over the
+  `appearance-picker` PIECE, wired to `set()`) in the rail foot. The picker piece is
+  controlled — `scheme`, `mode`, `@change({ scheme, mode })` — and carries its own
+  `DEFAULT_SCHEMES`/`DEFAULT_MODES` (tested equal to `appearance.js`) because copied
+  pieces may not import `registry/theme/`.
 - **Wrap @magic-spells web components directly whenever possible; port only when
   wrapping genuinely can't work** (rule set 2026-08-19 as "wrap when simple", strengthened
   2026-08-22 — see `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md`; `scroll-stack`
@@ -303,8 +360,9 @@ with:
   one-line `@import './pieces.css';` wiring step is printed (styles.css is user-owned).
   Detection keys on the `puzzle-pieces design tokens` header comment in `pieces.css` —
   **don't reword that comment without updating the CLI's marker.** `registry.json`'s
-  `themes` array lists the alternates (warm, void, dim) for the docs site; the CLI reads
-  only the singular `theme` key.
+  `themes` array (`{ name, file, label, description }`) and `modes` list the palettes for
+  the docs site and a future `puzzle add theme <name>`; the CLI reads only the singular
+  `theme` key today (Go's `json.Unmarshal` ignores the unknown keys).
 - Copies stay **byte-identical** to the registry (no stamped headers); `pieces.lock` at the
   consumer app root records sha256 content hashes per piece/lib so a future `diff`/`update`
   can distinguish upstream-changed from locally-customized.

@@ -23,3 +23,6 @@ npm-debug.log*
 
 # Source maps — dev builds drop these into the tracked dist/ output
 dist/*.map
+
+# Headless-browser screenshots from the themes verification pass
+.playwright/

@@ -1,0 +1,125 @@
+<puzzle-view>
+  <!-- The wrapper paints nothing; it is the "inside" the two dismiss modifiers
+       measure against (Escape while focus is within, pointerdown anywhere else). -->
+  <div class="relative" @keydown:escape={ close } @pointerdown:outside={ close }>
+    <button
+      type="button"
+      ref="trigger"
+      class={ triggerClass }
+      aria-haspopup="dialog"
+      aria-expanded={ open ? 'true' : 'false' }
+      aria-controls={ panelId }
+      title="Appearance — theme and mode"
+      @click={ toggle }>
+      <!-- The dot previews the current palette's accent: `data-scheme` scopes it. -->
+      <span class="size-2.5 shrink-0 rounded-full bg-brand ring-1 ring-rail-edge" data-scheme={ scheme } aria-hidden="true"></span>
+      <span class="min-w-0 flex-1 truncate text-left">
+        <span class="block truncate text-xs font-medium text-rail-ink">{ schemeLabel }</span>
+        <span class="block truncate text-micro text-rail-muted">{ modeLabel }</span>
+      </span>
+      <svg class="size-4 shrink-0 text-rail-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.2a2 2 0 0 1-1.8-2.8l.4-.9A2.4 2.4 0 0 0 14.2 3H12z"/>
+        <path d="M8.5 7.5h.01M13.5 6.5h.01M17.5 11.5h.01"/>
+      </svg>
+    </button>
+
+    {#if open}
+      <!-- NOT A MODAL — the whole point is watching the shell repaint behind it,
+           so it is a popover surface (surface-raised + shadow-popover) parked
+           in the window's lower-left corner (FIXED: the rail's footer clips its
+           overflow and its list would sit over an absolutely placed panel), and
+           a click on the page closes it AND reaches the page. -->
+      <section
+        id={ panelId }
+        ref="panel"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby={ titleId }
+        tabindex="-1"
+        class="fixed inset-x-3 bottom-3 z-50 max-h-popover overflow-y-auto rounded-xl border border-border bg-surface-raised p-4 text-body shadow-popover sm:inset-x-auto sm:left-3 sm:w-80">
+        <header class="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <h2 id={ titleId } class="text-sm font-semibold text-ink">Appearance</h2>
+            <p class="mt-0.5 text-xs text-muted">Watch the shell change behind this panel.</p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            class="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-sunken hover:text-ink outline-ring focus-visible:outline-2"
+            @click={ close }>
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </header>
+        <AppearancePicker scheme={ scheme } mode={ mode } @change={ applyChoice }/>
+      </section>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import AppearancePicker from '../ui/AppearancePicker.pzl';
+import { SCHEMES, MODES, current, set, subscribe } from '../../lib/appearance.js';
+
+// AppearanceSwitcher — the rail-foot trigger that opens the AppearancePicker
+// piece in a popover. The trigger shows the current palette (its accent as a
+// scoped dot) and mode; the picker inside is the registry piece, wired here to
+// appearance.js (`set`), which writes <html>'s attributes, persists to
+// localStorage and notifies — this view re-renders from `current()` on every
+// notification (including another tab's change and OS flips while following).
+//
+// Painted with the RAIL roles because it lives on the rail; the popover is a
+// content surface (surface-raised) because it floats over the page.
+let uid = 0;
+
+const TRIGGER =
+  'flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ' +
+  'hover:bg-rail-active outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2';
+
+export default class AppearanceSwitcher extends PuzzleView {
+  _id = `appearance-${++uid}`;
+
+  data(params, props) {
+    const live = current();
+    const scheme = SCHEMES.find((s) => s.value === live.scheme) || SCHEMES[0];
+    const mode = live.mode === null ? null : MODES.find((m) => m.value === live.mode) || null;
+    const state = this.getData() || {};
+    return {
+      open: !!state.open,
+      panelId: `${this._id}-panel`,
+      titleId: `${this._id}-title`,
+      triggerClass: [TRIGGER, state.open ? 'bg-rail-active' : '', props.class || ''].join(' '),
+      scheme: scheme.value,
+      mode: live.mode,
+      schemeLabel: scheme.label,
+      modeLabel: mode ? mode.label : 'System',
+    };
+  }
+
+  events = {
+    toggle: () => {
+      const open = !this.getData().open;
+      this.setData({ open });
+      this.refresh();
+      if (open) requestAnimationFrame(() => this.refs.panel && this.refs.panel.focus());
+    },
+    close: () => {
+      if (!this.getData().open) return;
+      this.setData({ open: false });
+      this.refresh();
+      if (this.refs.trigger) this.refs.trigger.focus();
+    },
+    applyChoice: (choice) => set(choice),
+  };
+
+  mounted() {
+    this._unsubscribe = subscribe(() => this.refresh());
+  }
+
+  destroyed() {
+    if (this._unsubscribe) this._unsubscribe();
+  }
+}
+</script>

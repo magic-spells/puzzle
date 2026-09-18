@@ -8,12 +8,12 @@
       {#for item in items}
         <li class={ item.rowClass }>
           {#if item.kind === 'divider'}
-            <div class="mx-1 my-2 border-t border-border" role="separator" aria-hidden="true"></div>
+            <div class={ dividerClass } role="separator" aria-hidden="true"></div>
 
           {:else if item.kind === 'group'}
             <!-- The unpadded wrapper is the grid item: padding on the item itself would floor the 0fr track at padding height, so the padded heading clips inside it instead. -->
             <div class="min-h-0 overflow-hidden">
-              <p class="truncate px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted">{ item.label }</p>
+              <p class={ groupHeadingClass }>{ item.label }</p>
             </div>
 
           {:else if item.kind === 'parent'}
@@ -126,7 +126,7 @@
       {/for}
     </ul>
 
-    <div class="mt-auto shrink-0 overflow-hidden border-t border-border p-2 empty:hidden">
+    <div class={ footerClass }>
       <Slot name="footer"/>
     </div>
 
@@ -204,6 +204,15 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                       rail only reflects the prop and *asks* to change via @collapse.
 //                       Collapsed = an icon-only w-[3.75rem] rail (expanded is w-64); the
 //                       width eases via transition-[width] (motion-reduce disables it).
+//   variant     string  'surface' (default) | 'rail'. `surface` is a content-level rail:
+//                       bg-surface, border-border, text-muted rows, the brand tint on the
+//                       active row. `rail` paints the piece as the app shell's RAIL with
+//                       the shell roles every theme file declares — bg-rail, text-rail-ink /
+//                       text-rail-muted, bg-rail-active on hover and the active row, and
+//                       border-rail-edge for every hairline — so it reads as one flat
+//                       surface with a top bar (bg-bar) in all three modes: dark frame
+//                       in dark and medium, light-grey frame in light. The flyout stays a
+//                       surface popover in both variants (it floats over content).
 //   label       string  accessible <nav> label (default 'Main').
 //   class       string  appended to the root <nav>.
 //
@@ -257,8 +266,34 @@ import { PuzzleView } from '@magic-spells/puzzle';
 let uid = 0;
 
 const NAV_BASE =
-  'relative flex h-full flex-col bg-surface border-r border-border ' +
+  'relative flex h-full flex-col border-r ' +
   'transition-[width] duration-200 ease-out motion-reduce:transition-none';
+
+// VARIANTS — the colour vocabulary per variant. Everything geometric is shared;
+// only the tokens differ. `surface` is the content-level rail the piece always
+// had; `rail` is the app shell's rail drawn with the shell roles (see the
+// `variant` prop above). Literal class strings so Tailwind's scan sees them.
+const VARIANTS = {
+  surface: {
+    nav: 'bg-surface border-border',
+    idle: 'text-muted hover:bg-surface-sunken hover:text-ink',
+    active: 'bg-brand-tint text-ink font-medium',
+    badge: 'bg-surface-sunken text-muted',
+    quiet: 'text-muted',
+    line: 'border-border',
+    edgeArrow: 'border-border bg-surface text-muted',
+  },
+  rail: {
+    nav: 'bg-rail border-rail-edge',
+    idle: 'text-rail-muted hover:bg-rail-active hover:text-rail-ink',
+    active: 'bg-rail-active text-rail-ink font-medium',
+    badge: 'bg-rail-active text-rail-muted',
+    quiet: 'text-rail-muted',
+    line: 'border-rail-edge',
+    edgeArrow: 'border-rail-edge bg-rail-active text-rail-ink',
+  },
+};
+const variantOf = (name) => VARIANTS[name] || VARIANTS.surface;
 
 // EDGE TOGGLE — the collapse control is a full-height button straddling the
 // right border (w-3 with translate-x-1/2: 6px inside the rail, 6px over the
@@ -275,7 +310,7 @@ const EDGE_LINE =
   'group-hover/edge:bg-ring group-focus-visible/edge:bg-ring';
 const EDGE_ARROW =
   'absolute left-1/2 top-1/2 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center ' +
-  'rounded-full border border-border bg-surface text-muted shadow-sm ' +
+  'rounded-full border shadow-sm ' +
   'opacity-0 transition-opacity duration-150 motion-reduce:transition-none ' +
   'group-hover/edge:opacity-100 group-focus-visible/edge:opacity-100 ' +
   'outline-ring group-focus-visible/edge:outline-2';
@@ -286,10 +321,7 @@ const ROW_BASE =
   'group flex items-center gap-3 rounded-md text-sm overflow-hidden ' +
   'transition-[color,background-color] duration-200 ease-out motion-reduce:transition-none ' +
   'outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
-const IDLE = 'text-muted hover:bg-surface-sunken hover:text-ink';
-const ACTIVE = 'bg-brand-tint text-ink font-medium';
-const BADGE =
-  'shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-xs font-medium text-muted';
+const BADGE = 'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium';
 
 // ROW_PAD is load-bearing geometry: list p-2 + row px-3 centers the size-5 icon
 // at 1.875rem, exactly half the collapsed rail. Keep gap-3/px-3/size-5 together;
@@ -299,7 +331,8 @@ const ROW_PAD = 'px-3 py-2';
 const LABEL_BASE =
   'min-w-0 flex-1 overflow-hidden whitespace-nowrap text-left transition-opacity duration-200 ease-out motion-reduce:transition-none';
 const CHEVRON_BASE =
-  'size-4 shrink-0 text-muted transition-[rotate,opacity] duration-200 ease-out motion-reduce:transition-none';
+  'size-4 shrink-0 transition-[rotate,opacity] duration-200 ease-out motion-reduce:transition-none';
+const GROUP_HEADING = 'truncate px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide';
 const GROUP_ROW =
   'grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none';
 const FLYOUT_GAP = 8;
@@ -309,11 +342,11 @@ const FLYOUT =
 const FLYOUT_HEADING =
   'px-2.5 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-muted';
 
-const linkClass = (active) =>
-  [ROW_BASE, ROW_PAD, active ? ACTIVE : IDLE].join(' ');
+const linkClass = (active, v) =>
+  [ROW_BASE, ROW_PAD, active ? v.active : v.idle].join(' ');
 
-const childLinkClass = (active) =>
-  [ROW_BASE, 'px-3 py-1.5', active ? ACTIVE : IDLE].join(' ');
+const childLinkClass = (active, v) =>
+  [ROW_BASE, 'px-3 py-1.5', active ? v.active : v.idle].join(' ');
 
 // Normalize the raw items prop into tagged rows the template branches on, resolving
 // active state against activePath. The array index is kept as a stable key for the
@@ -476,6 +509,7 @@ export default class Sidebar extends PuzzleView {
   data(params, props) {
     const activePath = props.activePath || '';
     const collapsed = this._collapsed();
+    const v = variantOf(props.variant);
     const items = normalizeItems(props.items, activePath);
     const base = `pieces-sidebar-${this._uid}`;
     const flyoutIndex = collapsed ? this._flyoutIndex : null;
@@ -510,21 +544,23 @@ export default class Sidebar extends PuzzleView {
         it.ariaControls = collapsed ? it.flyoutId : it.submenuId;
         it.ariaExpanded = (collapsed ? it.flyoutOpen : it.visualOpen) ? 'true' : 'false';
         it.triggerClass = [
-          linkClass(collapsed && (it.childActive || it.active)),
+          linkClass(collapsed && (it.childActive || it.active), v),
           'w-full cursor-pointer',
         ].join(' ');
         it.chevronClass = [
           CHEVRON_BASE,
+          v.quiet,
           it.visualOpen ? 'rotate-90' : '',
           collapsed ? 'opacity-0' : '',
         ].join(' ');
         it.submenuClass = [
-          'ml-[1.375rem] mt-0.5 space-y-0.5 border-l border-border pl-2 transition-opacity duration-200 ease-out motion-reduce:transition-none',
+          'ml-[1.375rem] mt-0.5 space-y-0.5 border-l pl-2 transition-opacity duration-200 ease-out motion-reduce:transition-none',
+          v.line,
           collapsed ? 'opacity-0' : '',
         ].join(' ');
-        it.children = it.children.map((c) => ({ ...c, linkClass: childLinkClass(c.active) }));
+        it.children = it.children.map((c) => ({ ...c, linkClass: childLinkClass(c.active, v) }));
       } else if (it.kind === 'link') {
-        it.linkClass = linkClass(it.active);
+        it.linkClass = linkClass(it.active, v);
         it.ariaCurrent = it.active ? 'page' : false;
       }
     });
@@ -539,18 +575,22 @@ export default class Sidebar extends PuzzleView {
       // Badges ride the same fade as labels — kept mounted, clipped by the row.
       badgeClass: [
         BADGE,
+        v.badge,
         'transition-opacity duration-200 motion-reduce:transition-none',
         collapsed ? 'opacity-0' : '',
       ].join(' '),
-      badgeStatic: BADGE,
+      badgeStatic: [BADGE, VARIANTS.surface.badge].join(' '),
+      groupHeadingClass: [GROUP_HEADING, v.quiet].join(' '),
+      dividerClass: ['mx-1 my-2 border-t', v.line].join(' '),
+      footerClass: ['mt-auto shrink-0 overflow-hidden border-t p-2 empty:hidden', v.line].join(' '),
       flyoutClass: FLYOUT,
       flyoutHeadingClass: FLYOUT_HEADING,
       flyoutStyle: `left:${this._flyoutPos.left}px;top:${this._flyoutPos.top}px;`,
       toggleLabel,
       edgeToggleClass: EDGE_TOGGLE,
       edgeLineClass: EDGE_LINE,
-      edgeArrowClass: EDGE_ARROW,
-      rootClass: [NAV_BASE, collapsed ? 'w-[3.75rem]' : 'w-64', props.class || ''].join(' '),
+      edgeArrowClass: [EDGE_ARROW, v.edgeArrow].join(' '),
+      rootClass: [NAV_BASE, v.nav, collapsed ? 'w-[3.75rem]' : 'w-64', props.class || ''].join(' '),
     };
   }
 

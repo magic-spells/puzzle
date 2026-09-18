@@ -1,12 +1,22 @@
 {
   "name": "@magic-spells/puzzle-pieces",
   "version": "0.7.1",
-  "description": "Copy-in UI component registry for the Puzzle framework. Fetched by `puzzle add piece` — never installed or imported directly.",
+  "description": "UI component registry for the Puzzle framework: copy-in pieces fetched by `puzzle add piece`, plus importable design tokens — four palettes × three modes as CSS, with the appearance helper and pre-paint snippet.",
   "license": "MIT",
   "type": "module",
   "files": [
     "registry"
   ],
+  "exports": {
+    "./themes/default.css": "./registry/theme/pieces.css",
+    "./themes/dim.css": "./registry/theme/dim.css",
+    "./themes/warm.css": "./registry/theme/warm.css",
+    "./themes/void.css": "./registry/theme/void.css",
+    "./appearance": "./registry/theme/appearance.js",
+    "./pre-paint": "./registry/theme/pre-paint.js",
+    "./registry/*": "./registry/*",
+    "./package.json": "./package.json"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/magic-spells/puzzle.git",
@@ -17,7 +27,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test test/*.test.js test/*.test.mjs"
   },
   "devDependencies": {
     "marked": "^17.0.1"

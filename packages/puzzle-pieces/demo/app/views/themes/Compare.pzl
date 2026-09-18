@@ -1,0 +1,119 @@
+<puzzle-view class="w-full">
+  <article class="mx-auto w-full max-w-5xl min-w-0">
+    <header class="mb-8">
+      <h1 class="text-3xl font-semibold tracking-tight text-ink">Compare</h1>
+      <p class="mt-2 text-body">
+        All four schemes across all three modes. Every tile is the live stylesheet — a
+        miniature of this very shell, scoped to that palette and mode by two attributes.
+      </p>
+    </header>
+
+    <!-- Column headers: the three modes. Below md the rows stack, so the caption
+         under each tile carries the mode instead. -->
+    <div class="hidden md:flex md:gap-6">
+      <div class="w-56 shrink-0"></div>
+      <div class="grid min-w-0 flex-1 grid-cols-3 gap-4">
+        {#for m in modes}
+          <p key={ m.value } class="text-xs font-semibold uppercase tracking-wide text-muted">{ m.label }</p>
+        {/for}
+      </div>
+    </div>
+
+    <div class="mt-3 space-y-8">
+      {#for row in rows}
+        <section key={ row.scheme } class="md:flex md:gap-6">
+          <div class="w-56 shrink-0">
+            <h2 class="text-sm font-semibold tracking-tight text-ink">{ row.label }</h2>
+            <p class="mt-1 text-xs/relaxed text-muted">{ row.description }</p>
+          </div>
+
+          <div class="mt-3 grid min-w-0 flex-1 grid-cols-1 gap-4 sm:grid-cols-3 md:mt-0">
+            {#for cell in row.cells}
+              <div key={ cell.key } class={ cell.class }>
+                <ShellMock scheme={ cell.scheme } mode={ cell.mode } size="mini"/>
+                <div class="mt-3 flex items-center justify-between gap-2">
+                  <span class="truncate font-mono text-xs text-muted">{ cell.caption }</span>
+                  <Button size="sm" variant="ghost" @press={ use(cell.scheme, cell.mode) }>
+                    {#if cell.current}In use{:else}Use{/if}
+                  </Button>
+                </div>
+              </div>
+            {/for}
+          </div>
+        </section>
+      {/for}
+    </div>
+
+    <section class="mt-14 scroll-mt-20">
+      <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">How the medium mode is tuned</h2>
+      <p class="max-w-2xl text-sm/relaxed text-body">
+        Medium is soft dark, not a third palette. It keeps <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-sm text-ink">color-scheme: dark</code>,
+        so every <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-sm text-ink">light-dark()</code> pair
+        already resolves to its dark half; on top of that it lifts the grounds to mid greys of
+        the same hue, dims the type one stop, and keeps the frame-to-panel step the smallest of
+        the three modes — small enough that the panel still reads as set down on the frame, and
+        no larger.
+      </p>
+    </section>
+  </article>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ShellMock from '@/components/themes/ShellMock.pzl';
+import Button from '@/components/ui/Button.pzl';
+import { SCHEMES, MODES, current, set, subscribe } from '@/lib/appearance.js';
+
+// Compare — the contact sheet: four palettes down, three modes across, twelve
+// live miniatures of the docs shell. Nothing here is a screenshot; each tile is
+// a ShellMock carrying its own `data-scheme` + `data-theme`, so the grid is the
+// stylesheet demonstrating itself and can never drift from it.
+//
+// The tile matching the appearance in force gets a focus-coloured ring. Since
+// another tab (or the switcher in the rail) can change that at any moment, the
+// view subscribes to appearance.js and refreshes on every notification.
+
+const CELL_BASE = 'rounded-xl border border-border bg-surface p-3';
+const CELL_ON = 'ring-2 ring-ring ring-offset-2 ring-offset-surface-panel';
+
+export default class Compare extends PuzzleView {
+	data(params, props) {
+		const live = current();
+		// A null mode means "follow the OS": resolve it so exactly one tile can be
+		// marked as in use. Guarded — data() also runs under Node at build time.
+		const liveMode = live.mode || (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+		return {
+			modes: MODES,
+			rows: SCHEMES.map((s) => ({
+				scheme: s.value,
+				label: s.label,
+				description: s.description,
+				cells: MODES.map((m) => {
+					const isCurrent = s.value === live.scheme && m.value === liveMode;
+					return {
+						key: s.value + '-' + m.value,
+						scheme: s.value,
+						mode: m.value,
+						caption: s.value + ' · ' + m.value,
+						current: isCurrent,
+						class: [CELL_BASE, isCurrent ? CELL_ON : ''].join(' '),
+					};
+				}),
+			})),
+		};
+	}
+
+	events = {
+		use: (scheme, mode) => set({ scheme, mode }),
+	};
+
+	mounted() {
+		this._unsubscribe = subscribe(() => this.refresh());
+	}
+
+	destroyed() {
+		if (this._unsubscribe) this._unsubscribe();
+	}
+}
+</script>
