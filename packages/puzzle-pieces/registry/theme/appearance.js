@@ -178,8 +178,9 @@ export function resolveColorScheme(mode) {
 }
 
 /**
- * Hear every apply() — including one caused by another tab writing the store.
- * Returns the unsubscribe function.
+ * Hear every apply() — including one caused by another tab writing the store —
+ * and, while `mode` is null, every OS light/dark flip (the choice re-resolves
+ * even though nothing on <html> changed). Returns the unsubscribe function.
  */
 export function subscribe(fn) {
 	listeners.add(fn);
@@ -194,6 +195,19 @@ function ensureStorageListener() {
 	window.addEventListener('storage', (event) => {
 		if (event.key === config.storageKey) apply(read());
 	});
+	// Following the OS is a live choice: when the system flips between light
+	// and dark while `mode` is null, nothing on <html> changes (there is no
+	// attribute to change) but every subscriber that resolved the effective
+	// mode through matchMedia needs to hear about it.
+	if (typeof window.matchMedia === 'function') {
+		const query = window.matchMedia('(prefers-color-scheme: dark)');
+		const onChange = () => {
+			if (live.mode !== null) return;
+			for (const fn of listeners) fn({ ...live });
+		};
+		if (typeof query.addEventListener === 'function') query.addEventListener('change', onChange);
+		else if (typeof query.addListener === 'function') query.addListener(onChange);
+	}
 }
 
 /**

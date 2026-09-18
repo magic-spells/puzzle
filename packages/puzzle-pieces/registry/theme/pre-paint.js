@@ -46,7 +46,12 @@
 		var pick = JSON.parse(localStorage.getItem(key) || 'null') || {};
 		var scheme = pick.scheme || pick.theme || attr('data-default-scheme');
 		var mode = pick.mode === 'mixed' ? 'medium' : pick.mode;
-		if (MODES.indexOf(mode) === -1) mode = attr('data-default-mode');
+		// A stored `mode: null` is a real choice — "follow the OS" — not an
+		// empty store, so it must NOT fall through to data-default-mode (that
+		// would paint the default and let boot() strip it: the very flash this
+		// file exists to prevent). Only a missing or unknown mode takes the default.
+		if (pick.mode === null) mode = null;
+		else if (MODES.indexOf(mode) === -1) mode = attr('data-default-mode');
 		if (SCHEMES.indexOf(scheme) !== -1 && scheme !== 'default') {
 			root.setAttribute('data-scheme', scheme);
 		}
