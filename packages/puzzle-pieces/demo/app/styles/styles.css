@@ -139,6 +139,21 @@
  */
 @source not "../../dist/**";
 
+/* Docs-site type scale — the four sizes the docs chrome uses below Tailwind's
+   `xs`, plus the shell's brand size, as tokens so no view reaches for a raw
+   pixel value (test/demo-theme-guard.test.mjs bans `text-[…]` in the themes
+   files). Component docs pages predate this and still carry `text-[13px]`. */
+@theme {
+  --text-2xs: 0.625rem;              /* 10px — tile captions */
+  --text-2xs--line-height: 0.875rem;
+  --text-micro: 0.6875rem;           /* 11px — eyebrows, chip text */
+  --text-micro--line-height: 1rem;
+  --text-code: 0.8125rem;            /* 13px — inline code, token names */
+  --text-code--line-height: 1.25rem;
+  --text-brand: 0.9375rem;           /* 15px — the shell's wordmark */
+  --text-brand--line-height: 1.25rem;
+}
+
 /* Gutter system (Luna-theme pattern, same as magic-spells-puzzle-site): one
    responsive variable drives side padding via Tailwind utilities (px-gutter). */
 :root {

@@ -5,10 +5,10 @@
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Theming</h1>
         <p class="mt-2 text-body">
           Every piece styles itself through the same set of semantic tokens —
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">bg-surface</code>,
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">text-ink</code>,
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">border-border</code>,
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">shadow-panel</code> —
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">bg-surface</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">text-ink</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">border-border</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">shadow-panel</code> —
           and never a colour of its own. The package ships four palettes and three modes,
           twelve appearances in all, and nothing inside a piece changes when you switch
           between them: the token names stay put, only their values move.
@@ -19,25 +19,25 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">The model</h2>
         <p class="mb-3 text-sm/relaxed text-body">
           Two attributes on
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ htmlTag }</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">{ htmlTag }</code>
           decide the appearance, and they are independent of each other.
         </p>
         <dl class="mb-5 space-y-3 text-sm/relaxed text-body">
           <div>
-            <dt class="font-mono text-[13px] text-ink">data-scheme</dt>
+            <dt class="font-mono text-code text-ink">data-scheme</dt>
             <dd class="mt-1">
-              The palette — <span class="font-mono text-[13px] text-ink">dim</span>, <span class="font-mono text-[13px] text-ink">warm</span> or <span class="font-mono text-[13px] text-ink">void</span>. The default palette
+              The palette — <span class="font-mono text-code text-ink">dim</span>, <span class="font-mono text-code text-ink">warm</span> or <span class="font-mono text-code text-ink">void</span>. The default palette
               needs no attribute at all, because the
-              <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@theme</code>
-              block is its values. Writing the attribute with the value <span class="font-mono text-[13px] text-ink">default</span> is still valid, and
+              <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">@theme</code>
+              block is its values. Writing the attribute with the value <span class="font-mono text-code text-ink">default</span> is still valid, and
               is how a preview restates the default palette inside a page that is currently
               in another one.
             </dd>
           </div>
           <div>
-            <dt class="font-mono text-[13px] text-ink">data-theme</dt>
+            <dt class="font-mono text-code text-ink">data-theme</dt>
             <dd class="mt-1">
-              The mode — <span class="font-mono text-[13px] text-ink">light</span>, <span class="font-mono text-[13px] text-ink">medium</span> or <span class="font-mono text-[13px] text-ink">dark</span>. With the attribute
+              The mode — <span class="font-mono text-code text-ink">light</span>, <span class="font-mono text-code text-ink">medium</span> or <span class="font-mono text-code text-ink">dark</span>. With the attribute
               absent the page follows the OS between light and dark; medium is never chosen
               by the OS, only by a person.
             </dd>
@@ -45,17 +45,17 @@
         </dl>
         <p class="mb-3 text-sm/relaxed text-body">
           Every token is one
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">light-dark()</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">light-dark()</code>
           pair, so a mode block only has to set
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">color-scheme</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">color-scheme</code>
           and both halves resolve for free. Having
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">color-scheme</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">color-scheme</code>
           follow the mode is also what keeps native UI in step — form controls, scrollbars and
           dialog backdrops agree with the page, with no duplicate dark-mode class list.
         </p>
         <p class="mb-4 text-sm/relaxed text-body">
           Medium is <span class="text-ink">soft dark</span>: it runs on
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">color-scheme: dark</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">color-scheme: dark</code>,
           so every pair already resolves to its dark half, then lifts the grounds to mid grey
           of the palette’s own hue and dims the type a stop. Each file’s medium block therefore
           lists only the tokens whose medium value differs from dark — light text on grey
@@ -72,27 +72,27 @@
         <ul class="mb-5 space-y-2 text-sm/relaxed">
           {#for e in exportRows}
             <li key={ e.path } class="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
-              <span class="shrink-0 font-mono text-[13px] text-ink">{ e.path }</span>
+              <span class="shrink-0 font-mono text-code text-ink">{ e.path }</span>
               <span class="text-muted">{ e.note }</span>
             </li>
           {/for}
         </ul>
         <p class="mb-4 text-sm/relaxed text-body">
           Always import the default stylesheet. It is
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">registry/theme/pieces.css</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">registry/theme/pieces.css</code>,
           it holds the
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@theme</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">@theme</code>
           block every utility is generated from, and the other three only override its values.
           Add a palette file for each palette you want available; a palette is inert until
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">data-scheme</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">data-scheme</code>
           selects it, so importing one costs nothing but its bytes.
         </p>
         <CodeBlock code={ importSnippet } lang="css"/>
         <p class="mt-4 text-sm/relaxed text-body">
-          A copy-in path — <span class="font-mono text-[13px] text-ink">puzzle add theme { nameArg }</span> —
+          A copy-in path — <span class="font-mono text-code text-ink">puzzle add theme { nameArg }</span> —
           is planned, so a palette can be vendored into an app and retuned in place. Until it
           lands, copy the files out of
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">registry/theme/*.css</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">registry/theme/*.css</code>
           by hand.
         </p>
       </section>
@@ -101,36 +101,36 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Switching at runtime</h2>
         <p class="mb-4 text-sm/relaxed text-body">
           The
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">appearance</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">appearance</code>
           export owns the two attributes; nothing else should write them. Call
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">boot()</code>
-          first thing in <span class="font-mono text-[13px] text-ink">app.js</span> to make the
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">boot()</code>
+          first thing in <span class="font-mono text-code text-ink">app.js</span> to make the
           module agree with the document, then
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">set({ setArg })</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">set({ setArg })</code>
           for changes,
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">current()</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">current()</code>
           to read the choice in force, and
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">subscribe(fn)</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">subscribe(fn)</code>
           to hear every apply — including one caused by another tab. A
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">mode</code>
-          of <span class="font-mono text-[13px] text-ink">null</span> means follow the OS. The
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">mode</code>
+          of <span class="font-mono text-code text-ink">null</span> means follow the OS. The
           choice persists under one key,
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">puzzle:appearance</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">puzzle:appearance</code>,
           as the JSON object
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ storedShape }</code>;
-          a legacy stored mode of <span class="font-mono text-[13px] text-ink">mixed</span> reads as <span class="font-mono text-[13px] text-ink">medium</span>.
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">{ storedShape }</code>;
+          a legacy stored mode of <span class="font-mono text-code text-ink">mixed</span> reads as <span class="font-mono text-code text-ink">medium</span>.
         </p>
         <CodeBlock code={ runtimeSnippet } lang="js"/>
         <p class="mt-6 mb-4 text-sm/relaxed text-body">
           One thing has to happen earlier than any module can: painting the stored choice.
           Inline the whole of
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">pre-paint</code>
-          in the shell’s <span class="font-mono text-[13px] text-ink">{ headTag }</span>, before
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">pre-paint</code>
+          in the shell’s <span class="font-mono text-code text-ink">{ headTag }</span>, before
           the stylesheet, and configure it with data attributes on the script tag itself:
-          <span class="font-mono text-[13px] text-ink">data-key</span> is the storage key to
-          read (an app that owns another key passes it here), <span class="font-mono text-[13px] text-ink">data-default-mode</span> the mode to
-          paint when nothing is stored — omit it and the page follows the OS — and <span class="font-mono text-[13px] text-ink">data-default-scheme</span> the palette
-          for that same case. A module arriving with <span class="font-mono text-[13px] text-ink">app.js</span> is a frame too late: the
+          <span class="font-mono text-code text-ink">data-key</span> is the storage key to
+          read (an app that owns another key passes it here), <span class="font-mono text-code text-ink">data-default-mode</span> the mode to
+          paint when nothing is stored — omit it and the page follows the OS — and <span class="font-mono text-code text-ink">data-default-scheme</span> the palette
+          for that same case. A module arriving with <span class="font-mono text-code text-ink">app.js</span> is a frame too late: the
           page paints the default first, and that is the flash.
         </p>
         <CodeBlock code={ prePaintSnippet } lang="html"/>
@@ -140,13 +140,13 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Scoping a subtree</h2>
         <p class="mb-4 text-sm/relaxed text-body">
           The palette selectors are deliberately unanchored — not tied to
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">:root</code> —
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">:root</code> —
           so putting both attributes on any element renders that whole subtree in another
           palette and mode while the page around it keeps its own. That is the entire mechanism
           behind this demo’s compare grid and scheme panels. Give a scoped preview an explicit
           ground and ink
-          (<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">bg-surface</code>,
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">text-ink</code>)
+          (<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">bg-surface</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">text-ink</code>)
           or it inherits the page’s.
         </p>
         <CodeBlock code={ scopeSnippet } lang="html"/>
@@ -172,7 +172,7 @@
           <tbody>
             {#for g in tokenRows}
               <tr key={ g.id } class="border-b border-border align-top">
-                <td class="py-2.5 pr-4 font-mono text-[13px] text-ink">{ g.title }</td>
+                <td class="py-2.5 pr-4 font-mono text-code text-ink">{ g.title }</td>
                 <td class="py-2.5 pr-4 text-muted">{ g.count }</td>
                 <td class="py-2.5 text-body">{ g.description }</td>
               </tr>
@@ -210,7 +210,7 @@
           {/for}
         </ol>
         <p class="text-sm/relaxed text-body">
-          Then run <span class="font-mono text-[13px] text-ink">npm test</span>. It enforces
+          Then run <span class="font-mono text-code text-ink">npm test</span>. It enforces
           that every palette declares an identical token set, and that every palette clears AA
           in all three modes, so a half-finished palette fails loudly instead of shipping with
           holes.

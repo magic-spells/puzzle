@@ -15,7 +15,7 @@
       </button>
       <a
         href="#/"
-        class="flex items-center gap-2 rounded-md text-[15px] font-semibold tracking-tight text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-4">
+        class="flex items-center gap-2 rounded-md text-brand font-semibold tracking-tight text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-4">
         <span class="flex size-6 items-center justify-center rounded-md bg-brand text-xs font-bold text-brand-ink" aria-hidden="true">P</span>
         <span class="truncate">Puzzle Pieces</span>
       </a>

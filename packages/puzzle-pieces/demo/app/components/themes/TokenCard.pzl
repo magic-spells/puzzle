@@ -2,12 +2,12 @@
   <div class="rounded-xl border border-border bg-surface-card p-3 shadow-card">
     <div class="flex items-start justify-between gap-2">
       <div class="min-w-0">
-        <p class="truncate font-mono text-[13px] text-ink">{ name }</p>
+        <p class="truncate font-mono text-code text-ink">{ name }</p>
         <p class="mt-0.5 text-xs/relaxed text-muted">{ role }</p>
       </div>
       <div class="flex shrink-0 items-center gap-1">
         {#if alpha}
-          <span class="rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] font-medium text-muted">alpha</span>
+          <span class="rounded bg-surface-sunken px-1.5 py-0.5 text-2xs font-medium text-muted">alpha</span>
         {/if}
         <CopyButton value={ copyValue } size="sm"/>
       </div>
@@ -16,7 +16,7 @@
     <div class="mt-3 grid grid-cols-3 gap-2">
       {#for col in columns}
         <div key={ col.mode } class={ col.columnClass }>
-          <p class="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted">{ col.label }</p>
+          <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-muted">{ col.label }</p>
           <div data-scheme={ col.scheme } data-theme={ col.mode }>
             {#if shadow}
               <div class="rounded-md bg-surface-panel p-2">
@@ -26,7 +26,7 @@
               <div class="h-10 w-full rounded-md border border-border" style={ col.swatchStyle }></div>
             {/if}
           </div>
-          <p class="mt-1 break-all font-mono text-[11px] text-muted">{ col.value }</p>
+          <p class="mt-1 break-all font-mono text-micro text-muted">{ col.value }</p>
           {#if col.chip}
             <p class={ col.chipClass }>{ col.chipText }</p>
           {/if}
@@ -70,9 +70,9 @@ const MODE_LABELS = [
 const COLUMN = 'min-w-0 rounded-lg p-1.5';
 const COLUMN_ON = 'min-w-0 rounded-lg p-1.5 ring-1 ring-border-strong';
 
-const CHIP = 'mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium';
-const CHIP_PASS = 'mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-success-tint text-success';
-const CHIP_FAIL = 'mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-danger-tint text-danger-on-tint';
+const CHIP = 'mt-1 inline-block rounded px-1.5 py-0.5 text-2xs font-medium';
+const CHIP_PASS = 'mt-1 inline-block rounded px-1.5 py-0.5 text-2xs font-medium bg-success-tint text-success';
+const CHIP_FAIL = 'mt-1 inline-block rounded px-1.5 py-0.5 text-2xs font-medium bg-danger-tint text-danger-on-tint';
 
 /** A ground's custom property (`--color-surface`) read back as a token name. */
 const groundLabel = (prop) => String(prop || '').replace('--color-', '');

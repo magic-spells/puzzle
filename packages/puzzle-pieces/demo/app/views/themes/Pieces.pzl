@@ -7,7 +7,7 @@
           The registry rendered in the appearance currently in force — no scoping wrapper anywhere on
           this page, so switching the scheme or the mode repaints every piece below from the tokens.
         </p>
-        <p class="mt-3 font-mono text-[13px] text-muted">{ scheme } · { mode }</p>
+        <p class="mt-3 font-mono text-code text-muted">{ scheme } · { mode }</p>
       </header>
 
       <section id="buttons" class="mt-12 scroll-mt-20">
@@ -140,7 +140,7 @@
             <Sidebar variant="rail" items={ navItems } activePath="#/inbox" label="Rail"/>
           </div>
           <p class="mt-3 text-sm text-muted">
-            The two rails are the same config. <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">variant="rail"</code>
+            The two rails are the same config. <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">variant="rail"</code>
             paints the piece with the app-shell roles — bg-rail and text-rail-ink — instead of the
             content-level surface roles, which is why it reads as chrome rather than as a card.
           </p>

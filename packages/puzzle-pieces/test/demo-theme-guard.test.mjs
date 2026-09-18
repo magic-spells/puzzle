@@ -31,9 +31,10 @@ function guarded() {
 // A hex literal, not an anchor id that happens to start with hex letters (`#badges`).
 const HEX = /#[0-9a-fA-F]{3,8}(?![\w-])/g;
 const FUNCS = /\b(rgba?|hsla?|oklch|oklab|lab|lch|color)\(/g;
-// Arbitrary-value escapes carrying a COLOUR (`bg-[#…]`, `text-[rgb(…)]`); size escapes
-// such as `text-[13px]` are the docs site's existing convention and stay allowed.
+// Arbitrary-value escapes carrying a COLOUR (`bg-[#…]`, `text-[rgb(…)]`).
 const ESCAPES = /-\[(?:#|rgba?\(|hsla?\(|oklch\(|oklab\(|lab\(|lch\(|color\()/g;
+// Raw type sizes too: the docs scale is tokens (`text-code`, `text-micro`, …).
+const TYPE_ESCAPES = /\b(?:text|tracking|leading)-\[/g;
 
 test('themes demo files exist', () => {
 	for (const f of FIXED) assert.ok(existsSync(join(DEMO, f)), `${f} missing`);
@@ -49,7 +50,7 @@ test('no colour literals or colour escape hatches in the shell and themes files'
 		src.split('\n').forEach((line, i) => {
 			// `var(--color-x)` references and `#/route` hrefs are fine; literals are not.
 			const stripped = line.replace(/var\(--[a-z0-9-]+\)/g, '').replace(/#\//g, '');
-			for (const re of [HEX, FUNCS, ESCAPES]) {
+			for (const re of [HEX, FUNCS, ESCAPES, TYPE_ESCAPES]) {
 				re.lastIndex = 0;
 				const m = re.exec(stripped);
 				if (m) offences.push(`${rel}:${i + 1}: ${m[0]} — ${line.trim().slice(0, 100)}`);

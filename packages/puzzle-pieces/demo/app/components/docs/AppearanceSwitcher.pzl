@@ -1,6 +1,6 @@
 <puzzle-view>
   <div class={ rootClass }>
-    <p class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-rail-muted">Scheme</p>
+    <p class="mb-1.5 px-1 text-micro font-semibold uppercase tracking-wide text-rail-muted">Scheme</p>
     <div class="grid grid-cols-2 gap-1" role="group" aria-label="Color scheme">
       {#for s in schemes}
         <button
@@ -16,7 +16,7 @@
       {/for}
     </div>
 
-    <p class="mb-1.5 mt-3 px-1 text-[11px] font-semibold uppercase tracking-wide text-rail-muted">Mode</p>
+    <p class="mb-1.5 mt-3 px-1 text-micro font-semibold uppercase tracking-wide text-rail-muted">Mode</p>
     <div class="grid grid-cols-3 gap-1" role="group" aria-label="Mode">
       {#for m in modes}
         <button
