@@ -20,8 +20,10 @@ Decisions taken (2026-09-18):
 - Themes live INSIDE `@magic-spells/puzzle-pieces`, not a separate package. Cory: "we
   integrate the themes into puzzle-pieces repo directly and have the different themes as
   different exports". The tokens are the pieces contract; they version together.
-- Tokens are authored as DATA and the CSS is GENERATED (Cory picked "Data, generated
-  CSS"). Generated files are committed so the copy-in registry stays plain files.
+- Tokens are hand-written CSS; the four files in `registry/theme/` are the source of
+  truth (Cory, 2026-09-18: "we just need a .css theme file with the css vars in it").
+  An earlier draft of this brief called for JS token sources and a generator; that was
+  dropped the same day, before anything shipped — people edit the CSS directly.
 - Three real modes: `light`, `medium`, `dark`. `mixed` is renamed `medium` and becomes
   its own value set. Cory: "this is a good opportunity to change mixed to medium … the
   Mixed we currently use has a dark sidebar and white main and that's a high contrast that
@@ -77,21 +79,35 @@ Reference values the researcher pulled (2026-09-18):
 
 ## 3. Deliverables (all in `packages/puzzle-pieces`)
 
-### 3.1 Token sources — `src/themes/`
+### 3.1 The theme files — `registry/theme/`
 
-- `src/themes/default.js`, `dim.js`, `warm.js`, `void.js`. Each exports one object:
-  `{ name, label, description, modes: { light, medium, dark } }` where each mode is a flat
-  map of token name → value. The shape must make it impossible for a palette to miss a
-  token: `src/themes/roles.js` declares the canonical token list (names, group, kind:
-  `color | shadow | alpha`, `contrastPairs`), and the generator fails the build if any
-  palette/mode omits or adds a name.
+Four hand-written CSS files, the source of truth. People edit values here and run
+`npm test`.
+
+- `pieces.css` — the default palette. Keeps line 2 EXACTLY `* puzzle-pieces design tokens
+  (Tailwind v4 @theme).` — the CLI keys installed-detection on the marker
+  `puzzle-pieces design tokens` (`compiler/internal/pieces/pieces.go`). Structure: a
+  Tailwind v4 `@theme { … }` block declaring every token with `light-dark(light, dark)`
+  pairs (so utilities exist for every name and a two-mode app needs nothing else), then
+  unlayered blocks: `:root { color-scheme: light dark }`, `[data-theme='light']` /
+  `[data-theme='dark']` / `[data-theme='medium']` setting `color-scheme`, a medium block
+  re-declaring every token whose medium value differs from the dark half, and the default
+  palette restated on `[data-scheme='default']` for preview cards.
+- `dim.css`, `warm.css`, `void.css` — scheme OVERRIDES, not drop-ins any more: unlayered
+  `[data-scheme='dim'] { … light-dark pairs for EVERY token … }` and a medium block on
+  `[data-scheme='dim'][data-theme='medium'], [data-theme='medium'] [data-scheme='dim']:not([data-theme])`.
+  Selectors are NOT anchored to `:root` because the Appearance UIs scope `data-scheme` on
+  preview cards (Pyramid's `appearance-tokens.test.mjs` asserts this; keep it true).
 - Token groups (names exactly as the apps use them today — do NOT rename existing names;
-  the whole point is that Pyramid/Sites can switch imports without touching class strings):
+  the whole point is that Pyramid/Sites can switch imports without touching class strings).
+  The canonical NAME list lives in `test/lib/roles.mjs` (with each role's contrast
+  grounds) and is mirrored, names only, in `demo/app/lib/tokenNames.js`; the tests fail if
+  any theme file or either list drifts:
   - text: `ink body muted faint label-ink`
   - surfaces: `page surface surface-sunken surface-raised surface-base`
   - brand: `brand brand-dark brand-tint brand-ink brand-on-tint`
-  - status: `danger danger-dark danger-tint danger-ink success success-tint warning
-    warning-tint`
+  - status: `danger danger-dark danger-tint danger-ink danger-on-tint success success-tint
+    warning warning-tint`
   - lines: `border border-strong border-dashed ring`
   - charts: `chart-1 … chart-8` (fixed slot order, colour-blind validated — keep the
     registry's values unless a palette demands otherwise)
@@ -100,66 +116,53 @@ Reference values the researcher pulled (2026-09-18):
     rail-muted rail-active rail-edge edge-highlight edge-highlight-strong panel-edge
     shadow-contact`
   - alpha family: `well well-strong well-deep well-deepest scrim scrim-strong` plus the
-    shadow colours Pyramid names (`shadow-soft shadow-glow shadow-drop shadow-inset
-    text-shadow`) and the box-shadow values `--shadow-float --shadow-contact
+    shadow colours Pyramid names (`shadow-soft shadow-glow shadow-drop shadow-popover
+    shadow-inset text-shadow`) and the box-shadow values `--shadow-float --shadow-contact
     --shadow-panel --shadow-card --shadow-popover`
   - Pyramid-only tokens (studio, github/figma, method-*, canvas, swatch, drop) are NOT in
     scope; they stay in Pyramid.
-- Medium mode values: derive them per palette by hand (not a formula) using the rule
-  "soft dark": page/surface lifted from near-black to mid-dark greys of the palette's hue
-  (roughly L 18–26% in OKLCH), frame a touch darker than the panel rather than the black
-  used in dark, ink/body dimmed one stop from dark's. The frame-to-panel contrast in
-  medium must be visibly lower than in dark and in light.
+- Medium mode values: hand-tuned per palette (not a formula) using the rule "soft dark":
+  page/surface lifted from near-black to mid-dark greys of the palette's hue (roughly L
+  18–26% in OKLCH), frame a touch darker than the panel rather than the black used in
+  dark, ink/body dimmed one stop from dark's. The frame-to-panel contrast in medium must
+  be visibly lower than in dark and in light (`contrast.test.mjs` measures it in OKLCH L).
 
-### 3.2 Generator — `scripts/build-themes.mjs`
+### 3.2 Runtime files — also in `registry/theme/`
 
-Emits, and the repo commits, into `registry/theme/`:
-
-- `pieces.css` — the default palette. Keeps line 2 EXACTLY `* puzzle-pieces design tokens
-  (Tailwind v4 @theme).` — the CLI keys installed-detection on the marker
-  `puzzle-pieces design tokens` (`compiler/internal/pieces/pieces.go`). Structure: a
-  Tailwind v4 `@theme { … }` block declaring every token with `light-dark(light, dark)`
-  pairs (so utilities exist for every name and a two-mode app needs nothing else), then
-  unlayered blocks: `:root { color-scheme: light dark }`, `[data-theme='light']` /
-  `[data-theme='dark']` setting `color-scheme`, and `[data-theme='medium']` re-declaring
-  every token whose medium value differs, with `color-scheme: dark`.
-- `dim.css`, `warm.css`, `void.css` — scheme OVERRIDES, not drop-ins any more: unlayered
-  `[data-scheme='dim'] { … light-dark pairs … }` and `[data-scheme='dim'][data-theme='medium'],
-  [data-theme='medium'] [data-scheme='dim'] { … }`. Selectors are NOT anchored to `:root`
-  because the Appearance UIs scope `data-scheme` on preview cards (Pyramid's
-  `appearance-tokens.test.mjs` asserts this; keep it true).
-- `shell.css` — is NOT a separate file: the shell roles are generated into the same
-  palette files as everything else (they are colour vars per palette). Keep this brief
-  honest if that changes.
-- `tokens.json` — `{ roles: [...], palettes: { default: { light, medium, dark }, … } }`
-  with resolved hex/rgba values, for the demo and for tooling.
 - `pre-paint.js` — the anti-flash snippet apps inline in `index.html`: reads one
   localStorage key (`puzzle:appearance`, JSON `{ scheme, mode }`), sets `data-scheme`,
   `data-theme` and inline `color-scheme` before first paint. Apps may keep their own key
-  by passing it in; Pyramid's `pyramid:appearance` must remain supported by parameter.
-- `appearance.js` — runtime helper: `read()`, `apply({ scheme, mode })`, `subscribe()`,
-  the `mixed → medium` read-time alias, and `SCHEMES` / `MODES` constants.
+  by passing it in (`data-key` on the script tag); Pyramid's `pyramid:appearance` must
+  remain supported by parameter, and a stored `theme` field / `mixed` mode are read as
+  `scheme` / `medium`.
+- `appearance.js` — runtime helper: `read()`, `apply({ scheme, mode })`, `set()`,
+  `subscribe()`, `boot()`, `configure({ storageKey, fallback })`, the `mixed → medium`
+  read-time alias, and `SCHEMES` / `MODES` constants.
 
 Also:
 - `registry/registry.json`: the `themes` array becomes truthful (name, file, label,
-  description) and gains `modes: ["light","medium","dark"]`. The Go `Registry` struct does
-  not read it today; note that in the CLI follow-up below, do not change Go here.
+  description) and the file gains `modes: ["light","medium","dark"]`. The Go `Registry`
+  struct does not read it today; note that in the CLI follow-up below, do not change Go here.
 - `package.json`: add `exports` so apps can import as a dependency:
   `"./themes/default.css": "./registry/theme/pieces.css"`, `"./themes/dim.css"`,
-  `"./themes/warm.css"`, `"./themes/void.css"`, `"./themes/tokens.json"`,
-  `"./appearance": "./registry/theme/appearance.js"`, `"./pre-paint": …`. Update the
-  package description (it currently says "never installed or imported directly" — now it
-  is both copy-in AND importable; say so). Keep `files: ["registry"]`.
-- `demo/app/styles/schemes.css` is DELETED; the demo imports the generated scheme files.
+  `"./themes/warm.css"`, `"./themes/void.css"`, `"./appearance":
+  "./registry/theme/appearance.js"`, `"./pre-paint": …`. Update the package description
+  (it currently says "never installed or imported directly" — now it is both copy-in AND
+  importable; say so). Keep `files: ["registry"]`.
+- `demo/app/styles/schemes.css` is DELETED; the demo imports the registry theme files.
 
 ### 3.3 Tests — `test/`
 
-- `themes.test.mjs`: generator output is byte-equal to the committed files (run the
-  generator to a temp dir and diff); every palette declares exactly the role list; every
-  scheme file's selectors are unanchored; the marker line is intact; `tokens.json` round-
-  trips.
-- `contrast.test.mjs`: WCAG 2.2 AA over every palette × every mode: text roles (`ink body
-  muted label-ink bar-ink rail-ink`) ≥ 4.5:1 on `page`, `surface`, `surface-sunken`,
+- `themes.test.mjs`: parses the four CSS files (shared parser in `test/lib/parse-theme.mjs`
+  — test-only, the demo must NOT import it) and asserts every file declares exactly the
+  same set of `--color-*`/`--shadow-*` names (the contract in `test/lib/roles.mjs`); scheme
+  selectors are unanchored; the marker line is intact; each medium block re-declares the
+  grounds and type that make "soft dark" and never restates a value that is already the
+  dark half; the demo's `tokenNames.js`, its `appearance.js` copy and its inline pre-paint
+  script match the registry.
+- `contrast.test.mjs`: parses the CSS the same way (resolves `light-dark()` pairs plus the
+  medium block into per-mode maps) and holds WCAG 2.2 AA over every palette × every mode:
+  text roles (`ink body muted label-ink bar-ink rail-ink`) ≥ 4.5:1 on `page`, `surface`, `surface-sunken`,
   `surface-frame`/`bar` as applicable; `bar-muted`/`rail-muted` ≥ 4.5:1 on the frame;
   `brand-ink` on `brand`, `danger-ink` on `danger`; non-text (`border`, `ring`) ≥ 3:1.
   `faint` and chart slots excluded (disabled/decorative). Port the maths from Pyramid's
@@ -180,7 +183,10 @@ shows the values of each of the color schemes with all of their css vars and col
   - **Scheme panel** (one per palette, `/themes/:scheme`): every token, grouped as in
     §3.1, as colour cards: swatch, token name, the three mode values side by side, the
     contrast ratio against its declared ground with an AA pass/fail chip. Copy-to-
-    clipboard on the var name.
+    clipboard on the var name. Values come from the LIVE computed styles
+    (`getComputedStyle(el).getPropertyValue('--color-…')` on an element scoped to each
+    scheme × mode) over the static name list in `demo/app/lib/tokenNames.js` — no JSON
+    file, so the cards can never disagree with the stylesheet.
   - **Grid** (`/themes/compare`): all four schemes × three modes as mini shell mocks
     (frame + rail + panel + a card + text samples) in one screen.
   - **Shell** (`/themes/shell`): a full-size frame/rail/panel mock in the current
@@ -195,7 +201,8 @@ shows the values of each of the color schemes with all of their css vars and col
 ### 3.5 Docs
 
 - `packages/puzzle-pieces/README.md` and `CLAUDE.md`: the theme model, the exports, how
-  to add a palette (edit `src/themes/x.js`, run the generator, run the tests), the
+  to add a palette (write `registry/theme/x.css` restating every token, list it in
+  `registry.json`, `appearance.js`, `pre-paint.js` and the two name lists, run the tests), the
   medium rule, the attribute names.
 - `packages/puzzle/skills/puzzle/SKILL.md` §Styling: one paragraph on `data-scheme` +
   `data-theme` with three modes and the importable exports.
@@ -230,7 +237,8 @@ shows the values of each of the color schemes with all of their css vars and col
   browser pass (the builder's own playwright, never the shared MCP browser) that
   screenshots every scheme × mode of the compare grid and the shell view, reads the
   computed `--color-surface`, `--color-surface-frame`, `--color-ink` for each combination
-  and asserts they match `tokens.json`, and reports zero console errors. Screenshots into
+  and asserts they match the values in the CSS files (parsed with the test parser), and
+  reports zero console errors. Screenshots into
   `packages/puzzle-pieces/demo/.playwright/themes/` (gitignored) and the paths in the
   report.
 - Pyramid smoke: from a Pyramid worktree, temporarily point `@import`s at the generated
