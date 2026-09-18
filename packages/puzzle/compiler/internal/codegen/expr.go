@@ -14,6 +14,197 @@ import (
 // rewrites identifier ROOTS to `__d.<name>` and leaves loop variables,
 // `event`, JS keywords/literals, and property accesses untouched.
 
+// scopeMap is the lexical scope threaded through emission: an in-scope
+// identifier maps to the JS it resolves to. The empty string means "emit the
+// name bare" — an ordinary binding (a range-loop variable, a snippet param,
+// `event`, the imported `ViewNode`). A NON-empty value is a rewrite, which is
+// how a persistent list block's row locals reach their scope object
+// (the D170 emission contract: `todo` → `s.item`, the counter → `s.i`).
+// Membership alone still decides "do not prefix with __d."; the value only
+// decides what is written in the identifier's place.
+type scopeMap map[string]string
+
+// scopeRef reports the JS an in-scope identifier resolves to.
+func scopeRef(scope scopeMap, name string) (string, bool) {
+	repl, ok := scope[name]
+	if !ok {
+		return "", false
+	}
+	if repl == "" {
+		return name, true
+	}
+	return repl, true
+}
+
+// boolScope adapts a plain name set to a scopeMap. It is the seam for callers
+// outside codegen (puzzle check) that only ever bind plain names.
+func boolScope(names map[string]bool) scopeMap {
+	out := make(scopeMap, len(names))
+	for k := range names {
+		out[k] = ""
+	}
+	return out
+}
+
+// exprFacts is what one resolved expression READ, classified by the same
+// lexical pass that rewrites it (D170, compiler lowering). A list block needs three
+// things from a loop body — which parent data roots it reads (the `roots`
+// dirty mask), which members it reads off the row item (`fields`/`deep`), and
+// whether it touches `this` (`volatile`) — and deriving them from a second
+// scanner would be a second set of rules to keep in sync with resolveExpr.
+type exprFacts struct {
+	// roots are the identifier roots rewritten to `__d.<name>`, in first-read
+	// order, distinct.
+	roots []string
+	// locals records how each in-scope binding was read.
+	locals map[string]*localRead
+	// usesThis is set by a bare `this` reference (not a property named "this").
+	usesThis bool
+	// volatileRead is set by a read of a mutable global or a clock-reading
+	// built-in formatter — a value that can differ between two renders with no
+	// data mutation at all, so a cached row would freeze it (D170 volatile).
+	volatileRead bool
+}
+
+// localRead is how one in-scope binding was used inside an expression.
+type localRead struct {
+	// fields are the depth-one member names read off the binding
+	// (`todo.text` → "text"), in first-read order, distinct.
+	fields []string
+	// deep marks a read the row revision cannot cover: a deeper path
+	// (`todo.author.name`), a dynamic member (`todo[k]`), or a call on the
+	// binding (`todo.fullName()`).
+	deep bool
+	// bareInCall marks the binding passed WHOLE into a call — `fmt(todo)`,
+	// whose result is displayed, so the row depends on more than the item's own
+	// identity. A whole read outside call parens (a component prop, a handler
+	// argument) is not recorded here: those re-read the live row at use time.
+	bareInCall bool
+	// whole marks a whole-value read that IS the entire expression — `{ todo }`,
+	// `todo={ todo }`, `del(todo)`'s argument. Such a read depends on the item's
+	// identity alone, which the row revision covers exactly.
+	whole bool
+	// opaque marks a whole-value read that is NOT the entire expression: a
+	// parenthesised or comment-separated member access (`(post).author.name`), a
+	// template-literal interpolation, an operand of a larger expression, a call
+	// argument. The compiler cannot see which members the value reaches, so the
+	// site is conservative (`deep`) exactly as a relation read is. A formatter
+	// pipe marks a `whole` read opaque for the same reason (the formatter is
+	// handed the record itself).
+	opaque bool
+	// renderRead marks a read evaluated during RENDER. A handler ARGUMENT is
+	// not one: it is re-read at fire time against the live row scope, so it
+	// neither makes an enclosing-local read volatile nor counts as opaque —
+	// the same carve-out `this` in a handler argument already has.
+	renderRead bool
+}
+
+func (f *exprFacts) addRoot(name string) {
+	for _, r := range f.roots {
+		if r == name {
+			return
+		}
+	}
+	f.roots = append(f.roots, name)
+}
+
+func (f *exprFacts) local(name string) *localRead {
+	if f.locals == nil {
+		f.locals = map[string]*localRead{}
+	}
+	r := f.locals[name]
+	if r == nil {
+		r = &localRead{}
+		f.locals[name] = r
+	}
+	return r
+}
+
+func (r *localRead) addField(name string) {
+	for _, f := range r.fields {
+		if f == name {
+			return
+		}
+	}
+	r.fields = append(r.fields, name)
+}
+
+// merge folds other into f, preserving first-read order.
+func (f *exprFacts) merge(other *exprFacts) {
+	if f == nil || other == nil {
+		return
+	}
+	for _, r := range other.roots {
+		f.addRoot(r)
+	}
+	if other.usesThis {
+		f.usesThis = true
+	}
+	if other.volatileRead {
+		f.volatileRead = true
+	}
+	for name, read := range other.locals {
+		dst := f.local(name)
+		for _, fl := range read.fields {
+			dst.addField(fl)
+		}
+		dst.deep = dst.deep || read.deep
+		dst.bareInCall = dst.bareInCall || read.bareInCall
+		dst.whole = dst.whole || read.whole
+		dst.opaque = dst.opaque || read.opaque
+		dst.renderRead = dst.renderRead || read.renderRead
+	}
+}
+
+// volatileGlobals are globals whose value can change between two renders with
+// no data mutation at all: the clock, the URL, storage, the RNG. A row body
+// reading one must re-evaluate every pass, so its site is `volatile` (D170).
+// Only the names that are ALSO in jsGlobals are reachable here — the rest
+// (`performance`, `location`, `history`, `navigator`, `localStorage`,
+// `sessionStorage`, `crypto`, `self`) resolve to `__d.<name>` and are already
+// tracked through the site's roots mask; they are listed so the rule is
+// complete if one of them ever joins jsGlobals.
+var volatileGlobals = map[string]bool{
+	"Date": true, "performance": true, "window": true, "document": true,
+	"location": true, "history": true, "navigator": true,
+	"localStorage": true, "sessionStorage": true, "crypto": true,
+	"globalThis": true, "self": true,
+}
+
+// volatileGlobalRead reports whether the global `name` read at src[..at] is a
+// mutable one. `Math` is pure except for `Math.random`, so it is the one global
+// classified by the member that follows it; every other pure global (`JSON`,
+// `Number`, `Intl`, …) is pure whatever is read off it.
+func volatileGlobalRead(name, src string, at int) bool {
+	if volatileGlobals[name] {
+		return true
+	}
+	if name != "Math" {
+		return false
+	}
+	k := skipExprSpace(src, at)
+	if k < len(src) && src[k] == '?' && k+1 < len(src) && src[k+1] == '.' {
+		k++
+	}
+	if k >= len(src) || src[k] != '.' {
+		return false
+	}
+	m := skipExprSpace(src, k+1)
+	e := m
+	for e < len(src) && isIdentChar(src[e]) {
+		e++
+	}
+	return src[m:e] == "random"
+}
+
+// clockFormatters are the shipped built-in formatters whose output depends on
+// the current time rather than on their input alone, so a cached row using one
+// would display a frozen value ("1 second ago", forever). A site whose body
+// pipes through one is `volatile`. USER-defined formatters are pure functions of
+// their input by contract (SPEC §6); a row that must re-evaluate every render
+// reads through `this`, which is already volatile.
+var clockFormatters = map[string]bool{"timeago": true}
+
 // jsKeywords are identifier ROOTS that must never be rewritten to __d.<name>:
 // JS literals and operator-keywords that can appear in a template expression.
 var jsKeywords = map[string]bool{
@@ -127,16 +318,18 @@ func startsWithObjectLiteral(expr string) bool {
 // Known limitation (intentionally out of scope): arrow-function parameters and
 // object-literal keys are NOT recognized as binding positions, so a name written
 // there is still prefixed. These discouraged template forms are unsupported.
-func resolveExpr(expr string, scope map[string]bool) string {
-	out, _ := resolveExprTrackingScope(expr, scope, nil)
+func resolveExpr(expr string, scope scopeMap) string {
+	out, _ := resolveExprScan(expr, scope, nil, nil)
 	return out
 }
 
 // ResolveCheckExpr exposes the render compiler's expression scoping to the
 // puzzle-check emitter. Keeping this as a narrow internal-package seam avoids a
 // second JavaScript scanner drifting from the one that drives runtime codegen.
+// The check emitter only ever binds plain names, so it keeps the plain name-set
+// signature; the scopeMap rewrite values are a render-emission concern.
 func ResolveCheckExpr(expr string, scope map[string]bool) string {
-	return resolveExpr(expr, scope)
+	return resolveExpr(expr, boolScope(scope))
 }
 
 // ResolveCheckEvent exposes the event-value compiler to puzzle check for the
@@ -153,21 +346,41 @@ func ResolveCheckExpr(expr string, scope map[string]bool) string {
 // bare form actually promises. Call forms keep their authored arguments and are
 // still checked as calls.
 func ResolveCheckEvent(expr string, scope map[string]bool) (string, error) {
-	out, _, err := compileEventValueMode(expr, scope, true)
-	return out, err
+	ev, err := compileEventValueMode(expr, boolScope(scope), true, nil)
+	return ev.js, err
 }
 
 // resolveExprTrackingScope resolves expr exactly like resolveExpr and also
-// reports whether it references an identifier from trackedScope. Keeping the
-// reference check inside the resolver makes it follow the same lexical rules:
-// property names and literal/comment/regex text do not count, while identifiers
-// inside template-literal interpolations do.
-func resolveExprTrackingScope(expr string, scope, trackedScope map[string]bool) (string, bool) {
+// reports whether it references an identifier from trackedScope.
+func resolveExprTrackingScope(expr string, scope, trackedScope scopeMap) (string, bool) {
+	return resolveExprScan(expr, scope, trackedScope, nil)
+}
+
+// resolveExprScan is the single expression pass. It resolves expr exactly like
+// resolveExpr, reports whether it references an identifier from trackedScope,
+// and — when facts is non-nil — classifies every identifier root it saw
+// (exprFacts). Keeping all three inside ONE scanner makes them follow the same
+// lexical rules: property names and literal/comment/regex text do not count,
+// while identifiers inside template-literal interpolations do.
+func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts) (string, bool) {
+	return resolveExprScanIn(expr, scope, trackedScope, facts, false)
+}
+
+// resolveExprScanIn is resolveExprScan with the nesting flag the template-literal
+// recursion sets. A read inside `${…}` is never "the entire expression", however
+// it is spelled, so it can never be the identity-only whole-value read.
+func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFacts, nested bool) (string, bool) {
 	var b strings.Builder
 	referencesTrackedScope := false
 	n := len(expr)
 	i := 0
 	lastNonSpace := byte(0)
+	// callDepth counts the open parens that FOLLOW a value-ending token, i.e.
+	// call argument lists rather than grouping parens. A whole-value read of a
+	// loop local inside one is `fmt(todo)` — the row then depends on more than
+	// the item's identity (the D170 emission contract's `deep`).
+	callDepth := 0
+	var parens []bool
 	// prevEndsExpr tracks whether the previous significant token can END an
 	// expression (identifier/number/string/template close, ')', ']', '}'). It
 	// disambiguates '/': division after such a token, else a regex literal.
@@ -224,7 +437,7 @@ func resolveExprTrackingScope(expr string, scope, trackedScope map[string]bool) 
 						break
 					}
 					inner := expr[j+2 : end]
-					resolved, referencesScope := resolveExprTrackingScope(inner, scope, trackedScope)
+					resolved, referencesScope := resolveExprScanIn(inner, scope, trackedScope, facts, true)
 					b.WriteString("${")
 					b.WriteString(resolved)
 					b.WriteByte('}')
@@ -287,12 +500,39 @@ func resolveExprTrackingScope(expr string, scope, trackedScope map[string]bool) 
 			}
 			name := expr[i:j]
 			isProp := lastNonSpace == '.'
-			if !isProp && trackedScope[name] {
-				referencesTrackedScope = true
+			if !isProp {
+				if _, tracked := trackedScope[name]; tracked {
+					referencesTrackedScope = true
+				}
 			}
-			if isProp || jsKeywords[name] || jsGlobals[name] || scope[name] {
+			local, inScope := scopeRef(scope, name)
+			switch {
+			case isProp:
 				b.WriteString(name)
-			} else {
+			case inScope:
+				// A lexical binding SHADOWS a keyword-ish global, which used to be
+				// invisible because both spellings emitted the bare name. It is
+				// visible now that a binding can carry a rewrite: a
+				// `{#for document in documents}` row must read `s.item`, not the
+				// window's document.
+				if facts != nil {
+					noteLocalRead(facts, name, expr, j, callDepth, !nested && spansExpr(expr, i, j))
+				}
+				b.WriteString(local)
+			case jsKeywords[name]:
+				if facts != nil && name == "this" {
+					facts.usesThis = true
+				}
+				b.WriteString(name)
+			case jsGlobals[name]:
+				if facts != nil && volatileGlobalRead(name, expr, j) {
+					facts.volatileRead = true
+				}
+				b.WriteString(name)
+			default:
+				if facts != nil {
+					facts.addRoot(name)
+				}
 				b.WriteString("__d.")
 				b.WriteString(name)
 			}
@@ -338,6 +578,20 @@ func resolveExprTrackingScope(expr string, scope, trackedScope map[string]bool) 
 			i += 2
 		default:
 			b.WriteByte(c)
+			if c == '(' {
+				// A '(' after a value-ending token opens a CALL argument list;
+				// after an operator it is a grouping paren. The stack keeps the
+				// two apart across nesting.
+				parens = append(parens, prevEndsExpr)
+				if prevEndsExpr {
+					callDepth++
+				}
+			} else if c == ')' && len(parens) > 0 {
+				if parens[len(parens)-1] {
+					callDepth--
+				}
+				parens = parens[:len(parens)-1]
+			}
 			if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
 				lastNonSpace = c
 				// Only closing brackets/parens end an expression; every other
@@ -348,6 +602,96 @@ func resolveExprTrackingScope(expr string, scope, trackedScope map[string]bool) 
 		}
 	}
 	return b.String(), referencesTrackedScope
+}
+
+// noteLocalRead classifies ONE read of an in-scope binding for exprFacts. src
+// is the expression being scanned and at is the index just past the identifier,
+// so the classification is a read-only peek at what follows: the main loop
+// still tokenizes those bytes normally (a member name arrives as a property
+// access and is skipped there).
+//
+//	todo.text        → field "text"
+//	todo.author.name → deep (the record revision does not cover it)
+//	todo.fullName()  → deep (a call, and a computed getter is indistinguishable)
+//	todo[k]          → deep (dynamic member)
+//	fmt(todo)        → the whole item into a call whose result is displayed
+//	todo             → a whole-value read (component prop, handler argument):
+//	                   neither a field nor deep — those re-read the live row
+//
+// `whole` reports that the identifier spans the ENTIRE expression being scanned.
+// A whole-value read that does not (an operand, a template-literal
+// interpolation, a call argument, a member access reached through parens or a
+// comment) is OPAQUE: the compiler cannot see which members the value reaches,
+// so the site must be conservative exactly as a relation read makes it.
+func noteLocalRead(facts *exprFacts, name, src string, at, callDepth int, whole bool) {
+	read := facts.local(name)
+	read.renderRead = true
+	k := skipExprSpace(src, at)
+	// Optional chaining reads the same member the plain '.' does.
+	if k < len(src) && src[k] == '?' && k+1 < len(src) && src[k+1] == '.' {
+		k++
+	}
+	switch {
+	case k < len(src) && src[k] == '[':
+		read.deep = true
+	case k < len(src) && src[k] == '(':
+		// The binding itself is called.
+		read.deep = true
+	case k < len(src) && src[k] == '.' && !(k+2 < len(src) && src[k+1] == '.' && src[k+2] == '.'):
+		m := skipExprSpace(src, k+1)
+		if m >= len(src) || !isIdentStart(src[m]) {
+			read.deep = true
+			return
+		}
+		e := m
+		for e < len(src) && isIdentChar(src[e]) {
+			e++
+		}
+		after := skipExprSpace(src, e)
+		if after < len(src) && (src[after] == '(' || src[after] == '[' ||
+			(src[after] == '.' && !(after+2 < len(src) && src[after+1] == '.' && src[after+2] == '.')) ||
+			(src[after] == '?' && after+1 < len(src) && src[after+1] == '.')) {
+			read.deep = true
+			return
+		}
+		read.addField(src[m:e])
+	default:
+		if callDepth > 0 {
+			read.bareInCall = true
+		}
+		if whole {
+			read.whole = true
+		} else {
+			read.opaque = true
+		}
+	}
+}
+
+// spansExpr reports whether src[start:end] is the whole expression apart from
+// surrounding whitespace.
+func spansExpr(src string, start, end int) bool {
+	for i := 0; i < start; i++ {
+		switch src[i] {
+		case ' ', '\t', '\n', '\r':
+		default:
+			return false
+		}
+	}
+	for i := end; i < len(src); i++ {
+		switch src[i] {
+		case ' ', '\t', '\n', '\r':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func skipExprSpace(s string, i int) int {
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+		i++
+	}
+	return i
 }
 
 // scanRegexLiteral returns the index just past the regex literal starting at i
@@ -536,79 +880,103 @@ func splitEventConditional(expr string) (condition, truthy, falsy string, ok boo
 	return "", "", "", false
 }
 
-// compileEventValue compiles an @event value and reports whether it is
-// DATA-INDEPENDENT (cacheable, v1.29 D62 / SPEC §31). It accepts the two SPEC §5
-// handler forms plus the D86 handler-valued conditional whose branches are each
-// a handler form or null. A literal null emits no handler.
-func compileEventValue(expr string, scope map[string]bool) (string, bool, error) {
-	return compileEventValueMode(expr, scope, false)
+// eventValue is a compiled @event value plus the two caching verdicts the
+// emitter needs.
+type eventValue struct {
+	js string
+	// cacheable marks a DATA-INDEPENDENT handler: the same function object on
+	// every render, so it rides the per-instance `__h` cache (v1.29 D62 / SPEC
+	// §31).
+	cacheable bool
+	// rowCacheable marks a handler that captures loop bindings and nothing
+	// else: not `__h`-cacheable (its capture differs per row), but stable for
+	// the LIFE of a row, so a persistent list block caches it on the row scope
+	// (`s.h0 ??= …`, D170 stable loop handlers). The emitter still checks that every
+	// captured binding belongs to a lowered loop before using it.
+	rowCacheable bool
+	// refs are the in-scope binding names the handler ARGUMENTS referenced,
+	// minus the synthesized `event` parameter. The emitter uses them to confirm
+	// every capture belongs to a lowered loop before caching on a row scope.
+	refs []string
+}
+
+// compileEventValue compiles an @event value and reports its caching verdicts.
+// It accepts the two SPEC §5 handler forms plus the D86 handler-valued
+// conditional whose branches are each a handler form or null. A literal null
+// emits no handler. facts, when non-nil, collects what the handler arguments
+// read (the row's `roots` mask includes handler reads — D170 emission contract).
+func compileEventValue(expr string, scope scopeMap, facts *exprFacts) (eventValue, error) {
+	return compileEventValueMode(expr, scope, false, facts)
 }
 
 // compileEventValueMode is compileEventValue with the puzzle-check switch:
 // bareAsReference emits a bare handler name as `this.events.name` rather than
 // wrapping it in a call (see ResolveCheckEvent). Every runtime caller passes
 // false, so the emitted render code is unchanged.
-func compileEventValueMode(expr string, scope map[string]bool, bareAsReference bool) (string, bool, error) {
+func compileEventValueMode(expr string, scope scopeMap, bareAsReference bool, facts *exprFacts) (eventValue, error) {
 	expr = strings.TrimSpace(expr)
 	eventParam := "event"
-	if scope["event"] {
+	if _, shadowed := scope["event"]; shadowed {
 		// Preserve a loop item/counter named event: the DOM event parameter must
 		// not shadow the outer .map((event) => …) binding.
 		eventParam = "__ev"
 	}
 	if expr == "null" {
-		return "null", false, nil
+		return eventValue{js: "null"}, nil
 	}
 	if condition, truthy, falsy, ok := splitEventConditional(expr); ok {
 		if condition == "" || truthy == "" || falsy == "" {
-			return "", false, fmt.Errorf("event handler must be a bare method name or a single call expression (got %q)", expr)
+			return eventValue{}, fmt.Errorf("event handler must be a bare method name or a single call expression (got %q)", expr)
 		}
-		truthyJS, err := compileEventBranch(truthy, scope, eventParam, bareAsReference)
+		truthyJS, err := compileEventBranch(truthy, scope, eventParam, bareAsReference, facts)
 		if err != nil {
-			return "", false, err
+			return eventValue{}, err
 		}
-		falsyJS, err := compileEventBranch(falsy, scope, eventParam, bareAsReference)
+		falsyJS, err := compileEventBranch(falsy, scope, eventParam, bareAsReference, facts)
 		if err != nil {
-			return "", false, err
+			return eventValue{}, err
 		}
 		// The condition is evaluated during render and may toggle function ↔
-		// null, so the conditional value itself must never be cached.
-		return "(" + resolveExpr(condition, scope) + ") ? " + truthyJS + " : " + falsyJS, false, nil
+		// null, so the conditional value itself must never be cached — by the
+		// instance cache OR by a row scope.
+		cond, _ := resolveExprScan(condition, scope, nil, facts)
+		return eventValue{js: "(" + cond + ") ? " + truthyJS + " : " + falsyJS}, nil
 	}
-	return compileEventHandler(expr, scope, eventParam, bareAsReference)
+	return compileEventHandler(expr, scope, eventParam, bareAsReference, facts)
 }
 
-func compileEventBranch(expr string, scope map[string]bool, eventParam string, bareAsReference bool) (string, error) {
+func compileEventBranch(expr string, scope scopeMap, eventParam string, bareAsReference bool, facts *exprFacts) (string, error) {
 	if expr == "null" {
 		return "null", nil
 	}
-	out, _, err := compileEventHandler(expr, scope, eventParam, bareAsReference)
-	return out, err
+	ev, err := compileEventHandler(expr, scope, eventParam, bareAsReference, facts)
+	return ev.js, err
 }
 
 // compileEventHandler compiles one bare identifier or single call expression.
 // The callee is qualified to this.events.* and call arguments are resolved with
 // the DOM event in scope unless a loop binding named event already owns that
 // name. Call forms are cacheable only when their arguments directly reference no
-// loop-scope binding and contain no resolved render-data read.
-func compileEventHandler(expr string, scope map[string]bool, eventParam string, bareAsReference bool) (string, bool, error) {
+// loop-scope binding and contain no resolved render-data read; a form that
+// references ONLY loop-scope bindings is row-cacheable instead.
+func compileEventHandler(expr string, scope scopeMap, eventParam string, bareAsReference bool, facts *exprFacts) (eventValue, error) {
 	if isJSIdentifier(expr) {
 		if bareAsReference {
-			return "this.events." + expr, true, nil
+			return eventValue{js: "this.events." + expr, cacheable: true}, nil
 		}
-		return "(" + eventParam + ") => this.events." + expr + "(" + eventParam + ")", true, nil
+		return eventValue{js: "(" + eventParam + ") => this.events." + expr + "(" + eventParam + ")", cacheable: true}, nil
 	}
 	op := strings.IndexByte(expr, '(')
 	if op < 0 {
-		return "", false, fmt.Errorf("event handler must be a bare method name or a single call expression (got %q)", expr)
+		return eventValue{}, fmt.Errorf("event handler must be a bare method name or a single call expression (got %q)", expr)
 	}
 	callee := strings.TrimSpace(expr[:op])
 	if !isJSIdentifier(callee) {
-		return "", false, fmt.Errorf("event handler callee must be a plain method name (got %q)", callee)
+		return eventValue{}, fmt.Errorf("event handler callee must be a plain method name (got %q)", callee)
 	}
 	closeParen := matchBalanced(expr, op, '(', ')')
 	if closeParen != len(expr)-1 {
-		return "", false, fmt.Errorf("event handler must be a single call expression (got %q)", expr)
+		return eventValue{}, fmt.Errorf("event handler must be a single call expression (got %q)", expr)
 	}
 	argsRaw := strings.TrimSpace(expr[op+1 : closeParen])
 	// An object-literal FIRST argument (`save({ id: 1 })`) would be mangled by
@@ -616,23 +984,60 @@ func compileEventHandler(expr string, scope map[string]bool, eventParam string, 
 	// caller positions it at the @event attribute. Leading-'{' only — a literal
 	// nested in a later argument is out of scope (SPEC §6).
 	if startsWithObjectLiteral(argsRaw) {
-		return "", false, errors.New(objectLiteralMsg)
+		return eventValue{}, errors.New(objectLiteralMsg)
 	}
 	evScope := cloneScope(scope)
-	evScope["event"] = true
+	_, eventIsBinding := evScope["event"]
+	if !eventIsBinding {
+		// Never overwrite a real binding named `event` (a {#for} item may own
+		// the name): its rewrite value must survive.
+		evScope["event"] = ""
+	}
 	argsJS := ""
 	referencesLoopScope := false
+	// The argument scan runs into its OWN facts so the synthesized `event`
+	// parameter can be dropped from the reference list before the caller sees
+	// it; roots and item reads still reach the caller's facts.
+	argFacts := &exprFacts{}
 	if argsRaw != "" {
-		argsJS, referencesLoopScope = resolveExprTrackingScope(argsRaw, evScope, scope)
+		argsJS, referencesLoopScope = resolveExprScan(argsRaw, evScope, scope, argFacts)
 	}
-	cacheable := !referencesLoopScope && !strings.Contains(argsJS, "__d.")
-	return "(" + eventParam + ") => this.events." + callee + "(" + argsJS + ")", cacheable, nil
+	if !eventIsBinding {
+		delete(argFacts.locals, "event")
+	}
+	// A `this.…` argument is evaluated at FIRE time inside the closure, against
+	// an instance that outlives every render, so it cannot make a row volatile —
+	// D62 already classifies such an argument as data-independent. A `__d.…`
+	// argument is different: it is captured from the render's snapshot, so its
+	// roots stay in the mask and keep the row rebuilding.
+	argFacts.usesThis = false
+	argFacts.volatileRead = false
+	// Loop locals in an argument are read at fire time off the LIVE row scope
+	// too, so they neither count as opaque whole-value reads nor make a site
+	// reading an enclosing row's local volatile — the same carve-out as `this`.
+	for _, read := range argFacts.locals {
+		read.opaque = false
+		read.whole = false
+		read.renderRead = false
+	}
+	facts.merge(argFacts)
+	refs := make([]string, 0, len(argFacts.locals))
+	for name := range argFacts.locals {
+		refs = append(refs, name)
+	}
+	dataFree := !strings.Contains(argsJS, "__d.")
+	return eventValue{
+		js:           "(" + eventParam + ") => this.events." + callee + "(" + argsJS + ")",
+		cacheable:    !referencesLoopScope && dataFree,
+		rowCacheable: referencesLoopScope && dataFree,
+		refs:         refs,
+	}, nil
 }
 
-func cloneScope(scope map[string]bool) map[string]bool {
-	out := make(map[string]bool, len(scope)+1)
-	for k := range scope {
-		out[k] = true
+func cloneScope(scope scopeMap) scopeMap {
+	out := make(scopeMap, len(scope)+1)
+	for k, v := range scope {
+		out[k] = v
 	}
 	return out
 }

@@ -36,6 +36,22 @@ notes:
       matched the runtime, and the card was rewritten to state what the code actually does. Verified
       at this sha with the framework suite green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      Binding inside a `{#for}` row resolves through D170's row scope, and the contract is unchanged
+      by it. A loop-var-rooted member path (`todo.text`) classifies exactly as before, but the
+      emitted target is now `s.item` — the row state's CURRENT item, read at write time — so the
+      record arm writes to the live record after a reorder or a same-key replacement, not to
+      whatever the row was built against. `__bind`'s memoization is unaffected: it keys on (target,
+      key, spec), and `s.item` hands it the same record object the old emission did. The other half
+      worth knowing: a loop body containing a form control with `value`/`checked` makes its site
+      `ctrl: true`, and the block collects those control vnodes when it builds the row. A CLEAN row
+      returns its previous vnode subtree and `patch()` short-circuits — no attr pass — so the
+      live-DOM re-assert that keeps a change-committed input, a clicked checkbox or a held IME
+      composition from drifting runs off that collected list instead, through the same `syncControl`
+      comparison `patchAttrs` uses. One implementation, one contract; a cached row with no controls
+      re-asserts nothing.
+    sha: ff9454a1857e785d8c8590e5d47f2a6030f107e8
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js

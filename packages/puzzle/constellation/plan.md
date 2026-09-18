@@ -11,6 +11,52 @@ notes:
       DevTools framework bridge is merged while the extension repo is unstarted. Added the
       deep-review-round paragraph and the SKILL.md refresh as the named pre-0.2.0 blocker.
     sha: 35e8fd092a8e4559269fd8578a419e69e8371f6c
+  - kind: state
+    text: >-
+      2026-09-10 — 0.8.0 direction PLANNED, not built: compiled direct-DOM rendering + persistent
+      keyed lists, recorded as [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] (status planned) with the
+      working plan in packages/puzzle/plan/Puzzle-Render-Upgrade.md. It replaces the GPT-6 Pro
+      handoff under 0.8.0-plan/ as the working plan (that folder is untracked scratch and should be
+      deleted once D170 is adopted). The next free decision number after this is D171. Nothing in
+      the tree has changed for it yet; 0.7.1 is still the in-progress release.
+  - kind: state
+    text: >-
+      2026-09-10, later — 0.8.0 direction re-scoped with Cory's agreement: the direct-DOM rewrite
+      was measured (five real templates, +25–27% gzip in a bundle even with every emitter lever) and
+      dropped; the plan of record is now packages/puzzle/plan/Puzzle-Render-Upgrade.md — keep the
+      virtual DOM, add persistent list blocks with cached row subtrees, an identity short-circuit in
+      patch(), static subtree caching, a record render revision with snapshot prop compare, stable
+      loop handlers, and a flush-seq dedupe. Card renamed to
+      [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] and rewritten in place (status planned). The rejected
+      plan is archived at packages/puzzle/plan/rejected/Puzzle-Direct-DOM-Rendering.md for its
+      measurements. Nothing in the tree is built yet; plan §14 questions wait on Cory.
+  - kind: state
+    text: >-
+      2026-09-10 — **0.8.0's render change is BUILT, not verified.**
+      [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] landed on `feat/render-lists` in three commits: the
+      plan (`plan/Puzzle-Render-Upgrade.md`), the runtime (bdf7e9d — `views/listBlock.js`,
+      `renderRev.js`, the patch identity short-circuit, `propsEqual` revision snapshots,
+      PuzzleView's `__c`/`__list`/`__dirty`/`__propRevs`, the flush-sequence dedupe), and the
+      compiler (ff9454a — item-form `{#for}` lowering to `this.__list(…, __L<n>)`, row-scope handler
+      caches, static-subtree cache sites, the `Class.__roots` stamp, `__L<n>` reserved). Both suites
+      green at those shas; the plan §11 byte and work gates are being measured by a verification
+      pass, and D170 goes `verified` only when those numbers land. The direct-DOM rewrite that was
+      0.8.0's first direction is rejected on measurement and archived at
+      `plan/rejected/Puzzle-Direct-DOM-Rendering.md`; [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] carries
+      the reason. Cards truthed through D170. **The next free decision number is D171.**
+    sha: ff9454a1857e785d8c8590e5d47f2a6030f107e8
+  - kind: state
+    text: >-
+      2026-09-11 — the two 0.8.0 planning documents under `packages/puzzle/plan/`
+      (`Puzzle-Render-Upgrade.md` and `rejected/Puzzle-Direct-DOM-Rendering.md`) were removed from
+      the `feat/render-lists` branch at Cory's request: "don't commit the .md plan files we made, we
+      don't need those." The notes above that name those paths are history and stay as written. The
+      record is now [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] — its `## Decision` items 1–6 and `##
+      Consequences` hold the full design — plus the hand-written todos fixtures under
+      `tests/fixtures/todos/` (the byte contract for what the compiler emits) and the expects in
+      `benchmarks/scenarios.mjs` with the measured numbers in D170's verified note (the gates).
+      Every code, test and benchmark comment that cited a plan section was re-pointed at D170 plus
+      the mechanism's name in the same sweep.
 ---
 
 # Puzzle project map

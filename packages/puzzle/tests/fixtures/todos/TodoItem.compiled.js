@@ -61,7 +61,7 @@ TodoItem.prototype.render = function () {
           }, []),
           ...(__d.todo.completed
             ? [
-                new ViewNode('div', { class: 'absolute inset-0 flex items-center justify-center' }, [
+                (this.__c[0] ??= new ViewNode('div', { class: 'absolute inset-0 flex items-center justify-center' }, [
                   new ViewNode('svg', {
                     class: 'w-3 h-3 text-ink',
                     fill: 'currentColor',
@@ -73,7 +73,7 @@ TodoItem.prototype.render = function () {
                       'clip-rule': 'evenodd',
                     }, []),
                   ]),
-                ]),
+                ])),
               ]
             : []),
         ]),

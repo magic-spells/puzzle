@@ -24,6 +24,23 @@ notes:
       sites sit behind the inline `__PUZZLE_DEV__` probe, so the warnings and their module-level
       once-state tree-shake out of production; in development they still warn at most once per
       session, exactly as described above.
+  - kind: state
+    text: >-
+      Where the key expression lives moved with D170's list blocks; the semantics on this card did
+      not change. An item-form `{#for}` no longer prepends `key: ViewNode.keyOf(item)` to the row
+      root — the synthetic key is the site meta's key function, `key: (item) =>
+      ViewNode.keyOf(item)`, hoisted to the module-scope `const __L<n>`, and the row root carries
+      the block's resolved `key: s.k`. An explicit `key={ … }` becomes `(item) => <expr>` (or
+      `(item, i) => …`) in the same meta, with the loop locals left bare as the arrow's own
+      parameters — but only when it reads nothing that lives inside `render()`; a key touching
+      `__d`, `__f` or `this` cannot become a module-scope arrow, so the whole site keeps today's
+      `.map(…)` emission and this card's original prepend/suppress behaviour verbatim. Range loops
+      and loops inside a `<Snippet>` body also keep `.map`. `keyOf` itself, the explicit-key
+      override, the null-key warn-once and positional fallback, and the duplicate-key warning are
+      all unchanged; the block adds one more dev warning of its own when two rows collide on a key
+      in a single pass, because a shared key would otherwise alias two logical rows onto one row
+      state.
+    sha: ff9454a1857e785d8c8590e5d47f2a6030f107e8
 ---
 
 # D58 — List keying: pk-aware auto-key, explicit key override, null-key warning

@@ -124,8 +124,13 @@ func TestInlineSVGKeyDoesNotSuppressSyntheticKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	if !strings.Contains(res.JS, "key: ViewNode.keyOf(row)") {
+	// The synthetic key now lives in the site meta; the row root carries the
+	// block's resolved key (D170 emission contract).
+	if !strings.Contains(res.JS, "const __L0 = { key: (row) => ViewNode.keyOf(row) };") {
 		t.Errorf("synthetic {#for} key was suppressed by a literal SVG root key:\n%s", res.JS)
+	}
+	if !strings.Contains(res.JS, "key: s.k") {
+		t.Errorf("lowered row root must carry the block key:\n%s", res.JS)
 	}
 	if strings.Contains(res.JS, "key: 'asset-key'") {
 		t.Errorf("literal SVG root key reached the vnode directive path:\n%s", res.JS)
@@ -353,7 +358,7 @@ func TestInlineSVGInSkeletonAndFor(t *testing.T) {
 	}
 	// Keyed under {#for}: the svg's parent <li> gets key: ViewNode.keyOf(item)
 	// (pk-aware auto-key, D58), and dedupe keeps one entry despite two uses.
-	if !strings.Contains(res.JS, "key: ViewNode.keyOf(item)") {
+	if !strings.Contains(res.JS, "const __L0 = { key: (item) => ViewNode.keyOf(item) };") {
 		t.Errorf("expected keyed {#for} body:\n%s", res.JS)
 	}
 	if len(res.InlinedFiles) != 1 {

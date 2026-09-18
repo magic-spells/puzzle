@@ -16,6 +16,7 @@ connections:
   - COMPONENT-FORMATTERS
   - FLOW-REACTIVITY
   - FILE-DEVPERF
+  - DECISION-D170-INCREMENTAL-VDOM-LISTS
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
@@ -79,6 +80,9 @@ driver has already opted in.
 
 ## The thirteen built scenarios and what each probes
 
+
+
+
 | scenario | the question | the answer |
 | --- | --- | --- |
 | `keyed-list` | what does a fully-mounted keyed list cost, on the js-framework-benchmark op set? | 7 elements/row, 350k live elements and 50,001 views at 50k records |
@@ -87,10 +91,10 @@ driver has already opted in.
 | `async-waterfall` | do N independent `async data()` evaluations overlap or queue? | **serialized**, `maxInFlight` 1 of 20 |
 | `deep-nest` | is one update proportional to DEPTH, or to the forest? | **neither** — O(1); see "refuted" below |
 | `write-storm` | does the rAF-batched flush hold under mutation pressure, and what does persistence cost? | batching holds unconditionally; persistence is the finding |
-| `islands` | does `island` really freeze its subtree, and what does the freeze still cost? | 0 violations; 20,000 child vnodes rebuilt per render |
+| `islands` | does `island` really freeze its subtree, and what does the freeze still cost? | 0 violations, and **20,000 child vnodes per render** — this seed is dynamic, so D170's build-once island cache (static seeds only) does not apply |
 | `formatters` | what does the built-in registry cost across a large re-render? | was 91.4% — priced the Intl cache that cut it to ~23%; `count-intl` now pins 0 constructions |
-| `listener-churn` | what does removing and re-adding a DOM listener on every render actually cost? | `churn` costs 46% more than `stable` at 1k rows and 32% at 10k; `stable` and `none` are within noise of each other |
-| `route-churn` | how many times does a REUSED route ancestor render per committed navigation? | `depth + 2` — 27 ancestor renders per navigation against 6 `data()` runs, 81.5% mutating nothing |
+| `listener-churn` | what does removing and re-adding a DOM listener on every render actually cost? | `churn` cost 46% more than `stable` at 1k rows and 32% at 10k; since D170 the churn arm compiles to a row-cached handler and all three arms report **0** listener calls |
+| `route-churn` | how many times does a REUSED route ancestor render per committed navigation? | was `depth + 2` (27 per navigation, 81.5% mutating nothing); since D170 it is 12, because the bailouts stop the reused-ancestor cascade — O(depth), not O(depth²) |
 | `form-state` | what does a keystroke cost the rest of a 400-control form? | both controlled form properties write only on a real change (0 writes on a clean re-render); one `record.update()` rebuilds the schema descriptor map three times |
 | `flip-churn` | what do N rows cost the D85 FLIP path at once? | flip is **98.8%** of a 500-row reorder — 68.5ms against 0.80ms for the identical rotation with no `flip` attribute |
 | `loop-trap` | does the D121 loop detector actually fire in a browser? | both arms, at exactly the documented thresholds |
@@ -101,6 +105,18 @@ detector to detect anything. It is exercised through `benchmarks/probe.mjs`
 instead ([[DECISION-D128-BENCHMARK-METHODOLOGY]]), which also runs the two
 scenario-specific probe scripts `probe-route-churn.mjs` and
 `probe-listener-churn.mjs` for the counters their matrix rows cannot express.
+
+`keyed-list` gained three D170 work-count gates — `update-one`, `update-all` and
+`reorder` — whose counters are asserted exactly at 1,000 rows rather than
+compared as timings, and `KeyedList.watchRows()` runs a real `MutationObserver`
+over the list body in the production bundle to report them.
+
+Timing cells not called out above were taken **before**
+[[DECISION-D170-INCREMENTAL-VDOM-LISTS]]. The structural counters in
+`benchmarks/baseline.json` were re-recorded on the D170 branch and every one of
+them moved in the improving direction; the milliseconds in this card's prose have
+not all been retaken, so read an unannotated figure as the pre-D170 baseline the
+gates were measured against.
 
 ## `keyed-list` is deliberately NOT virtualized
 
@@ -118,53 +134,50 @@ reactive store is O(1) in nodes but O(n log n) in `data()` per scroll bucket.
 
 ## Findings this app produced
 
-Recorded here as measurements only; each is reachable from the card it concerns.
 
-- **Formatters are 91.4% of a 10,000-row re-render** — 376.1ms formatted against
-  32.4ms for an identical tree rendering plain strings, with identical layout
-  cost in both arms. 10,000 `Intl.DateTimeFormat` plus 10,000
-  `Intl.RelativeTimeFormat` constructed per render, nothing cached
-  ([[COMPONENT-FORMATTERS]]).
-- **`_persistNow` serializes the whole store per dirty flush** — one 10k
-  serialize adds **34.8ms** to a painted frame against **11.5ms** for the 5,000
-  writes that triggered it ([[COMPONENT-STORE]]). Persistence is opt-in.
-- **Async `data()` is fully serialized** — `maxInFlight` 1 of 20 in production,
-  from a concurrency census rather than the clock ([[COMPONENT-STORE]],
-  [[FLOW-REACTIVITY]]).
-- **A reused route ancestor at depth `d` renders `d + 2` times per committed
-  navigation**, so the reused prefix costs **O(depth²)** renders rather than two
-  per level. Over five ancestor levels that is 27 renders against 6 `data()`
-  runs, 81.5% of them mutating nothing
-  ([[DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL]]).
-- **Rebinding a DOM listener every render is a real cost** — the `churn` arm
-  runs 46% over `stable` at 1,000 rows and 32% over it at 10,000, which is the
-  price an invoker pattern would recover ([[COMPONENT-VIEW-MANAGER]],
-  [[DECISION-D62-HANDLER-CACHING]]).
+The measured results, with the mechanism each one implicates. Numbers are from
+`npm run bench` against the production `examples/stress` bundle; see
+`benchmarks/scenarios.mjs` for the declared expects the runner asserts.
+
+- **Row work is proportional to what changed, not to list length** — one
+  `record.update()` in a 1,000-row keyed list runs 1 child `data()`, rebuilds 1
+  row and writes 2 DOM mutations; `update-all` scales that exactly (1000 / 1000
+  / 2000, no row counted twice); a display-order flip that writes no record
+  rebuilds **0** rows and only moves nodes
+  ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]).
+- **A row-cached handler is identity-stable** — `listener-churn`'s `churn` arm
+  used to report 400,000 `addEventListener`/`removeEventListener` calls at
+  10,000 rows and now reports **0**, because the compiler caches a loop
+  handler on the row scope. `list-row-identity` proves a row-cached handler
+  still fires and still reads the CURRENT row.
 - **Caret safety is emergent, not mechanical** — nothing in `client-runtime/`
-  touches `selectionStart` or `document.activeElement`; `patchAttrs` compares
+  touches `selectionStart` or `document.activeElement`; the patcher compares
   against the live DOM first, so a re-render mid-keystroke writes no `value` and
   never disturbs the caret ([[COMPONENT-VIEW-MANAGER]]).
 - **FLIP is 98.8% of a reorder** — 500 rows through `playFlip()` cost 68.5ms
   against 0.80ms for the identical rotation with no `flip` attribute, and the
   cost is forced layout and style rather than framework JavaScript.
-- **`island` freezes patching, not allocation** — 20,000 child vnodes rebuilt
-  and discarded per render, measured by read-counting getters rather than
-  inferred ([[DECISION-D44-DOM-ISLANDS]], [[COMPONENT-VIEW-MANAGER]]).
-
-### Two hypotheses refuted — do not re-fund these
-
-- **Deep nesting is not a cost.** A leaf update runs `data()` on **1 of 1,536**
-  views; so does a branch-root update (not 24). Depth costs nothing unless the
-  data threaded down actually changes. `update-global` is the control that makes
-  those numbers mean anything — it wakes all 1,536, so a scenario with broken
-  subscriptions would report a very impressive `1` and mean nothing.
-- **The per-row re-render cascade is not a framework bug.**
-  `patchComponent`'s `shallowEqual` bailout is correct and extremely effective;
-  the canonical Puzzle list idiom disarms it by handing the patcher a fresh
-  function object per row per render. [[DECISION-D62-HANDLER-CACHING]] predicted
-  exactly this; the `?handlers=inline|stable` A/B measured it.
+- **`island` freezes patching but not allocation, and that half is still open**
+  — 20,000 child vnodes rebuilt and discarded per render, measured by
+  read-counting getters rather than inferred
+  ([[DECISION-D44-DOM-ISLANDS]], [[COMPONENT-VIEW-MANAGER]],
+  [[DECISION-D170-INCREMENTAL-VDOM-LISTS]]). D170 makes an island's children
+  array a build-once cache site at any size, but only when the seed is STATIC,
+  and this scenario's seed is a nested `{#for}` over plain objects, so it does
+  not qualify: `islandChildVnodesPerRender` stays at **20,000**, with
+  `islandViolations` still 0 and the shell still provably mutating. The static
+  requirement is not timidity — `??=` is per view instance, while D44 re-seeds
+  an island from the template on a key-reset or hide/show remount, so a cached
+  dynamic seed would display the first render's values forever. Closing it needs
+  the RUNTIME to own the seed's lifetime: emit the seed as a per-render thunk
+  the runtime evaluates at mount only — one closure per render instead of N
+  vnodes, and correct on remount. Deferred, not built.
+- **The reused-ancestor cascade is O(depth), not O(depth²)** — `route-churn`
+  reports 1,200 ancestor renders per navigation burst where it reported 2,700,
+  and 600 on the params-only control where it reported 2,100.
 
 ## Durable gotchas
+
 
 - **Counters that must survive production live in the app, not the framework.**
   `app/row-metrics.js` (`childDataRuns`), `app/nest-metrics.js`
@@ -187,11 +200,18 @@ Recorded here as measurements only; each is reachable from the card it concerns.
   subscription modes would read N/N for reasons having nothing to do with
   subscription precision. In `loop-trap` a query would drag the host into the
   same causal chain and inflate the counter being measured.
-- **`ListRow` takes primitive props, never the record.** Records mutate in
-  place, so `row={ record }` hands the patcher the same reference before and
-  after an update, `shallowEqual` reports "unchanged", and `update-every-10th`
-  silently fails to repaint. This is [[FLOW-REACTIVITY]]'s record-as-prop caveat
-  as a working example.
+- **`ListRow` takes primitive props, not the record — and that is now a
+  measurement choice, not a correctness requirement.** It was a requirement:
+  records mutate in place, so `row={ record }` handed the patcher the same
+  reference before and after an update, the prop compare reported "unchanged",
+  and `update-every-10th` silently failed to repaint. Since
+  [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] a record prop also compares by render
+  revision, so passing the record would repaint correctly. The scenario keeps
+  primitive props anyway, because the whole point of the `keyed-list` /
+  `virtual-list` A/B is that both arms do identical per-row work — changing what
+  a row receives would change what is being compared. [[FLOW-REACTIVITY]] holds
+  the current contract and its remaining edges (a related record, a computed
+  getter, a direct field assignment).
 - **Rows carry an explicit `seq`** because `findMany` returns Map-insertion
   order, which cannot be permuted in place. `swap-rows` is therefore two genuine
   reactive writes at the cost of one O(n log n) sort per render — inside both

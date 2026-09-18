@@ -23,13 +23,18 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 `)
 	// Collection resolves against the model; the lambda param is the intact
 	// identifier (not split on any character).
-	if !strings.Contains(got, "__d.items.map(($foo) =>") {
-		t.Errorf("expected `__d.items.map(($foo) =>`, got:\n%s", got)
+	if !strings.Contains(got, "__l(this, this, 0, __d.items, (s) =>") {
+		t.Errorf("expected the item-form loop to lower to a list block, got:\n%s", got)
 	}
-	// The loop variable is in scope inside the body: a bare `{ $foo }` stays
-	// local — never rewritten to `__d.$foo` and never mangled.
-	if !strings.Contains(got, "__s($foo,") {
-		t.Errorf("expected body reference `__s($foo, …)` (loop var in scope), got:\n%s", got)
+	// The identifier survives intact in the site meta's key arrow, which is
+	// where the loop variable is still spelled out (D170 emission contract).
+	if !strings.Contains(got, "const __L0 = { key: ($foo) => ViewNode.keyOf($foo) };") {
+		t.Errorf("expected the key arrow to keep the intact identifier, got:\n%s", got)
+	}
+	// The loop variable is in scope inside the body: a bare `{ $foo }` reads the
+	// row scope — never rewritten to `__d.$foo` and never mangled.
+	if !strings.Contains(got, "__s(s.item,") {
+		t.Errorf("expected body reference `__s(s.item, …)` (loop var in scope), got:\n%s", got)
 	}
 	if strings.Contains(got, "__d.$foo") || strings.Contains(got, "__d.foo") {
 		t.Errorf("loop variable `$foo` must not be rewritten to the data model:\n%s", got)
@@ -53,8 +58,13 @@ func TestForAllowedIdentifiersCompile(t *testing.T) {
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
 </script>`)
-			if !strings.Contains(got, ".map(("+tc.item+", "+tc.counter+") =>") {
+			// A lowered loop spells the identifiers in the site meta's key arrow;
+			// the body reads them off the row scope.
+			if !strings.Contains(got, "key: ("+tc.item+") => ViewNode.keyOf("+tc.item+")") {
 				t.Errorf("allowed loop identifiers did not compile intact:\n%s", got)
+			}
+			if !strings.Contains(got, "__l(this, this, 0, __d.items, (s) =>") {
+				t.Errorf("allowed loop identifiers did not lower to a list block:\n%s", got)
 			}
 		})
 	}

@@ -19,8 +19,12 @@ export { FormatterRegistry } from './formatters.js';
 export { lazy } from './router/lazy.js';
 
 // Compiler support (constellation/doc/DOC-COMPILER-DESIGN.md §b): compiled .pzl modules import
-// ViewNode/SLOT_TAG/displayValue from the package root — the injected render()
-// builds trees and applies the shared display-coercion rule with them. Not part
-// of the SPEC §1 user-facing surface.
+// ViewNode/SLOT_TAG/displayValue/listRows from the package root — the injected
+// render() builds trees, applies the shared display-coercion rule, and renders
+// its item-form {#for} sites with them. Each is imported only by a module that
+// actually emits it (`displayValue as __s`, `listRows as __l`), so a loop-free
+// app never pulls the list block in. Not part of the SPEC §1 user-facing
+// surface.
 export { ViewNode, SLOT_TAG, SNIPPET_TAG, PORTAL_TAG } from './views/ViewNode.js';
 export { displayValue } from './display.js';
+export { listRows } from './views/listBlock.js';
