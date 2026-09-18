@@ -360,8 +360,11 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 
 		// (2) A symlinked destination is a deliberate link (a dev checkout, a
 		// shared palette): report and skip it rather than silently replacing what
-		// it points at. --overwrite is explicit intent and writes through.
-		info, lerr := os.Lstat(abs)
+		// it points at. --overwrite is explicit intent and writes THROUGH the link
+		// (abs is already the resolved target), never over it. The Lstat is on the
+		// UNRESOLVED path — containedWritePath has followed the link by now, so
+		// stat-ing abs would only ever see the target.
+		info, lerr := os.Lstat(filepath.Join(resolvedRoot, filepath.FromSlash(rel)))
 		switch {
 		case lerr == nil && info.Mode()&os.ModeSymlink != 0:
 			if !opts.Overwrite {
