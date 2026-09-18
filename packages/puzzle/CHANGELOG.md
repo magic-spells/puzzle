@@ -157,6 +157,20 @@ values every consumer sees and adds a mode and new exports, which is a
 
 ### Added
 
+- **`puzzle add theme <name…>`.** The CLI can now copy any of the registry's
+  palettes, not just the default one — the gap that had apps hand-copying
+  `dim.css` and drifting from it. The default palette is the `app/styles/
+  pieces.css` `add piece` already writes (the two stay idempotent with each
+  other); every other lands in `app/styles/themes/<name>.css`, recorded in
+  `pieces.lock` under its registry path. Names resolve before anything is
+  fetched, so an unknown one writes nothing and lists what is available; a
+  locally modified copy is refused unless `--overwrite` is given; and a palette
+  your `styles.css` already imports from the package
+  (`@magic-spells/puzzle-pieces/themes/<name>.css`) is reported as wired and
+  skipped — which also stops `add piece` copying `pieces.css` beside such an
+  import. `puzzle add theme` with no name lists the palettes with per-theme
+  install state. styles.css is still never edited: the `@import` and the
+  `data-scheme` switch are printed (D3, D171).
 - **puzzle-pieces: four palettes × three modes, shipped as CSS.** The theme
   files in `packages/puzzle-pieces/registry/theme/` are the single source of
   colour for every Puzzle app: `pieces.css` (the default palette — cool

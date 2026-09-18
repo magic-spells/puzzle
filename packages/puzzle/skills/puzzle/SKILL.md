@@ -41,7 +41,7 @@ CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
 `--hybrid`, `--mode production|development`), `check` (run the app-installed
 TypeScript compiler over `.pzl` scripts and template expressions), `preview`
 (serve an existing `dist/` with production-host semantics), `init`, `generate`,
-`add` (tailwind integration, `piece <name…>`, `skills`), `upgrade`, `doctor`,
+`add` (tailwind integration, `piece <name…>`, `theme <name…>`, `skills`), `upgrade`, `doctor`,
 `info`.
 
 - `dev` and `build` both take `--fixtures` (see Fixtures below).
@@ -772,7 +772,10 @@ shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`…). Two attributes on
 absent = default) and `data-theme` is the mode (`light | medium | dark`; absent
 follows the OS — medium is "soft dark"). Tokens are `light-dark()` pairs keyed
 on `color-scheme`, so the same markup is right in every scheme × mode; put both
-attributes on any element to scope a subtree. Persist and apply the choice with
+attributes on any element to scope a subtree. Copy a palette in with `puzzle add theme <name…>` (no name lists them with this
+app's install state); the default lands as `app/styles/pieces.css`, every other
+as `app/styles/themes/<name>.css`, and the `@import` line is printed, never
+written. Persist and apply the choice with
 `@magic-spells/puzzle-pieces/appearance` (`boot()` first thing in app.js,
 `set({ scheme, mode })`, `mode: null` = follow OS) and inline
 `@magic-spells/puzzle-pieces/pre-paint` in `<head>` before the stylesheet so
