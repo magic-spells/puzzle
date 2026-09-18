@@ -113,3 +113,7 @@ dist
 
 # Playwright MCP session artifacts
 .playwright-mcp/
+
+# Constellation working memory (local scratchpad; the rules file is committed)
+.constellation/*
+!.constellation/CLAUDE.md
