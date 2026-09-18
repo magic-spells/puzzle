@@ -16,9 +16,27 @@ import (
 
 // Registry is the parsed registry.json index.
 type Registry struct {
-	Version int     `json:"version"`
-	Theme   string  `json:"theme"`
-	Pieces  []Piece `json:"pieces"`
+	Version int    `json:"version"`
+	Theme   string `json:"theme"`
+	// Modes are the appearance modes every theme file implements
+	// (data-theme="light|medium|dark"); empty means the built-in three.
+	Modes []string `json:"modes"`
+	// Themes are the selectable palettes `puzzle add theme` copies. The entry
+	// whose File equals Theme IS the default one `add piece` already copies to
+	// app/styles/pieces.css. A registry predating this field still has that one
+	// theme (see registryThemes).
+	Themes []Theme `json:"themes"`
+	Pieces []Piece `json:"pieces"`
+}
+
+// Theme is one selectable palette in the registry's `themes` array. File is a
+// registry-relative path, validated like every other manifest path before it is
+// fetched or turned into a destination.
+type Theme struct {
+	Name        string `json:"name"`
+	File        string `json:"file"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
 }
 
 // Piece is one registry entry.
