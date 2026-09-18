@@ -40,6 +40,10 @@
  * there. Three selectors per block — the root with no palette, an element
  * carrying both attributes, and a preview card scoping only the palette under
  * a medium root (a card naming its own mode is left to its own color-scheme).
+ * Note the converse: an element carrying ONLY `data-theme="medium"` under a
+ * non-default root (say `<html data-scheme="warm">`) matches this file's
+ * `[data-theme='medium']:not([data-scheme])` and picks up the DEFAULT palette's
+ * medium overrides, not warm's — scope a preview with both attributes.
  *
  * Keep line 2 of this file intact — `puzzle add piece` keys its installed
  * detection on the "puzzle-pieces design tokens" string.

@@ -23,7 +23,7 @@
         <div class="mb-12 grid gap-3 sm:grid-cols-3">
           {#for s in summary}
             <div key={ s.mode } class={ s.class }>
-              <p class="text-[10px] font-medium uppercase tracking-wide text-muted">{ s.label }</p>
+              <p class="text-2xs font-medium uppercase tracking-wide text-muted">{ s.label }</p>
               <p class="mt-1 font-mono text-lg text-ink">{ s.min }</p>
               <p class="mt-0.5 text-xs text-muted">{ s.counts }</p>
             </div>
@@ -152,10 +152,6 @@ export default class SchemePanel extends PuzzleView {
 		const summary = state.summary || {};
 		const mode = state.mode || null;
 
-		// A scheme change on a reused instance: re-probe once the new markup is
-		// on screen. data() stays a pure derivation — this only queues work.
-		if (known && this._probedScheme !== null && this._probedScheme !== scheme) this.scheduleProbe();
-
 		return {
 			known,
 			scheme,
@@ -216,16 +212,25 @@ export default class SchemePanel extends PuzzleView {
 
 	mounted() {
 		this.setData({ mode: liveMode() });
+		// appearance.js notifies on every set() and, while following the OS, on
+		// every system light/dark flip — so one subscription covers both.
 		this._unsubscribe = subscribe(() => {
 			this.setData({ mode: liveMode() });
 			this.refresh();
 		});
+		// The demo is hash-routed. Navigating /themes/dim → /themes/warm reuses
+		// this view with new params; the router re-renders on hashchange, and the
+		// queued probe (next frame) reads the re-rendered, re-scoped probe area.
+		this._onHashChange = () => this.scheduleProbe();
+		window.addEventListener('hashchange', this._onHashChange);
 		this.probe();
 	}
 
 	destroyed() {
 		if (this._unsubscribe) this._unsubscribe();
 		this._unsubscribe = null;
+		if (this._onHashChange) window.removeEventListener('hashchange', this._onHashChange);
+		this._onHashChange = null;
 	}
 
 	/** Queue one probe pass for after the next paint (idempotent). */
@@ -248,6 +253,12 @@ export default class SchemePanel extends PuzzleView {
 		if (!root || typeof getComputedStyle !== 'function') return;
 
 		const scheme = this.getData().scheme || DEFAULT_SCHEME;
+		const wrapper = root.querySelector('[data-scheme]');
+		if (wrapper && wrapper.getAttribute('data-scheme') !== scheme) {
+			// The router has not re-rendered the probe area yet — come back.
+			this.scheduleProbe();
+			return;
+		}
 
 		// Raw resolved strings, keyed `<mode>|<prop>`.
 		const raw = new Map();
