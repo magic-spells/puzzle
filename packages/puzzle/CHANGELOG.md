@@ -144,6 +144,11 @@ one is *not* a compile error; it silently builds a different product.
 
 ## 0.8.0 — Unreleased
 
+Folds the never-published 0.7.1 notes (registry version floors, the
+background update notice) into this minor: the themes work re-tunes token
+values every consumer sees and adds a mode and new exports, which is a
+0.x minor, not a patch.
+
 ### Added
 
 - **puzzle-pieces: four palettes × three modes, shipped as CSS.** The theme
@@ -168,10 +173,13 @@ one is *not* a compile error; it silently builds a different product.
   scheme colour cards from live computed styles, a 4 × 3 compare grid, a
   labelled shell mock and a pieces gallery). Token NAMES are unchanged from
   what Pyramid and Sites use today; adopting the package there is a follow-up.
-
-## 0.7.1 — Unreleased
-
-### Added
+- **puzzle-pieces: `appearance-picker` piece.** The palette + mode picker
+  Pyramid and Sites each carried a copy of, as one controlled piece: theme
+  cards that are live miniatures of the shell painted in each palette (scoped
+  `data-scheme`), a Light / Medium / Dark / System radiogroup, and
+  `@change({ scheme, mode })` for the app to persist through the `appearance`
+  export. The pieces docs shell opens it from the rail's foot as a non-modal
+  popover.
 
 - **Registry dependencies carry a version floor (D169).** A piece manifest's
   `dependencies` entry is now an npm install spec — `"@magic-spells/collapsible-content@^1.2.0"` —

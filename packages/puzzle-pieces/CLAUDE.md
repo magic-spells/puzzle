@@ -199,7 +199,11 @@ CLI — it is unrelated and must not be bumped along with the release.
   `pre-paint.js`. Colour cards read LIVE computed styles over the static name list in
   `demo/app/lib/tokenNames.js` — no JSON, and the demo never imports `test/`. The docs
   shell IS the frame/rail/panel composition (Sidebar `variant="rail"`, `bg-bar`,
-  `bg-surface-panel`), with `AppearanceSwitcher` in the rail foot.
+  `bg-surface-panel`), with `AppearanceSwitcher` (a non-modal popover over the
+  `appearance-picker` PIECE, wired to `set()`) in the rail foot. The picker piece is
+  controlled — `scheme`, `mode`, `@change({ scheme, mode })` — and carries its own
+  `DEFAULT_SCHEMES`/`DEFAULT_MODES` (tested equal to `appearance.js`) because copied
+  pieces may not import `registry/theme/`.
 - **Wrap @magic-spells web components directly whenever possible; port only when
   wrapping genuinely can't work** (rule set 2026-08-19 as "wrap when simple", strengthened
   2026-08-22 — see `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md`; `scroll-stack`
