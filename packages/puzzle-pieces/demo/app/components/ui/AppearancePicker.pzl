@@ -155,7 +155,9 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class        string        appended to the root
 //
 // EVENTS (callback props, value-first)
-//   @change({ scheme, mode })  every pick; the full choice, not just the axis that moved
+//   @change({ scheme, mode })  every pick; the full choice, not just the axis that moved.
+//                              CONTROLLED means the parent must feed the new value back
+//                              in — arrow keys and clicks only visibly move once it does.
 
 export const DEFAULT_SCHEMES = [
   { value: 'default', label: 'Default', description: 'Cool near-black with a navy tint and an indigo accent — balanced, classy, premium.' },
@@ -197,8 +199,7 @@ export default class AppearancePicker extends PuzzleView {
     const schemes = Array.isArray(props.schemes) && props.schemes.length ? props.schemes : DEFAULT_SCHEMES;
     const modes = Array.isArray(props.modes) && props.modes.length ? props.modes : DEFAULT_MODES;
     const system = props.system !== false;
-    const scheme = props.scheme || schemes[0].value;
-    const mode = props.mode === undefined ? null : props.mode;
+    const { scheme, mode } = this._current();
 
     const options = [...modes.map((m) => ({ ...m, key: m.value })), ...(system ? [SYSTEM] : [])];
     const currentKey = mode === null ? 'system' : mode;
@@ -234,12 +235,21 @@ export default class AppearancePicker extends PuzzleView {
     };
   }
 
+  // The one resolution of "current choice" both data() and _emit() use, so a
+  // caller passing only `mode` still hears the first card as its scheme.
+  _current() {
+    const props = this.props || {};
+    const schemes = Array.isArray(props.schemes) && props.schemes.length ? props.schemes : DEFAULT_SCHEMES;
+    return {
+      scheme: props.scheme || schemes[0].value,
+      mode: props.mode === undefined ? null : props.mode,
+    };
+  }
+
   _emit(patch) {
     const change = this.props && this.props.change;
     if (typeof change !== 'function') return;
-    const scheme = patch.scheme !== undefined ? patch.scheme : this.props.scheme || null;
-    const mode = patch.mode !== undefined ? patch.mode : this.props.mode === undefined ? null : this.props.mode;
-    change({ scheme, mode });
+    change({ ...this._current(), ...patch });
   }
 
   events = {

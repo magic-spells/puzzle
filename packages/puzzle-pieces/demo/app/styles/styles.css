@@ -152,6 +152,9 @@
   --text-code--line-height: 1.25rem;
   --text-brand: 0.9375rem;           /* 15px — the shell's wordmark */
   --text-brand--line-height: 1.25rem;
+  /* A corner popover may never outgrow the window: viewport minus the corner
+     insets, so it scrolls inside instead of losing its bottom edge. */
+  --spacing-popover: calc(100dvh - 1.5rem);
 }
 
 /* Gutter system (Luna-theme pattern, same as magic-spells-puzzle-site): one
