@@ -2,8 +2,9 @@ package build
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 // PreflightRuntime verifies that the runtime resolver used by configureRuntime
@@ -26,7 +27,27 @@ func PreflightRuntime(root string) error {
 	)
 }
 
+// packageManagerInstallCommand names the install command for the lockfile
+// nearest to root, walking up so a monorepo app whose lockfile lives at the
+// workspace root still gets `pnpm install` rather than the generic line.
 func packageManagerInstallCommand(root string) string {
+	dir, err := filepath.Abs(root)
+	if err != nil {
+		dir = root
+	}
+	for {
+		if command := lockfileInstallCommand(dir); command != "" {
+			return command
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+func lockfileInstallCommand(dir string) string {
 	for _, candidate := range []struct {
 		lockfile string
 		command  string
@@ -37,14 +58,9 @@ func packageManagerInstallCommand(root string) string {
 		{lockfile: "bun.lock", command: "bun install"},
 		{lockfile: "package-lock.json", command: "npm install"},
 	} {
-		if fileExists(filepath.Join(root, candidate.lockfile)) {
+		if fsutil.FileExists(filepath.Join(dir, candidate.lockfile)) {
 			return candidate.command
 		}
 	}
 	return ""
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

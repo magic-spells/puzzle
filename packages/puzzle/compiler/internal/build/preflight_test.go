@@ -42,6 +42,27 @@ func TestPreflightRuntimeMissingUsesLockfileManager(t *testing.T) {
 	}
 }
 
+func TestPreflightRuntimeMissingUsesParentLockfile(t *testing.T) {
+	t.Setenv(RuntimeEnvVar, "")
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "yarn.lock"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(workspace, "apps", "site")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := PreflightRuntime(root)
+	if err == nil {
+		t.Fatal("expected preflight error")
+	}
+	want := "puzzle: @magic-spells/puzzle is not installed in this project.\nRun `yarn install` and try again."
+	if err.Error() != want {
+		t.Fatalf("unexpected error:\n%s", err.Error())
+	}
+}
+
 func TestPreflightRuntimeInstalledPackagePasses(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(RuntimeEnvVar, "")
