@@ -1,7 +1,7 @@
 <puzzle-view class="flex h-dvh flex-col bg-surface-frame text-body">
   <!-- TOP BAR — the frame's horizontal arm. bg-bar equals surface-frame in every
        theme file, so the bar and the rail read as one flat L around the panel. -->
-  <header class="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,36rem)_minmax(0,1fr)] items-center gap-3 bg-bar px-4 text-bar-ink">
+  <header class="grid h-17 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,36rem)_minmax(0,1fr)] items-center gap-3 bg-bar px-4 text-bar-ink">
     <!-- THREE COLUMNS, not a flex row with a `justify-between`. The wings are
          equal `1fr` tracks and the search sits in the `auto` one between them,
          which is what centres it on the WINDOW rather than on whatever is left
