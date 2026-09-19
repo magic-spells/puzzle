@@ -88,6 +88,19 @@ notes:
       shared dependency prints once at the strictest range. A bare name still parses and still
       prints bare — third-party registries on the old shape are unaffected — and neither
       `registry.json`'s `"version": 1` nor `pieces.lock` changed shape.
+  - kind: decision
+    text: >-
+      Runtime preflight (PR #139, feat/runtime-preflight → release/0.8.0): `puzzle build` and
+      `puzzle dev` call build.PreflightRuntime before any esbuild work. If none of the three runtime
+      sources resolves (PUZZLE_RUNTIME, in-repo FindRuntime walk, installed FindInstalledRuntime),
+      the CLI exits 1 with a single message — "@magic-spells/puzzle is not installed in this
+      project. Run `<pm> install` and try again." — where the install command comes from the nearest
+      lockfile walking up from the app root (pnpm/yarn/bun before package-lock.json), falling back
+      to a generic npm line. Reason: with a global CLI and no node_modules, esbuild used to dump ~30
+      raw resolution errors. Rejected: auto-running npm install — the CLI never touches node_modules
+      or the network, it would guess the package manager, and a global CLI version could install a
+      mismatched runtime. check/generate/preview are deliberately not gated: they never bundle.
+    sha: 9996ca0
 ---
 
 # Compiler CLI

@@ -29,6 +29,13 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      PR #139: dev runs build.PreflightRuntime once at startup (right after resolving the app root,
+      before the workdir sweep, watchers and listener) and returns the error up through Serve →
+      cobra → main's single stderr print + exit 1. It does not re-run on file-change rebuilds. See
+      COMPONENT-COMPILER-CLI for the message and the no-auto-install decision.
+    sha: 9996ca0
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 

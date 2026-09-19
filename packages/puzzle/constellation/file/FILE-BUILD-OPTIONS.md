@@ -15,6 +15,12 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: gotcha
+    text: >-
+      configureRuntime still silently falls through when no runtime source resolves; the user-facing
+      guard is build.PreflightRuntime (internal/build/preflight.go), which consults the same three
+      sources in the same order and must stay in step if the precedence here changes.
+    sha: 9996ca0
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/build/options.go`.
