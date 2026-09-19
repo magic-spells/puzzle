@@ -113,7 +113,7 @@ const RULES = [
 
 const MARKUP = `<div class="flex h-dvh flex-col bg-surface-frame text-body">
   <!-- the frame's horizontal arm -->
-  <header class="flex h-12 items-center bg-bar px-3 text-bar-ink">
+  <header class="flex h-14 items-center bg-bar px-4 text-bar-ink">
     <span class="text-xs text-bar-muted">breadcrumb</span>
   </header>
 

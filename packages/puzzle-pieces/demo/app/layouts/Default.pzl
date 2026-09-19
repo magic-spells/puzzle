@@ -1,7 +1,7 @@
 <puzzle-view class="flex h-dvh flex-col bg-surface-frame text-body">
   <!-- TOP BAR — the frame's horizontal arm. bg-bar equals surface-frame in every
        theme file, so the bar and the rail read as one flat L around the panel. -->
-  <header class="grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,36rem)_minmax(0,1fr)] items-center gap-3 bg-bar px-3 text-bar-ink">
+  <header class="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,36rem)_minmax(0,1fr)] items-center gap-3 bg-bar px-4 text-bar-ink">
     <!-- THREE COLUMNS, not a flex row with a `justify-between`. The wings are
          equal `1fr` tracks and the search sits in the `auto` one between them,
          which is what centres it on the WINDOW rather than on whatever is left
@@ -74,7 +74,9 @@
            nav and no second pane to give room to, and the piece's icon-only mode
            hid the very labels the site is a list of. The Sidebar docs page still
            demonstrates collapsing — the prop defaults to true. -->
-      <Sidebar variant="rail" collapsible={ false } items={ navItems } activePath={ activeHref } label="Docs">
+      <!-- `border-r-0`: the panel draws the seam (border-l + rounded-tl), so the rail's
+           own right edge would show above the corner as a second line. -->
+      <Sidebar variant="rail" collapsible={ false } items={ navItems } activePath={ activeHref } label="Docs" class="border-r-0">
         <div slot="footer">
           <AppearanceSwitcher/>
         </div>
@@ -83,8 +85,13 @@
 
     <!-- PANEL — the work surface set down inside the frame: one step lighter
          than the frame, a lip along its top edge (panel-edge: a hairline in
-         light, a light lip in dark), and the panel shadow seating it. -->
-    <main class="min-w-0 flex-1 overflow-y-auto border-t border-panel-edge bg-surface-panel shadow-panel lg:rounded-tl-xl lg:border-l">
+         light, a light lip in dark), and the panel shadow seating it.
+         `relative` because this is the scroll container: an absolutely
+         positioned descendant (e.g. an `sr-only` span, which is `position:
+         absolute`) must resolve against it, not the body — otherwise it
+         escapes the overflow clip and stretches the document below the
+         h-dvh shell, letting the viewport scroll past the html element. -->
+    <main class="relative min-w-0 flex-1 overflow-y-auto border-t border-panel-edge bg-surface-panel shadow-panel lg:rounded-tl-xl lg:border-l">
       <div class="px-gutter py-10">
         <Slot/>
 
