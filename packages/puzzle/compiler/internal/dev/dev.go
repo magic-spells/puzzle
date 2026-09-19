@@ -176,6 +176,9 @@ func Serve(root string, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("resolving app root: %w", err)
 	}
+	if err := build.PreflightRuntime(absRoot); err != nil {
+		return err
+	}
 	dist := filepath.Join(absRoot, "dist")
 	appDir := filepath.Join(absRoot, "app")
 

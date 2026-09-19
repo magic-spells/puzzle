@@ -69,6 +69,9 @@ dev' runs for an output: 'static' project.`,
 		if err != nil {
 			return err
 		}
+		if err := build.PreflightRuntime(dir); err != nil {
+			return err
+		}
 
 		start := time.Now()
 		// The metafile drives the summary's bundle-composition breakdown: which
