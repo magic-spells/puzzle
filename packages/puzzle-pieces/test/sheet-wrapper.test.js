@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 // Static guards for the overlay WRAPPER pieces — `sheet`, `bottom-sheet`,
-// `dialog` and `alert-dialog`. There is nothing left to unit test in this repo
+// `dialog`, `alert-dialog` and `command`. There is nothing left to unit test in this repo
 // for any of them: the motion, the gestures, the snap policy and the
 // open/close state machine all live in @magic-spells/sheet,
 // @magic-spells/bottom-sheet and @magic-spells/dialog-panel now, and are
@@ -17,7 +17,7 @@ const readJSON = async (path) =>
 
 // Every wrapper here also declares @magic-spells/dialog-panel: the two sheets
 // wrap a package that only PEERs on it, and yarn 1 will not install a peer on
-// its own; the two dialogs wrap dialog-panel itself.
+// its own; the two dialogs and the command palette wrap dialog-panel itself.
 const DIALOG_PANEL = '@magic-spells/dialog-panel';
 
 // A dependency entry is "<name>@<range>" (D169); the last @ separates, so a
@@ -53,6 +53,13 @@ const WRAPPERS = [
 		file: 'AlertDialog.pzl',
 		manifest: '../registry/ui/alert-dialog/piece.json',
 		source: '../registry/ui/alert-dialog/AlertDialog.pzl',
+		package: DIALOG_PANEL,
+	},
+	{
+		piece: 'command',
+		file: 'Command.pzl',
+		manifest: '../registry/ui/command/piece.json',
+		source: '../registry/ui/command/Command.pzl',
 		package: DIALOG_PANEL,
 	},
 ];

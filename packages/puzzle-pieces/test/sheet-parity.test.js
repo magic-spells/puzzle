@@ -15,6 +15,7 @@ const copies = [
 		'../registry/ui/alert-dialog/AlertDialog.pzl',
 		'../demo/app/components/ui/AlertDialog.pzl',
 	],
+	['Command.pzl', '../registry/ui/command/Command.pzl', '../demo/app/components/ui/Command.pzl'],
 ];
 
 test('registry and demo overlay-wrapper copies stay byte-identical', async () => {

@@ -1,77 +1,79 @@
 <puzzle-view>
-  <dialog
-    class={ panelClass }
-    role="dialog"
-    aria-modal="true"
-    aria-label={ ariaLabel }
-    @cancel={ onCancel(event) }
-    @click={ onBackdrop(event) }>
-    <div class="flex items-center gap-2 border-b border-border px-3">
-      <svg
-        class="size-4 shrink-0 text-muted"
-        viewBox="0 0 20 20"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        aria-hidden="true">
-        <circle cx="9" cy="9" r="6" />
-        <path d="M14 14l4 4" stroke-linecap="round" />
-      </svg>
-      <input
-        data-command-input
-        id={ inputId }
-        type="text"
-        class="h-11 w-full bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none"
-        role="combobox"
-        aria-expanded="true"
-        aria-controls={ listId }
-        aria-activedescendant={ activeId }
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="off"
-        spellcheck="false"
-        placeholder={ placeholder }
-        value={ query }
-        @input={ onInput(event) }
-        @keydown:down:prevent={ moveDown }
-        @keydown:up:prevent={ moveUp }
-        @keydown:enter={ onEnter(event) } />
-    </div>
+  <dialog-panel ref="panel">
+    <dialog-backdrop class={ backdropClass }></dialog-backdrop>
 
-    <div class="max-h-72 overflow-y-auto p-1" id={ listId } role="listbox">
-      {#if empty}
-        <p class="py-6 text-center text-sm text-muted">{ emptyText }</p>
-      {:else}
-        {#for row in rows}
-          <div
-            id={ row.id }
-            role={ row.role }
-            data-opt-index={ row.optIndex }
-            aria-selected={ row.ariaSelected }
-            aria-disabled={ row.ariaDisabled }
-            class={ row.cls }
-            @click={ choose(row, event) }
-            @mouseenter={ hover(row) }>
-            {#if row.kind === 'option'}
-              <Slot
-                name="option"
-                item={ row.item }
-                active={ row.active }
-                selected={ row.selected }
-                disabled={ row.disabled }>
-                <span class="truncate">{ row.label }</span>
-                {#if row.hint}
-                  <span class="shrink-0 text-xs text-muted">{ row.hint }</span>
-                {/if}
-              </Slot>
-            {:else}
-              { row.label }
-            {/if}
-          </div>
-        {/for}
-      {/if}
-    </div>
-  </dialog>
+    <dialog
+      class={ panelClass }
+      role="dialog"
+      aria-modal="true"
+      aria-label={ ariaLabel }>
+      <div class="flex items-center gap-2 border-b border-border px-3">
+        <svg
+          class="size-4 shrink-0 text-muted"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true">
+          <circle cx="9" cy="9" r="6" />
+          <path d="M14 14l4 4" stroke-linecap="round" />
+        </svg>
+        <input
+          data-command-input
+          id={ inputId }
+          type="text"
+          class="h-11 w-full bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls={ listId }
+          aria-activedescendant={ activeId }
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          placeholder={ placeholder }
+          value={ query }
+          @input={ onInput(event) }
+          @keydown:down:prevent={ moveDown }
+          @keydown:up:prevent={ moveUp }
+          @keydown:enter={ onEnter(event) } />
+      </div>
+
+      <div class="max-h-72 overflow-y-auto p-1" id={ listId } role="listbox">
+        {#if empty}
+          <p class="py-6 text-center text-sm text-muted">{ emptyText }</p>
+        {:else}
+          {#for row in rows}
+            <div
+              id={ row.id }
+              role={ row.role }
+              data-opt-index={ row.optIndex }
+              aria-selected={ row.ariaSelected }
+              aria-disabled={ row.ariaDisabled }
+              class={ row.cls }
+              @click={ choose(row, event) }
+              @mouseenter={ hover(row) }>
+              {#if row.kind === 'option'}
+                <Slot
+                  name="option"
+                  item={ row.item }
+                  active={ row.active }
+                  selected={ row.selected }
+                  disabled={ row.disabled }>
+                  <span class="truncate">{ row.label }</span>
+                  {#if row.hint}
+                    <span class="shrink-0 text-xs text-muted">{ row.hint }</span>
+                  {/if}
+                </Slot>
+              {:else}
+                { row.label }
+              {/if}
+            </div>
+          {/for}
+        {/if}
+      </div>
+    </dialog>
+  </dialog-panel>
 </puzzle-view>
 
 <script>
@@ -79,11 +81,23 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 // Command — a command palette, self-contained: no other pieces imported. Built
 // on the native <dialog> element so the browser does the hard parts —
-// showModal() traps focus and inerts the page, the top layer and ::backdrop
-// come free, and Escape arrives as the `cancel` event. Filtering,
-// grouping, ranking, and roving keyboard navigation are Puzzle-native: local UI
-// state (query, activeIndex) via setData + refresh(), imperative DOM only for the
-// native APIs (showModal/close/focus/scrollIntoView).
+// showModal() traps focus and inerts the page, the top layer comes free, and
+// Escape arrives as the `cancel` event. Filtering, grouping, ranking, and
+// roving keyboard navigation are Puzzle-native: local UI state (query,
+// activeIndex) via setData + refresh(), imperative DOM only for focus and
+// scrollIntoView.
+//
+// THE OVERLAY IS A WRAPPER, NOT A PORT. Like Dialog, AlertDialog, Sheet and
+// BottomSheet, the palette renders the real <dialog-panel> / <dialog-backdrop>
+// custom elements from @magic-spells/dialog-panel and lets them run the
+// open/close machine: the scrim and panel fade in AND out (a raw showModal()
+// has no exit and its ::backdrop is unreachable from dialog.animate()),
+// Escape, the backdrop click, the page scroll lock and focus return are all
+// upstream. One base for every overlay in the registry means one loaded
+// module and one close-and-notify contract. <dialog-backdrop> is THE scrim
+// surface across the family — the native ::backdrop stays transparent — so
+// the overlay colour is two utilities on that element, the same pair Dialog
+// uses.
 //
 //   <Command
 //     open={ open }
@@ -109,19 +123,46 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // Snippet body cannot contain composition markers or ref=. With no snippet, the
 // marker fallback renders the stock row unchanged.
 //
-// CONTROLLED BY THE PARENT. The parent owns `open`; Command syncs the native
-// element to it (showModal()/close() in mounted()/afterUpdate(), exactly like a
-// modal). Command never sets `open` itself — it only *asks* the parent to close
-// via the `close` callback.
+// CONTROLLED BY THE PARENT, EDGE-TRIGGERED. The parent owns `open`, but only a
+// CHANGE to it acts: true → panel.show(), false → panel.hide(). The palette
+// re-renders on every keystroke, so a level-triggered sync would re-open a
+// palette the user just dismissed while the parent's state still said open.
+// Command never sets `open` itself — it only *asks* the parent to close via
+// the `close` callback, and the parent's flip to false is then a no-op edge
+// against an already-closed panel.
 //
 // TWO CALLBACKS, TWO MEANINGS:
 //   @select(value, event) — fires when an item is activated (Enter or click).
 //     The parent decides what happens next, INCLUDING whether to close (flip
 //     `open`). Command does NOT auto-close after a select — a palette often runs
 //     an action and stays open, so that call belongs to the parent.
-//   @close() — fires ONLY for user-driven dismissal: Escape (native `cancel`)
-//     or a backdrop click. The parent flips `open` false, which routes back
-//     through afterUpdate() → close().
+//   @close() — fires ONLY for user-driven dismissal: Escape, a backdrop click,
+//     or a [data-action-hide-dialog] descendant. dialog-panel closes itself
+//     on those and reports through its `hidden` event once the exit fade has
+//     finished; a close the parent asked for by flipping `open` is flagged
+//     at `beforeHide` and never reported back. The parent flips `open` false
+//     in @close so the next open is a fresh edge.
+//
+// LOADING. The package registers its custom elements at module scope with
+// `class extends HTMLElement`, a ReferenceError under Node — so a top-level
+// import would crash the prerender pass. The import lives in mounted()
+// instead, and an `open` that is already true when the view mounts is applied
+// the moment the module arrives.
+//
+// STYLESHEET. Add it once to your app's style entry — Dialog, AlertDialog,
+// Sheet and BottomSheet need the same one import:
+//   @import "@magic-spells/dialog-panel/css" layer(components);
+// The layer matters: the stylesheet uses plain element selectors, and an
+// unlayered import would outrank every utility on the panel.
+//
+// WHAT DIALOG-PANEL OWNS, AND THIS PIECE MUST NOT SET: `opacity`, `transform`
+// and `transition` on the <dialog>, plus `display` / `opacity` / `transition`
+// on <dialog-backdrop>, all keyed off the [state] attribute. The one motion
+// utility here is `motion-reduce:duration-1`, which shortens both fades to a
+// millisecond under prefers-reduced-motion — a duration, not a transition, so
+// dialog-panel still gets the `transitionend` it waits on before it closes
+// the native element (`transition-none` would leave an invisible modal open
+// until the 700ms fallback).
 //
 // GLOBAL HOTKEY IS NOT THIS COMPONENT'S JOB — the parent (usually a layout) binds
 // it and flips `open`. A layout-level idea:
@@ -134,10 +175,15 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   }
 let uid = 0;
 
+// The overlay: the look the rest of the overlay family lands on.
+const OVERLAY = 'bg-black/50 backdrop-blur-sm motion-reduce:duration-1';
+
+// The panel. `m-auto` is not decoration: a modal <dialog> is centred by the
+// browser through `margin: auto` against four zeroed insets, and Tailwind's
+// preflight resets margin to 0 on every element.
 const PANEL_BASE =
   'm-auto mt-[15vh] w-full max-w-lg rounded-xl border border-border bg-surface p-0 ' +
-  'text-body shadow-xl overflow-hidden ' +
-  '[&::backdrop]:bg-black/50';
+  'text-body shadow-xl overflow-hidden motion-reduce:duration-1';
 
 const OPTION_BASE =
   'flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm select-none';
@@ -155,6 +201,14 @@ export default class Command extends PuzzleView {
     this._uid = ++uid;
     this._base = `pp-command-${this._uid}`;
     this._scrollActive = false; // scroll the active option into view after next render
+    this._panel = null;
+    this._live = false;
+    this._ready = false;
+    this._lastOpen = false;
+    // A hide the wrapper asked for (read by beforeHide, set for one synchronous
+    // stretch only) and a hide the user asked for (carried to `hidden`).
+    this._selfHiding = false;
+    this._userHide = false;
     // Seed local UI state so the first data() run can read it back.
     this.setData({ query: '', activeIndex: -1 });
   }
@@ -294,40 +348,112 @@ export default class Command extends PuzzleView {
       placeholder: props.placeholder || 'Type a command or search…',
       emptyText: props.emptyText || 'No results found.',
       ariaLabel: props.label || 'Command palette',
+      backdropClass: OVERLAY,
       panelClass: [PANEL_BASE, props.class || ''].join(' '),
     };
   }
 
-  // ---- open / close (native <dialog> reconciled with the `open` prop) -------
+  // ---- open / close (dialog-panel reconciled with the `open` prop) ----------
 
   mounted() {
-    this.syncOpen();
+    if (typeof window === 'undefined') return;
+    this._live = true;
+    this._panel = this.refs.panel;
+    this._lastOpen = !!this.props.open;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so no dispatch can be missed in the gap.
+    this._panel?.addEventListener('beforeHide', this._onBeforeHide);
+    this._panel?.addEventListener('hidden', this._onHidden);
+
+    import('@magic-spells/dialog-panel')
+      .then(() => {
+        if (!this._live) return;
+        this._ready = true;
+        // A palette that mounted already open opens now.
+        this._sync();
+      })
+      .catch((error) => {
+        console.error(
+          '[Command] failed to load @magic-spells/dialog-panel — the palette will not open.',
+          error
+        );
+      });
   }
 
   afterUpdate() {
-    this.syncOpen();
+    if (!this._live) return;
+    const open = !!this.props.open;
+    if (open !== this._lastOpen) {
+      this._lastOpen = open;
+      this._sync();
+    }
     if (this._scrollActive) {
       this._scrollActive = false;
       this._scrollActiveIntoView();
     }
   }
 
-  // Idempotent: the dialog.open guards make repeat calls (any afterUpdate) safe
-  // and keep showModal() from throwing on an already-open dialog. On the
+  destroyed() {
+    this._live = false;
+    this._panel?.removeEventListener('beforeHide', this._onBeforeHide);
+    this._panel?.removeEventListener('hidden', this._onHidden);
+    // Unbound FIRST: this close is a teardown, not a user dismissal, and must
+    // not call back into a parent that is being torn down with us.
+    if (this._panel?.isOpen) this._panel.hide();
+    this._panel = null;
+  }
+
+  // dialog-panel's events bubble, so a nested overlay's close would otherwise
+  // reach this panel's listeners too.
+  _mine(event) {
+    return event.target === this._panel;
+  }
+
+  // Every close path passes beforeHide synchronously, inside hide(). One the
+  // wrapper asked for is flagged for that stretch; anything else is the user.
+  _onBeforeHide = (event) => {
+    if (!this._mine(event)) return;
+    if (!this._selfHiding) this._userHide = true;
+  };
+
+  _onHidden = (event) => {
+    if (!this._mine(event)) return;
+    const user = this._userHide;
+    this._userHide = false;
+    if (!user) return;
+    const { close } = this.props;
+    if (typeof close === 'function') close();
+  };
+
+  // Edge-triggered, never level-triggered: called only when `open` actually
+  // changed (or when the module finally landed on a palette that mounted
+  // open). The isOpen guards make a redundant edge a no-op. On the
   // closed→open edge we clear the query, seat the active row on the first
-  // enabled result, and focus the input.
-  syncOpen() {
-    const dialog = this.element;
-    if (!dialog) return;
-    const shouldOpen = !!this.props.open;
-    if (shouldOpen && !dialog.open) {
-      dialog.showModal();
+  // enabled result, and focus the input — show() opens the native element
+  // synchronously, so it can take focus straight away.
+  _sync() {
+    if (!this._ready || !this._panel) return;
+    if (this._lastOpen) {
+      if (this._panel.isOpen) return;
+      this._panel.show(this._trigger());
       this._resetForOpen();
-      dialog.querySelector('[data-command-input]')?.focus();
-      this._playEnter(dialog);
-    } else if (!shouldOpen && dialog.open) {
-      dialog.close();
+      this._panel.querySelector('[data-command-input]')?.focus();
+    } else if (this._panel.isOpen) {
+      this._selfHiding = true;
+      try {
+        this._panel.hide();
+      } finally {
+        this._selfHiding = false;
+      }
     }
+  }
+
+  // The element show() returns focus to: whatever the user was on when the
+  // parent opened the palette.
+  _trigger() {
+    const active = document.activeElement;
+    return active && active !== document.body && active.focus ? active : undefined;
   }
 
   _resetForOpen() {
@@ -335,17 +461,6 @@ export default class Command extends PuzzleView {
     this._scrollActive = false;
     this.setData({ query: '', activeIndex: this._firstEnabled(options) });
     this.refresh();
-  }
-
-  _playEnter(dialog) {
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    dialog.animate(
-      [
-        { opacity: 0, transform: 'scale(0.98)' },
-        { opacity: 1, transform: 'scale(1)' },
-      ],
-      { duration: 150, easing: 'ease-out' }
-    );
   }
 
   // ---- active-row movement --------------------------------------------------
@@ -425,22 +540,6 @@ export default class Command extends PuzzleView {
       if (row.kind !== 'option' || row.disabled) return;
       const { select } = this.props;
       if (typeof select === 'function') select(row.value, event);
-    },
-
-    // Escape (native `cancel`). Always preventDefault so the browser can't close
-    // the element behind the vdom's back; then ask the parent to close.
-    onCancel: (event) => {
-      event.preventDefault();
-      const { close } = this.props;
-      if (typeof close === 'function') close(event);
-    },
-
-    // Backdrop click: the click lands on the <dialog> element itself only when it
-    // hit the ::backdrop (clicks on inner content have a deeper target).
-    onBackdrop: (event) => {
-      if (event.target !== this.element) return;
-      const { close } = this.props;
-      if (typeof close === 'function') close(event);
     },
   };
 }
