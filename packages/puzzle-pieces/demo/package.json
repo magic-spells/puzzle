@@ -25,6 +25,7 @@
     "@magic-spells/select-dropdown": "^0.3.0",
     "@magic-spells/sheet": "^0.1.1",
     "@magic-spells/split-panel": "^0.2.0",
+    "@magic-spells/split-text": "^0.2.0",
     "@magic-spells/tab-group": "^1.2.0",
     "@tiptap/core": "3.30.0",
     "@tiptap/extension-list": "3.30.0",

@@ -125,6 +125,19 @@
 @import "@magic-spells/image-zoom/css" layer(components);
 
 /*
+ * The SplitText piece wraps @magic-spells/split-text. REQUIRED: the masked
+ * word/char wrappers, the resting transforms, every effect's keyframes, the
+ * shared delay/stagger/duration plumbing and the post-reveal `display: contents`
+ * collapse all live here — without it the piece renders plain, unanimated text.
+ * It also carries `split-text:not(:defined) { visibility: hidden }`, which is
+ * what stops a prerendered headline flashing in its finished pose before the
+ * module lands and drops it back to animate. `layer(components)` for the usual
+ * reason: plain element selectors (`split-text`, `.split-text-word`) would
+ * otherwise outrank the Tailwind type utilities the piece puts on the element.
+ */
+@import "@magic-spells/split-text/css" layer(components);
+
+/*
  * The QuantityInput piece wraps @magic-spells/quantity-input and deliberately
  * imports NOTHING: that package's optional stylesheet carries hex colours and
  * fixed control sizing, which is what this registry replaces with tokens, and the

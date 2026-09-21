@@ -1033,6 +1033,18 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "split-text",
+      "description": "Text reveal that splits a headline or paragraph into words, characters or detected lines and animates each unit in with a CSS stagger — eight effects, scroll/load/manual triggers, a replay token, and start/complete callbacks; wraps the @magic-spells/split-text web component rather than porting it",
+      "files": [
+        "SplitText.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [
+        "@magic-spells/split-text@^0.2.0"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "stat-card",
       "description": "KPI tile: label, preformatted value, optional signed delta with sentiment coloring, and an optional trend Sparkline",
       "files": [

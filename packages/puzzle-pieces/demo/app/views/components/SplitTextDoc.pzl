@@ -1,0 +1,462 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Split Text</h1>
+        <p class="mt-2 text-body">
+          A text reveal. The element splits its own text into words, characters or detected lines,
+          wraps each unit in a masked span, and animates them in on a CSS-driven stagger. Eight
+          built-in effects, and the animation itself is pure CSS keyed off a per-unit index.
+        </p>
+        <p class="mt-3 text-body">
+          This piece is a <strong class="font-medium text-ink">wrapper</strong>, not a port: it renders the real <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">{ '<split-text>' }</code> custom element from <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">@magic-spells/split-text</code>
+          and binds attributes to it. The parts worth not forking are the grapheme-correct
+          character splitter, the lines mode that measures the real wrap after the fonts load, and
+          the aria bookkeeping that keeps a screen reader from reading the sentence one span at a
+          time.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Under <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">prefers-reduced-motion: reduce</code> nothing on this page animates: the element short-circuits before it splits anything and
+          the text is simply there.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex w-full max-w-xl flex-col items-start gap-5">
+          <SplitText class="block text-3xl font-semibold tracking-tight text-ink sm:text-4xl" trigger="load" play={ heroPlay }>
+            Built for the web, not for the framework.
+          </SplitText>
+          <Button variant="outline" size="sm" @press={ replayHero }>Replay</Button>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          This piece has a runtime dependency: the web component it wraps.
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge the component's stylesheet into your app's style entry
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">app/styles/styles.css</code>).
+          The masks, the resting transforms and every effect's keyframes live in it, so the piece
+          renders plain unanimated text without it:
+        </p>
+        <CodeBlock code={ installCss }/>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">layer(components)</code> is not decoration. The sheet is plain element selectors
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">split-text</code>, <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">.split-text-word</code>),
+          and an unlayered import would outrank the Tailwind type utilities you put on the element.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <section id="content" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Content is static</h2>
+        <p class="mb-3 text-sm text-body">
+          This is the one rule the piece asks you to keep. Children pass through untouched, and at
+          connect the element <strong class="font-medium text-ink">replaces its own text nodes with
+          nested spans</strong>. Puzzle's patcher no longer owns that subtree, so the content you
+          pass must be literal markup, never an interpolation that changes underneath it. Inline
+          tags are preserved by the splitter and are fine — links stay clickable, emphasis still
+          styles, a line break still breaks a line.
+        </p>
+        <p class="mb-3 text-sm text-body">
+          To show different text, change the text <em class="text-ink">and</em> bump <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code> in the same render: the element restores its own snapshot, adopts whatever markup is
+          there now, and re-splits it.
+        </p>
+        <p class="text-sm text-muted">
+          The same applies to the attributes. The element declares no observed attributes — <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">split</code>, <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">effect</code>,
+          the three timings, the easing and the trigger are read once, when it splits. Changing one
+          of those props renders the new attribute but changes nothing on screen until the next
+          split, so bump <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code> to re-read them. That is exactly what the effect gallery below does.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="chars" title="Characters, with a slower stagger" code={ codeChars }>
+          <div class="flex w-full max-w-xl flex-col items-start gap-5">
+            <SplitText
+              class="block text-base leading-relaxed text-body"
+              split="chars"
+              stagger={ 12 }
+              duration={ 700 }
+              trigger="load"
+              play={ charsPlay }
+              @complete={ noteChars }>
+              Character mode wraps every grapheme in its own mask. Emoji and accents survive the
+              split — the segmenter cuts on grapheme clusters, not code units — so the stagger
+              runs letter by letter without ever cutting a character in half.
+            </SplitText>
+            <div class="flex items-center gap-3">
+              <Button variant="outline" size="sm" @press={ replayChars }>Replay</Button>
+              <span class="font-mono text-code text-muted">{ charsNote }</span>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="lines" title="Lines, detected from the real wrap" code={ codeLines }>
+          <div class="flex w-full max-w-lg flex-col items-start gap-5">
+            <SplitText
+              class="block text-base leading-relaxed text-body"
+              split="lines"
+              stagger={ 90 }
+              trigger="load"
+              play={ linesPlay }>
+              Lines are not a guess. The element splits on words first, waits for the fonts to
+              settle, measures where every word actually landed, and groups the ones that share a
+              top edge into a line. Narrow the window and hit replay: the groups follow the new
+              wrap, because they are read back off the layout rather than written into the markup.
+            </SplitText>
+            <Button variant="outline" size="sm" @press={ replayLines }>Replay</Button>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="effects" title="The eight effects" code={ codeEffects }>
+          <div class="flex w-full max-w-2xl flex-col items-start gap-5">
+            <div class="grid w-full gap-4 sm:grid-cols-2">
+              {#for item in effects}
+                <div key={ item.name } class="rounded-lg border border-border bg-surface p-4">
+                  <span class="font-mono text-micro uppercase tracking-wider text-brand">{ item.name }</span>
+                  <SplitText
+                    class="mt-1 block text-lg font-medium text-ink"
+                    split="chars"
+                    effect={ item.name }
+                    stagger={ 24 }
+                    trigger="manual"
+                    play={ effectsPlay }>{ item.text }</SplitText>
+                </div>
+              {/for}
+            </div>
+            <Button variant="outline" size="sm" @press={ replayEffects }>Play all</Button>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="scroll" title="Scroll-triggered — the default" code={ codeScroll }>
+          <div class="w-full max-w-xl">
+            <p class="text-sm text-muted">
+              Everything above is set to fire on load so the page is not a field of frozen text.
+              The real default is <span class="font-medium text-ink">trigger="visible"</span>:
+              nothing happens until the element has scrolled a fifth of the way up from the bottom
+              of the viewport. Keep scrolling.
+            </p>
+            <div class="mt-6 flex h-72 items-end justify-center rounded-lg border border-dashed border-border-dashed bg-surface-sunken">
+              <span class="mb-4 font-mono text-micro uppercase tracking-wider text-muted">keep going</span>
+            </div>
+            <div class="mt-6">
+              <SplitText class="block text-2xl font-semibold tracking-tight text-ink" effect="slide-right" stagger={ 40 }>
+                Right on cue.
+              </SplitText>
+            </div>
+            <p class="mt-4 text-sm text-muted">
+              Move the trigger line with <span class="font-medium text-ink">offset</span> — <span class="font-medium text-ink">offset="0"</span> fires the instant the element
+              first intersects, <span class="font-medium text-ink">offset="200px"</span> waits until
+              it is 200 pixels clear of the bottom edge. It fires once; reload or bump <span class="font-medium text-ink">play</span> to see it again.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+          <p class="mb-4 text-sm text-body">
+            Every prop but <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code> maps to an attribute on the element. A prop you don't pass renders no attribute at all,
+            so the component's own default applies.
+          </p>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Props</h3>
+          <div class="text-sm">
+            {#for row in propRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-40 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Callbacks</h3>
+          <p class="mb-2 text-sm text-body">
+            Both are value-first: the piece hands you the element's own detail object, <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">{ '{ split, count }' }</code> — the mode that actually ran and the number of animating units (lines, not words, in
+            lines mode).
+          </p>
+          <div class="text-sm">
+            {#for row in eventRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-40 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Custom properties</h3>
+          <p class="mb-2 text-sm text-body">
+            There is no <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">style</code> prop: the element writes the resolved timings into the host's inline style at every
+            split, and a bound style attribute would be rewritten wholesale by the patcher. Set
+            these through <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class</code> instead — they are inherited, so an arbitrary-property utility on the element or on any
+            ancestor reaches them: <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class="[--split-text-distance:40%]"</code>.
+          </p>
+          <div class="text-sm">
+            {#for row in cssRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-56 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Accessibility and first paint</h3>
+          <ul class="space-y-1.5 text-sm text-body">
+            <li>
+              <span class="font-medium text-ink">The sentence is announced once.</span> The element
+              copies its plain text into <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">aria-label</code> and marks the generated wrappers <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">aria-hidden</code>.
+              Wrappers inside an interactive ancestor are left alone, so a nested link keeps its
+              accessible name. Don't set an aria-label yourself — the element only fills in an
+              absent one, and a stale one would win.
+            </li>
+            <li>
+              <span class="font-medium text-ink">Reduced motion is handled upstream, and early.</span> The element marks itself revealed in its connect path and returns before it splits
+              anything: no spans, no keyframes, no observer. <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">@complete</code> still fires with a count of 0, so a parent chaining off the reveal is not stranded.
+            </li>
+            <li>
+              <span class="font-medium text-ink">First paint is blank.</span> The stylesheet hides <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">split-text:not(:defined)</code> so the text cannot flash in its finished pose and then drop back to animate — which
+              means a prerendered page renders this text invisible until the module lands. Reserve
+              the space for a headline above the fold, and don't wrap body copy that has to be
+              readable before JavaScript.
+            </li>
+            <li>
+              <span class="font-medium text-ink">Once it's done, it's ordinary text again.</span> After the reveal the wrappers collapse to <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">display: contents</code>,
+              so the layout matches the original markup and the text reflows normally on resize.
+            </li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import SplitText from '@/components/ui/SplitText.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for SplitText — follows the ScrollStackDoc / MarqueeDoc wrapper
+// shape. Code samples live as template-literal consts because literal tag names
+// and {#…} tokens would be parsed as template syntax in prose.
+//
+// Every example but the last one uses trigger="load" on purpose: a page of
+// visible-triggered reveals would be a page of text that has already played by
+// the time you read it. The scroll example keeps the real default so the trigger
+// is actually demonstrated.
+const installCmd = 'puzzle add piece split-text';
+const installDep = 'npm install @magic-spells/split-text';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/split-text/css" layer(components);`;
+
+const usageImport = `import SplitText from '@/components/ui/SplitText.pzl';`;
+
+const usageMarkup = `<SplitText class="text-4xl font-semibold text-ink">
+  Built for the web, not for the framework.
+</SplitText>
+
+// The content must be literal markup, not a changing interpolation —
+// the element rewrites its own text nodes into masked spans at connect.`;
+
+const codeHero = `// trigger="load" fires on the next microtask instead of waiting for the
+// scroll position. \`play\` is the replay token: the piece is edge-triggered
+// on it, so a render carrying the same value never restarts the animation.
+<SplitText class="block text-4xl font-semibold text-ink" trigger="load" play={ heroPlay }>
+  Built for the web, not for the framework.
+</SplitText>
+
+<Button variant="outline" size="sm" @press={ replayHero }>Replay</Button>
+
+// in the view:
+created() { this.setData('heroPlay', 0); }
+events = {
+  replayHero: () => {
+    this.setData('heroPlay', this.getData().heroPlay + 1);
+    this.refresh();
+  },
+};`;
+
+const codeChars = `// split="chars" masks every grapheme. Slow the stagger down and shorten
+// the duration or a long sentence takes all day.
+<SplitText
+  class="block text-base leading-relaxed text-body"
+  split="chars"
+  stagger={ 12 }
+  duration={ 700 }
+  trigger="load"
+  play={ charsPlay }
+  @complete={ noteChars }>
+  Character mode wraps every grapheme in its own mask…
+</SplitText>
+
+// @complete is value-first — it hands you { split, count }
+noteChars: ({ split, count }) => {
+  this.setData('charsNote', \`\${count} \${split}\`);
+  this.refresh();
+},`;
+
+const codeLines = `// Lines are measured, not guessed: the element splits on words, waits for
+// document.fonts.ready, then groups words that share a top edge. Resize the
+// window and replay — the groups follow the new wrap.
+<SplitText
+  class="block text-base leading-relaxed text-body"
+  split="lines"
+  stagger={ 90 }
+  trigger="load"
+  play={ linesPlay }>
+  Lines are not a guess…
+</SplitText>`;
+
+const codeEffects = `// Attributes are read once, when the element splits — so changing \`effect\`
+// alone changes nothing on screen. Bumping the shared \`play\` token re-splits
+// every card, which is what makes "Play all" work.
+{#for item in effects}
+  <div key={ item.name }>
+    <SplitText
+      class="block text-lg font-medium text-ink"
+      split="chars"
+      effect={ item.name }
+      stagger={ 24 }
+      trigger="manual"
+      play={ effectsPlay }>{ item.text }</SplitText>
+  </div>
+{/for}
+
+// trigger="manual" has no trigger to re-arm, so the token does the firing
+// itself: the piece calls split() and then reveal().
+
+// A ninth effect is CSS, not JavaScript: write a resting state, bind a
+// keyframe to [data-state="revealing"], and the name is a valid \`effect\`.
+// SplitText.registerEffect(name, { easing, perUnit }) adds the two things
+// CSS cannot do — a default curve and a per-unit random start.`;
+
+const codeScroll = `// The default. Nothing happens until the element has scrolled 20% of the
+// viewport height up from the bottom edge.
+<SplitText class="block text-2xl font-semibold text-ink" effect="slide-right" stagger={ 40 }>
+  Right on cue.
+</SplitText>
+
+// offset="0"     — fire on first intersection
+// offset="200px" — wait until it is 200px clear of the bottom edge`;
+
+const EFFECTS = [
+  { name: 'rise', text: 'Rises into view.' },
+  { name: 'drop', text: 'Falls into place.' },
+  { name: 'slide-right', text: 'In from the right.' },
+  { name: 'slide-left', text: 'And from the left.' },
+  { name: 'bloom', text: 'Comes into focus.' },
+  { name: 'spin-x', text: 'Up from the baseline.' },
+  { name: 'spin-y', text: 'Open like a door.' },
+  { name: 'magnetic', text: 'Pulled into place.' },
+];
+
+const propRows = [
+  { name: 'split', desc: "'words' (default) | 'chars' | 'lines'. Lines are detected from the layout after the fonts load, so they follow the real wrap." },
+  { name: 'effect', desc: "'rise' (default) | 'drop' | 'slide-right' | 'slide-left' | 'bloom' | 'spin-x' | 'spin-y' | 'magnetic', or any name registered with SplitText.registerEffect(). An unknown name falls back to the default keyframe." },
+  { name: 'delay', desc: 'Milliseconds before the first unit animates. Default 0.' },
+  { name: 'stagger', desc: 'Milliseconds between units. Default 30 — lower it for chars on a long string, raise it for lines.' },
+  { name: 'duration', desc: 'Milliseconds per unit. Default 800.' },
+  { name: 'easing', desc: 'CSS easing function. Default cubic-bezier(0.16, 1, 0.3, 1). A spring overshoot like cubic-bezier(0.34, 1.56, 0.64, 1) reads playful.' },
+  { name: 'trigger', desc: "'visible' (default, an IntersectionObserver) | 'load' (next microtask) | 'manual' (only the play token fires it)." },
+  { name: 'offset', desc: "How far above the bottom of the viewport the visible trigger fires, in px or %. Default '20%'; '0' fires on first intersection." },
+  { name: 'play', desc: 'The replay token — any value the parent changes. A render whose play differs from the last one re-splits the element and re-arms its trigger; a render carrying the same value does nothing. Not an attribute, and never written back.' },
+  { name: 'class', desc: 'Merged onto the element. Type utilities go here, and so do the custom properties, as arbitrary-property utilities.' },
+];
+
+const eventRows = [
+  { name: '@start', desc: 'The reveal has begun. Fires once per split, never per unit.' },
+  { name: '@complete', desc: 'The last unit has landed. Also fires immediately, with count 0, when reduced motion or an empty host short-circuits the animation — so it reliably means "the text is now in its final state".' },
+];
+
+const cssRows = [
+  { name: '--split-text-distance', desc: 'Travel distance for rise / drop / slide-*. Default 100% of the unit; 40% is a subtler version of the same move.' },
+  { name: '--split-text-blur', desc: 'Starting blur radius for bloom and magnetic. Default 2px.' },
+  { name: '--split-text-scale', desc: "Bloom's starting scale. Default 0.7." },
+  { name: '--split-text-perspective', desc: 'Camera distance for spin-x / spin-y, set on the host. Default 2000px — shorten it for a harder flip.' },
+  { name: '--split-text-origin', desc: 'transform-origin for the spins. Defaults to bottom for spin-x and left for spin-y.' },
+  { name: '--split-text-jitter', desc: 'Per-unit timing offset in stagger steps, written by a registered perUnit hook. 0 is a perfectly even stagger.' },
+];
+
+export default class SplitTextDoc extends PuzzleView {
+  created() {
+    this.setData({
+      heroPlay: 0,
+      charsPlay: 0,
+      linesPlay: 0,
+      effectsPlay: 0,
+      charsNote: 'waiting…',
+    });
+  }
+
+  data() {
+    const d = this.getData();
+    return {
+      effects: EFFECTS,
+      heroPlay: d.heroPlay,
+      charsPlay: d.charsPlay,
+      linesPlay: d.linesPlay,
+      effectsPlay: d.effectsPlay,
+      charsNote: d.charsNote,
+      installCmd,
+      installDep,
+      installCss,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeChars,
+      codeLines,
+      codeEffects,
+      codeScroll,
+      propRows,
+      eventRows,
+      cssRows,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Content is static', href: '#content' },
+        { label: 'Characters', href: '#chars' },
+        { label: 'Lines', href: '#lines' },
+        { label: 'Effects', href: '#effects' },
+        { label: 'Scroll trigger', href: '#scroll' },
+        { label: 'Reference', href: '#reference' },
+      ],
+    };
+  }
+
+  #bump(key) {
+    this.setData(key, (this.getData()[key] || 0) + 1);
+    this.refresh();
+  }
+
+  events = {
+    replayHero: () => this.#bump('heroPlay'),
+    replayChars: () => this.#bump('charsPlay'),
+    replayLines: () => this.#bump('linesPlay'),
+    replayEffects: () => this.#bump('effectsPlay'),
+    noteChars: ({ split, count }) => {
+      this.setData('charsNote', `${count} ${split}`);
+      this.refresh();
+    },
+  };
+}
+</script>
