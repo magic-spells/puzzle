@@ -180,18 +180,13 @@
   /* A corner popover may never outgrow the window: viewport minus the corner
      insets, so it scrolls inside instead of losing its bottom edge. */
   --spacing-popover: calc(100dvh - 1.5rem);
-  /* Demo-local grain tile (200×200, served from app/public at the site root).
-     Exposed as `bg-noise` so the search dialog's ::backdrop can layer texture
-     over its dim colour. Deliberately NOT in registry/theme/pieces.css — the
-     asset ships with the docs site, not with the registry. */
+  /* Demo-local grain tile, served from app/public at the site root. The PNG
+     is authored at 2x (200×200) and painted at 100×100 so it stays crisp on
+     retina displays; both land on every <dialog-backdrop> through the rule
+     below the family imports. Deliberately NOT in registry/theme/pieces.css —
+     the asset ships with the docs site, not with the registry. */
   --background-image-noise: url('/bg-noise-dark-20.png');
-  /* Overlay fade timing, copied from @magic-spells/dialog-panel's own
-     <dialog-backdrop> rules so the search dialog's ::backdrop matches the
-     Dialog piece: 0.3s ease-out in, 0.2s ease-in out. */
-  --duration-overlay-in: 300ms;
-  --duration-overlay-out: 200ms;
-  --ease-overlay-in: ease-out;
-  --ease-overlay-out: ease-in;
+  --background-size-noise: 100px 100px;
 }
 
 /* Gutter system (Luna-theme pattern, same as magic-spells-puzzle-site): one
@@ -240,65 +235,25 @@
 @import "../../../registry/theme/void.css";
 
 /*
- * Search dialog overlay fade.
+ * Overlay grain.
  *
- * The colour, grain and blur live as `backdrop:` utilities on the <dialog>
- * itself (SearchDialog.pzl); only the TIMING is here, because it cannot be
- * expressed with utilities: an exit fade on a native dialog needs `display`
- * and `overlay` in the transition list with `transition-behavior:
- * allow-discrete` (Tailwind has no `overlay` utility), and the enter/exit
- * halves use different durations and easings — dialog-panel's 0.3s ease-out
- * in, 0.2s ease-in out. Values come from the tokens above.
+ * <dialog-backdrop> is THE overlay surface across the @magic-spells overlay
+ * family — Dialog, AlertDialog, Sheet and the docs SearchDialog all paint their
+ * scrim on it (BottomSheet is the one exception: its stylesheet hides the
+ * element and paints the native ::backdrop instead). The colour and blur stay
+ * where each piece puts them (`bg-black/50 backdrop-blur-sm`); this adds the
+ * site's texture on top, once, so every overlay on the docs site matches.
  *
- * The closed rule is the after-change style on close, so it carries the exit
- * timing; @starting-style gives the open rule its entry start.
+ * Unlayered on purpose: sheet.css sets the scrim with the `background`
+ * SHORTHAND (which resets background-image) from inside layer(components) at
+ * a higher specificity, so a layered rule here would lose on the Sheet and win
+ * on the Dialog. The registry pieces are untouched — a consuming app that wants
+ * grain adds the same three lines.
  */
-/* The ::backdrop only exists while its dialog is rendered and in the top
-   layer, so the dialog itself has to linger for the exit fade: `display` and
-   `overlay` transition discretely (they hold their visible value for the whole
-   duration and flip at the end). The panel is already gone by then — the morph
-   engine has swapped it for its in-flight blob (it sets `visibility: hidden`
-   on the dialog for the flight), so nothing double-renders.
-
-   `!important` is load-bearing: the morph engine writes an inline
-   `transition: none` on the dialog when it takes over, which otherwise
-   cancels both this and the ::backdrop fade the moment the dialog drops out
-   of the top layer. Only `display` and `overlay` are listed, so the engine
-   still gets its un-transitioned transform/opacity. */
-[data-search-dialog] {
-  transition:
-    display var(--duration-overlay-out) allow-discrete,
-    overlay var(--duration-overlay-out) allow-discrete !important;
-}
-
-[data-search-dialog]::backdrop {
-  opacity: 0;
-  transition:
-    opacity var(--duration-overlay-out) var(--ease-overlay-out),
-    display var(--duration-overlay-out) allow-discrete,
-    overlay var(--duration-overlay-out) allow-discrete;
-}
-
-[data-search-dialog][open]::backdrop {
-  opacity: 1;
-  transition:
-    opacity var(--duration-overlay-in) var(--ease-overlay-in),
-    display var(--duration-overlay-in) allow-discrete,
-    overlay var(--duration-overlay-in) allow-discrete;
-}
-
-@starting-style {
-  [data-search-dialog][open]::backdrop {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-search-dialog],
-  [data-search-dialog]::backdrop,
-  [data-search-dialog][open]::backdrop {
-    transition: none;
-  }
+dialog-backdrop {
+  background-image: var(--background-image-noise);
+  background-repeat: repeat;
+  background-size: var(--background-size-noise);
 }
 
 @layer base {
