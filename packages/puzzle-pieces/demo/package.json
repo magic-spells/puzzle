@@ -15,7 +15,7 @@
     "@magic-spells/dropdown-panel": "^2.1.0",
     "@magic-spells/frame-engine": "^1.0.1",
     "@magic-spells/image-zoom": "^0.1.0",
-    "@magic-spells/morph-engine": "^0.1.2",
+    "@magic-spells/morph-engine": "^0.4.2",
     "@magic-spells/panel-stack": "^0.2.0",
     "@magic-spells/physics-engine": "^1.0.1",
     "@magic-spells/puzzle": "file:../../puzzle",

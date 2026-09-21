@@ -29,6 +29,29 @@ notes:
       (edge-triggered in afterUpdate → element.split(), plus reveal() for trigger="manual"), which
       is also the only way a changed attribute is applied since the element observes none; the host
       binds no `style` (the element writes the timing custom properties there itself).
+  - kind: state
+    text: >-
+      2026-09-21 (0.8.0, chore/morph-engine-0.4.2): the `@magic-spells/morph-engine` floor moved
+      ^0.1.2 → ^0.4.2 in `demo/package.json` and in the three manifests that declare it
+      (date-picker, emoji-picker, emoji-picker-simple) plus their `registry.json` rows — one floor
+      per package, so all four had to move together. Nothing in 0.2–0.4 was removed or renamed, so
+      the pieces' surface (`new MorphEngine({ revealAt, lockScroll })`, `show({ from, to, display
+      })`, `hide()`, `on('shown'|'hidden'|'reveal'|'unreveal')`, `state`, `destroy()`) is untouched;
+      the new options (`cloneFit`, `handoff`, `container`) are all opt-in. Two 0.4.x fixes are why
+      the floor is worth raising for this registry: 0.4.1 normalizes computed colors to `rgba()` at
+      capture, which fixes the blob painting an opaque WHITE HAIRLINE border for the whole flight
+      whenever a source uses a Tailwind v4 opacity modifier (`border-border/60` serializes as
+      `oklab(L a b / α)`) on a dark theme — every morph piece styles its panel that way, so every
+      dark-mode flight was affected; it also makes `parseShadow` take the first VISIBLE OUTER shadow
+      instead of Tailwind's leading transparent placeholder rings. 0.4.2 adds a `container` option
+      so a blob flying into an open `showModal()` dialog is appended inside that dialog's subtree
+      rather than painted under the browser top layer. NOT adopted here and not needed today:
+      DatePicker and both emoji pickers morph into popovers, the docs SearchDialog's blob lands in
+      `document.body` at z-index 9999 and stays visible for the whole flight, and the Dialog piece
+      does not use morph-engine at all (its "Morphing dialogs" docs section points at Sheet, which
+      owns that flight internally). Revisit `container` only if a piece ever morphs into a real
+      `showModal()` dialog. Smoked on 3074 in light and dark: blob visible mid-flight with a
+      correctly themed dark border, no console errors.
 ---
 
 # The registry — source of truth
