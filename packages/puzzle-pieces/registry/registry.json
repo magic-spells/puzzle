@@ -524,6 +524,18 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "image-zoom",
+      "description": "Pinch-to-zoom and pan viewer for a single image — two-finger pinch, drag-to-pan, double-tap/double-click toggle, min/max scale with rubber-band resistance and animated snap-back, and value-first change/zoomStart/zoomEnd callbacks; wraps the @magic-spells/image-zoom web component rather than porting it",
+      "files": [
+        "ImageZoom.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [
+        "@magic-spells/image-zoom@^0.1.0"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "input-group",
       "description": "Field-compatible input with fused prefix/suffix addon slots — group-level focus ring and error styling, full label/hint/error ARIA",
       "files": [

@@ -9,6 +9,17 @@ connections:
   - DECISION-REGISTRY-SHAPED-REPO
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
+notes:
+  - kind: state
+    text: >-
+      0.8.0, feat/piece-image-zoom: new `image-zoom` piece — a WRAPPER over @magic-spells/image-zoom
+      (floor ^0.1.0, the only published release), see COMPONENT-IMAGE-ZOOM. Registry manifest +
+      registry.json row, demo copy, ImageZoomDoc page, nav/routes entries, `@import
+      "@magic-spells/image-zoom/css" layer(components)` in demo/app/styles/styles.css, and
+      test/image-zoom-wrapper.test.js (wired into all.test.js). The image is a PROP, not a slot —
+      the component caches its single `<img>` child at connect and writes the transform into its
+      inline style, so the piece owns that element; a `src` change re-attaches the host so the
+      component re-measures.
 ---
 
 # The registry — source of truth

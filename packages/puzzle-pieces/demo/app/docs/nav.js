@@ -224,6 +224,8 @@ export const SECTIONS = [
 			description: "Semantic key-value description list (<dl>/<dt>/<dd>) rendered from an items array, for detail panels, summaries, and spec sheets — stacked or inline two-column layout, optional row dividers, two sizes" },
 		{ name: "empty", title: "Empty", path: "/components/empty",
 			description: "Empty-state block for no-results moments — optional icon slot, title, description, and action slot in a centered muted column" },
+		{ name: "image-zoom", title: "Image Zoom", path: "/components/image-zoom",
+			description: "Pinch-to-zoom and pan viewer for a single image — two-finger pinch, drag-to-pan, double-tap/double-click toggle, min/max scale with rubber-band resistance and animated snap-back, and value-first change/zoomStart/zoomEnd callbacks; wraps the @magic-spells/image-zoom web component rather than porting it" },
 		{ name: "kanban", title: "Kanban", path: "/components/kanban",
 			description: "Config-first controlled Kanban board — pointer and keyboard card movement, insertion placeholders, aria-live announcements, a value-first @move intent, and caller-owned card and column-header snippets that preserve piece-owned drag mechanics" },
 		{ name: "kbd", title: "Kbd", path: "/components/kbd",

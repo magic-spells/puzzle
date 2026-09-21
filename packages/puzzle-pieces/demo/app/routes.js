@@ -47,6 +47,7 @@ import EmptyDoc from './views/components/EmptyDoc.pzl';
 import FaderDoc from './views/components/FaderDoc.pzl';
 import FieldDoc from './views/components/FieldDoc.pzl';
 import HoverCardDoc from './views/components/HoverCardDoc.pzl';
+import ImageZoomDoc from './views/components/ImageZoomDoc.pzl';
 import InputGroupDoc from './views/components/InputGroupDoc.pzl';
 import InputOtpDoc from './views/components/InputOtpDoc.pzl';
 import KanbanDoc from './views/components/KanbanDoc.pzl';
@@ -443,6 +444,13 @@ export default [
 		view: HoverCardDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Hover Card — Puzzle Pieces' },
+	},
+	{
+		path: '/components/image-zoom',
+		name: 'image-zoom',
+		view: ImageZoomDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Image Zoom — Puzzle Pieces' },
 	},
 	{
 		path: '/components/input-group',

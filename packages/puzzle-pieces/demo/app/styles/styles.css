@@ -113,6 +113,18 @@
 @import "@magic-spells/scrolling-content/css" layer(components);
 
 /*
+ * The ImageZoom piece wraps @magic-spells/image-zoom. REQUIRED: the host's
+ * overflow clip and aspect ratio, the absolutely-positioned `transform-origin:
+ * 0 0` image box the gesture transform is written into, and the `touch-action`
+ * switch that hands a one-finger swipe back to page scroll while unzoomed all
+ * live here — without them the transform lands on an element nothing clips.
+ * `layer(components)` for the usual reason: plain element selectors
+ * (`image-zoom`, `image-zoom img`), so an unlayered import would outrank the
+ * `aspect-*`, `rounded-*` and `bg-*` utilities the piece expects on the host.
+ */
+@import "@magic-spells/image-zoom/css" layer(components);
+
+/*
  * The QuantityInput piece wraps @magic-spells/quantity-input and deliberately
  * imports NOTHING: that package's optional stylesheet carries hex colours and
  * fixed control sizing, which is what this registry replaces with tokens, and the
