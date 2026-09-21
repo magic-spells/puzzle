@@ -125,8 +125,13 @@ function attr(value) {
   return value === undefined || value === null || value === '' ? false : String(value);
 }
 
+// min/max are numbers the component parses back out of the attribute with
+// parseFloat, so a numeric STRING is just as valid a prop as a number — coerce
+// rather than test, or `max="3"` (or a value that came out of JSON) would
+// render no attribute and silently fall back to the component's own default.
 function scale(value) {
-  return Number.isFinite(value) && value > 0 ? String(value) : false;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? String(n) : false;
 }
 
 export default class ImageZoom extends PuzzleView {

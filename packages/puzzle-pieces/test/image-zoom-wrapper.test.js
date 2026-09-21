@@ -52,7 +52,10 @@ test('the package is imported dynamically, inside mounted(), and never at module
 		false,
 		`ImageZoom.pzl must not import ${PACKAGE} at module scope`
 	);
-	const mounted = source.slice(source.indexOf('  mounted()'));
+	// Bounded at afterUpdate() on purpose: an unbounded slice runs to the end of
+	// the file, so the import could migrate into afterUpdate()/destroyed() and
+	// this would still pass.
+	const mounted = source.slice(source.indexOf('  mounted()'), source.indexOf('  afterUpdate()'));
 	assert.match(mounted, new RegExp(`import\\('${SPECIFIER}'\\)`));
 	assert.match(mounted, /typeof window === 'undefined'/);
 	assert.equal(source.includes('customElements'), false, 'the piece registers nothing itself');

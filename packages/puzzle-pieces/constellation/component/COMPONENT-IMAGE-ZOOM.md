@@ -25,6 +25,20 @@ props:
 connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DOC-REGISTRY
+notes:
+  - kind: gotcha
+    text: >-
+      UPSTREAM, not the wrapper's to fix: @magic-spells/image-zoom's disconnectedCallback drops its
+      listeners but does NOT clear #imgNaturalWidth/#imgNaturalHeight/#baseScale, so #isReady()
+      keeps returning true across the re-attach the piece does on a `src` swap. Between that
+      re-attach and the new image's `load`, a gesture is computed against the PREVIOUS image's
+      metrics and the view jumps when the real fit lands. Rapid swaps also leave orphan once-`load`
+      listeners on the img (harmless — #initialiseFit is idempotent). The fix is upstream: reset the
+      natural-size/base-scale fields in disconnectedCallback (and ideally drop a pending
+      once-listener), which would make #isReady() false until the new source loads. Do NOT paper
+      over it in the wrapper — per DECISION-WRAP-WEB-COMPONENTS, piece-only extras go upstream
+      first. The window is short and needs a gesture inside it, so it is not a blocker for the 0.8.0
+      piece.
 ---
 
 Single-file wrapper over `@magic-spells/image-zoom` 0.1.0 (0.8.0,
