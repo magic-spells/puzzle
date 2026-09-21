@@ -1,0 +1,259 @@
+<puzzle-view>
+  <split-text
+    ref="host"
+    class={ rootClass }
+    split={ splitAttr }
+    effect={ effectAttr }
+    delay={ delayAttr }
+    stagger={ staggerAttr }
+    duration={ durationAttr }
+    easing={ easingAttr }
+    trigger={ triggerAttr }
+    offset={ offsetAttr }><Children/></split-text>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// SplitText — a text reveal. The element splits its own text into words,
+// characters or detected lines, wraps each unit in a masked span, and animates
+// them in with a CSS-driven stagger. Eight built-in effects; the animation
+// itself is pure CSS keyed off a per-unit `--i` index.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <split-text> custom
+// element from @magic-spells/split-text and binds attributes to it. There is
+// nothing here worth reimplementing and several things worth not forking: the
+// grapheme-correct character splitter (Intl.Segmenter with an emoji-safe
+// fallback), the lines mode that measures word rects after `document.fonts.ready`
+// and groups them by their top edge, the aria-label/aria-hidden bookkeeping that
+// keeps a screen reader from re-reading the sentence one span at a time, and the
+// `display: contents` collapse that lets the text reflow normally once the
+// reveal has finished.
+//
+//   <SplitText class="text-4xl font-semibold text-ink">
+//     Built for the web, not for the framework.
+//   </SplitText>
+//
+//   <SplitText split="chars" effect="bloom" stagger={ 18 } trigger="manual" play={ token }>
+//     Comes into focus.
+//   </SplitText>
+//
+// CONTENT IS STATIC — THIS IS THE ONE RULE. Children pass through untouched, and
+// at connect the element REPLACES its own text nodes with nested spans. Puzzle's
+// patcher does not own that subtree any more, so the content you pass must be
+// literal markup, never an interpolation that changes: a re-render carrying new
+// text would patch against a DOM the element has already rewritten. Inline tags
+// (<em>, <strong>, <a>, <br>) are preserved by the splitter and are fine. To show
+// different text, change the text AND bump `play` in the same render — `play`
+// restores the element's own snapshot and re-splits from whatever is there now.
+//
+// ATTRIBUTES ARE READ ONCE, AT CONNECT. The element declares no
+// observedAttributes: `split`, `effect`, the three timings, `easing`, `trigger`
+// and `offset` are read when it splits and never again. Changing one of those
+// props mid-life renders the new attribute but changes nothing on screen until
+// the next split — bump `play` to re-read them.
+//
+// REPLAY IS A TOKEN PROP, NOT A METHOD. `play` is any value the parent changes
+// (a counter is the obvious one). The piece is edge-triggered on it: a render
+// whose `play` differs from the last one re-splits the element and re-arms its
+// trigger — so a `visible` element already on screen animates again immediately,
+// a `load` element replays on the next microtask, and a `manual` element is
+// revealed outright. A render that carries the same `play` does nothing, so an
+// unrelated re-render can never restart the animation. `play` is not an
+// attribute and the element never writes it back. This is the controlled shape:
+// the parent owns "has it played", the piece just obeys. There is deliberately
+// no `@ready` handle — a token covers every case a method would.
+//
+// Props (each maps to an attribute; a prop you do not pass renders no attribute
+// at all, so the component's own default applies)
+//   split     'words' (default) | 'chars' | 'lines'. Lines are DETECTED from
+//             layout after fonts load, so they follow the real wrap.
+//   effect    'rise' (default) | 'drop' | 'slide-right' | 'slide-left' |
+//             'bloom' | 'spin-x' | 'spin-y' | 'magnetic'. Any name registered
+//             with SplitText.registerEffect() is accepted too — an unknown name
+//             renders as-is and simply falls back to the default keyframe.
+//   delay     ms before the first unit animates (default 0)
+//   stagger   ms between units (default 30)
+//   duration  ms per unit (default 800)
+//   easing    CSS easing function string (default cubic-bezier(0.16, 1, 0.3, 1))
+//   trigger   'visible' (default) | 'load' | 'manual'
+//   offset    how far above the bottom of the viewport the `visible` trigger
+//             fires, as px or % (default '20%'; '0' fires on first intersection)
+//   play      replay token — see REPLAY above
+//   class     merged onto the element
+//   @start    fired when the reveal begins: start({ split, count })
+//   @complete fired when the last unit lands: complete({ split, count }). It
+//             also fires immediately, with count 0, when reduced motion or an
+//             empty host short-circuits the animation — so "the text is now in
+//             its final state" is the reliable reading of it.
+//
+// `style` IS NOT A PROP. The element writes the resolved timing values
+// (--split-text-delay / -stagger / -duration / -easing) into the host's INLINE
+// style at every split, and a bound `style` attribute is rewritten wholesale by
+// the patcher — it would drop them on the next unrelated render. Set the tunable
+// custom properties through `class` instead, which is a different attribute and
+// safe: they are ordinary inherited properties, so an arbitrary-property utility
+// on the element (or on any ancestor) reaches them —
+// `class="[--split-text-distance:40%]"`, `[--split-text-blur:6px]`,
+// `[--split-text-perspective:800px]`, `[--split-text-origin:center]`,
+// `[--split-text-scale:0.9]`.
+//
+// REDUCED MOTION is handled upstream and handled EARLY: under
+// `prefers-reduced-motion: reduce` the element marks itself revealed in
+// connectedCallback and returns before any splitting happens — no spans, no
+// keyframes, no observer, and the text is simply there. @complete still fires
+// (count 0), so a parent that chains something off the reveal is not stranded.
+// There is nothing for this piece to add, and nothing to opt out of.
+//
+// LOADING. The package registers its custom element at module scope with
+// `class extends HTMLElement`, which is a ReferenceError under Node — so a
+// top-level import would crash the prerender pass of any app on static or hybrid
+// output. The import lives in mounted() instead, which never runs server-side.
+//
+// FIRST PAINT IS BLANK, and that is the point: the stylesheet hides
+// `split-text:not(:defined)`, so the un-upgraded element shows nothing rather
+// than flashing the finished text and then dropping back to animate it. The flip
+// side is that a prerendered page renders this text invisible until the module
+// lands. Reserve the space (a `min-h-*` on a wrapper) for a headline above the
+// fold, and do not wrap body copy that has to be readable before JS.
+//
+// STYLESHEET. This piece needs the component's CSS, which is not part of the
+// copied file. Add it once to your app's style entry:
+//   @import "@magic-spells/split-text/css" layer(components);
+// It is not cosmetics: the masks, the resting transforms, every effect's
+// keyframes, the `:not(:defined)` guard and the post-reveal `display: contents`
+// collapse all live in it, and without it the piece renders plain unanimated
+// text. The layer matters for the usual reason — the sheet is plain element
+// selectors (`split-text`, `.split-text-word`), and an unlayered import would
+// outrank the Tailwind utilities you put on the element.
+//
+// A11Y. The element copies its plain text into `aria-label` and marks the
+// generated wrappers `aria-hidden`, so the sentence is announced once; wrappers
+// inside an interactive ancestor (a link, a button) are left alone so nested
+// controls keep their accessible names. Do not set `aria-label` yourself — the
+// element only fills it in when it is absent, and an outdated one would win.
+
+// A prop that was not passed renders no attribute — `false` is the compiler's
+// omit sentinel, the same one ScrollStack uses for its optional attributes.
+function attr(value) {
+  return value === undefined || value === null || value === '' ? false : String(value);
+}
+
+function oneOf(value, allowed) {
+  return allowed.includes(value) ? value : false;
+}
+
+// The three timings are read with Number() upstream and rejected unless finite
+// and >= 0, so anything else is better dropped here than rendered as a dead
+// attribute. 0 is meaningful (no delay, no stagger) and must survive.
+function ms(value) {
+  return Number.isFinite(value) && value >= 0 ? String(value) : false;
+}
+
+export default class SplitText extends PuzzleView {
+  #host = null;
+  #live = false;
+  #ready = false;
+  #lastPlay;
+  #pendingPlay = false;
+
+  data(params, props) {
+    return {
+      rootClass: props.class || false,
+      splitAttr: oneOf(props.split, ['words', 'chars', 'lines']),
+      // NOT restricted to the eight built-ins: registerEffect() makes an effect
+      // name a CSS contract, so a custom one has to reach the attribute.
+      effectAttr: attr(props.effect),
+      delayAttr: ms(props.delay),
+      staggerAttr: ms(props.stagger),
+      durationAttr: ms(props.duration),
+      easingAttr: attr(props.easing),
+      triggerAttr: oneOf(props.trigger, ['visible', 'load', 'manual']),
+      // '0' disables the trigger offset and must not be mistaken for unset —
+      // attr() only drops undefined / null / ''.
+      offsetAttr: attr(props.offset),
+    };
+  }
+
+  mounted() {
+    // Browser-only by construction — see LOADING above. The guard is belt and
+    // braces for any host that runs lifecycle hooks outside a document.
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#host = this.refs.host;
+    this.#lastPlay = this.props.play;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, and a `load`-triggered reveal fires a microtask after
+    // the module lands, so binding later could miss the start event.
+    this.#host?.addEventListener('split-text:start', this.#onStart);
+    this.#host?.addEventListener('split-text:complete', this.#onComplete);
+
+    import('@magic-spells/split-text')
+      .then(() => {
+        if (!this.#live) return;
+        this.#ready = true;
+        // A replay asked for while the module was still in flight is honoured
+        // now — the element has just split for the first time, so for every
+        // trigger but `manual` it is already doing the right thing; `manual`
+        // needs the reveal it was promised.
+        if (this.#pendingPlay) {
+          this.#pendingPlay = false;
+          this.#replay();
+        }
+      })
+      .catch((error) => {
+        console.error(
+          '[SplitText] failed to load @magic-spells/split-text — the text will ' +
+            'stay hidden by the stylesheet.',
+          error
+        );
+      });
+  }
+
+  afterUpdate() {
+    if (!this.#live) return;
+    // Edge-triggered on the PARENT's value: only a CHANGED `play` is a request.
+    // A render carrying the same token — the common case, since any state change
+    // anywhere in the parent re-renders us — must never restart the animation.
+    const play = this.props.play;
+    if (play === this.#lastPlay) return;
+    this.#lastPlay = play;
+    this.#replay();
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.#host?.removeEventListener('split-text:start', this.#onStart);
+    this.#host?.removeEventListener('split-text:complete', this.#onComplete);
+    // Everything else — the IntersectionObserver, the AbortController and its
+    // listeners — is released by the element's own disconnectedCallback when
+    // Puzzle removes it.
+    this.#host = null;
+  }
+
+  // Value-first, and the detail object is passed straight through: it is
+  // { split, count } — the mode that actually ran (lines resolves after layout)
+  // and the number of animating units, lines rather than words in lines mode.
+  #onStart = (event) => {
+    this.props.start?.(event.detail);
+  };
+
+  #onComplete = (event) => {
+    this.props.complete?.(event.detail);
+  };
+
+  #replay() {
+    if (!this.#ready || !this.#host) {
+      this.#pendingPlay = true;
+      return;
+    }
+    // split() restores the element's own pre-split snapshot (or adopts whatever
+    // markup is there now), clears the revealed flags and re-runs its connect
+    // path, which re-reads every attribute and re-arms the trigger.
+    this.#host.split?.();
+    // `manual` has no trigger to re-arm, so the token has to do the firing.
+    if (this.props.trigger === 'manual') this.#host.reveal?.();
+  }
+}
+</script>

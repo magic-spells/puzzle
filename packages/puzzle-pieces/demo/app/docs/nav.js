@@ -248,6 +248,8 @@ export const SECTIONS = [
 			description: "Hairline divider in horizontal or vertical orientation" },
 		{ name: "sidebar", title: "Sidebar", path: "/components/sidebar",
 			description: "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, an optional-controlled collapsed icon-only mode with header/footer slots, and a `rail` variant that paints it with the shell roles (bg-rail, text-rail-ink) as the frame's rail" },
+		{ name: "split-text", title: "Split Text", path: "/components/split-text",
+			description: "Text reveal that splits a headline or paragraph into words, characters or detected lines and animates each unit in with a CSS stagger — eight effects, scroll/load/manual triggers, a replay token, and start/complete callbacks; wraps the @magic-spells/split-text web component rather than porting it" },
 		{ name: "stepper", title: "Stepper", path: "/components/stepper",
 			description: "Numbered step-progress indicator — horizontal or vertical, complete/current/upcoming states, optional clickable steps" },
 		{ name: "table", title: "Table", path: "/components/table",
