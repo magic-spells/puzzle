@@ -47,6 +47,7 @@ import EmptyDoc from './views/components/EmptyDoc.pzl';
 import FaderDoc from './views/components/FaderDoc.pzl';
 import FieldDoc from './views/components/FieldDoc.pzl';
 import HoverCardDoc from './views/components/HoverCardDoc.pzl';
+import ImageZoomDoc from './views/components/ImageZoomDoc.pzl';
 import InputGroupDoc from './views/components/InputGroupDoc.pzl';
 import InputOtpDoc from './views/components/InputOtpDoc.pzl';
 import KanbanDoc from './views/components/KanbanDoc.pzl';
@@ -88,6 +89,7 @@ import SparklineDoc from './views/components/SparklineDoc.pzl';
 import SpinnerDoc from './views/components/SpinnerDoc.pzl';
 import SplitButtonDoc from './views/components/SplitButtonDoc.pzl';
 import SplitPanelDoc from './views/components/SplitPanelDoc.pzl';
+import SplitTextDoc from './views/components/SplitTextDoc.pzl';
 import StatCardDoc from './views/components/StatCardDoc.pzl';
 import StepperDoc from './views/components/StepperDoc.pzl';
 import SwitchDoc from './views/components/SwitchDoc.pzl';
@@ -445,6 +447,13 @@ export default [
 		meta: { title: 'Hover Card — Puzzle Pieces' },
 	},
 	{
+		path: '/components/image-zoom',
+		name: 'image-zoom',
+		view: ImageZoomDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Image Zoom — Puzzle Pieces' },
+	},
+	{
 		path: '/components/input-group',
 		name: 'input-group',
 		view: InputGroupDoc,
@@ -730,6 +739,13 @@ export default [
 		view: SplitPanelDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Split Panel — Puzzle Pieces' },
+	},
+	{
+		path: '/components/split-text',
+		name: 'split-text',
+		view: SplitTextDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Split Text — Puzzle Pieces' },
 	},
 	{
 		path: '/components/stat-card',

@@ -9,6 +9,8 @@ import './select-family-parity.test.js';
 import './select-wrapper.test.js';
 import './marquee-wrapper.test.js';
 import './quantity-input-wrapper.test.js';
+import './image-zoom-wrapper.test.js';
+import './split-text-wrapper.test.js';
 import './layout-family-parity.test.js';
 import './layout-wrapper.test.js';
 import './calendar-snippet.test.js';
