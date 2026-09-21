@@ -9,6 +9,16 @@ connections:
   - DECISION-REGISTRY-SHAPED-REPO
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
+notes:
+  - kind: state
+    text: >-
+      0.8.0 (feat/piece-split-text): new piece `split-text` — a wrapper over
+      @magic-spells/split-text, floor ^0.2.0, one file (SplitText.pzl), no registry deps. Adds the
+      `@magic-spells/split-text/css` import to demo/app/styles/styles.css and a docs page at
+      /components/split-text. See COMPONENT-SPLIT-TEXT: replay is a `play` TOKEN prop
+      (edge-triggered in afterUpdate → element.split(), plus reveal() for trigger="manual"), which
+      is also the only way a changed attribute is applied since the element observes none; the host
+      binds no `style` (the element writes the timing custom properties there itself).
 ---
 
 # The registry — source of truth
