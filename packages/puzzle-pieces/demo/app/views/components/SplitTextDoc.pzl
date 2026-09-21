@@ -81,19 +81,14 @@
           styles, a line break still breaks a line.
         </p>
         <p class="mb-3 text-sm text-body">
-          To show different text, change the text <em class="text-ink">and</em> bump
-          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code>
-          in the same render: the element restores its own snapshot, adopts whatever markup is
+          To show different text, change the text <em class="text-ink">and</em> bump <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code> in the same render: the element restores its own snapshot, adopts whatever markup is
           there now, and re-splits it.
         </p>
         <p class="text-sm text-muted">
-          The same applies to the attributes. The element declares no observed attributes —
-          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">split</code>,
-          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">effect</code>,
+          The same applies to the attributes. The element declares no observed attributes — <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">split</code>, <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">effect</code>,
           the three timings, the easing and the trigger are read once, when it splits. Changing one
           of those props renders the new attribute but changes nothing on screen until the next
-          split, so bump <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code>
-          to re-read them. That is exactly what the effect gallery below does.
+          split, so bump <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code> to re-read them. That is exactly what the effect gallery below does.
         </p>
       </section>
 
@@ -173,11 +168,9 @@
               </SplitText>
             </div>
             <p class="mt-4 text-sm text-muted">
-              Move the trigger line with <span class="font-medium text-ink">offset</span> —
-              <span class="font-medium text-ink">offset="0"</span> fires the instant the element
+              Move the trigger line with <span class="font-medium text-ink">offset</span> — <span class="font-medium text-ink">offset="0"</span> fires the instant the element
               first intersects, <span class="font-medium text-ink">offset="200px"</span> waits until
-              it is 200 pixels clear of the bottom edge. It fires once; reload or bump
-              <span class="font-medium text-ink">play</span> to see it again.
+              it is 200 pixels clear of the bottom edge. It fires once; reload or bump <span class="font-medium text-ink">play</span> to see it again.
             </p>
           </div>
         </ExampleBox>
@@ -185,8 +178,7 @@
         <section id="reference" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
           <p class="mb-4 text-sm text-body">
-            Every prop but <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code>
-            maps to an attribute on the element. A prop you don't pass renders no attribute at all,
+            Every prop but <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code> maps to an attribute on the element. A prop you don't pass renders no attribute at all,
             so the component's own default applies.
           </p>
 
@@ -202,9 +194,7 @@
 
           <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Callbacks</h3>
           <p class="mb-2 text-sm text-body">
-            Both are value-first: the piece hands you the element's own detail object,
-            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">{ '{ split, count }' }</code>
-            — the mode that actually ran and the number of animating units (lines, not words, in
+            Both are value-first: the piece hands you the element's own detail object, <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">{ '{ split, count }' }</code> — the mode that actually ran and the number of animating units (lines, not words, in
             lines mode).
           </p>
           <div class="text-sm">
@@ -218,11 +208,9 @@
 
           <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Custom properties</h3>
           <p class="mb-2 text-sm text-body">
-            There is no <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">style</code>
-            prop: the element writes the resolved timings into the host's inline style at every
+            There is no <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">style</code> prop: the element writes the resolved timings into the host's inline style at every
             split, and a bound style attribute would be rewritten wholesale by the patcher. Set
-            these through <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class</code>
-            instead — they are inherited, so an arbitrary-property utility on the element or on any
+            these through <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class</code> instead — they are inherited, so an arbitrary-property utility on the element or on any
             ancestor reaches them:
             <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class="[--split-text-distance:40%]"</code>.
           </p>
@@ -239,33 +227,23 @@
           <ul class="space-y-1.5 text-sm text-body">
             <li>
               <span class="font-medium text-ink">The sentence is announced once.</span> The element
-              copies its plain text into
-              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">aria-label</code>
-              and marks the generated wrappers
-              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">aria-hidden</code>.
+              copies its plain text into <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">aria-label</code> and marks the generated wrappers <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">aria-hidden</code>.
               Wrappers inside an interactive ancestor are left alone, so a nested link keeps its
               accessible name. Don't set an aria-label yourself — the element only fills in an
               absent one, and a stale one would win.
             </li>
             <li>
-              <span class="font-medium text-ink">Reduced motion is handled upstream, and early.</span>
-              The element marks itself revealed in its connect path and returns before it splits
-              anything: no spans, no keyframes, no observer.
-              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">@complete</code>
-              still fires with a count of 0, so a parent chaining off the reveal is not stranded.
+              <span class="font-medium text-ink">Reduced motion is handled upstream, and early.</span> The element marks itself revealed in its connect path and returns before it splits
+              anything: no spans, no keyframes, no observer. <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">@complete</code> still fires with a count of 0, so a parent chaining off the reveal is not stranded.
             </li>
             <li>
-              <span class="font-medium text-ink">First paint is blank.</span> The stylesheet hides
-              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">split-text:not(:defined)</code>
-              so the text cannot flash in its finished pose and then drop back to animate — which
+              <span class="font-medium text-ink">First paint is blank.</span> The stylesheet hides <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">split-text:not(:defined)</code> so the text cannot flash in its finished pose and then drop back to animate — which
               means a prerendered page renders this text invisible until the module lands. Reserve
               the space for a headline above the fold, and don't wrap body copy that has to be
               readable before JavaScript.
             </li>
             <li>
-              <span class="font-medium text-ink">Once it's done, it's ordinary text again.</span>
-              After the reveal the wrappers collapse to
-              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">display: contents</code>,
+              <span class="font-medium text-ink">Once it's done, it's ordinary text again.</span> After the reveal the wrappers collapse to <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">display: contents</code>,
               so the layout matches the original markup and the text reflows normally on resize.
             </li>
           </ul>
