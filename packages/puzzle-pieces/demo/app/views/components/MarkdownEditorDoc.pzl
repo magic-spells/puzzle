@@ -52,7 +52,7 @@
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="live-document" title="Live document" code={ codeLive }>
-          <div class="grid w-full gap-6 self-start lg:grid-cols-2">
+          <div class="grid w-full grid-cols-1 gap-6 self-start lg:grid-cols-2">
             <MarkdownEditor label="Editor" value={ md } @change={ setMd } />
             <div class="min-w-0 space-y-4">
               <div>

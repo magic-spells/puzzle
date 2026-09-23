@@ -1,28 +1,38 @@
 <puzzle-view>
   <div class="contents">
+    <!-- ONE trigger, two dresses. Below lg it is an icon button the size of the
+         bar's other icon buttons (hamburger, GitHub): no label, no ⌘K chip — a
+         phone has no keyboard shortcut to advertise and the bar has no room for
+         a field. From lg it grows into the centred search field. It stays the
+         same element either way, so it is always the morph source and the
+         focus-return target, and aria-label names it in both dresses. -->
     <button
       data-search-open
       type="button"
       aria-label="Search the docs"
       aria-keyshortcuts="Control+K"
-      class="flex h-8 w-full min-w-0 max-w-xl cursor-pointer items-center gap-2 rounded-md bg-bar-hover px-3 text-sm text-bar-muted transition-colors hover:text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
-      <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      class="flex size-8 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md text-sm text-bar-muted transition-colors hover:bg-bar-hover hover:text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 lg:w-full lg:min-w-0 lg:max-w-xl lg:shrink lg:justify-start lg:bg-bar-hover lg:px-3">
+      <svg class="size-4.5 shrink-0 lg:size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-4-4" />
       </svg>
-      <span class="min-w-0 flex-1 truncate text-left">Search…</span>
-      <Kbd class="hidden shrink-0 gap-1 border-bar-line bg-bar-hover text-bar-muted sm:inline-flex">
-        <span data-search-shortcut>Ctrl</span><span>K</span>
-      </Kbd>
+      <span class="hidden min-w-0 flex-1 truncate text-left lg:block">Search…</span>
+      <!-- The span owns the display: Kbd's own `inline-flex` sorts after
+           `hidden` in Tailwind's output, so `hidden` on the Kbd never won. -->
+      <span class="hidden shrink-0 lg:inline-flex">
+        <Kbd class="gap-1 border-bar-line bg-bar-hover text-bar-muted">
+          <span data-search-shortcut>Ctrl</span><span>K</span>
+        </Kbd>
+      </span>
     </button>
 
     <dialog-panel ref="panel" morph-display="flex">
-      <dialog-backdrop class="bg-black/50 backdrop-blur-sm"></dialog-backdrop>
+      <dialog-backdrop class="bg-scrim/60 backdrop-blur-sm backdrop-saturate-150"></dialog-backdrop>
 
       <dialog
         data-search-dialog
         aria-label="Search the docs"
-        class="m-0 h-dvh max-h-dvh w-full max-w-none border-0 bg-surface p-0 text-body shadow-2xl open:flex sm:fixed sm:inset-0 sm:mx-auto sm:mt-20 sm:h-fit sm:max-h-[min(34rem,calc(100vh-10rem))] sm:w-[min(92%,38rem)] sm:rounded-xl sm:border sm:border-border">
+        class="m-0 h-dvh max-h-dvh w-full max-w-none border-0 bg-surface p-0 text-body shadow-2xl open:flex sm:fixed sm:inset-0 sm:mx-auto sm:mt-20 sm:h-fit sm:max-h-[min(34rem,calc(100vh-10rem))] sm:w-[min(92%,38rem)] sm:border sm:border-border">
         <div data-search-frame class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
           <div class="flex items-center gap-3 border-b border-border p-4">
             <svg class="size-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -110,10 +120,13 @@ import { searchDocs, SEARCH_COUNT } from '@/docs/search.js';
 // layer(components)`). What that buys over the hand-rolled showModal()/close()
 // this used to be:
 //
-//   * <dialog-backdrop> is the ONE overlay surface across the family. Its
-//     colour and blur are the same two utilities the Dialog piece uses, and
-//     the site-wide grain (styles.css, `dialog-backdrop { background-image }`)
-//     lands on it for free. The native ::backdrop stays transparent — the
+//   * <dialog-backdrop> is the ONE overlay surface across the family. The
+//     shell's two overlays (this and the mobile docs Sheet in the layout)
+//     share one FROSTED-GLASS recipe — a light scrim (`bg-scrim/60`, the
+//     theme's scrim token at 60%), `backdrop-blur-sm` and
+//     `backdrop-saturate-150` — so the page stays faintly readable through
+//     it, and the site-wide grain (styles.css, `dialog-backdrop {
+//     background-image }`) lands on top for free. The native ::backdrop stays transparent — the
 //     family keeps it that way on purpose, because a top-layer ::backdrop
 //     would paint OVER the morph blob and blur the very thing in flight.
 //   * The scrim fade, the page scroll lock, Escape, the backdrop click and the
@@ -137,6 +150,9 @@ import { searchDocs, SEARCH_COUNT } from '@/docs/search.js';
 // binding — both would fight the engine's own box interpolation. `open:flex`
 // rather than a bare `flex` keeps dialog:not([open]){display:none} intact;
 // `morph-display="flex"` is the same display for the engine's flight.
+// The corner radius of both ends (the lg field and the sm+ panel) is a literal
+// 22px from styles.css ("Morph endpoints"), not a rounded-* utility, so the
+// radius the engine reads is identical at both ends and never tweens.
 //
 // LOADING. dialog-panel registers `class extends HTMLElement` at module scope,
 // so it is imported in mounted() (never top-level) like the Dialog piece does.

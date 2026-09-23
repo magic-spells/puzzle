@@ -126,7 +126,7 @@
 
         <ExampleBox id="effects" title="The eight effects" code={ codeEffects }>
           <div class="flex w-full max-w-2xl flex-col items-start gap-5">
-            <div class="grid w-full gap-4 sm:grid-cols-2">
+            <div class="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
               {#for item in effects}
                 <div key={ item.name } class="rounded-lg border border-border bg-surface p-4">
                   <span class="font-mono text-micro uppercase tracking-wider text-brand">{ item.name }</span>
