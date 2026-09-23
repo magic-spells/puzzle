@@ -52,6 +52,15 @@ notes:
       owns that flight internally). Revisit `container` only if a piece ever morphs into a real
       `showModal()` dialog. Smoked on 3074 in light and dark: blob visible mid-flight with a
       correctly themed dark border, no console errors.
+  - kind: state
+    text: >-
+      0.8.0 (feat/spinner-variants): `spinner` gains a `variant` prop (ring default + ticks, trace,
+      dots, snap, spark, heartbeat) and a new piece `shimmer-text` lands (101 pieces). Both are
+      CSS-only and carry their keyframes in their own `<style>` block — the pieces guide's second
+      sanctioned `<style>` exception, see DECISION-CSS-ONLY-MOTION. Manifests, registry.json rows,
+      demo copies, SpinnerDoc rewrite, new ShimmerTextDoc + nav/routes, README count, and
+      test/loading-pieces.test.js (wired into all.test.js). COMPONENT-SPINNER and
+      COMPONENT-SHIMMER-TEXT hold the per-design notes.
 ---
 
 # The registry — source of truth
@@ -81,7 +90,7 @@ The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing ru
 
 
 
-`registry.json` is not hand-maintained per entry — it is the aggregation of all `piece.json` manifests, pieces alphabetical, with a top-level `theme` pointer and `version`. **Regenerate it whenever a piece is added or renamed** (re-run the aggregation; lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`). Current count: **100 pieces** — keep the README and the demo shell (`Introduction.pzl`, `ComponentsIndex.pzl`) count in sync when it changes.
+`registry.json` is not hand-maintained per entry — it is the aggregation of all `piece.json` manifests, pieces alphabetical, with a top-level `theme` pointer and `version`. **Regenerate it whenever a piece is added or renamed** (re-run the aggregation; lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`). Current count: **101 pieces** — keep the README and the demo shell (`Introduction.pzl`, `ComponentsIndex.pzl`) count in sync when it changes.
 
 ## theme/pieces.css is the token source
 

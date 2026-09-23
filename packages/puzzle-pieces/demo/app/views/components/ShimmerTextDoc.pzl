@@ -1,0 +1,127 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Shimmer Text</h1>
+        <p class="mt-2 text-body">
+          Text for a pending state. The line sits in muted ink and a wave of full ink passes through
+          it, like ink soaking into paper, then rests. The wave is the text's own colour ramp rather
+          than a white shine laid over it, so it reads the same in every palette and mode.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <ShimmerText class="text-2xl font-medium tracking-tight">Thinking…</ShimmerText>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction). The keyframe
+          travels inside the piece's own style block, so there is no stylesheet to import.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="speed" title="Speed" code={ codeSpeed } tall={ false }>
+          <div class="flex flex-col items-start gap-3 text-base">
+            <ShimmerText speed="slow">Slow — reading 1,204 files…</ShimmerText>
+            <ShimmerText>Normal — searching the docs…</ShimmerText>
+            <ShimmerText speed="fast">Fast — almost there…</ShimmerText>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="with-spinner" title="With a spinner" code={ codeWithSpinner } tall={ false }>
+          <div class="flex w-full max-w-md flex-col gap-3">
+            <div class="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-4 py-3">
+              <Spinner variant="spark" size="sm" label="Thinking"/>
+              <ShimmerText class="text-sm font-medium">Thinking through your question…</ShimmerText>
+            </div>
+            <div class="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-4 py-3 text-muted">
+              <Spinner variant="ticks" size="sm" label="Searching"/>
+              <ShimmerText class="text-sm">Searching 38 sources</ShimmerText>
+            </div>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility and motion</h2>
+        <p class="mb-3 text-sm text-body">
+          Shimmer Text is plain text: no role and no live region. Pair it with whatever already
+          announces the state — a Spinner, or an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">aria-busy</code> region.
+          The colour comes from a clipped gradient, so a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">text-*</code>
+          class will not recolour it; size, weight and tracking utilities work as usual.
+        </p>
+        <p class="text-sm text-body">
+          Under <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">prefers-reduced-motion: reduce</code>
+          the wave stops with its crest over the middle of the line and the text takes a slow opacity
+          pulse instead.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ShimmerText from '@/components/ui/ShimmerText.pzl';
+import Spinner from '@/components/ui/Spinner.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for ShimmerText — the Button exemplar shape (header → hero
+// ExampleBox → Installation → Usage → titled example sections → Toc).
+const installCmd = 'puzzle add piece shimmer-text';
+const usageImport = `import ShimmerText from '@/components/ui/ShimmerText.pzl';`;
+const usageMarkup = `<ShimmerText>Thinking…</ShimmerText>`;
+
+const codeHero = `<ShimmerText class="text-2xl font-medium tracking-tight">Thinking…</ShimmerText>`;
+
+const codeSpeed = `<ShimmerText speed="slow">Slow — reading 1,204 files…</ShimmerText>
+<ShimmerText>Normal — searching the docs…</ShimmerText>
+<ShimmerText speed="fast">Fast — almost there…</ShimmerText>
+
+<!-- or a sweep length in milliseconds -->
+<ShimmerText speed={ 2800 }>Custom</ShimmerText>`;
+
+const codeWithSpinner = `<div class="flex items-center gap-2.5">
+  <Spinner variant="spark" size="sm" label="Thinking"/>
+  <ShimmerText class="text-sm font-medium">Thinking through your question…</ShimmerText>
+</div>`;
+
+export default class ShimmerTextDoc extends PuzzleView {
+  data(params, props) {
+    return {
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeSpeed,
+      codeWithSpinner,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Speed', href: '#speed' },
+        { label: 'With a spinner', href: '#with-spinner' },
+        { label: 'Accessibility and motion', href: '#accessibility' },
+      ],
+    };
+  }
+}
+</script>

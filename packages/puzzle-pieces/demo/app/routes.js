@@ -82,6 +82,7 @@ import SearchFieldDoc from './views/components/SearchFieldDoc.pzl';
 import SelectDoc from './views/components/SelectDoc.pzl';
 import SeparatorDoc from './views/components/SeparatorDoc.pzl';
 import SheetDoc from './views/components/SheetDoc.pzl';
+import ShimmerTextDoc from './views/components/ShimmerTextDoc.pzl';
 import SidebarDoc from './views/components/SidebarDoc.pzl';
 import SkeletonDoc from './views/components/SkeletonDoc.pzl';
 import SliderDoc from './views/components/SliderDoc.pzl';
@@ -690,6 +691,13 @@ export default [
 		view: SheetDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Sheet — Puzzle Pieces' },
+	},
+	{
+		path: '/components/shimmer-text',
+		name: 'shimmer-text',
+		view: ShimmerTextDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Shimmer Text — Puzzle Pieces' },
 	},
 	{
 		path: '/components/sidebar',

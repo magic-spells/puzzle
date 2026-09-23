@@ -1,0 +1,89 @@
+<puzzle-view>
+  <span class={ rootClass } style={ rootStyle }><Children/></span>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ShimmerText — "ink shimmer" for a pending line of text ("Thinking…",
+// "Searching the docs…"). The text sits in the muted ink colour and a wave of
+// full ink passes through it, left to right, then rests — the colour deepening
+// as it goes, like ink soaking into paper. Not a white highlight sweeping over
+// the top: the wave is the text's own colour ramp, so it reads in light and
+// dark and in every palette without a tuned shine colour.
+//
+//   <ShimmerText>Thinking…</ShimmerText>
+//   <ShimmerText speed="slow" class="text-sm">Searching 1,204 files…</ShimmerText>
+//
+// HOW. The children render inside one inline <span> whose text is transparent
+// and painted by its own background (`bg-clip-text`): a muted → ink → muted
+// gradient from Tailwind utilities, three times the element's width, whose
+// background-position a keyframe slides across. The keyframe and the
+// background-size live in the <style> block at the bottom — utilities cannot
+// express either — so `puzzle add piece shimmer-text` brings the animation with
+// it. CSS only: no JS timers, no splitting the text.
+//
+// It is plain text semantically — no role, no live region. Put it inside
+// whatever already announces the state (a Spinner, an aria-busy region).
+//
+// REDUCED MOTION. Under prefers-reduced-motion the wave stops with the ink
+// crest held over the middle of the text, and the whole line takes Tailwind's
+// slow opacity pulse, so it still reads as pending.
+//
+// Colour comes from the gradient, so a `text-*` class does NOT recolour it.
+// Size, weight and tracking utilities in `class` work as usual.
+//
+// Props
+//   speed   'slow' | 'normal' (default) | 'fast' — one sweep plus its rest,
+//           3.2s / 2.2s / 1.4s. A number is taken as milliseconds.
+//   class   merged onto the <span>
+const BASE =
+  'bg-linear-to-r from-muted from-35% via-ink via-50% to-muted to-65% bg-clip-text text-transparent shimmer-text motion-reduce:animate-pulse';
+
+const SPEED = { slow: 3200, normal: 2200, fast: 1400 };
+
+export default class ShimmerText extends PuzzleView {
+  data(params, props) {
+    const ms = Number.isFinite(props.speed) && props.speed > 0 ? props.speed : SPEED[props.speed] || SPEED.normal;
+    return {
+      rootClass: `${BASE} ${props.class || ''}`,
+      // the keyframe reads its duration from here, so `speed` needs no class
+      rootStyle: `--shimmer-text-duration:${ms}ms`,
+    };
+  }
+}
+</script>
+
+<style>
+/*
+ * ShimmerText motion. Global on purpose (the one class is prefixed), and in
+ * `@layer components` so utilities passed in `class` still win. The gradient
+ * is 300% of the text's width: at position 100% its ink crest sits just off
+ * the left edge, at 0% just off the right, so sliding 100% → 0% carries the
+ * crest across the text, and the last 25% of the cycle is the rest.
+ */
+@layer components {
+  .shimmer-text {
+    background-size: 300% 100%;
+    background-position: 100% 0;
+    /* linear on purpose: an eased sweep spends its slow ends off the text and
+       rushes the part you can see */
+    animation: shimmer-text var(--shimmer-text-duration, 2200ms) linear infinite;
+  }
+  @keyframes shimmer-text {
+    0% {
+      background-position: 100% 0;
+    }
+    75%,
+    100% {
+      background-position: 0% 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .shimmer-text {
+      animation: none;
+      background-position: 50% 0;
+    }
+  }
+}
+</style>

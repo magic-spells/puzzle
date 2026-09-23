@@ -1,6 +1,6 @@
 {
   "name": "spinner",
-  "description": "Inline rotating-ring loading indicator",
+  "description": "Inline loading indicator in seven CSS-only designs — the rotating ring, stepped activity ticks, a squircle trace, typing dots, Puzzle's snapping tiles, an AI spark and a live heartbeat — each a single role=status span in sm/md/lg",
   "files": ["Spinner.pzl"],
   "registryDependencies": [],
   "dependencies": [],

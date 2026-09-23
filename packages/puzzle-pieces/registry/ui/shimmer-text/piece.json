@@ -1,0 +1,8 @@
+{
+  "name": "shimmer-text",
+  "description": "Pending-state text with an ink shimmer — a wave of full ink passes through muted text, CSS-only, with a slow pulse under reduced motion",
+  "files": ["ShimmerText.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}
