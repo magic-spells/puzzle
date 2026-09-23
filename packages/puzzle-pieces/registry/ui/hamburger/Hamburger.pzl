@@ -56,9 +56,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // Callback
 //   @change(nextOpen, event)  the NEXT open value (value-first); optional
 //
-// COLOR. The bars paint in currentColor. The button defaults to the ink token
-// from its own `<style>` rule, inside `@layer components`, so any `text-*` you
-// pass in `class` (a utility) wins without a fight.
+// COLOR. The bars paint in currentColor, inherited from the parent like
+// Spinner's currentColor variants, so the icon matches a header's text colour
+// without help; pass `text-*` in `class` to set it. The hover fill lives in the
+// `<style>` block (inside `@layer components`), not a `hover:bg-*` utility, so a
+// caller's own `hover:bg-*` in `class` always wins — two same-property
+// utilities resolve by Tailwind's sort order, not by class order.
 //
 // MOTION IS CSS ONLY. Each bar moves with the individual `translate` and `rotate`
 // properties, not `transform`, so every property keeps its own duration and
@@ -75,7 +78,7 @@ const SIZE = { sm: 'size-8', md: 'size-10', lg: 'size-12' };
 
 const BASE =
   'inline-grid shrink-0 place-items-center rounded-lg cursor-pointer select-none align-middle ' +
-  'transition-colors hover:bg-surface-sunken ' +
+  'transition-colors ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
   'disabled:opacity-50 disabled:pointer-events-none hamburger-button';
 
@@ -140,7 +143,6 @@ export default class Hamburger extends PuzzleView {
      the centre line. Even thicknesses on even button sizes keep every bar on
      whole pixels. */
   .hamburger-button {
-    color: var(--color-ink);
     --hamburger-width: calc(var(--spacing, 0.25rem) * 5);
     --hamburger-thickness: calc(var(--spacing, 0.25rem) * 0.5);
     --hamburger-gap: calc(var(--spacing, 0.25rem) * 1);
@@ -153,6 +155,13 @@ export default class Hamburger extends PuzzleView {
   .hamburger-button[data-size='lg'] {
     --hamburger-width: calc(var(--spacing, 0.25rem) * 6);
     --hamburger-gap: calc(var(--spacing, 0.25rem) * 1.25);
+  }
+
+  /* Hover fill here, not a utility, so `hover:bg-*` in `class` wins. */
+  @media (hover: hover) {
+    .hamburger-button:hover {
+      background-color: var(--color-surface-sunken);
+    }
   }
 
   .hamburger-bar {

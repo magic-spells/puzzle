@@ -28,7 +28,6 @@ connections:
   - DOC-REGISTRY
 ---
 
-
 A real `<button type="button">` with `aria-expanded` (string form), optional `aria-controls`, and a static label (default 'Menu' — aria-expanded carries the state). Three aria-hidden sibling `<span>` bars stacked in one grid cell, so the X is centred by construction. Optional-controlled (DatePicker's shape): pass `open` and the parent owns it; omit it and the button toggles itself. `@change(nextOpen)` fires either way. Added 0.8.0 (PR #148). Inspired by jonsuh/hamburgers (squeeze / spin / slider) but a clean rewrite with new names.
 
 ## Why spans, not pseudo-elements
@@ -46,6 +45,9 @@ The original library draws the top and bottom bars as `::before`/`::after` of th
 
 ## Gotchas
 
+
 - Transitions exist ONLY under `prefers-reduced-motion: no-preference` AND `data-animate='true'` — inverted from Spinner's reduce-block, to avoid a specificity fight between variant rules and "off" rules. `animate={false}` and reduced motion both swap instantly.
-- Default colour is `color: var(--color-ink)` in the `<style>` block (inside `@layer components`), not a `text-ink` class, so a caller's `text-*` always wins — two text utilities on one element resolve by stylesheet order, not class order.
-- Docs: `demo/app/views/components/HamburgerDoc.pzl`, in the nav's Content section next to Toggle. Guarded by `test/hamburger.test.js`.
+- Colour is inherited `currentColor` (no default colour rule), so the bars match a header's text colour like Spinner's currentColor variants; `text-*` in `class` sets it.
+- The hover fill (`--color-surface-sunken`) is in the `<style>` block's `@layer components`, NOT a `hover:bg-*` utility. Two same-property utilities resolve by Tailwind's sort order, not class order, so a utility hover in the piece beat callers' `hover:bg-brand-*` / `bar-*` / `rail-*` (review of PR #148; fixed on release/0.8.0). Bar geometry sits in the block too, since every offset derives from per-size custom properties — both deviations are noted in CLAUDE.md's CSS-only-motion paragraph.
+- A second click during the open's 140ms move phase makes the close wait its lag before spreading — a brief pause CSS alone can't avoid.
+- Docs: `demo/app/views/components/HamburgerDoc.pzl`, in the nav's Content section next to Toggle. Guarded by `test/hamburger.test.js` and the 0.7.0 colour-token guard in `test/loading-pieces.test.js`.

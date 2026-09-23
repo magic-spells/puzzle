@@ -236,7 +236,9 @@ CLI — it is unrelated and must not be bumped along with the release.
   `hamburger`, 0.8.0): keyframes, per-part stagger from a `--i` custom property, SVG
   dash maths, clip-paths and per-property transition delays (hamburger's two-phase
   bars: the closed and open rules swap which of `translate`/`rotate` waits) have no
-  utility form, and keyframes in `theme/pieces.css` would never reach
+  utility form (hamburger also keeps its bar geometry and its hover fill in the block:
+  every offset derives from per-size custom properties, and a hover fill in
+  `@layer components` loses to a caller's `hover:bg-*` where a utility would not), and keyframes in `theme/pieces.css` would never reach
   an app whose pieces.css predates the piece (the CLI copies the theme only when it is
   missing). So the block rides in the piece: global, every name prefixed with the piece
   name, wrapped in `@layer components` (it holds because collected component CSS is

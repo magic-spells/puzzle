@@ -70,7 +70,7 @@ source with a `piece.json` manifest describing its files and dependencies.
 
 ## What's inside
 
-**101 pieces**, from primitives (Button, Field, Select, Checkbox, Switch) through
+**102 pieces**, from primitives (Button, Field, Select, Checkbox, Switch) through
 overlays (Dialog, Sheet, Popover, DropdownMenu, Command), data display (DataTable,
 Timeline, Tree, StatCard), charts (LineChart, BarChart, AreaChart, PieChart,
 Sparkline), rich editing (RichTextEditor, MarkdownEditor), and app-scale composites

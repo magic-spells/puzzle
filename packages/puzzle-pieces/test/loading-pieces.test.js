@@ -82,7 +82,8 @@ const THEME_0_7_COLORS = new Set(
 test('loading pieces use only colour tokens the 0.7.0 theme already had', async () => {
   const theme = await readText('../registry/theme/pieces.css');
   const current = new Set([...theme.matchAll(/--color-([a-z0-9-]+):/g)].map((m) => m[1]));
-  for (const { name, file } of PIECES) {
+  // hamburger rides the same CSS-only-motion exception, so it gets the same guard
+  for (const { name, file } of [...PIECES, { name: 'hamburger', file: 'Hamburger.pzl' }]) {
     const source = await readText(`../registry/ui/${name}/${file}`);
     const used = new Set();
     // utility suffixes (after an optional variant and a colour-taking prefix)
