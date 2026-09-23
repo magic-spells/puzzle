@@ -7,8 +7,15 @@ connections:
   - DOC-REGISTRY
   - DECISION-THEMES-IN-PIECES
   - DECISION-COPY-IN-DISTRIBUTION
+notes:
+  - kind: state
+    text: >-
+      Hamburger (0.8.0, PR #148) is the third piece under this exception. Its reason is per-property
+      transition delays — the closed and open rules swap which of `translate`/`rotate` waits, giving
+      collapse→rotate on open and unrotate→spread on close — which has no utility form without
+      arbitrary values. It gates transitions inside `prefers-reduced-motion: no-preference` rather
+      than disabling them in a reduce block. See [[COMPONENT-HAMBURGER]].
 ---
-
 
 # Loading motion is our own CSS-only design, with keyframes in the piece
 
