@@ -180,6 +180,21 @@
   /* A corner popover may never outgrow the window: viewport minus the corner
      insets, so it scrolls inside instead of losing its bottom edge. */
   --spacing-popover: calc(100dvh - 1.5rem);
+  /* The floating docs pill below lg: `bottom-dock` seats it 1rem above the
+     safe-area inset; `dock-clear` is the room content (the panel's last line,
+     the toast stack) keeps free beneath it — the pill's 2.75rem plus the dock
+     offset plus a 1rem breath. */
+  --spacing-dock: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  --spacing-dock-clear: calc(env(safe-area-inset-bottom, 0px) + 4.75rem);
+  /* `shadow-dock`: the pill floats over live content, so it takes a step past
+     shadow-popover — a tighter drop for the edge plus a wider, softer one for
+     lift. Built from the theme's shadow colours, so it deepens in dark and
+     medium the way every other shadow does. */
+  --shadow-dock:
+    inset 0 1px 0 var(--color-edge-highlight),
+    0 2px 6px -1px var(--color-shadow-drop),
+    0 10px 24px -6px var(--color-shadow-drop),
+    0 28px 64px -12px var(--color-shadow-popover);
   /* Demo-local grain tile, served from app/public at the site root. The PNG
      is authored at 2x (200×200) and painted at 100×100 so it stays crisp on
      retina displays; both land on every <dialog-backdrop> through the rule
@@ -254,6 +269,39 @@ dialog-backdrop {
   background-image: var(--background-image-noise);
   background-repeat: repeat;
   background-size: var(--background-size-noise);
+}
+
+/*
+ * Morph endpoints: LITERAL radii, a sanctioned exception to "tokens only".
+ *
+ * The morph engine reads each end's computed per-corner radii and lerps
+ * between them. Tailwind v4's `rounded-full` is `calc(infinity * 1px)`, which
+ * computes to ~1.68e7px, so a pill → panel morph stayed a stadium for the
+ * whole flight and snapped square at the reveal. Both ends of both shell
+ * morphs therefore carry the SAME finite 22px, so the radius never tweens:
+ *   - the mobile docs pill (22px = half its h-11 height, i.e. fully round)
+ *     and the Sheet card it morphs into. sheet.css paints the card's corners
+ *     from --sheet-card-border-radius inside layer(components); this rule is
+ *     unlayered, so it wins.
+ *   - the lg search field and the SearchDialog panel it morphs into (sm+ only:
+ *     below sm the dialog is full-screen and does not morph). Below lg the
+ *     trigger is an icon button and keeps its rounded-md.
+ */
+[data-docs-pill],
+dialog-panel:has([data-docs-drawer]) > dialog {
+  border-radius: 22px;
+}
+
+@media (min-width: 40rem) {
+  [data-search-dialog] {
+    border-radius: 22px;
+  }
+}
+
+@media (min-width: 64rem) {
+  [data-search-open] {
+    border-radius: 22px;
+  }
 }
 
 @layer base {

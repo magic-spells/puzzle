@@ -58,9 +58,12 @@ export default class ExampleBox extends PuzzleView {
       sectionClass: ['scroll-mt-20', props.class || ''].join(' '),
       code: props.code || '',
       lang: props.lang || false,
+      // Padding steps down on phones (p-10 left a 255px stage at 375px), and
+      // the centring is SAFE: plain `justify-center` splits an over-wide
+      // child's overflow across BOTH edges, and the left half is unreachable.
       previewClass: tall
-        ? 'flex min-h-[350px] items-center justify-center p-10'
-        : 'flex min-h-[160px] items-center justify-center p-8',
+        ? 'flex min-h-[350px] items-center justify-center-safe px-4 py-8 sm:p-10'
+        : 'flex min-h-[160px] items-center justify-center-safe px-4 py-6 sm:p-8',
     };
   }
 }

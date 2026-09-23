@@ -1,8 +1,14 @@
 <puzzle-view class="flex h-dvh flex-col bg-surface-frame text-body">
   <!-- TOP BAR — the frame's horizontal arm. bg-bar equals surface-frame in every
        theme file, so the bar and the rail read as one flat L around the panel. -->
-  <header class="grid h-17 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,36rem)_minmax(0,1fr)] items-center gap-3 bg-bar px-4 text-bar-ink">
-    <!-- THREE COLUMNS, not a flex row with a `justify-between`. The wings are
+  <header class="flex h-17 shrink-0 items-center gap-1 bg-bar px-4 text-bar-ink lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,36rem)_minmax(0,1fr)] lg:gap-3">
+    <!-- BELOW lg: ONE FLEX ROW — [brand] … [search icon][GitHub]. The brand
+         wing takes the slack (`flex-1`) and the search trigger collapses to an
+         icon button (SearchDialog dresses itself per breakpoint), so the brand
+         keeps its full width at 375px instead of losing it to a field that
+         cannot fit. No hamburger: the docs nav below lg is the floating
+         current-page pill at the bottom of the window (see DOCS MENU). -->
+    <!-- FROM lg: THREE COLUMNS, not a flex row with a `justify-between`. The wings are
          equal `1fr` tracks and the search sits in the `auto` one between them,
          which is what centres it on the WINDOW rather than on whatever is left
          over after the right cluster (the app template's TopBar grid). The
@@ -16,33 +22,23 @@
          the "P" tile on the rows' icon column (x=20) and the wordmark on their
          label column (x=52) — one edge down the left of the window instead of
          two that nearly line up. -->
-    <div class="-ml-1 flex min-w-0 items-center gap-3">
-      <button
-        type="button"
-        class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-bar-muted transition-colors hover:bg-bar-hover hover:text-bar-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 lg:hidden"
-        aria-label="Toggle navigation"
-        aria-expanded={ mobileNavOpen ? 'true' : 'false' }
-        @click={ toggleMobileNav }>
-        <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <path d="M4 7h16M4 12h16M4 17h16"/>
-        </svg>
-      </button>
+    <div class="-ml-1 flex min-w-0 flex-1 items-center gap-3">
       <a
         href="#/"
-        class="flex items-center gap-3 rounded-md px-3 py-1.5 text-brand font-semibold tracking-tight text-bar-ink transition-colors hover:bg-bar-hover outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+        class="flex min-w-0 items-center gap-3 rounded-md px-3 py-1.5 text-brand font-semibold tracking-tight text-bar-ink transition-colors hover:bg-bar-hover outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
         <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-brand text-2xs font-bold text-brand-ink" aria-hidden="true">P</span>
         <span class="truncate">Puzzle Pieces</span>
       </a>
-      <span class="hidden text-xs text-bar-muted md:inline">{ pieceCount } pieces · v{ version }</span>
+      <span class="hidden whitespace-nowrap text-xs text-bar-muted md:inline">{ pieceCount } pieces · v{ version }</span>
     </div>
     <!-- THE SEARCH, centred on the window: the docs SearchDialog's trigger,
          dressed as the template's search field. The dialog still morphs out of
          it — the trigger is the morph source, whatever its box. -->
-    <div class="flex min-w-0 items-center justify-center">
+    <div class="flex shrink-0 items-center justify-center lg:min-w-0">
       <SearchDialog/>
     </div>
 
-    <div class="flex min-w-0 items-center justify-end gap-2">
+    <div class="flex shrink-0 items-center justify-end gap-2 lg:min-w-0">
       <a
         href="https://github.com/magic-spells/puzzle-pieces"
         target="_blank"
@@ -56,14 +52,80 @@
     </div>
   </header>
 
-  <!-- MOBILE NAV — below lg the rail is a drawer under the bar, painted with the
-       same rail roles; the switcher rides along so phones can pick a theme too. -->
-  {#if mobileNavOpen}
-    <div class="max-h-[70dvh] overflow-y-auto border-b border-rail-edge bg-rail px-3 pb-3 lg:hidden">
-      <SideNav path={ path } class="py-2"/>
-      <AppearanceSwitcher class="mt-2 border-t border-rail-edge pt-3"/>
+  <!-- DOCS MENU (below lg) — a floating pill at the bottom centre that names the
+       page being read ("Charts · Line Chart") and MORPHS into the nav: the
+       Sheet piece as an inset bottom card (`mode="card"`) with the pill as its
+       `morphTrigger`. It replaces an inline drawer under the bar, which pushed
+       the page down by a screen or more.
+       The pill is never hidden by this layout: the sheet hides its trigger
+       for the flight and pops it back after, and a trigger the page hides
+       itself makes the sheet skip the morph. It is also the focus-return
+       target, so it stays in the DOM. The wrapper spans the window
+       (inset-x-4) so a long title truncates instead of running off the edge,
+       and passes pointer events through around the pill. `bottom-dock` is
+       1rem above the safe-area inset.
+       No `rounded-*` on the pill: its radius is a literal 22px, matched on
+       the sheet card, in styles.css ("Morph endpoints") — `rounded-full`
+       computes to ~1.68e7px and wrecked the morph's radius. -->
+  <div class="pointer-events-none fixed inset-x-4 bottom-dock z-30 flex justify-center lg:hidden">
+    <button
+      type="button"
+      data-docs-pill
+      class="pointer-events-auto flex h-11 min-w-0 max-w-full cursor-pointer items-center gap-2 border border-border bg-surface-raised px-4 text-sm font-medium text-ink shadow-dock outline-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+      aria-haspopup="dialog"
+      aria-expanded={ mobileNavOpen ? 'true' : 'false' }
+      @click={ openMobileNav }>
+      <!-- The accessible name is built from the visible text (WCAG 2.5.3), with
+           the button's purpose prepended for screen readers only. -->
+      <span class="sr-only">Docs menu, current page:</span>
+      {#if currentGroup}
+        <span class="shrink-0 text-muted">{ currentGroup }</span>
+        <span class="shrink-0 text-faint" aria-hidden="true">·</span>
+      {/if}
+      <span class="min-w-0 truncate">{ currentTitle }</span>
+      <svg class="size-4 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m6 15 6-6 6 6"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- The sheet opens at 65dvh (`initialSnap="0"` — the component's default is
+       the LAST snap) and drags up to 92. It owns
+       the morph out of and back into the pill (skipped, with a plain spring
+       entrance, under prefers-reduced-motion), Escape, the scrim tap, swipe
+       dismissal, the page scroll lock and focus return to the pill, and
+       reports each through @hide. Picking a link closes it too
+       (onDrawerClick) — the layout persists across routes, so without that it
+       would stay up over the page the reader just asked for.
+       `breakpoint` 1024 keeps the phone profile (snap points, card) on every
+       width the pill shows at — the pill is lg:hidden, and the default 768
+       would turn a tablet's sheet into a centred dialog. Deliberately NO
+       `maxDisplayWidth`: `lg:hidden` is fractional and innerWidth rounds, so
+       a zoomed 1023.5px viewport shows the pill while a 1023 ceiling refuses
+       show() silently. A sheet left open across 1024 just morphs to the
+       desktop profile in place and still closes normally.
+       The switcher rides in the sheet's foot so phones can pick a theme too.
+       backdropClass is the shell's frosted-glass scrim, shared with the
+       SearchDialog (see its header comment). -->
+  <Sheet
+    open={ mobileNavOpen }
+    title="Docs"
+    position="bottom"
+    mode="card"
+    breakpoint="1024"
+    snapPoints="65dvh 92dvh"
+    initialSnap="0"
+    morphTrigger="[data-docs-pill]"
+    backdropClass="bg-scrim/60 backdrop-blur-sm backdrop-saturate-150"
+    @show={ revealActiveLink }
+    @hide={ closeMobileNav }>
+    <div data-docs-drawer class="-mx-2" @click={ onDrawerClick(event) }>
+      <SideNav path={ path }/>
     </div>
-  {/if}
+    <div slot="footer">
+      <AppearanceSwitcher/>
+    </div>
+  </Sheet>
 
   <div class="flex min-h-0 flex-1">
     <!-- RAIL — the sidebar piece in its `rail` variant: the frame's vertical arm.
@@ -90,9 +152,15 @@
          positioned descendant (e.g. an `sr-only` span, which is `position:
          absolute`) must resolve against it, not the body — otherwise it
          escapes the overflow clip and stretches the document below the
-         h-dvh shell, letting the viewport scroll past the html element. -->
-    <main class="relative min-w-0 flex-1 overflow-y-auto border-t border-panel-edge bg-surface-panel shadow-panel lg:rounded-tl-xl lg:border-l">
-      <div class="px-gutter py-10">
+         h-dvh shell, letting the viewport scroll past the html element.
+         `overflow-x-hidden`: the panel scrolls DOWN, never sideways. A closed
+         dropdown-panel flyout is invisible but still laid out at its open
+         position, and near the right edge of a phone-width page that box
+         alone made the whole panel pan sideways into blank space. Wide
+         content (tables, code, toolbars) scrolls inside its own container. -->
+    <main class="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden border-t border-panel-edge bg-surface-panel shadow-panel lg:rounded-tl-xl lg:border-l">
+      <!-- pb-dock-clear below lg: the floating docs pill must not sit on the footer. -->
+      <div class="px-gutter pt-10 pb-dock-clear lg:pb-10">
         <Slot/>
 
         <footer class="mt-16 border-t border-border pt-6 text-sm text-muted">
@@ -102,13 +170,16 @@
     </main>
   </div>
 
-  <Toaster position="bottom-right"/>
+  <!-- Below lg the stack lifts clear of the docs pill; `max-lg:` sorts after the
+       piece's own `bottom-4`, so the offset wins without touching the piece. -->
+  <Toaster position="bottom-right" class="max-lg:bottom-dock-clear"/>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Toaster from '../components/ui/Toaster.pzl';
 import Sidebar from '../components/ui/Sidebar.pzl';
+import Sheet from '../components/ui/Sheet.pzl';
 import SideNav from '../components/docs/SideNav.pzl';
 import SearchDialog from '../components/docs/SearchDialog.pzl';
 import AppearanceSwitcher from '../components/docs/AppearanceSwitcher.pzl';
@@ -144,6 +215,21 @@ const NAV_ITEMS = [
   })),
 ];
 
+// What the mobile docs pill says: "<group> · <title>" for every nav
+// destination, the bare title for the Getting started pages. A path the nav
+// does not list (a typo'd hash) falls back to the neutral "Menu".
+const CURRENT = new Map([
+  ...GETTING_STARTED.map((item) => [item.path, { group: '', title: item.title }]),
+  // "Themes", not "Schemes": the pill names the group the sheet's list files
+  // the page under, and SideNav lists the scheme panels in its Themes group.
+  ...SCHEME_PANELS.map((item) => [item.path, { group: 'Themes', title: item.title }]),
+  ...THEMES.map((item) => [item.path, { group: 'Themes', title: item.title }]),
+  ...SECTIONS.flatMap((section) =>
+    section.items.map((item) => [item.path, { group: section.label, title: item.title }])
+  ),
+]);
+const NO_PAGE = { group: '', title: 'Menu' };
+
 export default class DefaultLayout extends PuzzleView {
   data(params, props) {
     // this.route is the per-navigation snapshot (D47), readable here in data();
@@ -153,7 +239,10 @@ export default class DefaultLayout extends PuzzleView {
       (this.ctx && this.ctx.router && this.ctx.router.current && this.ctx.router.current.path) ||
       '/';
     const state = this.getData();
+    const current = CURRENT.get(path) || NO_PAGE;
     return {
+      currentGroup: current.group,
+      currentTitle: current.title,
       path,
       activeHref: `#${path}`,
       navItems: NAV_ITEMS,
@@ -163,10 +252,53 @@ export default class DefaultLayout extends PuzzleView {
     };
   }
 
+  // The docs Sheet's <dialog-panel>, and whether it is actually up. `open` is
+  // only a request: the sheet can refuse it (modules still loading, a display
+  // limit), and it reports nothing when it does.
+  sheetIsOpen() {
+    return !!this.element?.querySelector('[data-docs-drawer]')?.closest('dialog-panel')?.isOpen;
+  }
+
+  setMobileNav(open) {
+    this.setData({ mobileNavOpen: open });
+    this.refresh();
+  }
+
   events = {
-    toggleMobileNav: () => {
-      this.setData({ mobileNavOpen: !this.getData().mobileNavOpen });
+    // `open` is edge-triggered, so a `true` the sheet never acted on would
+    // swallow every later press. Re-arm the edge when state says open but the
+    // sheet is not, and after asking, drop a request the sheet refused.
+    openMobileNav: () => {
+      if (this.getData().mobileNavOpen) {
+        if (this.sheetIsOpen()) return;
+        this.setMobileNav(false);
+      }
+      this.setMobileNav(true);
+      requestAnimationFrame(() => {
+        if (this.getData().mobileNavOpen && !this.sheetIsOpen()) this.setMobileNav(false);
+      });
+    },
+    // The sheet closed itself (Escape, scrim, swipe, a link) — resync so the
+    // next pill press is a fresh open edge.
+    closeMobileNav: () => {
+      if (!this.getData().mobileNavOpen) return;
+      this.setData({ mobileNavOpen: false });
       this.refresh();
+    },
+    // Any link in the sheet closes it; the router still follows the href. A
+    // modified or non-primary click opens a new tab and leaves this page where
+    // it is, so the sheet stays up.
+    onDrawerClick: (event) => {
+      if (!event.target.closest('a[href]')) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      this.setData({ mobileNavOpen: false });
+      this.refresh();
+    },
+    // The sheet lists ~110 links; open it on the page being read rather than
+    // on "Introduction". Runs once the entrance has settled.
+    revealActiveLink: () => {
+      const active = this.element.querySelector('[data-docs-drawer] [aria-current="page"]');
+      active?.scrollIntoView({ block: 'center' });
     },
   };
 }
