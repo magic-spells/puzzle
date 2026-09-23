@@ -951,6 +951,16 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "shimmer-text",
+      "description": "Pending-state text with an ink shimmer — a wave of full ink passes through muted text, CSS-only, with a slow pulse under reduced motion",
+      "files": [
+        "ShimmerText.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "sidebar",
       "description": "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, an optional-controlled collapsed icon-only mode with header/footer slots, and a `rail` variant that paints it with the shell roles (bg-rail, text-rail-ink) as the frame's rail",
       "files": [
@@ -996,7 +1006,7 @@
     },
     {
       "name": "spinner",
-      "description": "Inline rotating-ring loading indicator",
+      "description": "Inline loading indicator in seven CSS-only designs — the rotating ring, stepped activity ticks, a squircle trace, typing dots, Puzzle's snapping tiles, an AI spark and a live heartbeat — each a single role=status span in sm/md/lg",
       "files": [
         "Spinner.pzl"
       ],

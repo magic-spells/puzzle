@@ -23,3 +23,4 @@ import './markdown-parity.test.js';
 import './split-panel-snap.test.js';
 import './snap-echo.test.js';
 import './registry-deps.test.js';
+import './loading-pieces.test.js';
