@@ -46,6 +46,7 @@ import EmojiPickerSimpleDoc from './views/components/EmojiPickerSimpleDoc.pzl';
 import EmptyDoc from './views/components/EmptyDoc.pzl';
 import FaderDoc from './views/components/FaderDoc.pzl';
 import FieldDoc from './views/components/FieldDoc.pzl';
+import HamburgerDoc from './views/components/HamburgerDoc.pzl';
 import HoverCardDoc from './views/components/HoverCardDoc.pzl';
 import ImageZoomDoc from './views/components/ImageZoomDoc.pzl';
 import InputGroupDoc from './views/components/InputGroupDoc.pzl';
@@ -439,6 +440,13 @@ export default [
 		view: FieldDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Field — Puzzle Pieces' },
+	},
+	{
+		path: '/components/hamburger',
+		name: 'hamburger',
+		view: HamburgerDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Hamburger — Puzzle Pieces' },
 	},
 	{
 		path: '/components/hover-card',

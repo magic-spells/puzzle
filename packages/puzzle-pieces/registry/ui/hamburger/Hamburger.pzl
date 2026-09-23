@@ -1,0 +1,252 @@
+<puzzle-view>
+  <button
+    type="button"
+    class={ classes }
+    data-variant={ variant }
+    data-size={ size }
+    data-animate={ animateAttr }
+    aria-expanded={ expandedAttr }
+    aria-controls={ controls }
+    aria-label={ label }
+    disabled={ disabled }
+    @click={ handleClick }>
+    <span class="col-start-1 row-start-1 rounded-full bg-current hamburger-bar hamburger-bar-top" aria-hidden="true"></span>
+    <span class="col-start-1 row-start-1 rounded-full bg-current hamburger-bar hamburger-bar-mid" aria-hidden="true"></span>
+    <span class="col-start-1 row-start-1 rounded-full bg-current hamburger-bar hamburger-bar-bottom" aria-hidden="true"></span>
+  </button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Hamburger — a menu button whose three bars fold into an X when open. The root
+// is a real <button type="button"> carrying aria-expanded; the bars are three
+// aria-hidden sibling spans stacked in one grid cell, so the X is centred by
+// construction at every size.
+//
+//   <Hamburger/>                                     self-managed, "Menu"
+//   <Hamburger variant="twist" size="lg"/>
+//   <Hamburger open={ navOpen } controls="site-nav" @change={ setNavOpen }/>
+//   <Hamburger open={ navOpen } animate={ false } @change={ setNavOpen }/>
+//
+// Variants (all end on the same centred X)
+//   converge  (default) two phases: the outer bars slide in to the middle bar,
+//             then turn ±45° into the X; the middle bar hides the instant they
+//             meet. Closing runs it backwards — unturn first, then spread.
+//   twist     the same two phases, but the turn carries on round to 225° / 135°,
+//             so the X arrives after half a spin. Reverses on close.
+//   slide     one phase, everything at once: the middle bar slides out to the
+//             left as it fades while the outer bars move in and pivot.
+//
+// OPTIONAL-CONTROLLED (DatePicker's shape). Pass `open` and the parent owns the
+// state: a click fires @change(next) and waits for the parent to flip `open`.
+// Omit it and the button toggles itself, still firing @change — so a bare
+// <Hamburger/> works.
+//
+// Props
+//   variant   'converge' (default) | 'twist' | 'slide'
+//   open      boolean, optional-controlled (see above)
+//   animate   default true; false swaps the icon instantly with no transition
+//   size      'sm' | 'md' (default) | 'lg' — a 32 / 40 / 48px square button
+//   label     accessible name, default 'Menu'. Keep it static: aria-expanded
+//             already tells assistive tech whether the menu is open.
+//   controls  id of the element the button opens, emitted as aria-controls
+//   disabled  boolean — dims the button and blocks the callback
+//   class     merged onto the root <button>
+// Callback
+//   @change(nextOpen, event)  the NEXT open value (value-first); optional
+//
+// COLOR. The bars paint in currentColor. The button defaults to the ink token
+// from its own `<style>` rule, inside `@layer components`, so any `text-*` you
+// pass in `class` (a utility) wins without a fight.
+//
+// MOTION IS CSS ONLY. Each bar moves with the individual `translate` and `rotate`
+// properties, not `transform`, so every property keeps its own duration and
+// delay — the two-phase variants are nothing more than the closed-state and
+// open-state rules swapping which property waits for the other. The rules live
+// in the <style> block below (per-property delays have no utility form) and ride
+// with the file, so `puzzle add piece hamburger` brings them along. Geometry is
+// three custom properties per size — bar width, thickness and gap — and every
+// offset is derived from them. Transitions exist only under
+// prefers-reduced-motion: no-preference and animate={true}; otherwise the icon
+// swaps instantly. aria-expanded is emitted in STRING form ('true' | 'false').
+const VARIANTS = ['converge', 'twist', 'slide'];
+const SIZE = { sm: 'size-8', md: 'size-10', lg: 'size-12' };
+
+const BASE =
+  'inline-grid shrink-0 place-items-center rounded-lg cursor-pointer select-none align-middle ' +
+  'transition-colors hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
+  'disabled:opacity-50 disabled:pointer-events-none hamburger-button';
+
+export default class Hamburger extends PuzzleView {
+  created() {
+    // Uncontrolled open state — an instance field, not view data: the render
+    // model is derived from it in data(), so a toggle must refresh() to re-run
+    // data() (setData alone would not).
+    this._uncontrolledOpen = false;
+  }
+
+  _controlled() {
+    return this.props.open !== undefined;
+  }
+
+  _open() {
+    return this._controlled() ? !!this.props.open : this._uncontrolledOpen;
+  }
+
+  data(params, props) {
+    const size = SIZE[props.size] ? props.size : 'md';
+    const open = this._open();
+    return {
+      variant: VARIANTS.includes(props.variant) ? props.variant : 'converge',
+      size,
+      animateAttr: props.animate === false ? 'false' : 'true',
+      expandedAttr: open ? 'true' : 'false',
+      controls: props.controls || false,
+      label: props.label || 'Menu',
+      disabled: !!props.disabled,
+      classes: `${BASE} ${SIZE[size]} ${props.class || ''}`,
+    };
+  }
+
+  events = {
+    handleClick: (event) => {
+      if (this.props.disabled) return;
+      const next = !this._open();
+      if (!this._controlled()) {
+        this._uncontrolledOpen = next;
+        this.refresh();
+      }
+      const { change } = this.props;
+      if (typeof change === 'function') change(next, event);
+    },
+  };
+}
+</script>
+
+<style>
+/*
+ * Hamburger geometry and motion. Global on purpose (not `scoped`): every class
+ * is prefixed `hamburger-`, and the data-* / aria-* attributes are only ever
+ * matched on `.hamburger-button`. Everything sits in `@layer components` (the
+ * build appends this block after Tailwind's output, which declares that layer
+ * below utilities), so a utility in `class` wins.
+ */
+@layer components {
+  /* ── geometry ───────────────────────────────────────────────────────── */
+  /* Three numbers per size, in steps of Tailwind's --spacing (0.25rem if the
+     app never emitted it); the outer bars sit one gap plus one thickness from
+     the centre line. Even thicknesses on even button sizes keep every bar on
+     whole pixels. */
+  .hamburger-button {
+    color: var(--color-ink);
+    --hamburger-width: calc(var(--spacing, 0.25rem) * 5);
+    --hamburger-thickness: calc(var(--spacing, 0.25rem) * 0.5);
+    --hamburger-gap: calc(var(--spacing, 0.25rem) * 1);
+    --hamburger-offset: calc(var(--hamburger-gap) + var(--hamburger-thickness));
+  }
+  .hamburger-button[data-size='sm'] {
+    --hamburger-width: calc(var(--spacing, 0.25rem) * 4);
+    --hamburger-gap: calc(var(--spacing, 0.25rem) * 0.75);
+  }
+  .hamburger-button[data-size='lg'] {
+    --hamburger-width: calc(var(--spacing, 0.25rem) * 6);
+    --hamburger-gap: calc(var(--spacing, 0.25rem) * 1.25);
+  }
+
+  .hamburger-bar {
+    width: var(--hamburger-width);
+    height: var(--hamburger-thickness);
+  }
+  .hamburger-bar-top {
+    translate: 0 calc(var(--hamburger-offset) * -1);
+  }
+  .hamburger-bar-bottom {
+    translate: 0 var(--hamburger-offset);
+  }
+
+  /* ── the X ──────────────────────────────────────────────────────────── */
+  /* rotate is applied after translate, about each bar's own centre, so a bar
+     turns in place wherever it has moved to. */
+  .hamburger-button {
+    --hamburger-top-angle: 45deg;
+    --hamburger-bottom-angle: -45deg;
+    --hamburger-mid-exit: 0 0;
+  }
+  .hamburger-button[data-variant='twist'] {
+    --hamburger-top-angle: 225deg;
+    --hamburger-bottom-angle: 135deg;
+  }
+  .hamburger-button[data-variant='slide'] {
+    --hamburger-mid-exit: -50% 0;
+  }
+  .hamburger-button[aria-expanded='true'] .hamburger-bar-top {
+    translate: 0 0;
+    rotate: var(--hamburger-top-angle);
+  }
+  .hamburger-button[aria-expanded='true'] .hamburger-bar-bottom {
+    translate: 0 0;
+    rotate: var(--hamburger-bottom-angle);
+  }
+  .hamburger-button[aria-expanded='true'] .hamburger-bar-mid {
+    translate: var(--hamburger-mid-exit);
+    opacity: 0;
+  }
+
+  /* ── timing ─────────────────────────────────────────────────────────── */
+  /* move: the translate phase, an ease-out. turn: the rotate phase INTO the X,
+     a spring (ζ 0.7, ~4.6% overshoot, settled by the end) sampled into
+     linear(). unturn: the rotate phase back OUT of the X, a plain ease-in-out
+     — the overshoot belongs to the arrival; on the way out it would tilt the
+     bars past flat just as they start to spread. fade: the middle bar's
+     opacity. The lag pair is the whole two-phase trick: opening, rotate (and
+     the middle bar's hide) wait --hamburger-lag-open for the bars to meet;
+     closing, translate (and the middle bar's return) wait
+     --hamburger-lag-close for the unturn to finish. Every list below runs
+     translate, rotate, opacity. */
+  .hamburger-button {
+    --hamburger-ease-move: cubic-bezier(0.25, 1, 0.5, 1);
+    --hamburger-ease-turn: linear(0, 0.063, 0.208, 0.384, 0.557, 0.708, 0.83, 0.92, 0.981, 1.019, 1.039, 1.046, 1.044, 1.039, 1.031, 1.023, 1.015, 1.009, 1.005, 1.002, 1);
+    --hamburger-ease-unturn: cubic-bezier(0.4, 0, 0.2, 1);
+    --hamburger-move: 140ms;
+    --hamburger-turn: 240ms;
+    --hamburger-unturn: 150ms;
+    --hamburger-fade: 0s;
+    --hamburger-lag-open: var(--hamburger-move);
+    --hamburger-lag-close: var(--hamburger-unturn);
+  }
+  .hamburger-button[data-variant='twist'] {
+    --hamburger-turn: 300ms;
+    --hamburger-unturn: 220ms;
+  }
+  .hamburger-button[data-variant='slide'] {
+    --hamburger-move: 250ms;
+    --hamburger-turn: 250ms;
+    --hamburger-unturn: 250ms;
+    --hamburger-fade: 180ms;
+    --hamburger-lag-open: 0s;
+    --hamburger-lag-close: 0s;
+  }
+
+  /* ── motion (opt-in) ────────────────────────────────────────────────── */
+  /* Transitions exist only when the user has not asked for reduced motion and
+     the piece has not been given animate={false}; in every other case there
+     is simply nothing to transition and the icon swaps instantly. The closed
+     rule is the CLOSE transition and the open rule is the OPEN transition —
+     a transition takes its timing from the state it is heading into. */
+  @media (prefers-reduced-motion: no-preference) {
+    .hamburger-button[data-animate='true'] .hamburger-bar {
+      transition-property: translate, rotate, opacity;
+      transition-duration: var(--hamburger-move), var(--hamburger-unturn), var(--hamburger-fade);
+      transition-timing-function: var(--hamburger-ease-move), var(--hamburger-ease-unturn), var(--hamburger-ease-move);
+      transition-delay: var(--hamburger-lag-close), 0s, var(--hamburger-lag-close);
+    }
+    .hamburger-button[data-animate='true'][aria-expanded='true'] .hamburger-bar {
+      transition-duration: var(--hamburger-move), var(--hamburger-turn), var(--hamburger-fade);
+      transition-timing-function: var(--hamburger-ease-move), var(--hamburger-ease-turn), var(--hamburger-ease-move);
+      transition-delay: 0s, var(--hamburger-lag-open), var(--hamburger-lag-open);
+    }
+  }
+}
+</style>
