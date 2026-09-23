@@ -57,7 +57,8 @@ export default class ShimmerText extends PuzzleView {
 <style>
 /*
  * ShimmerText motion. Global on purpose (the one class is prefixed), and in
- * `@layer components` so utilities passed in `class` still win. The gradient
+ * `@layer components` so utilities passed in `class` win, except on
+ * background-position, which the running animation drives. The gradient
  * is 300% of the text's width: at position 100% its ink crest sits just off
  * the left edge, at 0% just off the right, so sliding 100% → 0% carries the
  * crest across the text, and the last 25% of the cycle is the rest.

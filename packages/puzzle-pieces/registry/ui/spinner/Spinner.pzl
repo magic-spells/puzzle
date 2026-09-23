@@ -6,7 +6,7 @@
       {/for}
     {:else if variant === 'trace'}
       <svg class="block size-full overflow-visible" viewBox="0 0 24 24" fill="none" stroke-width={ traceStroke } stroke-linecap="round" aria-hidden="true">
-        <path class="stroke-border" d="M12 2H15C19.06 2 22 4.94 22 9V15C22 19.06 19.06 22 15 22H9C4.94 22 2 19.06 2 15V9C2 4.94 4.94 2 9 2Z"/>
+        <path class="stroke-border-strong" d="M12 2H15C19.06 2 22 4.94 22 9V15C22 19.06 19.06 22 15 22H9C4.94 22 2 19.06 2 15V9C2 4.94 4.94 2 9 2Z"/>
         <path class="stroke-brand spinner-trace-seg" pathLength="100" d="M12 2H15C19.06 2 22 4.94 22 9V15C22 19.06 19.06 22 15 22H9C4.94 22 2 19.06 2 15V9C2 4.94 4.94 2 9 2Z"/>
       </svg>
     {:else if variant === 'dots'}
@@ -18,7 +18,7 @@
         <span class={ p.class } style={ p.style } aria-hidden="true"></span>
       {/for}
     {:else if variant === 'spark'}
-      <span class="absolute inset-0 m-auto size-11/20 bg-linear-to-br from-brand-on-tint to-brand spinner-spark-star spinner-spark-main" aria-hidden="true"></span>
+      <span class="absolute inset-0 m-auto size-11/20 bg-linear-to-br from-brand/60 to-brand spinner-spark-star spinner-spark-main" aria-hidden="true"></span>
       <span class="absolute inset-0 spinner-spark-orbit" aria-hidden="true"><span class="absolute left-1/2 top-0 size-1/5 -translate-x-1/2 bg-brand spinner-spark-star spinner-spark-sat"></span></span>
     {:else if variant === 'heartbeat'}
       <span class={ ringClass } aria-hidden="true"></span>
@@ -76,7 +76,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // a `--i` custom property, the SVG dash maths, the star clip-path). It rides with
 // this file on purpose: `puzzle add piece spinner` then brings its animations
 // with it, even into an app whose pieces.css predates this piece. The rules sit
-// in `@layer components`, so any utility you pass in `class` still wins.
+// in `@layer components`, so a utility you pass in `class` wins — except on a
+// property the animation drives (the dots root's opacity, the snap root's
+// rotate), which the running animation owns. Every colour class here uses a
+// token the 0.7 theme already had, so an older pieces.css renders it fully.
+// All roots are `align-middle`, so every variant sits on the same line in text.
 // Under prefers-reduced-motion every variant (ring included) drops its motion
 // for Tailwind's slow opacity pulse and holds a static, still-busy pose.
 //
@@ -88,28 +92,28 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const VARIANTS = ['ring', 'ticks', 'trace', 'dots', 'snap', 'spark', 'heartbeat'];
 const SIZE = { sm: 'size-4', md: 'size-6', lg: 'size-10' };
 
-// ring — byte-for-byte the classes the piece shipped before variants existed,
-// plus the reduced-motion pulse.
-const RING = 'inline-block animate-spin rounded-full border-2 border-border border-t-brand motion-reduce:animate-pulse';
+// ring — the classes the piece shipped before variants existed, plus
+// align-middle and the reduced-motion pulse.
+const RING = 'inline-block align-middle animate-spin rounded-full border-2 border-border border-t-brand motion-reduce:animate-pulse';
 
-const TICKS = 'relative inline-block motion-reduce:animate-pulse';
+const TICKS = 'relative inline-block align-middle motion-reduce:animate-pulse';
 const TICK = 'absolute left-1/2 top-0 h-3/10 w-1/8 -translate-x-1/2 origin-bottom rounded-full bg-current spinner-tick';
 
-const TRACE = 'inline-block motion-reduce:animate-pulse';
+const TRACE = 'inline-block align-middle motion-reduce:animate-pulse';
 // user units per 2px: the 24-unit viewBox drawn at 16 / 24 / 40px
 const TRACE_STROKE = { sm: 3, md: 2, lg: 1.2 };
 
-const DOTS = 'inline-flex items-center justify-center spinner-dots motion-reduce:animate-pulse';
+const DOTS = 'inline-flex align-middle items-center justify-center spinner-dots motion-reduce:animate-pulse';
 const DOTS_SIZE = { sm: 'h-4 gap-0.5', md: 'h-6 gap-1', lg: 'h-10 gap-1.5' };
 const DOT_SIZE = { sm: 'size-1', md: 'size-1.5', lg: 'size-2.5' };
 
-const SNAP = 'inline-grid grid-cols-2 spinner-snap motion-reduce:animate-pulse';
+const SNAP = 'inline-grid align-middle grid-cols-2 spinner-snap motion-reduce:animate-pulse';
 const SNAP_SIZE = { sm: 'gap-px p-0.5', md: 'gap-0.5 p-1', lg: 'gap-1 p-1.5' };
 const TILE_ROUND = { sm: 'rounded-xs', md: 'rounded-xs', lg: 'rounded-sm' };
 
-const SPARK = 'relative inline-block motion-reduce:animate-pulse';
+const SPARK = 'relative inline-block align-middle motion-reduce:animate-pulse';
 
-const BEAT = 'relative inline-grid place-items-center motion-reduce:animate-pulse';
+const BEAT = 'relative inline-grid align-middle place-items-center motion-reduce:animate-pulse';
 const BEAT_DOT = { sm: 'size-1.5', md: 'size-2.5', lg: 'size-4' };
 
 // --i drives every stagger in the <style> block; --x/--y point each snap tile
@@ -167,6 +171,9 @@ export default class Spinner extends PuzzleView {
  * `spinner-`, and a global block needs no per-component stamp. Only what no
  * Tailwind utility can say lives here — keyframes, per-part stagger/rotation
  * from `--i`, SVG dash maths, the star clip-path, and the reduced-motion pose.
+ * The rules sit in `@layer components` (the build appends this block after
+ * Tailwind's output, which declares that layer below utilities), so utilities
+ * in `class` win — except on a property a running animation drives.
  */
 
 /* trace: the segment's head and tail are two animated numbers along the
@@ -203,15 +210,24 @@ export default class Spinner extends PuzzleView {
   }
 
   /* ── trace ──────────────────────────────────────────────────────────── */
+  /* Static fallback: a browser without CSS mod() shows a parked segment, not
+     a finished-looking full outline. */
   .spinner-trace-seg {
-    --spinner-trace-len: mod(var(--spinner-trace-head) - var(--spinner-trace-tail) + 100, 100);
-    stroke-dasharray: calc(var(--spinner-trace-len)) calc(100 - var(--spinner-trace-len));
-    stroke-dashoffset: calc(-1 * var(--spinner-trace-tail));
-    /* one keyframe interval per side, eased: quick on the straights, slow in
-       the corners. The tail runs the same curve a beat behind the head. */
-    animation:
-      spinner-trace-head 2400ms cubic-bezier(0.65, 0, 0.35, 1) -200ms infinite,
-      spinner-trace-tail 2400ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    stroke-dasharray: 16 84;
+  }
+  @supports (width: mod(1px, 1px)) {
+    .spinner-trace-seg {
+      /* head − tail, plus 7 so the segment never shrinks below a short dash
+         in the corners; the dash starts 7 behind the tail to match. */
+      --spinner-trace-len: calc(mod(var(--spinner-trace-head) - var(--spinner-trace-tail) + 100, 100) + 7);
+      stroke-dasharray: calc(var(--spinner-trace-len)) calc(100 - var(--spinner-trace-len));
+      stroke-dashoffset: calc(7 - var(--spinner-trace-tail));
+      /* one keyframe interval per side, eased: quick on the straights, slow
+         in the corners. The tail runs the same curve a beat behind the head. */
+      animation:
+        spinner-trace-head 2400ms cubic-bezier(0.65, 0, 0.35, 1) -260ms infinite,
+        spinner-trace-tail 2400ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    }
   }
   /* The path starts at the top centre and runs clockwise, so 12.5 / 37.5 /
      62.5 / 87.5 are the four corner midpoints. */
@@ -351,8 +367,9 @@ export default class Spinner extends PuzzleView {
   }
 
   /* ── reduced motion ─────────────────────────────────────────────────── */
-  /* The root pulses (motion-reduce:animate-pulse in the markup); the parts
-     stop and hold a pose that still reads as busy. */
+  /* The root pulses (motion-reduce:animate-pulse in the markup — a utility,
+     so it outranks this layer's root animations); the parts stop and hold a
+     pose that still reads as busy. */
   @media (prefers-reduced-motion: reduce) {
     .spinner-tick,
     .spinner-trace-seg,

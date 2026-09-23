@@ -69,6 +69,34 @@ for (const { name, file } of PIECES) {
   });
 }
 
+// The --color-* names the 0.7.0 pieces.css declared (git show
+// origin/release/0.7.0:packages/puzzle-pieces/registry/theme/pieces.css). These
+// pieces carry their own motion CSS into apps whose pieces.css `puzzle add` will
+// never rewrite, so every colour they use must already exist there.
+const THEME_0_7_COLORS = new Set(
+  'body border-strong border brand-dark brand-ink brand-tint brand chart-1 chart-2 chart-3 chart-4 chart-5 chart-6 chart-7 chart-8 danger-dark danger-ink danger-tint danger faint ink muted page ring success-tint success surface-sunken surface warning-tint warning'.split(
+    ' '
+  )
+);
+
+test('loading pieces use only colour tokens the 0.7.0 theme already had', async () => {
+  const theme = await readText('../registry/theme/pieces.css');
+  const current = new Set([...theme.matchAll(/--color-([a-z0-9-]+):/g)].map((m) => m[1]));
+  for (const { name, file } of PIECES) {
+    const source = await readText(`../registry/ui/${name}/${file}`);
+    const used = new Set();
+    // utility suffixes (after an optional variant and a colour-taking prefix)
+    for (const m of source.matchAll(/(?:^|[\s'"`:])(?:[a-z-]+:)*(?:bg|text|border(?:-[trblxy])?|stroke|fill|from|via|to|outline|ring|decoration|shadow)-([a-z0-9-]+)(?:\/\d+)?(?=[\s'"`])/g)) {
+      if (current.has(m[1])) used.add(m[1]);
+    }
+    for (const m of source.matchAll(/var\(--color-([a-z0-9-]+)\)/g)) used.add(m[1]);
+    assert.ok(used.size > 0, `${file}: found no colour tokens — the scan is broken`);
+    for (const token of used) {
+      assert.ok(THEME_0_7_COLORS.has(token), `${file} uses --color-${token}, which a 0.7 pieces.css does not declare`);
+    }
+  }
+});
+
 test('spinner: ring is the default and keeps its original classes', async () => {
   const source = await readText('../registry/ui/spinner/Spinner.pzl');
   assert.match(source, /VARIANTS\.includes\(props\.variant\) \? props\.variant : 'ring'/);

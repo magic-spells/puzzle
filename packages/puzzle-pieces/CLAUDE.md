@@ -237,8 +237,11 @@ CLI — it is unrelated and must not be bumped along with the release.
   clip-paths have no utility form, and keyframes in `theme/pieces.css` would never reach
   an app whose pieces.css predates the piece (the CLI copies the theme only when it is
   missing). So the block rides in the piece: global, every name prefixed with the piece
-  name, wrapped in `@layer components` so utilities passed in `class` still win, and
-  with a `prefers-reduced-motion` section. Layout, size and colour stay utilities.
+  name, wrapped in `@layer components` (it holds because collected component CSS is
+  appended after Tailwind's output), with `@property` rules outside the layer and a
+  `prefers-reduced-motion` section. Utilities in `class` win except on properties the
+  animation drives. Layout, size and colour stay utilities — and only on tokens older
+  shipped themes already have, since `puzzle add` never rewrites an existing pieces.css.
   Note `@apply` does NOT work inside `<style>` — Tailwind never processes that text, so
   the rule survives literally into the bundle and the browser silently drops it. Raw
   properties and `var(--…)` are fine.
