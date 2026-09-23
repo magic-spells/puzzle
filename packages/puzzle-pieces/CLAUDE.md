@@ -233,8 +233,10 @@ CLI — it is unrelated and must not be bumped along with the release.
   independent of the stamp). Reach for `<style>` ONLY when class names are machine-
   generated; anything you can express as a utility must stay a utility.
   **The second sanctioned exception is CSS-only motion** (`spinner`, `shimmer-text`,
-  0.8.0): keyframes, per-part stagger from a `--i` custom property, SVG dash maths and
-  clip-paths have no utility form, and keyframes in `theme/pieces.css` would never reach
+  `hamburger`, 0.8.0): keyframes, per-part stagger from a `--i` custom property, SVG
+  dash maths, clip-paths and per-property transition delays (hamburger's two-phase
+  bars: the closed and open rules swap which of `translate`/`rotate` waits) have no
+  utility form, and keyframes in `theme/pieces.css` would never reach
   an app whose pieces.css predates the piece (the CLI copies the theme only when it is
   missing). So the block rides in the piece: global, every name prefixed with the piece
   name, wrapped in `@layer components` (it holds because collected component CSS is

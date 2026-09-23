@@ -1,0 +1,234 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Hamburger</h1>
+        <p class="mt-2 text-body">
+          A menu button whose three bars fold into an X, in three motions, all CSS. The root is a real
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">button</code>
+          carrying <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">aria-expanded</code>,
+          and it manages its own state until you hand it an
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">open</code> prop.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="grid w-full max-w-md grid-cols-3 gap-6">
+          {#for v in variants}
+            <div class="flex flex-col items-center gap-3">
+              <Hamburger variant={ v.name } size="lg" label={ v.label }/>
+              <span class="font-mono text-code text-muted">{ v.name }</span>
+            </div>
+          {/for}
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction). The
+          transitions travel inside the piece's own style block, so there is no stylesheet to import.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <section id="variants" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Variants</h2>
+        <dl class="grid gap-y-5">
+          {#for v in variants}
+            <div class="flex items-start gap-4">
+              <dt class="shrink-0">
+                <Hamburger variant={ v.name } label={ v.label }/>
+              </dt>
+              <dd class="pt-2 text-sm text-body">
+                <span class="font-mono text-code text-ink">{ v.name }</span>
+                <span class="text-muted"> — </span>{ v.blurb }
+              </dd>
+            </div>
+          {/for}
+        </dl>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes } tall={ false }>
+          <div class="grid w-full max-w-sm grid-cols-4 items-center gap-x-6 gap-y-5">
+            <span></span>
+            <span class="text-center font-mono text-code text-muted">sm</span>
+            <span class="text-center font-mono text-code text-muted">md</span>
+            <span class="text-center font-mono text-code text-muted">lg</span>
+            {#for row in variants}
+              <div class="contents">
+                <span class="font-mono text-code text-muted">{ row.name }</span>
+                <div class="flex justify-center"><Hamburger variant={ row.name } size="sm" label={ row.label }/></div>
+                <div class="flex justify-center"><Hamburger variant={ row.name } size="md" label={ row.label }/></div>
+                <div class="flex justify-center"><Hamburger variant={ row.name } size="lg" label={ row.label }/></div>
+              </div>
+            {/for}
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="controlled" title="Driving a menu" code={ codeControlled }>
+          <div class="w-full max-w-sm overflow-clip rounded-xl border border-border bg-surface">
+            <div class="flex items-center justify-between border-b border-border px-4 py-2">
+              <span class="text-sm font-semibold text-ink">Acme</span>
+              <Hamburger open={ navOpen } controls="hamburger-demo-nav" label="Site menu" @change={ setNavOpen }/>
+            </div>
+            <nav id="hamburger-demo-nav" class="px-2 py-2" hidden={ navHidden }>
+              <a href="#controlled" class="block rounded-lg px-3 py-2 text-sm text-body hover:bg-surface-sunken hover:text-ink">Product</a>
+              <a href="#controlled" class="block rounded-lg px-3 py-2 text-sm text-body hover:bg-surface-sunken hover:text-ink">Pricing</a>
+              <a href="#controlled" class="block rounded-lg px-3 py-2 text-sm text-body hover:bg-surface-sunken hover:text-ink">Docs</a>
+            </nav>
+            <p class="border-t border-border px-4 py-2 font-mono text-code text-muted">aria-expanded="{ navExpanded }"</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="no-animation" title="No animation" code={ codeNoAnimate } tall={ false }>
+          <div class="flex items-center gap-8">
+            {#for v in variants}
+              <div class="flex flex-col items-center gap-3">
+                <Hamburger variant={ v.name } animate={ false } label={ v.label }/>
+                <span class="font-mono text-code text-muted">{ v.name }</span>
+              </div>
+            {/for}
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="color" title="Color" code={ codeColor } tall={ false }>
+          <div class="flex flex-wrap items-center justify-center gap-6">
+            <Hamburger class="text-muted" label="Menu"/>
+            <Hamburger class="text-brand" variant="twist" label="Menu"/>
+            <div class="rounded-xl bg-brand p-2">
+              <Hamburger class="text-brand-ink hover:bg-brand-dark" variant="slide" label="Menu"/>
+            </div>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility and motion</h2>
+        <p class="mb-3 text-sm text-body">
+          The root is a native button, so Enter and Space toggle it and it takes focus in order. It
+          carries <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">aria-expanded</code>
+          and, when you pass <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">controls</code>,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">aria-controls</code>
+          pointing at the menu it opens. The <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">label</code>
+          (default “Menu”) stays the same in both states — aria-expanded already says which one it is in.
+          The three bars are aria-hidden.
+        </p>
+        <p class="text-sm text-body">
+          Under <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">prefers-reduced-motion: reduce</code>
+          there are no transitions at all: the icon swaps between the bars and the X instantly, exactly
+          as it does with <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">{ 'animate={ false }' }</code>.
+        </p>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Hamburger from '@/components/ui/Hamburger.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for Hamburger — follows the Button exemplar shape (header → hero
+// ExampleBox → Installation → titled example sections → Toc).
+const installCmd = 'puzzle add piece hamburger';
+const usageImport = `import Hamburger from '@/components/ui/Hamburger.pzl';`;
+const usageMarkup = `<Hamburger/>
+<Hamburger variant="twist" open={ menuOpen } controls="site-nav" @change={ setMenuOpen }/>`;
+
+const VARIANTS = [
+  { name: 'converge', label: 'Menu (converge)', blurb: 'the default. The outer bars slide in to the middle one, then turn into the X; closing unturns first, then spreads.' },
+  { name: 'twist', label: 'Menu (twist)', blurb: 'the same two phases, but the turn keeps going for half a spin before it settles on the X.' },
+  { name: 'slide', label: 'Menu (slide)', blurb: 'one phase: the middle bar slides away as it fades while the outer bars move in and pivot, all at once.' },
+];
+
+const codeHero = `<Hamburger/>                      <!-- converge -->
+<Hamburger variant="twist"/>
+<Hamburger variant="slide"/>`;
+
+const codeSizes = `<Hamburger size="sm"/>   <!-- 32px button -->
+<Hamburger size="md"/>   <!-- 40px, the default -->
+<Hamburger size="lg"/>   <!-- 48px -->`;
+
+const codeControlled = `<Hamburger
+  open={ navOpen }
+  controls="site-nav"
+  label="Site menu"
+  @change={ setNavOpen }/>
+
+<nav id="site-nav" hidden={ !navOpen }>…</nav>
+
+// in the view
+events = {
+  setNavOpen: (next) => {
+    this.setData({ navOpen: next });
+    this.refresh();
+  },
+};`;
+
+const codeNoAnimate = `<!-- swaps between the bars and the X with no transition -->
+<Hamburger animate={ false }/>`;
+
+const codeColor = `<!-- the bars paint in currentColor; the default is text-ink -->
+<Hamburger class="text-muted"/>
+<Hamburger class="text-brand" variant="twist"/>
+
+<div class="rounded-xl bg-brand p-2">
+  <Hamburger class="text-brand-ink hover:bg-brand-dark" variant="slide"/>
+</div>`;
+
+export default class HamburgerDoc extends PuzzleView {
+  created() {
+    this.setData({ navOpen: false });
+  }
+
+  data(params, props) {
+    const state = this.getData();
+    return {
+      ...state,
+      navHidden: !state.navOpen,
+      navExpanded: state.navOpen ? 'true' : 'false',
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeSizes,
+      codeControlled,
+      codeNoAnimate,
+      codeColor,
+      variants: VARIANTS,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Variants', href: '#variants' },
+        { label: 'Sizes', href: '#sizes' },
+        { label: 'Driving a menu', href: '#controlled' },
+        { label: 'No animation', href: '#no-animation' },
+        { label: 'Color', href: '#color' },
+        { label: 'Accessibility and motion', href: '#accessibility' },
+      ],
+    };
+  }
+
+  events = {
+    setNavOpen: (next) => {
+      this.setData({ navOpen: next });
+      this.refresh();
+    },
+  };
+}
+</script>

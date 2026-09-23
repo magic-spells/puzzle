@@ -1,0 +1,8 @@
+{
+  "name": "hamburger",
+  "description": "Menu button whose three bars fold into an X — converge, twist or slide, CSS-only two-phase motion on the individual translate/rotate properties, aria-expanded/aria-controls, optional-controlled open, an animate={false} instant swap, and bars in currentColor at sm/md/lg",
+  "files": ["Hamburger.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

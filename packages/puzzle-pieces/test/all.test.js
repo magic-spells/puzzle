@@ -24,3 +24,4 @@ import './split-panel-snap.test.js';
 import './snap-echo.test.js';
 import './registry-deps.test.js';
 import './loading-pieces.test.js';
+import './hamburger.test.js';
