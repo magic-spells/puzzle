@@ -4,7 +4,7 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Hamburger</h1>
         <p class="mt-2 text-body">
-          A menu button whose three bars fold into an X, in three motions, all CSS. The root is a real
+          A menu button whose three bars fold into an X, in two motions, all CSS. The root is a real
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">button</code>
           carrying <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">aria-expanded</code>,
           and it manages its own state until you hand it an
@@ -107,7 +107,7 @@
             <Hamburger class="text-muted" label="Menu"/>
             <Hamburger class="text-brand" variant="twist" label="Menu"/>
             <div class="rounded-xl bg-brand p-2">
-              <Hamburger class="text-brand-ink hover:bg-brand-dark" variant="slide" label="Menu"/>
+              <Hamburger class="text-brand-ink hover:bg-brand-dark" label="Menu"/>
             </div>
           </div>
         </ExampleBox>
@@ -153,12 +153,10 @@ const usageMarkup = `<Hamburger/>
 const VARIANTS = [
   { name: 'converge', label: 'Menu (converge)', blurb: 'the default. The outer bars slide in to the middle one, then turn into the X; closing unturns first, then spreads.' },
   { name: 'twist', label: 'Menu (twist)', blurb: 'the same two phases, but the turn keeps going for half a spin before it settles on the X.' },
-  { name: 'slide', label: 'Menu (slide)', blurb: 'one phase: the middle bar slides away as it fades while the outer bars move in and pivot, all at once.' },
 ];
 
 const codeHero = `<Hamburger/>                      <!-- converge -->
-<Hamburger variant="twist"/>
-<Hamburger variant="slide"/>`;
+<Hamburger variant="twist"/>`;
 
 const codeSizes = `<Hamburger size="sm"/>   <!-- 32px button -->
 <Hamburger size="md"/>   <!-- 40px, the default -->
@@ -183,12 +181,12 @@ events = {
 const codeNoAnimate = `<!-- swaps between the bars and the X with no transition -->
 <Hamburger animate={ false }/>`;
 
-const codeColor = `<!-- the bars paint in currentColor; the default is text-ink -->
+const codeColor = `<!-- the bars paint in currentColor, inherited from the parent -->
 <Hamburger class="text-muted"/>
 <Hamburger class="text-brand" variant="twist"/>
 
 <div class="rounded-xl bg-brand p-2">
-  <Hamburger class="text-brand-ink hover:bg-brand-dark" variant="slide"/>
+  <Hamburger class="text-brand-ink hover:bg-brand-dark"/>
 </div>`;
 
 export default class HamburgerDoc extends PuzzleView {

@@ -1,10 +1,10 @@
 ---
-name: Hamburger — menu button with converge, twist and slide motion
+name: Hamburger — menu button with converge and twist motion
 status: built
 framework: puzzle
 props:
   - name: variant
-    type: '''converge'' | ''twist'' | ''slide'''
+    type: '''converge'' | ''twist'''
   - name: open
     type: boolean (optional-controlled)
   - name: animate
@@ -22,7 +22,6 @@ props:
 variants:
   - converge
   - twist
-  - slide
 connections:
   - DECISION-CSS-ONLY-MOTION
   - DOC-REGISTRY
@@ -36,10 +35,11 @@ The original library draws the top and bottom bars as `::before`/`::after` of th
 
 ## Motion
 
-- Each bar moves with the individual `translate` and `rotate` properties, never `transform`, so each property has its own duration, delay and easing. The two-phase variants are just the closed and open rules swapping which property waits: open = translate in, then rotate; close = unrotate, then spread.
+
+- Each bar moves with the individual `translate` and `rotate` properties, never `transform`, so each property has its own duration, delay and easing. Both variants are two-phase: the closed and open rules swap which property waits — open = translate in, then rotate; close = unrotate, then spread.
 - **converge** (default): slide in 140ms ease-out, turn 240ms spring; close unturns 150ms, spreads 140ms.
 - **twist**: same, but the turn runs to 225° / 135° over 300ms, so the X lands after half a spin; close unturns 220ms.
-- **slide**: one phase, 250ms; middle bar translates −50% sideways and fades over 180ms.
+- A third, single-phase `slide` variant (middle bar slid out sideways while fading, everything at once) shipped in PR #148 and was removed on release/0.8.0 before release at Cory's call — two motions are enough.
 - The spring (ζ 0.7, ~4.6% overshoot, 21-point `linear()`) is used only for turning INTO the X. On close it overshot past 0° just as the bars spread and looked sloppy, so the unturn uses `cubic-bezier(0.4, 0, 0.2, 1)`.
 - All timings are `--hamburger-*` custom properties set per variant; geometry is bar width / thickness / gap per size, every offset derived by calc().
 

@@ -35,8 +35,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //             meet. Closing runs it backwards — unturn first, then spread.
 //   twist     the same two phases, but the turn carries on round to 225° / 135°,
 //             so the X arrives after half a spin. Reverses on close.
-//   slide     one phase, everything at once: the middle bar slides out to the
-//             left as it fades while the outer bars move in and pivot.
 //
 // OPTIONAL-CONTROLLED (DatePicker's shape). Pass `open` and the parent owns the
 // state: a click fires @change(next) and waits for the parent to flip `open`.
@@ -44,7 +42,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // <Hamburger/> works.
 //
 // Props
-//   variant   'converge' (default) | 'twist' | 'slide'
+//   variant   'converge' (default) | 'twist'
 //   open      boolean, optional-controlled (see above)
 //   animate   default true; false swaps the icon instantly with no transition
 //   size      'sm' | 'md' (default) | 'lg' — a 32 / 40 / 48px square button
@@ -73,7 +71,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // offset is derived from them. Transitions exist only under
 // prefers-reduced-motion: no-preference and animate={true}; otherwise the icon
 // swaps instantly. aria-expanded is emitted in STRING form ('true' | 'false').
-const VARIANTS = ['converge', 'twist', 'slide'];
+const VARIANTS = ['converge', 'twist'];
 const SIZE = { sm: 'size-8', md: 'size-10', lg: 'size-12' };
 
 const BASE =
@@ -181,14 +179,10 @@ export default class Hamburger extends PuzzleView {
   .hamburger-button {
     --hamburger-top-angle: 45deg;
     --hamburger-bottom-angle: -45deg;
-    --hamburger-mid-exit: 0 0;
   }
   .hamburger-button[data-variant='twist'] {
     --hamburger-top-angle: 225deg;
     --hamburger-bottom-angle: 135deg;
-  }
-  .hamburger-button[data-variant='slide'] {
-    --hamburger-mid-exit: -50% 0;
   }
   .hamburger-button[aria-expanded='true'] .hamburger-bar-top {
     translate: 0 0;
@@ -199,7 +193,6 @@ export default class Hamburger extends PuzzleView {
     rotate: var(--hamburger-bottom-angle);
   }
   .hamburger-button[aria-expanded='true'] .hamburger-bar-mid {
-    translate: var(--hamburger-mid-exit);
     opacity: 0;
   }
 
@@ -228,14 +221,6 @@ export default class Hamburger extends PuzzleView {
   .hamburger-button[data-variant='twist'] {
     --hamburger-turn: 300ms;
     --hamburger-unturn: 220ms;
-  }
-  .hamburger-button[data-variant='slide'] {
-    --hamburger-move: 250ms;
-    --hamburger-turn: 250ms;
-    --hamburger-unturn: 250ms;
-    --hamburger-fade: 180ms;
-    --hamburger-lag-open: 0s;
-    --hamburger-lag-close: 0s;
   }
 
   /* ── motion (opt-in) ────────────────────────────────────────────────── */
