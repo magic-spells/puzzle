@@ -72,10 +72,12 @@
       type="button"
       data-docs-pill
       class="pointer-events-auto flex h-11 min-w-0 max-w-full cursor-pointer items-center gap-2 border border-border bg-surface-raised px-4 text-sm font-medium text-ink shadow-dock outline-ring focus-visible:outline-2 focus-visible:outline-offset-2"
-      aria-label="Docs menu, current page: { currentTitle }"
       aria-haspopup="dialog"
       aria-expanded={ mobileNavOpen ? 'true' : 'false' }
       @click={ openMobileNav }>
+      <!-- The accessible name is built from the visible text (WCAG 2.5.3), with
+           the button's purpose prepended for screen readers only. -->
+      <span class="sr-only">Docs menu, current page:</span>
       {#if currentGroup}
         <span class="shrink-0 text-muted">{ currentGroup }</span>
         <span class="shrink-0 text-faint" aria-hidden="true">·</span>
@@ -97,8 +99,11 @@
        would stay up over the page the reader just asked for.
        `breakpoint` 1024 keeps the phone profile (snap points, card) on every
        width the pill shows at — the pill is lg:hidden, and the default 768
-       would turn a tablet's sheet into a centred dialog. `maxDisplayWidth`
-       1023 closes an open sheet when a resize reaches the rail's breakpoint.
+       would turn a tablet's sheet into a centred dialog. Deliberately NO
+       `maxDisplayWidth`: `lg:hidden` is fractional and innerWidth rounds, so
+       a zoomed 1023.5px viewport shows the pill while a 1023 ceiling refuses
+       show() silently. A sheet left open across 1024 just morphs to the
+       desktop profile in place and still closes normally.
        The switcher rides in the sheet's foot so phones can pick a theme too.
        backdropClass is the shell's frosted-glass scrim, shared with the
        SearchDialog (see its header comment). -->
@@ -110,7 +115,6 @@
     breakpoint="1024"
     snapPoints="65dvh 92dvh"
     initialSnap="0"
-    maxDisplayWidth="1023"
     morphTrigger="[data-docs-pill]"
     backdropClass="bg-scrim/60 backdrop-blur-sm backdrop-saturate-150"
     @show={ revealActiveLink }
@@ -216,7 +220,9 @@ const NAV_ITEMS = [
 // does not list (a typo'd hash) falls back to the neutral "Menu".
 const CURRENT = new Map([
   ...GETTING_STARTED.map((item) => [item.path, { group: '', title: item.title }]),
-  ...SCHEME_PANELS.map((item) => [item.path, { group: 'Schemes', title: item.title }]),
+  // "Themes", not "Schemes": the pill names the group the sheet's list files
+  // the page under, and SideNav lists the scheme panels in its Themes group.
+  ...SCHEME_PANELS.map((item) => [item.path, { group: 'Themes', title: item.title }]),
   ...THEMES.map((item) => [item.path, { group: 'Themes', title: item.title }]),
   ...SECTIONS.flatMap((section) =>
     section.items.map((item) => [item.path, { group: section.label, title: item.title }])
@@ -246,11 +252,31 @@ export default class DefaultLayout extends PuzzleView {
     };
   }
 
+  // The docs Sheet's <dialog-panel>, and whether it is actually up. `open` is
+  // only a request: the sheet can refuse it (modules still loading, a display
+  // limit), and it reports nothing when it does.
+  sheetIsOpen() {
+    return !!this.element?.querySelector('[data-docs-drawer]')?.closest('dialog-panel')?.isOpen;
+  }
+
+  setMobileNav(open) {
+    this.setData({ mobileNavOpen: open });
+    this.refresh();
+  }
+
   events = {
+    // `open` is edge-triggered, so a `true` the sheet never acted on would
+    // swallow every later press. Re-arm the edge when state says open but the
+    // sheet is not, and after asking, drop a request the sheet refused.
     openMobileNav: () => {
-      if (this.getData().mobileNavOpen) return;
-      this.setData({ mobileNavOpen: true });
-      this.refresh();
+      if (this.getData().mobileNavOpen) {
+        if (this.sheetIsOpen()) return;
+        this.setMobileNav(false);
+      }
+      this.setMobileNav(true);
+      requestAnimationFrame(() => {
+        if (this.getData().mobileNavOpen && !this.sheetIsOpen()) this.setMobileNav(false);
+      });
     },
     // The sheet closed itself (Escape, scrim, swipe, a link) — resync so the
     // next pill press is a fresh open edge.
@@ -259,9 +285,12 @@ export default class DefaultLayout extends PuzzleView {
       this.setData({ mobileNavOpen: false });
       this.refresh();
     },
-    // Any link in the sheet closes it; the router still follows the href.
+    // Any link in the sheet closes it; the router still follows the href. A
+    // modified or non-primary click opens a new tab and leaves this page where
+    // it is, so the sheet stays up.
     onDrawerClick: (event) => {
       if (!event.target.closest('a[href]')) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       this.setData({ mobileNavOpen: false });
       this.refresh();
     },

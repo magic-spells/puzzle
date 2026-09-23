@@ -23,6 +23,21 @@ notes:
       morphs therefore carry a literal 22px (styles.css "Morph endpoints"). var()-based radii are
       fine because the engine reads computed values.
     sha: eaa3efa
+  - kind: state
+    text: >-
+      Supersedes part of the note above (2026-09-23 follow-up). The pill Sheet no longer sets
+      maxDisplayWidth. `lg:hidden` is fractional and innerWidth rounds, so a 1023.5px viewport
+      showed the pill while a 1023 ceiling silently refused show(). openMobileNav now re-arms a
+      stale `true` and drops a request the sheet refused on the next frame. Scheme pages read
+      "Themes · Dim" on the pill. The pill's accessible name is its visible text plus an sr-only
+      "Docs menu, current page:" prefix. Grain: the old bg-noise-dark-20.png was near-black
+      (luminance 0–30) at a flat 20% alpha, which reads as a uniform veil with about 0.9/255
+      measured grain contrast, i.e. invisible. It is replaced by magicspells.io's bg-noise.png
+      (black-and-white at 3% alpha), painted at its native 100px as TWO offset layers (about 3.2/255
+      in every mode). GOTCHA upstream: @magic-spells/sheet's dist/sheet.css sets only
+      `-webkit-backdrop-filter` on the overlay, so a Sheet without a backdrop-blur in backdropClass
+      gets no blur in Chromium or Firefox. The shell's Sheet passes backdrop-blur-sm through
+      backdropClass.
 ---
 
 # The demo docs-site app

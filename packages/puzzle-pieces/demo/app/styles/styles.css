@@ -195,12 +195,18 @@
     0 2px 6px -1px var(--color-shadow-drop),
     0 10px 24px -6px var(--color-shadow-drop),
     0 28px 64px -12px var(--color-shadow-popover);
-  /* Demo-local grain tile, served from app/public at the site root. The PNG
-     is authored at 2x (200×200) and painted at 100×100 so it stays crisp on
-     retina displays; both land on every <dialog-backdrop> through the rule
-     below the family imports. Deliberately NOT in registry/theme/pieces.css —
-     the asset ships with the docs site, not with the registry. */
-  --background-image-noise: url('/bg-noise-dark-20.png');
+  /* Demo-local grain tile, served from app/public at the site root — the same
+     bg-noise.png magicspells.io lays on its frosted Sheet scrim. It is
+     black-AND-white salt-and-pepper (full 0–255 luminance) at a flat 3%
+     alpha, so it reads on a light scrim and a dark one alike. It is painted
+     at its native 100×100 — at 50×50 each grain averages with its
+     neighbours and the texture halves. (The previous
+     bg-noise-dark-20.png was near-black grain — luminance 0–30 — at a flat
+     20% alpha: a uniform dark veil with ~2% grain contrast, invisible in
+     every mode.) Lands on every <dialog-backdrop> through the rule below the
+     family imports. Deliberately NOT in registry/theme/pieces.css — the asset
+     ships with the docs site, not with the registry. */
+  --background-image-noise: url('/bg-noise.png');
   --background-size-noise: 100px 100px;
 }
 
@@ -265,8 +271,15 @@
  * on the Dialog. The registry pieces are untouched — a consuming app that wants
  * grain adds the same three lines.
  */
+/*
+ * TWO passes of the same tile, the second offset off the tile grid: one pass at
+ * 3% reads as a faint haze (measured grain contrast ~2.3/255 on the scrim), two
+ * reach ~3.2 in light, medium and dark alike — enough to read as frosted glass
+ * without a new asset. The offset keeps the passes from landing grain-on-grain.
+ */
 dialog-backdrop {
-  background-image: var(--background-image-noise);
+  background-image: var(--background-image-noise), var(--background-image-noise);
+  background-position: 0 0, 50px 37px;
   background-repeat: repeat;
   background-size: var(--background-size-noise);
 }
