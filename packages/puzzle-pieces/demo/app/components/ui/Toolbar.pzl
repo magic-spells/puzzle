@@ -91,8 +91,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const ROOT_BASE =
   'inline-flex rounded-lg border border-border bg-surface p-1';
 
+// Horizontal WRAPS: a toolbar wider than its container (a formatting bar on a
+// phone) drops its overflow to a second row instead of running past the edge.
+// Roving focus follows DOM order, so arrow keys are unaffected by the wrap.
 const ORIENTATION = {
-  horizontal: 'flex-row items-center gap-1',
+  horizontal: 'flex-row flex-wrap items-center gap-1',
   vertical: 'flex-col items-stretch gap-1',
 };
 

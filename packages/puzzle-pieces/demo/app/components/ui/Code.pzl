@@ -204,8 +204,11 @@ export default class Code extends PuzzleView {
       ]
         .filter(Boolean)
         .join(' '),
+      // bg-surface: the buttons float over the scroller, so on a line longer
+      // than the panel (any phone) the code would otherwise run visibly
+      // underneath the icons. The ground matches the panel's own.
       iconBtnClass:
-        'inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-muted ' +
+        'inline-flex cursor-pointer items-center justify-center rounded-md bg-surface p-1.5 text-muted ' +
         'transition-colors hover:bg-surface-sunken hover:text-ink ' +
         'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
     };
