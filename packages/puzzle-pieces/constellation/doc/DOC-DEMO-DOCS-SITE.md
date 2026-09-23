@@ -38,6 +38,14 @@ notes:
       `-webkit-backdrop-filter` on the overlay, so a Sheet without a backdrop-blur in backdropClass
       gets no blur in Chromium or Firefox. The shell's Sheet passes backdrop-blur-sm through
       backdropClass.
+  - kind: decision
+    text: >-
+      SUPERSEDES the earlier bg-noise.png note: the dialog-backdrop grain is
+      demo/app/public/bg-noise-dark-20.png, painted as a SINGLE pass at background-size 100px 100px
+      (the --background-image-noise / --background-size-noise tokens in demo/app/styles/styles.css).
+      This is Cory's explicit choice ("I told you to use bg-noise-dark-20.png"), and it overrides
+      the contrast measurement that motivated the swap. bg-noise.png was removed. Don't reintroduce
+      a second offset layer: a doubled 20% dark tile darkens the scrim.
 ---
 
 # The demo docs-site app
