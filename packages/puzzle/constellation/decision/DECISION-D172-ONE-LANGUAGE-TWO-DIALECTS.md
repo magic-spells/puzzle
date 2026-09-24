@@ -21,6 +21,18 @@ notes:
       shared conformance fixtures. The host-block extension hook is what lets a third party build
       its own dialect. Not scheduled: do it when an outside user asks or when Sites needs the public
       Go module, whichever comes first. The follow-ups in Consequences are the path there.
+  - kind: gotcha
+    text: >-
+      One existing construct already breaks the never-redefine rule: a formatter pipe inside an
+      UNQUOTED attribute value. In Sites, `title={ price | money }` runs the `money` formatter
+      (Sites lifts it into SitesFormattedAttr). In PuzzleKit the whole brace body is pasted as
+      JavaScript, so the same source compiles to a bitwise OR, `__d.price | __d.money` (verified
+      with pzlc on 2026-09-23). Text interpolation `{ price | money }` and quoted `title="{ price |
+      money }"` agree in both dialects. Proposed resolution: make the pipe-as-formatter reading
+      core, so PuzzleKit splits a top-level `|` in an unquoted attribute into a formatter chain the
+      way Sites does (`||` stays logical OR). That is technically breaking for a bitwise OR in an
+      attribute expression, which is almost certainly a bug wherever it appears today. Needs its own
+      decision when scheduled.
 ---
 
 # D172 — One language, two dialects, one public name
