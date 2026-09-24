@@ -61,6 +61,11 @@ notes:
     text: >-
       2026-09-18 — D171 is taken ([[DECISION-D171-ADD-THEME]], `puzzle add theme <name…>`, built on
       feat/add-theme for 0.8.0). **The next free decision number is D172.**
+  - kind: state
+    text: >-
+      2026-09-23 — D172 is taken ([[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]]: Puzzle is one
+      template language with two dialects, PuzzleKit and Sites; marketed as "Puzzle"; package and
+      CLI names unchanged). **The next free decision number is D173.**
 ---
 
 # Puzzle project map
