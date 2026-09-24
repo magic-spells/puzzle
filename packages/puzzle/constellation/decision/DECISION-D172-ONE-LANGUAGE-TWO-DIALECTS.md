@@ -39,15 +39,19 @@ notes:
 
 ## Context
 
+
 The `.pzl` template grammar now has two hosts. PuzzleKit (the SPA framework in
 this package) compiles it to `PuzzleView` render functions in JavaScript.
 Magic Spells Sites (a separate repo, `magic-spells/sites`) renders `.pzl` theme
 files server-side in Go at request time, using a vendored, pinned copy of
 `compiler/internal/parser`. The two already differ, deliberately:
 
-- **Sites adds:** `{#let}` template variables, top-level `<schema>`,
-  `<SitesHead/>`, and implicit component props. A file's kind comes from its
-  directory, so there is no `<puzzle-view>` wrapper.
+- **Sites adds:** `{#let}` template variables, top-level `<schema>`, layout
+  markers, and implicit component props. A file's kind comes from its
+  directory, so there is no `<puzzle-view>` wrapper. The layout markers are
+  `<SitesHead/>` today; the planned set is `<SiteHead/>` (platform head tags),
+  `<SiteContent/>` (the page body), and `<HeaderGroup/>`/`<FooterGroup/>`
+  (section groups). They replace Sites' current use of `<Slot>` in layouts.
 - **Sites restricts:** expressions are a defined subset evaluated in Go (no
   calls; formatters are the only way to run code). `@event`, `<Portal>` and
   `<Snippet>` are compile errors.
@@ -68,10 +72,10 @@ core that Shopify extends with its own tags and objects.
   (quoted and unquoted), plus the formatter call syntax.
 - `{#if}`/`{:else}`, `{#for}`, `{#case}`, `{#raw}`, `{#svg}`.
 - Components: capitalized tags, dotted family tags, props.
-- `<Children/>` and `<Slot name="…">` with fallback bodies. Both dialects use
-  them. The meaning is shared ("an outlet filled from outside this file"); each
-  host decides what fills it (PuzzleKit: caller content or the route's view;
-  Sites: the page template, section stack or a section group).
+- `<Children/>` and `<Slot name="…">` with fallback bodies: content a caller
+  passes into a component. Both dialects use them for components. PuzzleKit
+  also uses the unnamed `<Slot>` as its router outlet in layouts. Sites
+  layouts use their own markers instead (below).
 - **The core expression language** is the portable subset Sites defines:
   paths, literals, arithmetic, comparison, `&&`/`||`/`??`, ternary.
 
@@ -80,8 +84,15 @@ core that Shopify extends with its own tags and objects.
 | | PuzzleKit | Sites |
 |---|---|---|
 | File structure | `<puzzle-view>`/`<puzzle-layout>`/`<puzzle-skeleton>` wrapper + `<script>` class | No wrapper; the directory decides the kind; top-level `<schema>` |
-| Adds | `@event` + modifiers, `<Portal>`, `<Snippet>`, `ref`/`key`/`flip`/`island`, implicit binding | `{#let}`, `<SitesHead/>`, implicit props |
+| Adds | `@event` + modifiers, `<Portal>`, `<Snippet>`, `ref`/`key`/`flip`/`island`, implicit binding | `{#let}`, layout markers (planned: `<SiteHead/>`, `<SiteContent/>`, `<HeaderGroup/>`, `<FooterGroup/>`), implicit props |
 | Expressions | Full JavaScript (a superset of the core) | The core subset only |
+
+**Markers are not components.** Like `<Slot>` and `<Children>`, a dialect's
+markers are reserved capitalized names that the parser matches before
+component resolution. No theme or app file stands behind them: the host fills
+them with content (Sites: platform head tags, the page body, a section group).
+A component file named after a reserved marker is an error, not a silent
+shadow.
 
 **Architecture: one parser that knows every construct, with per-dialect
 switches.** The shared lexer/parser has every construct from both dialects
@@ -144,7 +155,7 @@ or "Puzzle.js"; puzzlejs.dev is only the address.
   Sites' post-parse rejection of `@event`/`<Portal>`/`<Snippet>` becomes the
   dialect switch being off.
 - **Follow-up: move Sites' syntax into the shared parser behind the Sites
-  switch:** `{#let}`, `<schema>` lifting, `<SitesHead/>`, and the unquoted
+  switch:** `{#let}`, `<schema>` lifting, the layout markers, and the unquoted
   attribute formatter pipe (which becomes core, see the gotcha note). Sites
   then drops its `sitesPatches` entry and the syntax files in its vendored
   copy, keeping only its evaluator and renderer. Later, once the parser is a
