@@ -10,6 +10,17 @@ connections:
   - DECISION-D162-MONOREPO-PACKAGES
   - DECISION-D32-CLI-TOOLING
   - DOC-RELEASE-SURFACE
+notes:
+  - kind: decision
+    text: >-
+      2026-09-23 (Cory) — publishing the core as a standalone language is the intended end state,
+      for people who want to use Puzzle outside PuzzleKit and Sites. It is four artifacts: the core
+      language spec (with the add-or-restrict, never-redefine rule for dialects); the parser as a
+      public Go module; a JS parser package (e.g. `@magic-spells/puzzle-parser`, consolidating the
+      splitter/lexer ports now vendored in `../puzzle-eslint` and `../puzzle-prettier`); and the
+      shared conformance fixtures. The host-block extension hook is what lets a third party build
+      its own dialect. Not scheduled: do it when an outside user asks or when Sites needs the public
+      Go module, whichever comes first. The follow-ups in Consequences are the path there.
 ---
 
 # D172 — One language, two dialects, one public name
