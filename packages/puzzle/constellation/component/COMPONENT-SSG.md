@@ -83,6 +83,12 @@ notes:
       (pre-existing, not D175): the shell plan's `</body>` anchor is the FIRST `</body>` match in
       the shell, so a shell with the text `</body>` inside an HTML comment before the real one gets
       every island and the module script injected inside the comment — the page never boots.
+  - kind: state
+    text: >-
+      D175 item 8 landed: the prerender's build i18n service sets the formatter locale
+      (`setFormatLocale(defaultLocale)`, through the service's apply step) when it loads the default
+      table, so prerendered dates and numbers render in the default locale rather than the build
+      machine's — the earlier note's "pending PR #150" item is done.
 ---
 
 # Static generation runtime

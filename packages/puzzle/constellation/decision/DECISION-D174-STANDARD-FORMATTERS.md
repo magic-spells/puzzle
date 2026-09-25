@@ -1,6 +1,6 @@
 ---
 name: >-
-  D174 — The standard formatter set: 34 names in both hosts, PuzzleKit-only and Sites-only
+  D174 — The standard formatter set: 35 names in both hosts, PuzzleKit-only and Sites-only
   formatters, sanitized raw
 status: built
 connections:
@@ -90,7 +90,7 @@ Sites: `currency` 9, `date` 3, `pluralize` 1, `truncate` 2, `raw` 3, `escape`
 1, `upcase` 1, plus the Sites-only `image_url` 24, `image_tag` 4, `t` 33 and
 `url` 5. No template in any corpus calls a built-in list formatter.
 
-## The standard set (34 names)
+## The standard set (35 names)
 
 Every standard name exists in both hosts with the same arguments and the same
 meaning.
@@ -108,11 +108,20 @@ arguments, expected output) that both hosts run:
 **Locale-rendered (6)**: `date`, `time`, `datetime`, `number_with_delimiter`,
 `compact_number`, `pluralize`. The name, arguments and meaning are standard;
 the exact string is host-rendered, because PuzzleKit uses the browser's
-`Intl` data for the viewer's locale and Sites uses its own Go locale data for
-the site's locale, and the two can differ for the same locale. Each host pins
-its own outputs. Cross-host fixtures pin only what is locale-independent: the
-`iso` date presets, `pluralize`'s word choice, and `number_with_delimiter`
-with an explicit delimiter.
+`Intl` data for the viewer's locale (the app's active locale when it
+configures translations, [[DECISION-D175-TRANSLATIONS]]) and Sites uses its
+own Go locale data for the site's locale, and the two can differ for the same
+locale. Each host pins its own outputs. Cross-host fixtures pin only what is
+locale-independent: the `iso` date presets, `pluralize`'s word choice, and
+`number_with_delimiter` with an explicit delimiter.
+
+**Translation (1)**: `t`, joined by [[DECISION-D175-TRANSLATIONS]] — lookup in
+the active locale then the default, the key itself on a miss, single-pass
+`{name}` placeholders, and CLDR plural entries chosen by `count`. The
+conformance table pins lookup, fallback, substitution and the plural choice;
+`{count}` in a non-`en` locale is host-rendered like the set above. In
+PuzzleKit `t` is not a built-in: the i18n service registers it when the app
+configures translations.
 
 Failure policy outside a formatter's domain is host-defined (D173 V17). The
 value printed after the chain follows D173 V6.
@@ -246,9 +255,9 @@ value printed after the chain follows D173 V6.
   [[DECISION-D79-LINK-FORMATTER]]), `timeago` (needs a clock at render time),
   `in_timezone` (needs the viewer's zone). All three are inherent to a
   browser host.
-- **Sites-only (25):**
-  - Platform-bound (7): `url`, `asset_url`, `menu_link`, `image_url`,
-    `image_srcset`, `image_tag`, `t`.
+- **Sites-only (24):**
+  - Platform-bound (6): `url`, `asset_url`, `menu_link`, `image_url`,
+    `image_srcset`, `image_tag`.
   - Pure (1): `class_map`.
   - List formatters (17): `where`, `reject`, `find`, `sort`, `sort_natural`,
     `map`, `uniq`, `reverse`, `compact`, `first`, `last`, `slice`, `sum`,
@@ -257,8 +266,8 @@ value printed after the chain follows D173 V6.
     Sites keeps their current behavior; as Sites-only names they need no
     cross-host agreement.
 
-Totals: PuzzleKit ships 37 names (34 standard + 3), Sites 59 (34 standard +
-25).
+Totals: PuzzleKit ships 38 names (35 standard + 3), Sites 59 (35 standard +
+24).
 
 ## Removed names
 

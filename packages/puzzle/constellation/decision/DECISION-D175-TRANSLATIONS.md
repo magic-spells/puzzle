@@ -2,7 +2,7 @@
 name: >-
   D175 — Translations: the `t` formatter joins the standard set; one build-filled, hashed locale
   file per language, loaded before the first render
-status: building
+status: built
 connections:
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D173-CORE-SEMANTICS
@@ -79,6 +79,22 @@ notes:
       the brief's defaults: selection order stored → exact → base → same-base configured tag →
       default, storage key `__puzzleLocale`; `defaultLocale`; nested files allowed; no special
       `zero` rule; `currency` locale-independent; route `meta.title` static.
+  - kind: state
+    text: >-
+      Built — supersedes the `building` note above. PR #150 merged into release/0.8.0, and
+      feat/translations was rebased onto it (and onto #151). Item 8 is done:
+      `client-runtime/formatters/locale.js` (`formatLocale`, `setFormatLocale`, `localeNumber` moved
+      from builtins.js), builtins.js threading behind the `__PUZZLE_HAS_I18N__` probe, the service's
+      apply step calling `setFormatLocale` (so the prerender renders in the default locale; the
+      `onLocale` option was dropped as unneeded), and `t`'s `{count}` using `localeNumber`. Item 7's
+      remainder is done: `t` in `STANDARD_FORMATTERS` (35 names) with the shadow warning, and the
+      conformance table's `t` rows (top-level `translations`, per-row `locale`). D174's counts are
+      updated (35 standard, Sites-only 24 with 6 platform-bound, PuzzleKit 38). Deviation for item
+      8: instead of keying every cache by locale, `setFormatLocale` clears `localeNumber`'s
+      per-digit cache and `compact_number`/`timeago` rebuild their single-slot formatter when the
+      slot moves — same result, and an app without i18n keeps its exact code. The only D175 piece
+      left is template-level `t({ … })` coverage, which waits on D173 V8 (feat/core-expressions, PR
+      #152) and sits as a `t.Skip("TODO(V8)")` Go test.
 ---
 
 # D175 — Translations: `'key' | t`, one locale file per language

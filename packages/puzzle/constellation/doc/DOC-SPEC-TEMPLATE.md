@@ -496,6 +496,7 @@ closed stub would silently drop nested members. Without `--family`,
 
 ## 66. Translations: the `t` formatter and `ctx.i18n` (v1.81)
 
+
 Shipped in v1.81 ([[DECISION-D175-TRANSLATIONS]], which holds the rationale and
 rejected alternatives). This section is the contract; the build side is in
 [[DOC-SPEC-BUILD]] and the switch rebuild in [[DOC-SPEC-ROUTER]].
@@ -515,7 +516,9 @@ have `other`; any other object is a namespace. Values are strings, namespaces
 or plural entries; anything else, a duplicated flattened key, or a plural entry
 without `other` is a positioned build error.
 
-**`{ key | t }` and `{ key | t(vars) }`.**
+**`{ key | t }` and `{ key | t(vars) }`.** `t` is one of the 35 standard
+formatter names ([[DECISION-D174-STANDARD-FORMATTERS]]) but not a built-in: the
+i18n service registers it.
 
 - The key is looked up in the active locale's table, which the build has
   already filled from the default locale. A miss prints the key itself — never
@@ -535,7 +538,8 @@ without `other` is a positioned build error.
   `other` with a development warning. There is no special `zero` rule: `zero`
   is used only where the locale's CLDR rules select it.
 - `{count}`, when `count` is a finite number, prints in the active locale's
-  number format; other variables print unformatted.
+  number format — the helper `number_with_delimiter` and `pluralize` share;
+  other variables print unformatted.
 - Output is text: markup inside a translation prints literally.
 - Until object-literal formatter arguments land (D173 V8), pass `vars` as a
   data field (`t(user)`, `t(cart)`) rather than an inline `t({ … })`. The
@@ -545,9 +549,19 @@ without `other` is a positioned build error.
 **The service.** `this.ctx.i18n` / `app.i18n` carry `t(key, vars?)` (the same
 function the formatter calls), `locale`, `locales` (config order),
 `defaultLocale`, and `setLocale(tag)`. The `t` formatter is service-bound like
-`link`: registered at mount only if the app registered no `t` of its own.
-Without `i18n`, a template `t` hits the D43 guard, whose development hint names
-the `i18n` config, and the key prints through.
+`link`: registered at mount only if the app registered no `t` of its own (an
+app `t` wins, with the standard-name shadow warning). Without `i18n`, a
+template `t` hits the D43 guard, whose development hint names the `i18n`
+config, and the key prints through.
+
+**Formatter locale.** With `i18n` configured, the active locale replaces the
+viewer's in every locale-rendered formatter — `date`, `time`, `datetime`,
+`number_with_delimiter`, `compact_number`, the `pluralize` count and
+`timeago`. An explicit `locale` argument to the date family still wins, and
+`currency` stays locale-independent. The locale is one slot per page (two
+mounted apps share it; the last switch wins), set by the service on load and
+on every switch; prerendered pages render dates and numbers in the default
+locale. Without `i18n`, those formatters keep the viewer's locale.
 
 **Locale selection at startup.** (1) the stored choice
 `localStorage.__puzzleLocale`, read inside try/catch and used only if still
@@ -567,9 +581,9 @@ arrive prints the key, with a development warning.
 
 **`setLocale(tag)`.** An unconfigured tag throws a `RangeError` naming the
 configured locales (every build). Otherwise the new file is fetched first; only
-then do the table, `locale` and `<html lang>` switch together, the choice is
-stored (try/catch), and the page rebuilds once at the same location (§ Router:
-the same-location rebuild). A failed fetch rejects and changes nothing.
+then do the table, `locale`, the formatter locale and `<html lang>` switch
+together, the choice is stored (try/catch), and the page rebuilds once at the
+same location ([[DOC-SPEC-ROUTER]]). A failed fetch rejects and changes nothing.
 Overlapping calls resolve last-wins. Called before the first commit, it
 replaces the pending startup load and rebuilds nothing. Store records survive a
 switch; `setData` local state does not. Static output re-assembles and
@@ -577,7 +591,6 @@ re-mounts its page chain instead.
 
 **`<html lang>`** is set to the active locale on load and on every switch.
 
-**Not in v1.81 (future work):** locale-aware date/number formatters (D175
-Formatter locale, after the standard formatter set lands), translated route
-`meta.title` (static by §45), locale URL prefixes, rich-text translations,
-`dir="rtl"`, key types for `puzzle check`.
+**Not in v1.81 (future work):** translated route `meta.title` (static by §45),
+locale URL prefixes, rich-text translations, `dir="rtl"`, key types for
+`puzzle check`.

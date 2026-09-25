@@ -269,7 +269,11 @@ under Changed.
   `navigator.languages` (exact tag, base language, then a configured tag with
   the same base), then the default; the first render always has its strings.
   `--hybrid` and `--static` pages prerender in the default locale and carry its
-  table inline, so a default-locale visitor makes no extra request.
+  table inline, so a default-locale visitor makes no extra request. With
+  translations configured, `date`, `time`, `datetime`, `number_with_delimiter`,
+  `compact_number`, the `pluralize` count and `timeago` render in the active
+  locale instead of the viewer's (an explicit `locale` argument still wins;
+  `currency` is unchanged). `t` joins the standard formatter set (35 names).
   `/testing`'s `mountView` and `createTestApp` take `i18n: { locale, strings }`.
   Without `i18n` configured nothing ships: hello-world and todos are
   byte-identical in raw size. See `examples/i18n` (en, es, pl).

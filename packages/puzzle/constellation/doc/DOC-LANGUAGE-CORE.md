@@ -495,21 +495,26 @@ Template-relevant sections in DOC-SPEC-VIEW are all PuzzleKit: §12 animations,
 
 ## Standard formatters
 
-[[DECISION-D174-STANDARD-FORMATTERS]] fixes the **standard set: 34 names**
+
+[[DECISION-D174-STANDARD-FORMATTERS]] fixes the **standard set: 35 names**
 with the same arguments and meaning in both hosts, pinned for identical output
 by the shared conformance table (`tests/conformance/formatters.json` in
 `packages/puzzle`, which Sites' Go tests are to run too). D174 has each name's
-contract; this table records where each host stands against it.
+contract; this table records where each host stands against it. `t` joined
+the set with [[DECISION-D175-TRANSLATIONS]].
 
 **PuzzleKit implements D174 groups (a) and (g)**: `client-runtime/formatters/builtins.js`
 is the standard set plus `timeago` and `in_timezone`, with the router-backed
-`link` added by the registry (37 names). The one PuzzleKit gap is group (e):
-`raw` and `newline_to_br` still return plain text rather than sanitized markup.
+`link` added by the registry and the service-bound `t` added by the i18n
+service when the app configures translations (38 names). With translations
+configured, the locale-rendered rows follow the app's active locale instead
+of the viewer's (D175). The one PuzzleKit gap is group (e): `raw` and
+`newline_to_br` still return plain text rather than sanitized markup.
 **Sites has not moved yet** (`sites/engine/engine/formatters/*.go`, 61 names
 including four aliases); its column describes today's registry.
 
-Counts: 34 standard (28 identical-output, 6 locale-rendered), 3 PuzzleKit-only,
-25 Sites-only.
+Counts: 35 standard (28 identical-output, 6 locale-rendered, 1 translation),
+3 PuzzleKit-only, 24 Sites-only.
 
 | Name | PuzzleKit | Sites today | Status |
 |---|---|---|---|
@@ -534,13 +539,14 @@ Counts: 34 standard (28 identical-output, 6 locale-rendered), 3 PuzzleKit-only,
 | `number_with_delimiter` | as D174: viewer locale; explicit delimiter forces one | fixed `,` | locale-rendered; Sites pending |
 | `compact_number` | `Intl` compact notation | — | locale-rendered; Sites pending |
 | `pluralize` | as D174: count in the viewer locale, then the word | ungrouped count, then the word | locale-rendered; Sites pending (F15) |
+| `t` | as D175: the active locale's build-filled table, the key itself on a miss, single-pass `{name}`, CLDR plural entries chosen by a numeric `count` through `Intl.PluralRules`, `{count}` in the locale's number format; present only with `i18n` configured | lookup with the `en` fallback, the key on a miss, single-pass `{name}`; flat files, no plurals | standard (D175); Sites pending plural entries, nested files and the `{count}` number format |
 | `link` | router-aware href for a path (§6, D79) | — (Sites has `url`) | PuzzleKit-only |
 | `timeago`, `in_timezone` | relative time; time-zone shift | — (no clock or zone at render time, by design) | PuzzleKit-only |
 | `noescape` | removed | alias of `raw` | removed from both; Sites pending |
 | `upper`, `lower` | — | aliases of `upcase`, `downcase` | removed from Sites; pending |
 | `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last` | removed (list shaping is `data()` or a plain expression) | list formatters | Sites-only |
 | `reject`, `find`, `sort_natural`, `slice`, `sum`, `concat`, `push`, `contains`, `group_by` | — | list queries and list building | Sites-only |
-| `url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`, `image_tag`, `t` | — | platform-bound | Sites-only |
+| `url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`, `image_tag` | — | platform-bound | Sites-only |
 | `class_map` | — | class names from a map | Sites-only |
 
 ## Known divergences

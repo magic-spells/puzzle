@@ -64,6 +64,27 @@ notes:
       `in_timezone` returns a shifted local Date, not a zoned value. The Intl presets look right
       because they print no offset. Known limitation of `in_timezone`'s shifted-Date contract; not
       an `iso` bug.
+  - kind: state
+    text: >-
+      Translations (D175, v1.81). `t` is the 35th name in `STANDARD_FORMATTERS` but not a built-in:
+      it lives in `client-runtime/i18n.js`, and `installTranslate(registry, i18n)` registers it over
+      the i18n service right after `makeFormatterRegistry`, only when the app configured `i18n` and
+      did not register its own `t` (an app `t` wins and draws the standard-name shadow warning). It
+      is not in the D31 manifest; the usage scan records `t` calls and literal keys separately
+      (`Usage.TKeys`). Without `i18n`, a template `t` hits the D43 `__missing` guard, whose
+      development hint for `t` says how to configure `i18n`. `nearestFormatter` is exported so the
+      service reuses it for its missing-key did-you-mean. The formatter locale lives in
+      `client-runtime/formatters/locale.js` (NOT builtins.js, which builtins-all.js
+      namespace-imports — any helper exported there would become a formatter): the `formatLocale`
+      slot, `setFormatLocale` (the i18n service's apply step calls it, so the prerender renders in
+      the default locale), and `localeNumber` (moved from builtins.js; shared by `pluralize`,
+      `number_with_delimiter` and `t`'s `{count}`). `date`/`time`/`datetime` do `locale ??=
+      formatLocale`, so an explicit argument wins; `compact_number` and `timeago` rebuild their
+      single-slot formatter when the slot moves; `setFormatLocale` clears `localeNumber`'s cache.
+      Every read sits behind the inline `__PUZZLE_HAS_I18N__` probe, so an app without translations
+      passes `undefined` exactly as before. `currency` stays locale-independent. The conformance
+      table carries top-level `translations` and `t` rows with a `locale`, run through the service
+      in tests/formatters.test.js.
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 

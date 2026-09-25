@@ -382,7 +382,9 @@ With `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` in
 <!-- 3 items — a numeric `count` picks the plural form -->
 ```
 
-A missing key prints the key itself. Switch languages with
+A missing key prints the key itself. Dates and numbers (`date`,
+`number_with_delimiter`, `compact_number`, …) follow the active locale. Switch
+languages with
 `this.ctx.i18n.setLocale('es')`: the new file loads first, then the page
 rebuilds in place and the choice is remembered. See `examples/i18n`.
 

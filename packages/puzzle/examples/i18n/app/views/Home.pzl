@@ -18,7 +18,7 @@
     </div>
     <dl class="grid grid-cols-2 gap-y-2 text-sm">
       <dt class="text-muted">{ 'home.cart.total' | t }</dt>
-      <dd class="text-right tabular-nums">{ cart.count * 1249.5 | number_with_delimiter }</dd>
+      <dd class="text-right tabular-nums">{ cart.count * 12495.75 | number_with_delimiter }</dd>
       <dt class="text-muted">{ 'home.cart.updated' | t }</dt>
       <dd class="text-right">{ updated | date('long') }</dd>
     </dl>

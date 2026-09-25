@@ -418,6 +418,9 @@ many other`) is a plural entry and must have `other`.
   build fills every locale's missing keys from the default and warns; a
   literal key missing from the default locale is a build warning too.
 - Output is text: markup in a translation prints literally.
+- With `i18n` configured, `date`/`time`/`datetime`, `number_with_delimiter`,
+  `compact_number`, the `pluralize` count and `timeago` follow the ACTIVE
+  locale (not the browser's); pass an explicit locale to `date(…)` to pin one.
 - Route `meta.title` stays a static string — it is not translated.
 - Prerendered pages (`--hybrid`/`--static`) render in `defaultLocale` and carry
   its table inline; a viewer in another locale sees one swap after load.
