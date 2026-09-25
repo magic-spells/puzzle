@@ -73,6 +73,13 @@ notes:
       dialect divergence V1–V18 from [[DOC-LANGUAGE-CORE]], and
       [[DECISION-D174-STANDARD-FORMATTERS]] proposes the formatter resolutions F1–F27, the standard
       set, renames/removals and the host-only lists. **The next free decision number is D175.**
+  - kind: state
+    text: >-
+      2026-09-25 — D175 is taken ([[DECISION-D175-TRANSLATIONS]], status planned, for 0.8.0: the `t`
+      formatter joins the standard set with one meaning in both hosts, including Shopify-style
+      plural entries; one build-filled, hashed locale file per language, loaded before the first
+      render; locale selection and the config shape still await Cory's confirmation). **The next
+      free decision number is D176.**
 ---
 
 # Puzzle project map
