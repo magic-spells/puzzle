@@ -95,10 +95,31 @@ One shared balanced scanner handles expressions in templates and attributes,
 skipping JS strings, regexes, comments, and nested template-literal
 interpolations. Top-level split helpers recognize formatter pipes/arguments,
 loop counters, range ellipses, and case values without confusing nested JS.
-Object literals remain outside the template-expression subset and get a
-positioned error. The scanner's regex/division disambiguation must stay in
+The scanner's regex/division disambiguation must stay in
 lockstep with [[COMPONENT-CODEGEN]]'s expression scanner; a mismatch splits
 `{ /a|b/.test(name) }` at the regex's `|` as a formatter pipe.
+
+A top-level `|` is a formatter pipe in every value position
+([[DECISION-D173-CORE-SEMANTICS]] V1), not only in text interpolation:
+`parseChain` splits base + chain once, and its result lands on
+`DynamicAttr.Formatters` (brace-only non-event attribute values and component
+props, including marker args), `If.Formatters` (`{#if}`, `{:else if}`,
+`{#unless}`), `Case.Formatters`, and `InlineIfPart.Formatters` (an inline
+`{#if}` inside an attribute value). `||`, a pipe inside parentheses, a string, or
+a regex is never a split point. An `{#unless}` with a chain keeps the bare base
+in `Cond` and sets `If.Negate`, so codegen negates after the formatters run;
+without a chain `Cond` stays `!(cond)` and the AST is unchanged. Every segment
+after a pipe must be a formatter name — `isFormatterName`,
+`[A-Za-z_$][A-Za-z0-9_$-]*`, bare or called — in text interpolation as well, so
+`{ flags | 4 }`, `{ w / 2 | 0 }` and `{ a |= 2 }` are positioned errors steering
+to a parenthesized bitwise OR rather than lookups of a formatter named `4`.
+Event handlers take no chain. `{:when}` values take none either, and a
+top-level pipe in one is a positioned error (`parseWhenValues`) rather than a
+silent bitwise OR. A top-level pipe in a `{#for}` header (collection or range
+bound, checked after the counter is peeled) is a positioned error steering to
+shaping the list in `data()`. A template expression that starts with an object
+literal is rejected by codegen, not here; object literals are legal as call and
+formatter arguments.
 
 Every literal scanner clamps its escape skip at `len(s)`. The `j += 2` that
 steps over `\x` must not run past EOF on a literal whose last byte is a

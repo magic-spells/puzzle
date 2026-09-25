@@ -21,7 +21,7 @@ IndexedFor.prototype.render = function () {
           key: s.k,
           class: 'item',
         }, [
-          new ViewNode('text', { value: __s(s.i + 1, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'i + 1' : 0) + '. ' + __s(s.item.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
+          new ViewNode('text', { value: __s(s.i + 1, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'i + 1' : 0) + '. ' + __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
         ])
       , __L0)
     ),

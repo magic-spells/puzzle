@@ -804,7 +804,7 @@ export declare function listRows(
 	view: object,
 	owner: object,
 	id: number,
-	items: ArrayLike<any>,
+	items: unknown,
 	factory: (row: any) => ViewNode,
 	meta: {
 		key: (item: any, index: number) => any;
@@ -816,3 +816,18 @@ export declare function listRows(
 		volatile?: boolean;
 	}
 ): ViewNode[];
+
+/**
+ * The loop domain of an item-form `{#for}` (D173 V12): returns the collection
+ * when it is an array and an empty list otherwise (a non-list other than
+ * `null`/`undefined` also warns in development). A compiled module whose item
+ * loop keeps `.map` imports this as `__e`. Never called from user code.
+ */
+export declare function loopItems(value: unknown): any[];
+
+/**
+ * The numbers of a range `{#for from...to}` (D173 V12): both bounds truncated
+ * toward zero, zero iterations for a missing or non-finite bound. A compiled
+ * module with a range loop imports this as `__r`. Never called from user code.
+ */
+export declare function loopRange(from: unknown, to: unknown): number[];

@@ -61,8 +61,8 @@ Binding.prototype.render = function () {
         new ViewNode('input', {
           key: s.k,
           type: 'checkbox',
-          checked: s.item.completed,
-          '@change:bind': this.__bind(s.item, 'completed', 'c'),
+          checked: s.item?.completed,
+          '@change:bind': this.__bind(s.item ?? 0, 'completed', 'c'),
         }, [])
       , __L0)
     ),
@@ -80,8 +80,8 @@ Binding.prototype.render = function () {
     }, []),
     new ViewNode('input', {
       type: 'date',
-      value: __d.profile.birthday,
-      '@change:bind': this.__bind(__d.profile, 'birthday', 'v'),
+      value: __d.profile?.birthday,
+      '@change:bind': this.__bind(__d.profile ?? 0, 'birthday', 'v'),
     }, []),
     new ViewNode('input', {
       value: __d.inputOwned,
@@ -126,7 +126,7 @@ Binding.prototype.render = function () {
       multiple: true,
     }, []),
     new ViewNode(Foo, { value: __d.x }, []),
-    new ViewNode('input', { value: __d.x.trim() }, []),
+    new ViewNode('input', { value: __d.x?.trim() }, []),
   ]);
 };
 Binding.__pzlModule = 'binding.pzl';

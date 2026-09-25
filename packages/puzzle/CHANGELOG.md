@@ -166,7 +166,28 @@ background update notice) into this minor: the themes work re-tunes token
 values every consumer sees and adds a mode and new exports, which is a
 0.x minor, not a patch.
 
+The D173 core-semantics round then gives each construct PuzzleKit shares with
+Sites one meaning. For template expressions and loops that is: a pipe means a
+formatter in every value position, member access never throws, and a loop over
+something that is not a list runs zero times. The breaking edges are marked
+under Changed.
+
 ### Added
+
+- **Object literals as formatter and call arguments (D173 V8).**
+  `{ 'cart.count' | t({ count: n, unit }) }` (an app `t` formatter) and
+  `{ fmt(x, { digits: 2 }) }`
+  compile. Values resolve as template expressions and keys stay keys; before
+  this, the compiler scoped the keys too and emitted `{__d.width: 480}`, which
+  only the bundler caught. Shorthand, quoted, computed and spread keys all work.
+  An expression still cannot *start* with an object literal (`{ {a: 1} }` is
+  ambiguous with the interpolation braces), and the error now says to pass it
+  as an argument or build it in `data()`.
+- **A component without a `<script>` reads its props by name (D173 V15).** The
+  compiler gives it a `data(params, props)` that returns its props, so
+  `<Chip tone="warn"/>` with a template of `<span class={ tone }>…` works with
+  no boilerplate. A component with a script is unchanged: its own `data()`
+  decides.
 
 - **`puzzle add theme <name…>`.** The CLI can now copy any of the registry's
   palettes, not just the default one — the gap that had apps hand-copying
@@ -349,7 +370,51 @@ values every consumer sees and adds a mode and new exports, which is a
   the list runtime as `__l`. Binding `__l` or one of the `__L<n>` names in a
   `<script>` is a positioned compile error, the way binding `ViewNode` already
   is. The instance names join `__h`/`__ref`/`__bind` as names a component must
-  not define.
+  not define. A file that emits a `.map` item loop or a range loop also imports
+  the loop guards as `__e` / `__r` (D173 V12), which are reserved the same way.
+- **BREAKING: a `|` is a formatter pipe in every value position (D173 V1).**
+  Brace-only attribute values, component props, and the `{#if}`,
+  `{:else if}`, `{#unless}` and `{#case}` headers now split a top-level `|`
+  into a formatter chain, exactly as text interpolation always has:
+  `title={ price | currency }` calls `currency` where it used to compile to a
+  bitwise OR. `||`, and a `|` inside a string, a regex, parentheses or
+  brackets, are not pipes; `@event` handlers are untouched. A chained
+  form-control `value={ x | f }` is one-way and does not auto-bind. To keep a
+  bitwise OR, wrap it in parentheses (`{ (a | b) }`).
+- **BREAKING: what follows a pipe must be a formatter name.** Everywhere a pipe
+  is a formatter — text interpolation included — the text after it must be a
+  name (`[A-Za-z_$][A-Za-z0-9_$-]*`, bare or called). `{ flags | 4 }`,
+  `{ w / 2 | 0 }` and `{ a |= 2 }` used to compile to a lookup of a formatter
+  named `4` (a silent pass-through); they are now positioned errors that say to
+  parenthesize a bitwise OR.
+- **BREAKING: a pipe in a `{#for}` header or a `{:when}` value is a compile
+  error (D173 V1).** In a loop's collection or range bound, shape the list in
+  `data()` and loop over that field (`{#for item in sortedItems}`); a
+  `{:when}` value takes no chain, so list alternatives with commas or format in
+  the `{#case}` header. The positioned errors say so.
+- **Member access in a template never throws (D173 V4).** Every `.` and `[`
+  step in a value expression — text, attributes and props, `{#if}`/`{#case}`
+  headers, formatter arguments, loop collections and keys — compiles to `?.`,
+  so `{ user.address.city }` prints nothing when `address` is missing instead
+  of sending the view to `errorView`. A path that exists evaluates exactly as
+  before; writing `?.` yourself stays legal. Event-handler arguments and
+  `puzzle check` keep the author's spelling. A two-way bound
+  `value={ profile.name }` whose `profile` is missing is inert until the record
+  exists (it used to be reachable only by throwing): it never writes a stray
+  top-level `name`. Cost: +34 B gzip on the todos example, nothing on
+  hello-world.
+- **BREAKING: a loop over something that is not a list runs zero times (D173
+  V12).** A missing collection (`null`/`undefined`) loops zero times silently;
+  any other non-array (a string, an object, a number) loops zero times with a
+  development warning — so a `{#for}` over a string's characters stops
+  iterating. Range bounds truncate to whole numbers (with a development warning
+  for a non-integer; a numeric string such as a route param's `'5'` is fine),
+  and a missing or non-finite bound runs the range zero times. A range with two
+  integer-literal bounds (`{#for 1...3}`) is folded at compile time. `loopItems`
+  and `loopRange` are exported from the package root as compiler support,
+  beside `listRows`.
+- **`==` and `!=` keep their JavaScript meaning (D173 V2/V3)** — unchanged, and
+  now pinned by a test. `x == null` is the portable absence test.
 
 - **The update notice never waits on the network (D76).** `puzzle build` and
   `puzzle dev` print "a newer version is available" from a cached answer and

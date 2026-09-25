@@ -15,7 +15,7 @@ SkeletonInlineComponent.prototype.render = function () {
 
   return new ViewNode('div', { class: 'user-card' }, [
     new ViewNode('h2', {}, [
-      new ViewNode('text', { value: __s(__d.user.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
+      new ViewNode('text', { value: __s(__d.user?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
     ]),
   ]);
 };

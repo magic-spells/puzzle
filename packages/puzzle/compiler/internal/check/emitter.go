@@ -481,6 +481,22 @@ func (e *emitter) emitAttrs(attrs []parser.Attr, scope map[string]bool, indent i
 	for _, attr := range attrs {
 		switch a := attr.(type) {
 		case *parser.DynamicAttr:
+			if len(a.Formatters) > 0 {
+				// A brace-only value with a formatter chain (D173 V1) is checked
+				// the way the same chain in text is.
+				inner, start, err := e.attrInner(a.Pos.Offset)
+				if err != nil {
+					return err
+				}
+				spans, err := chainSpans(inner, start, a.Expr, a.Formatters)
+				if err != nil {
+					return err
+				}
+				e.b.WriteString(spaces(indent) + "void (")
+				e.writeChain(spans, a.Formatters, scope)
+				e.b.WriteString(");\n")
+				continue
+			}
 			span, err := e.attrExpr(a.Pos.Offset, a.Expr)
 			if err != nil {
 				return err
@@ -522,7 +538,9 @@ func (e *emitter) emitParts(parts []parser.Part, scope map[string]bool, indent i
 				return err
 			}
 			e.b.WriteString(spaces(indent) + "if (")
-			e.writeResolved(span, scope)
+			if err := e.writeCondition(span, p.Cond, p.Formatters, scope); err != nil {
+				return err
+			}
 			e.b.WriteString(") {\n")
 			if err := e.emitParts(p.Then, scope, indent+2); err != nil {
 				return err
@@ -549,12 +567,21 @@ func (e *emitter) emitInterpolation(n *parser.Interpolation, scope map[string]bo
 	// and reports "Object is possibly 'undefined'" on a correct template under
 	// strictNullChecks — while checking nothing about `a + 1` itself.
 	e.b.WriteString(spaces(indent) + "void (")
-	for i := len(n.Formatters) - 1; i >= 0; i-- {
-		e.b.WriteString("__puzzle_check_formatter(" + strconv.Quote(n.Formatters[i].Name) + ", ")
+	e.writeChain(spans, n.Formatters, scope)
+	e.b.WriteString(");\n")
+	return nil
+}
+
+// writeChain writes a base expression wrapped in its formatter chain as nested
+// `__puzzle_check_formatter(name, value, ...args)` calls. spans holds the base
+// first, then every formatter argument in source order (chainSpans' layout).
+func (e *emitter) writeChain(spans []sourceExpr, fmts []parser.FormatterCall, scope map[string]bool) {
+	for i := len(fmts) - 1; i >= 0; i-- {
+		e.b.WriteString("__puzzle_check_formatter(" + strconv.Quote(fmts[i].Name) + ", ")
 	}
 	e.writeResolved(spans[0], scope)
 	spanIndex := 1
-	for _, formatter := range n.Formatters {
+	for _, formatter := range fmts {
 		for range formatter.Args {
 			e.b.WriteString(", ")
 			e.writeResolved(spans[spanIndex], scope)
@@ -562,7 +589,21 @@ func (e *emitter) emitInterpolation(n *parser.Interpolation, scope map[string]bo
 		}
 		e.b.WriteString(")")
 	}
-	e.b.WriteString(");\n")
+}
+
+// writeCondition writes a block subject located at span: the plain expression,
+// or — when the header carries a formatter chain (D173 V1) — the chain, whose
+// base is base.
+func (e *emitter) writeCondition(span sourceExpr, base string, fmts []parser.FormatterCall, scope map[string]bool) error {
+	if len(fmts) == 0 {
+		e.writeResolved(span, scope)
+		return nil
+	}
+	spans, err := chainSpans(span.text, span.offset, base, fmts)
+	if err != nil {
+		return err
+	}
+	e.writeChain(spans, fmts, scope)
 	return nil
 }
 
@@ -575,7 +616,9 @@ func (e *emitter) emitIf(n *parser.If, scope map[string]bool, indent int) error 
 	if negate {
 		e.b.WriteString("!(")
 	}
-	e.writeResolved(span, scope)
+	if err := e.writeCondition(span, n.Cond, n.Formatters, scope); err != nil {
+		return err
+	}
 	if negate {
 		e.b.WriteString(")")
 	}
@@ -663,12 +706,20 @@ func (e *emitter) emitSnippet(n *parser.Snippet, scope map[string]bool, indent i
 }
 
 func (e *emitter) emitCase(n *parser.Case, scope map[string]bool, indent int) error {
-	caseSpan, err := e.directiveExpr(n.Pos.Offset, "case", n.Expr)
+	var caseSpan sourceExpr
+	var err error
+	if len(n.Formatters) > 0 {
+		caseSpan, err = e.directiveRest(n.Pos.Offset, "case")
+	} else {
+		caseSpan, err = e.directiveExpr(n.Pos.Offset, "case", n.Expr)
+	}
 	if err != nil {
 		return err
 	}
 	e.b.WriteString(spaces(indent) + "switch (")
-	e.writeResolved(caseSpan, scope)
+	if err := e.writeCondition(caseSpan, n.Expr, n.Formatters, scope); err != nil {
+		return err
+	}
 	e.b.WriteString(") {\n")
 	for _, clause := range n.Clauses {
 		values, err := e.whenExprs(clause.Pos.Offset, clause.Values)
@@ -721,13 +772,19 @@ func (e *emitter) interpolationExprs(n *parser.Interpolation) ([]sourceExpr, err
 	if err != nil {
 		return nil, err
 	}
-	baseAt := strings.Index(inner, n.Expr)
+	return chainSpans(inner, start, n.Expr, n.Formatters)
+}
+
+// chainSpans locates a chained value's base expression and every formatter
+// argument inside inner, the source text that starts at byte start.
+func chainSpans(inner string, start int, base string, fmts []parser.FormatterCall) ([]sourceExpr, error) {
+	baseAt := strings.Index(inner, base)
 	if baseAt < 0 {
-		return nil, fmt.Errorf("cannot locate template expression %q", n.Expr)
+		return nil, fmt.Errorf("cannot locate template expression %q", base)
 	}
-	spans := []sourceExpr{{text: n.Expr, offset: start + baseAt}}
-	cursor := baseAt + len(n.Expr)
-	for _, formatter := range n.Formatters {
+	spans := []sourceExpr{{text: base, offset: start + baseAt}}
+	cursor := baseAt + len(base)
+	for _, formatter := range fmts {
 		nameAt := strings.Index(inner[cursor:], formatter.Name)
 		if nameAt < 0 {
 			return nil, fmt.Errorf("cannot locate formatter %q", formatter.Name)
@@ -750,6 +807,35 @@ func (e *emitter) interpolationExprs(n *parser.Interpolation) ([]sourceExpr, err
 		cursor = last.offset - start + len(last.text)
 	}
 	return spans, nil
+}
+
+// attrInner returns the text inside an attribute's value braces and the byte
+// offset it starts at.
+func (e *emitter) attrInner(anchor int) (string, int, error) {
+	open := strings.IndexByte(e.source[anchor:], '{')
+	if open < 0 {
+		return "", 0, fmt.Errorf("cannot locate attribute expression at byte %d", anchor)
+	}
+	inner, start, _, err := braceInner(e.source, anchor+open)
+	return inner, start, err
+}
+
+// directiveRest locates everything after a block keyword (`{#case …}`) — the
+// subject including any formatter chain.
+func (e *emitter) directiveRest(anchor int, keyword string) (sourceExpr, error) {
+	inner, start, _, err := braceInner(e.source, anchor)
+	if err != nil {
+		return sourceExpr{}, err
+	}
+	prefix := "#" + keyword
+	trimmed := strings.TrimSpace(inner)
+	if !strings.HasPrefix(trimmed, prefix) {
+		return sourceExpr{}, fmt.Errorf("expected {%s} at byte %d", prefix, anchor)
+	}
+	rest := trimmed[len(prefix):]
+	leadingInner := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
+	leadingRest := len(rest) - len(strings.TrimLeft(rest, " \t\r\n"))
+	return sourceExpr{text: strings.TrimSpace(rest), offset: start + leadingInner + len(prefix) + leadingRest}, nil
 }
 
 func (e *emitter) attrExpr(anchor int, expr string) (sourceExpr, error) {

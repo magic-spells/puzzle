@@ -24,7 +24,7 @@ func TestTextRunInternalNewlineKeepsOneSpace(t *testing.T) {
 		{
 			name:     "interpolation to interpolation across a dropped whitespace-only node",
 			template: "<p>{ user.first }\n   { user.last }</p>",
-			want:     " + ' ' + __s(__d.user.last",
+			want:     " + ' ' + __s(__d.user?.last",
 		},
 		{
 			name:     "interpolation to text across a newline",

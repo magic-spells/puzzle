@@ -65,7 +65,7 @@ func TestListBlockImportOnlyWhenLowered(t *testing.T) {
 // root still carries `key: s.k`, so the block owns row identity either way.
 func TestListBlockExplicitKey(t *testing.T) {
 	got := compileSrc(t, listSrc("  {#for todo in todos}<li key={ todo.slug }>{ todo.text }</li>{/for}"))
-	if !strings.Contains(got, "const __L0 = { key: (todo) => todo.slug, fields: ['text'] };") {
+	if !strings.Contains(got, "const __L0 = { key: (todo) => todo?.slug, fields: ['text'] };") {
 		t.Errorf("explicit key must become the meta key arrow:\n%s", got)
 	}
 	if !strings.Contains(got, "new ViewNode('li', { key: s.k }") {
@@ -90,13 +90,13 @@ func TestListBlockExplicitKeyReadsCounter(t *testing.T) {
 // throws on its first call.
 func TestListBlockKeyReadingDataKeepsMap(t *testing.T) {
 	got := compileSrc(t, listSrc("  {#for todo in todos}<li key={ prefix + todo.id }>{ todo.text }</li>{/for}"))
-	if !strings.Contains(got, "__d.todos.map((todo) =>") {
+	if !strings.Contains(got, "__e(__d.todos).map((todo) =>") {
 		t.Errorf("a data-reading explicit key must keep the .map emission:\n%s", got)
 	}
 	if strings.Contains(got, "__L0") || strings.Contains(got, "__l(") {
 		t.Errorf("a data-reading explicit key must not produce a list block:\n%s", got)
 	}
-	if !strings.Contains(got, "key: __d.prefix + todo.id") {
+	if !strings.Contains(got, "key: __d.prefix + todo?.id") {
 		t.Errorf("the author's key must stand verbatim on the row root:\n%s", got)
 	}
 }
@@ -257,7 +257,7 @@ func TestListBlockNestedLoops(t *testing.T) {
 		"const __L0 = { key: (group) => ViewNode.keyOf(group), fields: ['items'] };",
 		"const __L1 = { key: (item) => ViewNode.keyOf(item), fields: ['name'] };",
 		"__l(this, this, 0, __d.groups, (s) =>",
-		"__l(this, s, 1, s.item.items, (s1) =>",
+		"__l(this, s, 1, s.item?.items, (s1) =>",
 		"new ViewNode('p', {\n            key: s1.k,",
 		"'@click': (s1.h0 ??= (event) => this.events.pick(s1.item, s.item)),",
 	} {
@@ -272,7 +272,7 @@ func TestListBlockNestedLoops(t *testing.T) {
 // stamps.
 func TestListBlockSnippetBodyKeepsMap(t *testing.T) {
 	got := compileSrc(t, listSrc("  <Row><Snippet rows>{#for r in rows}<li>{ r.name }</li>{/for}</Snippet></Row>"))
-	if !strings.Contains(got, "rows.map((r) =>") {
+	if !strings.Contains(got, "__e(rows).map((r) =>") {
 		t.Errorf("a loop inside a snippet body must keep the .map emission:\n%s", got)
 	}
 	if strings.Contains(got, "__L0") || strings.Contains(got, "__l(") {
@@ -283,11 +283,12 @@ func TestListBlockSnippetBodyKeepsMap(t *testing.T) {
 	}
 }
 
-// Range loops keep today's emission everywhere, with or without a counter.
+// Range loops are never lowered, with or without a counter: they map the
+// guarded number list (`__r`, D173 V12).
 func TestListBlockRangeUnchanged(t *testing.T) {
 	got := compileSrc(t, listSrc("  {#for 1...count, n}<span key={ n }>{ n }</span>{/for}"))
-	if !strings.Contains(got, "Array.from({ length: (__d.count) - (1) + 1 }") {
-		t.Errorf("range form must keep Array.from:\n%s", got)
+	if !strings.Contains(got, "__r(1, __d.count).map((n) =>") {
+		t.Errorf("range form must map the loopRange list:\n%s", got)
 	}
 	if strings.Contains(got, "__L0") || strings.Contains(got, "__l(") {
 		t.Errorf("a range loop must produce no list block:\n%s", got)
@@ -345,7 +346,7 @@ func TestListBlockKeyReadingEnclosingRowKeepsMap(t *testing.T) {
 			"    <div>{#for tag in todo.tags}<li key={ todo.id + tag.id }>{ tag.n }</li>{/for}</div>\n"+
 			"  {/for}",
 	))
-	if !strings.Contains(got, "s.item.tags.map((tag) =>") {
+	if !strings.Contains(got, "__e(s.item?.tags).map((tag) =>") {
 		t.Errorf("the inner loop must keep the .map emission:\n%s", got)
 	}
 	if strings.Contains(got, "__L1") {
@@ -385,7 +386,7 @@ func TestListBlockNeverLowersInsideRangeBody(t *testing.T) {
 	if strings.Contains(got, "__l(") || strings.Contains(got, "__L0") {
 		t.Errorf("a loop inside a range body must not lower:\n%s", got)
 	}
-	if !strings.Contains(got, "__d.items.map((item) =>") {
+	if !strings.Contains(got, "__e(__d.items).map((item) =>") {
 		t.Errorf("it must keep the .map emission:\n%s", got)
 	}
 	if strings.Contains(got, "listRows") {
@@ -408,7 +409,7 @@ func TestListBlockNeverLowersInsideMapFallbackBody(t *testing.T) {
 	if strings.Contains(got, "__l(") || strings.Contains(got, "__L0") {
 		t.Errorf("neither loop may lower (the outer key reads render scope):\n%s", got)
 	}
-	if !strings.Contains(got, "group.items.map((item) =>") {
+	if !strings.Contains(got, "__e(group?.items).map((item) =>") {
 		t.Errorf("the nested loop must keep the .map emission:\n%s", got)
 	}
 	if strings.Contains(got, "this.__c[") || strings.Contains(got, ".c[") {
@@ -437,7 +438,7 @@ func TestListBlockRangeInsideRowDoesNotLowerNestedItemLoop(t *testing.T) {
 	if strings.Contains(got, "__L1") {
 		t.Errorf("the loop inside the range must produce no site meta:\n%s", got)
 	}
-	if !strings.Contains(got, "s.item.tags.map((tag) =>") {
+	if !strings.Contains(got, "__e(s.item?.tags).map((tag) =>") {
 		t.Errorf("it must keep the .map emission, reading the row through the scope:\n%s", got)
 	}
 }
@@ -462,7 +463,7 @@ func TestListBlockRangeCounterShadowingRowScope(t *testing.T) {
 	if !strings.Contains(got, "key: __pzls") {
 		t.Errorf("the counter's reads must be rewritten to the mangled name:\n%s", got)
 	}
-	if !strings.Contains(got, "s.item.text") {
+	if !strings.Contains(got, "s.item?.text") {
 		t.Errorf("the row local must still read off the row scope:\n%s", got)
 	}
 }
@@ -477,13 +478,13 @@ func TestListBlockFallbackItemShadowingRowScope(t *testing.T) {
 	if strings.Contains(got, ".map((s) =>") {
 		t.Errorf("a fallback loop item must not shadow the row scope object:\n%s", got)
 	}
-	if !strings.Contains(got, "s.item.tags.map((__pzls) =>") {
+	if !strings.Contains(got, "__e(s.item?.tags).map((__pzls) =>") {
 		t.Errorf("the colliding item must be mangled:\n%s", got)
 	}
-	if !strings.Contains(got, "__pzls.name") {
+	if !strings.Contains(got, "__pzls?.name") {
 		t.Errorf("the item's reads must be rewritten to the mangled name:\n%s", got)
 	}
-	if !strings.Contains(got, "s.item.text") {
+	if !strings.Contains(got, "s.item?.text") {
 		t.Errorf("the row local must still read off the row scope:\n%s", got)
 	}
 }
@@ -503,7 +504,7 @@ func TestListBlockNestedRangeCounterShadowingInnerRowScope(t *testing.T) {
 	if !strings.Contains(got, ".map((__pzls1) =>") {
 		t.Errorf("the colliding counter must be mangled:\n%s", got)
 	}
-	if !strings.Contains(got, "s1.item.name") {
+	if !strings.Contains(got, "s1.item?.name") {
 		t.Errorf("the inner row local must still read off `s1`:\n%s", got)
 	}
 }
@@ -523,7 +524,7 @@ func TestListBlockSnippetParamShadowingRowScope(t *testing.T) {
 	if !strings.Contains(got, "__s(__pzls,") {
 		t.Errorf("the parameter's reads must be rewritten to the mangled name:\n%s", got)
 	}
-	if !strings.Contains(got, "s.item.text") {
+	if !strings.Contains(got, "s.item?.text") {
 		t.Errorf("the row local must still read off the row scope:\n%s", got)
 	}
 }

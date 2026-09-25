@@ -154,6 +154,21 @@ Rules that bite:
   attribute it is a space-joined token list that drops `false` and empty items,
   so the clsx idiom `class={ [active && 'on', 'btn'] }` writes `class="btn"`;
   an object in a brace-only attribute omits the attribute, as `false`/`null` do.
+- **Template expressions are forgiving** (puzzle ≥ 0.8.0). A `|` is a
+  formatter pipe in every value position — text, brace-only attributes
+  (`title={ price | currency }`), component props, and the `{#if}`,
+  `{:else if}`, `{#unless}` and `{#case}` headers; `||` stays logical OR, and
+  a bitwise OR must be parenthesized (`{ (a | b) }`) — a pipe followed by
+  anything but a formatter name is a compile error. A pipe in a `{#for}` header
+  or a `{:when}` value is a compile error: shape the list in `data()` and loop
+  over that field. Member access is guarded, so `{ user.address.city }`
+  prints nothing when `address` is missing instead of throwing (`?.` is legal
+  but unnecessary). A missing collection or a non-list loops zero times (dev
+  warns on a non-list; range bounds truncate to whole numbers). `==` keeps its
+  JavaScript meaning; `x == null` is the absence test. Object literals work as
+  call and formatter arguments (`{ 'cart.count' | t({ count: n }) }`, with an
+  app `t` formatter) but cannot START an expression. A component with no
+  `<script>` reads its props by bare name (`{ tone }`).
 - **Three marker tags, four meanings.** `<Children/>` marks where a component's
   default children render; `<Slot name="x"/>` declares a named region (the
   caller routes a direct child in with a static `slot="x"` attribute);
@@ -238,7 +253,7 @@ Rules that bite:
   list is sorted/filtered/reordered — inserts and removes keep their normal
   enter/leave animations. Options via an object from `data()`:
   `flip={ flipOpts }` with `flipOpts: { duration: 400, easing: '...' }`
-  (inline object literals are not valid template expressions). Respects
+  (an object literal cannot start a template expression). Respects
   reduced motion; never write `flip` on an unkeyed row.
 
 ## Events

@@ -141,6 +141,11 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope scopeMap) *autoBind {
 		if !ok || at.Name != attrName {
 			continue
 		}
+		if len(at.Formatters) > 0 {
+			// `value={ name | upcase }` displays a formatted value (D173 V1);
+			// there is no field to write the edit back to, so it stays one-way.
+			return nil
+		}
 		target, field, _, ok := classifyBindExpr(at.Expr, scope)
 		if !ok {
 			return nil
@@ -162,6 +167,13 @@ func autoBindKV(bind *autoBind, scope scopeMap) string {
 			// inside a lowered list block binds `s.item` (D170 emission contract).
 			target = local
 		}
+		// A member-path bind whose root is missing must stay inert, not fall into
+		// __bind's `target == null` branch, which belongs to the bare-local form
+		// and would write the field as a stray top-level local. Coalescing to a
+		// primitive routes it to INERT_BIND — the same one-way display a
+		// primitive-rooted path gets — and the guarded value read (D173 V4) shows
+		// nothing. The next render with a real root binds normally.
+		target += " ?? 0"
 	}
 	return jsKey("@"+bind.event+":bind") + ": this.__bind(" +
 		target + ", " + jsString(bind.field) + ", " + jsString(bind.spec) + ")"

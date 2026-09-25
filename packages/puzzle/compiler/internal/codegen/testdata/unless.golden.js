@@ -13,7 +13,7 @@ Unless.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('puzzle-view', { class: 'account' }, [
-    ...(!(__d.user.verified)
+    ...(!(__d.user?.verified)
       ? [
           new ViewNode('p', { class: 'warn' }, [
             new ViewNode('text', { value: 'Please verify your account.' }),
@@ -24,7 +24,7 @@ Unless.prototype.render = function () {
             new ViewNode('text', { value: 'You are verified.' }),
           ]),
         ]),
-    ...(!(__d.items.length)
+    ...(!(__d.items?.length)
       ? [
           new ViewNode('div', { class: 'empty' }, [
             ...(!(__d.loading)

@@ -18,7 +18,7 @@ ScopedSnippetDefault.prototype.render = function () {
         params: ['user'],
         fn: ({ user }) => ([
             new ViewNode('p', {}, [
-              new ViewNode('text', { value: __s(user.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) + ' — ' + __s(__d.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'title' : 0) }),
+              new ViewNode('text', { value: __s(user?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) + ' — ' + __s(__d.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'title' : 0) }),
             ]),
           ]),
       }),

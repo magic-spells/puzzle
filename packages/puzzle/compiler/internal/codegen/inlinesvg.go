@@ -218,7 +218,7 @@ func (c *compiler) emitSVGRef(el *parser.Element, scope scopeMap) (string, error
 	keyArg := ""
 	for _, a := range el.Attrs {
 		if d, ok := a.(*parser.DynamicAttr); ok && d.Name == "key" {
-			keyArg = c.resolve(d.Expr, scope)
+			keyArg = c.resolveValue(d.Expr, d.Formatters, scope)
 			break
 		}
 	}

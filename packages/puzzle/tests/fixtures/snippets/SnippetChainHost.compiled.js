@@ -25,7 +25,7 @@ SnippetChainHost.prototype.render = function () {
         fits: 'heading',
         params: ['group'],
         fn: ({ group }) => ([
-            new ViewNode('text', { value: 'chain-heading:' + __s(group.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) }),
+            new ViewNode('text', { value: 'chain-heading:' + __s(group?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) }),
           ]),
       }),
       new ViewNode(SNIPPET_TAG, {
@@ -33,7 +33,7 @@ SnippetChainHost.prototype.render = function () {
         params: ['user', 'group'],
         fn: ({ user, group }) => ([
             new ViewNode('span', { class: 'chain-person' }, [
-              new ViewNode('text', { value: 'chain-row:' + __s(group.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ':' + __s(user.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
+              new ViewNode('text', { value: 'chain-row:' + __s(group?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ':' + __s(user?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
             ]),
           ]),
       }),
@@ -42,7 +42,7 @@ SnippetChainHost.prototype.render = function () {
         params: ['group'],
         fn: ({ group }) => ([
             new ViewNode('span', { class: 'chain-default' }, [
-              new ViewNode('text', { value: 'chain-default:' + __s(group.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) }),
+              new ViewNode('text', { value: 'chain-default:' + __s(group?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) }),
             ]),
           ]),
       }),

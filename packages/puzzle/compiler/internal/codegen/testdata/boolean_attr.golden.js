@@ -19,7 +19,7 @@ BooleanAttr.prototype.render = function () {
       autofocus: true,
       '@input:bind': this.__bind(null, 'name', 'v'),
     }, []),
-    new ViewNode('button', { disabled: !__d.name.trim() }, [
+    new ViewNode('button', { disabled: !__d.name?.trim() }, [
       new ViewNode('text', { value: 'Go' }),
     ]),
   ]);

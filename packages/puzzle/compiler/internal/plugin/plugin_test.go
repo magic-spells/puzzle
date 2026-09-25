@@ -957,6 +957,41 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// D173 V1 made a pipe a formatter in every value position, so each new chained
+// position is an emit site the scan must seed: a brace-only attribute, a
+// component prop, a marker argument, the {#if}/{:else if}/{#unless}/{#case}
+// subjects, and an attribute value's inline {#if} condition.
+func TestScanFormattersCoversChainPositions(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/views/Home.pzl": `<puzzle-view>
+  <a title={ name | capitalize }>x</a>
+  <Card items={ list | round }><Children item={ row | join }/></Card>
+  {#if tags | size}<b>a</b>{:else if others | modulo(2)}<b>b</b>{/if}
+  {#unless amount | abs}<b>c</b>{/unless}
+  {#case level | floor}{:when 1}<b>d</b>{/case}
+  <p class="{#if on | ceil}on{/if}">y</p>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Card from './Card.pzl';
+export default class Home extends PuzzleView {}
+</script>
+`,
+	})
+	got, err := ScanFormatters(root)
+	if err != nil {
+		t.Fatalf("ScanFormatters: %v", err)
+	}
+	for site, want := range map[string]string{
+		"attribute": "capitalize", "prop": "round", "marker arg": "join", "if": "size",
+		"else if": "modulo", "unless": "abs", "case": "floor", "inline if": "ceil",
+	} {
+		if !got[want] {
+			t.Errorf("scanner missed formatter %q in the %s position: %#v", want, site, got)
+		}
+	}
+}
+
 // Marker fallbacks compile through the same child-emission path as element
 // bodies (D141), so build-wide formatter and feature scans must descend into
 // them. Missing either result would silently omit the formatter or flip module.
