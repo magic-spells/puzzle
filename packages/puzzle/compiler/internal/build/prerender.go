@@ -26,8 +26,8 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
-	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
 )
 
 // prerenderSentinel prefixes the JSON summary the prerender entry writes to

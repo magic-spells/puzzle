@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/textutil"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
 )
 
 // sections.go is the .pzl section splitter (constellation/doc/DOC-COMPILER-DESIGN.md §b step 1).
@@ -378,7 +378,7 @@ func findStyleClose(s string, from int) int {
 	return -1
 }
 
-// skipCSSString returns the index just past a CSS string opened at s[i] (a '\'' or
+// skipCSSString returns the index just past a CSS string opened at s[i] (a '\” or
 // '"'), honoring backslash escapes; an unterminated string runs to EOF.
 func skipCSSString(s string, i int) int {
 	q := s[i]

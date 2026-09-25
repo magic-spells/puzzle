@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // expr.go implements scope-tracked JS-expression rewriting and the SPEC §5

@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/jsident"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // classname.go extracts the component class name for the appended

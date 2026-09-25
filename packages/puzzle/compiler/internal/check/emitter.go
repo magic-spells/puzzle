@@ -15,7 +15,7 @@ import (
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 const shim = `/// <reference types="@magic-spells/puzzle/puzzle-env" />

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // inlinesvg_test.go — codegen coverage for {#svg} resolution (v1.14, D46): file

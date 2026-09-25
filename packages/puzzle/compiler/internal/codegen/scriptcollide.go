@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/jsident"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // scriptcollide.go — the <script>-import collision WARNING (v0.1 hardening).

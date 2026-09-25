@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // pathShapeMsg is the single rejection message for a non-app/assets-relative

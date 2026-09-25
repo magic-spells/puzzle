@@ -7,11 +7,13 @@ import (
 	"testing"
 )
 
-// repoFile resolves a path relative to the repository root (three levels up
-// from compiler/internal/parser).
+// repoFile resolves a path relative to the framework package root,
+// packages/puzzle, a sibling of this module (two levels up from
+// packages/puzzle-lang/parser, then into puzzle). The parser has no fixtures
+// of its own yet, so these tests parse the canonical todos example.
 func repoFile(t *testing.T, rel string) string {
 	t.Helper()
-	return filepath.Join("..", "..", "..", rel)
+	return filepath.Join("..", "..", "puzzle", rel)
 }
 
 // walk visits every node in the tree depth-first.

@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	runtimeformatters "github.com/magic-spells/puzzle/client-runtime/formatters"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 var (

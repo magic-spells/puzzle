@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
 )
 
 // themeMarker is the header comment carried in the registry's theme/pieces.css.

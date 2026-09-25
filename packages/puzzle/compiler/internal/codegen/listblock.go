@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // listblock.go — item-form {#for} lowering to a persistent list block
