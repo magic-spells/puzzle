@@ -43,20 +43,20 @@
         {#for seg in segments, si}<span>{#case seg.kind}{:when 'mention'}<a href="/u/{ seg.value }" class="text-accent hover:underline" @click={ nav('/u/' + seg.value, event) }>@{ seg.value }</a>{:when 'hashtag'}<a href="/explore" class="text-accent hover:underline" @click={ nav('/explore', event) }>#{ seg.value }</a>{:else}{ seg.value }{/case}</span>{/for}
       </div>
 
-      <!-- Action row. Counts run through | compact (847 → "847", 3.4M). Reply
+      <!-- Action row. Counts run through | compact_number (847 → "847", 3.4M). Reply
            icon routes to the detail thread; rechirp/like toggle the record's
            local flags and light up green/pink. record.update() (inside the model
            methods) notifies subscribers, so the feed's owning view re-runs data()
            and this same card re-renders with the new count. -->
       <div class="flex items-center gap-6 mt-2 text-muted text-sm">
         <button type="button" class="flex items-center gap-1.5 hover:text-accent transition-colors" @click={ nav('/post/' + post.id, event) }>
-          <span class="text-base leading-none">💬</span>{#if post.replyCount}<span>{ post.replyCount | compact }</span>{/if}
+          <span class="text-base leading-none">💬</span>{#if post.replyCount}<span>{ post.replyCount | compact_number }</span>{/if}
         </button>
         <button type="button" class="flex items-center gap-1.5 transition-colors {#if post.rechirped}text-boost{/if}{#if !post.rechirped}hover:text-boost{/if}" @click={ toggleRechirp(event) }>
-          <span class="text-base leading-none">🔁</span>{#if post.rechirpCount}<span>{ post.rechirpCount | compact }</span>{/if}
+          <span class="text-base leading-none">🔁</span>{#if post.rechirpCount}<span>{ post.rechirpCount | compact_number }</span>{/if}
         </button>
         <button type="button" class="flex items-center gap-1.5 transition-colors {#if post.liked}text-like{/if}{#if !post.liked}hover:text-like{/if}" @click={ toggleLike(event) }>
-          <span class="text-base leading-none">{#if post.liked}♥{:else}♡{/if}</span>{#if post.likeCount}<span>{ post.likeCount | compact }</span>{/if}
+          <span class="text-base leading-none">{#if post.liked}♥{:else}♡{/if}</span>{#if post.likeCount}<span>{ post.likeCount | compact_number }</span>{/if}
         </button>
       </div>
     </div>

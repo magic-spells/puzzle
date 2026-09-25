@@ -48,7 +48,7 @@
     <div class="text-muted text-sm truncate mt-0.5">{ listing.title }</div>
     <div class="text-muted text-sm">{ listing.type }</div>
     <div class="mt-1 text-fg">
-      <span class="font-semibold">{ listing.pricePerNight | currency }</span><span class="text-muted"> night</span>
+      <span class="font-semibold">{ listing.pricePerNight | currency('$', 0) }</span><span class="text-muted"> night</span>
     </div>
   </a>
 </puzzle-view>

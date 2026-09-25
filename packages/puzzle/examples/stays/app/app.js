@@ -32,24 +32,14 @@ const app = new PuzzleApp({
   apiURL: '',
 
   // Display-only formatters (logic belongs in data(), per SPEC §8). These only
-  // shape values for presentation — money, ratings, word forms, and dates.
+  // shape values for presentation — ratings, word forms, and dates. Money uses
+  // the built-in currency formatter: `{ price | currency('$', 0) }` -> "$1,149".
   formatters: {
-    // Whole-dollar money with thousands separators: 149 -> "$149".
-    currency: (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`,
-
     // Two-decimal rating: 4.9 -> "4.90", 4.875 -> "4.88".
     rating: (n) => (Math.round((Number(n) || 0) * 100) / 100).toFixed(2),
 
     // Pick a word form: plural(1,'night') -> 'night', plural(3,'night') -> 'nights'.
     plural: (count, singular, plural) => (count === 1 ? singular : plural || `${singular}s`),
-
-    // Shorten big counts: 1200 -> "1.2K", 3_400_000 -> "3.4M".
-    compact: (n) => {
-      const num = Number(n) || 0;
-      if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1)}M`;
-      if (num >= 1_000) return `${(num / 1_000).toFixed(num >= 10_000 ? 0 : 1)}K`;
-      return String(num);
-    },
 
     // 'Jul 12' — short month + day, no year.
     monthDay: (iso) => {

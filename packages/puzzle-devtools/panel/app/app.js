@@ -23,17 +23,6 @@ const app = new PuzzleApp({
 	models,
 	routerMode: hashRouter(),
 
-	formatters: {
-		/** Compact JSON for payload previews; unserializable values degrade to String(). */
-		json: (value) => {
-			try {
-				return JSON.stringify(value);
-			} catch (err) {
-				return String(value);
-			}
-		},
-	},
-
 	beforeMount(instance) {
 		installBridge(instance.store);
 	},

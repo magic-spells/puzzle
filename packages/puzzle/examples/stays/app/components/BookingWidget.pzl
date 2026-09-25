@@ -7,7 +7,7 @@
     <!-- Header: nightly price + a compact rating on the right. -->
     <div class="flex items-baseline justify-between gap-3 mb-5">
       <div class="min-w-0">
-        <span class="text-2xl font-semibold text-fg">{ price | currency }</span>
+        <span class="text-2xl font-semibold text-fg">{ price | currency('$', 0) }</span>
         <span class="text-muted"> night</span>
       </div>
       <div class="text-sm text-fg shrink-0">★ { rating | rating } <span class="text-muted">· { reviewCount } reviews</span></div>
@@ -46,20 +46,20 @@
     {#if hasDates}
       <div class="mt-5 pt-5 border-t border-line space-y-3 text-sm">
         <div class="flex items-center justify-between text-fg">
-          <span class="underline decoration-muted/40">{ price | currency } × { nights } { nights | plural('night','nights') }</span>
-          <span>{ subtotal | currency }</span>
+          <span class="underline decoration-muted/40">{ price | currency('$', 0) } × { nights } { nights | plural('night','nights') }</span>
+          <span>{ subtotal | currency('$', 0) }</span>
         </div>
         <div class="flex items-center justify-between text-fg">
           <span class="underline decoration-muted/40">Cleaning fee</span>
-          <span>{ cleaning | currency }</span>
+          <span>{ cleaning | currency('$', 0) }</span>
         </div>
         <div class="flex items-center justify-between text-fg">
           <span class="underline decoration-muted/40">Service fee</span>
-          <span>{ service | currency }</span>
+          <span>{ service | currency('$', 0) }</span>
         </div>
         <div class="flex items-center justify-between font-semibold text-fg pt-3 border-t border-line">
           <span>Total</span>
-          <span>{ total | currency }</span>
+          <span>{ total | currency('$', 0) }</span>
         </div>
       </div>
     {/if}

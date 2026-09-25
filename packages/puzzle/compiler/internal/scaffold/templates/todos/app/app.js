@@ -60,10 +60,6 @@ const app = new PuzzleApp({
   // Global formatters available in all templates
   // (display transformation only — logic belongs in data())
   formatters: {
-    pluralize: (count, singular, plural) => {
-      return count === 1 ? singular : plural || singular + 's';
-    },
-
     todoDate: (date) => {
       if (!date) return '';
 
