@@ -14,6 +14,24 @@
   {#for 1...1}<div class="mapped">{#for ch in word}<b>{ ch }</b>{/for}</div>{/for}
   <Chip tone="warm" />
   <input class="missing-bind" value={ profile.name } />
+  <p class="prose">
+    tokens —
+    <code>a</code>,
+    <code>b</code>
+    and { unit }
+    <b>{ n }</b>
+  </p>
+  <div class="stack">
+    <button>One</button>
+    <button>Two</button>
+  </div>
+  <pre class="pre">
+  indented
+    more { n }
+</pre>
+  <textarea class="ta">
+  keep
+    this</textarea>
 </puzzle-view>
 
 <script>

@@ -58,13 +58,19 @@ they mean in HTML, with these rules:
   `&amp;`, not as `&`.
 - **HTML comments `<!-- … -->` are removed at compile time.** They never reach
   the output.
-- **Whitespace** ([[DECISION-D168-TEXT-RUN-WHITESPACE]], §6): a run of spaces,
-  tabs and newlines collapses to one space. Whitespace that contains a newline
-  and sits between elements (source indentation) is dropped. Inside a run of
-  text and interpolations, a newline still separates words, so
-  `{ user.first }` and `{ user.last }` on two lines render `John Doe`.
-  `{ a }{ b }` with nothing between them stays adjacent. The two hosts do not
-  yet agree on every edge of this rule; see V10.
+- **Whitespace** ([[DECISION-D168-TEXT-RUN-WHITESPACE]], §6): text renders the
+  way the same markup renders in a browser, minus source indentation. A run of
+  spaces, tabs and newlines collapses to one space. Whitespace that contains a
+  newline is dropped at a parent's first or last child and between two
+  non-text siblings (elements, components, markers, `{#svg}`, control blocks),
+  so stacked buttons get no gap. Between text or an interpolation and anything
+  else it is one space: `tokens —` + newline + `<code>a</code>,` + newline +
+  `<code>b</code>` + newline + `and more` renders `tokens — a, b and more`, and
+  `{ user.first }` and `{ user.last }` on two lines render `John Doe`. A space
+  next to a control block sits outside the block, so it renders whether or not
+  the branch does. `{ a }{ b }` with nothing between them stays adjacent. A
+  `<pre>` or `<textarea>` body keeps its bytes exactly, except the one newline
+  right after the start tag, which HTML drops too.
 
 ```html
 <p>Price: \{ not an interpolation \}</p>
@@ -585,14 +591,11 @@ adopt V1 (chains in `{#if}`/`{#case}` headers and the `{#for}` error) and V2
   still pending in Sites, so `class={ [active && 'on', 'btn'] }` can differ
   there until it lands. Listed until the shared conformance fixture pins both
   hosts.
-- **V10 — whitespace edges.** PuzzleKit drops newline-bearing whitespace at
-  every element edge; Sites drops it only at the first and last child of a
-  parent. So `Hello` + newline + `<b>x</b>` + newline + `world` renders
-  `Hello<b>x</b>world` in PuzzleKit and `Hello <b>x</b> world` in Sites.
-  Sites also preserves `<pre>` and `<textarea>` bodies exactly, where PuzzleKit
-  collapses them. And a newline-only gap between an interpolation and an
-  `{#if}` keeps one space in PuzzleKit (D168) but is dropped in Sites. Which
-  rule is core?
+- **V10 — whitespace. PuzzleKit follows the core** (see Markup and text,
+  [[DECISION-D168-TEXT-RUN-WHITESPACE]]). Sites still keeps newline-bearing
+  whitespace between two inline siblings, so indentation between buttons
+  becomes a gap there, and still drops the gap between an interpolation and a
+  following `{#if}`, gluing the two words.
 - **V11 — text inside `{#raw}`.** PuzzleKit creates a literal text node, so
   `{#raw}&amp;{/raw}` displays `&amp;`. Sites writes raw text unescaped, so the
   browser displays `&`. Is raw text subject to the "not entity-decoded" rule?

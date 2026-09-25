@@ -316,6 +316,44 @@ describe('lexer table parity with the compiler', () => {
 	});
 });
 
+// D168: rendered whitespace depends on where the template's line breaks fall —
+// text wrapped next to an inline element renders one space, stacked elements
+// render none, and a <pre>/<textarea> body renders its bytes. The plugin must
+// never join, split or reindent those lines, whatever the print width.
+describe('template whitespace is layout (D168)', () => {
+	const src =
+		'<puzzle-view>\n' +
+		'  <p>\n' +
+		'    tokens —\n' +
+		'    <code>a</code>,\n' +
+		'    <code>b</code>\n' +
+		'    and more { count }\n' +
+		'    <b>x</b>{ y }<i>z</i>\n' +
+		'  </p>\n' +
+		'  <div class="flex">\n' +
+		'    <button>One</button>\n' +
+		'    <button>Two</button>\n' +
+		'  </div>\n' +
+		'  <pre>\n' +
+		'    indented\n' +
+		'\tcode   stays\n' +
+		'  </pre>\n' +
+		'  <textarea>\n' +
+		'  a\n' +
+		'  </textarea>\n' +
+		'</puzzle-view>\n\n' +
+		'<script>\n' +
+		'export default class T {}\n' +
+		'</script>\n';
+
+	it('keeps the template byte-identical at any print width', async () => {
+		for (const printWidth of [20, 80, 200]) {
+			const out = await format(src, { printWidth });
+			expect(sectionMap(out)['puzzle-view'].inner).toBe(sectionMap(src)['puzzle-view'].inner);
+		}
+	});
+});
+
 describe('options passthrough', () => {
 	it('respects singleQuote for the embedded JS', async () => {
 		const out = await format(read('ts-scripts.pzl'), { singleQuote: true });

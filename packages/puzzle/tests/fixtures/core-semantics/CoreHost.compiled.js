@@ -125,6 +125,34 @@ CoreHost.prototype.render = function () {
       value: __d.profile?.name,
       '@input:bind': this.__bind(__d.profile ?? 0, 'name', 'v'),
     }, []),
+    new ViewNode('p', { class: 'prose' }, [
+      new ViewNode('text', { value: 'tokens — ' }),
+      new ViewNode('code', {}, [
+        new ViewNode('text', { value: 'a' }),
+      ]),
+      new ViewNode('text', { value: ', ' }),
+      new ViewNode('code', {}, [
+        new ViewNode('text', { value: 'b' }),
+      ]),
+      new ViewNode('text', { value: ' and ' + __s(__d.unit, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'unit' : 0) + ' ' }),
+      new ViewNode('b', {}, [
+        new ViewNode('text', { value: __s(__d.n, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'n' : 0) }),
+      ]),
+    ]),
+    (this.__c[0] ??= new ViewNode('div', { class: 'stack' }, [
+      new ViewNode('button', {}, [
+        new ViewNode('text', { value: 'One' }),
+      ]),
+      new ViewNode('button', {}, [
+        new ViewNode('text', { value: 'Two' }),
+      ]),
+    ])),
+    new ViewNode('pre', { class: 'pre' }, [
+      new ViewNode('text', { value: '  indented\n    more ' + __s(__d.n, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'n' : 0) + '\n' }),
+    ]),
+    new ViewNode('textarea', { class: 'ta' }, [
+      new ViewNode('text', { value: '  keep\n    this' }),
+    ]),
   ]);
 };
 CoreHost.__pzlModule = 'CoreHost.pzl';

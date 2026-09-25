@@ -10,7 +10,7 @@
 // (golden_test.go) is a byte-compare. The idioms are documented inline where
 // they are emitted.
 //
-// # Whitespace / text policy (derived from Home.pzl vs Home.compiled.js)
+// # Whitespace / text policy (D168, the core rule of D173 V10)
 //
 // Applied to template Text nodes only (never to attribute values, which keep
 // their bytes). For each Text node:
@@ -20,24 +20,33 @@
 //     likewise;
 //   - if the result is empty, drop the node.
 //
-// So "\n        Made with " → "Made with " (indentation gone, the space before
-// the next inline element kept) and pure inter-element indentation
-// ("</h2>\n      <form>") drops entirely. Consecutive Text/Interpolation
-// siblings coalesce into ONE text vnode whose value is the `+`-concatenation of
-// quoted literals and shared display-coercion calls.
+// Consecutive Text/Interpolation siblings coalesce into ONE text vnode whose
+// value is the `+`-concatenation of quoted literals and shared display-coercion
+// calls.
 //
-// Stripping is an ELEMENT-boundary rule, so it applies only at the edges of such
-// a run. Inside one run, a stripped edge that borders another run member (an
-// interpolation, or a text segment across a dropped whitespace-only node) gets
-// exactly one space back — a newline between "new" and "{ n }" separates words,
-// as it does in HTML, Vue and Svelte. `{ a }{ b }` with no whitespace between
-// them stays adjacent.
+// Stripping is a PARENT-EDGE rule. A stripped edge gets exactly one space back
+// whenever it borders anything other than the parent's edge:
+//   - another member of the same run (an interpolation, or a text segment
+//     across a dropped whitespace-only node): `{ first }\n{ last }` renders
+//     "John Doe";
+//   - a sibling element, component, marker, portal, snippet or {#svg}:
+//     `tokens —\n<code>a</code>,\n<code>b</code>\nand more` renders
+//     "tokens — a, b and more", as a browser renders the same markup;
+//   - a sibling control-flow block ({#if}, {#for}, {#case}): the space lands
+//     outside the block, so it renders whether or not the branch does.
 //
-// A control-flow block ({#if}, {#for}, {#case}) breaks the run without ending
-// the line of prose, so a run edge that borders one — on either side — is
-// padded the same way: `you have { n } new\n{#if x}message{/if}` renders
-// "new message". Elements, components, markers and {#svg} are NOT control flow;
-// the element-boundary strip stands at those edges (D168).
+// A run edge that is the first or last child of its parent (an element, a
+// component's children, a marker fallback, a snippet body, or a control
+// block's own body) keeps the strip: it is indentation. Whitespace-only text
+// with a newline between two non-text siblings drops entirely, so stacked
+// buttons and stacked conditionals get no gap. Nothing is invented where the
+// source had no whitespace: `{ a }{ b }` and `<b>x</b>{ y }` stay adjacent.
+//
+// A <pre> or <textarea> body is preserved exactly: every Text node in its
+// subtree is emitted byte for byte, whitespace-only nodes included, except the
+// one newline directly after the start tag, which HTML's parser drops too. A
+// {#for} body's own children still drop their whitespace there, because a loop
+// body is a single root element and cannot hold text.
 package codegen
 
 import (
@@ -518,6 +527,12 @@ type compiler struct {
 	// the one they will be emitted in and throw the text away, so their facts
 	// must never reach a site.
 	analyzing int
+	// preserveWS > 0 inside a <pre> or <textarea> body, where every Text node is
+	// emitted byte for byte (D168 rule 6). Every walker that descends into an
+	// element's children and calls processChildren — emitElement and the static
+	// subtree analysis — raises it for those two tags, so the look-ahead passes
+	// count the same text vnodes emission produces.
+	preserveWS int
 	// snippetDepth > 0 inside a <Snippet> body: stamped fresh per expansion, so
 	// it owns no cache — loops keep `.map`, and neither static subtrees nor row
 	// handlers are cached there.
@@ -649,13 +664,19 @@ func (c *compiler) emitSkeletonRoot(skel *parser.Element, viewAttrs []parser.Att
 // the column the first line actually starts at, used only for the print-width
 // decision (the root sits after "return ", so startCol > ind there).
 func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []parser.Node, ind, startCol int, isComponent bool, scope scopeMap) (string, error) {
-	processed, err := c.processChildren(children, scope)
-	if err != nil {
-		return "", err
-	}
 	tag := ""
 	if !isComponent && len(tagStr) >= 2 && tagStr[0] == '\'' && tagStr[len(tagStr)-1] == '\'' {
 		tag = tagStr[1 : len(tagStr)-1]
+	}
+	if preservesWhitespace(tag) {
+		// The whole subtree, descendants included, keeps its bytes (D168).
+		children = preservedBody(children)
+		c.preserveWS++
+		defer func() { c.preserveWS-- }()
+	}
+	processed, err := c.processChildren(children, scope)
+	if err != nil {
+		return "", err
 	}
 	multiline, err := c.attrsMultiline(tag, attrs, tagStr, startCol, len(processed) == 0, scope, isComponent)
 	if err != nil {
@@ -1341,8 +1362,15 @@ func (c *compiler) forBodyRoot(f *parser.For, scope scopeMap) (parser.Node, bool
 	// locals are not bound yet) and every emitted byte is discarded — only the
 	// root node and the explicit-key verdict are used. Facts collected here
 	// would register the loop's own locals as parent data roots.
+	//
+	// Inside a <pre>/<textarea> the body's own whitespace still drops: a loop
+	// body is one root element and cannot hold text. Only this one children
+	// list is exempt; the root's descendants are preserved as usual.
 	c.analyzing++
+	preserve := c.preserveWS
+	c.preserveWS = 0
 	items, err := c.processChildren(f.Body, scope)
+	c.preserveWS = preserve
 	c.analyzing--
 	if err != nil {
 		return nil, false, err
@@ -1690,19 +1718,20 @@ func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprF
 }
 
 // processChildren applies the whitespace policy, coalesces text runs, and drops
-// pure inter-element whitespace, returning items in source order.
+// pure inter-element whitespace, returning items in source order. It classifies
+// one children list only; descendants are processed as they are emitted.
 func (c *compiler) processChildren(children []parser.Node, scope scopeMap) ([]item, error) {
 	var items []item
 	var run []parser.Node
-	// leftBlock: the sibling immediately before the run being collected is a
-	// control-flow block, so the run's leading edge is a word boundary rather
-	// than an element boundary (see the package doc).
-	leftBlock := false
-	flush := func(rightBlock bool) error {
+	// leftSibling: a sibling node, not the parent's edge, sits immediately
+	// before the run being collected, so a stripped leading edge is a word
+	// boundary rather than indentation (see the package doc).
+	leftSibling := false
+	flush := func(rightSibling bool) error {
 		if len(run) == 0 {
 			return nil
 		}
-		val, ok, err := c.buildTextRun(run, scope, leftBlock, rightBlock)
+		val, ok, err := c.buildTextRun(run, scope, leftSibling, rightSibling)
 		run = run[:0]
 		if err != nil {
 			return err
@@ -1717,12 +1746,11 @@ func (c *compiler) processChildren(children []parser.Node, scope scopeMap) ([]it
 		case *parser.Text, *parser.Interpolation:
 			run = append(run, ch)
 		default:
-			block := isControlFlow(ch)
-			if err := flush(block); err != nil {
+			if err := flush(true); err != nil {
 				return nil, err
 			}
 			items = append(items, item{node: ch})
-			leftBlock = block
+			leftSibling = true
 		}
 	}
 	if err := flush(false); err != nil {
@@ -1731,28 +1759,51 @@ func (c *compiler) processChildren(children []parser.Node, scope scopeMap) ([]it
 	return items, nil
 }
 
-// isControlFlow reports whether n is a control-flow block — `{#if}` (which
-// `{#unless}` desugars to), `{#for}`, or `{#case}`. Such a node breaks the
-// coalesced text run, but the break is a word boundary, not an element
-// boundary: a newline between a run and an adjacent control-flow sibling
-// separates words exactly as a run-internal newline does. Elements,
-// components, markers, and `{#svg}` are deliberately NOT control flow — the
-// element-boundary strip stands there (D168).
-func isControlFlow(n parser.Node) bool {
-	switch n.(type) {
-	case *parser.If, *parser.For, *parser.Case:
-		return true
+// preservesWhitespace reports whether an element's body keeps its source
+// whitespace byte for byte (D168 rule 6).
+func preservesWhitespace(tag string) bool {
+	return tag == "pre" || tag == "textarea"
+}
+
+// preservedBody returns a <pre>/<textarea> body without the one newline that
+// HTML's parser drops directly after the start tag, so `<pre>` + newline +
+// `code` renders the same in the browser runtime as the same markup parsed.
+// Only a first-child Text node can carry that newline, and a {#raw} body's text
+// never does: `<pre>{#raw}` + newline keeps its bytes (D150), since the newline
+// does not follow the start tag in the source.
+func preservedBody(children []parser.Node) []parser.Node {
+	if len(children) == 0 {
+		return children
 	}
-	return false
+	t, ok := children[0].(*parser.Text)
+	if !ok || t.Raw {
+		return children
+	}
+	v := t.Value
+	switch {
+	case strings.HasPrefix(v, "\r\n"):
+		v = v[2:]
+	case strings.HasPrefix(v, "\n"):
+		v = v[1:]
+	default:
+		return children
+	}
+	if v == "" {
+		return children[1:]
+	}
+	out := make([]parser.Node, len(children))
+	copy(out, children)
+	out[0] = &parser.Text{Value: v, Raw: t.Raw, Pos: t.Pos}
+	return out
 }
 
 // buildTextRun coalesces a run of Text/Interpolation siblings into a single
 // text-vnode value expression. Returns ("", false, nil) when the run reduces to
 // nothing (pure whitespace); a positioned error when an interpolation is an
-// object literal (SPEC §6). leftBlock/rightBlock report that the run is bounded
-// by a control-flow sibling, which makes that edge a run-INTERNAL boundary for
-// padding purposes.
-func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftBlock, rightBlock bool) (string, bool, error) {
+// object literal (SPEC §6). leftSibling/rightSibling report that the run is
+// bounded by a sibling node rather than the parent's edge, which makes that
+// edge a word boundary for padding purposes (D168).
+func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftSibling, rightSibling bool) (string, bool, error) {
 	facts := c.factSink()
 	defer func() { c.absorb(facts, scope) }()
 	type seg struct {
@@ -1769,7 +1820,9 @@ func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftBlock, ri
 	for _, n := range run {
 		switch t := n.(type) {
 		case *parser.Text:
-			if t.Raw {
+			if t.Raw || c.preserveWS > 0 {
+				// {#raw} bytes, and every Text node inside a <pre>/<textarea>
+				// body, are emitted exactly as authored (D150, D168).
 				segs = append(segs, seg{text: t.Value, static: true})
 				continue
 			}
@@ -1813,18 +1866,18 @@ func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftBlock, ri
 			segs[i].gap = true
 		}
 	}
-	// A control-flow sibling breaks the run without ending the line of prose,
-	// so a stripped edge that borders one is padded exactly like an internal
-	// boundary. Element boundaries keep the strip.
+	// A sibling node breaks the run without ending the line of prose, so a
+	// stripped edge that borders one is padded exactly like an internal
+	// boundary. Only the parent's edges keep the strip.
 	trailGap := false
-	if leftBlock && (leadPad || segs[0].padL) {
+	if leftSibling && (leadPad || segs[0].padL) {
 		if segs[0].static {
 			segs[0].text = " " + segs[0].text
 		} else {
 			segs[0].gap = true
 		}
 	}
-	if rightBlock && segs[len(segs)-1].padR {
+	if rightSibling && segs[len(segs)-1].padR {
 		last := len(segs) - 1
 		if segs[last].static {
 			segs[last].text += " "
