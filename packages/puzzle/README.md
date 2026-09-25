@@ -452,6 +452,9 @@ The framework lives at `packages/puzzle` in the `magic-spells/puzzle`
 repository; the repo root is a private shell whose scripts delegate here.
 `packages/` holds everything that releases in lockstep with it:
 
+- [`packages/puzzle-lang`](../puzzle-lang) — the Puzzle template language
+  (lexer, section splitter, AST, positioned errors) as its own Go module, which
+  the compiler imports
 - [`packages/puzzle-pieces`](../puzzle-pieces) — the official component
   library (published to npm as `@magic-spells/puzzle-pieces`)
 - [`packages/puzzle-devtools`](../puzzle-devtools) — the Chrome DevTools

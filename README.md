@@ -9,6 +9,7 @@ Everything that releases in lockstep with the framework lives here:
 | Package | What it is | Ships as |
 |---|---|---|
 | [`packages/puzzle`](packages/puzzle) | The framework: runtime, compiler, CLI, examples | `@magic-spells/puzzle` on npm |
+| [`packages/puzzle-lang`](packages/puzzle-lang) | The Puzzle language as a Go module: lexer, section splitter, AST, positioned errors | Go module, tagged `packages/puzzle-lang/vX.Y.Z` |
 | [`packages/puzzle-pieces`](packages/puzzle-pieces) | Copy-in UI component registry for `puzzle add piece` | `@magic-spells/puzzle-pieces` on npm |
 | [`packages/puzzle-devtools`](packages/puzzle-devtools) | Chrome DevTools extension | extension zip (never npm) |
 | [`packages/puzzle-eslint`](packages/puzzle-eslint) | ESLint plugin for `.pzl` files | `@magic-spells/eslint-plugin-puzzle` (not yet published) |
