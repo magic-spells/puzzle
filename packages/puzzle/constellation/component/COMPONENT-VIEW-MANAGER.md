@@ -120,6 +120,34 @@ notes:
       `displayValue(value, 0, ' ')`; controlled `value` (setAttr's PROPS arm, syncControlValue,
       reassertSelectValue, and the serializer's value/select/textarea/option paths) prints the same
       way. Pinned by tests/slot-filled.test.js and tests/display-value.test.js.
+  - kind: gotcha
+    text: >-
+      CORRECTS the 0.8.0 D173 note above. That note calls dropping an unfilled bucket's placeholders
+      "intended". It is not, and the code no longer does it for a marker without a fallback.
+
+
+      Marker expansion now goes through ONE helper, `fill(out, nodes, marker, parts)`, which
+      replaces `isFilled` and the four fill/fallback arms. The V14 filled test runs only when the
+      marker HAS a fallback body. A marker with no fallback (a plain `<Children/>`) splices the
+      supplied nodes through as they are, PLACEHOLDER_TAG vnodes included.
+
+
+      Why this matters: the positional unkeyed patcher pairs children by index. If a marker
+      contributes zero nodes on one render and one node on the next, every sibling after it in the
+      component's template shifts. Siblings that shift are tag-mismatched and replaced, so an
+      `<input>` loses focus and a stateful child component is destroyed and rebuilt. The first V14
+      build did exactly that to a call-site `{#if}` toggling: `created()` ran 3x and focus was lost.
+
+
+      A marker WITH a fallback still swaps content for fallback, so a fallback whose node count
+      differs from the content's still shifts the siblings after it. The documented author rule is
+      one root element in such a fallback; padding was rejected (+32 B gzip). `nodes` is null for an
+      args-bearing marker filled with plain content, which always renders its fallback. Pinned by
+      the "sibling stability" block in tests/slot-filled.test.js.
+
+
+      V9 update: an attribute list drops `false` and every item that prints nothing (displayValue
+      with sep ' ').
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

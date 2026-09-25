@@ -504,11 +504,7 @@ function expandChildList(kids, parts) {
 					// stays at the marker position; the nearest call-site context appends the
 					// metadata to the component's DIRECT children after this descent, so a
 					// marker nested under authored markup still reaches partitionSlots.
-					if (isFilled(bucket)) {
-						for (const sc of bucket) out.push(sc);
-					} else {
-						for (const fb of k.children) out.push(expandNode(fb, parts));
-					}
+					fill(out, bucket, k, parts);
 					parts.callSite.forwarded = true;
 					// Forward every snippet even if a different marker in this wrapper already
 					// consumed it — snippet functions are reusable, and two consumers may stamp
@@ -526,11 +522,7 @@ function expandChildList(kids, parts) {
 					}
 					// A stamp that rendered nothing leaves the position unfilled, so the
 					// marker's fallback shows for that stamp (D173 V14).
-					if (isFilled(stampedNodes)) {
-						for (const stamped of stampedNodes) out.push(stamped);
-					} else {
-						for (const fb of k.children) out.push(expandNode(fb, parts));
-					}
+					fill(out, stampedNodes, k, parts);
 					continue;
 				}
 				if (
@@ -541,18 +533,10 @@ function expandChildList(kids, parts) {
 				) {
 					warnPlainScopedContent(markerName, k.attrs.args || {}, parts.component);
 				}
-				if (!hasArgs && isFilled(bucket)) {
-					for (const sc of bucket) out.push(sc);
-				} else {
-					for (const fb of k.children) out.push(expandNode(fb, parts));
-				}
+				fill(out, hasArgs ? null : bucket, k, parts);
 				continue;
 			}
-			if (isFilled(bucket)) {
-				for (const sc of bucket) out.push(sc);
-			} else {
-				for (const fb of k.children) out.push(expandNode(fb, parts));
-			}
+			fill(out, bucket, k, parts);
 			continue;
 		}
 		const ek = expandNode(k, parts);
@@ -566,18 +550,38 @@ function expandChildList(kids, parts) {
 }
 
 /**
- * Whether supplied content fills a composition position (D173 V14): it must
- * render at least one node that is not whitespace-only text. A false call-site
- * `{#if}` contributes only its arity placeholder and an empty `{#for}` nothing
- * at all, so both leave the position unfilled and the marker's fallback body
- * (D141) shows. A component or an element always counts — whether a child
+ * Splice what fills marker `k` into `out`: the supplied `nodes`, or the
+ * marker's fallback body (D141) when the position is unfilled.
+ *
+ * Filled (D173 V14) means the content renders at least one node that is not
+ * whitespace-only text. A false call-site `{#if}` contributes only its arity
+ * placeholder and an empty `{#for}` nothing at all, so both leave the position
+ * unfilled. An element or a component always counts — whether a child
  * component's own template renders anything is not knowable here. A text
  * node's value is already display text (codegen wraps every interpolation in
- * displayValue). The shared expansion serves the browser and both prerender
- * modes, so SSG output agrees.
+ * displayValue).
+ *
+ * The test runs only when the marker HAS a fallback. A marker without one
+ * splices the supplied nodes through as they are, placeholders included, so a
+ * toggling call-site `{#if}` keeps the marker's arity constant and the
+ * positional patcher never shifts — and remounts — the siblings after it. A
+ * fallback whose node count differs from the content's still shifts them on
+ * each flip; SPEC §24 tells authors to keep such a fallback to one root.
+ * `nodes` is null for an args-bearing marker filled with plain content, which
+ * always renders its fallback. The shared expansion serves the browser and
+ * both prerender modes, so SSG output agrees.
  */
-const isFilled = (nodes) =>
-	nodes?.some((n) => n.tag !== PLACEHOLDER_TAG && (!n.isText || /\S/.test(n.attrs.value)));
+function fill(out, nodes, k, parts) {
+	if (
+		nodes &&
+		(!k.children.length ||
+			nodes.some((n) => n.tag !== PLACEHOLDER_TAG && (!n.isText || /\S/.test(n.attrs.value))))
+	) {
+		for (const n of nodes) out.push(n);
+	} else {
+		for (const fb of k.children) out.push(expandNode(fb, parts));
+	}
+}
 
 const UNKNOWN_SNIPPET_OWNER = {};
 let snippetWarnings;

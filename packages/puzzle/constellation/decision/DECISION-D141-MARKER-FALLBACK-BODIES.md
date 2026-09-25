@@ -30,7 +30,6 @@ positioned compile errors steering to the capitalized forms (D134).
 
 ## Contract
 
-
 - **Uniform across the one mechanism.** `<Children>` and bare `<Slot>` are the
   same AST node, so fallback behaves identically in all three positions:
   component default content, named-slot fallback, and the router outlet — which
@@ -42,6 +41,13 @@ positioned compile errors steering to the capitalized forms (D134).
   call-site `{#if}` and an empty `{#for}` both leave it unfilled, so the
   fallback shows — the empty-state pattern needs no extra syntax. The same test
   applies to each snippet stamp and to a forwarded position.
+- **Keep a fallback to one root element when siblings follow the marker.** The
+  unkeyed patcher pairs children by position, so a fallback whose node count
+  differs from the content it swaps with shifts every sibling after the marker
+  in the component's template, and those siblings remount on each flip (an
+  input loses focus, a child component loses its state). A marker without a
+  fallback passes its content through untouched and never shifts anything; the
+  runtime does not pad fallbacks (measured at +32 B gzip and rejected).
 - **A fallback body is ordinary template content.** Interpolations (including
   formatter pipes), `{#if}`/`{#for}`/`{#case}` blocks, components, event
   bindings, refs, and `{#svg}` inline SVG (D46) all parse and compile through
@@ -53,10 +59,11 @@ positioned compile errors steering to the capitalized forms (D134).
   whether a position was filled, which is all fallback needs. A testable-slots
   API remains a separate, unclaimed decision.
 - **Implementation surface:** `Slot.Children` in the AST, paired-marker
-  parsing, codegen fallback emission, the runtime `expandChildList` fallback
-  branch (with its `isFilled` test), and fallback-content traversal in a11y,
-  refs, and the class scan. Golden churn is acceptable
-  (compiler-over-runtime-bytes: the runtime cost is one branch).
+  parsing, codegen fallback emission, the runtime `fill` helper in
+  `expandChildList` (the filled test runs only for a marker that has a
+  fallback), and fallback-content traversal in a11y, refs, and the class scan.
+  Golden churn is acceptable (compiler-over-runtime-bytes: the runtime cost is
+  one branch).
 
 ## Rationale
 

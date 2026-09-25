@@ -238,3 +238,67 @@ describe('default markers in exclusive branches (D173 V13)', () => {
 		host.destroy();
 	});
 });
+
+// Review regression (PR #151): V14 must not change a marker's arity when the
+// marker has no fallback. A plain <Children/> splices the call-site content
+// through as-is — placeholder included — so toggling a call-site {#if} never
+// shifts the siblings after the marker, and the positional patcher keeps the
+// input (and its focus) and the stateful child. A one-node fallback swaps
+// one-for-one with one-node content, so it holds too. (A fallback whose node
+// count differs from the content's still shifts siblings — SPEC §24 tells
+// authors to keep such a fallback to one root element.)
+describe('sibling stability after a marker when a call-site {#if} toggles (D173 V14)', () => {
+	let created = 0;
+	class Stateful extends PuzzleView {
+		created() {
+			created++;
+		}
+		render() {
+			return h('span', { class: 'stateful' }, [text('s')]);
+		}
+	}
+	function hostWith(fallback) {
+		class Card extends PuzzleView {
+			render() {
+				return h('section', {}, [marker(fallback), h('input', { class: 'after' }), h(Stateful, {})]);
+			}
+		}
+		return class Host extends PuzzleView {
+			created() {
+				this.setData({ show: false });
+			}
+			data() {
+				return { show: this.getData().show };
+			}
+			render() {
+				return h('div', {}, [
+					h(Card, {}, this.getData().show ? [h('p', {}, [text('Hi')])] : [placeholder()]),
+				]);
+			}
+		};
+	}
+
+	for (const [label, fallback] of [
+		['no fallback', []],
+		['a one-node fallback', [h('em', {}, [text('fb')])]],
+	]) {
+		it(`${label}: the input keeps focus and the stateful sibling is never rebuilt`, async () => {
+			created = 0;
+			const Host = hostWith(fallback);
+			const el = container();
+			const host = await new Host().mount(el);
+			const input = el.querySelector('input.after');
+			input.focus();
+
+			host.setData('show', true);
+			host.flushUpdates();
+			host.setData('show', false);
+			host.flushUpdates();
+
+			expect(el.querySelector('input.after')).toBe(input);
+			expect(document.activeElement).toBe(input);
+			expect(created).toBe(1);
+			host.destroy();
+		});
+	}
+});

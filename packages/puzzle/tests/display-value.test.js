@@ -254,10 +254,23 @@ describe('value printing (D173 V6)', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		try {
 			expect(displayValue({ ok: true }, 'v6.object')).toBe('');
-			expect(displayValue(new Date(0), 'v6.object')).toBe('');
+			expect(displayValue({ other: true }, 'v6.object')).toBe('');
 			expect(warn).toHaveBeenCalledTimes(1);
 			expect(warn).toHaveBeenCalledWith(
 				'[puzzle] object template value for "v6.object"; rendering nothing — format it or print one of its fields'
+			);
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	it('prints a Date as nothing and steers to the date formatters in development', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			expect(displayValue(new Date(0), 'v6.date')).toBe('');
+			expect(warn).toHaveBeenCalledTimes(1);
+			expect(warn).toHaveBeenCalledWith(
+				'[puzzle] Date template value for "v6.date"; rendering nothing — format it with | date (or | datetime, | time)'
 			);
 		} finally {
 			warn.mockRestore();
@@ -294,15 +307,37 @@ describe('list and object attribute values (D173 V9)', () => {
 			const container = document.createElement('div');
 			new ViewManager(container).render(tree());
 			const div = container.firstElementChild;
-			expect(div.getAttribute('class')).toBe('card is-active  3');
+			expect(div.getAttribute('class')).toBe('card is-active 3');
 			expect(div.hasAttribute('data-obj')).toBe(false);
 			expect(div.getAttribute('data-nan')).toBe('');
 			expect(div.getAttribute('data-empty-list')).toBe('');
 			expect(container.querySelector('input').value).toBe('a b');
 
 			expect(await serialize(tree())).toBe(
-				'<div class="card is-active  3" data-nan="" data-empty-list=""><input value="a b"></div>'
+				'<div class="card is-active 3" data-nan="" data-empty-list=""><input value="a b"></div>'
 			);
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	it('drops false and empty items from an attribute list (the clsx idiom), browser and SSG alike', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const active = false;
+			const tree = () =>
+				h('div', {
+					class: [active && 'on', 'btn', null, undefined, '', [1, 2], 0, true],
+					'data-none': [false, null, ''],
+				});
+			const container = document.createElement('div');
+			new ViewManager(container).render(tree());
+			const div = container.firstElementChild;
+			expect(div.getAttribute('class')).toBe('btn 1,2 0 true');
+			expect(div.getAttribute('data-none')).toBe('');
+			expect(await serialize(tree())).toBe('<div class="btn 1,2 0 true" data-none=""></div>');
+			// Text keeps the plain comma join: false prints, empties stay as empty slots.
+			expect(displayValue([false, null, 'a'])).toBe('false,,a');
 		} finally {
 			warn.mockRestore();
 		}

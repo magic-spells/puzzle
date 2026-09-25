@@ -115,7 +115,6 @@ PuzzleKit contract: §6 and [[COMPONENT-FORMATTERS]].
 
 ## Attributes
 
-
 | Form | Example | Meaning |
 |---|---|---|
 | static | `class="card"` | copied as written |
@@ -129,10 +128,12 @@ A brace-only value controls the attribute's presence
 
 - `false`, `null` and `undefined` omit the attribute; `true` writes it with an
   empty value.
-- A list writes its items, each printed by the value rule above, joined with
-  single spaces, so `class={ ['card', active ? 'is-active' : null] }` works.
-  (Text and quoted attributes keep the `,` join, and a list passed to a
-  component as a prop stays a list.)
+- A list is a token list: its items, each printed by the value rule above, are
+  joined with single spaces, and `false` and every item that prints nothing
+  (`null`, `undefined`, `''`, …) are dropped. So the clsx idiom
+  `class={ [active && 'on', 'btn'] }` writes `class="btn"`. (Text and quoted
+  attributes keep the plain `,` join, and a list passed to a component as a
+  prop stays a list.)
 - An object omits the attribute, and a host may warn in development.
 - Anything else is printed by the value rule.
 
