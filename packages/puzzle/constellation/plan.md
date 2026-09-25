@@ -66,6 +66,13 @@ notes:
       2026-09-23 — D172 is taken ([[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]]: Puzzle is one
       template language with two dialects, PuzzleKit and Sites; marketed as "Puzzle"; package and
       CLI names unchanged). **The next free decision number is D173.**
+  - kind: state
+    text: >-
+      2026-09-24 — D173 and D174 are taken, both status planned (PROPOSED, awaiting Cory's batch
+      approval; nothing built): [[DECISION-D173-CORE-SEMANTICS]] proposes an outcome for each
+      dialect divergence V1–V18 from [[DOC-LANGUAGE-CORE]], and
+      [[DECISION-D174-STANDARD-FORMATTERS]] proposes the formatter resolutions F1–F27, the standard
+      set, renames/removals and the host-only lists. **The next free decision number is D175.**
 ---
 
 # Puzzle project map
