@@ -10,6 +10,7 @@ connections:
   - DECISION-D162-MONOREPO-PACKAGES
   - DECISION-D32-CLI-TOOLING
   - DOC-RELEASE-SURFACE
+  - DECISION-D166-SNIPPETS
 notes:
   - kind: decision
     text: >-
@@ -51,8 +52,9 @@ files server-side in Go at request time, using a vendored, pinned copy of
   no `<puzzle-view>` wrapper. (Its head-tags marker, `<SitesHead/>`, becomes a
   layout slot; see Decision.)
 - **Sites restricts:** expressions are a defined subset evaluated in Go (no
-  calls; formatters are the only way to run code). `@event`, `<Portal>` and
-  `<Snippet>` are compile errors.
+  calls; formatters are the only way to run code). `@event` and `<Portal>` are
+  compile errors. `<Snippet>` is a compile error today only because Sites has
+  not implemented it yet; it is core (see Decision).
 - **PuzzleKit adds:** the script section (`data()`, `setData`, lifecycle),
   `@event` callbacks, and full JavaScript expressions. It has no template
   variables; the script section is where values get named.
@@ -89,6 +91,14 @@ core that Shopify extends with its own tags and objects.
   slot names exist and which are required is a host rule checked after
   parsing. No marker tags such as `<SiteContent/>` are needed:
   platform-filled placeholders are slots.
+- **Snippets: `<Snippet fits="…" params>`** ([[DECISION-D166-SNIPPETS]]), the
+  per-item template a caller hands a component that owns a loop (a table cell,
+  a list row, a carousel slide). Core because nothing about it needs a browser:
+  a server renderer stamps the body per item with the caller's scope plus the
+  parameters, which is the easy case. Same semantics in every host: `fits`,
+  bare-attribute parameter declarations, the leaf rule, forwarding through a
+  wrapper's `<Children/>`. PuzzleKit implements it today; Sites has not built
+  it yet (planned), and until then rejects it with an error saying so.
 - **The core expression language** is the portable subset Sites defines:
   paths, literals, arithmetic, comparison, `&&`/`||`/`??`, ternary.
 
@@ -97,8 +107,9 @@ core that Shopify extends with its own tags and objects.
 | | PuzzleKit | Sites |
 |---|---|---|
 | File structure | `<puzzle-view>`/`<puzzle-layout>`/`<puzzle-skeleton>` wrapper + `<script>` class | No wrapper; the directory decides the kind; top-level `<schema>` |
-| Adds | `@event` + modifiers, `<Portal>`, `<Snippet>`, `ref`/`key`/`flip`/`island`, implicit binding | `{#let}`, implicit props |
+| Adds | `@event` + modifiers, `<Portal>`, `ref`/`key`/`flip`/`island`, implicit binding | `{#let}`, implicit props |
 | Expressions | Full JavaScript (a superset of the core) | The core subset only |
+| Not yet built | — | `<Snippet>` (core; planned) |
 
 **Architecture: one parser that knows every construct, with per-dialect
 switches.** The shared lexer/parser has every construct from both dialects
@@ -115,11 +126,12 @@ uses, which they can read from the project (`puzzle.config.js` vs Sites'
 
 **The rule that keeps two dialects maintainable: they differ only by addition
 or restriction, never by redefinition.** A dialect may switch a construct on
-or leave it off; it never gives shared syntax a different meaning. **Formatters
-follow the same rule:** a standard set with the same name behaves the same in
-both hosts (implemented twice, in JS and in Go); anything else is
-host-specific and named so. A proposal that would need the same spelling to
-behave differently per host gets a new spelling instead.
+or leave it off; it never gives shared syntax a different meaning. A construct
+may move from a dialect into the core (an addition, as `<Snippet>` did), never
+the other way. **Formatters follow the same rule:** a standard set with the
+same name behaves the same in both hosts (implemented twice, in JS and in Go);
+anything else is host-specific and named so. A proposal that would need the
+same spelling to behave differently per host gets a new spelling instead.
 
 **Public naming follows the Svelte pattern.** puzzlejs.dev, the README and the
 package all market **"Puzzle"**: one name, one install
@@ -167,20 +179,26 @@ or "Puzzle.js"; puzzlejs.dev is only the address.
 
 
 - **The parser accepts every construct and each host switches on its own.**
-  Sites' post-parse rejection of `@event`/`<Portal>`/`<Snippet>` becomes the
-  dialect switch being off.
+  Sites' post-parse rejection of `@event`/`<Portal>` becomes the dialect switch
+  being off.
 - **Follow-up: move Sites' syntax into the shared parser behind the Sites
   switch:** `{#let}`, `<schema>` lifting, and the unquoted attribute formatter
   pipe (which becomes core, see the gotcha note). Sites then drops its
   `sitesPatches` entry and the syntax files in its vendored copy, keeping only
   its evaluator and renderer. Later, once the parser is a public Go module,
   Sites stops vendoring altogether.
-- **Follow-up in Sites: layout slots** (dispatched 2026-09-24 on
-  `feat/layout-slots` in the Sites repo). `<SitesHead/>` becomes
+- **Follow-up in Sites: layout slots** (built as Sites PR #9,
+  `feat/layout-slots`, 2026-09-24; not merged yet). `<SitesHead/>` becomes
   `<Slot name="head-content"/>`; the page body is the plain `<Slot/>`; section
   groups use `-group` slot names (`header-group`, `footer-group`,
   `panel-group`). Sites requires all five in every layout exactly once, keeps
-  `head-content` inside `<head>`, and rejects any other layout slot name.
+  `head-content` inside `<head>`, rejects any other layout slot name, and
+  refuses to publish or deploy a theme that fails the check.
+- **Follow-up in Sites: `<Snippet>` support**, after the dialect switches land.
+  Rewrite Sites' DECISION-TEMPLATE-GRAMMAR (which rejects it today), render a
+  snippet body per item in the Go renderer with the caller's scope plus the
+  declared parameters, and prove parity with PuzzleKit through the shared
+  conformance fixtures.
 - **Follow-up: dialect-aware tooling becomes dialect selection.** The three
   editor grammars and the eslint/prettier plugins learn the Sites constructs
   once (one grammar) and pick the dialect per project. They must do this before
