@@ -75,14 +75,20 @@ core that Shopify extends with its own tags and objects.
   role decides who fills it. In a component, the caller does. In a layout, the
   host does, and **the plain `<Slot/>` in a layout is the page** in both
   dialects (PuzzleKit: the router's current view; Sites: the page template and
-  its sections). A host may reserve named layout slots: Sites reserves
-  `<Slot name="head"/>` (platform head tags, inside `<head>`),
-  `<Slot name="header"/>` and `<Slot name="footer"/>` (the site's header and
-  footer sections). A fallback body renders when the host has nothing for that
-  slot, so `<Slot name="header">…a default header…</Slot>` works. Which layout
-  slot names are valid, and which are required (the plain `<Slot/>`, exactly
-  once), is a host rule checked after parsing. No marker tags such as
-  `<SiteContent/>` are needed: platform-filled placeholders are slots.
+  its sections). A host may reserve named layout slots. Sites reserves
+  `<Slot name="head-content"/>` (the platform's head tags, placed inside
+  `<head>`; deliberately not Shopify's `content_for_header`, whose "header"
+  reads as the visible site header) and `-group` names for the site's section
+  groups: `<Slot name="header-group"/>`, `<Slot name="footer-group"/>`,
+  `<Slot name="panel-group"/>`. **A Sites layout must contain every one of
+  those slots, plus the plain `<Slot/>`, exactly once**, so every theme gives
+  the platform the same places to render into and the customizer the same
+  groups to edit; a missing one is a compile error naming it. A fallback body
+  renders when the host has nothing for that slot, so
+  `<Slot name="header-group">…a default header…</Slot>` works. Which layout
+  slot names exist and which are required is a host rule checked after
+  parsing. No marker tags such as `<SiteContent/>` are needed:
+  platform-filled placeholders are slots.
 - **The core expression language** is the portable subset Sites defines:
   paths, literals, arithmetic, comparison, `&&`/`||`/`??`, ternary.
 
@@ -169,11 +175,12 @@ or "Puzzle.js"; puzzlejs.dev is only the address.
   `sitesPatches` entry and the syntax files in its vendored copy, keeping only
   its evaluator and renderer. Later, once the parser is a public Go module,
   Sites stops vendoring altogether.
-- **Follow-up in Sites: layout slots.** `<SitesHead/>` becomes
-  `<Slot name="head"/>`; the page body is the plain `<Slot/>`; header and
-  footer sections fill `<Slot name="header"/>`/`<Slot name="footer"/>`. Sites
-  validates the reserved names and requires the plain `<Slot/>` exactly once
-  per layout.
+- **Follow-up in Sites: layout slots** (dispatched 2026-09-24 on
+  `feat/layout-slots` in the Sites repo). `<SitesHead/>` becomes
+  `<Slot name="head-content"/>`; the page body is the plain `<Slot/>`; section
+  groups use `-group` slot names (`header-group`, `footer-group`,
+  `panel-group`). Sites requires all five in every layout exactly once, keeps
+  `head-content` inside `<head>`, and rejects any other layout slot name.
 - **Follow-up: dialect-aware tooling becomes dialect selection.** The three
   editor grammars and the eslint/prettier plugins learn the Sites constructs
   once (one grammar) and pick the dialect per project. They must do this before
