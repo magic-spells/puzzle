@@ -50,6 +50,19 @@ notes:
       is now a positioned error steering to `{#for 1...5, i}` (the counter always binds AFTER the
       range); spread and call collections still parse as before. Pinned in
       compiler/internal/parser/parser_test.go.
+  - kind: state
+    text: >-
+      2026-09-24 (0.8.0, feat/puzzle-lang) — the parser moved, unchanged, out of
+      `compiler/internal/parser` into its own Go module, `packages/puzzle-lang` (module
+      `github.com/magic-spells/puzzle/packages/puzzle-lang`, package `parser`), together with the
+      `jsident` and `textutil` helpers it imports (D172). Paths in older notes on this card
+      (`compiler/internal/parser/depth.go`, `.../parser_test.go`) now read
+      `packages/puzzle-lang/parser/...`. The compiler imports it through `require ... v0.0.0` +
+      `replace => ../puzzle-lang` in `packages/puzzle/go.mod`; outside hosts (Magic Spells Sites)
+      will import a `packages/puzzle-lang/vX.Y.Z` tag. Gotcha: the FILE cards' `path` fields now
+      point outside this plan root (`../puzzle-lang/...`), and the constellation tooling reports
+      such bindings as "outside code root", so `code: direct` hydration and staleness checks do not
+      reach the parser sources.
 ---
 
 # Template parser

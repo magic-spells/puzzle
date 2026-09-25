@@ -51,6 +51,7 @@ verified_sha: 1d9ce9fa1a905467382cdc0ef8f43e9f1993ea99
 
 ## Decision
 
+
 The repo root is a **private shell** (named plain `puzzle`, `private: true`,
 version 0.0.0, never published) whose scripts delegate into the framework
 package. Everything that versions in lockstep lives under `packages/`, and
@@ -64,6 +65,18 @@ every package in the train carries the framework's version:
   has. The absorbed satellites were imported with full history
   (`git subtree add`); the framework itself moved here by `git mv`, so
   `git log --follow` crosses the move.
+- **`packages/puzzle-lang`** — the Puzzle template language as its own Go
+  module, `github.com/magic-spells/puzzle/packages/puzzle-lang`
+  ([[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]]): the `parser` package (section
+  splitter, lexer, AST, positioned errors) plus the `jsident` and `textutil`
+  helpers the compiler shares. Unlike the framework's module, this path IS
+  directory-derived: another module can import it only because it sits outside
+  `internal/` and its path matches `packages/puzzle-lang`. The compiler
+  requires it at `v0.0.0` and `replace`s it with `../puzzle-lang`, so it
+  always builds from the working tree. Outside consumers resolve a version
+  through a `packages/puzzle-lang/vX.Y.Z` tag (the Go convention for a module
+  in a subdirectory), created by hand next to `vX.Y.Z`. It is no npm package
+  and nothing in `release:prep` stamps it.
 - **`packages/puzzle-pieces`** — the `@magic-spells/puzzle-pieces` npm
   transport: registry, node test suites, demo app, and its own constellation
   root. Pieces resolve to the CLI's major.minor (D32), so the version must
@@ -82,9 +95,9 @@ every package in the train carries the framework's version:
 - **`packages/puzzle-eslint` / `packages/puzzle-prettier`** — the `.pzl`
   lint/format plugins (`@magic-spells/eslint-plugin-puzzle`,
   `@magic-spells/prettier-plugin-puzzle`). Both vendor JS ports of the
-  compiler's section splitter/lexer, so grammar changes must land in them
-  too — CI runs their suites on every push. Train-versioned and
-  release-prep-asserted; their first npm publish is a separate decision.
+  section splitter/lexer in `packages/puzzle-lang/parser`, so grammar changes
+  must land in them too — CI runs their suites on every push. Train-versioned
+  and release-prep-asserted; their first npm publish is a separate decision.
 
 The pieces demo's framework dep is `file:../../puzzle` and its scripts run
 the monorepo compiler binary (`../../puzzle/puzzle` — `go run` needs module

@@ -17,7 +17,7 @@ connections:
 code_refs:
   - compiler/cmd/puzzle/initcmd.go
   - compiler/cmd/pzlc/main.go
-  - compiler/internal/parser/sections.go
+  - ../puzzle-lang/parser/sections.go
   - compiler/internal/plugin/plugin.go
   - compiler/internal/scaffold/scaffold.go
 verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
