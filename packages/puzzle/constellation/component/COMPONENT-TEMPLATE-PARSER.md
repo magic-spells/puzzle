@@ -4,8 +4,8 @@ status: verified
 connections:
   - COMPONENT-CODEGEN
   - DOC-TEMPLATE-SYNTAX
-verified_at: '2026-08-24T21:39:23.520Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-09-25T10:47:50.423Z'
+verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 notes:
   - kind: gotcha
     text: >-
@@ -67,6 +67,13 @@ notes:
       `../puzzle-lang/...` code_refs that decision cards (D12, D16, D54, D59, D70) carried were
       dropped for the same reason. The earlier note saying the FILE cards bind outside this plan's
       code root is superseded.
+  - kind: verified
+    text: >-
+      0.8.0 truthing sweep: body and notes checked against the merged release/0.8.0 code
+      (client-runtime formatters/views/router/ssg/static, compiler/internal/codegen,
+      packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
+      corrected.
+    sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
 
 # Template parser
@@ -183,8 +190,11 @@ cannot appear inside an island or inside a marker's fallback body. A paired-only
 child; `fits` is static and every other attribute is a bare parameter. Its body
 is stamped output: component invocations are legal, but composition markers and
 `ref=` are positioned errors at every depth. Slot names stay static, non-empty,
-reserved-name checked, and unique per template body. Every distinct marker AST
-declaration is unique even when args-bearing; one marker declaration inside a
+reserved-name checked, and unique per render path: the mutually exclusive
+branches of one `{#if}`/`{:else}` or `{#case}` are separate paths (D173 V13,
+`walkBranches` in `slot.go`), so each may declare the same marker, while a
+marker after the block still collides with one inside it. Every distinct marker
+AST declaration on one path is unique even when args-bearing; one marker declaration inside a
 loop remains legal because validation visits that site once. Call-site named
 fills must be direct static `slot="x"` children, while default forwarding may
 appear inside a component invocation. Components/markers are forbidden inside

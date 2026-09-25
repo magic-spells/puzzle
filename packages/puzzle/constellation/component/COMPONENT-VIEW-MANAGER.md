@@ -167,8 +167,15 @@ notes:
       in hello-world, +151 B); a '#html' vnode in a build with the define false falls to the
       metadata-tag throw (the message names the define). The SSG serializer emits `htmlOf(vnode)` —
       the same string — with no comment, since takeover re-mounts. Tests: tests/raw-html.test.js.
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: verified
+    text: >-
+      0.8.0 truthing sweep: body and notes checked against the merged release/0.8.0 code
+      (client-runtime formatters/views/router/ssg/static, compiler/internal/codegen,
+      packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
+      corrected.
+    sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+verified_at: '2026-09-25T10:47:50.423Z'
+verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
 
 # ViewManager and ViewNode

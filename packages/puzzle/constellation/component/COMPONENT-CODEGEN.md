@@ -7,8 +7,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-09-25T10:47:50.423Z'
+verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 notes:
   - kind: gotcha
     text: >-
@@ -81,6 +81,21 @@ notes:
       component root or a `{#for}` body root (the existing element-or-component errors). Pinned by
       markup_test.go (including the element-parity whitespace case). The usage scan (plugin/scan.go)
       sets `HasRawHTML` from the same names and keeps them out of the manifest.
+  - kind: state
+    text: >-
+      Since D172 the parser half of the scanner pair lives in the sibling module:
+      `packages/puzzle-lang/parser/lexskip.go` (LexSkip, LexPlainEndsExpr), imported by codegen as
+      `github.com/magic-spells/puzzle/packages/puzzle-lang/parser`. The "parser/lexskip.go" in the
+      scanner gotcha above means that file; there is no `compiler/internal/parser` anymore. The
+      codegen twin is still `compiler/internal/codegen/expr.go`, and the differential test is in
+      `expr_test.go`.
+  - kind: verified
+    text: >-
+      0.8.0 truthing sweep: body and notes checked against the merged release/0.8.0 code
+      (client-runtime formatters/views/router/ssg/static, compiler/internal/codegen,
+      packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
+      corrected.
+    sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
 
 # Render-function codegen

@@ -1,7 +1,7 @@
 ---
 name: Formatter registry
 status: verified
-verified_at: '2026-08-24T21:39:23.520Z'
+verified_at: '2026-09-25T10:47:50.423Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-CODEGEN
@@ -96,7 +96,14 @@ notes:
       from templates instead of the generic shadow warning. The `builtins.js` exports return the
       sanitized markup / escaped-text-with-<br> strings, for script code and the conformance table;
       importing them pulls in the sanitizer.
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: verified
+    text: >-
+      0.8.0 truthing sweep: body and notes checked against the merged release/0.8.0 code
+      (client-runtime formatters/views/router/ssg/static, compiler/internal/codegen,
+      packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
+      corrected.
+    sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
 
 # Formatter registry
@@ -109,7 +116,7 @@ Liquid-style, display-only transformations used by compiled template chains. The
 
 An unknown formatter calls `__missing(name)`: warn once per registry, include a did-you-mean suggestion at edit distance at most two, and return a pass-through function. A typo therefore renders the original value instead of crashing the view. A name D174 removed (`sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last`, `noescape`) gets a replacement hint instead of a did-you-mean — `data()`, `items[0]`, `items.at(-1)`, `compact_number`, `raw`. The hint table sits behind `__PUZZLE_DEV__` with the rest of the warn block, so production carries none of it.
 
-**The built-in set is D174's standard set** ([[DECISION-D174-STANDARD-FORMATTERS]]): the 34 names Sites implements with the same arguments and meaning, plus the PuzzleKit-only `link`, `timeago` and `in_timezone`. `formatters.js` exports the 34 as `STANDARD_FORMATTERS`, and `makeFormatterRegistry` logs a **development-only** `console.warn` when an app formatter registers under one of them — the app still wins, and it never throws. PuzzleKit-only names (and an app `link`) draw no warning. An app `raw` or `newline_to_br` draws a different warning: templates never call either name through the registry, so the app's function is unreachable from a template. There are no list formatters: list shaping is `data()` or a plain expression. The identical-output part of the set is pinned by the shared conformance table `tests/conformance/formatters.json` (name, input, args, expect; JSON `null` is the missing value; a `zone` field runs a case in a child process with that `TZ`), which Sites' Go tests are meant to run too.
+**The built-in set is D174's standard set** ([[DECISION-D174-STANDARD-FORMATTERS]]): the 35 names Sites implements with the same arguments and meaning — 34 built-ins plus the service-bound `t` (D175, installed from the i18n service, not a built-in) — plus the PuzzleKit-only `link`, `timeago` and `in_timezone`. `formatters.js` exports the 35 as `STANDARD_FORMATTERS`, and `makeFormatterRegistry` logs a **development-only** `console.warn` when an app formatter registers under one of them — the app still wins, and it never throws. PuzzleKit-only names (and an app `link`) draw no warning. An app `raw` or `newline_to_br` draws a different warning: templates never call either name through the registry, so the app's function is unreachable from a template. There are no list formatters: list shaping is `data()` or a plain expression. The identical-output part of the set is pinned by the shared conformance table `tests/conformance/formatters.json` (name, input, args, expect; JSON `null` is the missing value; a `zone` field runs a case in a child process with that `TZ`), which Sites' Go tests are meant to run too.
 
 Built-ins are pure named exports. A JSON name manifest is embedded by the Go build scanner, which serves a virtual module importing only formatters observed in project templates. The scan deliberately errs toward inclusion; `escape` is the one safety default the manifest and the registry always carry. The markup pair never enters the manifest: codegen lowers a text interpolation ending in `raw` or `newline_to_br` to the live-HTML node, whose runtime applies the sanitizer itself, and the scan records the pair only as the `__PUZZLE_HAS_RAW_HTML__` bit. Raw/test imports use the full built-in map. `default` is a reserved word, so `builtins.js` exports it as `export { defaultValue as default }` — the module's default export — and the virtual manifest binds it as `default as __puzzle_default`; nothing may import `builtins.js`'s default expecting anything else.
 

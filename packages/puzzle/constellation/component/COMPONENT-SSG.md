@@ -21,8 +21,8 @@ connections:
   - FILE-STATIC-MOUNT
   - FILE-BUILD-PRERENDER
   - FILE-BUILD-PRERENDER-PAGES
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-09-25T10:47:50.423Z'
+verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 notes:
   - kind: state
     text: >-
@@ -100,6 +100,13 @@ notes:
       `prerenderToDir` rewrites the shell's `<html lang>` to `defaultLocale` once per build
       (`withHtmlLang`: replaces an existing `lang`, adds one otherwise), so every prerendered page
       declares the language it is written in.
+  - kind: verified
+    text: >-
+      0.8.0 truthing sweep: body and notes checked against the merged release/0.8.0 code
+      (client-runtime formatters/views/router/ssg/static, compiler/internal/codegen,
+      packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
+      corrected.
+    sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
 
 # Static generation runtime

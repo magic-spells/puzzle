@@ -123,8 +123,15 @@ notes:
       resolves it. Tests in tests/i18n-app.test.js pin both orderings, no enter/out animation on a
       switch (fails if the skipEnter/#pendingOut block is removed) and no skeleton flash (fails if
       REBUILD leaves the takeover-style exemption).
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: verified
+    text: >-
+      0.8.0 truthing sweep: body and notes checked against the merged release/0.8.0 code
+      (client-runtime formatters/views/router/ssg/static, compiler/internal/codegen,
+      packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
+      corrected.
+    sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+verified_at: '2026-09-25T10:47:50.423Z'
+verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
 
 # Router
@@ -189,9 +196,10 @@ token bump and before any view/layout construction — sequentially root→leaf 
 every matched navigation (params/query-only included, `{ to, from, ctx }` with
 frozen snapshots, `from` null on nav #0), token-rechecked across awaits.
 `false`/throw = stay put through the shared failed-navigation recovery helper;
-a string verdict redirects through public `replace()` (denied URL never enters
+a string verdict redirects through public `push()` when the denied navigation
+was a push and `replace()` for a pop or navigation #0 (denied URL never enters
 history; ten guard redirects without a commit trip the cycle cap, reset in
-`#commitState`). An empty guard chain adds no await — unguarded navigation
+`#commitState` and at the start of every externally-initiated navigation). An empty guard chain adds no await — unguarded navigation
 keeps its synchronous path to construction.
 
 Lazy route views resolve next ([[DECISION-D163-LAZY-ROUTE-VIEWS]]), and this
@@ -216,12 +224,12 @@ with one frozen
 per navigation by `parseLocation` — frozen null-proto query, repeated keys →
 frozen arrays, URLSearchParams decoding; D83), and abandons/destroys fresh
 work on failure or supersession. The winning swap commits
-location/history/title (`resolveHead` + `syncTitle` from head.js — per-field
-leaf→root meta resolution, only a non-null resolved title assigns, memory mode
+location/history/title (`resolveHeadField(chain, 'title')` + `syncTitle` from
+head.js — nearest-defined leaf→root resolution of the title field, only a non-null resolved title assigns, memory mode
 document-untouched; D84), scroll bookkeeping, mounted tree, and `current` in
 one synchronous window. The managed `og:`/`twitter:`/description/canonical tags
 are **not** synced here, in any output mode: D111 made them build-time only, so
-`#syncHead` does exactly `syncTitle(resolveHead(entry.chain))` and
+`#syncHead` does exactly `syncTitle(resolveHeadField(entry.chain, 'title'))` and
 `headTags.js` never enters a browser bundle.
 Dev builds emit the committed route to the D100 DevTools bridge
 ([[FILE-DEVTOOLS]]) from `#commitState`, beside the existing `warnMissingSlots`
