@@ -502,7 +502,6 @@ Counts: 34 standard (28 identical-output, 6 locale-rendered), 3 PuzzleKit-only,
 
 ## Known divergences
 
-
 Same syntax, different result. Each is an open question for a later decision,
 not a fix. V1 is already on D172 as a gotcha with a proposed resolution. An
 entry marked **PuzzleKit follows the core** is decided on
@@ -540,8 +539,11 @@ the core sections above); it stays listed until Sites changes too.
   invalid JavaScript (`{__d.height: 480}`) that only the bundler catches. Do
   object literals join the core?
 - **V9 — list and object values in a brace-only attribute. PuzzleKit follows
-  the core** (see Attributes); Sites already did. Listed until the shared
-  conformance fixture pins both hosts.
+  the core** (see Attributes). Sites today joins a list with spaces and drops
+  an object with a warning; dropping `false` and empty items from the list is
+  still pending in Sites, so `class={ [active && 'on', 'btn'] }` can differ
+  there until it lands. Listed until the shared conformance fixture pins both
+  hosts.
 - **V10 — whitespace edges.** PuzzleKit drops newline-bearing whitespace at
   every element edge; Sites drops it only at the first and last child of a
   parent. So `Hello` + newline + `<b>x</b>` + newline + `world` renders
