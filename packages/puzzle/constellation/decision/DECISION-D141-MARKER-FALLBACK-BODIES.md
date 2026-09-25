@@ -30,11 +30,18 @@ positioned compile errors steering to the capitalized forms (D134).
 
 ## Contract
 
+
 - **Uniform across the one mechanism.** `<Children>` and bare `<Slot>` are the
   same AST node, so fallback behaves identically in all three positions:
   component default content, named-slot fallback, and the router outlet — which
   shows its fallback when no child route occupies it (a parent route rendering
   as the leaf).
+- **"Nothing fills the position" means nothing rendered.** A position is filled
+  only when the content supplied for it renders at least one node that is not
+  whitespace-only text ([[DECISION-D173-CORE-SEMANTICS]] V14). A false
+  call-site `{#if}` and an empty `{#for}` both leave it unfilled, so the
+  fallback shows — the empty-state pattern needs no extra syntax. The same test
+  applies to each snippet stamp and to a forwarded position.
 - **A fallback body is ordinary template content.** Interpolations (including
   formatter pipes), `{#if}`/`{#for}`/`{#case}` blocks, components, event
   bindings, refs, and `{#svg}` inline SVG (D46) all parse and compile through
@@ -47,9 +54,9 @@ positioned compile errors steering to the capitalized forms (D134).
   API remains a separate, unclaimed decision.
 - **Implementation surface:** `Slot.Children` in the AST, paired-marker
   parsing, codegen fallback emission, the runtime `expandChildList` fallback
-  branch, and fallback-content traversal in a11y, refs, and the class scan.
-  Golden churn is acceptable (compiler-over-runtime-bytes: the runtime cost is
-  one branch).
+  branch (with its `isFilled` test), and fallback-content traversal in a11y,
+  refs, and the class scan. Golden churn is acceptable
+  (compiler-over-runtime-bytes: the runtime cost is one branch).
 
 ## Rationale
 

@@ -101,6 +101,25 @@ notes:
       receiving the replacement BEFORE it exactly as before, and a synchronous removal falls back to
       the captured next sibling when it is still under the same parent. The keyed patcher already
       unmounted first and is untouched. Pinned by tests/patch-replace-ordering.test.js.
+  - kind: state
+    text: >-
+      0.8.0, D173 V14/V9/V6. "Unfilled" in the composition paragraph now means the supplied content
+      renders no node other than whitespace-only text: `isFilled(nodes)` in viewManager.js skips
+      `PLACEHOLDER_TAG` vnodes (a false call-site `{#if}`'s arity padding) and text vnodes whose
+      value has no `\S`, and counts every element or component. It gates all four `expandChildList`
+      arms: the plain default/named bucket, the args-less plain arm, the D71 forwarding arm (an
+      unfilled position forwards the wrapper marker's own fallback), and each snippet stamp (a stamp
+      returning nothing expands the fallback for that stamp). A text vnode's value is tested raw
+      because codegen always hands it display text. Filled content is still spliced as-is,
+      placeholders and whitespace included, so the D170 identity short-circuit and cached rows are
+      untouched; an unfilled bucket's placeholders are dropped in favour of the fallback. SSG/static
+      share `expandSlots`, so prerender output matches without a separate path. setAttr (and
+      ssg/serialize.js's serializeAttrs, mirrored) now omits an object value (`typeof value ===
+      'object' && !Array.isArray(value)`) alongside false/null/undefined, warning in dev through
+      `displayValue(value, name)`, and writes a list joined with single spaces via
+      `displayValue(value, 0, ' ')`; controlled `value` (setAttr's PROPS arm, syncControlValue,
+      reassertSelectValue, and the serializer's value/select/textarea/option paths) prints the same
+      way. Pinned by tests/slot-filled.test.js and tests/display-value.test.js.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

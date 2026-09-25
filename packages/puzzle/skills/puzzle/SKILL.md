@@ -148,6 +148,11 @@ Rules that bite:
   raw-markup exception is compile-time `{#svg 'path.svg'}` inline SVG.
   `{#raw}` is not a second one — it only turns the brace lexer off; no runtime
   value can reach inside it.
+- **What prints.** `null`, `undefined`, `NaN`, ±Infinity and objects (a `Date`
+  included — format it with `| date`) print nothing; an object also warns in
+  development. A list prints comma-joined in text, but space-joined in a
+  brace-only attribute, so `class={ ['card', active ? 'on' : null] }` works; an
+  object in a brace-only attribute omits the attribute, as `false`/`null` do.
 - **Three marker tags, four meanings.** `<Children/>` marks where a component's
   default children render; `<Slot name="x"/>` declares a named region (the
   caller routes a direct child in with a static `slot="x"` attribute);
@@ -157,7 +162,11 @@ Rules that bite:
   data attributes, and a snippet declares matching parameters as bare
   attributes; binding is by name. `fits="x"` routes it to `<Slot name="x">`,
   while omitted `fits` targets `<Children>`. Ordinary Children/Slot markers may
-  be paired with fallback content, which supplied content replaces entirely. A
+  be paired with fallback content, which supplied content replaces entirely —
+  and content only counts when it renders something, so a false `{#if}` or an
+  empty `{#for}` at the call site shows the fallback (the empty-state idiom).
+  One marker per name on any render path: the same `<Children/>` in both
+  branches of an `{#if}/{:else}` is fine, twice on one path is an error. A
   Snippet must be paired and be a direct child of a component call; composition
   markers and `ref=` are forbidden inside its body. Lowercase
   `<children>`/`<slot>`/`<snippet>` steer to the capitalized marker spellings

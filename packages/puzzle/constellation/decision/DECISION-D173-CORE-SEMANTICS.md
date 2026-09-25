@@ -14,6 +14,34 @@ connections:
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D174-STANDARD-FORMATTERS
   - DECISION-D167-COMPONENT-FAMILIES
+notes:
+  - kind: state
+    text: >-
+      2026-09-25: build groups (d) slot rules and (f) value printing are BUILT in PuzzleKit on
+      feat/slot-and-print-rules (PR into release/0.8.0). V14: `isFilled` in viewManager.js
+      `expandChildList`: a PLACEHOLDER_TAG vnode and whitespace-only text do not fill. It gates the
+      plain default/named arm, the D71 forwarding arm (which forwards the wrapper's own fallback)
+      and each snippet stamp. SSG/static share expandSlots. V13: `walkBranches` in
+      puzzle-lang/parser/slot.go walks each exclusive {#if}/{#case} branch against its own copy of
+      the markers on the path, then merges the result back. The eslint/prettier ports carry no slot
+      check, so they did not change. V6/V9: display.js `displayValue(value, expression, sep)`.
+      setAttr and serializeAttrs omit an object attribute and pass sep ' ' for a list. Controlled
+      `value` also joins a list with spaces, because V9 says "on an element" and a
+      property/attribute split would diverge from Sites. D127's "null brace-only attribute renders
+      ''" wording was wrong: removal is the rule, and D127, SPEC §6 and LANGUAGE-CORE now state it.
+      Cost: +87 B gzip hello-world, +80 B todos (not size-neutral). DOC-LANGUAGE-CORE marks
+      V6/V9/V13/V14 as "PuzzleKit follows the core" until Sites changes.
+  - kind: deviation
+    text: >-
+      V6 as built in PuzzleKit: (1) a FUNCTION (and a symbol) is not treated as an "object". It
+      still prints as String() would. JS functions are objects, but guarding them costs bytes on
+      every interpolation, and no correct template prints one. (2) A `Date` IS an object here, so `{
+      post.createdAt }` on a Puzzle.date() field now prints nothing (plus the dev warning) instead
+      of the locale string. The corpus scan found no such template. Authors format it with `| date`.
+      Flag this if Sites treats a date as a scalar. (3) V14 applies to snippet stamps too: a stamp
+      that renders nothing shows the marker's fallback for that stamp. This follows the card's
+      "content supplied for it renders at least one node" literally. D166 said only "when nothing
+      fills the position".
 ---
 
 # D173 — Core semantics: one meaning for each shared construct
