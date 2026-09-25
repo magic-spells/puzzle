@@ -23,6 +23,8 @@
  *   named/default slots and unfilled-marker omission behave identically;
  * - string children (an inlined `{#svg}` island seed, v1.14 D46) are emitted
  *   verbatim — they map to innerHTML seeding in the browser;
+ * - a live-HTML vnode (`raw` / `newline_to_br`, D174) emits the sanitized markup
+ *   views/html.js parses in the browser — the same htmlOf() call;
  * - `<script>`/`<style>` are RAWTEXT: their text is emitted unescaped (a JSON-typed
  *   script gets the `\u003c` data-island escape instead), and content that would
  *   end — or refuse to end — the element in the parser is a build error;
@@ -41,9 +43,11 @@ import {
 	SLOT_TAG,
 	PLACEHOLDER_TAG,
 	PORTAL_TAG,
+	HTML_TAG,
 	metadataTagError,
 } from '../views/ViewNode.js';
 import { expandSlots } from '../views/viewManager.js';
+import { htmlOf } from '../views/html.js';
 import { displayValue as stringify } from '../display.js';
 
 // Void elements (HTML spec): self-closing, never carry children.
@@ -176,6 +180,12 @@ async function serializeNode(vnode, ctx, selectState) {
 	// framework-created outlet that only exists once the browser runtime mounts, so
 	// portaled markup appears at takeover, never in the static output.
 	if (vnode.tag === PORTAL_TAG) return '';
+
+	// Live HTML (D174): the same sanitized (or newline_to_br-escaped) markup the
+	// browser parses into the node's range — one function, so the prerendered page
+	// and the mounted one agree byte for byte. The browser's position comment is
+	// not emitted: takeover re-mounts the tree, it never adopts these nodes.
+	if (vnode.tag === HTML_TAG) return htmlOf(vnode);
 
 	if (vnode.isComponent) return serializeComponent(vnode, ctx, selectState);
 

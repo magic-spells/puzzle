@@ -1,0 +1,24 @@
+<puzzle-view>
+  <div class="intro">{ intro | raw }</div>
+  <p class="mix">Before { lead } { body | truncate(40) | raw } after</p>
+  <p class="note">{ note | newline_to_br }</p>
+  <div class="cond">{#if flag}{ extra | raw }{:else}plain{/if} tail</div>
+  <ul class="rows">
+    {#for row in rows}
+      <li>{ row.label }: { row.html | raw }</li>
+    {/for}
+  </ul>
+  <div class="keyed">{ header | raw }{#for row in rows}<span>{ row.label }</span>{/for}</div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// D174 group (e): every placement of a live-HTML interpolation the reconciler
+// has to keep in position — see tests/raw-html.test.js.
+export default class RawHost extends PuzzleView {
+  data() {
+    return this.fixture;
+  }
+}
+</script>

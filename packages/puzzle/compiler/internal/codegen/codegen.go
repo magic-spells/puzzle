@@ -236,6 +236,12 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 	scope := scopeMap{}
 
+	// Markup formatters (D174) may only end a text interpolation's chain; every
+	// other placement is a positioned error before anything is emitted.
+	if err := c.checkMarkupFormatters(root.Children, ""); err != nil {
+		return "", err
+	}
+
 	// Resolve {#svg} nodes (v1.14, D46): read each referenced file and splice an
 	// <svg> element carrying its attrs + raw inner markup, BEFORE emit. Run on the
 	// template AST here and on the skeleton AST below.
@@ -283,6 +289,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		return "", err
 	}
 	if skel != nil {
+		if err := c.checkMarkupFormatters(skel.Children, ""); err != nil {
+			return "", err
+		}
 		collectA11yWarnings(skel.Children, opts.Filename, warnings)
 		if err := c.resolveInlineSVG(skel.Children, opts.AssetsDir, inlined); err != nil {
 			return "", err
@@ -791,6 +800,9 @@ func (c *compiler) emitItem(it item, ind int, scope scopeMap) (string, error) {
 			return "", err
 		}
 		return "..." + m, nil
+	case *parser.Interpolation:
+		// Only a markup interpolation is kept as a node (processChildren).
+		return c.emitMarkup(n, scope)
 	case *parser.InlineSVG:
 		// Every {#svg} is replaced by resolveInlineSVG before emit; one surviving
 		// here is a compiler bug, not a user error.
@@ -1742,6 +1754,17 @@ func (c *compiler) processChildren(children []parser.Node, scope scopeMap) ([]it
 		return nil
 	}
 	for _, ch := range children {
+		// A markup interpolation (D174) renders as its own live-HTML vnode: a
+		// non-text sibling, so it ends the text run exactly as an element does
+		// and the text on either side keeps its one space (D168).
+		if isMarkupInterp(ch) {
+			if err := flush(true); err != nil {
+				return nil, err
+			}
+			items = append(items, item{node: ch})
+			leftSibling = true
+			continue
+		}
 		switch ch.(type) {
 		case *parser.Text, *parser.Interpolation:
 			run = append(run, ch)

@@ -100,7 +100,8 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 
 // bundleDefines builds the literal define map. The __PUZZLE_HAS_* values are
 // SOURCE facts: plugin.ScanUsage reads templates for flip, Portal, raw-block,
-// and Snippet usage, and app scripts for lazy() route views.
+// Snippet and markup-formatter (`raw`/`newline_to_br`, D174) usage, and app
+// scripts for lazy() route views.
 // __PUZZLE_DEV__, __PUZZLE_TAKEOVER__ and __PUZZLE_CAPTURE__ are BUILD facts
 // carried by bundleFlags.
 //
@@ -131,6 +132,7 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		"__PUZZLE_HAS_RAW_AT__":   strconv.FormatBool(f.RawAt),
 		"__PUZZLE_HAS_LAZY__":     strconv.FormatBool(f.Lazy),
 		"__PUZZLE_HAS_SNIPPETS__": strconv.FormatBool(f.Snippets),
+		"__PUZZLE_HAS_RAW_HTML__": strconv.FormatBool(f.RawHTML),
 		"__PUZZLE_TAKEOVER__":     strconv.FormatBool(flags.Takeover),
 		"__PUZZLE_CAPTURE__":      strconv.FormatBool(flags.Capture),
 		// A CONFIG fact, not a usage-scan fact (D175): script code can call

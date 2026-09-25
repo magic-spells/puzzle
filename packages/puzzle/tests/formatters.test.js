@@ -213,8 +213,11 @@ describe('FormatterRegistry', () => {
 		expect(f.trim(undefined)).toBe('');
 	});
 
-	it('raw passes content through', () => {
-		expect(f.raw('<br>')).toBe('<br>');
+	it('raw returns the sanitized markup and newline_to_br the escaped text with <br>s (D174)', () => {
+		// Templates never call these (codegen lowers them to the live-HTML node);
+		// the functions return the markup that node renders.
+		expect(f.raw('<b onclick="x()">hi</b><script>alert(1)</script>')).toBe('<b>hi</b>');
+		expect(f.newline_to_br('<b>a</b>\nb')).toBe('&lt;b&gt;a&lt;/b&gt;<br>b');
 	});
 
 	describe('string formatters', () => {
@@ -722,6 +725,14 @@ describe('the standard set (D174)', () => {
 		expect(warn.mock.calls[0][0]).toContain('app formatter "pluralize" shadows the standard formatter');
 	});
 
+	it('warns that an app raw/newline_to_br is never called from templates (D174)', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		makeFormatterRegistry({ raw: (v) => v, newline_to_br: (v) => v });
+		expect(warn).toHaveBeenCalledTimes(2);
+		expect(warn.mock.calls[0][0]).toContain('app formatter "raw" is never called from templates');
+		expect(warn.mock.calls[1][0]).toContain('"newline_to_br" renders through the built-in sanitizer');
+	});
+
 	it('does not warn for PuzzleKit-only names or the app-supplied link', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		makeFormatterRegistry({ timeago: () => 'now', in_timezone: (v) => v, link: (v) => v, compact: (v) => v });
@@ -764,11 +775,11 @@ describe('standard formatter conformance table (D174)', () => {
 	const translated = conformance.cases.filter((c) => c.name === 't');
 	const zoned = conformance.cases.filter((c) => c.zone);
 
-	it('covers every identical-output standard name except the markup pair (group e)', () => {
+	it('covers every identical-output standard name', () => {
 		const covered = new Set(conformance.cases.map((c) => c.name));
 		const localeRendered = ['date', 'time', 'datetime', 'number_with_delimiter', 'compact_number', 'pluralize'];
 		for (const name of STANDARD_FORMATTERS) {
-			if (localeRendered.includes(name) || name === 'raw' || name === 'newline_to_br') continue;
+			if (localeRendered.includes(name)) continue;
 			expect(covered.has(name), name).toBe(true);
 		}
 		for (const name of covered) expect(STANDARD_FORMATTERS).toContain(name);

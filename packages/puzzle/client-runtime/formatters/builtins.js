@@ -11,6 +11,7 @@
 
 import { calendarISO, isCalendarDate, noDate, parseDateInput } from '../dates.js';
 import { formatLocale, localeNumber } from './locale.js';
+import { sanitizeHtml, newlineToBr } from '../sanitize.js';
 
 // null/undefined render as empty string, never the literal "null"/"undefined"
 const str = (v) => (v == null ? '' : String(v));
@@ -66,12 +67,18 @@ export function escape(v) {
 	return str(v);
 }
 
+// The two markup formatters (D174). A template never calls these functions:
+// codegen lowers a text interpolation whose chain ENDS in either name to the
+// live-HTML node (views/html.js), which runs the same sanitizer, and anywhere
+// else either name is a compile error. So an app formatter registered under
+// `raw` can never inject markup. The functions return the markup strings the
+// node renders — for script code, and for the shared conformance table.
 export function raw(v) {
-	return str(v);
+	return sanitizeHtml(str(v));
 }
 
 export function newline_to_br(v) {
-	return str(v).replace(/\n/g, '<br>');
+	return newlineToBr(str(v));
 }
 
 // ── Text ──────────────────────────────────────────────────────────────────────

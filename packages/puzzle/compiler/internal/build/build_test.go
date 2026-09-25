@@ -433,6 +433,8 @@ type definesFixture struct {
 	portal   bool
 	raw      bool
 	snippets bool
+	// rawHTML pipes a value through the D174 `raw` formatter.
+	rawHTML bool
 	// lazy adds a second route whose view is a D163 lazy() marker, declared in
 	// the routes module named by lazyRoutesExt (".js" when empty) so the same
 	// fixture can prove the usage scan reads TypeScript route tables too.
@@ -493,6 +495,9 @@ export default app;
 	}
 	if fx.raw {
 		featureMarkup += "  {#raw}<span @x=\"y\">literal</span>{/raw}\n"
+	}
+	if fx.rawHTML {
+		featureMarkup += "  <div>{ items | size | raw }</div>\n"
 	}
 	if fx.snippets {
 		featureMarkup += `  <ScopedList items={ items }>
@@ -606,6 +611,12 @@ const lazyResolverMarker = "lazy() loader must return a promise"
 // failure an unscanned marker gets instead of silently mounting as a view class.
 const lazyCompiledOutMarker = "lazy() support was compiled out"
 
+// sanitizerMarker is a literal from client-runtime/sanitize.js's DROP_NESTED
+// list — a string that survives minification and lives nowhere else in the
+// browser runtime, so its absence proves the sanitizer and the live-HTML node
+// tree-shook away (D174).
+const sanitizerMarker = "template object applet svg math select head frameset"
+
 // headTagMarker is the `data-puzzle-head` attribute the SSG stamps on every
 // managed tag — the same kind of minification-proof literal as flipEasing. It
 // must appear in PRERENDERED HTML and never in a browser bundle.
@@ -623,7 +634,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker, snippetsMarker, snippetForwardingMarker} {
+	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker, snippetsMarker, snippetForwardingMarker, sanitizerMarker} {
 		if strings.Contains(string(withoutJS), marker) {
 			t.Errorf("bundle without feature usage retained %q", marker)
 		}
@@ -662,6 +673,15 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	rawJS := readFile(t, filepath.Join(withRaw, "dist", "app.js"))
 	if !strings.Contains(rawJS, rawAtEscape) {
 		t.Errorf("bundle with {#raw} should retain the %q literal-attribute shim", rawAtEscape)
+	}
+
+	withRawHTML := writeDefinesFixture(t, definesFixture{rawHTML: true})
+	if err := Build(withRawHTML, Options{Development: false}); err != nil {
+		t.Fatalf("Build with raw formatter usage failed: %v", err)
+	}
+	rawHTMLJS := readFile(t, filepath.Join(withRawHTML, "dist", "app.js"))
+	if !strings.Contains(rawHTMLJS, sanitizerMarker) {
+		t.Errorf("bundle with `| raw` should retain the sanitizer (%q)", sanitizerMarker)
 	}
 
 	withSnippets := writeDefinesFixture(t, definesFixture{snippets: true})
