@@ -69,3 +69,27 @@ export function packedBinaryProblem({ pkgName, binaryPath, files }) {
 	}
 	return null;
 }
+
+/**
+ * The tag reminder release-prep prints in its summary. Cory tags every release
+ * by hand, and the language module needs a second tag beside the framework's:
+ * the Go toolchain finds a version of a module in a repository subdirectory
+ * only through a tag prefixed with that directory, so Sites and other `go get`
+ * consumers resolve `packages/puzzle-lang` through
+ * `packages/puzzle-lang/vX.Y.Z`, never through `vX.Y.Z` (D172).
+ *
+ * These are lines to print, not commands to run — release-prep creates and
+ * pushes no tags.
+ *
+ * @param {string} version the framework version being released ('0.8.0')
+ * @returns {string[]} summary lines, without trailing newlines
+ */
+export function tagReminderLines(version) {
+	const langTag = `packages/puzzle-lang/v${version}`;
+	return [
+		`After tagging v${version}, also push the language module's tag — Go consumers`,
+		`(Sites) \`go get\` packages/puzzle-lang by it, not by v${version}. This script`,
+		'creates no tags:',
+		`  git tag ${langTag} && git push origin ${langTag}`,
+	];
+}

@@ -35,7 +35,9 @@
 //      carries every platform pin (D120 — the root package must be published
 //      as this .tgz, never as a directory; see the note on step 7).
 //   7. Summary — print the exact `npm publish` commands in the REQUIRED order
-//      (platform packages first, root LAST so its optionalDependencies resolve).
+//      (platform packages first, root LAST so its optionalDependencies resolve),
+//      and remind Cory that the `vX.Y.Z` tag needs a companion
+//      `packages/puzzle-lang/vX.Y.Z` tag. The script never tags or pushes.
 //
 // Node builtins only. Any failure exits non-zero with a clear message.
 
@@ -43,7 +45,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, copyFileSync, chmodSync, statSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { packedBinaryProblem } from './release-checks.mjs';
+import { packedBinaryProblem, tagReminderLines } from './release-checks.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -466,6 +468,7 @@ console.log('own major.minor. The devtools zip is separate and unhurried:');
 console.log('  npm run build:compiler && cd ../puzzle-devtools && npm run build:zip\n');
 console.log('Then confirm the registry actually got the pins:');
 console.log('  npm run verify:published\n');
+console.log(tagReminderLines(version).join('\n') + '\n');
 console.log('Reminder: run the full suites first if you have not already:');
 console.log('  npm test');
 console.log('  cd compiler && go test ./...\n');
