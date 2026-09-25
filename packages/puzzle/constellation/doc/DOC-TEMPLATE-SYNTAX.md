@@ -72,7 +72,15 @@ Custom formatters are registered in the `PuzzleApp` config (`formatters: { ... }
 
 **The built-ins are the standard set (D174)** — the same names, arguments and meaning in PuzzleKit and Sites — plus the browser-only `link`, `timeago` and `in_timezone`: numbers (`abs`, `ceil`, `floor`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`), text (`downcase`, `upcase`, `capitalize`, `trim`, `strip`, `truncate`, `replace`, `split`, `strip_html`, `strip_newlines`, `pluralize`), markup (`escape`, `raw`, `newline_to_br`), values (`default`, `size`, `join`, `json`) and dates (`date`, `time`, `datetime` with the presets `short`, `medium` — the default — `long` and `iso`). DOC-SPEC-TEMPLATE §6 has each one's contract. An app formatter registered under a standard name wins, with a development warning.
 
-`escape` and `raw` still produce a **text vnode**, and neither injects HTML: `{ markup | raw }` displays the markup string as text, and `{ markup | escape }` is an identity — the page shows the value's characters. They are also unrelated to `{#raw}`: formatters run on a runtime value after the template has already lexed, while a raw block makes author-written source braces literal at compile time.
+**Markup: `raw` and `newline_to_br` render real HTML (D174).** Every other interpolation is a text node, so a value can never become markup by accident, and `{ markup | escape }` is an identity — the page shows the value's characters. `{ post.body | raw }` is the one way in, and it always goes through an allowlist sanitizer: document markup, links and images survive, with `class`, `id`, `title`, `lang` and `dir` on any kept tag (DOMPurify's defaults; no `id` on `<img>`, none starting with `__`) and `target="_blank"` on a link, which always gets `rel="noopener noreferrer"`; `<script>` (with its contents), every `on*` handler, `style` and `name`, any other `target`, `<iframe>`/`<object>`/`<embed>`/`<style>`/`<svg>`/forms, and any URL that is not relative, `http(s)` — or, on a link, `mailto:`/`tel:` — are removed. Because `class` and `id` survive, the value can use the app's CSS and shadow an undefined global by id: for untrusted user HTML that is a UI-overlay and naming risk, not code execution. `{ note | newline_to_br }` escapes the text and turns each line break into a real `<br>`, with no other markup.
+
+```html
+<article>{ post.bodyHtml | raw }</article>
+<p>{ comment.text | newline_to_br }</p>
+<div>{ post.bodyHtml | truncate(200) | raw }</div>   <!-- the chain before raw runs as text formatters -->
+```
+
+A markup formatter must be the **last** formatter of a **text** interpolation. After it the value is markup, not text, so `{ x | raw | upcase }`, `title={ x | raw }`, `<Card body={ x | raw } />`, `{#if x | raw}`, `raw(…)` with arguments, and a markup interpolation inside a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`, `<noscript>`, `<xmp>`, `<iframe>`, …) are all positioned compile errors. Because the compiler lowers these two names itself, an app formatter registered as `raw` is never called from a template (it draws a development warning), so no app code can inject markup. The value renders as sibling nodes with no wrapper element — for whitespace it counts as a non-text sibling, like an element — and the markup path is compiled out of apps that never use it (the sanitizer, of apps that only use `newline_to_br`). Neither formatter is related to `{#raw}`: formatters run on a runtime value after the template has already lexed, while a raw block makes author-written source braces literal at compile time.
 
 **Typos don't crash (v1.12, D43).** A formatter name that isn't registered renders the value **unchanged** and logs one `console.error` naming it — `[puzzle] unknown formatter "captialize" — value passed through unchanged (did you mean "capitalize"?)`. Formatters are resolved at render time (custom ones are registered in the app config), so this can't be a compile error — watch the console when a formatter seems to do nothing. A removed built-in (`sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last`, `noescape`) passes through the same way, and the message names its replacement.
 
@@ -614,13 +622,15 @@ used to put literal braces in template source.
 
 ## Deferred syntax
 
+
 These boundaries are deliberate and remain unshipped:
 
 - scoped slots (child data passed into parent-authored slot content);
 - array refs or refs inside loops;
 - dynamic `ref`, `slot`, or `island` names;
-- dynamic raw HTML injection syntax (`{@html expr}`); `{#raw}` is static source
-  and is documented above;
+- an unsanitized raw HTML injection syntax (`{@html expr}`); the sanitized
+  `raw` formatter is the supported way to render a value as markup, and
+  `{#raw}` is static source, both documented above;
 - components or composition markers inside an island subtree.
 
 Previously deferred named slots, skeletons, `{#unless}`, `{#case}`, event

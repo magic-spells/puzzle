@@ -581,6 +581,57 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// TestScanUsageRawHTML pins the D174 bit: a text interpolation ending in a
+// markup formatter keeps the live-HTML runtime, and neither markup name ever
+// enters the formatter manifest — templates never call them through the
+// registry.
+func TestScanUsageRawHTML(t *testing.T) {
+	const script = `<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`
+	for _, tt := range []struct {
+		name     string
+		template string
+		skeleton string
+		want     bool
+	}{
+		{name: "absent", template: `<puzzle-view><p>{ body | upcase }</p></puzzle-view>`},
+		{name: "raw block is not the formatter", template: `<puzzle-view>{#raw}<p>{ body | raw }</p>{/raw}</puzzle-view>`},
+		{name: "raw", template: `<puzzle-view><p>{ body | truncate(9) | raw }</p></puzzle-view>`, want: true},
+		{name: "newline_to_br", template: `<puzzle-view><p>{ body | newline_to_br }</p></puzzle-view>`, want: true},
+		{name: "in a loop row", template: `<puzzle-view><ul>{#for c in cs}<li>{ c.html | raw }</li>{/for}</ul></puzzle-view>`, want: true},
+		{name: "in skeleton", template: `<puzzle-view><p>x</p></puzzle-view>`, skeleton: `<puzzle-skeleton><p>{ hint | raw }</p></puzzle-skeleton>`, want: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeApp(t, map[string]string{
+				"app/views/Home.pzl": tt.template + "\n" + tt.skeleton + "\n" + script,
+			})
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if usage.HasRawHTML != tt.want {
+				t.Errorf("HasRawHTML = %v, want %v", usage.HasRawHTML, tt.want)
+			}
+			if usage.Features().RawHTML != tt.want {
+				t.Errorf("Features().RawHTML = %v, want %v", usage.Features().RawHTML, tt.want)
+			}
+			// Only `raw` keeps the sanitizer; `newline_to_br` alone does not.
+			wantSanitize := tt.want && strings.Contains(tt.template+tt.skeleton, "| raw")
+			if usage.HasRawSanitize != wantSanitize {
+				t.Errorf("HasRawSanitize = %v, want %v", usage.HasRawSanitize, wantSanitize)
+			}
+			for _, name := range []string{"raw", "newline_to_br"} {
+				if usage.Formatters[name] {
+					t.Errorf("markup formatter %q entered the manifest set: %v", name, usage.Formatters)
+				}
+			}
+		})
+	}
+}
+
 func TestScanUsageSnippets(t *testing.T) {
 	const script = `<script>
 import { PuzzleView } from '@magic-spells/puzzle';

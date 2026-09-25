@@ -10,7 +10,7 @@
  *     new ViewNode('button', { '@click': (e) => this.events.remove(todo) }, [...]),
  *   ])
  *
- * Three node kinds share this shape:
+ * These node kinds share this shape (plus the reserved '#'-prefixed tags below):
  * - Element/text — `tag` is a string. `'text'` WITH a `value` attr is a text
  *   node, its content is attrs.value; `'text'` without one is the authored SVG
  *   `<text>` element, and any other string is an HTML/SVG element name.
@@ -61,6 +61,14 @@ export const PLACEHOLDER_TAG = '#';
 // `children` are the teleported subtree.
 export const PORTAL_TAG = 'portal';
 
+// Reserved tag marking live HTML (D174): an interpolation whose chain ends in
+// `raw` (`attrs.value` is sanitized) or `newline_to_br` (`attrs.br` is set; the
+// value is escaped and its newlines become `<br>`). The ViewManager holds the
+// position with a comment and owns the parsed nodes after it (views/html.js);
+// the patcher never reconciles inside them. Codegen emits the literal
+// `new ViewNode('#html', { value })`.
+export const HTML_TAG = '#html';
+
 /**
  * The one diagnostic for a reserved '#'-prefixed metadata tag that reached a
  * rendering path (D89 boundary). Every such tag is consumed by expansion before
@@ -83,7 +91,9 @@ export function metadataTagError(tag) {
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		return new Error(
 			`[puzzle] vnode tag "${tag}" reached the DOM — it is framework metadata; ` +
-				'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ' +
+				(tag === HTML_TAG
+					? '`raw`/`newline_to_br` support was compiled out of this build (__PUZZLE_HAS_RAW_HTML__ is false). '
+					: 'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ') +
 				'Compiled component packages are not scanned for feature usage; use source pieces ' +
 				'or force the feature on.'
 		);

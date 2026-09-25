@@ -27,8 +27,10 @@ import {
 	PLACEHOLDER_TAG,
 	PORTAL_TAG,
 	SNIPPET_TAG,
+	HTML_TAG,
 	metadataTagError,
 } from './ViewNode.js';
+import { mountHtml, patchHtml, htmlTail, moveHtml, unmountHtml } from './html.js';
 import { beginFlip, playFlip } from './flip.js';
 import {
 	mountPortal,
@@ -669,6 +671,20 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 		return placeholder;
 	}
 
+	// Live HTML (D174): a position comment plus the sanitized nodes after it.
+	// Gated whole, so an app that never uses `raw`/`newline_to_br` ships none of
+	// it; a '#html' vnode that reaches a build with the define false (a template
+	// the usage scan never read) fails loudly at the metadata-tag guard below,
+	// the snippet tag's posture.
+	if (
+		(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
+		vnode.tag === HTML_TAG
+	) {
+		const start = mountHtml(vnode, parent, ref);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+		return start;
+	}
+
 	let el;
 	if (vnode.tag === PLACEHOLDER_TAG) {
 		// Conditional arity-padding placeholder (see ViewNode.PLACEHOLDER_TAG): an
@@ -929,7 +945,13 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// (D58/D85 destroyAnimated, registered in leavingEls) is still in the DOM, so
 		// the new element is inserted before it exactly as it was; a synchronous
 		// removal leaves the captured next sibling as the ref.
-		const next = anchor?.nextSibling ?? null;
+		// A live-HTML range (D174) ends at its last parsed node, not at its comment.
+		const next =
+			((typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
+			oldVnode.tag === HTML_TAG
+				? htmlTail(oldVnode)
+				: anchor
+			)?.nextSibling ?? null;
 		unmount(oldVnode);
 		const ref =
 			anchor && anchor.isConnected
@@ -992,6 +1014,17 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	// a tag mismatch handled by the replace path above (mount the new, unmount the
 	// comment — releaseSubtree/remove handle a comment-el vnode with no children).
 	if (newVnode.tag === PLACEHOLDER_TAG) return;
+
+	// Live HTML (D174): the comment transferred above; a changed value replaces
+	// the owned nodes, an unchanged one touches nothing.
+	if (
+		(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
+		newVnode.tag === HTML_TAG
+	) {
+		if (patchHtml(oldVnode, newVnode) && (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__))
+			devperfMutation();
+		return;
+	}
 
 	// Portal → portal: the local placeholder transferred above; the teleported
 	// children patch against this portal's bracketed range inside the outlet.
@@ -1270,6 +1303,15 @@ const leavingEls = new WeakSet();
  * destroy them all, not just a top-level component vnode.
  */
 function unmount(vnode) {
+	if (
+		(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
+		vnode.tag === HTML_TAG
+	) {
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (vnode.el?.parentNode) devperfMutation();
+		}
+		return unmountHtml(vnode);
+	}
 	if (vnode.tag === PORTAL_TAG) {
 		if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
 			return unmountPortal(vnode, unmount);
@@ -1720,7 +1762,18 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 		const [oldChild, newChild] = pairs[i];
 		if (oldChild) {
 			patch(oldChild, newChild, el, ctx, owner);
-			if (nextPersistentSibling(newChild.el) !== ref) {
+			// A live-HTML range (D174) is compared by its last node and moved whole.
+			// The probe stays inline in the condition so a build without it folds
+			// this arm away and keeps only the original single-node move.
+			if (
+				(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
+				newChild.tag === HTML_TAG
+			) {
+				if (nextPersistentSibling(htmlTail(newChild)) !== ref) {
+					moveHtml(el, newChild, ref);
+					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+				}
+			} else if (nextPersistentSibling(newChild.el) !== ref) {
 				el.insertBefore(newChild.el, ref);
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 					devperfMutation();

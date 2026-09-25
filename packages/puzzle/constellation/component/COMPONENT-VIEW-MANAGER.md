@@ -148,6 +148,25 @@ notes:
 
       V9 update: an attribute list drops `false` and every item that prints nothing (displayValue
       with sep ' ').
+  - kind: state
+    text: >-
+      Live-HTML node (D174 group e): `HTML_TAG = '#html'` (ViewNode.js) is the one vnode kind that
+      owns MORE than one DOM node — what a text interpolation ending in `raw`/`newline_to_br`
+      compiles to (`attrs.value`, plus `attrs.br` for newline_to_br). `views/html.js` holds the
+      contract: `el` is an empty comment that comes FIRST, and `vnode.nodes` are the parsed nodes
+      after it, so `el` stays a valid insertion ref for the previous sibling like every single-node
+      kind. Everything else that assumes one node per vnode had to learn the range: mount
+      (`mountHtml`, parsing the sanitized markup through an inert `<template>`), same-node patch
+      (`patchHtml`: an unchanged value/br pair carries `nodes` over untouched; a changed one removes
+      them and inserts the new ones after `el`), unmount (`unmountHtml`), patch()'s replace path
+      (the captured `next` is `htmlTail(old).nextSibling`, not the comment's), and
+      patchKeyedChildren's move (guard on `htmlTail`, move with `moveHtml`) — the raw node is never
+      keyed itself, but it can be an unkeyed sibling of keyed rows. The patcher never reconciles
+      inside `nodes`. Every branch sits behind the inline `__PUZZLE_HAS_RAW_HTML__` probe, with the
+      probe INSIDE each condition (a hoisted `const html = probe && …` kept htmlTail/moveHtml alive
+      in hello-world, +151 B); a '#html' vnode in a build with the define false falls to the
+      metadata-tag throw (the message names the define). The SSG serializer emits `htmlOf(vnode)` —
+      the same string — with no comment, since takeover re-mounts. Tests: tests/raw-html.test.js.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

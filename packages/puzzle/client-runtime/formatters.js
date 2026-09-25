@@ -14,9 +14,12 @@
  */
 
 import manifestFormatters from '@magic-spells/puzzle/formatters/manifest';
-import { escape, raw } from './formatters/builtins.js';
+import { escape } from './formatters/builtins.js';
 
-const requiredBuiltins = { escape, raw };
+// `raw` is no longer seeded here (D174): templates reach it only through the
+// live-HTML node, never through the registry, and seeding it would pull the
+// sanitizer into every bundle.
+const requiredBuiltins = { escape };
 
 // The standard formatter set (D174): the names Sites implements with the same
 // arguments and meaning. An app formatter registered under one of these draws a
@@ -191,7 +194,13 @@ export function makeFormatterRegistry(customFormatters = {}, url) {
 		// Shadowing a standard name is allowed — the app's function wins — but it
 		// is worth a development warning (D174). Never a throw.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (STANDARD_FORMATTERS.includes(name)) {
+			if (name === 'raw' || name === 'newline_to_br') {
+				// The markup pair is lowered by the compiler (D174): templates never call
+				// the registry for either name, so the app's function is unreachable there.
+				console.warn(
+					`[puzzle] app formatter "${name}" is never called from templates — "${name}" renders through the built-in sanitizer`,
+				);
+			} else if (STANDARD_FORMATTERS.includes(name)) {
 				console.warn(
 					`[puzzle] app formatter "${name}" shadows the standard formatter of the same name; templates using "${name}" now get the app's function`,
 				);

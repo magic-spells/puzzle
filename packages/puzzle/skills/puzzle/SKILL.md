@@ -136,19 +136,85 @@ too; irregular `pluralize('person', 'people')`). Numbers: `plus`, `minus`,
 number as written: `12.5` → `13%`), `number_with_delimiter` (viewer locale;
 an argument forces the delimiter), `compact_number` → `1.2K`. Values:
 `default('n/a')` (missing, `false`, `''`, `[]` — not `0`), `size`, `join`,
-`json`. Dates: `date`/`time`/`datetime` with presets `short`, `medium`
-(default), `long`, `iso`. There are **no list formatters** — no `sort`,
-`where`, `map`, `first`, `last`: shape lists in `data()` and index with
-`items[0]` / `items.at(-1)`. Don't register an app formatter under a
+`json`. Markup: `escape` (an identity on text), `raw` and `newline_to_br`
+(see Rendering HTML below). Dates: `date`/`time`/`datetime` with presets
+`short`, `medium` (default), `long`, `iso`. There are **no list formatters** —
+no `sort`, `where`, `map`, `first`, `last`: shape lists in `data()` and index
+with `items[0]` / `items.at(-1)`. Don't register an app formatter under a
 standard name (it wins, with a dev warning, and changes what the name means).
+
+### Rendering HTML: `raw` and `newline_to_br` (puzzle ≥ 0.8.0) — security
+
+`{ post.bodyHtml | raw }` renders a value as real HTML, and it is **always
+sanitized** — there is no unsanitized escape hatch, by design:
+
+```html
+<article class="prose">{ post.bodyHtml | raw }</article>
+<p>{ comment.text | newline_to_br }</p>        <!-- escaped text, real <br>s -->
+<div>{ post.bodyHtml | truncate(300) | raw }</div>
+```
+
+- **What survives:** paragraphs, headings, lists, tables, `b`/`i`/`em`/
+  `strong`/`code`/`pre`/`blockquote`/`br`/`hr`, `span`/`div`, links
+  (`<a href>`, plus `target` only as `_blank`, which always gets
+  `rel="noopener noreferrer"`) and images (`<img src srcset alt width
+  height>`), plus `class`, `id`, `title`, `lang` and `dir` (DOMPurify's
+  defaults). `id` is kept verbatim for heading anchors and styling — except
+  on `<img>` (it would clobber properties of a `<form>` it lands in) and
+  except an id starting with `__` (framework globals and dev hooks).
+- **What is removed:** `<script>` with its contents; `<style>`, `<iframe>`,
+  `<object>`, `<embed>`, `<svg>`, `<math>`, `<template>`, `<noscript>` with
+  their contents; forms and inputs (their text stays); every `on*` handler;
+  `style`, `name` (never kept — it is what reaches `document.<name>`) and any
+  author `rel`; any `target` other than `_blank` (a named target sets
+  `window.name` in the opened page; `_top`/`_parent` escape a frame); and any
+  `href`/`src`/`srcset` URL that is not relative or `http(s)` (links also
+  keep `mailto:`/`tel:`) — obfuscated `JaVaScRiPt:`, entity-encoded,
+  control-character-prefixed and whitespace-split schemes included.
+- **`class` and `id` survive, so untrusted HTML can reach your CSS and your
+  global names.** For HTML your own editors write, that is the point
+  (Tailwind `prose` tweaks, callouts, `#section` anchors). For untrusted user
+  HTML it is a UI and naming risk, not code execution:
+  - `class` can pull in your overlay utilities — a `fixed inset-0 z-50` block
+    can cover the page or fake a dialog. Render user HTML inside a container
+    that contains it: `contain: layout paint` (plus `relative
+    overflow-hidden`), so fixed/absolute children are clipped to the box.
+  - Every kept `id` becomes a `window[id]` named property when the page has no
+    global of that name: `<a id="CONFIG" href="…">` makes `window.CONFIG` that
+    element for code that reads an optional global (`window.CONFIG ??
+    defaults`). Don't read optional globals by bare name, and expect a user
+    id to collide with your own ids — skip-link targets, `label for`,
+    `aria-labelledby`. (GitHub-style `user-content-` id prefixing would avoid
+    both; PuzzleKit keeps ids verbatim instead, so in-content anchors work.)
+  - Prefer `newline_to_br` (or plain `{ text }`) for user-typed text.
+- **`raw` must be the LAST formatter of a TEXT interpolation.** Anything else
+  is a compile error: `{ x | raw | upcase }`, `title={ x | raw }`,
+  `<Card body={ x | raw } />`, `{#if x | raw}`, `raw(…)` with arguments, or
+  `{ x | raw }` inside a raw-text element (`<script>`, `<style>`, `<textarea>`,
+  `<title>`, `<noscript>`, `<xmp>`, `<iframe>`, …). Pass
+  markup to a component as a string prop and pipe it through `raw` inside the
+  component's own template.
+- **App formatters can't inject markup.** Registering your own `raw` does
+  nothing for templates (a dev warning says so): the compiler lowers the name
+  itself. Don't try to build HTML strings in a custom formatter — they print
+  as text.
+- **Still treat it as untrusted-content rendering.** Sanitizing makes the
+  markup inert, not trustworthy: a user can still post links and images.
+  Prefer `newline_to_br` (or plain `{ text }`) for user-typed text, and keep
+  `raw` for CMS/rich-text fields.
+- The output renders as sibling nodes with no wrapper element and prerenders
+  identically in `hybrid`/`static` output. Cost: ~2.3 KB gzip in an app that
+  uses `raw` (the sanitizer), ~0.4 KB in one that only uses `newline_to_br`,
+  nothing otherwise.
 
 Rules that bite:
 
 - **Text is text.** Template text is NOT HTML-entity decoded and interpolations
-  become text nodes — you cannot inject markup through `{ expr }`. The one
-  raw-markup exception is compile-time `{#svg 'path.svg'}` inline SVG.
-  `{#raw}` is not a second one — it only turns the brace lexer off; no runtime
-  value can reach inside it.
+  become text nodes — you cannot inject markup through a plain `{ expr }`. The
+  only ways markup gets in are compile-time `{#svg 'path.svg'}` inline SVG and
+  the sanitized `raw` formatter (see Rendering HTML above). `{#raw}` is
+  neither — it only turns the brace lexer off; no runtime value can reach
+  inside it.
 - **What prints.** `null`, `undefined`, `NaN`, ±Infinity and objects (a `Date`
   included — format it with `| date`) print nothing; an object also warns in
   development. A list prints comma-joined in text, but in a brace-only
