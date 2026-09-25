@@ -53,6 +53,8 @@ The organizing principle for v1: **the todos app compiling and running end-to-en
 
 The spec is split across six domain cards. Section numbers are globally unique and never change: `§22` is `§22` no matter which card holds it, so the `§N` citations in the other cards and in `client-runtime/` / `compiler/` comments stay valid. This card remains the entry point, and the binding contract is the six cards in aggregate. A reader following a `§N` citation from code should start here and use this table to find the section.
 
+Which of these sections define the Puzzle language core and which define the PuzzleKit dialect is mapped on [[DOC-LANGUAGE-CORE]] (D172).
+
 | § | Section | Card |
 | --- | --- | --- |
 | 1 | Naming & entry points | [[DOC-SPEC-ANATOMY]] |
