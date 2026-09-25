@@ -47,18 +47,20 @@ notes:
       next to `ScopeID`, which derives the id. The esbuild plugin calls it during a real build and
       the playground WASM compiler calls it in the browser (D164), so the two cannot drift; the
       emitted bytes are unchanged.
-  - kind: decision
+  - kind: gotcha
     text: >-
-      Whitespace policy amendment ([[DECISION-D168-TEXT-RUN-WHITESPACE]], 0.7.0 final review):
-      `processText` now reports whether it stripped a leading/trailing space because the run held a
-      newline, and `buildTextRun` re-inserts exactly one space at any run-INTERNAL boundary where a
-      stripped edge borders another run member (a dropped whitespace-only newline node sets the pad
-      on the previous segment). The space folds into the neighbouring static literal when there is
-      one. Run edges keep the old strip, so element-boundary indentation and every golden file are
-      byte-identical; compiled across all 581 `.pzl` files in the repo, only
-      `examples/stays/app/views/Listing.pzl` changed (`' ·'` → `' · '`). Raw-block segments
-      participate as static segments, so a neighbouring stripped edge's pad can prepend into a raw
-      literal — byte-identical to a separate `' '` segment. Pinned by `text_run_space_test.go`.
+      Whitespace ([[DECISION-D168-TEXT-RUN-WHITESPACE]], the merged D173 V10 rule; the package doc
+      in codegen.go states it). `processChildren` classifies ONE children list: each coalesced run
+      learns whether each edge borders a sibling node (`leftSibling`/`rightSibling`, any non-text
+      node) or the parent's edge, and `buildTextRun` puts one space back at every stripped edge
+      except a parent edge. `<pre>`/`<textarea>` bodies are preserved through the `preserveWS`
+      compiler counter, under which `buildTextRun` emits every Text node verbatim. Every walker that
+      descends into an element's children and calls `processChildren` must raise it for those two
+      tags — today `emitElement` and `staticSubtree` (staticcache.go) — or the static-cache
+      look-ahead counts a different number of text vnodes than emission produces. `preservedBody`
+      drops the one newline after the start tag (never from a `{#raw}` first child), and
+      `forBodyRoot` zeroes the counter for the loop body's own list, since a loop body is one root
+      element and cannot hold text.
 ---
 
 # Render-function codegen

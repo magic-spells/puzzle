@@ -10,6 +10,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FormatterRegistry } from '../client-runtime/formatters.js';
 import { listRows, loopItems, loopRange } from '../client-runtime/views/listBlock.js';
+import { serialize } from '../client-runtime/ssg/serialize.js';
+import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import CoreHost from './fixtures/core-semantics/CoreHost.compiled.js';
 
 let mounted = null;
@@ -89,6 +91,27 @@ describe('D173 core semantics — compiled output', () => {
 		// The bare-local path would have written `name` at the top level.
 		expect(Object.hasOwn(data, 'name')).toBe(false);
 		expect(data.profile).toBeNull();
+	});
+
+	// V10 / D168: text wrapped next to an inline element keeps one space,
+	// stacked elements get none, and <pre>/<textarea> bodies keep their bytes
+	// (minus the one newline HTML drops after the start tag) — in the mounted
+	// DOM and in the prerendered HTML alike.
+	it('applies the merged whitespace rule (V10)', async () => {
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const el = await mountHost();
+		expect(el.querySelector('.prose').textContent).toBe('tokens — a, b and items 3');
+		const stack = el.querySelector('.stack');
+		expect([...stack.childNodes].map((n) => n.nodeName)).toEqual(['BUTTON', 'BUTTON']);
+		expect(el.querySelector('.pre').textContent).toBe('  indented\n    more 3\n');
+		expect(el.querySelector('.ta').value).toBe('  keep\n    this');
+
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const html = await serialize(new ViewNode(CoreHost), { ctx: { formatters: new FormatterRegistry() } });
+		const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+		expect(doc.querySelector('.prose').textContent).toBe('tokens — a, b and items 3');
+		expect(doc.querySelector('.pre').textContent).toBe('  indented\n    more 3\n');
+		expect(doc.querySelector('.ta').value).toBe('  keep\n    this');
 	});
 });
 

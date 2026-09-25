@@ -15,9 +15,10 @@ notes:
       Loops: the item and range forms don't mix — `{#for i in 1...5}` is a positioned compile error
       steering to `{#for 1...5, i}` (the range form always binds its counter after the range).
       Before the 0.7.0 final review it parsed as a range whose lower bound was the text `i in 1` and
-      compiled green into JavaScript that threw on first render. Text whitespace: a line break
-      between a word and `{ expr }`, or between two interpolations, renders as one space (D168);
-      element-boundary indentation is still dropped.
+      compiled green into JavaScript that threw on first render. Text whitespace follows the merged
+      rule on D168 (D173 V10): a line break between text or an interpolation and anything else
+      renders as one space, one between two elements or at a parent's edge is dropped, and
+      `<pre>`/`<textarea>` bodies keep their bytes; SPEC §6 "Text whitespace" states it in full.
 ---
 
 # Puzzle Template Syntax (v1)

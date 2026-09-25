@@ -20,6 +20,8 @@ Template reformatting is **deliberately deferred to a future version.** In this 
 - every section's opening/closing tags and attributes
 - top-level HTML comments and all inter-section whitespace
 
+Template line breaks are layout, not style. Under the template whitespace rule (decision D168), a line break between text and an inline element renders as one space, one between two elements renders nothing, and a `<pre>` or `<textarea>` body renders exactly as written. Joining, splitting or reindenting template lines would change the page, so any future template formatter must keep every line break that sits next to text, and must leave `<pre>`/`<textarea>` bodies alone.
+
 The only guaranteed changes are: the `<script>` and `<style>` bodies are reformatted, and the file is normalized to end with exactly one trailing newline.
 
 ## Usage

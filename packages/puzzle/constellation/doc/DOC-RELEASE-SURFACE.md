@@ -114,15 +114,16 @@ second specification. Decision cards hold rationale and git holds chronology.
   passes through with a development hint, and an app formatter shadowing a
   standard name draws a development warning. A shared JSON conformance table
   (`tests/conformance/formatters.json`) pins the identical-output part.
-- Template text collapses whitespace runs to one space and drops an edge space
-  that held a newline (source indentation at element boundaries). That strip is
-  an **element-boundary** rule only (D168): inside one coalesced text run —
-  text↔interpolation, or interpolation↔interpolation across a whitespace-only
-  newline node — a stripped edge bordering another run member gets exactly one
-  space back, so `{ user.first }` and `{ user.last }` on separate lines render
-  "John Doe" as they do in HTML, Vue and Svelte. `{ a }{ b }` with nothing
-  between stays adjacent. `\{` / `\}` escapes a literal brace in text and in
-  attribute values, which is the only escape available inside an attribute.
+- Template text follows the merged whitespace rule (D168, D173 V10): a run of
+  whitespace collapses to one space; newline-bearing whitespace is dropped at
+  a parent's first or last child and between two non-text siblings, and is one
+  space between text or an interpolation and anything else — so
+  `tokens —` + newline + `<code>a</code>` renders `tokens — a`, and
+  `{ user.first }` and `{ user.last }` on separate lines render "John Doe".
+  `{ a }{ b }` with nothing between stays adjacent. `<pre>` and `<textarea>`
+  bodies keep their bytes, minus the one newline after the start tag that HTML
+  drops too. `\{` / `\}` escapes a literal brace in text and in attribute
+  values, which is the only escape available inside an attribute.
 - Implicit two-way binding (D147): a path-shaped `value=`/`checked=`
   (`ident` or `ident.ident`) on a plain form control synthesizes its own
   write-back handler (`@input:bind`/`@change:bind`) — suppressed by an author

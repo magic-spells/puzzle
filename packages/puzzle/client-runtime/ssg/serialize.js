@@ -26,7 +26,9 @@
  * - `<script>`/`<style>` are RAWTEXT: their text is emitted unescaped (a JSON-typed
  *   script gets the `\u003c` data-island escape instead), and content that would
  *   end — or refuse to end — the element in the parser is a build error;
- * - void elements self-close without children.
+ * - void elements self-close without children;
+ * - a `<pre>`/`<textarea>` body that starts with a newline is emitted with one
+ *   more, which HTML's parser drops, so the mounted text keeps it (D168).
  *
  * Principled differences from a jsdom mount of the same tree (documented, tested
  * for in the equivalence suite): controlled form values are serialized as their
@@ -207,7 +209,7 @@ async function serializeNode(vnode, ctx, selectState) {
 	if (tag === 'textarea' && 'value' in vnode.attrs) {
 		// Pathological template case: if a textarea has both value={...} and
 		// children, the browser's value property wins, so SSG replaces the children.
-		return `${open}${escapeText(stringify(vnode.attrs.value, 0, ' '))}</${tag}>`;
+		return `${open}${guardLeadingNewline(tag, escapeText(stringify(vnode.attrs.value, 0, ' ')))}</${tag}>`;
 	}
 
 	if (tag === 'script' || tag === 'style') {
@@ -222,7 +224,16 @@ async function serializeNode(vnode, ctx, selectState) {
 		typeof vnode.children === 'string'
 			? vnode.children
 			: await serializeChildren(vnode.children, ctx, childSelectState);
-	return `${open}${inner}</${tag}>`;
+	return `${open}${guardLeadingNewline(tag, inner)}</${tag}>`;
+}
+
+// HTML's parser drops one newline directly after a <pre>, <textarea> or
+// <listing> start tag. A body that really starts with one (D168 keeps these
+// bodies' bytes) gets a second newline for the parser to eat, so the prerendered
+// page shows the same text the browser runtime mounts.
+const LEADING_NEWLINE_TAGS = new Set(['pre', 'textarea', 'listing']);
+function guardLeadingNewline(tag, inner) {
+	return LEADING_NEWLINE_TAGS.has(tag) && inner.startsWith('\n') ? `\n${inner}` : inner;
 }
 
 /** Serialize and concatenate a child vnode list in order. */

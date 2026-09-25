@@ -141,7 +141,14 @@ func (c *compiler) staticSubtree(n parser.Node, scope scopeMap) (bool, int) {
 		// reconciled (D46/D44). One vnode, fully static.
 		return true, 1
 	}
-	childOK, childCount := c.staticChildren(el.Children, scope)
+	children := el.Children
+	if preservesWhitespace(el.Tag) {
+		// Mirror emitElement, so the count matches the emitted array (D168).
+		children = preservedBody(children)
+		c.preserveWS++
+		defer func() { c.preserveWS-- }()
+	}
+	childOK, childCount := c.staticChildren(children, scope)
 	if !childOK {
 		return false, 0
 	}

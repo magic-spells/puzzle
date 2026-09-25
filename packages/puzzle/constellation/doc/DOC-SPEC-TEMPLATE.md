@@ -17,30 +17,10 @@ notes:
     sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
   - kind: state
     text: >-
-      Text whitespace rule (§6, recorded on [[DECISION-D168-TEXT-RUN-WHITESPACE]] in the 0.7.0 final
-      review): template text collapses whitespace runs to one space and drops an edge space that
-      held a newline — source indentation at element boundaries. That strip is an element-boundary
-      rule only: inside one coalesced text run (text↔interpolation, interpolation↔interpolation
-      across a whitespace-only newline node) a stripped edge that borders another run member gets
-      exactly one space back, so `{ user.first }\n  { user.last }` renders "John Doe" as it does in
-      HTML, Vue and Svelte. `{ a }{ b }` with nothing between stays adjacent; run edges still strip;
-      the `<b>{ name }</b>\n(text)` element-boundary case is deliberately unchanged. Also: `{#for i
-      in 1...5}` is a positioned compile error steering to `{#for 1...5, i}` — the range form always
-      binds its counter after the range.
-  - kind: state
-    text: >-
-      Text whitespace rule (§6), superseding the earlier note above — the full rule as of the 0.7.0
-      final review, recorded on [[DECISION-D168-TEXT-RUN-WHITESPACE]]. Template text collapses
-      whitespace runs to one space and drops an edge space that held a newline (source indentation).
-      That strip is an ELEMENT-boundary rule only. Every non-element boundary keeps one space:
-      inside a coalesced text run (text↔interpolation, interpolation↔interpolation across a
-      whitespace-only newline node), and between a text run and an adjacent control-flow block —
-      `{#if}`, `{#for}`, `{#case}` — on either side. So `{ user.first }\n  { user.last }` renders
-      "John Doe" and `you have { n } new\n  {#if x}message{/if}` renders "new message", as they do
-      in HTML, Vue and Svelte. `{ a }{ b }` and `{#if x}a{/if}{ b }` with nothing between stay
-      adjacent; nothing is invented at an element edge, so a block that is an element's first/last
-      child gains no space; a block's own body edges keep the strip. Deliberately unchanged: the
-      `<b>{ name }</b>\n(text)` element-boundary case, and two blocks separated only by a newline.
+      `{#for i in 1...5}` is a positioned compile error steering to `{#for 1...5, i}` — the range
+      form always binds its counter after the range (0.7.0). The template whitespace rule lives in
+      the §6 "Text whitespace" bullet (D168, D173 V10), which replaces the two 0.7.0 whitespace
+      notes that stood here.
     sha: 513d834
   - kind: state
     text: >-
@@ -131,6 +111,7 @@ Supported:
 - **DOM islands (v1.13, D44):** a bare static `island` attribute on a plain element makes its children browser-owned after mount — the template children render once as *seed content* and are never reconciled again, while the element's own attributes and listeners keep patching normally. See §17.
 - **Element refs (v1.39, D72):** a static `ref="name"` on a plain element binds the live DOM node to `this.refs.name` — populated before `mounted()`, re-pointed on replacement, nulled on removal; the attribute never reaches the DOM. Static-string only (`ref={ expr }` is a positioned compile error — the expression boundary makes a braces form unimplementable); see §38 for the full contract and error set.
 - **Comments (v1.37, D70):** `{## any text }` (inline, self-contained) and `{#comment} … {/comment}` (block; body discarded **raw** — interpolations, block tags, and malformed template code inside are ignored, so it can comment out broken markup; nested `{#comment}` blocks count). Both are erased at the lexer — no token, no vnode, nothing in the bundle — and are legal at any text position, including `<puzzle-skeleton>` bodies. Inline comments track `{`/`}` nesting depth with `\{`/`\}` escapes and are deliberately NOT string-aware (`{## don't }` is fine); a lone `}` needs `\}`. The block closer tolerates whitespace (`{/ comment }`); opener content after the keyword is ignored. HTML comments `<!-- -->` remain compile-time-stripped as always. Compile errors (positioned): unclosed `{##`, unterminated `{#comment}`, either spelling inside an attribute value, a stray `{/comment}`. Additive; comment-free templates compile byte-identically.
+- **Text whitespace (D168, D173 V10):** template text renders the way the same markup renders in a browser, without source indentation leaking into the page. A run of spaces, tabs and newlines collapses to one space. Whitespace that contains a newline is **dropped** at a parent's first- or last-child edge (an element, a component's children, a marker fallback, a snippet body, or a control block's own body) and between two non-text siblings (elements, components, markers, `<Portal>`, `<Snippet>`, `{#svg}`, `{#if}`/`{#unless}`/`{#for}`/`{#case}`), so stacked buttons and stacked conditionals get no gap. Between text or an interpolation and anything else it collapses to **one space**: `tokens —` + newline + `<code>a</code>,` + newline + `<code>b</code>` + newline + `and more` renders `tokens — a, b and more`; `{ first }` + newline + `{ last }` renders `John Doe`; and a space before or after a control block lands outside the block, so it renders whether or not the branch does. Nothing is invented where the source has no whitespace (`<b>x</b>{ y }` and `{ a }{ b }` stay adjacent). A **`<pre>` or `<textarea>` body is preserved exactly**, descendants and interpolations included, except the one newline directly after the start tag, which HTML's parser drops too; a `{#raw}` body's own leading newline is kept, and a `{#for}` body inside one still drops its own whitespace because a loop body is a single root element. The prerender serializer doubles a leading newline in those bodies so the page shows the same text the browser runtime mounts. Layout note: a leading or trailing space inside a flex or grid item does not render, so an icon + newline + label inside a flex button is unaffected; in inline flow, write the two on one line when no space is wanted.
 - **Raw blocks (v1.70, D150):** `{#raw}…{/raw}` makes every brace in its body literal while preserving ordinary HTML parsing. See §57 for the full contract. The value-level `raw` formatter is unrelated: it runs after lexing and cannot make source braces literal.
 
 Deferred: `$emit`/event bus. (Named slots shipped in v1.21 — D53, §24; `<puzzle-skeleton>` auto-swapping shipped in v1.8 — D39, §16.)
