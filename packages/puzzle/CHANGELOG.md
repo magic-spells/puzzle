@@ -11,13 +11,24 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Eight breaking changes are easy to miss on a multi-version jump. Most fail
-loudly — a compile error, a constructor throw, an unresolvable import. Four are
-quiet: `output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
+Nine breaking changes are easy to miss on a multi-version jump. Most fail
+loudly — a compile error, a constructor throw, an unresolvable import. Five are
+quiet: the standard formatter set (0.8.0) changes output without an error;
+`output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
 are greppable; the stricter write-response guard (0.6.0) is not — it depends on
 what your server returns, so it surfaces at runtime on the first save — and
 neither is the behavior change under auto-fetching finds (0.7.0), which turns
 some reads that used to be local into requests.
+
+**Built-in formatters are the standard set (0.8.0, D174).** Quiet: a template
+keeps compiling and renders something different. Grep your templates for
+`pluralize` (it prints the count now — drop the separate `{ n }`),
+`date('short')` (now date-only — use `datetime('short')`), `date('date')`,
+`date('time')` or `date('datetime')` (retired presets), and the removed list
+formatters `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`,
+`last` and `noescape`; development logs each removed name you still use. Then
+look at `capitalize`, `currency`, `percentage` and `round` output — the 0.8.0
+entry lists every change.
 
 **Tracked `findOne`/`findMany` fetch what is missing (0.7.0, D161).** The
 rename half is loud: `store.loadAll` and the `loadAll` adapter verb are
@@ -211,7 +222,64 @@ values every consumer sees and adds a mode and new exports, which is a
   unaffected; neither `registry.json`'s schema version nor `pieces.lock` changed.
   Every bundled piece manifest now pins the floor it needs.
 
+- **`compact_number` and `default` formatters (D174).** `{ followers |
+  compact_number }` shortens a large number with a localized suffix through
+  `Intl.NumberFormat(locale, { notation: 'compact' })` — `1.2K`, `45K`, `3.4M`
+  in English. `{ subtitle | default('Untitled') }` swaps in a fallback for a
+  missing value, `false`, `''` or an empty list; `0` is a real value and is
+  kept.
+
 ### Changed
+
+- **BREAKING: the built-in formatters are the standard set (D174).** The
+  formatter names PuzzleKit and Sites share now mean the same thing in both,
+  which changes the output of several built-ins. Removed outright, with no
+  deprecation period: `sort`, `where`, `map`, `uniq`, `reverse`, `compact`,
+  `first` and `last` (shape lists in `data()`, or write `items[0]` /
+  `items.at(-1)`), and `noescape` (use `raw`). A template that still names one
+  passes the value through and, in development, logs what replaces it.
+  Changed:
+  - `pluralize` prints the count **and** the word, the count in the viewer's
+    locale: `{ n | pluralize('comment') }` → `3 comments`; the two-argument
+    form stays for irregular plurals (`pluralize('person', 'people')`).
+    Delete the separate `{ n }` in front of it.
+  - `number_with_delimiter` follows the viewer's locale (`1.234,5` in de-DE);
+    an explicit delimiter still forces one.
+  - `date`, `time` and `datetime` share the presets `short`, `medium` (the new
+    default), `long` and `iso`. `date('short')` is now date-only (`9/24/26`)
+    — use `datetime('short')` for the old date-and-time stamp. The preset
+    names `date`, `time` and `datetime` are retired, and an unknown preset is
+    a development error that renders as `medium`. `iso` is RFC 3339 in the
+    viewer's zone (`2026-09-24`, `15:04:05-04:00`,
+    `2026-09-24T15:04:05-04:00`), no longer a UTC `toISOString()`.
+  - `capitalize` leaves the rest of the string alone (`iPhone` → `IPhone`);
+    the old behavior is `downcase | capitalize`.
+  - `currency` groups thousands and puts the sign first: `-$1,234.50`.
+  - `percentage` takes the number as written (`12.5 | percentage(1)` →
+    `12.5%`); a ratio is `ratio | times(100) | percentage`.
+  - `round` rounds half away from zero on the decimal value (`1.005 |
+    round(2)` → `1.01`) and takes negative places (`1250 | round(-2)` →
+    `1300`); `currency` and `percentage` round the same way.
+  - `divided_by` and `modulo` by zero give a missing value, which prints
+    nothing, instead of `Infinity` / `NaN`.
+  - `escape` is an identity on text — the page shows `<b>`, not `&lt;b&gt;`.
+  - `json` sorts object keys and prints `null` for a missing value, `NaN` and
+    ±Infinity.
+  - `size`, `truncate` and `split('')` count code points, so an emoji is one;
+    `truncate`'s result never exceeds its length, ellipsis included; `size` of
+    a missing value is `0` and `split` of one is `[]`.
+  - `strip_html` is a quote-aware scanner that keeps a bare `<` (`1 <2`);
+    `strip_newlines` removes `\r` as well as `\n`.
+  - `currency`, `percentage`, `number_with_delimiter`, `compact_number` and
+    `pluralize` print nothing for a missing value, not `$0.00` or `0`.
+
+  An app formatter registered under a standard name still wins, now with a
+  development warning. The examples moved with it: blog's `pluralize`, chirp's
+  and music's own `compact` → `compact_number`, stays' own `currency` →
+  `currency('$', 0)`, and todos, the scaffold todos template and stress →
+  `datetime('short')`; typed-todos and the scaffold todos app drop their
+  now-shadowing `pluralize`, and the DevTools panel its unused `json`.
+  Scaffolded todos apps get the change with the next binary.
 
 - **A record prop now refreshes its child when that record changes.** Records
   mutate in place, so a record passed as a prop was always reference-equal and a

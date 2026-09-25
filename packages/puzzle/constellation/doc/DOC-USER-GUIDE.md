@@ -552,7 +552,7 @@ params and props** in `data(params, props)` — the router does not inject a
 
     <section class="comments">
       <h2 class="comments__title">
-        { comments.length } { comments.length | pluralize('comment', 'comments') }
+        { comments.length | pluralize('comment') }
       </h2>
 
       {#if comments.length > 0}

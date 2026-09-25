@@ -16,6 +16,31 @@ connections:
   - DECISION-D114-CALENDAR-DATE-FORMATTERS
   - DECISION-D150-RAW-TEMPLATE-BLOCK
   - DECISION-D79-LINK-FORMATTER
+notes:
+  - kind: state
+    text: >-
+      PuzzleKit groups (a) and (g) are built on `feat/formatter-set` (PR into release/0.8.0):
+      builtins.js/json are the 34 standard names + `timeago` + `in_timezone`; the removed names pass
+      through with a dev hint naming the replacement; `STANDARD_FORMATTERS` in formatters.js drives
+      the dev-only shadow warning; the conformance table lives at
+      `packages/puzzle/tests/conformance/formatters.json` (not in puzzle-lang, which this branch
+      does not touch) and runs from tests/formatters.test.js, zone-bearing cases in one child
+      process per `TZ`. Group (e) (sanitized `raw`/`newline_to_br`) is still open, so the table
+      carries no `raw`/`newline_to_br` rows yet. Sites work is untouched. Because `default` is a
+      reserved word, builtins.js exports it as the module default and the Go virtual manifest
+      aliases it (`default as __puzzle_default`, recorded on D31).
+  - kind: deviation
+    text: >-
+      Choices the card leaves open, made in the PuzzleKit build and NOT pinned by the conformance
+      table until Cory confirms them for Sites: (1) `currency` of an amount that rounds to zero is
+      unsigned (`-0.001` → `$0.00`; Sites prints `-$0.00`). (2) `currency`, `percentage`,
+      `number_with_delimiter`, `compact_number` and `pluralize` print nothing for a missing input
+      (V4/V6 spirit) instead of `Number(null)`'s `0`; a non-numeric string passes through as text.
+      (3) The `iso` preset returns the calendar date itself for a `YYYY-MM-DD` input in all three
+      formatters, `time` included (D114 idempotence); for an instant, `iso` uses `Z` for a zero
+      offset, matching Go's RFC 3339. (4) `json` prints `null` for an `undefined` object value
+      (JSON.stringify would omit it) and for a cycle. (5) An unknown date preset renders as `medium`
+      after the dev error.
 ---
 
 # D174 — The standard formatter set

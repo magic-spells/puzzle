@@ -416,68 +416,53 @@ Template-relevant sections in DOC-SPEC-VIEW are all PuzzleKit: §12 animations,
 
 ## Standard formatters
 
-Compared against `client-runtime/formatters/builtins.js` plus the router-backed
-`link` (PuzzleKit, 44 names) and `sites/engine/engine/formatters/*.go` (Sites, 61
-names including four aliases). **Identical** means the same result for every
-input the formatter is meant for (text, finite numbers, lists), given the same
-printed value; the value-printing and Unicode differences in V6 and V7 apply to
-all of them, and out-of-domain inputs follow each host's failure policy (V17).
-**The standard set is the 14 identical names.** Each "differs" row is an open
-question: which behavior becomes standard, or whether the name splits.
+[[DECISION-D174-STANDARD-FORMATTERS]] fixes the **standard set: 34 names**
+with the same arguments and meaning in both hosts, pinned for identical output
+by the shared conformance table (`tests/conformance/formatters.json` in
+`packages/puzzle`, which Sites' Go tests are to run too). D174 has each name's
+contract; this table records where each host stands against it.
 
-Counts: 14 identical, 27 differ, 3 PuzzleKit-only, 20 Sites-only.
+**PuzzleKit implements D174 groups (a) and (g)**: `client-runtime/formatters/builtins.js`
+is the standard set plus `timeago` and `in_timezone`, with the router-backed
+`link` added by the registry (37 names). The one PuzzleKit gap is group (e):
+`raw` and `newline_to_br` still return plain text rather than sanitized markup.
+**Sites has not moved yet** (`sites/engine/engine/formatters/*.go`, 61 names
+including four aliases); its column describes today's registry.
 
-| Name | PuzzleKit | Sites | Status |
+Counts: 34 standard (28 identical-output, 6 locale-rendered), 3 PuzzleKit-only,
+25 Sites-only.
+
+| Name | PuzzleKit | Sites today | Status |
 |---|---|---|---|
-| `abs` | absolute value | same | identical |
-| `ceil` | round up | same | identical |
-| `downcase` | lower case | same | identical |
-| `first` | first item | same | identical |
-| `floor` | round down | same | identical |
-| `join` | joins items, default `", "` | same | identical |
-| `last` | last item | same | identical |
-| `minus` | subtract | same | identical |
-| `number_with_delimiter` | groups the whole part in threes, default `,` | same | identical |
-| `plus` | add | same | identical |
-| `strip` | trims whitespace | alias of `trim` | identical |
-| `times` | multiply | same | identical |
-| `trim` | trims whitespace | same | identical |
-| `upcase` | upper case | same | identical |
-| `capitalize` | F1: first character upper, **rest lower-cased** | first character upper, rest untouched (`iPhone` survives) | differs |
-| `compact` | F2: drops `null`, `undefined` **and `''`** | drops nil only | differs |
-| `currency` | F3: `$` + fixed places, no grouping, `$-5.00` | groups thousands, sign first: `-$5.00` | differs |
-| `date` | F4: Intl presets `date`/`time`/`short`/`long`/`datetime`/`iso`, optional locale, the viewer's zone, `YYYY-MM-DD` read as a calendar day | presets `short`/`medium`/`long`/`iso` or a Go layout, en-US, no locale argument; RFC 3339 or epoch seconds | differs |
-| `datetime` | F5: as `date` | as `date` | differs |
-| `time` | F6: as `date` | as `date` | differs |
-| `divided_by` | F7: zero divisor gives `Infinity` | zero divisor is an error, renders empty | differs |
-| `escape` | F8: returns entity-escaped text, which a text node then shows literally (`&lt;b&gt;`) | drops the trusted-markup mark, so the renderer escapes once and `<b>` shows as `<b>` | differs |
-| `json` | F9: `JSON.stringify` (keys in insertion order; `undefined` renders nothing) | Go encoder (map keys sorted; nil gives `null`) | differs |
-| `map` | F10: `item[key]`, key read literally | dotted key path (`'fields.title'`) | differs |
-| `modulo` | F11: zero divisor gives `NaN` | zero divisor is an error, renders empty | differs |
-| `newline_to_br` | F12: inserts `<br>` into plain text (a text node shows it as text); `\n` only | escapes first, returns markup; handles `\r\n` and `\r` | differs |
-| `noescape` | F13: as `raw` | alias of `raw` | differs |
-| `percentage` | F14: multiplies by 100 (`0.125` → `13%`) | takes the number as written (`12.5` → `13%`) | differs |
-| `pluralize` | F15: returns the noun alone | prefixes the count: `2 notes` | differs |
-| `raw` | F16: `String(v)`; text nodes never inject markup | marks the value trusted markup and injects it | differs |
-| `replace` | F17: replacement optional, a RegExp search allowed | both arguments required, literal only | differs |
-| `reverse` | F18: lists, and strings by code point | lists only; a string gives nil | differs |
-| `round` | F19: places clamped to 0–100 | negative places round to tens and hundreds | differs |
-| `size` | F20: string length in UTF-16 units; a non-countable value gives `0` | runes; a non-countable value gives nil | differs |
-| `sort` | F21: one-segment key; numbers numeric, Dates chronological, anything else compared as strings | dotted key; fixed order nil < booleans < numbers < text < containers (containers and dates compare equal) | differs |
-| `split` | F22: separator optional (default `,`); `null` gives `['']` | separator required; nil stays nil | differs |
-| `strip_html` | F23: removes every `<…>` (regex) | quote-aware tag scanner; a `<` not followed by a tag name stays | differs |
-| `strip_newlines` | F24: removes `\n` only | removes `\r` and `\n` | differs |
-| `truncate` | F25: length optional (100), counts UTF-16 units | length required, counts runes; an ellipsis longer than the length is clipped | differs |
-| `uniq` | F26: `Set` over any value (objects by identity, `NaN` deduplicated) | scalars only; objects all kept | differs |
-| `where` | F27: `where(key, value)` on a literal key; `where(key)` keeps items whose key is `undefined` | dotted key; `where(key)` keeps items whose key is truthy | differs |
+| `abs`, `ceil`, `floor`, `plus`, `minus`, `times`, `downcase`, `upcase`, `trim`, `strip`, `join` | as D174 | same | standard, both hosts |
+| `divided_by`, `modulo` | as D174: a zero divisor gives a missing value | zero divisor is an error, renders empty | standard; Sites pending (F7, F11) |
+| `round` | as D174: half away from zero on the decimal value, negative places | same rule on the binary value (`1.005` → `1.00`) | standard; Sites pending (F19 fixture) |
+| `currency` | as D174: `-$1,234.50` | same | standard (F3) |
+| `percentage` | as D174: the number as written | same | standard (F14) |
+| `capitalize` | as D174: first character only | same | standard (F1) |
+| `truncate` | as D174: code points, length optional, never over length | length required | standard; Sites pending (F25) |
+| `replace` | as D174: replacement optional; a RegExp is a PuzzleKit addition | both arguments required | standard; Sites pending (F17) |
+| `split` | as D174: separator optional, `''` → code points, missing → `[]` | separator required, nil stays nil | standard; Sites pending (F22) |
+| `strip_html` | as D174: quote-aware scanner | same | standard (F23) |
+| `strip_newlines` | as D174: CR and LF | same | standard (F24) |
+| `escape` | as D174: identity on text | drops the trusted-markup mark | standard (F8) |
+| `raw` | `String(v)`; a text node never injects markup | trusted markup, unsanitized | standard; both pending group (e) (F16) |
+| `newline_to_br` | inserts `<br>` into plain text, LF only | escapes, then markup `<br>`; CR LF and CR too | standard; PuzzleKit pending group (e) (F12) |
+| `default` | as D174: `0` is kept | treats `0` as falsy | standard; Sites pending |
+| `size` | as D174: code points / items / keys, else `0` | runes; a missing value gives nil | standard; Sites pending (F20) |
+| `json` | as D174: sorted keys, missing / non-finite → `null` | Go encoder; NaN errors | standard; Sites pending (F9) |
+| `date`, `time`, `datetime` | as D174: `short`/`medium`/`long`/`iso`, viewer locale and zone | same presets, en-US, the value's own zone | locale-rendered; Sites pending the site zone (F4–F6) |
+| `number_with_delimiter` | as D174: viewer locale; explicit delimiter forces one | fixed `,` | locale-rendered; Sites pending |
+| `compact_number` | `Intl` compact notation | — | locale-rendered; Sites pending |
+| `pluralize` | as D174: count in the viewer locale, then the word | ungrouped count, then the word | locale-rendered; Sites pending (F15) |
 | `link` | router-aware href for a path (§6, D79) | — (Sites has `url`) | PuzzleKit-only |
 | `timeago`, `in_timezone` | relative time; time-zone shift | — (no clock or zone at render time, by design) | PuzzleKit-only |
-| `upper`, `lower` | — | aliases of `upcase`, `downcase` | Sites-only |
-| `default` | — | fallback for a falsy value | Sites-only |
-| `url`, `asset_url`, `menu_link` | — | site URL, theme asset URL, menu item href | Sites-only |
-| `image_url`, `image_srcset`, `image_tag` | — | image variants and tags | Sites-only |
-| `t`, `class_map` | — | locale strings; class names from a map | Sites-only |
+| `noescape` | removed | alias of `raw` | removed from both; Sites pending |
+| `upper`, `lower` | — | aliases of `upcase`, `downcase` | removed from Sites; pending |
+| `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last` | removed (list shaping is `data()` or a plain expression) | list formatters | Sites-only |
 | `reject`, `find`, `sort_natural`, `slice`, `sum`, `concat`, `push`, `contains`, `group_by` | — | list queries and list building | Sites-only |
+| `url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`, `image_tag`, `t` | — | platform-bound | Sites-only |
+| `class_map` | — | class names from a map | Sites-only |
 
 ## Known divergences
 
