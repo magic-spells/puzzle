@@ -51,6 +51,9 @@ import { devperfListRows } from '../devperf.js';
  * @returns {object[]} the row vnodes, in order
  */
 export function listRows(view, owner, id, items, factory, meta) {
+	// A missing collection loops zero times, and so does any other non-list
+	// (D173 V12) — this is the one place a lowered site's collection is read.
+	items = loopItems(items);
 	const blocks = (owner.__lists ??= []);
 	const block = (blocks[id] ??= { rows: new Map(), gen: 0, seen: 0, verdicts: null });
 	const rows = block.rows;
@@ -188,6 +191,85 @@ export function listRows(view, owner, id, items, factory, meta) {
 		devperfListRows(view, cached, built, deep || isConservativeSite(block) ? 1 : 0);
 	}
 	return out;
+}
+
+const EMPTY = [];
+
+/**
+ * The loop domain of `{#for item in collection}` (D173 V12): a list iterates,
+ * a missing collection (`null`/`undefined`) loops zero times silently, and any
+ * other value — a string, an object, a number, a Set — loops zero times with a
+ * development warning. Called by listRows for a lowered site and imported as
+ * `__e` by a module whose item loop keeps `.map` (a snippet body, a loop nested
+ * in a range, an explicit key that reads render state), so both shapes share one
+ * rule. Returns the collection itself when it is an array.
+ *
+ * @param {unknown} value the loop's collection expression
+ * @returns {unknown[]}
+ */
+export function loopItems(value) {
+	if (Array.isArray(value)) return value;
+	if (value != null && (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)) {
+		warnLoopOnce(
+			'{#for} collection is not a list (got ' + describe(value) + '); the loop runs zero times'
+		);
+	}
+	return EMPTY;
+}
+
+/**
+ * The whole numbers `from…to` of a range `{#for}` (D173 V12), imported as `__r`
+ * by a module with a range loop. Both bounds are truncated toward zero, with a
+ * development warning when one was not an integer; a missing (`null`/
+ * `undefined`) or non-finite bound runs the range zero times, as does an end
+ * below its start.
+ *
+ * @param {unknown} from the first number
+ * @param {unknown} to the last number, inclusive
+ * @returns {number[]}
+ */
+export function loopRange(from, to) {
+	const a = rangeBound(from);
+	const b = rangeBound(to);
+	const out = [];
+	for (let n = a; n <= b; n++) out.push(n);
+	return out;
+}
+
+function rangeBound(value) {
+	if (value == null) return NaN;
+	const n = Math.trunc(value);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (!Number.isFinite(n)) {
+			warnLoopOnce(
+				'{#for} range bound is not a finite number (got ' + describe(value) + '); the range runs zero times'
+			);
+		} else if (n !== Number(value)) {
+			// Compared as a number, so a numeric string from a route param ('5')
+			// is an integer bound, not a truncation.
+			warnLoopOnce(
+				'{#for} range bound ' + describe(value) + ' is not an integer; it is truncated to ' + n
+			);
+		}
+	}
+	return Number.isFinite(n) ? n : NaN;
+}
+
+function describe(value) {
+	if (typeof value === 'string') return JSON.stringify(value);
+	if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+	return Object.prototype.toString.call(value).slice(8, -1);
+}
+
+// One warning per distinct message per session, dev-only behind the inline
+// probe like warnDuplicateListKey, so production tree-shakes the helpers and
+// their once-state away.
+let warnedLoop;
+function warnLoopOnce(message) {
+	const seen = (warnedLoop ??= new Set());
+	if (seen.has(message)) return;
+	seen.add(message);
+	console.warn('[puzzle] ' + message);
 }
 
 /**

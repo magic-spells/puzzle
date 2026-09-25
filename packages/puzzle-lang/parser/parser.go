@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
@@ -714,11 +715,14 @@ func buildAttr(name string, npos Position, v Token, file string) (Attr, *ParseEr
 	}
 	switch v.Type {
 	case TokAttrBrace:
-		expr := strings.TrimSpace(v.Value)
-		if expr == "" {
+		if strings.TrimSpace(v.Value) == "" {
 			return nil, errAt(file, vpos, "empty attribute expression for %q", name)
 		}
-		return &DynamicAttr{Name: name, Expr: expr, Pos: npos}, nil
+		expr, fmts, perr := parseChain(v.Value, vpos, file, fmt.Sprintf("attribute expression for %q", name))
+		if perr != nil {
+			return nil, perr
+		}
+		return &DynamicAttr{Name: name, Expr: expr, Formatters: fmts, Pos: npos}, nil
 	case TokAttrQuoted, TokAttrBare:
 		parts, perr := parseAttrParts(v.Value, vpos, file)
 		if perr != nil {
@@ -850,21 +854,29 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#if} requires a condition")
 		}
+		cond, condFmts, perr := parseChain(rest, pos, p.file, "{#if} condition")
+		if perr != nil {
+			return nil, perr
+		}
 		thenNodes, perr := p.parseChildren(openCtx{kind: ctxBlockIf, pos: pos})
 		if perr != nil {
 			return nil, perr
 		}
 		type elseIfClause struct {
 			cond string
+			fmts []FormatterCall
 			body []Node
 			pos  Position
 		}
 		var clauses []elseIfClause
 		for p.cur.Type == TokElseIf {
 			cpos := tokPos(p.cur)
-			cond := p.cur.Value
-			if cond == "" {
+			if p.cur.Value == "" {
 				return nil, errAt(p.file, cpos, "{:else if} requires a condition")
+			}
+			cond, fmts, cerr := parseChain(p.cur.Value, cpos, p.file, "{:else if} condition")
+			if cerr != nil {
+				return nil, cerr
 			}
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
@@ -873,7 +885,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			if e != nil {
 				return nil, e
 			}
-			clauses = append(clauses, elseIfClause{cond: cond, body: body, pos: cpos})
+			clauses = append(clauses, elseIfClause{cond: cond, fmts: fmts, body: body, pos: cpos})
 		}
 		var elseNodes []Node
 		if p.cur.Type == TokElse {
@@ -903,9 +915,9 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		tail := elseNodes
 		for i := len(clauses) - 1; i >= 0; i-- {
 			c := clauses[i]
-			tail = []Node{&If{Cond: c.cond, Then: c.body, Else: tail, Pos: c.pos}}
+			tail = []Node{&If{Cond: c.cond, Formatters: c.fmts, Then: c.body, Else: tail, Pos: c.pos}}
 		}
-		return &If{Cond: rest, Then: thenNodes, Else: tail, Pos: pos}, nil
+		return &If{Cond: cond, Formatters: condFmts, Then: thenNodes, Else: tail, Pos: pos}, nil
 
 	case "unless":
 		// {#unless expr} desugars to the If node with a negated condition, so
@@ -915,6 +927,10 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		// (checkCloser) — unless/else-if chains are unreadable by design.
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#unless} requires a condition")
+		}
+		cond, condFmts, perr := parseChain(rest, pos, p.file, "{#unless} condition")
+		if perr != nil {
+			return nil, perr
 		}
 		thenNodes, perr := p.parseChildren(openCtx{kind: ctxBlockUnless, pos: pos})
 		if perr != nil {
@@ -937,7 +953,11 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if err := p.advance(); err != nil {
 			return nil, toPE(err)
 		}
-		return &If{Cond: "!(" + rest + ")", Then: thenNodes, Else: elseNodes, Pos: pos}, nil
+		if len(condFmts) > 0 {
+			// The chain runs first and the host negates its result (see If).
+			return &If{Cond: cond, Formatters: condFmts, Negate: true, Then: thenNodes, Else: elseNodes, Pos: pos}, nil
+		}
+		return &If{Cond: "!(" + cond + ")", Then: thenNodes, Else: elseNodes, Pos: pos}, nil
 
 	case "case":
 		// {#case expr} … {:when v1, v2} … {:else} … {/case}. Unlike {#unless},
@@ -945,6 +965,10 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		// once (semantically safe for getters); it does NOT desugar to If.
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#case} requires an expression")
+		}
+		caseExpr, caseFmts, perr := parseChain(rest, pos, p.file, "{#case} expression")
+		if perr != nil {
+			return nil, perr
 		}
 		// Only whitespace may sit between {#case expr} and the first {:when}; a
 		// stray element/interpolation there is a positioned error.
@@ -997,7 +1021,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if len(clauses) == 0 {
 			return nil, errAt(p.file, pos, "{#case} has no {:when} clauses")
 		}
-		return &Case{Expr: rest, Clauses: clauses, Else: elseNodes, Pos: pos}, nil
+		return &Case{Expr: caseExpr, Formatters: caseFmts, Clauses: clauses, Else: elseNodes, Pos: pos}, nil
 
 	case "svg":
 		// {#svg 'path'} is a VOID block (v1.14, D46): it inlines a file at compile
@@ -1060,6 +1084,12 @@ func parseWhenValues(raw string, pos Position, file string) ([]string, *ParseErr
 		if v == "" {
 			return nil, errAt(file, pos, "{:when} has an empty value (check for a stray comma)")
 		}
+		// A `|` is a formatter pipe in every other value position (D173 V1), and
+		// a {:when} value takes no chain; letting it compile as a bitwise OR
+		// would read as a formatter and silently match something else.
+		if hasTopLevelPipe(v) {
+			return nil, errAt(file, pos, "formatter pipes are not allowed in a {:when} value — list alternatives with commas ({:when 'a', 'b'}), apply the formatter in the {#case} header, or wrap a bitwise OR in parentheses, e.g. (a | b)")
+		}
 		vals = append(vals, v)
 	}
 	return vals, nil
@@ -1104,6 +1134,12 @@ func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) 
 	rest, counter, perr := peelForCounter(rest, pos, file)
 	if perr != nil {
 		return nil, perr
+	}
+	// A pipe anywhere in the header — the collection or either range bound — is
+	// the D173 V1 ban, reported before the header is taken apart so every
+	// spelling gets the same fix-it.
+	if hasTopLevelPipe(rest) {
+		return nil, forPipeError(pos, file)
 	}
 	if perr := loopBindingIdentError(counter, pos, file); perr != nil {
 		return nil, perr
@@ -1242,24 +1278,54 @@ func splitForIn(rest string) (item, coll string, ok bool) {
 // expression and a formatter chain, splitting pipes at top level only (|| is
 // not a pipe) — constellation/doc/DOC-COMPILER-DESIGN.md §c.
 func parseInterpolationExpr(raw string, pos Position, file string) (*Interpolation, *ParseError) {
+	expr, fmts, perr := parseChain(raw, pos, file, "interpolation")
+	if perr != nil {
+		return nil, perr
+	}
+	return &Interpolation{Expr: expr, Formatters: fmts, Pos: pos}, nil
+}
+
+// parseChain splits any template value position into its base expression and
+// formatter chain. It is the one pipe rule for every position that takes a
+// chain (D173 V1): text interpolation, quoted and brace-only attribute values,
+// component props and marker arguments, and the `{#if}`, `{:else if}`,
+// `{#unless}` and `{#case}` subjects. Only a top-level single `|` is a pipe:
+// `||` stays logical OR, and a `|` inside a string, a regex, parentheses,
+// brackets or braces is not a split point. what names the position in the
+// empty-expression errors ("interpolation", "{#if} condition", …).
+func parseChain(raw string, pos Position, file, what string) (string, []FormatterCall, *ParseError) {
 	segs := splitTopLevel(raw, '|', true)
 	expr := strings.TrimSpace(segs[0])
 	if expr == "" {
-		return nil, errAt(file, pos, "empty interpolation")
+		return "", nil, errAt(file, pos, "empty %s", what)
 	}
 	var fmts []FormatterCall
 	for _, seg := range segs[1:] {
 		s := strings.TrimSpace(seg)
 		if s == "" {
-			return nil, errAt(file, pos, "empty formatter in interpolation")
+			return "", nil, errAt(file, pos, "empty formatter in %s", what)
 		}
 		fc, perr := parseFormatter(s, pos, file)
 		if perr != nil {
-			return nil, perr
+			return "", nil, perr
 		}
 		fmts = append(fmts, fc)
 	}
-	return &Interpolation{Expr: expr, Formatters: fmts, Pos: pos}, nil
+	return expr, fmts, nil
+}
+
+// hasTopLevelPipe reports whether s contains a formatter pipe by parseChain's
+// rule. The `{#for}` header uses it to reject a chain (D173 V1).
+func hasTopLevelPipe(s string) bool {
+	return len(splitTopLevel(s, '|', true)) > 1
+}
+
+// forPipeError is the positioned `{#for}`-header pipe ban (D173 V1). A chain in
+// a loop header puts list shaping, sorting and the loop on one line, so the
+// fix-it names the list first: in PuzzleKit, the script's data() shapes it and
+// the loop iterates that field.
+func forPipeError(pos Position, file string) *ParseError {
+	return errAt(file, pos, "formatter pipes are not allowed in a {#for} header — shape the list in data() and loop over that field (e.g. {#for item in sortedItems})")
 }
 
 // parseFormatter parses "name" or "name(arg, arg)". Arguments split at
@@ -1267,11 +1333,17 @@ func parseInterpolationExpr(raw string, pos Position, file string) (*Interpolati
 func parseFormatter(s string, pos Position, file string) (FormatterCall, *ParseError) {
 	open := strings.IndexByte(s, '(')
 	if open < 0 {
+		if !isFormatterName(s) {
+			return FormatterCall{}, notFormatterError(s, pos, file)
+		}
 		return FormatterCall{Name: s}, nil
 	}
 	name := strings.TrimSpace(s[:open])
 	if name == "" {
 		return FormatterCall{}, errAt(file, pos, "formatter is missing a name")
+	}
+	if !isFormatterName(name) {
+		return FormatterCall{}, notFormatterError(name, pos, file)
 	}
 	if !strings.HasSuffix(s, ")") {
 		return FormatterCall{}, errAt(file, pos, "formatter %q: missing closing ')'", name)
@@ -1284,6 +1356,31 @@ func parseFormatter(s string, pos Position, file string) (FormatterCall, *ParseE
 		}
 	}
 	return FormatterCall{Name: name, Args: args}, nil
+}
+
+// isFormatterName reports whether s can name a formatter: `[A-Za-z_$]` then
+// `[A-Za-z0-9_$-]*`. Anything else after a top-level `|` — a number
+// (`{ w / 2 | 0 }`), an operator (`a |= 2`), two words — was meant as JavaScript,
+// and silently compiling it to a registry lookup would turn a bitwise OR into a
+// missing-formatter pass-through.
+func isFormatterName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '_' || c == '$' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
+		case i > 0 && (c == '-' || (c >= '0' && c <= '9')):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func notFormatterError(name string, pos Position, file string) *ParseError {
+	return errAt(file, pos, "%q is not a formatter name — a top-level `|` in a template expression is a formatter pipe; to use a bitwise OR, wrap it in parentheses, e.g. (a | b)", name)
 }
 
 // firstWord returns the leading identifier-ish run of s (after leading space).

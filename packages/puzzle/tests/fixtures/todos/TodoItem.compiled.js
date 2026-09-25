@@ -48,18 +48,18 @@ TodoItem.prototype.render = function () {
         new ViewNode('input', {
           type: 'checkbox',
           class: 'sr-only',
-          checked: __d.todo.completed,
+          checked: __d.todo?.completed,
           // The synthesized write-back for `checked={ todo.completed }`: a
           // distinct listener slot on the modifier channel, and a memoized
           // handler keyed by (target, field, spec) so the identity is stable
           // across renders and the listener never re-attaches.
-          '@change:bind': this.__bind(__d.todo, 'completed', 'c'),
+          '@change:bind': this.__bind(__d.todo ?? 0, 'completed', 'c'),
         }, []),
         new ViewNode('div', { class: 'relative' }, [
           new ViewNode('div', {
-            class: `w-5 h-5 rounded-md border transition-colors ${__d.todo.completed ? 'bg-accent border-accent' : ''}${!__d.todo.completed ? 'border-white/25 group-hover:border-white/40' : ''}`,
+            class: `w-5 h-5 rounded-md border transition-colors ${__d.todo?.completed ? 'bg-accent border-accent' : ''}${!__d.todo?.completed ? 'border-white/25 group-hover:border-white/40' : ''}`,
           }, []),
-          ...(__d.todo.completed
+          ...(__d.todo?.completed
             ? [
                 (this.__c[0] ??= new ViewNode('div', { class: 'absolute inset-0 flex items-center justify-center' }, [
                   new ViewNode('svg', {
@@ -79,12 +79,12 @@ TodoItem.prototype.render = function () {
         ]),
       ]),
       new ViewNode('span', {
-        class: `flex-1 truncate ${__d.todo.completed ? 'text-faint line-through' : ''}${!__d.todo.completed ? 'text-fg' : ''}`,
+        class: `flex-1 truncate ${__d.todo?.completed ? 'text-faint line-through' : ''}${!__d.todo?.completed ? 'text-fg' : ''}`,
       }, [
-        new ViewNode('text', { value: String(__d.todo.text) }),
+        new ViewNode('text', { value: String(__d.todo?.text) }),
       ]),
       new ViewNode('span', { class: 'ml-4 shrink-0 font-mono text-[11px] text-faint tabular-nums' }, [
-        new ViewNode('text', { value: String((__f["datetime"] || __f.__missing("datetime"))(__d.todo.createdAt, 'short')) }),
+        new ViewNode('text', { value: String((__f["datetime"] || __f.__missing("datetime"))(__d.todo?.createdAt, 'short')) }),
       ]),
       new ViewNode('button', {
         class: 'ml-3 w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-xl leading-none text-faint hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all',

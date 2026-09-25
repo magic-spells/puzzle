@@ -1,7 +1,6 @@
 package codegen
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -279,12 +278,12 @@ func isJSIdentifier(s string) bool {
 }
 
 // objectLiteralMsg is the positioned compile error for a template expression
-// that begins with an object literal. resolveExpr rewrites identifier roots to
-// __d.<name>, so an object literal's KEYS become member expressions
-// (`{ done: true }` → `{ __d.done: true }`) — invalid JS that esbuild would
-// otherwise reject deep in generated code with no .pzl position. Callers detect
-// it up front for an actionable error (SPEC §6).
-const objectLiteralMsg = "object literals aren't supported in template expressions — build the object in data() or an events handler (SPEC §6)"
+// that BEGINS with an object literal. Object literals are legal in argument and
+// nested positions (D173 V8: `{ label | t({ count: n }) }`, the scanner scopes
+// their values and leaves their keys alone), but not at the start of an
+// expression, where `{ {` reads as a brace inside the interpolation brace.
+// Callers detect it up front for an actionable, positioned error (SPEC §6).
+const objectLiteralMsg = "a template expression can't start with an object literal — pass it as an argument (a formatter's or a call's) or build it in data() (SPEC §6)"
 
 // startsWithObjectLiteral reports whether a template expression begins (after
 // leading whitespace) with '{'. Only a LEADING brace is detected (SPEC §6): a
@@ -315,9 +314,10 @@ func startsWithObjectLiteral(expr string) bool {
 // Whitespace and operators are preserved byte-for-byte, so the emitted
 // expression matches the fixture exactly.
 //
-// Known limitation (intentionally out of scope): arrow-function parameters and
-// object-literal keys are NOT recognized as binding positions, so a name written
-// there is still prefixed. These discouraged template forms are unsupported.
+// Object-literal KEYS are recognized (D173 V8): only the values are scoped, and a
+// shorthand property is expanded. Known limitation (intentionally out of scope):
+// arrow-function parameters are NOT recognized as binding positions, so a name
+// written there is still prefixed. That discouraged template form is unsupported.
 func resolveExpr(expr string, scope scopeMap) string {
 	out, _ := resolveExprScan(expr, scope, nil, nil)
 	return out
@@ -362,14 +362,89 @@ func resolveExprTrackingScope(expr string, scope, trackedScope scopeMap) (string
 // (exprFacts). Keeping all three inside ONE scanner makes them follow the same
 // lexical rules: property names and literal/comment/regex text do not count,
 // while identifiers inside template-literal interpolations do.
+//
+// resolveExprScan does NOT guard member access: it is the form for event
+// handler arguments (PuzzleKit JavaScript, evaluated at fire time) and for the
+// puzzle-check emitter. Template VALUE positions go through
+// resolveValueScan instead.
 func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts) (string, bool) {
-	return resolveExprScanIn(expr, scope, trackedScope, facts, false)
+	return resolveExprScanIn(expr, scope, trackedScope, facts, false, false)
+}
+
+// resolveValueScan is resolveExprScan for a template VALUE position — text
+// interpolation, attribute values and props, block headers, loop collections
+// and range bounds, formatter arguments, row keys. It lowers every member and
+// index step to its optional form (`a.b.c` → `__d.a?.b?.c`, `a[i]` →
+// `__d.a?.[__d.i]`), so reading through a missing value yields undefined and
+// prints nothing instead of throwing a render error (D173 V4). A path that
+// exists evaluates exactly as before.
+//
+// Three kinds of step stay plain because they can never be nullish or because
+// an optional step there is a syntax error: the first step off `this`, a
+// standard global (`Math.max`) or a literal (`'a'.length`), and every step of a
+// `new` callee (`new Intl.NumberFormat(…)` — `new a?.B()` does not parse). An
+// expression the optional form cannot express at all — a tagged template, an
+// update operator, an assignment — is emitted unguarded, byte-for-byte as
+// resolveExprScan would.
+func resolveValueScan(expr string, scope scopeMap, facts *exprFacts) string {
+	if facts == nil {
+		out, _, ok := resolveGuardedIn(expr, scope, nil, false)
+		if ok {
+			return out
+		}
+		plain, _ := resolveExprScanIn(expr, scope, nil, nil, false, false)
+		return plain
+	}
+	// The guarded pass reads into a scratch set so a fallback to the plain pass
+	// does not record every read twice.
+	sub := &exprFacts{}
+	out, _, ok := resolveGuardedIn(expr, scope, sub, false)
+	if ok {
+		facts.merge(sub)
+		return out
+	}
+	plain, _ := resolveExprScanIn(expr, scope, nil, facts, false, false)
+	return plain
+}
+
+// resolveGuardedIn runs the guarded scan and reports whether the expression
+// could be guarded (ok false means: emit the plain form instead).
+func resolveGuardedIn(expr string, scope scopeMap, facts *exprFacts, nested bool) (string, bool, bool) {
+	var unguardable bool
+	out, refs := resolveExprScanFull(expr, scope, nil, facts, nested, true, &unguardable)
+	return out, refs, !unguardable
 }
 
 // resolveExprScanIn is resolveExprScan with the nesting flag the template-literal
 // recursion sets. A read inside `${…}` is never "the entire expression", however
 // it is spelled, so it can never be the identity-only whole-value read.
-func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFacts, nested bool) (string, bool) {
+func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFacts, nested, guard bool) (string, bool) {
+	var unguardable bool
+	return resolveExprScanFull(expr, scope, trackedScope, facts, nested, guard, &unguardable)
+}
+
+// chainFrame is the member-chain state saved when a bracket opens, so a root
+// read INSIDE `f(…)`, `a[…]` or `{…}` cannot change how the chain around it is
+// guarded.
+type chainFrame struct {
+	open      byte // '(', '[' or '{'
+	safeSteps int
+}
+
+// resolveExprScanFull is the scanner body. guard turns on the D173 V4 member
+// guard; *unguardable is set when the expression contains a construct the
+// optional form cannot express (see resolveValueScan), and the caller then
+// re-emits it plain.
+//
+// Object literals (D173 V8) are recognized by their braces: inside `{…}` an
+// identifier in KEY position — right after the `{` or a `,` at that level — is
+// a property name, not a data read, so `{ height: 480 }` stays as written and
+// only the values are scoped. A shorthand property is expanded
+// (`{ count }` → `{ count: __d.count }`), because the bare name would read an
+// undeclared binding at runtime. Quoted, computed and spread members need no
+// special case: strings are copied, and a computed key or a spread operand is
+// an ordinary expression.
+func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprFacts, nested, guard bool, unguardable *bool) (string, bool) {
 	var b strings.Builder
 	referencesTrackedScope := false
 	n := len(expr)
@@ -385,8 +460,35 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 	// expression (identifier/number/string/template close, ')', ']', '}'). It
 	// disambiguates '/': division after such a token, else a regex literal.
 	prevEndsExpr := false
+	// brackets is the open-bracket stack with the member-chain state each one
+	// interrupted. keyPos is set right after an object literal's `{` or one of
+	// its `,` separators: the next identifier there is a property name.
+	var brackets []chainFrame
+	keyPos := false
+	// safeSteps is how many following member steps of the current chain need no
+	// guard: 1 after `this`, a global or a literal; -1 (all of them) through a
+	// `new` callee; 0 otherwise. afterNew marks the `new` keyword itself, whose
+	// operand root opens an unguarded callee.
+	safeSteps := 0
+	afterNew := false
+	topIs := func(open byte) bool {
+		return len(brackets) > 0 && brackets[len(brackets)-1].open == open
+	}
 	for i < n {
 		c := expr[i]
+		// Everything except whitespace and comments is a token that ends key
+		// position and the `new` keyword's reach; atKey remembers whether THIS
+		// token sits in an object literal's key position.
+		atKey := false
+		isSpace := c == ' ' || c == '\t' || c == '\n' || c == '\r'
+		isComment := c == '/' && i+1 < n && (expr[i+1] == '/' || expr[i+1] == '*')
+		if !isSpace && !isComment {
+			atKey = keyPos && topIs('{')
+			keyPos = false
+			if !isIdentStart(c) {
+				afterNew = false
+			}
+		}
 		switch {
 		case c == '\'' || c == '"':
 			j := i + 1
@@ -410,8 +512,14 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 			b.WriteString(expr[i:j])
 			lastNonSpace = c
 			prevEndsExpr = true
+			safeSteps = 1
 			i = j
 		case c == '`':
+			if prevEndsExpr {
+				// A tagged template: `a.b` + template is a call the optional form
+				// cannot express (`a?.b`x`` is a syntax error).
+				*unguardable = true
+			}
 			j := i + 1
 			b.WriteByte('`')
 			for j < n {
@@ -437,7 +545,7 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 						break
 					}
 					inner := expr[j+2 : end]
-					resolved, referencesScope := resolveExprScanIn(inner, scope, trackedScope, facts, true)
+					resolved, referencesScope := resolveExprScanFull(inner, scope, trackedScope, facts, true, guard, unguardable)
 					b.WriteString("${")
 					b.WriteString(resolved)
 					b.WriteByte('}')
@@ -450,6 +558,7 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 			}
 			lastNonSpace = '`'
 			prevEndsExpr = true
+			safeSteps = 1
 			i = j
 		case c == '/':
 			switch {
@@ -480,11 +589,13 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 				b.WriteString(expr[i:j])
 				lastNonSpace = expr[j-1]
 				prevEndsExpr = true
+				safeSteps = 1
 				i = j
 			default:
 				// Division operator ('/' or '/=').
 				if i+1 < n && expr[i+1] == '=' {
 					b.WriteString("/=")
+					*unguardable = true
 					i += 2
 				} else {
 					b.WriteByte('/')
@@ -500,11 +611,30 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 			}
 			name := expr[i:j]
 			isProp := lastNonSpace == '.'
+			if atKey && !isProp {
+				// An object literal's property name (D173 V8). `name:` is a key and
+				// stays bare; `name,` / `name}` is a shorthand property, expanded so
+				// the value half resolves like any other read.
+				k := skipExprSpace(expr, j)
+				if k < n && expr[k] == ':' {
+					b.WriteString(name)
+					lastNonSpace = name[len(name)-1]
+					prevEndsExpr = true
+					i = j
+					continue
+				}
+				if k >= n || expr[k] == ',' || expr[k] == '}' {
+					b.WriteString(name)
+					b.WriteString(": ")
+				}
+			}
 			if !isProp {
 				if _, tracked := trackedScope[name]; tracked {
 					referencesTrackedScope = true
 				}
 			}
+			newCallee := afterNew && !isProp
+			afterNew = false
 			local, inScope := scopeRef(scope, name)
 			switch {
 			case isProp:
@@ -519,22 +649,40 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 					noteLocalRead(facts, name, expr, j, callDepth, !nested && spansExpr(expr, i, j))
 				}
 				b.WriteString(local)
+				safeSteps = 0
+				if name == "ViewNode" {
+					// The compiler's own import (the `.map` fallback's synthetic
+					// `ViewNode.keyOf(item)` key) is never nullish.
+					safeSteps = 1
+				}
 			case jsKeywords[name]:
 				if facts != nil && name == "this" {
 					facts.usesThis = true
 				}
 				b.WriteString(name)
+				safeSteps = 0
+				if name == "this" {
+					safeSteps = 1
+				}
+				if name == "new" {
+					afterNew = true
+				}
 			case jsGlobals[name]:
 				if facts != nil && volatileGlobalRead(name, expr, j) {
 					facts.volatileRead = true
 				}
 				b.WriteString(name)
+				safeSteps = 1
 			default:
 				if facts != nil {
 					facts.addRoot(name)
 				}
 				b.WriteString("__d.")
 				b.WriteString(name)
+				safeSteps = 0
+			}
+			if newCallee {
+				safeSteps = -1
 			}
 			lastNonSpace = name[len(name)-1]
 			// A property access is always a value; a bare keyword that cannot end
@@ -554,6 +702,7 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 			b.WriteString(expr[i:j])
 			lastNonSpace = expr[j-1]
 			prevEndsExpr = true
+			safeSteps = 1
 			i = j
 		case c == '.' && i+2 < n && expr[i+1] == '.' && expr[i+2] == '.':
 			// Spread/rest `...` (SPEC §6): emit the three dots but leave
@@ -572,13 +721,47 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 			// update therefore leaves a following '/' as division, while a prefix
 			// update remains non-ending until its operand is scanned. Consume both
 			// bytes so a+++/re/ still treats the third '+' as a plain operator and
-			// the slash as a regex opener.
+			// the slash as a regex opener. An update target cannot be an optional
+			// chain, so the guard stands down for this expression.
 			b.WriteString(expr[i : i+2])
 			lastNonSpace = c
+			*unguardable = true
 			i += 2
+		case c == '.' && guard && prevEndsExpr:
+			// A member step (D173 V4). An optional step reads undefined through a
+			// missing object instead of throwing; `safeSteps` exempts the steps
+			// that can never be nullish or may not be optional.
+			if safeSteps != 0 {
+				if safeSteps > 0 {
+					safeSteps--
+				}
+				b.WriteByte('.')
+			} else {
+				b.WriteString("?.")
+			}
+			lastNonSpace = '.'
+			prevEndsExpr = false
+			i++
+		case c == '[' && guard && prevEndsExpr:
+			// A computed member step: `a[i]` → `a?.[i]`, under the same exemptions
+			// as a dot step. The index expression inside is its own chain.
+			if safeSteps != 0 {
+				if safeSteps > 0 {
+					safeSteps--
+				}
+				b.WriteByte('[')
+			} else {
+				b.WriteString("?.[")
+			}
+			brackets = append(brackets, chainFrame{open: '[', safeSteps: safeSteps})
+			safeSteps = 0
+			lastNonSpace = '['
+			prevEndsExpr = false
+			i++
 		default:
 			b.WriteByte(c)
-			if c == '(' {
+			switch c {
+			case '(':
 				// A '(' after a value-ending token opens a CALL argument list;
 				// after an operator it is a grouping paren. The stack keeps the
 				// two apart across nesting.
@@ -586,13 +769,69 @@ func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFac
 				if prevEndsExpr {
 					callDepth++
 				}
-			} else if c == ')' && len(parens) > 0 {
-				if parens[len(parens)-1] {
-					callDepth--
+				brackets = append(brackets, chainFrame{open: '(', safeSteps: safeSteps})
+				safeSteps = 0
+			case ')':
+				if len(parens) > 0 {
+					if parens[len(parens)-1] {
+						callDepth--
+					}
+					parens = parens[:len(parens)-1]
 				}
-				parens = parens[:len(parens)-1]
+				if topIs('(') {
+					brackets = brackets[:len(brackets)-1]
+				}
+				// A call's result (or a parenthesized value) may be nullish, and a
+				// `new` callee ends at its argument list: the next step is guarded.
+				safeSteps = 0
+			case '[':
+				// An array literal (a computed member step took the case above).
+				brackets = append(brackets, chainFrame{open: '[', safeSteps: safeSteps})
+				safeSteps = 0
+			case ']':
+				// Closing a computed member step restores the chain it interrupted
+				// (an array literal restores the state before it, which the next
+				// root overwrites anyway).
+				if topIs('[') {
+					safeSteps = brackets[len(brackets)-1].safeSteps
+					brackets = brackets[:len(brackets)-1]
+				} else {
+					safeSteps = 0
+				}
+			case '{':
+				// Inside an expression a brace opens an object literal (a template
+				// literal's `${` is consumed by the backtick case), so the next
+				// identifier is in key position.
+				brackets = append(brackets, chainFrame{open: '{', safeSteps: safeSteps})
+				safeSteps = 0
+				keyPos = true
+			case '}':
+				if topIs('{') {
+					brackets = brackets[:len(brackets)-1]
+				}
+				safeSteps = 0
+			case ',':
+				keyPos = topIs('{')
+			case '=':
+				// An assignment (`=`, `+=`, `??=`, …) — not `==`/`===`/`!=`/`<=`/
+				// `>=`/`=>` — has a target the optional form cannot express.
+				prev := byte(0)
+				if i > 0 {
+					prev = expr[i-1]
+				}
+				next := byte(0)
+				if i+1 < n {
+					next = expr[i+1]
+				}
+				// A shift assignment (`<<=`, `>>=`, `>>>=`) ends in the same `<=`/`>=`
+				// bytes a comparison does; the doubled angle bracket before it tells
+				// them apart.
+				shiftAssign := (prev == '<' || prev == '>') && i > 1 && expr[i-2] == prev
+				if next != '=' && next != '>' && (shiftAssign || (prev != '=' && prev != '!' && prev != '<' && prev != '>')) {
+					*unguardable = true
+				}
 			}
-			if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			if !isSpace {
 				lastNonSpace = c
 				// Only closing brackets/parens end an expression; every other
 				// operator/delimiter means the next '/' starts a regex.
@@ -979,13 +1218,6 @@ func compileEventHandler(expr string, scope scopeMap, eventParam string, bareAsR
 		return eventValue{}, fmt.Errorf("event handler must be a single call expression (got %q)", expr)
 	}
 	argsRaw := strings.TrimSpace(expr[op+1 : closeParen])
-	// An object-literal FIRST argument (`save({ id: 1 })`) would be mangled by
-	// resolveExpr into invalid JS; reject it here with the shared message. The
-	// caller positions it at the @event attribute. Leading-'{' only — a literal
-	// nested in a later argument is out of scope (SPEC §6).
-	if startsWithObjectLiteral(argsRaw) {
-		return eventValue{}, errors.New(objectLiteralMsg)
-	}
 	evScope := cloneScope(scope)
 	_, eventIsBinding := evScope["event"]
 	if !eventIsBinding {

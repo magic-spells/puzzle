@@ -18,7 +18,7 @@ ScopedSnippetNamed.prototype.render = function () {
         params: ['group'],
         fn: ({ group }) => ([
             new ViewNode('h2', {}, [
-              new ViewNode('text', { value: __s(group.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) }),
+              new ViewNode('text', { value: __s(group?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) }),
             ]),
           ]),
       }),
@@ -27,7 +27,7 @@ ScopedSnippetNamed.prototype.render = function () {
         params: ['user', 'group'],
         fn: ({ user, group }) => ([
             new ViewNode('p', {}, [
-              new ViewNode('text', { value: __s(group.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ': ' + __s(user.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
+              new ViewNode('text', { value: __s(group?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ': ' + __s(user?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
             ]),
           ]),
       }),

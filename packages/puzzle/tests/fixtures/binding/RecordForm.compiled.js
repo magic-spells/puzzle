@@ -25,20 +25,20 @@ RecordForm.prototype.render = function () {
       }, [
         new ViewNode('input', {
           class: 'text',
-          value: s.item.text,
-          '@input:bind': this.__bind(s.item, 'text', 'v'),
+          value: s.item?.text,
+          '@input:bind': this.__bind(s.item ?? 0, 'text', 'v'),
         }, []),
         new ViewNode('input', {
           class: 'done',
           type: 'checkbox',
-          checked: s.item.completed,
-          '@change:bind': this.__bind(s.item, 'completed', 'c'),
+          checked: s.item?.completed,
+          '@change:bind': this.__bind(s.item ?? 0, 'completed', 'c'),
         }, []),
         new ViewNode('input', {
           class: 'rank',
           type: 'number',
-          value: s.item.rank,
-          '@change:bind': this.__bind(s.item, 'rank', 'vn'),
+          value: s.item?.rank,
+          '@change:bind': this.__bind(s.item ?? 0, 'rank', 'vn'),
         }, []),
       ])
     , __L0)

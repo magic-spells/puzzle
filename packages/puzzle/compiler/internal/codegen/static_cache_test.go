@@ -185,7 +185,7 @@ func TestStaticCacheIslandChildrenLoop(t *testing.T) {
 	if strings.Contains(got, ".c[") || strings.Contains(got, "this.__c[") {
 		t.Errorf("an island's sole-{#for} seed must not be cached:\n%s", got)
 	}
-	if !strings.Contains(got, "__l(this, s, 1, s.item.items, (s1) =>") {
+	if !strings.Contains(got, "__l(this, s, 1, s.item?.items, (s1) =>") {
 		t.Errorf("the nested list call must still be emitted:\n%s", got)
 	}
 	// A view-level island over a loop is the same shape one level out.
@@ -314,7 +314,7 @@ func TestStaticCacheRangeDoesNotLowerNestedItemLoop(t *testing.T) {
 	if strings.Contains(got, "__l(") || strings.Contains(got, "__L0") {
 		t.Errorf("an item-form loop inside a range body must not lower:\n%s", got)
 	}
-	if !strings.Contains(got, "__d.todos.map((todo) =>") {
+	if !strings.Contains(got, "__e(__d.todos).map((todo) =>") {
 		t.Errorf("it must keep the .map emission:\n%s", got)
 	}
 }

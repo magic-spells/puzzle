@@ -23,7 +23,7 @@ ScopedMarkerArgs.prototype.render = function () {
       }, [
         new ViewNode(SLOT_TAG, { name: 'row', args: { user: s.item, group: __d.group } }, [
           new ViewNode('span', {}, [
-            new ViewNode('text', { value: __s(s.item.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
+            new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
           ]),
         ]),
       ])

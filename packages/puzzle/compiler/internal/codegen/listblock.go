@@ -245,7 +245,7 @@ func (c *compiler) bareBinding(scope scopeMap, name string) (scopeMap, string) {
 // interpolations inside template literals included (D170, compiler lowering).
 func (c *compiler) resolve(expr string, scope scopeMap) string {
 	f := c.factSink()
-	out, _ := resolveExprScan(expr, scope, nil, f)
+	out := resolveValueScan(expr, scope, f)
 	c.absorb(f, scope)
 	return out
 }
@@ -359,7 +359,9 @@ func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lo
 		if startsWithObjectLiteral(attr.Expr) {
 			return "", false, c.cgErr(attr.Pos, objectLiteralMsg)
 		}
-		js, _ = resolveExprScan(attr.Expr, keyScope, nil, facts)
+		// A chained key (`key={ id | slug }`) reads `__f`, which the `__f[`
+		// check below turns into a `.map` site.
+		js = c.resolveChain(attr.Expr, attr.Formatters, keyScope, facts)
 	case *parser.MixedAttr:
 		js = c.emitMixedFacts(attr.Parts, keyScope, facts)
 	default:

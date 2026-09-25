@@ -202,8 +202,16 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	var className string
 	if strings.TrimSpace(scripts) == "" {
 		className = classNameFromFilename(opts.Filename)
+		// A script-less COMPONENT reads its props by name (D173 V15): the
+		// synthesized data() returns them, so `{ tone }` renders the `tone` prop
+		// as it does in Sites. A component with a script keeps PuzzleKit's rule —
+		// its own data() decides — and views and layouts have no props.
+		body := ""
+		if opts.Mode == ModeComponent {
+			body = "\n  data(params, props) {\n    return props;\n  }\n"
+		}
 		scripts = "import { PuzzleView } from '@magic-spells/puzzle';\n" +
-			"export default class " + className + " extends PuzzleView {}\n"
+			"export default class " + className + " extends PuzzleView {" + body + "}\n"
 	} else {
 		className, err = extractClassName(scripts, scriptToks, opts.Filename, sec.ScriptsPos)
 		if err != nil {
@@ -318,6 +326,14 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	// views/listBlock.js in its bundle.
 	if len(c.listSites) > 0 {
 		imports = append(imports, "listRows as __l")
+	}
+	// The loop guards (D173 V12) follow the same rule: a `.map` loop imports
+	// loopItems, a range loop loopRange, and a file with neither imports nothing.
+	if c.usesLoopItems {
+		imports = append(imports, "loopItems as __e")
+	}
+	if c.usesLoopRange {
+		imports = append(imports, "loopRange as __r")
 	}
 	importLine := "import { " + strings.Join(imports, ", ") + " } from '@magic-spells/puzzle';"
 
@@ -458,6 +474,12 @@ type compiler struct {
 	// package-root display helper. Static-only modules and modules whose dynamic
 	// values remain raw vnode attrs do not pay for an unused import.
 	usesDisplayValue bool
+
+	// Set when a `.map` item loop (usesLoopItems) or a range loop
+	// (usesLoopRange) is emitted, so the runtime loop guards (D173 V12) are
+	// imported only by a module that calls them.
+	usesLoopItems bool
+	usesLoopRange bool
 
 	// Set when an emitted interpolation carries a non-empty formatter chain, which
 	// is the only thing that reads __f. It gates the `const __f =
@@ -852,7 +874,11 @@ func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (stri
 // an unstable conditional emits both branches unpadded, byte-identically to the
 // pre-padding form. Nested conditionals make this decision independently.
 func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, error) {
-	cond := c.resolve(n.Cond, scope)
+	cond := c.resolveValue(n.Cond, n.Formatters, scope)
+	if n.Negate {
+		// `{#unless x | f}`: the chain runs first, then the negation (If.Negate).
+		cond = "!(" + cond + ")"
+	}
 	thenItems, err := c.processChildren(n.Then, scope)
 	if err != nil {
 		return "", err
@@ -1041,7 +1067,7 @@ func (c *compiler) caseStaticLen(n *parser.Case, scope scopeMap) (int, bool, err
 // cleanly in nested cases: user expressions never resolve to it, and each arm
 // only ever compares its own `__c`.
 func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, error) {
-	caseExpr := c.resolve(n.Expr, scope)
+	caseExpr := c.resolveValue(n.Expr, n.Formatters, scope)
 
 	// Pre-process every clause body + the else and compute the max static arity.
 	// Padding applies only when every branch has provably fixed occupancy; an
@@ -1118,27 +1144,73 @@ func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, er
 	return b.String(), nil
 }
 
-// emitFor compiles a {#for}. Named form → `<coll>.map((item) => <body>)` with
-// `key: ViewNode.keyOf(item)` prepended to the body's root element (pk-aware
-// auto-key, D58). Range form → `Array.from(…, (_, __i) => <body>)` keyed by the
-// generated VALUE (`<from> + __i`), never by __i: the range bounds are data, so
-// sliding the window (`5...7` → `6...8`) must not re-hand keys 0,1,2 to different
-// numbers and let the reconciler patch stale rows in place (D58 — range keys are
-// the generated numbers, unique by construction).
+// emitFor compiles a {#for}. Named form → `__e(<coll>).map((item) => <body>)`
+// with `key: ViewNode.keyOf(item)` prepended to the body's root element
+// (pk-aware auto-key, D58) — or, far more often, a lowered list block (see
+// emitListCall). `__e` (the runtime's loopItems) hands back the collection when
+// it is an array and an empty list otherwise, so a missing collection loops
+// zero times and any other non-list does too, with a development warning
+// (D173 V12). Range form → `__r(<from>, <to>).map((__i) => <body>)`: `__r` (the
+// runtime's loopRange) builds the whole numbers from..to with both bounds
+// truncated toward zero, and a missing or non-finite bound runs the range zero
+// times. Rows are keyed by the generated VALUE, never by its position: the range
+// bounds are data, so sliding the window (`5...7` → `6...8`) must not re-hand
+// keys 0,1,2 to different numbers and let the reconciler patch stale rows in
+// place (D58 — range keys are the generated numbers, unique by construction).
 // An explicit `key` attr on the body root suppresses the prepend (forBody).
 // An optional trailing counter binds the 0-based index (item form) or the
-// current number (range form): the item form adds the second .map parameter; the
-// range form maps the generated values (`… (_, __i) => <from> + __i).map((n) =>`)
-// so the body sees the number, keyed by it (range values are unique).
+// current number (range form): the item form adds the second .map parameter;
+// the range form names the value parameter after the counter.
+// literalRange constant-folds a range whose bounds are both integer literals
+// (`{#for 1...3}`): nothing can be missing or fractional, so the loop needs no
+// `loopRange` guard or import. A short range emits its numbers as an array
+// literal; a long one generates them. It reports false for any other bound.
+func literalRange(from, to string) (string, bool) {
+	lo, errLo := strconv.Atoi(strings.TrimSpace(from))
+	hi, errHi := strconv.Atoi(strings.TrimSpace(to))
+	if errLo != nil || errHi != nil || !isIntLiteral(from) || !isIntLiteral(to) {
+		return "", false
+	}
+	n := hi - lo + 1
+	switch {
+	case n <= 0:
+		return "[]", true
+	case n <= 16:
+		nums := make([]string, n)
+		for i := range nums {
+			nums[i] = strconv.Itoa(lo + i)
+		}
+		return "[" + strings.Join(nums, ", ") + "]", true
+	default:
+		return "Array.from({ length: " + strconv.Itoa(n) + " }, (_, __k) => __k + " + strconv.Itoa(lo) + ")", true
+	}
+}
+
+// isIntLiteral accepts an optional leading `-` and decimal digits, and nothing
+// else (strconv.Atoi alone would also take `+1`, which a template author writes
+// as an expression).
+func isIntLiteral(s string) bool {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "-")
+	if s == "" || len(s) > 9 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, error) {
 	if f.IsRange {
-		// Parenthesize both bounds: they are spliced textually, so a composite
-		// from/to (e.g. `start + 1`, `a || b`, a ternary) would otherwise bind
-		// wrong — left-associative minus does not distribute over `to - from`,
-		// and `from + __i` would mis-associate too.
-		from := "(" + c.resolve(f.RangeFrom, scope) + ")"
-		to := "(" + c.resolve(f.RangeTo, scope) + ")"
-		gen := "Array.from({ length: " + to + " - " + from + " + 1 }, (_, __i) =>"
+		gen, folded := literalRange(f.RangeFrom, f.RangeTo)
+		if !folded {
+			c.usesLoopRange = true
+			gen = "__r(" + c.resolve(f.RangeFrom, scope) + ", " + c.resolve(f.RangeTo, scope) + ")"
+		}
+		gen += ".map(("
 		if f.Counter != "" {
 			bodyScope, counter := c.bareBinding(scope, f.Counter)
 			c.mapDepth++
@@ -1147,21 +1219,18 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 			if err != nil {
 				return "", err
 			}
-			return gen + " " + from + " + __i).map((" + counter + ") =>\n" +
+			return gen + counter + ") =>\n" +
 				sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 		}
-		// Counterless range: key by the generated VALUE, not the 0-based __i. The
-		// key expression is the RAW from-bound source — forBody hands it to the
-		// attribute emitter, which runs resolveExpr on it exactly once (resolving a
-		// second time would produce `__d.__d.x`), so it lands as the same
-		// `(<from>) + __i` the counter form emits as its value.
+		// Counterless range: the generated value binds as the compiler-private
+		// `__i` and keys the row.
 		c.mapDepth++
-		body, err := c.forBody(f, scopeAdd(scope, "__i"), "("+f.RangeFrom+") + __i", ind+2, nil)
+		body, err := c.forBody(f, scopeAdd(scope, "__i"), "__i", ind+2, nil)
 		c.mapDepth--
 		if err != nil {
 			return "", err
 		}
-		return gen + "\n" +
+		return gen + "__i) =>\n" +
 			sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 	}
 	// Item form lowers to a persistent list block (D170, list blocks) unless the
@@ -1200,7 +1269,8 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 	if err != nil {
 		return "", err
 	}
-	return coll + ".map((" + params + ") =>\n" +
+	c.usesLoopItems = true
+	return "__e(" + coll + ").map((" + params + ") =>\n" +
 		sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 }
 
@@ -1484,7 +1554,7 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
-		return jsKey(at.Name) + ": " + c.resolve(at.Expr, scope), nil
+		return jsKey(at.Name) + ": " + c.resolveValue(at.Expr, at.Formatters, scope), nil
 	case *parser.MixedAttr:
 		return jsKey(at.Name) + ": " + c.emitMixed(at.Parts, scope), nil
 	case *parser.EventAttr:
@@ -1572,7 +1642,7 @@ func (c *compiler) emitMixedFacts(parts []parser.Part, scope scopeMap, facts *ex
 			b.WriteString(c.displayValue(expr, pp.Interp.Expr))
 			b.WriteString("}")
 		case *parser.InlineIfPart:
-			cond, _ := resolveExprScan(pp.Cond, scope, nil, facts)
+			cond := c.resolveChain(pp.Cond, pp.Formatters, scope, facts)
 			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
@@ -1604,7 +1674,7 @@ func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprF
 			expr := c.applyFormatters(resolved, pp.Interp.Formatters, scope, facts)
 			segs = append(segs, c.displayValue(expr, pp.Interp.Expr))
 		case *parser.InlineIfPart:
-			cond, _ := resolveExprScan(pp.Cond, scope, nil, facts)
+			cond := c.resolveChain(pp.Cond, pp.Formatters, scope, facts)
 			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
@@ -1828,7 +1898,7 @@ func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, sco
 		b.WriteString(out)
 		for _, a := range fc.Args {
 			b.WriteString(", ")
-			arg, _ := resolveExprScan(a, scope, nil, facts)
+			arg := resolveValueScan(a, scope, facts)
 			b.WriteString(arg)
 		}
 		b.WriteString(")")
@@ -1845,17 +1915,34 @@ func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, sco
 // `{ post }` alone — the display of the record — stays on identity.
 func (c *compiler) resolveInterpBase(expr string, fmts []parser.FormatterCall, scope scopeMap, facts *exprFacts) string {
 	if facts == nil || len(fmts) == 0 {
-		out, _ := resolveExprScan(expr, scope, nil, facts)
-		return out
+		return resolveValueScan(expr, scope, facts)
 	}
 	sub := &exprFacts{}
-	out, _ := resolveExprScan(expr, scope, nil, sub)
+	out := resolveValueScan(expr, scope, sub)
 	for _, read := range sub.locals {
 		if read.whole {
 			read.opaque = true
 		}
 	}
 	facts.merge(sub)
+	return out
+}
+
+// resolveChain resolves a value position's base expression and applies its
+// formatter chain. Every position that takes a chain (D173 V1) emits through
+// it: text and quoted-attribute interpolations, brace-only attributes, props
+// and marker arguments, and the `{#if}`/`{#unless}`/`{#case}` subjects. An
+// empty chain emits exactly what resolving the expression alone would.
+func (c *compiler) resolveChain(expr string, fmts []parser.FormatterCall, scope scopeMap, facts *exprFacts) string {
+	return c.applyFormatters(c.resolveInterpBase(expr, fmts, scope, facts), fmts, scope, facts)
+}
+
+// resolveValue is resolveChain with the emitter's fact sink, the chained form
+// of c.resolve.
+func (c *compiler) resolveValue(expr string, fmts []parser.FormatterCall, scope scopeMap) string {
+	f := c.factSink()
+	out := c.resolveChain(expr, fmts, scope, f)
+	c.absorb(f, scope)
 	return out
 }
 

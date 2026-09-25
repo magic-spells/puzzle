@@ -287,11 +287,13 @@ func TestRegexLiteralImmediatelyAfterBraceCompiles(t *testing.T) {
 }
 
 // TestObjectLiteralRejected asserts the FIX 2 guard (SPEC §6): a template
-// expression that begins with an object literal fails with the shared,
-// positioned compile error instead of emitting invalid JS. Covered at all three
-// entry points — a text interpolation, a dynamic attribute, and an event-handler
-// call argument. wantCol is derived from the source so the position check is not
-// hand-counted; each Pos points at the construct's opening token.
+// expression that BEGINS with an object literal fails with the shared,
+// positioned compile error, because `{ {` reads as a brace inside the
+// interpolation brace. Covered at both entry points — a text interpolation and a
+// dynamic attribute. (An object literal as an ARGUMENT is legal, D173 V8; see
+// TestObjectLiteralArguments.) wantCol is derived from the source so the
+// position check is not hand-counted; each Pos points at the construct's opening
+// token.
 func TestObjectLiteralRejected(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -300,7 +302,6 @@ func TestObjectLiteralRejected(t *testing.T) {
 	}{
 		{"text interpolation", `<puzzle-view>{ { a: 1 } }</puzzle-view>`, "{ { a"},
 		{"dynamic attribute", `<puzzle-view><div x={ { a: 1 } }></div></puzzle-view>`, "x="},
-		{"event call argument", `<puzzle-view><button @click={ save({ id: 1 }) }></button></puzzle-view>`, "@click"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -385,8 +386,11 @@ func TestCompileEventValue(t *testing.T) {
 		{"member callee is error", "obj.method()", nil, "", false, true},
 		{"not a call and not id is error", "a + b", nil, "", false, true},
 		{"trailing junk after call is error", "f() + 1", nil, "", false, true},
-		// An object-literal first argument is rejected (SPEC §6), not mangled.
-		{"object literal arg is error", "save({ id: 1 })", nil, "", false, true},
+		// An object-literal argument is legal (D173 V8): its keys stay keys and
+		// only its values are scoped. Data-free, so it is cacheable.
+		{"object literal arg", "save({ id: 1 })", nil, "(event) => this.events.save({ id: 1 })", true, false},
+		{"object literal arg scopes values only", "save({ id: todo.id, todo, n: count })", scope("todo"),
+			"(event) => this.events.save({ id: todo.id, todo: todo, n: __d.count })", false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

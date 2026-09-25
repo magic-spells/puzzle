@@ -15,10 +15,10 @@ SkeletonMinDuration.prototype.render = function () {
 
   return new ViewNode('puzzle-view', { class: 'post-detail' }, [
     new ViewNode('h1', {}, [
-      new ViewNode('text', { value: __s(__d.post.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'post.title' : 0) }),
+      new ViewNode('text', { value: __s(__d.post?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'post.title' : 0) }),
     ]),
     new ViewNode('p', {}, [
-      new ViewNode('text', { value: __s(__d.post.body, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'post.body' : 0) }),
+      new ViewNode('text', { value: __s(__d.post?.body, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'post.body' : 0) }),
     ]),
   ]);
 };
@@ -29,7 +29,7 @@ SkeletonMinDuration.prototype.renderSkeleton = function () {
 
   return new ViewNode('puzzle-view', { class: 'post-detail' }, [
     new ViewNode('div', { class: 'animate-pulse' },
-      Array.from({ length: (3) - (1) + 1 }, (_, __i) => (1) + __i).map((n) =>
+      [1, 2, 3].map((n) =>
         new ViewNode('div', {
           key: n,
           class: 'bg-skeleton h-4',

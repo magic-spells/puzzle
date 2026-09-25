@@ -92,22 +92,32 @@ A **formatter** transforms a value for display. Write it after a pipe:
 <p>{ post.title | upcase }</p>
 <p>{ post.body | truncate(120) }</p>
 <p>{ product.name | trim | capitalize }</p>
-<a title="{ price | currency }">…</a>
+<a title={ price | currency }>…</a>
+{#if post.tags | size}<p>Tagged</p>{/if}
 ```
 
 - `{ value | name }` or `{ value | name(arg, arg) }`. Arguments are
-  expressions, in parentheses, separated by commas.
+  expressions, in parentheses, separated by commas. An argument may be an
+  object literal: `{ 'cart.count' | t({ count: n }) }`.
 - Chains run left to right and have no length limit.
 - Only a **top-level single `|`** is a pipe. `||` is logical OR, and a `|`
   inside a string, parentheses or brackets is not a pipe.
+- **What follows a pipe must be a formatter name** (`[A-Za-z_$][A-Za-z0-9_$-]*`,
+  bare or called). `{ flags | 4 }` or `{ a |= 2 }` is a compile error; a bitwise
+  OR goes in parentheses, `{ (a | b) }`.
 - A formatter should be a pure function of its input. In PuzzleKit, filtering
   and sorting belong in `data()`; Sites, which has no script, provides list
   formatters for them.
 
-Core positions for a formatter chain: text interpolation and **quoted**
-attribute values. The unquoted attribute form `title={ price | money }` is where
-the hosts currently disagree (V1). A block header (`{#if}`, `{#for}`,
-`{#case}`) takes a plain expression, not a chain.
+**A pipe is a formatter in every value position** (D173 V1): text
+interpolation, quoted and brace-only attribute values, component props, and the
+`{#if}`, `{:else if}`, `{#unless}` and `{#case}` subjects. `{#unless x | f}`
+negates the formatted value. **A pipe in a `{#for}` header is a compile
+error**, in the collection and in range bounds: name the list first (PuzzleKit:
+shape it in `data()` and loop over that field; Sites: `{#let}`). So is a pipe in
+a `{:when}` value, which takes no chain. `@event` handler bodies are PuzzleKit
+JavaScript, not value positions. PuzzleKit builds all of this; Sites still
+rejects a chain in `{#if}`/`{#case}` headers until its next parser sync.
 
 Which formatter names exist is a host decision; the names both hosts implement
 identically are the **standard set** (see Standard formatters below). Full
@@ -146,6 +156,7 @@ Each dialect reserves its own attribute names on top of this (PuzzleKit:
 
 ## Control blocks
 
+
 ```html
 {#if items.length > 3}
   <p>many</p>
@@ -166,11 +177,13 @@ Each dialect reserves its own attribute names on top of this (PuzzleKit:
 
 - **`{#if}`** takes any number of `{:else if cond}` clauses and one optional
   trailing `{:else}`. `{#unless}` is the inverted form; it allows `{:else}` but
-  not `{:else if}`. §6.
-- **`{#case expr}`** compares with strict equality. A `{:when}` may list several
-  values, separated by commas, as alternatives. The first match wins and there
-  is no fall-through. Only whitespace may appear before the first `{:when}`, and
-  `{:else}` must be last. §6.
+  not `{:else if}`. Each condition may carry a formatter chain
+  (`{#if post.tags | size}`). §6.
+- **`{#case expr}`** compares with strict equality. The subject may carry a
+  formatter chain; `{:when}` values are plain expressions. A `{:when}` may list
+  several values, separated by commas, as alternatives. The first match wins and
+  there is no fall-through. Only whitespace may appear before the first
+  `{:when}`, and `{:else}` must be last. §6.
 - **`{#for}`** has four forms:
 
   | Form | Binds |
@@ -182,8 +195,15 @@ Each dialect reserves its own attribute names on top of this (PuzzleKit:
 
   Both range bounds are expressions (`{#for start...end, x}`). A range whose end
   is below its start runs zero times. `{#for i in 1...5}` is an error that
-  steers to `{#for 1...5, i}`: the counter always comes after the range. §6.
+  steers to `{#for 1...5, i}`: the counter always comes after the range. A
+  formatter pipe anywhere in the header is an error (D173 V1). §6.
   How PuzzleKit keys and caches rows (§28) is PuzzleKit behavior, not core.
+- **The loop domain** (D173 V12): `{#for x in c}` iterates lists. A missing
+  collection runs zero times with no warning; any other non-list (a string, an
+  object, a number) runs zero times with a development warning. Range bounds
+  are truncated toward zero, with a development warning when a bound was not an
+  integer, and a missing bound runs the range zero times. Built in PuzzleKit;
+  Sites still renders nothing for a non-integer bound until it adopts the rule.
 
 ## Raw and SVG blocks
 
@@ -215,6 +235,7 @@ removed at compile time and are allowed anywhere text is. §6.
 
 ## Components
 
+
 A **capitalized tag** is a component:
 
 ```html
@@ -235,8 +256,10 @@ A **capitalized tag** is a component:
   component can use them, and a dotted name that starts with one
   (`<Slot.Foo>`) is an error.
 - How a name finds its component file, and how the component reads its props,
-  is a host rule. PuzzleKit resolves the name from the file's `<script>`
-  imports and hands props to `data(params, props)`. Sites resolves
+  is a host rule (D173 V15). PuzzleKit resolves the name from the file's
+  `<script>` imports and hands props to `data(params, props)`; a component
+  file with **no** `<script>` gets a `data()` that returns its props, so
+  `{ tone }` reads the `tone` prop there as it does in Sites. Sites resolves
   `components/<Name>.pzl` and exposes each prop as a bare name.
 
 ## Slots
@@ -324,14 +347,15 @@ rejects them until it does.
 
 ## Expressions
 
+
 The **core expression language** is the part of JavaScript expression syntax
 that both hosts evaluate the same way. It is based on Sites'
 `DECISION-EXPRESSION-SUBSET` (`sites/constellation/decision/`). PuzzleKit
 accepts JavaScript expressions, a superset of the core, within the §6
 expression boundary (template expressions are lexed, not parsed: no arrow
 functions, no object literal at the start of an expression, no destructuring).
-Sites accepts exactly the core plus two additions (object literals, `==` as a
-spelling of `===`).
+Sites accepts exactly the core (its `==` is still strict equality until it
+adopts V2, below).
 
 **Names.** An identifier reads from the scope the host supplies (PuzzleKit:
 `data()` fields; Sites: the render context and props) plus the loop variables
@@ -347,10 +371,21 @@ and `$`.
 | boolean | `true`, `false` |
 | absent | `null`, `undefined` |
 | list | `[]`, `[price, qty]` |
+| object | `{ height: 480 }`, `{ 'cart.count': n }` — in argument and nested positions only |
+
+**Object literals** (D173 V8) are allowed where a value is an argument or
+nested inside another value — `{ photo | resize({ height: 480 }) }` — but not
+at the start of an expression, where `{ {` is ambiguous with the interpolation
+brace. Keys are identifiers or quoted strings; values are core expressions.
+Shorthand (`{ count }`), computed keys and spread are PuzzleKit JavaScript, not
+core.
 
 **Access.** `a.b`, `a?.b`, `a[expr]`, and `.length` on strings and lists.
-Reading a member of an absent value is not portable (V4): write `a?.b` when `a`
-may be missing.
+**Reading a member of a missing value yields a missing value** (D173 V4), and a
+missing value prints nothing, so `{ a.b.c }` with `a.b` unset renders an empty
+string in both hosts; `?.` is legal and unnecessary. PuzzleKit gets there by
+guarding every member and index step in codegen; a path that exists evaluates
+exactly as before.
 
 **Operators**, loosest binding first:
 
@@ -360,6 +395,7 @@ may be missing.
 | `a ?? b` | `b` when `a` is `null` or `undefined`, else `a` (`0`, `''`, `false` are kept) |
 | `a \|\| b` | `a` if truthy, else `b` (returns an operand, not a boolean) |
 | `a && b` | `a` if falsy, else `b` |
+| `==` `!=` | JavaScript loose equality (`1 == '1'` is true; `x == null` is true for both absent values) |
 | `===` `!==` | strict equality; lists and objects compare by identity |
 | `<` `<=` `>` `>=` | number with number, or string with string |
 | `+` `-` | numbers; `+` concatenates when either side is a string |
@@ -367,6 +403,13 @@ may be missing.
 | `!x` `-x` | prefix; `!x` is always a boolean |
 | `.` `?.` `[…]` | postfix, binds tightest |
 
+- **`==` and `!=` mean what they mean in JavaScript** (D173 V2): PuzzleKit
+  compiles them unchanged (pinned by a codegen test); Sites implements
+  JavaScript's loose-equality algorithm when it adopts V2.
+- **Test for a missing value with `x == null`** (D173 V3). It is true for both
+  `null` and `undefined` in both hosts. What `x === null` or `x === undefined`
+  returns is host-defined: PuzzleKit follows JavaScript (`undefined === null`
+  is false), while Sites has one absent value.
 - **`??` may not be mixed with `&&` or `||` without parentheses.**
   `a ?? b || c` is an error; write `(a ?? b) || c` or `a ?? (b || c)`. (This is
   JavaScript's own rule: Sites reports it at compile time, PuzzleKit's bundler
@@ -378,17 +421,17 @@ may be missing.
 **Not in the core:** function and method calls (a formatter is the portable way
 to run code), assignment, `++`/`--`, arrow functions, `new`, `typeof`,
 `instanceof`, `in`, template literals, regular expressions, the comma operator,
-bitwise operators, spread, `this`, object literals (V8), and loose equality
-`==`/`!=` (V2). Arithmetic or comparison on operands of mixed or non-number
-types is not portable either (V5).
+bitwise operators, spread, and `this`. Arithmetic or comparison on operands of
+mixed or non-number types is not portable either (V5).
 
 ## Dialects
+
 
 | | PuzzleKit | Sites |
 |---|---|---|
 | File structure | `<puzzle-view>` root (§3); optional `<puzzle-skeleton>` (§16), `<script>` class (§4, `lang="ts"` §25), `<style>` / `<style scoped>` (§29) | No wrapper; the directory decides the file kind; optional `<schema>`, `<script>` (browser JavaScript), `<style>` / `<style scoped>` — `sites/constellation/decision/DECISION-TEMPLATE-GRAMMAR.md`, `DECISION-NO-VIEW-WRAPPERS-IN-THEMES.md` |
-| Expressions | JavaScript, a superset of the core, within the §6 expression boundary | The core subset, plus object literals and `==` as `===` — `DECISION-EXPRESSION-SUBSET.md` |
-| Adds | `@event` + modifiers (§5, §47); callback props (§6); implicit two-way binding (§6, [[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); `<Portal>` ([[DECISION-D144-PORTAL]]); `island` (§17); `key` (§28); `ref` (§38); `flip` (§46); formatters `link`, `timeago`, `in_timezone` | `{#let}` template variables; implicit props (bare names); `<Form>`; reserved layout slots and section groups; a formatter chain in an unquoted attribute (proposed core, V1); Sites formatters (`default`, `url`, `image_url`, `t`, …) — `sites/engine/constellation/doc/DOC-TEMPLATE-LANGUAGE.md` |
+| Expressions | JavaScript, a superset of the core, within the §6 expression boundary | The core subset, with `==` still spelled as `===` until V2 lands — `DECISION-EXPRESSION-SUBSET.md` |
+| Adds | `@event` + modifiers (§5, §47); callback props (§6); implicit two-way binding (§6, [[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); `<Portal>` ([[DECISION-D144-PORTAL]]); `island` (§17); `key` (§28); `ref` (§38); `flip` (§46); formatters `link`, `timeago`, `in_timezone`; a script-less component reads its props (V15) | `{#let}` template variables (its value is a formatter-chain position); implicit props (bare names); `<Form>`; reserved layout slots and section groups; Sites formatters (`default`, `url`, `image_url`, `t`, …) — `sites/engine/constellation/doc/DOC-TEMPLATE-LANGUAGE.md` |
 | Restricts | — | `@event` and `<Portal>` are compile errors; `ref`/`key`/`flip`/`island` are dropped with a warning; an unknown formatter or a wrong argument count is a compile error; interpolation is not allowed in `<script>`/`<style>` bodies or event-handler attributes — `DECISION-AUTO-ESCAPE.md` |
 | Not yet built | — | `<Snippet>` and marker arguments (core; planned) |
 
@@ -502,26 +545,23 @@ Counts: 34 standard (28 identical-output, 6 locale-rendered), 3 PuzzleKit-only,
 
 ## Known divergences
 
-Same syntax, different result. Each is an open question for a later decision,
-not a fix. V1 is already on D172 as a gotcha with a proposed resolution. An
-entry marked **PuzzleKit follows the core** is decided on
-[[DECISION-D173-CORE-SEMANTICS]] and built in PuzzleKit (the rule is stated in
-the core sections above); it stays listed until Sites changes too.
+Same syntax, different result. [[DECISION-D173-CORE-SEMANTICS]] decides every
+item. An entry marked **PuzzleKit follows the core** is built in PuzzleKit (the
+rule is stated in the core sections above); it stays listed until Sites changes
+too.
 
-- **V1 — formatter pipe outside text and quoted attributes.** In an unquoted
-  attribute, Sites runs a formatter (`title={ price | money }`), while PuzzleKit
-  compiles `__d.price | __d.money`, a bitwise OR, and does the same for props
-  (`<Card items={ list | sort }/>`). In `{#if}`, `{#for}` and `{#case}` headers,
-  PuzzleKit also compiles a bitwise OR and Sites reports a compile error. Is the
-  pipe a formatter in every expression position?
-- **V2 — `==` and `!=`.** Sites treats them as `===`/`!==`; PuzzleKit uses
-  JavaScript's loose equality (`1 == '1'` is true). Should core reject them or
-  define them as strict?
-- **V3 — `null === undefined`.** True in Sites (one absent value), false in
-  PuzzleKit. Should core forbid comparing against `undefined`?
-- **V4 — member access through an absent value.** `{ a.b.c }` with `a.b` unset
-  is nil in Sites and a thrown `TypeError` (a render error) in PuzzleKit. Is
-  `?.` required in core, or does PuzzleKit guard plain access?
+**Resolved in the core above** (group (b), expressions and loops): V1 (a pipe is
+a formatter in every value position; banned in `{#for}` headers and `{:when}`
+values), V2 (`==`/`!=` are JavaScript loose equality), V3 (`x == null` is the
+portable absence test; strict comparison against `null`/`undefined` is
+host-defined), V4 (reading through a missing value prints nothing), V8 (object
+literals in argument and nested positions) and V15 (a script-less PuzzleKit
+component reads its props). PuzzleKit implements all of them. Sites still has to
+adopt V1 (chains in `{#if}`/`{#case}` headers and the `{#for}` error) and V2
+(loose equality in its evaluator) on its next parser sync.
+
+**Still open:**
+
 - **V5 — arithmetic and comparison on non-numbers.** `'2' * 3`, `null + 1`,
   `-'2'`, `1 < '2'`: JavaScript coerces; Sites yields nil. Should core define
   these as nil, or leave them undefined?
@@ -533,11 +573,6 @@ the core sections above); it stays listed until Sites changes too.
   differs on special cases (`'ß' | upcase` is `SS` in PuzzleKit, `ß` in Sites),
   and the two whitespace sets `trim` removes differ on U+0085 and U+FEFF. Which
   unit and which Unicode tables are core?
-- **V8 — object literals.** Sites accepts `{ height: 480 }`
-  (`image_url(640, { height: 480 })`). PuzzleKit rejects an object literal at
-  the start of an expression, and one inside a formatter argument compiles to
-  invalid JavaScript (`{__d.height: 480}`) that only the bundler catches. Do
-  object literals join the core?
 - **V9 — list and object values in a brace-only attribute. PuzzleKit follows
   the core** (see Attributes). Sites today joins a list with spaces and drops
   an object with a warning; dropping `false` and empty items from the list is
@@ -555,23 +590,15 @@ the core sections above); it stays listed until Sites changes too.
 - **V11 — text inside `{#raw}`.** PuzzleKit creates a literal text node, so
   `{#raw}&amp;{/raw}` displays `&amp;`. Sites writes raw text unescaped, so the
   browser displays `&`. Is raw text subject to the "not entity-decoded" rule?
-- **V12 — `{#for}` input outside its domain.** An absent collection runs zero
-  times in Sites and throws in PuzzleKit. A string iterates its characters in
-  PuzzleKit and runs zero times in Sites; a map warns in Sites. Non-integer
-  range bounds truncate in PuzzleKit and warn and render nothing in Sites. What
-  does core promise?
+- **V12 — the loop domain. PuzzleKit follows the core** (see Control blocks).
+  Sites still renders nothing for a non-integer range bound instead of
+  truncating it, and warns on a map rather than on every non-list.
 - **V13 — markers in exclusive branches. PuzzleKit follows the core** (see
   Slots): the check lives in the shared parser, so Sites follows it too at its
   next parser sync; it already allowed one marker per render path.
 - **V14 — when is a slot "filled"? PuzzleKit follows the core** (see Slots).
   Sites still counts an empty `{#for}` and a call-site `{#if}` that renders
   nothing as filled, so its fallback stays hidden.
-- **V15 — how a component reads its props.** Sites exposes each prop as a bare
-  name (`{ tone }`). In PuzzleKit the same `{ tone }` reads a `data()` field,
-  which is empty unless `data(params, props)` returns it. D172 records implicit
-  props as a Sites addition, but a component file with no script is not
-  portable between the hosts. Should core say how props reach a component's
-  scope?
 - **V16 — dotted component tags in Sites.** Family tags are core, and the
   shared parser accepts `<Frame.Wrapper>`. But a Sites component file name must
   match `^[A-Z][A-Za-z0-9]*$` in a flat `components/` folder, so no file can

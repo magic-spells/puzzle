@@ -1,0 +1,43 @@
+<puzzle-view class="core">
+  <p class="deep">{ user.profile.name }</p>
+  <p class="index">{ rows[0].label }</p>
+  <p class="title" title={ price | money }>t</p>
+  <p class="label">{ 'cart.count' | t({ count: n, unit }) }</p>
+  <p class="nested">{ 'x' | echo({ outer: { inner: n }, 'quoted-key': unit }) }</p>
+  {#if tags | size}<p class="has-tags">tags</p>{:else}<p class="no-tags">none</p>{/if}
+  {#unless tags | size}<p class="unless">empty</p>{/unless}
+  {#case status | upcase}{:when 'OPEN'}<p class="case">open</p>{:else}<p class="case">other</p>{/case}
+  <p class="eq">{ one == '1' ? 'loose' : 'strict' }</p>
+  <ul class="string-loop">{#for ch in word}<li>{ ch }</li>{/for}</ul>
+  <ul class="missing-loop">{#for m in missing}<li>{ m }</li>{/for}</ul>
+  <ul class="range">{#for 1...count, k}<li>{ k }</li>{/for}</ul>
+  {#for 1...1}<div class="mapped">{#for ch in word}<b>{ ch }</b>{/for}</div>{/for}
+  <Chip tone="warm" />
+  <input class="missing-bind" value={ profile.name } />
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Chip from './Chip.compiled.js';
+
+// D173 group (b): every construct here is one the compiled output must render
+// without throwing — see tests/core-semantics.test.js.
+export default class CoreHost extends PuzzleView {
+  data() {
+    return {
+      user: undefined,
+      rows: undefined,
+      price: 5,
+      n: 3,
+      unit: 'items',
+      tags: [],
+      status: 'open',
+      one: 1,
+      word: 'abc',
+      missing: null,
+      count: 2.7,
+      profile: null,
+    };
+  }
+}
+</script>

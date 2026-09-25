@@ -26,6 +26,18 @@ notes:
       patchPortal only runs when a patch actually reaches the portal vnode, and a cached ancestor
       returns first. Tests: tests/list-cache-invalidation.test.js,
       tests/list-control-replay.test.js.
+  - kind: state
+    text: >-
+      D173 V12 (feat/core-expressions): the module also exports `loopItems(value)` and
+      `loopRange(from, to)`, re-exported from the package root beside `listRows` and imported by a
+      compiled module as `__e` / `__r` only when it emits a `.map` item loop / a range loop.
+      `loopItems` returns an array as-is and one shared module-level empty array for anything else
+      (dev warns once per shape for a non-null non-array) — nothing may push into what it returns;
+      `listRows` runs its input through it first, so a lowered loop over a missing collection
+      renders zero rows instead of throwing. `loopRange` truncates finite bounds to whole numbers
+      and yields no iterations for a missing or non-finite bound (dev warns for either). The same
+      "never import from inside client-runtime/" rule covers both: they ride the module only for
+      apps whose templates loop.
 ---
 
 Source binding for the owning component cards. Behavioral intent stays in [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] and [[COMPONENT-PUZZLE-VIEW]]; this card anchors that decision to `client-runtime/views/listBlock.js`.

@@ -18,7 +18,7 @@ export default class SnippetList extends PuzzleView {
 
 import { ViewNode, SLOT_TAG, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (user) => user.id, roots: 1, fields: ['name'] };
+const __L0 = { key: (user) => user?.id, roots: 1, fields: ['name'] };
 
 SnippetList.prototype.render = function () {
   const __d = this.getData();
@@ -33,7 +33,7 @@ SnippetList.prototype.render = function () {
       __l(this, this, 0, __d.users, (s) =>
         new ViewNode('li', { key: s.k }, [
           new ViewNode(SLOT_TAG, { name: 'row', args: { user: s.item, group: __d.group } }, [
-            new ViewNode('text', { value: __s(s.item.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
+            new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
           ]),
         ])
       , __L0)

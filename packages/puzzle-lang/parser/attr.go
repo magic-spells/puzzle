@@ -84,9 +84,12 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 			if kw != "if" {
 				return nil, "", errAt(c.file, pos, "only {#if} is allowed in attribute values (got {#%s})", kw)
 			}
-			cond := strings.TrimSpace(hdr[len(kw):])
-			if cond == "" {
+			if strings.TrimSpace(hdr[len(kw):]) == "" {
 				return nil, "", errAt(c.file, pos, "{#if} requires a condition")
+			}
+			cond, condFmts, cerr := parseChain(hdr[len(kw):], pos, c.file, "{#if} condition")
+			if cerr != nil {
+				return nil, "", cerr
 			}
 			flush()
 			c.i = end
@@ -104,7 +107,7 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 			if t != "endif" {
 				return nil, "", errAt(c.file, pos, "unclosed {#if} in attribute value")
 			}
-			parts = append(parts, &InlineIfPart{Cond: cond, Then: thenParts, Else: elseParts, Pos: pos})
+			parts = append(parts, &InlineIfPart{Cond: cond, Formatters: condFmts, Then: thenParts, Else: elseParts, Pos: pos})
 
 		case ':':
 			inner, end, err := scanBraceGroup(c.s, c.i)

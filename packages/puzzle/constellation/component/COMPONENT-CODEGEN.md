@@ -66,7 +66,11 @@ notes:
 Transforms the parser AST into one ES module: the user's script bytes, compiler
 imports, and `ClassName.prototype.render = function () { … }`. The user class
 body is never rewritten. Class extraction is LexSkip-aware and requires a real
-named `export default class … extends …` declaration.
+named `export default class … extends …` declaration. A script-less inline
+component ([[DECISION-D173-CORE-SEMANTICS]] V15) gets a synthesized class whose
+`data(params, props)` returns `props`, so its template reads its props by bare
+name exactly as a scripted component's `data()` would expose them; a script-less
+view or layout keeps the empty class.
 
 The `<script>` body is tokenized ONCE per compile (`tokenizeJS`, scriptcollide.go)
 and the one stream feeds all three consumers that used to lex those same bytes
@@ -76,10 +80,10 @@ disagree about opaque units — a comment is whitespace to the class-keyword
 adjacency rule (`export default /* x */ class Foo {}` is a declaration) while a
 string or regex breaks it, and the binding scans treat every opaque unit alike.
 The reserved-binding check covers what the compiler **declares** as well as what
-it imports: `ViewNode`, `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `__s`, `__l`
-and the `{#svg}` shared-asset locals, plus the `__L<n>` list-block meta consts a
-template with an item-form `{#for}` hoists to module scope. Each produces a
-positioned error naming the emission and why *this* file makes it.
+it imports: `ViewNode`, `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `__s`, `__l`,
+`__e`, `__r` and the `{#svg}` shared-asset locals, plus the `__L<n>` list-block
+meta consts a template with an item-form `{#for}` hoists to module scope. Each
+produces a positioned error naming the emission and why *this* file makes it.
 
 Mode comes from the app-relative path. Views/layouts preserve the
 `<puzzle-view>` root; inline components require one render root and do not emit
@@ -94,6 +98,34 @@ template-literal static text stay intact. An in-scope binding shadows a
 keyword-ish global, so a `{#for document of docs}` row reads `s.item`, not
 `window.document`. Reads of names imported by the script emit a warning because
 imports are not template scope.
+
+**Value positions are member-guarded** (D173 V4, `resolveValueScan`): in text
+interpolation, attribute values and props, `{#if}`/`{#case}` headers, inline-if
+conditions, formatter arguments, loop collections and keys, each `.`/`[` after a
+value-ending token is emitted as `?.`/`?.[`, so a missing link in a path yields
+`undefined` (which prints nothing) instead of a TypeError. Exempt: the first
+step after `this`, a JS global, a literal, or `ViewNode`; a `new` callee; and
+the whole expression when it contains a construct optional chaining cannot sit
+under (an assignment, `++`/`--`, a tagged template) — that expression falls back
+to the plain scan. The assignment detector tells a shift assignment (`<<=`,
+`>>=`, `>>>=`) from a `<=`/`>=` comparison by the doubled angle bracket before
+the `=`. Event-handler arguments, `resolveExpr` callers and the
+`puzzle check` emitter stay unguarded (`resolveExprScan`): a handler runs at
+fire time, and check must type the author's own spelling. Facts are identical
+guarded or not. Object literals (V8) are legal inside an argument position:
+an object-literal `{` pushes a key frame, a bare identifier in key position
+followed by `:` stays a key, and a shorthand key (`{ id }`) expands to
+`id: <resolved>` so it still reads model data. An expression that STARTS with an
+object literal stays a positioned error — `{ {a: 1} }` is ambiguous with the
+interpolation braces.
+
+**A pipe is a formatter chain in every value position** (D173 V1):
+`resolveChain` resolves the base, then wraps it in the same `__f[...]` calls text
+interpolation uses, for `DynamicAttr` values and props, if/else-if/unless/case
+headers (an unless chain negates AFTER the formatters, via `If.Negate`), and
+inline-if conditions. A chained form-control value never auto-binds (it is a
+display projection, not a writable path), and a chained explicit `key=` reads
+`__f`, so that loop site keeps `.map`.
 
 The same single scan also **classifies** what an expression read — the data
 roots it touched, the loop item's members at depth one, whether it reached
@@ -129,11 +161,24 @@ positioned error steering to a wrapper element. **The injected import line is
 built per file from what the file actually needs** — that is the tree-shaking
 contract, not a tidiness preference: `ViewNode` always, `SLOT_TAG` when a marker
 is present, `SNIPPET_TAG` when a Snippet is present, `PORTAL_TAG` when a portal
-is, `displayValue as __s` when an interpolation coerces for display, and
-`listRows as __l` when the file lowers at least one item-form `{#for}` (last in
-that order). A runtime module reachable only through such an import is absent
-from an app whose templates never emit it, which is why `views/listBlock.js`
-must never be imported from inside `client-runtime/` — see [[FILE-LIST-BLOCK]].
+is, `displayValue as __s` when an interpolation coerces for display,
+`listRows as __l` when the file lowers at least one item-form `{#for}`,
+`loopItems as __e` when it emits an item-form loop as `.map`, and
+`loopRange as __r` when it emits a range loop with a non-literal bound (in that
+order). A runtime module reachable only through such an import is absent from
+an app whose templates never emit it, which is why `views/listBlock.js` must
+never be imported from inside `client-runtime/` — see [[FILE-LIST-BLOCK]].
+
+**The loop domain is guarded** (D173 V12): a `.map` item loop iterates
+`__e(<coll>).map(…)`, and a range iterates `__r(<from>, <to>).map(…)` (a
+counterless range maps over `__i`, which is its generated key), so a missing
+collection or a non-list loops zero times — with a dev warning for a non-list —
+rather than throwing; `listRows` applies the same `loopItems` normalization for
+lowered sites. A range whose bounds are both integer literals (`literalRange`:
+an optional `-` and digits, nothing else) cannot be missing or fractional, so it
+is constant-folded — an array literal for up to 16 numbers
+(`{#for 1...3}` → `[1, 2, 3].map(…)`), `Array.from({ length: n }, …)` beyond,
+`[]` for an end below its start — and imports no `loopRange`.
 
 **Item-form loops lower to persistent list blocks** (`listblock.go`,
 [[DECISION-D170-INCREMENTAL-VDOM-LISTS]]). The `.map(…)` becomes
@@ -230,7 +275,7 @@ global, and reserved-`event` roots never classify; a bare loop variable never
 classifies, a loop-var-rooted member path does) and `detectAutoBind` applies the
 element-level conditions (form-control tag, no author `@input`/`@change`, no
 static `readonly`/`disabled`, no `multiple` on a `<select>`, static
-classifiable `type`). Both `attrsMultiline`
+classifiable `type`, no formatter chain on the value). Both `attrsMultiline`
 and `emitAttrs` consume it — inline SVG calls that pair directly — appending
 `'@<event>:bind': this.__bind(target, field, spec)` after the authored attrs.
 The synthesized attr counts toward the width trial (layout stays deterministic)
@@ -238,7 +283,12 @@ and consumes no `__h` site index; `attrKV` runs twice per attr, so a counter
 there would drift every golden. Non-classifying templates emit byte-identically.
 Inside a lowered row the bind target resolves through the same scope map, so a
 member path rooted at the loop variable writes to `s.item` — the live record,
-not a render-time copy. The bind attr name is matched case-SENSITIVELY
+not a render-time copy. A member-path target is emitted as `root ?? 0`
+(`this.__bind(__d.profile ?? 0, 'name', 'v')`): `__bind`'s `target == null`
+branch belongs to the bare-local form (`this.__bind(null, 'draft', 'v')`), so a
+missing root must never reach it — it would write the field as a stray
+top-level local — and a primitive target already returns the inert one-way
+handler. The bind attr name is matched case-SENSITIVELY
 (`value`/`checked`), because the runtime's property-write lookup is; a
 `VALUE={ x }` spelling stays a plain one-way attribute rather than a bind the
 runtime would never honor.
@@ -280,5 +330,7 @@ range loops, and slot markers disable padding); `listblock_test.go` and
 conservative meta, the `listRows as __l` import appearing only for a file that
 lowers a site, the `mapDepth` exclusions, the row-scope shadow mangling, the
 cache threshold, the static island-seed case and every exclusion —
-and the todos fixtures remain the byte contract the emitter is matched to, not
-the other way round.
+`core_semantics_test.go` pins the D173 value rules (chains in every value
+position, the member guard and its exemptions, object-literal arguments, the
+loop-guard imports and the literal-range fold), and the todos fixtures remain
+the byte contract the emitter is matched to, not the other way round.
