@@ -497,6 +497,27 @@ under Changed.
   warning instead of writing `[object Object]`. A controlled `value={ list }`
   prints the same way. Text and quoted attributes keep the plain comma join, and
   a list passed as a component prop stays a list.
+- **BREAKING: template whitespace follows one merged rule (D168, D173 V10).**
+  A line break between text (or an interpolation) and an element now renders
+  one space, in either order, as it does in HTML. Before, it was dropped, so
+  prose wrapped around inline elements glued together: `tokens —` + newline +
+  `<code>a</code>,` + newline + `<code>b</code>` + newline + `and more`
+  rendered `tokens —a,band more` and now renders `tokens — a, b and more`.
+  Indentation between two elements is still dropped, so stacked buttons and
+  badges get no gap, and a parent's first- and last-child indentation is still
+  dropped. `<pre>` and `<textarea>` bodies are now preserved exactly,
+  descendants and interpolations included, instead of collapsed; the one
+  newline directly after the start tag is dropped, as HTML's parser drops it,
+  and prerendered pages print the same text the browser runtime mounts.
+  **Upgrading:** a flex or grid item ignores the new leading or trailing space,
+  so an icon + newline + label inside a flex button looks the same. In inline
+  flow, the space is now visible; where an author added a margin to fake the
+  missing space, drop the margin, or put the two on one line with no
+  whitespace between them to keep them touching. A `<pre>` or `<textarea>`
+  whose body was indented with the template now shows that indentation:
+  dedent the body, or bind it (`{ code }`, `value={ text }`). Across the
+  0.8.0 corpus (607 files), 131 files gained a space in 832 text runs, none
+  lost one, and no `<pre>`/`<textarea>` body changed.
 
 ### Fixed
 

@@ -155,6 +155,15 @@ Rules that bite:
   attribute it is a space-joined token list that drops `false` and empty items,
   so the clsx idiom `class={ [active && 'on', 'btn'] }` writes `class="btn"`;
   an object in a brace-only attribute omits the attribute, as `false`/`null` do.
+- **Whitespace renders like HTML** (puzzle ≥ 0.8.0). A line break between
+  text and an element (either order) is one space, so prose may wrap around
+  `<code>`, `<a>` or `<b>` freely; a line break between two elements, or at a
+  parent's first/last child, is dropped, so stacked buttons get no gap. To
+  keep text and an inline element touching, write them on one line with no
+  whitespace between. `<pre>` and `<textarea>` bodies keep their bytes exactly
+  (only the newline right after the start tag is dropped), so don't indent
+  their contents with the template — bind them (`<pre>{ code }</pre>`,
+  `value={ text }`) or dedent.
 - **Template expressions are forgiving** (puzzle ≥ 0.8.0). A `|` is a
   formatter pipe in every value position — text, brace-only attributes
   (`title={ price | currency }`), component props, and the `{#if}`,
