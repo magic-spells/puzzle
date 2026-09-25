@@ -36,11 +36,9 @@ notes:
       decision when scheduled.
   - kind: state
     text: >-
-      2026-09-24 — of the four standalone-language artifacts, the Go parser module now exists:
-      `packages/puzzle-lang` (branch feat/puzzle-lang, PR into release/0.8.0). It is a move of
-      `compiler/internal/{parser,jsident,textutil}` with no behavior change. It becomes publicly
-      resolvable only when Cory pushes a `packages/puzzle-lang/vX.Y.Z` tag. The dialect switches,
-      the JS parser package, and the conformance fixtures are still not started.
+      The parser lives in `packages/puzzle-lang`, a separate Go module that `packages/puzzle/go.mod`
+      requires through a `replace => ../puzzle-lang`. Its FILE cards bind to `../puzzle-lang/...`,
+      outside this plan's code root, so stale_report cannot track them.
 ---
 
 # D172 — One language, two dialects, one public name

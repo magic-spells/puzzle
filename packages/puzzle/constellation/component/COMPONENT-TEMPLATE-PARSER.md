@@ -26,7 +26,7 @@ notes:
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
   - kind: state
     text: >-
-      The package also exports `OverNestingDepth` (compiler/internal/parser/depth.go, D164): a
+      The package also exports `OverNestingDepth` (packages/puzzle-lang/parser/depth.go, D164): a
       token-level scan that reports whether a template nests past a caller-supplied limit, without
       building an AST. It exists for the playground's WASM compiler, whose process cannot survive a
       Go fatal error — the recursive-descent parser exhausts the stack on a pathologically deep
@@ -49,20 +49,15 @@ notes:
       `Cannot use 'in' operator` on the first render. A bare-identifier item on the left of a range
       is now a positioned error steering to `{#for 1...5, i}` (the counter always binds AFTER the
       range); spread and call collections still parse as before. Pinned in
-      compiler/internal/parser/parser_test.go.
+      packages/puzzle-lang/parser/parser_test.go.
   - kind: state
     text: >-
-      2026-09-24 (0.8.0, feat/puzzle-lang) — the parser moved, unchanged, out of
-      `compiler/internal/parser` into its own Go module, `packages/puzzle-lang` (module
-      `github.com/magic-spells/puzzle/packages/puzzle-lang`, package `parser`), together with the
-      `jsident` and `textutil` helpers it imports (D172). Paths in older notes on this card
-      (`compiler/internal/parser/depth.go`, `.../parser_test.go`) now read
-      `packages/puzzle-lang/parser/...`. The compiler imports it through `require ... v0.0.0` +
-      `replace => ../puzzle-lang` in `packages/puzzle/go.mod`; outside hosts (Magic Spells Sites)
-      will import a `packages/puzzle-lang/vX.Y.Z` tag. Gotcha: the FILE cards' `path` fields now
-      point outside this plan root (`../puzzle-lang/...`), and the constellation tooling reports
-      such bindings as "outside code root", so `code: direct` hydration and staleness checks do not
-      reach the parser sources.
+      The parser lives in `packages/puzzle-lang` (module
+      `github.com/magic-spells/puzzle/packages/puzzle-lang`, package `parser`, with the `jsident`
+      and `textutil` helpers it imports; D172), a separate Go module that `packages/puzzle/go.mod`
+      requires through `require ... v0.0.0` + `replace => ../puzzle-lang`. Its FILE cards bind to
+      `../puzzle-lang/...`, outside this plan's code root, so stale_report cannot track them and
+      `code: direct` hydration does not reach the parser sources.
 ---
 
 # Template parser

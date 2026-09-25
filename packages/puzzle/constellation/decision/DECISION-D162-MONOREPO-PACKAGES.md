@@ -51,7 +51,6 @@ verified_sha: 1d9ce9fa1a905467382cdc0ef8f43e9f1993ea99
 
 ## Decision
 
-
 The repo root is a **private shell** (named plain `puzzle`, `private: true`,
 version 0.0.0, never published) whose scripts delegate into the framework
 package. Everything that versions in lockstep lives under `packages/`, and
