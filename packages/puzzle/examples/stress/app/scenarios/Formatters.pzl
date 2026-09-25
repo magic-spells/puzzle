@@ -47,7 +47,7 @@ import {
 // formatters — what does the built-in formatter registry cost across a large
 // re-render, and how much of that is Intl object construction?
 //
-// `client-runtime/formatters/builtins.js` caches its Intl objects: `date()`'s
+// `client-runtime/formatters/builtins.js` caches its Intl objects: `datetime()`'s
 // Intl.DateTimeFormat per (locale, options), `timeago()`'s RelativeTimeFormat
 // outright, both built on first use. Intl constructors are among the most
 // expensive objects in the platform (locale resolution, pattern compilation) —
@@ -98,7 +98,7 @@ export default class Formatters extends PuzzleView {
     // identity that every probe this scenario installs was also removed.
     const all = this.ctx.formatters.getAll();
     this.pristine = {
-      date: all.date,
+      datetime: all.datetime,
       timeago: all.timeago,
       DateTimeFormat: Intl.DateTimeFormat,
       RelativeTimeFormat: Intl.RelativeTimeFormat,
@@ -127,7 +127,7 @@ export default class Formatters extends PuzzleView {
       rowCount: this.rows.length,
       tick: this.tick,
       formatted: this.formatted,
-      armLabel: this.formatted ? 'date + timeago' : 'raw strings (control)',
+      armLabel: this.formatted ? 'datetime + timeago' : 'raw strings (control)',
       armCls: this.formatted ? 'text-accent' : 'text-muted',
       explainText:
         'each row runs two built-in formatters. builtins.js caches its Intl objects — one DateTimeFormat per ' +
@@ -151,7 +151,7 @@ export default class Formatters extends PuzzleView {
     clearType(store, TYPE);
     store.resetFixtureSeed(STRESS_SEED);
     // The generator derives createdAt from the fixture seed rather than the
-    // clock, so the dates — and therefore `date()`'s output — are identical on
+    // clock, so the dates — and therefore `datetime()`'s output — are identical on
     // every run. (`timeago()` is relative to now by definition and is not.)
     this.rows = store.seed(TYPE, seqShapes(this.wantRows(), 0));
     this.tick = 0;
@@ -202,10 +202,10 @@ export default class Formatters extends PuzzleView {
   installFormatterProbe() {
     const registry = this.ctx.formatters;
     const all = registry.getAll();
-    const originals = { date: all.date, timeago: all.timeago };
+    const originals = { datetime: all.datetime, timeago: all.timeago };
     const stats = { calls: 0, ms: 0 };
 
-    for (const name of ['date', 'timeago']) {
+    for (const name of ['datetime', 'timeago']) {
       const original = originals[name];
       if (typeof original !== 'function') continue;
       registry.register(name, (...args) => {
@@ -299,7 +299,7 @@ export default class Formatters extends PuzzleView {
       ms: paintedMs,
       scriptMs,
       detail:
-        `${op}: ${this.rows.length} rows re-rendered ${formatted ? 'through date + timeago' : 'with raw strings'} ` +
+        `${op}: ${this.rows.length} rows re-rendered ${formatted ? 'through datetime + timeago' : 'with raw strings'} ` +
         `in ${ms1(scriptMs)}ms script${intlPart}${probePart}`,
     };
   }
@@ -338,11 +338,11 @@ export default class Formatters extends PuzzleView {
     }
 
     // Check the formatter actually ran, against the registry's own output. Only
-    // `date` is checked: `timeago` is relative to Date.now() by construction, so
+    // `datetime` is checked: `timeago` is relative to Date.now() by construction, so
     // a validate() microseconds after a render can legitimately disagree with it
     // — asserting it would produce a flaky failure that means nothing.
     if (this.formatted) {
-      const dateFn = this.ctx.formatters.get('date');
+      const dateFn = this.ctx.formatters.get('datetime');
       for (const index of [0, Math.floor(rows.length / 2), rows.length - 1]) {
         const record = this.rows[index];
         const shown = rows[index]?.querySelector('.fmt-date')?.textContent?.trim();
@@ -358,7 +358,7 @@ export default class Formatters extends PuzzleView {
     // pristine references are captured once at created(), so this is an identity
     // check rather than a guess about a function's shape.
     const all = this.ctx.formatters.getAll();
-    if (all.date !== this.pristine.date || all.timeago !== this.pristine.timeago) {
+    if (all.datetime !== this.pristine.datetime || all.timeago !== this.pristine.timeago) {
       return { ok: false, detail: 'a formatter probe was left installed on the registry' };
     }
     if (Intl.DateTimeFormat !== this.pristine.DateTimeFormat) {

@@ -243,8 +243,14 @@ for (const rel of SCAFFOLD_TEMPLATES) {
 
 	const badgeRel = '../puzzle-pieces/demo/app/layouts/Default.pzl';
 	const badge = readFileSync(join(repoRoot, badgeRel), 'utf8');
-	const badgeMatch = badge.match(/pieces · v(\d+\.\d+\.\d+)/);
-	if (!badgeMatch) fail(`could not find the "pieces · v<version>" header badge in ${badgeRel}`);
+	// The badge renders `pieces · v{ version }` from a VERSION constant; an older
+	// layout carried the literal, so accept either spelling.
+	const badgeMatch =
+		badge.match(/pieces · v(\d+\.\d+\.\d+)/) ??
+		badge.match(/^const VERSION = '(\d+\.\d+\.\d+)';$/m);
+	if (!badgeMatch) {
+		fail(`could not find the header badge version (literal or \`const VERSION\`) in ${badgeRel}`);
+	}
 	if (badgeMatch[1] !== version) {
 		fail(`${badgeRel} header badge says v${badgeMatch[1]}, expected v${version}`);
 	}
