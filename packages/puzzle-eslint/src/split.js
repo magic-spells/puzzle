@@ -1,6 +1,6 @@
 // split.js — a JavaScript port of the Puzzle compiler's .pzl section splitter.
 //
-// This mirrors compiler/internal/parser/sections.go (with its helpers in
+// This mirrors packages/puzzle-lang/parser/sections.go (with its helpers in
 // lexskip.go and scan.go) from the @magic-spells/puzzle repository. The Go
 // compiler is the source of truth; on any conflict, sections.go wins. Keep this
 // file a faithful transcription so the ESLint plugin carves a .pzl file into the

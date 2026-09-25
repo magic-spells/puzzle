@@ -1,5 +1,5 @@
 // lex.js — a faithful JavaScript port of the Puzzle compiler's shared lexical-skip
-// helpers (compiler/internal/parser/lexskip.go and scan.go). These back the
+// helpers (packages/puzzle-lang/parser/lexskip.go and scan.go). These back the
 // close-tag scanners in split.js so a literal section-close sentinel hidden
 // inside a JS string, template literal, regex, comment, or template brace group
 // never truncates a section body. The port operates on JS strings by code unit;

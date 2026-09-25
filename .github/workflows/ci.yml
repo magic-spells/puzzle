@@ -11,7 +11,7 @@ on:
 
 jobs:
   go:
-    name: Go (compiler)
+    name: Go (compiler + language)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -21,6 +21,14 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: packages/puzzle/go.mod
+      # packages/puzzle-lang is its own Go module (the parser, D172), so the
+      # compiler's `./...` below never reaches its packages. The compiler does
+      # build against it through the go.mod replace, but its tests only run
+      # from inside the module.
+      - run: go vet ./...
+        working-directory: packages/puzzle-lang
+      - run: go test ./...
+        working-directory: packages/puzzle-lang
       - run: go vet ./...
       - run: go build ./...
       - run: go test ./...
@@ -54,6 +62,10 @@ jobs:
       # One command per step on purpose: GitHub's pwsh wrapper only propagates
       # the LAST command's exit code, so chaining these in one `run` block would
       # let a failing `go vet` pass as long as `go test` succeeded.
+      - run: go vet ./...
+        working-directory: packages/puzzle-lang
+      - run: go test ./...
+        working-directory: packages/puzzle-lang
       - run: go vet ./...
         working-directory: packages/puzzle/compiler
       - run: go build ./...
@@ -219,7 +231,7 @@ jobs:
   plugins:
     name: Lint/format plugins
     # Both vendor JS ports of the compiler's section splitter/lexer
-    # (packages/puzzle/compiler/internal/parser) — running them on every push is
+    # (packages/puzzle-lang/parser) — running them on every push is
     # the drift alarm for grammar changes.
     runs-on: ubuntu-latest
     steps:
