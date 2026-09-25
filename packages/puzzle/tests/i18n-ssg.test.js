@@ -14,6 +14,7 @@ import { escapeScriptJson } from '../client-runtime/ssg/serialize.js';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -86,6 +87,23 @@ describe('prerender with translations', () => {
 		const { pages } = await prerender(config(), { i18n: I18N });
 		expect(pages[0].html).toContain('<h1>Welcome</h1>');
 		expect(pages[0].html).toContain('<p>3 items</p>');
+	});
+
+	it('renders numbers and dates in the default locale, not the build machine’s', async () => {
+		class Numbers extends PuzzleView {
+			render() {
+				const f = this.ctx.formatters.getAll();
+				return h('p', {}, [text(f.number_with_delimiter(12345.5) + ' / ' + f.date('2026-09-24', 'long'))]);
+			}
+		}
+		Numbers.__pzlModule = 'app/views/Numbers.pzl';
+		const manifest = { defaultLocale: 'de', locales: { de: 'locales/de.AAAA.json' } };
+		const { pages } = await prerender(
+			{ target: '#app', routes: [{ path: '/', view: Numbers }] },
+			{ i18n: { manifest, table: {} } },
+		);
+		expect(pages[0].html).toContain('<p>12.345,5 / 24. September 2026</p>');
+		setFormatLocale(undefined);
 	});
 
 	it('reads the default table from the staged locales/ file named by the manifest', async () => {

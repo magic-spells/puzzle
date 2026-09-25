@@ -17,6 +17,7 @@
 import manifestData from '@magic-spells/puzzle/i18n/manifest';
 import { displayValue } from './display.js';
 import { nearestFormatter } from './formatters.js';
+import { localeNumber, setFormatLocale } from './formatters/locale.js';
 
 /** The localStorage key that remembers a viewer's explicit setLocale() choice. */
 export const LOCALE_STORAGE_KEY = '__puzzleLocale';
@@ -86,9 +87,8 @@ function readIsland(tag) {
 	}
 }
 
-// Formatter caches, keyed by locale. Module-level: they hold nothing app-specific.
+// Plural rules, keyed by locale. Module-level: they hold nothing app-specific.
 const pluralRules = new Map();
-const numberFormats = new Map();
 
 function pluralCategory(locale, count) {
 	let rules = pluralRules.get(locale);
@@ -96,21 +96,16 @@ function pluralCategory(locale, count) {
 	return rules.select(count);
 }
 
-function localeCount(locale, n) {
-	let format = numberFormats.get(locale);
-	if (!format) numberFormats.set(locale, (format = new Intl.NumberFormat(locale)));
-	return format.format(n);
-}
-
 /**
  * Fill `{name}` placeholders in ONE left-to-right pass, so text that was inserted
  * is never substituted again. The name is the exact text between `{` and `}`. A
  * name missing from `vars` stays visible as written; a present name with a
  * missing value prints nothing (D173 V6, via displayValue). A finite-number
- * `count` prints in the active locale's number format. A `{` with no closing `}`
- * is literal text.
+ * `count` prints in the formatter locale's number format — the helper
+ * `number_with_delimiter` and `pluralize` share, which the service points at the
+ * active locale. A `{` with no closing `}` is literal text.
  */
-export function fillPlaceholders(text, vars, locale) {
+export function fillPlaceholders(text, vars) {
 	let out = '';
 	let i = 0;
 	for (;;) {
@@ -124,7 +119,7 @@ export function fillPlaceholders(text, vars, locale) {
 			const value = vars[name];
 			out +=
 				name === 'count' && typeof value === 'number' && isFinite(value)
-					? localeCount(locale, value)
+					? localeNumber(value)
 					: displayValue(value);
 		} else {
 			out += text.slice(open, close + 1);
@@ -152,8 +147,6 @@ export function fillPlaceholders(text, vars, locale) {
  * @param {string} [options.locale] a forced starting locale (the prerender always
  *   renders the default); skips storage and navigator
  * @param {() => unknown} [options.refresh] re-renders the host after a switch
- * @param {(tag: string) => void} [options.onLocale] called whenever the active
- *   locale changes (the formatter locale hook)
  * @returns {object|null}
  */
 export function createI18n(options = {}) {
@@ -161,7 +154,7 @@ export function createI18n(options = {}) {
 	if (!manifest) return null;
 	const tags = Object.keys(manifest.locales);
 	const defaultLocale = manifest.defaultLocale;
-	const { tables, url = (path) => path, refresh, onLocale } = options;
+	const { tables, url = (path) => path, refresh } = options;
 
 	let table = null;
 	let locale = defaultLocale;
@@ -190,7 +183,7 @@ export function createI18n(options = {}) {
 	const apply = (tag, strings) => {
 		table = strings;
 		locale = tag;
-		onLocale?.(tag);
+		setFormatLocale(tag);
 		if (typeof document !== 'undefined') document.documentElement.lang = tag;
 	};
 
@@ -281,7 +274,7 @@ export function createI18n(options = {}) {
 					text = text[pluralCategory(locale, Number(count))] ?? text.other;
 				}
 			}
-			return hasVars ? fillPlaceholders(text, vars, locale) : text;
+			return hasVars ? fillPlaceholders(text, vars) : text;
 		},
 
 		/**

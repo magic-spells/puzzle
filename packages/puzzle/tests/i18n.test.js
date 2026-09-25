@@ -11,6 +11,8 @@ import {
 	selectLocale,
 } from '../client-runtime/i18n.js';
 import { makeFormatterRegistry } from '../client-runtime/formatters.js';
+import * as f from '../client-runtime/formatters/builtins.js';
+import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 
 const EN = {
 	'cart.title': 'Your cart',
@@ -330,5 +332,45 @@ describe('the t formatter', () => {
 	});
 	it('createI18n returns null without a manifest (no translations configured)', () => {
 		expect(createI18n()).toBe(null);
+	});
+});
+
+// D175 item 8: the formatter locale. Every expectation names its locale, so none
+// of them moves with the process locale.
+describe('the formatter locale', () => {
+	afterEach(() => {
+		setFormatLocale(undefined);
+		vi.useRealTimers();
+	});
+
+	it('drives the number, date and relative-time formatters, and rebuilds their caches on a switch', () => {
+		vi.useFakeTimers({ now: new Date('2026-09-24T12:00:00Z') });
+		setFormatLocale('de-DE');
+		expect(f.number_with_delimiter(1234.5)).toBe('1.234,5');
+		expect(f.pluralize(1234, 'Kommentar', 'Kommentare')).toBe('1.234 Kommentare');
+		expect(f.compact_number(3400000)).toBe('3,4 Mio.');
+		expect(f.date('2026-09-24', 'long')).toBe('24. September 2026');
+		expect(f.timeago('2026-09-24T10:00:00Z')).toBe('vor 2 Stunden');
+
+		setFormatLocale('en-US');
+		expect(f.number_with_delimiter(1234.5)).toBe('1,234.5');
+		expect(f.compact_number(3400000)).toBe('3.4M');
+		expect(f.date('2026-09-24', 'long')).toBe('September 24, 2026');
+		expect(f.timeago('2026-09-24T10:00:00Z')).toBe('2 hours ago');
+	});
+
+	it('lets an explicit locale argument win, and leaves currency alone', () => {
+		setFormatLocale('de-DE');
+		expect(f.date('2026-09-24', 'long', 'en-US')).toBe('September 24, 2026');
+		expect(f.number_with_delimiter(1234.5, ',')).toBe('1,234.5');
+		expect(f.currency(1234.5)).toBe('$1,234.50');
+	});
+
+	it('follows the active locale: set on load and on every switch', async () => {
+		const i18n = await service({ en: EN, es: ES }, 'es');
+		expect(f.number_with_delimiter(12345.5)).toBe('12.345,5');
+		expect(i18n.t('item_count', { count: 12345.5 })).toBe('12.345,5 artículos');
+		await i18n.setLocale('en');
+		expect(f.number_with_delimiter(12345.5)).toBe('12,345.5');
 	});
 });

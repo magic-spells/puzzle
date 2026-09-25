@@ -22,7 +22,9 @@ const requiredBuiltins = { escape, raw };
 // arguments and meaning. An app formatter registered under one of these draws a
 // development warning, because the app's templates no longer mean what the
 // standard name means. PuzzleKit-only built-ins (`link`, `timeago`,
-// `in_timezone`) are deliberately absent — overriding those is ordinary.
+// `in_timezone`) are deliberately absent — overriding those is ordinary. `t` is
+// standard (D175) but not a built-in: the i18n service registers it when the app
+// configures translations.
 // Referenced only behind `__PUZZLE_DEV__`, so production tree-shakes it.
 export const STANDARD_FORMATTERS = [
 	'abs', 'ceil', 'floor', 'plus', 'minus', 'times', 'divided_by', 'modulo', 'round',
@@ -32,6 +34,7 @@ export const STANDARD_FORMATTERS = [
 	'escape', 'raw', 'newline_to_br',
 	'default', 'size', 'join', 'json',
 	'date', 'time', 'datetime', 'number_with_delimiter', 'compact_number', 'pluralize',
+	't',
 ];
 
 // Removed built-ins (D174) and what replaces each, for the unknown-name guard.

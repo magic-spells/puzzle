@@ -10,6 +10,7 @@
 // `join` and `size`.
 
 import { calendarISO, isCalendarDate, noDate, parseDateInput } from '../dates.js';
+import { formatLocale, localeNumber } from './locale.js';
 
 // null/undefined render as empty string, never the literal "null"/"undefined"
 const str = (v) => (v == null ? '' : String(v));
@@ -51,23 +52,10 @@ function roundHalfAway(n, p) {
 // so a delimiter containing `$` is inserted literally.
 const group = (whole, delimiter) => whole.replace(/\B(?=(\d{3})+(?!\d))/g, () => delimiter);
 
-// Locale-rendered numbers use the VIEWER's locale (Intl's default). One cached
-// NumberFormat per fraction-digit count, so the decimals print as given — `1234.5`
-// stays one decimal, never Intl's default three-digit rounding.
-const NUMBER_FORMATTERS = new Map();
-function localeNumber(n) {
-	const [m, e = 0] = String(Math.abs(n)).split('e');
-	const digits = Math.min(20, Math.max(0, (m.split('.')[1] || '').length - Number(e)));
-	let formatter = NUMBER_FORMATTERS.get(digits);
-	if (!formatter) {
-		formatter = new Intl.NumberFormat(undefined, {
-			minimumFractionDigits: digits,
-			maximumFractionDigits: digits,
-		});
-		NUMBER_FORMATTERS.set(digits, formatter);
-	}
-	return formatter.format(n);
-}
+// Locale-rendered numbers (`localeNumber`, formatters/locale.js) use the
+// viewer's locale — Intl's default — or, when the app configures translations,
+// the active locale (D175). The date family, `compact_number` and `timeago` read
+// the same slot, each behind the inline `__PUZZLE_HAS_I18N__` probe.
 
 // ── Markup ────────────────────────────────────────────────────────────────────
 
@@ -289,11 +277,20 @@ export function number_with_delimiter(v, delimiter) {
 }
 
 // Shortens a large number with a localized suffix: `1.2K`, `45K`, `3.4M` in en.
+// One cached formatter, rebuilt when the formatter locale moves (D175).
 let compactFormatter;
+let compactLocale;
 export function compact_number(v) {
 	const n = num(v);
 	if (!Number.isFinite(n)) return str(v);
-	compactFormatter ??= new Intl.NumberFormat(undefined, { notation: 'compact' });
+	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && compactLocale !== formatLocale) {
+		compactLocale = formatLocale;
+		compactFormatter = undefined;
+	}
+	compactFormatter ??= new Intl.NumberFormat(
+		typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__ ? formatLocale : undefined,
+		{ notation: 'compact' },
+	);
 	return compactFormatter.format(n);
 }
 
@@ -426,6 +423,7 @@ const TIMEZONE_FORMATTERS = new Map();
 // `timeago` takes no locale, so there is exactly one formatter to cache — built
 // on first use so importing the module never constructs an Intl object.
 let relativeTimeFormatter;
+let relativeLocale;
 // Dev-only warn-once ledger for unknown presets; production never touches it.
 let warnedPresets;
 
@@ -448,6 +446,8 @@ function formatDate(kind, v, preset, locale) {
 	if (noDate(v)) return '';
 	const d = parseDateInput(v);
 	if (isNaN(d.getTime())) return str(v);
+	// An explicit locale argument wins; otherwise the formatter locale (D175).
+	if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) locale ??= formatLocale;
 
 	if (preset === 'iso') {
 		// A calendar date names a day, not an instant: its ISO form is the day
@@ -558,9 +558,14 @@ export function timeago(v) {
 	const then = parseDateInput(v).getTime();
 	if (isNaN(then)) return str(v);
 
-	const rtf = (relativeTimeFormatter ??= new Intl.RelativeTimeFormat(undefined, {
-		numeric: 'auto',
-	}));
+	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && relativeLocale !== formatLocale) {
+		relativeLocale = formatLocale;
+		relativeTimeFormatter = undefined;
+	}
+	const rtf = (relativeTimeFormatter ??= new Intl.RelativeTimeFormat(
+		typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__ ? formatLocale : undefined,
+		{ numeric: 'auto' },
+	));
 	const diff = Math.round((then - Date.now()) / 1000);
 	const units = [
 		['year', 31536000],
