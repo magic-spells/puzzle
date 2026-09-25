@@ -33,5 +33,18 @@
       "mcp__constellation__traverse",
       "mcp__constellation__update_card"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx --no-install constellation working 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
   }
 }

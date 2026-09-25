@@ -11,3 +11,7 @@ skills/puzzle/.puzzle-skill-version
 # Local browser-compiler outputs (scripts/build-wasm.mjs)
 /artifacts/wasm/
 test-results/
+
+# Constellation working memory (local scratchpad; the rules file is committed)
+.constellation/*
+!.constellation/CLAUDE.md
