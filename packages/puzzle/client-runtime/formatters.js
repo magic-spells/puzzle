@@ -22,7 +22,9 @@ const requiredBuiltins = { escape, raw };
 // arguments and meaning. An app formatter registered under one of these draws a
 // development warning, because the app's templates no longer mean what the
 // standard name means. PuzzleKit-only built-ins (`link`, `timeago`,
-// `in_timezone`) are deliberately absent — overriding those is ordinary.
+// `in_timezone`) are deliberately absent — overriding those is ordinary. `t` is
+// standard (D175) but not a built-in: the i18n service registers it when the app
+// configures translations.
 // Referenced only behind `__PUZZLE_DEV__`, so production tree-shakes it.
 export const STANDARD_FORMATTERS = [
 	'abs', 'ceil', 'floor', 'plus', 'minus', 'times', 'divided_by', 'modulo', 'round',
@@ -32,6 +34,7 @@ export const STANDARD_FORMATTERS = [
 	'escape', 'raw', 'newline_to_br',
 	'default', 'size', 'join', 'json',
 	'date', 'time', 'datetime', 'number_with_delimiter', 'compact_number', 'pluralize',
+	't',
 ];
 
 // Removed built-ins (D174) and what replaces each, for the unknown-name guard.
@@ -76,8 +79,9 @@ function editDistance(a, b) {
 
 // Nearest registered formatter name within edit distance ≤ 2, or null when nothing
 // is close (D43 did-you-mean). First match wins on ties. Module-level for the same
-// tree-shaking reason as editDistance above.
-function nearestFormatter(formatters, name) {
+// tree-shaking reason as editDistance above. Also the i18n service's did-you-mean
+// over a locale table's keys (D175), from behind the same development probe.
+export function nearestFormatter(formatters, name) {
 	let best = null;
 	let bestDist = 3; // strictly-less-than test below accepts ≤ 2
 	for (const key of Object.keys(formatters)) {
@@ -124,6 +128,14 @@ export class FormatterRegistry {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (!this._warnedMissing.has(name)) {
 					this._warnedMissing.add(name);
+					// `t` is service-bound (D175): it exists only when the app configures
+					// translations, so the useful hint is how to turn them on.
+					if (name === 't') {
+						console.error(
+							"[puzzle] the t formatter needs translations — add i18n: { locales: ['en'], defaultLocale: 'en' } to puzzle.config.js and app/locales/en.json; the key passes through unchanged",
+						);
+						return (v) => v;
+					}
 					if (Object.hasOwn(REMOVED_FORMATTERS, name)) {
 						console.error(
 							`[puzzle] formatter "${name}" was removed — ${REMOVED_FORMATTERS[name]}; value passed through unchanged`,

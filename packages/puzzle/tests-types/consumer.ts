@@ -44,6 +44,7 @@ import type {
 	PuzzleErrorViewProps,
 	LazyView,
 	PuzzleViewConstructor,
+	PuzzleI18n,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -688,6 +689,35 @@ async function profileRenders(): Promise<void> {
 	void renders;
 }
 void profileRenders;
+
+// ---------------------------------------------------------------------------
+// Translations (D175)
+// ---------------------------------------------------------------------------
+
+class LocaleSwitcher extends PuzzleView {
+	data() {
+		const i18n: PuzzleI18n | undefined = this.ctx.i18n;
+		const label: string = i18n ? i18n.t('cart.items', { count: 3 }) : '';
+		const tags: readonly string[] = i18n?.locales ?? [];
+		return { label, tags, current: i18n?.locale, fallback: i18n?.defaultLocale };
+	}
+	choose(tag: string): Promise<void> | undefined {
+		return this.ctx.i18n?.setLocale(tag);
+	}
+}
+
+async function translatedTests(): Promise<void> {
+	const strings = { 'cart.items': { one: '{count} item', other: '{count} items' }, greeting: 'Hi' };
+	const view = await mountView(LocaleSwitcher, { i18n: { locale: 'en', strings } });
+	const app = await createTestApp({
+		routes: [{ path: '/', view: LocaleSwitcher }],
+		i18n: { locale: 'es', strings: { greeting: 'Hola' } },
+	});
+	const active: string | undefined = app.app.i18n?.locale;
+	void view;
+	void active;
+}
+void translatedTests;
 
 // ---------------------------------------------------------------------------
 // Error shapes (§20, §22)

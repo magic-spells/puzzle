@@ -49,6 +49,53 @@ import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js'
 import { isLazyView, resolveRouteViews } from '../router/lazy.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
+import i18nManifest from '@magic-spells/puzzle/i18n/manifest';
+import { createI18n, installTranslate } from '../i18n.js';
+
+// ---- translations (D175) ----------------------------------------------------
+
+/**
+ * The build's translation state for the prerender: the manifest plus the
+ * default locale's filled table, read from the staged `locales/` file the Go
+ * build wrote before this pass (no fetch). null without i18n. Every page renders
+ * in the default locale — Node has no navigator or storage to choose another.
+ * `override` ({ manifest, table }) is an internal seam for tests.
+ */
+function loadBuildI18n(outDir, override) {
+	if (override) return override;
+	if (!(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) || !i18nManifest) return null;
+	const file = path.join(outDir, i18nManifest.locales[i18nManifest.defaultLocale]);
+	return { manifest: i18nManifest, table: JSON.parse(fs.readFileSync(file, 'utf8')) };
+}
+
+/**
+ * The island every prerendered page carries so the default locale's first load
+ * makes no request: the table as JSON in a `data-puzzle-locale` script, escaped
+ * by the shared JSON-in-script rule (D113) so a `</script>` inside a string can
+ * never close it.
+ */
+function localeIsland(i18n) {
+	if (!i18n) return '';
+	const tag = i18n.manifest.defaultLocale;
+	return `<script type="application/json" data-puzzle-locale="${escapeAttr(tag)}">${escapeScriptJson(
+		JSON.stringify(i18n.table)
+	)}</script>`;
+}
+
+/**
+ * The shell with `<html lang>` set to the build locale, so a prerendered page
+ * declares the language it is written in before any script runs (the runtime
+ * keeps it in step on every switch). Replaces an existing `lang`, adds one
+ * otherwise; a shell without an `<html>` tag is returned unchanged.
+ */
+function withHtmlLang(shell, i18n) {
+	if (!i18n) return shell;
+	const lang = ` lang="${escapeAttr(i18n.manifest.defaultLocale)}"`;
+	return shell.replace(
+		/<html\b([^>]*)>/i,
+		(_, attrs) => `<html${attrs.replace(/\slang\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '')}${lang}>`
+	);
+}
 
 // ---- build-time reads -------------------------------------------------------
 
@@ -287,6 +334,19 @@ async function prerenderPass(config, opts = {}) {
 		return routeRouter;
 	};
 
+	// One build-wide i18n service over the default locale's filled table (D175):
+	// every page renders in the default locale, and nothing is fetched.
+	let i18n = null;
+	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && opts.i18n) {
+		const { manifest, table } = opts.i18n;
+		i18n = createI18n({
+			manifest,
+			tables: { [manifest.defaultLocale]: table },
+			locale: manifest.defaultLocale,
+		});
+		await i18n.__ready();
+	}
+
 	const createPageContext = async (entry) => {
 		builtContext = true;
 		// Both modes thread the page's route snapshot into their prerender router:
@@ -312,7 +372,7 @@ async function prerenderPass(config, opts = {}) {
 				});
 			}
 		}
-		return buildContext(config, { router });
+		return buildContext(config, { router, i18n });
 	};
 
 	for (const entry of entries) {
@@ -492,8 +552,11 @@ export async function prerenderToDir(config, options = {}) {
 	const routeRouter = new Router(config.routes ?? [], { mode: memoryRouter() });
 
 	const targetId = parseTargetId(config.target);
-	const shell = fs.readFileSync(shellPath, 'utf8');
-	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only });
+	const i18n = loadBuildI18n(outDir, options.i18n);
+	const shell = withHtmlLang(fs.readFileSync(shellPath, 'utf8'), i18n);
+	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only, i18n });
+	// Built once: every page carries the same default-locale table (D175).
+	const island = localeIsland(i18n);
 
 	if (mode === 'static') {
 		return writeStaticDir({
@@ -504,6 +567,7 @@ export async function prerenderToDir(config, options = {}) {
 			pages,
 			skipped,
 			warnings,
+			island,
 			adapterModuleMatches:
 				'adapterModule' in options ? options.adapterModule === config.adapter : null,
 		});
@@ -537,6 +601,7 @@ export async function prerenderToDir(config, options = {}) {
 							content: page.html,
 							title: page.title,
 							head: page.head,
+							island,
 						});
 			yield { outPath, html };
 		}
@@ -621,6 +686,7 @@ async function writeStaticDir({
 	pages,
 	skipped,
 	warnings,
+	island = '',
 	adapterModuleMatches = null,
 }) {
 	// The app-bundle tag is stripped once (the shell is identical for every page) so
@@ -707,6 +773,7 @@ async function writeStaticDir({
 				slug,
 				data: page.data ?? {},
 				readState: page.readState ?? null,
+				island,
 			});
 			written.push({
 				path: page.path,
@@ -770,7 +837,7 @@ async function writeStaticDir({
  * `config.beforeMount` is awaited with a `{ store, config }` facade (not a real
  * PuzzleApp — documented) so a build-time store seed lands before the first data().
  */
-async function buildContext(config, { router }) {
+async function buildContext(config, { router, i18n = null }) {
 	const { models = {}, formatters = {}, apiURL, storage, adapter, beforeRequest } = config;
 
 	installAdapterCapability(adapter, 'config.adapter');
@@ -785,6 +852,12 @@ async function buildContext(config, { router }) {
 	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
 	const ctx = { store, router, formatters: registry };
+	// The build's i18n service (D175), exactly as PuzzleApp wires it: ctx.i18n plus
+	// the service-bound `t` formatter, which an app `t` still overrides.
+	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && i18n) {
+		ctx.i18n = i18n;
+		installTranslate(registry, i18n);
+	}
 
 	// Receiver parity with the browser mount (app.js: beforeMount.call(app, app)):
 	// the function-form hook sees the `{ store, config }` facade as BOTH its receiver
@@ -972,7 +1045,7 @@ function serializeRouteJSON(entry) {
  * one splice over precomputed offsets rather than a document-wide rescan. A
  * missing or non-empty target element is a descriptive throw.
  */
-export function injectShell(shell, { targetId, content, title, head }) {
+export function injectShell(shell, { targetId, content, title, head, island = '' }) {
 	const plan = getShellPlan(shell);
 	const target = findTarget(shell, plan, targetId);
 	if (!target) {
@@ -991,6 +1064,11 @@ export function injectShell(shell, { targetId, content, title, head }) {
 	];
 	const headOp = headOperation(shell, plan, { head, title });
 	if (headOp) ops.push(headOp);
+	// The locale island (D175) rides at the SHELL's `</body>` anchor, the same
+	// fixed offset the static data island uses (D151); appended when there is none.
+	if (!island) return spliceShell(shell, ops);
+	if (plan.bodyCloseIndex < 0) return spliceShell(shell, ops) + island;
+	ops.push({ start: plan.bodyCloseIndex, end: plan.bodyCloseIndex, text: island });
 	return spliceShell(shell, ops);
 }
 
@@ -1029,7 +1107,7 @@ function stripAppBundle(shell) {
  */
 export function injectStaticShell(
 	shell,
-	{ targetId, content, title, head, slug, data, readState = null, base = '' }
+	{ targetId, content, title, head, slug, data, readState = null, base = '', island = '' }
 ) {
 	const plan = getShellPlan(shell);
 	const ops = [];
@@ -1064,9 +1142,12 @@ export function injectStaticShell(
 				JSON.stringify(readState)
 			)}</script>`
 		: '';
+	// The locale island (D175) — prerender:false pages carry it too, so no static
+	// page's first load in the default locale makes a request.
 	const scripts =
 		`<script type="application/json" data-puzzle-static-data>${json}</script>` +
 		readIsland +
+		island +
 		`<script type="module" src="${base}/_puzzle/${slug}.js"></script>`;
 	// The island rides before the SHELL's `</body>` — a fixed offset from the plan, so
 	// rendered content can never move the anchor (a `</body>` inside a raw <script>
@@ -1166,7 +1247,10 @@ const HEAD_OPEN_RE = /<head\b[^>]*>/i;
 const HEAD_CLOSE_RE = /<\/head>/i;
 const TITLE_ELEMENT_RE = /<title>[\s\S]*?<\/title>/;
 const TITLE_CLOSE_RE = /<\/title>/i;
-const BODY_CLOSE_RE = /<\/body>/i;
+// Global: the plan anchors on the LAST `</body>`, so the text `</body>` in a
+// shell comment or an inline script string before the real one can never
+// swallow the injected islands and page module.
+const BODY_CLOSE_RE = /<\/body>/gi;
 
 /**
  * One compiled marker matcher per managed tag. `spec.id` values are framework
@@ -1249,7 +1333,8 @@ function compileShellPlan(shell) {
 	}
 	edits.sort((a, b) => a.start - b.start);
 
-	const bodyClose = BODY_CLOSE_RE.exec(shell);
+	let bodyCloseIndex = -1;
+	for (const m of shell.matchAll(BODY_CLOSE_RE)) bodyCloseIndex = m.index;
 
 	return {
 		headStart,
@@ -1258,7 +1343,7 @@ function compileShellPlan(shell) {
 		titleSpan,
 		edits,
 		markerCounts,
-		bodyCloseIndex: bodyClose ? bodyClose.index : -1,
+		bodyCloseIndex,
 		targets: new Map(),
 	};
 }

@@ -27,7 +27,8 @@
 import { isAdapterCapability } from './capabilities.js';
 import { Store } from './datastore/store.js';
 import { makeFormatterRegistry } from './formatters.js';
-import { Router } from './router/router.js';
+import { createI18n, installTranslate } from './i18n.js';
+import { Router, normalizeBase } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorConfig } from './errors.js';
@@ -310,12 +311,34 @@ export class PuzzleApp {
 		}
 		this.#store = new Store(models, { storage, beforeRequest, apiURL, adapter });
 
+		// Translations (D175): the service picks the locale and STARTS loading its
+		// strings now, while the other services are wired, so the fetch overlaps
+		// beforeMount; mount() awaits it below, before navigation #0. Manifest paths
+		// are dist-relative: path routing resolves them under routerBase, while the
+		// hash and memory modes always serve the shell from the dist root, so they
+		// resolve against the document. A switch re-runs the committed location as a
+		// same-location rebuild (router __failedView(null, true)). Every reference
+		// spells the inline probe, so an app without i18n ships none of this.
+		if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
+			this.i18n = createI18n({
+				...this.config.__i18n,
+				url: (path) =>
+					routerMode
+						? new URL(path, document.baseURI).href
+						: normalizeBase(routerBase) + '/' + path,
+				refresh: () => this.router?.__failedView(null, true),
+			});
+		}
+
 		// 3. Formatters: shared built-in/custom wiring plus the live-router-backed
 		//    `link` encoder. The closure reads this.router lazily so a re-mount never
 		//    keeps a stale Router, and a custom `link` formatter still wins.
 		this.formatters = makeFormatterRegistry(formatters, (path) =>
 			this.router ? this.router.url(path) : path
 		);
+		// The service-bound `t` formatter (D175); an app `t` still wins.
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)
+			installTranslate(this.formatters, this.i18n);
 
 		// 4. Router + the shared context object injected into every view. Pass
 		//    `mode` through only when routerMode is set, so the Router's own default
@@ -345,6 +368,10 @@ export class PuzzleApp {
 		}
 
 		this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
+		// ctx gains `i18n` only when translations are configured (D175) — beside the
+		// store and router, reached as this.ctx.i18n.
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)
+			this.ctx.i18n = this.i18n;
 		setErrorConfig(this.ctx, onError, errorView);
 
 		// Claim mounted BEFORE the async start(): the initial navigation may await a
@@ -409,6 +436,21 @@ export class PuzzleApp {
 		// (re-)start from here. `#mountEpoch !== epoch` is the load-bearing half; the
 		// `!this._mounted` read stays as the plain torn-down case it always covered.
 		if (this.#mountEpoch !== epoch || !this._mounted) return this;
+
+		// The first render has its strings (D175): navigation #0 — its guards, its
+		// data(), its commit — never runs without the table. __ready follows any
+		// setLocale() beforeMount made, and rejects only when neither the active
+		// locale nor the default could load; that aborts the mount exactly like a
+		// rejected beforeMount.
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n) {
+			try {
+				await this.i18n.__ready();
+			} catch (err) {
+				if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
+				throw err;
+			}
+			if (this.#mountEpoch !== epoch || !this._mounted) return this;
+		}
 
 		// Dev HMR restore, phase 1 (§27, D57; Change D): consume the one-shot blob
 		// and transplant its STORE records BEFORE navigation #0, so nav #0's data()
@@ -596,6 +638,7 @@ export class PuzzleApp {
 		this.#store = null; // getter throws again post-unmount (store torn down)
 		this.router = null;
 		this.formatters = null;
+		if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) this.i18n = null;
 		this._container = null;
 		this._mounted = false;
 	}

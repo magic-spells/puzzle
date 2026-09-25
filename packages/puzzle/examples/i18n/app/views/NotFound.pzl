@@ -1,0 +1,9 @@
+<puzzle-view>
+  <p class="text-muted">{ 'notFound' | t }</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class NotFound extends PuzzleView {}
+</script>

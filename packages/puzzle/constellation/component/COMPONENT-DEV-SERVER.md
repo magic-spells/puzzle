@@ -36,6 +36,19 @@ notes:
       cobra → main's single stderr print + exit 1. It does not re-run on file-change rebuilds. See
       COMPONENT-COMPILER-CLI for the message and the no-auto-install decision.
     sha: 9996ca0
+  - kind: state
+    text: >-
+      Locale files in dev (D175, v1.81). SPA `WatchBuilder`: the first build and any batch touching
+      `app/locales/**` reload the locale set (a bad file fails the rebuild and keeps the last good
+      dist and manifest), write the new hashed files into `dist/locales/` without overwriting
+      existing names, refresh the manifest, rebuild `app.js`, and reload over SSE; only after a
+      successful build are superseded files pruned (the first landing prunes every stale file a
+      prior one-shot build left). Build warnings (fill, extra keys, missing literal keys) print once
+      per distinct set. Static dev (`StaticWatchBuilder`): a locale edit reloads the set into all
+      three plugins and `route_deps.go` classifies it render-wide ("a locale file changed") — a
+      locale file is read from disk and never imported, so no metafile carries it (the D155
+      `{#svg}`-style edge); locale files land in the warm staging swap. `dev.go` passes `cfg.I18n`
+      and `ValidatePublic(..., cfg.I18nEnabled())` reserves `locales/`.
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 

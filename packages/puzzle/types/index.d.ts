@@ -393,6 +393,40 @@ export interface PuzzleContext {
 	store: Store;
 	router: Router;
 	formatters: FormatterRegistry;
+	/**
+	 * The translation service (D175) — present only when `puzzle.config.js`
+	 * configures `i18n`, so it is optional here.
+	 */
+	i18n?: PuzzleI18n;
+}
+
+/** Variables for a translation: `{name}` placeholders, and `count` for plurals. */
+export type TranslationVars = Record<string, unknown>;
+
+/**
+ * The translation service (D175) — `this.ctx.i18n` and `app.i18n` when
+ * `i18n: { locales, defaultLocale }` is configured in `puzzle.config.js`.
+ * The `t` formatter calls the same `t`.
+ */
+export interface PuzzleI18n {
+	/** The active locale tag. */
+	readonly locale: string;
+	/** Every configured locale, in config order. */
+	readonly locales: readonly string[];
+	readonly defaultLocale: string;
+	/**
+	 * Look `key` up in the active locale. A missing key prints the key itself;
+	 * `vars` fill `{name}` placeholders in one pass, and a numeric `count` picks
+	 * the plural form through `Intl.PluralRules`.
+	 */
+	t(key: unknown, vars?: TranslationVars): string;
+	/**
+	 * Fetch `tag`'s strings, then switch the locale, store the choice and
+	 * rebuild the page at the same location. Rejects (changing nothing) when the
+	 * fetch fails; overlapping calls resolve last-wins. Throws a RangeError for a
+	 * tag that is not configured.
+	 */
+	setLocale(tag: string): Promise<void>;
 }
 
 // ----------------------------------------------------------------------------
@@ -741,6 +775,11 @@ export declare class PuzzleApp {
 	router: Router | null;
 	/** The wired formatter registry (null before mount / after unmount). */
 	formatters: FormatterRegistry | null;
+	/**
+	 * The translation service (D175) — absent when `i18n` is not configured,
+	 * null after unmount.
+	 */
+	i18n?: PuzzleI18n | null;
 	/** The shared context injected into every view (null before mount). */
 	ctx: PuzzleContext | null;
 	/** Boot the app and run the initial navigation. */

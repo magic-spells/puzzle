@@ -133,6 +133,11 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		"__PUZZLE_HAS_SNIPPETS__": strconv.FormatBool(f.Snippets),
 		"__PUZZLE_TAKEOVER__":     strconv.FormatBool(flags.Takeover),
 		"__PUZZLE_CAPTURE__":      strconv.FormatBool(flags.Capture),
+		// A CONFIG fact, not a usage-scan fact (D175): script code can call
+		// `this.ctx.i18n.t()` where no template scan can see it. It reads the plugin
+		// because the plugin also serves the locale manifest, so the define and the
+		// module can never disagree about whether translations exist.
+		"__PUZZLE_HAS_I18N__": strconv.FormatBool(pl.I18nEnabled()),
 	}
 }
 

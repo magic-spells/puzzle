@@ -1,0 +1,31 @@
+{
+  "brand": "Rynek Puzzle",
+  "nav": {
+    "home": "Start",
+    "about": "O przykładzie"
+  },
+  "language": "Język",
+  "home": {
+    "greeting": "Witaj ponownie, {name}!",
+    "intro": "Każdy tekst na tej stronie pochodzi z app/locales. Zmień język powyżej — strona przebuduje się na miejscu, a wybór zostanie zapamiętany.",
+    "cart": {
+      "title": "Twój koszyk",
+      "items": {
+        "zero": "Koszyk jest pusty",
+        "one": "{count} produkt",
+        "few": "{count} produkty",
+        "many": "{count} produktów",
+        "other": "{count} produktu"
+      },
+      "add": "Dodaj jeden",
+      "remove": "Usuń jeden",
+      "total": "Suma zamówienia",
+      "updated": "Ceny z dnia"
+    }
+  },
+  "about": {
+    "title": "O tym przykładzie",
+    "body": "Strony są prerenderowane po angielsku. Każda strona zawiera angielską tabelę, więc angielski gość nie wysyła dodatkowego żądania; każdy inny język ładuje jeden mały plik."
+  },
+  "notFound": "Ta strona nie istnieje."
+}

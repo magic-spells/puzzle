@@ -24,6 +24,18 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      i18n (D175, v1.81). The plugin serves a second virtual module,
+      `@magic-spells/puzzle/i18n/manifest`, beside the formatter manifest: `SetI18n(enabled,
+      manifestJS)` sets both the `__PUZZLE_HAS_I18N__` fact (read by `build/options.go` from
+      `pl.I18nEnabled()` for every pass) and the manifest source, which is `export default null`
+      whenever i18n is off or no locale set has been loaded yet; it is re-read on every OnLoad, so
+      an incremental rebuild after a locale edit sees the new hashes. The usage scan records `t` in
+      `Usage.Formatters` although it is not on the D31 allowlist, and walks every formatter chain
+      for a quoted literal whose FIRST formatter is `t` (`Usage.TKeys`: key → files), including
+      attribute values, `{#if}` bodies and skeletons; runtime-built keys are skipped. The per-file
+      scan memo carries both.
 ---
 
 # esbuild plugin and build pipeline

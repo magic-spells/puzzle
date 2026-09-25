@@ -68,6 +68,38 @@ notes:
       `created()` pins the subprocess until the 120s timeout kills it and fails the build blaming
       `data()`. The callback is load-bearing — a bare `process.exit()` after a pipe write truncates
       the payload and turns the hang into a "missing sentinel" failure.
+  - kind: state
+    text: >-
+      Translations in prerender (D175, v1.81). `prerenderToDir` reads the staged default-locale file
+      named by the manifest (`loadBuildI18n`; `options.i18n` is a test override), builds ONE service
+      per pass over that table in `defaultLocale`, and hands it to `buildContext`, which sets
+      `ctx.i18n` and installs `t`. Every rendered page gets the locale island `<script
+      type="application/json" data-puzzle-locale="<tag>">` (escapeScriptJson, D113) at the shell
+      plan's `</body>` anchor: `injectShell` adds it as one more op at `plan.bodyCloseIndex`
+      (appended when the shell has none); `injectStaticShell` places it with the data/read islands
+      just before the per-page module script, including `prerender:false` pages. Pages without
+      `i18n` emit byte-identical HTML. Pending PR #150: `setFormatLocale(defaultLocale)` so
+      prerendered dates/numbers use the build locale. Gotcha found while building examples/i18n
+      (pre-existing, not D175): the shell plan's `</body>` anchor is the FIRST `</body>` match in
+      the shell, so a shell with the text `</body>` inside an HTML comment before the real one gets
+      every island and the module script injected inside the comment — the page never boots.
+  - kind: state
+    text: >-
+      D175 item 8 landed: the prerender's build i18n service sets the formatter locale
+      (`setFormatLocale(defaultLocale)`, through the service's apply step) when it loads the default
+      table, so prerendered dates and numbers render in the default locale rather than the build
+      machine's — the earlier note's "pending PR #150" item is done.
+  - kind: state
+    text: >-
+      The `</body>` anchor gotcha in the translations note above is FIXED (PR #153 review round):
+      `compileShellPlan` now anchors `bodyCloseIndex` on the LAST `</body>` match in the shell
+      (`BODY_CLOSE_RE` is global and the plan walks every match), so the text `</body>` in a shell
+      comment or an inline script string before the real tag can no longer swallow the static
+      data/read/locale islands, the per-page module script, or the hybrid locale island. Pinned by
+      `tests/i18n-ssg.test.js` for both modes, with and without i18n. Also with i18n configured,
+      `prerenderToDir` rewrites the shell's `<html lang>` to `defaultLocale` once per build
+      (`withHtmlLang`: replaces an existing `lang`, adds one otherwise), so every prerendered page
+      declares the language it is written in.
 ---
 
 # Static generation runtime

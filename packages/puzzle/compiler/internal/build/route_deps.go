@@ -40,6 +40,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/magic-spells/puzzle/compiler/internal/locales"
 )
 
 // routeGraph is the reverse dependency graph captured after a successful
@@ -314,6 +316,12 @@ func (g *routeGraph) classify(root string, changed []string, assetConsumers func
 		publicPrefix = resolvePath(src) + string(filepath.Separator)
 	}
 
+	// Translations are render-wide (D175): every page carries the default
+	// locale's table in its island and renders its strings, and no metafile
+	// carries the edge — the locale file is read from disk, never imported, the
+	// same one-off shape as {#svg}. So any edit under app/locales/ is a full render.
+	localesPrefix := resolvePath(locales.SourceDir(root)) + string(filepath.Separator)
+
 	routes := map[string]bool{}
 	// attribute records one path's routes, or reports that it cannot be
 	// attributed at all.
@@ -334,6 +342,9 @@ func (g *routeGraph) classify(root string, changed []string, assetConsumers func
 		// The shell is spliced into every page: its own edit reaches all of them.
 		if shell != "" && p == shell {
 			return fullRender("the app shell changed")
+		}
+		if strings.HasPrefix(p, localesPrefix) {
+			return fullRender("a locale file changed")
 		}
 		// Any other public asset is copied into staging verbatim and appears in no
 		// page's HTML. It needs no render at all — which is why this test precedes

@@ -40,6 +40,17 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      Translations in `/testing` (D175, v1.81). `mountView(View, { i18n: { locale, strings } })` and
+      `createTestApp({ i18n: { locale, strings } })` render translated views with no fetch:
+      `strings` is the flat dotted-key table a build would emit (plural entries stay objects), and
+      `locale` (default `'en'`) is both the active and the default locale. `mountView` builds the
+      service into its ctx and installs `t` (a caller-supplied `ctx.i18n` wins), then awaits
+      `__ready()` before constructing the view; `createTestApp` passes the table through PuzzleApp's
+      internal `__i18n` seam, so the real app wiring runs. Single-table by design: a test that
+      exercises `setLocale` across locales uses `createTestApp` with a stubbed `fetch`, or the
+      service directly.
 ---
 
 # App-author test utilities

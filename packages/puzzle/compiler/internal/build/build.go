@@ -17,6 +17,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -155,9 +156,22 @@ func Build(root string, opts Options) error {
 	// is a reserved output name for this build.
 	splitting := cfg.Splitting() && mode != "static"
 
+	// Translations (D175): read, validate, flatten, and fill every locale up
+	// front, so a broken locale file fails the build before dist/ is touched and
+	// every esbuild pass below serves the same manifest. nil without i18n.
+	var localeRes *locales.Result
+	if cfg.I18nEnabled() {
+		endLocales := prof.phase("locales")
+		localeRes, err = loadLocales(absRoot, cfg)
+		endLocales()
+		if err != nil {
+			return err
+		}
+	}
+
 	// Reject a public/ tree that would clobber compiler output BEFORE touching
 	// dist/ — a config error must never destroy the last good build.
-	if err := ValidatePublic(absRoot, splitting); err != nil {
+	if err := ValidatePublic(absRoot, splitting, cfg.I18nEnabled()); err != nil {
 		return err
 	}
 
@@ -212,6 +226,16 @@ func Build(root string, opts Options) error {
 	endScan()
 	if scanErr != nil {
 		return scanErr
+	}
+	pc.i18n = cfg.I18nEnabled()
+	pc.locales = localeRes
+	printI18nWarnings(os.Stderr, i18nWarnings(absRoot, cfg, pc.usage, localeRes))
+	// The hashed locale files go into staging before any pass runs: the prerender
+	// (both output modes) reads the default table from staging/locales/.
+	if localeRes != nil {
+		if err := localeRes.WriteTo(staging, false); err != nil {
+			return err
+		}
 	}
 	pl := pc.plugin(absRoot)
 
@@ -549,7 +573,10 @@ func publicDir(root string) string {
 // directory), which the SPA pass owns only while build.splitting is on — the
 // same class of collision the static pass rejects for _puzzle
 // (prerender_pages.go). Off, that name belongs to the app again.
-func ValidatePublic(root string, splitting bool) error {
+//
+// i18n does the same for the root-level locales/ entry, which the build owns
+// while puzzle.config.js configures translations (D175).
+func ValidatePublic(root string, splitting, i18n bool) error {
 	src := publicDir(root)
 	if src == "" {
 		return nil
@@ -564,6 +591,12 @@ func ValidatePublic(root string, splitting bool) error {
 			return fmt.Errorf(
 				"public asset %s would overwrite compiler output dist/%s (a reserved output name while build.splitting is on); rename or remove it",
 				filepath.Join(src, name), chunksDirName,
+			)
+		}
+		if i18n && strings.EqualFold(name, locales.OutDirName) {
+			return fmt.Errorf(
+				"public asset %s would overwrite compiler output dist/%s (a reserved output name while i18n is configured); rename or remove it",
+				filepath.Join(src, name), locales.OutDirName,
 			)
 		}
 		if e.IsDir() {

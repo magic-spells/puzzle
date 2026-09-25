@@ -85,6 +85,46 @@ func (p *Plugin) formatterManifest() (string, error) {
 		"export default { " + strings.Join(props, ", ") + " };\n", nil
 }
 
+// I18nManifestSpecifier is the virtual module the i18n runtime imports for the
+// build's locale manifest (D175): `{ defaultLocale, locales: { tag: path } }`,
+// or null when the app configures no translations. Served the same way the
+// formatter manifest is, so it is not a new exclusion mechanism (D89's ceiling).
+const I18nManifestSpecifier = "@magic-spells/puzzle/i18n/manifest"
+
+const i18nManifestNamespace = "puzzle-i18n-manifest"
+
+// nullI18nManifest is the module every build without i18n serves. The i18n
+// runtime is only reachable behind __PUZZLE_HAS_I18N__, so it is resolved but
+// never shipped.
+const nullI18nManifest = "export default null;\n"
+
+// SetI18n records whether translations are configured and, once the locale files
+// have been loaded, the manifest module source (locales.Manifest.JS). enabled
+// drives the __PUZZLE_HAS_I18N__ define; the manifest may be set later, and again
+// on every locale edit — the virtual module is re-served on every rebuild.
+func (p *Plugin) SetI18n(enabled bool, manifestJS string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.i18nEnabled = enabled
+	p.i18nManifest = manifestJS
+}
+
+// I18nEnabled reports whether the app configured translations.
+func (p *Plugin) I18nEnabled() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.i18nEnabled
+}
+
+func (p *Plugin) i18nManifestSource() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.i18nEnabled || p.i18nManifest == "" {
+		return nullI18nManifest
+	}
+	return p.i18nManifest
+}
+
 func (p *Plugin) orderedUsedFormatterNames() ([]string, error) {
 	builtins, err := builtinFormatterNames()
 	if err != nil {

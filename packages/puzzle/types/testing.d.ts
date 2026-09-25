@@ -37,6 +37,17 @@ export interface MountViewOptions {
 	formatters?: Record<string, Formatter>;
 	/** Install and retain the adapter capability before constructing the default Store. */
 	adapter?: PuzzleAppConfig['adapter'];
+	/**
+	 * Render translated views with no fetch (D175): `strings` is the flat table a
+	 * build emits for `locale` (dotted keys; plural entries stay objects).
+	 */
+	i18n?: TestI18nOptions;
+}
+
+export interface TestI18nOptions {
+	/** The active (and default) locale. Default `'en'`. */
+	locale?: string;
+	strings?: Record<string, string | Partial<Record<'zero' | 'one' | 'two' | 'few' | 'many' | 'other', string>>>;
 }
 
 export interface MountedView<T extends PuzzleView = PuzzleView> {
@@ -62,6 +73,8 @@ export type TestAppConfig = Omit<PuzzleAppConfig, 'target' | 'routerMode'> & {
 	 * `routerMode`, which is forced.
 	 */
 	routerInitialPath?: string;
+	/** Translations for the app's i18n service, with no fetch (D175). */
+	i18n?: TestI18nOptions;
 };
 
 export interface TestApp {

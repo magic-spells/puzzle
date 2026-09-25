@@ -299,7 +299,7 @@ func Serve(root string, opts Options) error {
 		}
 	} else {
 		var builderErr error
-		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures, Splitting: splitting})
+		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures, Splitting: splitting, I18n: cfg.I18n})
 		if builderErr != nil {
 			// No incremental context: degrade fully to the non-incremental one-shot
 			// build.Build per change (slower, but correct — including its own Tailwind).
@@ -417,7 +417,7 @@ func Serve(root string, opts Options) error {
 		// with a reserved output (app.js/app.js.map/styles.css) while the server
 		// runs must surface as a visible build error, not a silent clobber.
 		endPublicValidation := prof.Phase("public validation")
-		if err := build.ValidatePublic(absRoot, splitting); err != nil {
+		if err := build.ValidatePublic(absRoot, splitting, cfg.I18nEnabled()); err != nil {
 			endPublicValidation()
 			logBuildFailure(stderr, err)
 			message := err.Error()

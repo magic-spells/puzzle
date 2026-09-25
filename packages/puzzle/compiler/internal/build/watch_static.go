@@ -52,6 +52,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
@@ -143,6 +144,12 @@ type StaticWatchBuilder struct {
 	haveCommittedCSS bool
 	nextCSS          string
 	haveNextCSS      bool
+
+	// locales is the last successful translation load (D175), reloaded on the
+	// first rebuild and on any app/locales/ edit. Every staging tree is fresh, so
+	// its files are written into each one; nothing needs pruning.
+	locales          *locales.Result
+	lastI18nWarnings string
 }
 
 // StaticWatchOptions configure the static dev builder.
@@ -320,12 +327,25 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	return nil
 }
 
+// printI18nWarnings prints the translation warnings when they differ from the
+// last set printed.
+func (b *StaticWatchBuilder) printI18nWarnings() {
+	warnings := i18nWarnings(b.root, b.cfg, b.usage, b.locales)
+	joined := strings.Join(warnings, "\n")
+	if joined == b.lastI18nWarnings {
+		return
+	}
+	b.lastI18nWarnings = joined
+	printI18nWarnings(os.Stderr, warnings)
+}
+
 // newPlugin builds a per-context Plugin sharing the session's transform memo and
 // the current usage facts — the long-lived analogue of passContext.plugin.
 func (b *StaticWatchBuilder) newPlugin(usage plugin.Usage) *plugin.Plugin {
 	pl := plugin.New(b.root)
 	pl.SetUsage(usage)
 	pl.SetCompileCache(b.cache)
+	applyI18n(pl, b.cfg.I18nEnabled(), b.locales)
 	return pl
 }
 
@@ -376,6 +396,23 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	b.cache.Evict(changed)
 	endEvict()
 
+	// Translations (D175): reload on the first rebuild and on any locale edit.
+	// A broken file fails the rebuild and leaves the last good site serving.
+	if b.cfg.I18nEnabled() && (b.locales == nil || localesChanged(b.root, changed)) {
+		endLocales := prof.phase("locales")
+		res, err := locales.Load(b.root, b.cfg.I18n)
+		endLocales()
+		if err != nil {
+			return err
+		}
+		b.locales = res
+		for _, pl := range []*plugin.Plugin{b.appPl, b.prePl, b.pagesPl} {
+			if pl != nil {
+				applyI18n(pl, true, res)
+			}
+		}
+	}
+
 	// Feature defines are frozen into every context, and so is the prerender
 	// entry's source — which names the conventional adapter module when one
 	// exists. A source edit that turns a define on or off, or a save that creates
@@ -404,6 +441,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 		}
 		endScan()
 	}
+	b.printI18nWarnings()
 
 	// One attempt at the plan the classifier chose, then — if anything about the
 	// partial path itself went wrong — one unconditional full render. A compile
@@ -519,6 +557,13 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	endPublic()
 	if err != nil {
 		return fmt.Errorf("copying public assets: %w", err)
+	}
+	// The locale files, before the prerender that reads the default table from
+	// staging/locales/ (D175).
+	if b.locales != nil {
+		if err := b.locales.WriteTo(staging, false); err != nil {
+			return err
+		}
 	}
 
 	// 3. The stylesheet, composed into staging rather than written over the

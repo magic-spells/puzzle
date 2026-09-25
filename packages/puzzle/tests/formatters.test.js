@@ -9,6 +9,8 @@ import {
 import fullBuiltins from '../client-runtime/formatters/builtins-all.js';
 import builtinNames from '../client-runtime/formatters/builtins.json';
 import conformance from './conformance/formatters.json';
+import { createI18n } from '../client-runtime/i18n.js';
+import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 
 const f = new FormatterRegistry().getAll();
 
@@ -700,10 +702,12 @@ describe('the standard set (D174)', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('is the 34 standard names, all built in; timeago and in_timezone are PuzzleKit-only', () => {
-		expect(STANDARD_FORMATTERS).toHaveLength(34);
-		expect(new Set(STANDARD_FORMATTERS).size).toBe(34);
-		for (const name of STANDARD_FORMATTERS) expect(builtinNames).toContain(name);
+	it('is the 35 standard names — all built in except the service-bound t; timeago and in_timezone are PuzzleKit-only', () => {
+		expect(STANDARD_FORMATTERS).toHaveLength(35);
+		expect(new Set(STANDARD_FORMATTERS).size).toBe(35);
+		// `t` is standard (D175) but registered by the i18n service, not built in.
+		for (const name of STANDARD_FORMATTERS) if (name !== 't') expect(builtinNames).toContain(name);
+		expect(builtinNames).not.toContain('t');
 		expect(builtinNames.filter((name) => !STANDARD_FORMATTERS.includes(name)).sort()).toEqual([
 			'in_timezone',
 			'timeago',
@@ -756,7 +760,8 @@ describe('the standard set (D174)', () => {
 describe('standard formatter conformance table (D174)', () => {
 	const fromJSON = (v) => (v === null ? undefined : v);
 	const toJSONValue = (v) => (v === undefined ? null : v);
-	const local = conformance.cases.filter((c) => !c.zone);
+	const local = conformance.cases.filter((c) => !c.zone && c.name !== 't');
+	const translated = conformance.cases.filter((c) => c.name === 't');
 	const zoned = conformance.cases.filter((c) => c.zone);
 
 	it('covers every identical-output standard name except the markup pair (group e)', () => {
@@ -774,6 +779,25 @@ describe('standard formatter conformance table (D174)', () => {
 		(_label, c) => {
 			const out = f[c.name](fromJSON(c.input), ...c.args.map(fromJSON));
 			expect(toJSONValue(out)).toEqual(c.expect);
+		},
+	);
+
+	// `t` rows (D175) run through the i18n service. The table for a row's locale is
+	// filled from the default (`en`) the way the build fills it, so the lookup, the
+	// fallback, the substitution and the plural choice are the runtime's.
+	afterEach(() => setFormatLocale(undefined));
+	it.each(translated.map((c) => [`t(${JSON.stringify(c.input)}, ${JSON.stringify(c.args)}) in ${c.locale}`, c]))(
+		'%s',
+		async (_label, c) => {
+			const { translations } = conformance;
+			const table = { ...translations.en, ...translations[c.locale] };
+			const i18n = createI18n({
+				manifest: { defaultLocale: 'en', locales: Object.fromEntries(Object.keys(translations).map((tag) => [tag, ''])) },
+				tables: { [c.locale]: table },
+				locale: c.locale,
+			});
+			await i18n.__ready();
+			expect(toJSONValue(i18n.t(fromJSON(c.input), ...c.args.map(fromJSON)))).toEqual(c.expect);
 		},
 	);
 
@@ -852,5 +876,49 @@ process.stdout.write(JSON.stringify({
 		expect(results.compactSmall).toBe('847');
 		// CLDR separates the number and the German suffix with a no-break space.
 		expect(results.compactMillions).toBe('3,4\u00A0Mio.');
+	});
+});
+
+// D175: with translations, the ACTIVE locale replaces the viewer's. The child runs
+// in a de-DE viewer locale and sets the formatter locale to en-US, the way the
+// i18n service does; an explicit locale argument still wins.
+describe.skipIf(process.platform === 'win32')('the formatter locale overrides a de-DE viewer locale (D175)', () => {
+	const builtins = new URL('../client-runtime/formatters/builtins.js', import.meta.url).href;
+	const locale = new URL('../client-runtime/formatters/locale.js', import.meta.url).href;
+	const script = `
+import * as f from ${JSON.stringify(builtins)};
+import { setFormatLocale } from ${JSON.stringify(locale)};
+const viewer = f.number_with_delimiter(1234.5);
+setFormatLocale('en-US');
+process.stdout.write(JSON.stringify({
+	viewer,
+	delimited: f.number_with_delimiter(1234.5),
+	plural: f.pluralize(1234, 'comment'),
+	compact: f.compact_number(3400000),
+	date: f.date('2026-09-24', 'long'),
+	explicit: f.date('2026-09-24', 'long', 'de-DE'),
+}));
+`;
+	const results = JSON.parse(
+		execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+			cwd: fileURLToPath(new URL('..', import.meta.url)),
+			env: { ...process.env, LC_ALL: 'de_DE.UTF-8', LANG: 'de_DE.UTF-8' },
+			encoding: 'utf8',
+		}),
+	);
+
+	it('renders in the viewer locale until a formatter locale is set', () => {
+		expect(results.viewer).toBe('1.234,5');
+	});
+
+	it('then renders every locale-rendered formatter in the formatter locale', () => {
+		expect(results.delimited).toBe('1,234.5');
+		expect(results.plural).toBe('1,234 comments');
+		expect(results.compact).toBe('3.4M');
+		expect(results.date).toBe('September 24, 2026');
+	});
+
+	it('lets an explicit locale argument win', () => {
+		expect(results.explicit).toBe('24. September 2026');
 	});
 });

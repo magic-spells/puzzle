@@ -31,6 +31,20 @@ notes:
       early-out is claimed before the awaited router.start(), so without the latch a second mount()
       during navigation zero resolved before the initial route had rendered and swallowed the first
       call's rejection.
+  - kind: state
+    text: >-
+      i18n wiring (D175, v1.81), every line behind the inline `__PUZZLE_HAS_I18N__` probe: step 1
+      builds `this.i18n = createI18n({ manifest, url, refresh })` from the virtual manifest right
+      after the Store, which picks the locale and starts loading (overlapping `beforeMount`);
+      `installTranslate` registers `t` after `makeFormatterRegistry`; `ctx.i18n` is set only then
+      (so the per-view derived ctx inherits it through `Object.create`). After `beforeMount` and its
+      staleness gate, `mount()` awaits `this.i18n.__ready()`; a rejection (active and default locale
+      both failed) goes through the same teardown as a rejected `beforeMount`. `refresh` is
+      `router.__failedView(null, true)` — the same-location rebuild. Manifest paths resolve against
+      `normalizeBase(routerBase)` in path mode and `document.baseURI` in hash/memory mode.
+      `unmount()` nulls `this.i18n`. `config.__i18n` is an INTERNAL seam (tests and `/testing`'s
+      `createTestApp` pass `{ manifest, tables, locale }` to skip fetching); it is not public
+      config.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

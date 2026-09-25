@@ -250,6 +250,38 @@ under Changed.
   missing value, `false`, `''` or an empty list; `0` is a real value and is
   kept.
 
+- **Translations: `{ 'cart.title' | t }` (D175).** Add
+  `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` to `puzzle.config.js`
+  and one `app/locales/<tag>.json` per locale. Files may nest (flattened to
+  dotted keys); an object whose keys are all CLDR categories is a plural entry
+  and must have `other`. The compiler validates every file (positioned errors
+  for bad types, collisions, a missing `other`, an `en_US`-style name), fills
+  each locale's missing keys from the default with a one-line warning, and
+  emits `dist/locales/<tag>.<hash>.json`; the browser fetches only the active
+  one. `t` looks the key up, prints the key itself on a miss, fills `{name}`
+  placeholders in one pass, and with a numeric `count` picks the plural form
+  through `Intl.PluralRules` and prints `{count}` in the locale's number
+  format; an exact 0 uses the entry's `zero` form when it has one, even in
+  English. Variables are one object — `t({ name: user.name })`, a data field
+  or a store record. `this.ctx.i18n` / `app.i18n` carry `t(key, vars)`, `locale`,
+  `locales`, `defaultLocale` and `setLocale(tag)`, which fetches first, then
+  switches, remembers the choice (`localStorage.__puzzleLocale`), sets
+  `<html lang>` and rebuilds the page at the same location — no history entry,
+  no scroll jump, no animations. A push still loading when the switch lands
+  finishes first, and a failed rebuild rejects `setLocale`. The startup locale is the stored choice, then
+  `navigator.languages` (exact tag, base language, then a configured tag with
+  the same base), then the default; the first render always has its strings.
+  `--hybrid` and `--static` pages prerender in the default locale and carry its
+  table inline and `<html lang>` set to it, so a default-locale visitor makes
+  no extra request. With
+  translations configured, `date`, `time`, `datetime`, `number_with_delimiter`,
+  `compact_number`, the `pluralize` count and `timeago` render in the active
+  locale instead of the viewer's (an explicit `locale` argument still wins;
+  `currency` is unchanged). `t` joins the standard formatter set (35 names).
+  `/testing`'s `mountView` and `createTestApp` take `i18n: { locale, strings }`.
+  Without `i18n` configured nothing ships: hello-world and todos are
+  byte-identical in raw size. See `examples/i18n` (en, es, pl).
+
 ### Changed
 
 - **BREAKING: the built-in formatters are the standard set (D174).** The
@@ -467,6 +499,11 @@ under Changed.
   a list passed as a component prop stays a list.
 
 ### Fixed
+
+- **Prerendered pages anchor their injected scripts on the shell's last
+  `</body>`.** A `</body>` inside a shell comment or an inline script string
+  used to capture the static data island and the page module (and, with
+  translations, the locale island), so the page never booted.
 
 ## 0.7.0 — 2026-09-09
 

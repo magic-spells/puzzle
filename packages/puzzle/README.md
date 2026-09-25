@@ -56,6 +56,7 @@ npm install -D @magic-spells/puzzle
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
 - **Server data with no loading code** — `findOne`/`findMany` inside a view's `data()` fetch whatever the store is missing and settle before the view commits, so a committed `null` always means "does not exist", never "still loading"
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
+- **Translations** — `{ 'cart.title' | t }` with one `app/locales/<tag>.json` per language: nested files, CLDR plurals through `Intl.PluralRules`, missing keys filled from the default at build time, and only the active locale's hashed file downloaded; `this.ctx.i18n.setLocale('es')` switches in place. Apps without `i18n` configured ship none of it
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
 - **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
 - **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout the first time a navigation needs it, guards first
@@ -356,6 +357,36 @@ development warning.
 { publishedAt | timeago }
 <!-- 2 hours ago -->
 ```
+
+### Translations
+
+With `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` in
+`puzzle.config.js` and one `app/locales/<tag>.json` per locale:
+
+```json
+{
+  "cart": {
+    "title": "Your cart",
+    "items": { "one": "{count} item", "other": "{count} items" }
+  },
+  "greeting": "Hello, {name}!"
+}
+```
+
+```html
+{ 'cart.title' | t }
+<!-- Your cart -->
+{ 'greeting' | t({ name: user.name }) }
+<!-- Hello, Ada! — fills {name} -->
+{ 'cart.items' | t({ count: cart.count }) }
+<!-- 3 items — a numeric `count` picks the plural form -->
+```
+
+A missing key prints the key itself. Dates and numbers (`date`,
+`number_with_delimiter`, `compact_number`, …) follow the active locale. Switch
+languages with
+`this.ctx.i18n.setLocale('es')`: the new file loads first, then the page
+rebuilds in place and the choice is remembered. See `examples/i18n`.
 
 ## Single-File Components
 

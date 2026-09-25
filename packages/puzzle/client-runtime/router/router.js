@@ -1121,6 +1121,11 @@ export class Router {
 			// every ordinary navigation. Read ONLY by the load-failure catch below, which
 			// refreshes that position's held face — #navigate returns undefined on success
 			// and failure alike, so the retry closure cannot detect the failure itself.
+			// A same-location rebuild (__failedView(null, true), D175) passes the REBUILD
+			// marker here instead of a view: every test of it sits behind the inline
+			// __PUZZLE_HAS_I18N__ probe, so an app without translations ships none of
+			// it, and the failure catches' `retryView.__retryErrorView?.()` is a no-op
+			// on the marker.
 			retryView = null,
 		}
 	) {
@@ -1472,11 +1477,15 @@ export class Router {
 			prepared.length = 0;
 		};
 
+		// A same-location rebuild (D175, the REBUILD marker) takes the same exemption-off path:
+		// the page is already on screen in the old language, so a skeleton would be a
+		// flash. Its probe folds to `false || false` without translations.
 		const isSSGTakeover =
-			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
-			!cur &&
-			this.#container != null &&
-			this.#container.hasAttribute('data-puzzle-ssg');
+			((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
+				!cur &&
+				this.#container != null &&
+				this.#container.hasAttribute('data-puzzle-ssg')) ||
+			((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD);
 		// EXCEPTION-SAFE handle sweep (D146). Every prepared handle is idempotent via
 		// its own `settled` flag, so discarding unconditionally on the way out is free
 		// on the success path (#commitState already committed them) and is the only
@@ -1609,7 +1618,12 @@ export class Router {
 			// on the pushed path refines the default landing (D41): read off the fragment
 			// parseLocation already split (D83 — stripPath dropped it for matching).
 			const anchor = loc.hash ? loc.hash.slice(1) : null;
-			const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
+			// A same-location rebuild (D175, the REBUILD marker) lands nowhere: the
+			// window stays where it is, and a custom scrollBehavior is not consulted.
+			const scroll =
+				(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD
+					? null
+					: this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
 
 			// Whether this navigation moves focus + announces (v1.56, D93). Only the
 			// GATE is decided here — memory mode, `focusBehavior: false`, and nav #0 all
@@ -1619,7 +1633,23 @@ export class Router {
 			// just carries the snapshots #commitState hands back to that function —
 			// the same pre-commit-sentinel/post-mount-resolution split D41's { anchor }
 			// scroll landing uses.
-			const focus = this.#resolveFocus({ to, from, push, pop, replace });
+			// Nor does a rebuild move focus or announce (D175).
+			const focus =
+				(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD
+					? null
+					: this.#resolveFocus({ to, from, push, pop, replace });
+
+			// A same-location rebuild (D175 — a locale switch) changes the words on the
+			// page and nothing else — and nothing animates. Every fresh level
+			// skips its enter, and the outgoing unit is parked as #pendingOut so #swap
+			// destroys it without playing its out (its existing interrupted-transition
+			// path). keep is 0 here, so the outgoing unit is the old layout, else the
+			// old root view — the one #swap would have animated.
+			if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD) {
+				for (const v of freshViews) v.skipEnter();
+				layout?.skipEnter();
+				this.#pendingOut ??= cur.layout ?? cur.views[0];
+			}
 
 			// Params-only degenerate case: keep === chain length ⇒ no fresh views, the
 			// whole chain was refreshed pre-commit. Just record state + refresh the
@@ -2095,10 +2125,45 @@ export class Router {
 		}
 	}
 
-	/** INTERNAL — mark a routed failure, or retry it through the normal rebuild. */
+	/**
+	 * INTERNAL — mark a routed failure, or retry it through the normal rebuild.
+	 *
+	 * `__failedView(null, true)` is the same-location REBUILD a locale switch
+	 * drives (D175): the committed location re-runs with keep = 0 — every routed
+	 * view and the layout constructed fresh, data() re-run, one commit — in replace
+	 * mode, with no animation, scroll change, or focus move (the REBUILD marker in
+	 * #navigate). It rides on this existing entry, behind the inline
+	 * __PUZZLE_HAS_I18N__ probe, because a new class member would ship in every
+	 * app: esbuild never removes class members.
+	 */
 	__failedView(view, retry = false) {
 		const st = this.#state;
 		if (!st) return retry ? null : undefined;
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && view === null) {
+			// Invalidating the committed chain is what forces keep = 0 and a fresh
+			// layout. It is left set if this navigation is superseded or fails, so the
+			// next navigation rebuilds every level too — no view keeps stale strings.
+			st.chainInvalid = st.layoutInvalid = true;
+			// A push still loading owns where the app is going: rebuilding the committed
+			// location now would supersede it and strand the app on the old page. Let it
+			// land (or fail), then rebuild wherever the app ended up.
+			const pending = this.#pendingNavPath != null && this.#pendingNavPromise;
+			if (pending) {
+				const again = () => this.__failedView(null, true);
+				return pending.then(again, again);
+			}
+			// Resolves once the rebuilt chain commits (or a newer navigation takes over);
+			// rejects when the rebuild itself failed and the old chain is still on
+			// screen (a data() failure, already reported through onError), so
+			// setLocale's caller learns the page was not rebuilt.
+			const nav = this.#navigate(st.path, { push: false, replace: true, retryView: REBUILD });
+			const token = this.#token;
+			return nav.then(() => {
+				if (this.#token === token && this.#state === st) {
+					throw new Error('[puzzle] the page could not be rebuilt in the new locale');
+				}
+			});
+		}
 		const routed = st.layout === view || st.views.includes(view);
 		if (retry) {
 			return routed
@@ -3422,3 +3487,11 @@ function sameDocKey(rawPath) {
 	const cut = rawPath.indexOf('#');
 	return sameNavKey(cut === -1 ? rawPath : rawPath.slice(0, cut));
 }
+
+// The same-location rebuild marker (D175): #navigate's `retryView` when a locale
+// switch re-runs the committed location quietly (no animation, scroll, or focus
+// change). Referenced only behind the __PUZZLE_HAS_I18N__ probe. It sits at the
+// end of the module on purpose: a dropped declaration between two others splits
+// the minifier's merged `var` statement and moves the bytes of apps that never
+// use it.
+const REBUILD = {};

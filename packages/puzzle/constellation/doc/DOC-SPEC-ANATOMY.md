@@ -163,12 +163,15 @@ export default class TodoHome extends PuzzleView {
 
 ## 10. Component context
 
-`this.ctx` exposes exactly three services: `store`, `router`, `formatters`. The extended surface in older docs (`this.$app`, `this.$events`, `ctx.utils`, global event bus) is deferred.
+
+`this.ctx` exposes three services: `store`, `router`, `formatters`. A fourth, `i18n`, is present only when `puzzle.config.js` configures translations (v1.81, §66, [[DECISION-D175-TRANSLATIONS]]) — `ctx` gains the key only then, so an app without `i18n` keeps the three-service ctx. The extended surface in older docs (`this.$app`, `this.$events`, `ctx.utils`, global event bus) is deferred.
 
 ## 11. Project layout & build
 
+
 - Source directory: **`app/`** (`app/app.js` is the entry). Output: **`dist/`**.
 - Static files: **`app/public/`** is copied verbatim into `dist/` at build. **`app/assets/`** (v1.14, D46) is the inverse — compile-time-only inputs for `{#svg}` inlining (§18), never copied to `dist/`.
+- Translations (v1.81, §66): **`app/locales/<tag>.json`**, one per locale, read only when `puzzle.config.js` declares `i18n: { locales: [...], defaultLocale: '…' }`. `locales` is a non-empty list of distinct BCP 47 tags (`-`, never `_`; compared case-insensitively) and must include `defaultLocale` (the key is `defaultLocale`, not the reserved word `default`). Every listed locale needs a file; an unlisted file is skipped with a warning, and an `app/locales/` folder without `i18n` is a warning. The compiler emits them as `dist/locales/<tag>.<hash>.json` ([[DOC-SPEC-BUILD]]).
 - `.pzl` compilation is implemented as an **esbuild plugin** (esbuild is Go-native): the Go side parses templates and generates render functions; esbuild owns module resolution, bundling, sourcemaps, and minification.
 - CLI v1: `puzzle build` (production by default) and `puzzle dev` (watch + static server with history-API fallback + live reload via SSE full-page reload; no HMR). (v1.4 adds the scaffolding/tooling commands — see §13.)
 - Styling: Tailwind-first. `puzzle.config.js` with `styles: { use: ['tailwindcss'] }`. A Sass pipeline is **not supported and will not be** (D35) — native CSS nesting plus Tailwind cover the ground a preprocessor used to.

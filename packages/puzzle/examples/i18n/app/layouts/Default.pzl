@@ -1,0 +1,24 @@
+<puzzle-view class="min-h-screen bg-page text-ink">
+  <header class="border-b border-line bg-surface">
+    <div class="max-w-2xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+      <a href="{ '/' | link }" class="font-semibold text-lg">{ 'brand' | t }</a>
+      <nav class="flex items-center gap-4 text-sm text-muted">
+        <a href="{ '/' | link }" class="hover:text-ink">{ 'nav.home' | t }</a>
+        <a href="{ '/about' | link }" class="hover:text-ink">{ 'nav.about' | t }</a>
+      </nav>
+      <LocaleSwitcher />
+    </div>
+  </header>
+  <main class="max-w-2xl mx-auto px-6 py-12">
+    <Slot />
+  </main>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import LocaleSwitcher from '../components/LocaleSwitcher.pzl';
+
+// Chrome only. Its strings come through `t` like everything else, so a locale
+// switch — which rebuilds every routed level, layout included — repaints it too.
+export default class DefaultLayout extends PuzzleView {}
+</script>

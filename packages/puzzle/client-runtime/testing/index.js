@@ -11,6 +11,7 @@ import { installAdapterCapability } from '../capabilities.js';
 import { memoryRouter } from '../router/modes.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
+import { createI18n, installTranslate } from '../i18n.js';
 import {
 	ensureTracking,
 	registerRouter,
@@ -41,6 +42,7 @@ export async function mountView(ViewClass, options = {}) {
 
 	const container = document.createElement('div');
 	const context = makeContext(options);
+	await context.i18n?.__ready?.();
 	const instance = new ViewClass(context);
 	const unregisterStore = registerStore(context.store);
 	const unregisterRouter = registerRouter(context.router);
@@ -98,12 +100,15 @@ export async function createTestApp(config = {}) {
 	requireDocument('createTestApp');
 	ensureTracking();
 
-	const { routerInitialPath, ...appConfig } = config;
+	const { routerInitialPath, i18n, ...appConfig } = config;
 	const container = document.createElement('div');
 	const app = new PuzzleApp({
 		...appConfig,
 		target: container,
 		routerMode: memoryRouter({ initialPath: routerInitialPath }),
+		// The app's i18n service over the in-memory table (D175) — PuzzleApp's
+		// internal seam, so the real wiring (ctx.i18n, app.i18n, `t`) is what runs.
+		...(i18n ? { __i18n: testI18nOptions(i18n) } : null),
 	});
 	const mount = trackWork(app.mount());
 	let store = null;
@@ -146,7 +151,32 @@ function makeContext(options) {
 	const formatters =
 		supplied.formatters ??
 		makeFormatterRegistry(options.formatters ?? {}, (path) => router.url(path));
-	return { store, router, formatters };
+	const ctx = { store, router, formatters };
+	// `i18n: { locale, strings }` (D175): a translated view renders with no fetch.
+	const i18n = supplied.i18n ?? (options.i18n ? createTestI18n(options.i18n) : null);
+	if (i18n) {
+		ctx.i18n = i18n;
+		installTranslate(formatters, i18n);
+	}
+	return ctx;
+}
+
+/**
+ * The i18n service over one in-memory table (D175): `{ locale, strings }`, where
+ * `strings` is the flat table a build would emit for `locale` (plural entries
+ * stay objects). Loads synchronously enough that `await __ready()` settles
+ * before the first render.
+ */
+function testI18nOptions({ locale = 'en', strings = {} } = {}) {
+	return {
+		manifest: { defaultLocale: locale, locales: { [locale]: '' } },
+		tables: { [locale]: strings },
+		locale,
+	};
+}
+
+function createTestI18n(options) {
+	return createI18n(testI18nOptions(options));
 }
 
 function makeInertRouter(current) {
