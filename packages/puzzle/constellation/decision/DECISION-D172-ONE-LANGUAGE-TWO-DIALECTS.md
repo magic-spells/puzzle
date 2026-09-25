@@ -106,7 +106,7 @@ core that Shopify extends with its own tags and objects.
 
 | | PuzzleKit | Sites |
 |---|---|---|
-| File structure | `<puzzle-view>`/`<puzzle-layout>`/`<puzzle-skeleton>` wrapper + `<script>` class | No wrapper; the directory decides the kind; top-level `<schema>` |
+| File structure | `<puzzle-view>`/`<puzzle-skeleton>` wrapper + `<script>` class (layouts are `<puzzle-view>` files too) | No wrapper; the directory decides the kind; top-level `<schema>` |
 | Adds | `@event` + modifiers, `<Portal>`, `ref`/`key`/`flip`/`island`, implicit binding | `{#let}`, implicit props |
 | Expressions | Full JavaScript (a superset of the core) | The core subset only |
 | Not yet built | — | `<Snippet>` (core; planned) |
