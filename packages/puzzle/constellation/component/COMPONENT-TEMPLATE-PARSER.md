@@ -4,9 +4,6 @@ status: verified
 connections:
   - COMPONENT-CODEGEN
   - DOC-TEMPLATE-SYNTAX
-  - FILE-PARSER
-  - FILE-PARSER-SECTIONS
-  - FILE-PARSER-SCANNER
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
@@ -58,6 +55,18 @@ notes:
       requires through `require ... v0.0.0` + `replace => ../puzzle-lang`. Its FILE cards bind to
       `../puzzle-lang/...`, outside this plan's code root, so stale_report cannot track them and
       `code: direct` hydration does not reach the parser sources.
+  - kind: state
+    text: >-
+      2026-09-25 — the parser's code binding moved to its own plan. `packages/puzzle-lang` now has a
+      constellation root (connected repo `puzzle-lang`; pass `repo=puzzle-lang`), which owns
+      FILE-PARSER, FILE-PARSER-SECTIONS, FILE-PARSER-SCANNER, FILE-PARSER-SLOT, and
+      TEST-COMPILER-PARSER with paths relative to that module (`parser/parser.go`, …), so
+      stale_report there tracks real parser drift. This card stays in the framework plan as the
+      behavioral contract: nearly 60 decision, feature, doc, and test cards here connect to it, and
+      plans cannot hold cross-plan connections. It therefore has no bound code in this plan; the
+      `../puzzle-lang/...` code_refs that decision cards (D12, D16, D54, D59, D70) carried were
+      dropped for the same reason. The earlier note saying the FILE cards bind outside this plan's
+      code root is superseded.
 ---
 
 # Template parser

@@ -1,11 +1,9 @@
 ---
 name: template parser entry
 status: verified
-path: ../puzzle-lang/parser/parser.go
+path: parser/parser.go
 language: go
 summary: Recursive-descent template parser and grammar validation.
-connections:
-  - COMPONENT-TEMPLATE-PARSER
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
@@ -17,4 +15,4 @@ notes:
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `packages/puzzle-lang/parser/parser.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle`).
+Source binding for the template parser. Behavioral intent stays on the owning component card, COMPONENT-TEMPLATE-PARSER in the connected `puzzle` plan (`repo=puzzle`); this card anchors that contract to `packages/puzzle-lang/parser/parser.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle-lang`).

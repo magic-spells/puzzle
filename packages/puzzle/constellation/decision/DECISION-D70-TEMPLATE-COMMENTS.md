@@ -21,12 +21,6 @@ notes:
   - kind: verified
     text: Claims re-verified against the current Go compiler code; no drift found.
     sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
-code_refs:
-  - ../puzzle-lang/parser/attr.go
-  - ../puzzle-lang/parser/lexer.go
-  - ../puzzle-lang/parser/parser.go
-  - ../puzzle-lang/parser/scan.go
-  - ../puzzle-lang/parser/sections.go
 verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 

@@ -80,6 +80,24 @@ notes:
       plural entries; one build-filled, hashed locale file per language, loaded before the first
       render; locale selection and the config shape still await Cory's confirmation). **The next
       free decision number is D176.**
+  - kind: state
+    text: >-
+      2026-09-25 — `packages/puzzle-lang` has its own constellation root (connected repo
+      `puzzle-lang`, reciprocated; also listed on the monorepo signpost). FILE-PARSER,
+      FILE-PARSER-SECTIONS, FILE-PARSER-SCANNER, FILE-PARSER-SLOT, and TEST-COMPILER-PARSER moved
+      there with paths relative to the module (`parser/*.go`), bodies, notes, and verified_sha
+      baselines kept, so stale_report tracks parser drift instead of listing `../puzzle-lang/...` as
+      missing_files. COMPONENT-TEMPLATE-PARSER and every DECISION card (D172, D173, the grammar
+      decisions) stay here: the component is the hub ~60 cards connect to, and plans cannot connect
+      cards across repos. The cards that connected to the moved FILE cards lost those edges, and the
+      `../puzzle-lang/...` code_refs on D12, D16, D54, D59, and D70 were dropped. Address the
+      parser's code cards with `repo=puzzle-lang`.
+connected_repos:
+  - name: puzzle-lang
+    path: ../puzzle-lang
+    description: >-
+      The Puzzle template language Go module (parser, jsident, textutil; D172) — owns the parser's
+      FILE cards and the parser test card
 ---
 
 # Puzzle project map

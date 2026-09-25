@@ -8,7 +8,6 @@ connections:
   - DOC-SPEC-TEMPLATE
   - DOC-TEMPLATE-SYNTAX
   - DOC-PUZZLE-FILE
-  - FILE-PARSER
   - FILE-CODEGEN
 notes:
   - kind: deviation

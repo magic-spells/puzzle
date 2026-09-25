@@ -313,6 +313,13 @@ that versions in lockstep with the framework is a sibling under `packages/`:
   working tree; `go test ./...` here does NOT run its tests — run them inside
   `../puzzle-lang` (CI does both). Outside consumers resolve it through a
   `packages/puzzle-lang/vX.Y.Z` tag, which Cory creates alongside `vX.Y.Z`.
+  It has its own constellation root (connected repo `puzzle-lang`; pass
+  `repo=puzzle-lang` from here, `repo=packages/puzzle-lang` from the monorepo
+  root) holding the parser's code binding: FILE-PARSER, FILE-PARSER-SECTIONS,
+  FILE-PARSER-SCANNER, FILE-PARSER-SLOT, and TEST-COMPILER-PARSER, with paths
+  relative to that module. COMPONENT-TEMPLATE-PARSER and every decision card
+  stay in this plan — plans cannot connect cards across repos, and ~60 cards
+  here connect to the component.
 - `../puzzle-pieces` — the `@magic-spells/puzzle-pieces` npm transport
   (registry + demo + its own constellation root). Version must equal this
   package's exactly (the D32 major.minor lock); `release:prep` asserts it and

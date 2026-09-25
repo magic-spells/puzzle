@@ -9,7 +9,6 @@ connections:
 code_refs:
   - compiler/cmd/puzzle/add.go
   - compiler/internal/config/config.go
-  - ../puzzle-lang/parser/sections.go
   - compiler/internal/plugin/plugin.go
   - compiler/internal/styles/styles.go
   - compiler/internal/scaffold/templates/todos/puzzle.config.js

@@ -3,25 +3,6 @@ name: Template parser and section splitting
 kind: unit
 status: verified
 framework: go test
-connections:
-  - COMPONENT-TEMPLATE-PARSER
-  - FILE-PARSER
-  - FILE-PARSER-SECTIONS
-  - FILE-PARSER-SCANNER
-  - FILE-PARSER-SLOT
-  - DECISION-D03-SCRIPTS-REAL-JS
-  - DECISION-D22-NO-ESCAPE-BY-DEFAULT
-  - DECISION-D36-UNLESS
-  - DECISION-D37-CASE-WHEN
-  - DECISION-D40-ELSE-IF
-  - DECISION-D46-INLINE-SVG
-  - DECISION-D70-TEMPLATE-COMMENTS
-  - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
-  - DECISION-D144-PORTAL
-  - DECISION-D150-RAW-TEMPLATE-BLOCK
-  - DOC-TEMPLATE-SYNTAX
-  - DOC-COMPILER-DESIGN
-  - DOC-TESTING
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
@@ -31,6 +12,11 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+connections:
+  - FILE-PARSER
+  - FILE-PARSER-SECTIONS
+  - FILE-PARSER-SCANNER
+  - FILE-PARSER-SLOT
 ---
 
 # Template parser and section splitting
@@ -63,3 +49,14 @@ Go module (D172), so the compiler's `go test ./...` does not run them: run
 the suite is self-contained and also passes from the Go module cache. Refresh
 a copy when `packages/puzzle/examples/todos` changes in a way the tests should
 follow.
+
+## Contracts it pins (in the connected `puzzle` plan)
+
+The behavior these tests pin is owned by cards in the framework plan
+(`repo=puzzle`), which cannot be graph connections from this plan:
+COMPONENT-TEMPLATE-PARSER; DECISION-D03-SCRIPTS-REAL-JS,
+DECISION-D22-NO-ESCAPE-BY-DEFAULT, DECISION-D36-UNLESS, DECISION-D37-CASE-WHEN,
+DECISION-D40-ELSE-IF, DECISION-D46-INLINE-SVG, DECISION-D70-TEMPLATE-COMMENTS,
+DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS, DECISION-D144-PORTAL,
+DECISION-D150-RAW-TEMPLATE-BLOCK; DOC-TEMPLATE-SYNTAX, DOC-COMPILER-DESIGN,
+DOC-TESTING.

@@ -9,13 +9,18 @@ live under `packages/` (decision D162):
   **Read `packages/puzzle/CLAUDE.md` before any framework work** — it is the
   operating guide, and the constellation under `packages/puzzle/constellation/`
   is the source of truth (constellation MCP: pass `repo=packages/puzzle`;
+  the parser's FILE and test cards live in `repo=packages/puzzle-lang`, and
   pieces' own constellation is `repo=packages/puzzle-pieces`).
 - `packages/puzzle-lang` — the Puzzle language as its own Go module
   (`github.com/magic-spells/puzzle/packages/puzzle-lang`): the `.pzl` parser
   (section splitter, lexer, AST, positioned errors) plus the `jsident` and
   `textutil` helpers the compiler shares. The compiler imports it through a
   `replace => ../puzzle-lang`; outside consumers need a
-  `packages/puzzle-lang/vX.Y.Z` tag, which Cory creates (D172).
+  `packages/puzzle-lang/vX.Y.Z` tag, which Cory creates (D172). It has its
+  own constellation root (`repo=packages/puzzle-lang`) holding the parser's
+  code binding — its FILE cards and TEST-COMPILER-PARSER; the parser's
+  contract (COMPONENT-TEMPLATE-PARSER) and every decision card stay in
+  `packages/puzzle`.
 - `packages/puzzle-pieces` — the pieces registry (npm, version == framework).
 - `packages/puzzle-devtools` — the Chrome extension (`private: true`, ships as
   a zip; its framework dep is `file:../puzzle`, so its suite runs against the

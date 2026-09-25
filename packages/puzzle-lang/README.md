@@ -36,6 +36,17 @@ the framework's `vX.Y.Z` tag:
 go get github.com/magic-spells/puzzle/packages/puzzle-lang@v0.8.0
 ```
 
+## Plan
+
+This module has its own Constellation plan in `constellation/` (the
+`puzzle-lang` connected repo; `repo=packages/puzzle-lang` from the monorepo
+root). It holds the parser's code binding — a FILE card per load-bearing parser
+file and the test card for this module's suite — so drift in `parser/` shows up
+in this plan's stale report. The parser's behavioral contract
+(COMPONENT-TEMPLATE-PARSER) and every language decision card (D172, D173, and
+the grammar decisions before them) live in the framework plan,
+`packages/puzzle/constellation`.
+
 ## Tests
 
 ```bash

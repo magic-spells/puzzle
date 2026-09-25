@@ -8,7 +8,6 @@ connections:
   - DOC-SPEC
   - DOC-EVENTS
   - FILE-VIEW-MANAGER
-  - FILE-PARSER
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:

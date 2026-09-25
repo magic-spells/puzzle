@@ -1,11 +1,9 @@
 ---
-name: template expression scanner
+name: pzl section splitter
 status: verified
-path: ../puzzle-lang/parser/scan.go
+path: parser/sections.go
 language: go
-summary: Shared balanced JS-like scanner and top-level splitting helpers.
-connections:
-  - COMPONENT-TEMPLATE-PARSER
+summary: Top-level section discovery with close-aware scanning and positioned offsets.
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 notes:
@@ -17,4 +15,4 @@ notes:
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `packages/puzzle-lang/parser/scan.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle`).
+Source binding for the template parser. Behavioral intent stays on the owning component card, COMPONENT-TEMPLATE-PARSER in the connected `puzzle` plan (`repo=puzzle`); this card anchors that contract to `packages/puzzle-lang/parser/sections.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle-lang`).
