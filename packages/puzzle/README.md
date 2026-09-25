@@ -283,61 +283,78 @@ They chain left to right with `|`, so each one receives the previous result:
 An unregistered formatter name never crashes a render — the value passes
 through that step unchanged and a single `console.error` names the offender.
 
+The built-ins are the **standard set** — the same names, arguments and meaning
+in PuzzleKit and in Sites — plus the browser-only `link`, `timeago` and
+`in_timezone`. There are no list-shaping formatters: sort, filter and pick
+items in `data()` or a plain expression (`items[0]`, `items.at(-1)`). An app
+formatter may reuse a standard name (the app's function wins), with a
+development warning.
+
 ### String Formatters
 
 ```html
 { text | trim }
 <!-- Remove whitespace -->
 { name | capitalize }
-<!-- First letter uppercase -->
+<!-- First character uppercase, the rest untouched: iPhone → IPhone -->
 { title | upcase }
 <!-- ALL UPPERCASE -->
 { title | downcase }
 <!-- all lowercase -->
 { content | truncate(100) }
-<!-- Limit to 100 chars -->
+<!-- At most 100 characters, the … included -->
 { slug | replace('-', ' ') }
-<!-- Replace characters -->
+<!-- Replace every occurrence -->
+{ count | pluralize('comment') }
+<!-- 1 comment / 3 comments; irregular: pluralize('person', 'people') -->
 ```
 
 ### Number Formatters
 
 ```html
 { price | currency('$', 2) }
-<!-- $19.99 -->
+<!-- $1,219.99 -->
 { progress | percentage }
-<!-- 75% -->
+<!-- 75.4 → 75% (the number as written) -->
 { count | number_with_delimiter }
-<!-- 1,234,567 -->
+<!-- 1,234,567 in the viewer's locale; number_with_delimiter(',') forces one -->
+{ followers | compact_number }
+<!-- 1.2K, 45K, 3.4M -->
 { rating | round(1) }
 <!-- 4.3 -->
 ```
 
-### Array Formatters
+### Value Formatters
 
 ```html
 { names | join(', ') }
 <!-- Join with commas -->
+{ tags | size }
+<!-- Items in a list, characters in text -->
+{ subtitle | default('Untitled') }
+<!-- Fallback for a missing, false, empty or [] value; 0 is kept -->
+{ obj | json }
+<!-- JSON with sorted keys -->
+{ html | raw }
+<!-- Still renders as text, not injected HTML -->
 ```
 
 ### Date Formatters
 
+`date`, `time` and `datetime` take the presets `short`, `medium` (the default),
+`long` and `iso`, in the viewer's locale and time zone:
+
 ```html
+{ createdAt | date }
+<!-- Sep 24, 2026 -->
 { createdAt | date('long') }
-<!-- January 15, 2024 -->
-{ updatedAt | date('short') }
-<!-- 1/15/24 -->
+<!-- September 24, 2026 -->
+{ updatedAt | datetime('short') }
+<!-- 9/24/26, 3:04 PM -->
+{ updatedAt | datetime('iso') }
+<!-- 2026-09-24T15:04:05-04:00 -->
 { publishedAt | timeago }
 <!-- 2 hours ago -->
-```
-
-### Utility Formatters
-
-```html
-{ html | raw }
-<!-- Skips entity escaping; still renders as text, not injected HTML -->
-{ obj | json }
-<!-- JSON stringify -->
 ```
 
 ## Single-File Components

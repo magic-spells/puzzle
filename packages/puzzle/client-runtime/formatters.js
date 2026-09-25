@@ -14,9 +14,39 @@
  */
 
 import manifestFormatters from '@magic-spells/puzzle/formatters/manifest';
-import { escape, raw, noescape } from './formatters/builtins.js';
+import { escape, raw } from './formatters/builtins.js';
 
-const requiredBuiltins = { escape, raw, noescape };
+const requiredBuiltins = { escape, raw };
+
+// The standard formatter set (D174): the names Sites implements with the same
+// arguments and meaning. An app formatter registered under one of these draws a
+// development warning, because the app's templates no longer mean what the
+// standard name means. PuzzleKit-only built-ins (`link`, `timeago`,
+// `in_timezone`) are deliberately absent — overriding those is ordinary.
+// Referenced only behind `__PUZZLE_DEV__`, so production tree-shakes it.
+export const STANDARD_FORMATTERS = [
+	'abs', 'ceil', 'floor', 'plus', 'minus', 'times', 'divided_by', 'modulo', 'round',
+	'currency', 'percentage',
+	'downcase', 'upcase', 'capitalize', 'trim', 'strip', 'truncate', 'replace', 'split',
+	'strip_html', 'strip_newlines',
+	'escape', 'raw', 'newline_to_br',
+	'default', 'size', 'join', 'json',
+	'date', 'time', 'datetime', 'number_with_delimiter', 'compact_number', 'pluralize',
+];
+
+// Removed built-ins (D174) and what replaces each, for the unknown-name guard.
+// List shaping is JavaScript in PuzzleKit. Dev-only, like STANDARD_FORMATTERS.
+const REMOVED_FORMATTERS = {
+	sort: 'sort the list in data() and loop over that field',
+	where: 'filter the list in data() and loop over that field',
+	map: 'map the list in data() and loop over that field',
+	uniq: 'dedupe the list in data() and loop over that field',
+	reverse: 'reverse the list in data() and loop over that field',
+	compact: 'filter the list in data() (for a short count, use compact_number)',
+	first: 'use items[0] in the expression',
+	last: 'use items.at(-1) in the expression',
+	noescape: 'use raw',
+};
 
 // Levenshtein edit distance — tight two-row DP, no dependency. Powers the
 // did-you-mean suggestion in the unknown-formatter guard (D43). Module-level (not a
@@ -94,6 +124,12 @@ export class FormatterRegistry {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (!this._warnedMissing.has(name)) {
 					this._warnedMissing.add(name);
+					if (Object.hasOwn(REMOVED_FORMATTERS, name)) {
+						console.error(
+							`[puzzle] formatter "${name}" was removed — ${REMOVED_FORMATTERS[name]}; value passed through unchanged`,
+						);
+						return (v) => v;
+					}
 					const suggestion = nearestFormatter(this.formatters, name);
 					const hint = suggestion ? ` (did you mean "${suggestion}"?)` : '';
 					console.error(
@@ -140,6 +176,15 @@ export class FormatterRegistry {
 export function makeFormatterRegistry(customFormatters = {}, url) {
 	const registry = new FormatterRegistry();
 	for (const [name, fn] of Object.entries(customFormatters)) {
+		// Shadowing a standard name is allowed — the app's function wins — but it
+		// is worth a development warning (D174). Never a throw.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (STANDARD_FORMATTERS.includes(name)) {
+				console.warn(
+					`[puzzle] app formatter "${name}" shadows the standard formatter of the same name; templates using "${name}" now get the app's function`,
+				);
+			}
+		}
 		registry.register(name, fn);
 	}
 	if (!registry.getAll().link && typeof url === 'function') {

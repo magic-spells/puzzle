@@ -19,7 +19,7 @@
 
     <div class="min-w-0">
       <div class="truncate font-medium {#if current}text-accent{/if}{#if !current}text-fg{/if}">{ track.title }</div>
-      <div class="text-xs text-muted">{ track.plays | compact } plays</div>
+      <div class="text-xs text-muted">{ track.plays | compact_number } plays</div>
     </div>
 
     <!-- `relative` so the context-menu popover can anchor to this cluster (the

@@ -65,7 +65,7 @@
           <button type="button" class="w-full text-left px-4 py-3 hover:bg-surface-2 transition-colors" @click={ setQuery(t.tag) }>
             <div class="text-xs text-muted">Trending in dev</div>
             <div class="font-bold text-fg">{ t.tag }</div>
-            <div class="text-xs text-muted">{ t.count | compact } { t.count | plural('chirp', 'chirps') }</div>
+            <div class="text-xs text-muted">{ t.count | compact_number } { t.count | plural('chirp', 'chirps') }</div>
           </button>
         {/for}
       {:else}

@@ -45,9 +45,9 @@
 
         <!-- Engagement totals. -->
         <div class="mt-3 pt-3 border-t border-line flex flex-wrap gap-x-5 gap-y-1 text-sm">
-          <span><span class="font-bold text-fg">{ post.rechirpCount | compact }</span> <span class="text-muted">{ post.rechirpCount | plural('Rechirp', 'Rechirps') }</span></span>
-          <span><span class="font-bold text-fg">{ post.likeCount | compact }</span> <span class="text-muted">{ post.likeCount | plural('Like', 'Likes') }</span></span>
-          <span><span class="font-bold text-fg">{ post.replyCount | compact }</span> <span class="text-muted">{ post.replyCount | plural('Reply', 'Replies') }</span></span>
+          <span><span class="font-bold text-fg">{ post.rechirpCount | compact_number }</span> <span class="text-muted">{ post.rechirpCount | plural('Rechirp', 'Rechirps') }</span></span>
+          <span><span class="font-bold text-fg">{ post.likeCount | compact_number }</span> <span class="text-muted">{ post.likeCount | plural('Like', 'Likes') }</span></span>
+          <span><span class="font-bold text-fg">{ post.replyCount | compact_number }</span> <span class="text-muted">{ post.replyCount | plural('Reply', 'Replies') }</span></span>
         </div>
       </article>
 

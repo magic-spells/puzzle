@@ -90,8 +90,6 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## `.pzl` files and templates
 
-
-
 - One `<puzzle-view>` template; optional `<script>` and `<style>`; optional
   `<puzzle-skeleton min-duration="…">`.
 - `<script>` is real JS. `lang="ts"` enables esbuild transpilation only — the
@@ -103,6 +101,19 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
+- **Built-in formatters are the D174 standard set** — 34 names with the same
+  arguments and meaning as Sites — plus the browser-only `link`, `timeago` and
+  `in_timezone`. Numbers: `abs`, `ceil`, `floor`, `plus`, `minus`, `times`,
+  `divided_by`, `modulo`, `round`, `currency`, `percentage`,
+  `number_with_delimiter`, `compact_number`. Text: `downcase`, `upcase`,
+  `capitalize`, `trim`, `strip`, `truncate`, `replace`, `split`, `strip_html`,
+  `strip_newlines`, `pluralize` (prints the count and the word). Markup:
+  `escape`, `raw`, `newline_to_br`. Values: `default`, `size`, `join`, `json`.
+  Dates: `date`, `time`, `datetime` with presets `short`, `medium` (default),
+  `long`, `iso`. No list formatters (list shaping is `data()`); a removed name
+  passes through with a development hint, and an app formatter shadowing a
+  standard name draws a development warning. A shared JSON conformance table
+  (`tests/conformance/formatters.json`) pins the identical-output part.
 - Template text collapses whitespace runs to one space and drops an edge space
   that held a newline (source indentation at element boundaries). That strip is
   an **element-boundary** rule only (D168): inside one coalesced text run —

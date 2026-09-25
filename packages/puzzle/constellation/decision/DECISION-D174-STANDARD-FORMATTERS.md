@@ -16,15 +16,46 @@ connections:
   - DECISION-D114-CALENDAR-DATE-FORMATTERS
   - DECISION-D150-RAW-TEMPLATE-BLOCK
   - DECISION-D79-LINK-FORMATTER
+notes:
+  - kind: state
+    text: >-
+      PuzzleKit groups (a) and (g) are built on `feat/formatter-set` (PR #150 into release/0.8.0):
+      builtins.js/json are the 34 standard names + `timeago` + `in_timezone`; the removed names pass
+      through with a dev hint naming the replacement; `STANDARD_FORMATTERS` in formatters.js drives
+      the dev-only shadow warning; the conformance table lives at
+      `packages/puzzle/tests/conformance/formatters.json` (not in puzzle-lang, which this branch
+      does not touch) and runs from tests/formatters.test.js, zone-bearing cases in one child
+      process per `TZ`; the locale-rendered defaults are pinned against real de-DE strings in a
+      child process with `LC_ALL=de_DE.UTF-8`. Group (e) (sanitized `raw`/`newline_to_br`) is still
+      open, so the table carries no `raw`/`newline_to_br` rows yet. Sites work is untouched. Because
+      `default` is a reserved word, builtins.js exports it as the module default and the Go virtual
+      manifest aliases it (`default as __puzzle_default`, recorded on D31).
+  - kind: deviation
+    text: >-
+      Choices the card leaves open, made in the PuzzleKit build. (1), (2), (4) and (5) and the
+      calendar-date half of (3) are NOT pinned by the conformance table until Cory confirms them for
+      Sites; the zero-offset `Z` half of (3) IS pinned (the UTC `time`/`datetime` iso rows), because
+      Go's RFC 3339 already prints `Z`. (1) `currency` of an amount that rounds to zero is unsigned
+      (`-0.001` → `$0.00`; Sites prints `-$0.00`). (2) The number formatters that print text —
+      `currency`, `percentage`, `number_with_delimiter`, `compact_number` and `pluralize` — print
+      nothing for a missing input (V4/V6 spirit) instead of `Number(null)`'s `0`, and a non-numeric
+      string passes through as text; the arithmetic ones that return a number — `round`, `plus`,
+      `minus`, `times`, `abs`, `floor`, `ceil` — still coerce a missing input to `0`. (3) The `iso`
+      preset returns the calendar date itself for a `YYYY-MM-DD` input in all three formatters,
+      `time` included (D114 idempotence); for an instant, `iso` prints `Z` for a zero offset. (4)
+      `json` prints `null` for an `undefined` object value (JSON.stringify would omit it) and for a
+      cycle. (5) An unknown date preset renders as `medium` after the dev error.
 ---
 
 # D174 — The standard formatter set
 
-Decided with Cory on 2026-09-25. The decisions below are adopted; none of the
-code changes is built yet. The build list at the end is the implementation
-order. Until a group lands, the formatter table in [[DOC-LANGUAGE-CORE]]
-describes today's registries. Core expression and rendering semantics
-(V1–V18) are on [[DECISION-D173-CORE-SEMANTICS]].
+Decided with Cory on 2026-09-25. The decisions below are adopted. PuzzleKit
+groups (a), the formatter set, and (g), standard-set alignment, are built;
+group (e), sanitized `raw` and `newline_to_br`, and the Sites half of the
+build list are still open. The build list at the end is the implementation
+order. The formatter table in [[DOC-LANGUAGE-CORE]] records where each host
+stands against this card. Core expression and rendering semantics (V1–V18)
+are on [[DECISION-D173-CORE-SEMANTICS]].
 
 ## Context
 

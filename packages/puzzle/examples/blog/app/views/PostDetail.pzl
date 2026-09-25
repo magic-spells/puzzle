@@ -21,7 +21,7 @@
 
     <section class="mt-10 border-t border-border pt-6">
       <h2 class="text-[1.2rem] text-ink mb-4">
-        { comments.length } { comments.length | pluralize('comment', 'comments') }
+        { comments.length | pluralize('comment') }
       </h2>
 
       {#if comments.length > 0}

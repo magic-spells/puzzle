@@ -10,10 +10,6 @@ const app = new PuzzleApp({
   target: '#app',
   routes,
   models,
-  formatters: {
-    pluralize: (count, singular, plural) =>
-      count === 1 ? singular : plural || singular + 's',
-  },
 });
 
 app.mount();

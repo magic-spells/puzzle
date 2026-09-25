@@ -57,32 +57,25 @@ Model getters work too: computed properties defined as plain getters on a `Puzzl
 Formatters transform a value for display, Liquid-style. They chain left to right with `|`, and take arguments in parentheses.
 
 ```html
-<!-- From Home.pzl -->
-<span class="text-xs text-gray-400">{ todo.createdAt | date('short') }</span>
+<!-- From TodoItem.pzl -->
+<span class="text-xs text-gray-400">{ todo.createdAt | datetime('short') }</span>
 ```
 
 ```html
 { text | trim | capitalize }
 { price | currency('$', 2) }
+{ comments.length | pluralize('comment') }   <!-- 3 comments -->
 ```
 
 Custom formatters are registered in the `PuzzleApp` config (`formatters: { ... }` in `app.js`) and used the same way; `this.ctx.formatters` exposes the registry if you ever need it in JS.
 
-Three always-registered compatibility formatters control value-level escaping:
+**The built-ins are the standard set (D174)** — the same names, arguments and meaning in PuzzleKit and Sites — plus the browser-only `link`, `timeago` and `in_timezone`: numbers (`abs`, `ceil`, `floor`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`), text (`downcase`, `upcase`, `capitalize`, `trim`, `strip`, `truncate`, `replace`, `split`, `strip_html`, `strip_newlines`, `pluralize`), markup (`escape`, `raw`, `newline_to_br`), values (`default`, `size`, `join`, `json`) and dates (`date`, `time`, `datetime` with the presets `short`, `medium` — the default — `long` and `iso`). DOC-SPEC-TEMPLATE §6 has each one's contract. An app formatter registered under a standard name wins, with a development warning.
 
-- `escape` converts `& < > " '` to HTML entities.
-- `raw` and `noescape` are pass-through aliases that stringify the value.
+`escape` and `raw` still produce a **text vnode**, and neither injects HTML: `{ markup | raw }` displays the markup string as text, and `{ markup | escape }` is an identity — the page shows the value's characters. They are also unrelated to `{#raw}`: formatters run on a runtime value after the template has already lexed, while a raw block makes author-written source braces literal at compile time.
 
-All three still produce a **text vnode**. They do not inject HTML: `{ markup |
-raw }` displays the markup string as text, and `{ markup | escape }` displays
-the entity spellings literally because DOM text nodes do not entity-decode.
-They are also unrelated to `{#raw}`: formatters run on a runtime value after the
-template has already lexed, while a raw block makes author-written source braces
-literal at compile time.
+**Typos don't crash (v1.12, D43).** A formatter name that isn't registered renders the value **unchanged** and logs one `console.error` naming it — `[puzzle] unknown formatter "captialize" — value passed through unchanged (did you mean "capitalize"?)`. Formatters are resolved at render time (custom ones are registered in the app config), so this can't be a compile error — watch the console when a formatter seems to do nothing. A removed built-in (`sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last`, `noescape`) passes through the same way, and the message names its replacement.
 
-**Typos don't crash (v1.12, D43).** A formatter name that isn't registered renders the value **unchanged** and logs one `console.error` naming it — `[puzzle] unknown formatter "captialize" — value passed through unchanged (did you mean "capitalize"?)`. Formatters are resolved at render time (custom ones are registered in the app config), so this can't be a compile error — watch the console when a formatter seems to do nothing.
-
-**Formatters are display-only.** Filtering, sorting, and any other data logic belongs in `data()`, not in the template:
+**Formatters are display-only — there are no list formatters.** Filtering, sorting, and any other data logic belongs in `data()`, not in the template; pick an item with a plain expression (`items[0]`, `items.at(-1)`):
 
 ```html
 <!-- Don't: logic in the template -->
@@ -613,8 +606,8 @@ elements use ordinary HTML entity escaping. `<script>` and `<style>` use their
 RAWTEXT serialization rule; JSON-typed scripts safely encode `<` as `\u003c`,
 which `JSON.parse()` decodes to the original value.
 
-The `raw` and `noescape` **formatters** solve a different, value-level problem
-and cannot be used to put literal braces in template source.
+The `raw` **formatter** solves a different, value-level problem and cannot be
+used to put literal braces in template source.
 
 ---
 
@@ -639,7 +632,7 @@ modifiers, and `{:else if}` are shipped and documented above.
 | Construct | Syntax | Example |
 | --------- | ------ | ------- |
 | Interpolation | `{ expr }` | `{ todo.text }` |
-| Formatter | `{ value \| fmt(args) }` | `{ todo.createdAt \| date('short') }` |
+| Formatter | `{ value \| fmt(args) }` | `{ todo.createdAt \| datetime('short') }` |
 | Formatter chain | `{ value \| fmt \| fmt2 }` | `{ text \| trim \| capitalize }` |
 | Conditional | `{#if expr} … {:else} … {/if}` | `{#if todos.length > 0} … {:else} … {/if}` |
 | Conditional chain | `{#if a} … {:else if b} … {:else} … {/if}` | `{#if user.isLoggedIn} … {:else if user.isPending} … {/if}` |

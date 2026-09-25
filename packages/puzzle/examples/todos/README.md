@@ -80,7 +80,6 @@ bind — the handler owns the write instead.
 ```javascript
 // Global formatters in app.js
 formatters: {
-  pluralize: (count, singular, plural) => count === 1 ? singular : (plural || singular + 's'),
   todoDate: (date) => formatRelativeDate(date)
 }
 ```

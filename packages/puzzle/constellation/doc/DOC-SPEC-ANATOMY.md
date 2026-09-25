@@ -56,8 +56,7 @@ const app = new PuzzleApp({
   models,               // model registry from /models/index.js
   adapter,              // optional: installs server sync for model adapter configs
   formatters: {         // optional: app-level template formatters
-    pluralize: (count, singular, plural) =>
-      count === 1 ? singular : plural || singular + 's',
+    byline: (name) => (name ? `By ${name}` : 'By an unknown author'),
   },
   apiURL: '/api',       // optional: base URL for future remote adapters
 });
@@ -65,7 +64,7 @@ const app = new PuzzleApp({
 app.mount();
 ```
 
-That is the **entire** v1 config surface: `target`, `routes`, `models`, `formatters`, `apiURL`. (v1.5 adds an optional `scrollBehavior` — see §14; v1.6 adds an optional `routerMode`, an imported mode object since D159 — see §15; v1.19 adds an optional `routerBase` — see §23; v1.24 adds an optional `transitionMode` — see §26; v1.31 adds optional `beforeMount`/`mounted`/`beforeUnmount` app lifecycle hooks — see §34; v1.67/v1.71 add the optional `onError` hook and `errorView` view — see §60; v1.72 adds the optional `adapter` capability — see §58.) App-level `settings`, `computed`, global `events` (including keyboard-shortcut strings), and `methods` remain deferred — see the cut list.
+That is the **entire** v1 config surface: `target`, `routes`, `models`, `formatters`, `apiURL`. (v1.5 adds an optional `scrollBehavior` — see §14; v1.6 adds an optional `routerMode`, an imported mode object since D159 — see §15; v1.19 adds an optional `routerBase` — see §23; v1.24 adds an optional `transitionMode` — see §26; v1.31 adds optional `beforeMount`/`mounted`/`beforeUnmount` app lifecycle hooks — see §34; v1.67/v1.71 add the optional `onError` hook and `errorView` view — see §60; v1.72 adds the optional `adapter` capability — see §58.) App-level `settings`, `computed`, global `events` (including keyboard-shortcut strings), and `methods` remain deferred — see the cut list. An app formatter named like a standard built-in (`pluralize`, `currency`, …) replaces it, with a development warning (D174).
 
 ## 3. `.pzl` file anatomy
 

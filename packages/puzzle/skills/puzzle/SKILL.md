@@ -124,6 +124,23 @@ anywhere, attribute values included, is `\{` / `\}` — e.g. `pattern="[0-9]\{5\
 `<script lang="ts">` for TypeScript (build remains transpile-only; run
 `puzzle check` separately for static checks).
 
+Built-in formatters are the standard set shared with Sites plus the
+browser-only `link`, `timeago`, `in_timezone`. Text: `trim`/`strip`,
+`upcase`, `downcase`, `capitalize` (first character only — `iPhone` stays
+`IPhone`), `truncate(n, '…')`, `replace(a, b)`, `split(sep)`, `strip_html`,
+`strip_newlines`, `pluralize('comment')` → `3 comments` (prints the count
+too; irregular `pluralize('person', 'people')`). Numbers: `plus`, `minus`,
+`times`, `divided_by`, `modulo` (a zero divisor prints nothing), `round(places)`,
+`floor`, `ceil`, `abs`, `currency('$', 2)` → `-$1,234.50`, `percentage` (the
+number as written: `12.5` → `13%`), `number_with_delimiter` (viewer locale;
+an argument forces the delimiter), `compact_number` → `1.2K`. Values:
+`default('n/a')` (missing, `false`, `''`, `[]` — not `0`), `size`, `join`,
+`json`. Dates: `date`/`time`/`datetime` with presets `short`, `medium`
+(default), `long`, `iso`. There are **no list formatters** — no `sort`,
+`where`, `map`, `first`, `last`: shape lists in `data()` and index with
+`items[0]` / `items.at(-1)`. Don't register an app formatter under a
+standard name (it wins, with a dev warning, and changes what the name means).
+
 Rules that bite:
 
 - **Text is text.** Template text is NOT HTML-entity decoded and interpolations

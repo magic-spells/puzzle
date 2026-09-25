@@ -8,6 +8,7 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D31-FORMATTER-TREESHAKE
   - DECISION-D43-FORMATTER-MISSING-GUARD
+  - DECISION-D174-STANDARD-FORMATTERS
   - FILE-FORMATTER-REGISTRY
   - FILE-FORMATTER-BUILTINS
   - FILE-FORMATTER-ALL
@@ -27,12 +28,12 @@ notes:
   - kind: gotcha
     text: >-
       Intl objects in the date family are CACHED in module-level Maps and reused for the app's
-      lifetime — `date` keyed on (locale, resolved preset), `in_timezone` on the tz argument, and
-      `timeago` — which takes no locale — held in a single lazily-built module-level slot.
-      Constructing them per call cost ~37us each; measured against the real exported date(), 100k
-      calls went 3725ms -> 122ms (~30x). Anything added here must stay stateless for reuse:
-      Intl.DateTimeFormat/RelativeTimeFormat are safe because format()/formatToParts() carry no
-      per-call state. Do not cache anything that does.
+      lifetime — `date`/`time`/`datetime` keyed on (locale, `kind:preset`), `in_timezone` on the tz
+      argument, and `timeago` — which takes no locale — held in a single lazily-built module-level
+      slot. Constructing them per call cost ~37us each; measured against the real exported date(),
+      100k calls went 3725ms -> 122ms (~30x). Anything added here must stay stateless for reuse:
+      Intl.DateTimeFormat/RelativeTimeFormat/NumberFormat are safe because format()/formatToParts()
+      carry no per-call state. Do not cache anything that does.
 
 
       Two non-obvious constraints hold the design together. (1) It must be a keyed Map, NOT a
@@ -48,13 +49,21 @@ notes:
 
 
       Preset resolution uses Object.hasOwn before the lookup, so an unknown preset name collapses
-      onto the `date` entry instead of minting one per typo.
+      onto the `medium` entry instead of minting one per typo. The kind is part of the key because
+      `date('short')` and `time('short')` are different Intl options.
   - kind: verified
     text: >-
       Re-verified against current code and corrected: at least one claim on this card no longer
       matched the runtime, and the card was rewritten to state what the code actually does. Verified
       at this sha with the framework suite green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: gotcha
+    text: >-
+      `in_timezone(...) | datetime('iso')` (and `time('iso')`) prints the TARGET zone's wall clock
+      with the VIEWER's offset — e.g. Tokyo's 09:00 stamped `-04:00` for a New York viewer — because
+      `in_timezone` returns a shifted local Date, not a zoned value. The Intl presets look right
+      because they print no offset. Known limitation of `in_timezone`'s shifted-Date contract; not
+      an `iso` bug.
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
@@ -66,9 +75,11 @@ Liquid-style, display-only transformations used by compiled template chains. The
 
 `register(name, fn)` validates both arguments and **throws** on a non-empty-string name or a non-function value. This closes the one gap in an otherwise established config-validation pattern — `PuzzleApp` already throws for non-function lifecycle hooks and the router for non-function guards. It throws rather than warning because a non-function formatter is a deterministic config error, and skipping it silently would fall through to `__missing` and disguise the broken config as a typo. Note the asymmetry with the paragraph below, which is deliberate: a bad *name* is a typo and renders through, a bad *value* is a config error and stops.
 
-An unknown formatter calls `__missing(name)`: warn once per registry, include a did-you-mean suggestion at edit distance at most two, and return a pass-through function. A typo therefore renders the original value instead of crashing the view.
+An unknown formatter calls `__missing(name)`: warn once per registry, include a did-you-mean suggestion at edit distance at most two, and return a pass-through function. A typo therefore renders the original value instead of crashing the view. A name D174 removed (`sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last`, `noescape`) gets a replacement hint instead of a did-you-mean — `data()`, `items[0]`, `items.at(-1)`, `compact_number`, `raw`. The hint table sits behind `__PUZZLE_DEV__` with the rest of the warn block, so production carries none of it.
 
-Built-ins are pure named exports. A JSON name manifest is embedded by the Go build scanner, which serves a virtual module importing only formatters observed in project templates. The scan deliberately errs toward inclusion; `escape`, `raw`, and `noescape` remain safety defaults. Raw/test imports use the full built-in map.
+**The built-in set is D174's standard set** ([[DECISION-D174-STANDARD-FORMATTERS]]): the 34 names Sites implements with the same arguments and meaning, plus the PuzzleKit-only `link`, `timeago` and `in_timezone`. `formatters.js` exports the 34 as `STANDARD_FORMATTERS`, and `makeFormatterRegistry` logs a **development-only** `console.warn` when an app formatter registers under one of them — the app still wins, and it never throws. PuzzleKit-only names (and an app `link`) draw no warning. There are no list formatters: list shaping is `data()` or a plain expression. The identical-output part of the set is pinned by the shared conformance table `tests/conformance/formatters.json` (name, input, args, expect; JSON `null` is the missing value; a `zone` field runs a case in a child process with that `TZ`), which Sites' Go tests are meant to run too.
+
+Built-ins are pure named exports. A JSON name manifest is embedded by the Go build scanner, which serves a virtual module importing only formatters observed in project templates. The scan deliberately errs toward inclusion; `escape` and `raw` remain safety defaults. Raw/test imports use the full built-in map. `default` is a reserved word, so `builtins.js` exports it as `export { defaultValue as default }` — the module's default export — and the virtual manifest binds it as `default as __puzzle_default`; nothing may import `builtins.js`'s default expecting anything else.
 
 One built-in is not a pure export: `link` (D79) needs the live router. Every
 registry is therefore built by one shared `makeFormatterRegistry(custom, url)`
@@ -81,7 +92,9 @@ kernel builds the same registry against its per-page router. `link` delegates to
 through). The tree-shake scanner ignores the name (not on the allowlist), the
 same handling as any custom formatter.
 
-All built-ins fail soft on nullish or invalid display input. Numeric precision normalizes to an integer in the `toFixed` range; date/locale/time-zone failures fall back to a string; sort copies before comparing, treats numeric arrays numerically and Date keys (CalendarDate included) chronologically by timestamp — NaN and Invalid Dates sort last, every other type pair still compares as strings (before the Date branch a `date()` field sorted by its weekday-first string form). `raw`/`noescape` only skip formatter escaping—they do not inject HTML into text vnodes. `reverse` iterates strings by code POINT (`[...v]`, since 0.3.0), not UTF-16 code unit — `split('')` tore surrogate pairs, so emoji/astral text reversed into lone-surrogate garbage; a user-visible output change for such strings.
+All built-ins fail soft on nullish or invalid display input. The number formatters that print (`currency`, `percentage`, `number_with_delimiter`, `compact_number`, `pluralize`) print nothing for a missing value rather than `Number(null)`'s `0`; `divided_by`/`modulo` return `undefined` for a zero divisor. `round`, `currency` and `percentage` share one decimal rounding helper that shifts the decimal string (`1.005` → `100.5`, not binary `100.4999…`) and rounds half away from zero; `places` normalizes to an integer, clamped to 0–100 for the `toFixed` pair and −100–100 for `round`. `escape` and `raw` are identities on text: neither injects HTML into a text vnode (sanitized markup rendering is D174 group e). `size`, `truncate`, `split('')` and `capitalize` work on code points, not UTF-16 units. `json` is a hand-written serializer (keys sorted by code point, missing / NaN / ±Infinity → `null`, a cycle → `null`), because a JS object always enumerates integer-like keys first and so cannot carry sorted order through `JSON.stringify`.
+
+Locale-rendered output uses the viewer's locale (Intl's default): `number_with_delimiter` with no argument and `pluralize`'s count go through one cached `Intl.NumberFormat` per fraction-digit count, so decimals print as given; `compact_number` uses one cached compact formatter.
 
 Those value-level runtime formatters are unrelated to D150's
 `{#raw}…{/raw}` source block, which disables brace lexing before any formatter
@@ -93,6 +106,10 @@ bare `YYYY-MM-DD` string as a **calendar date**
 constructs it as local midnight so it displays as written in every timezone,
 with a round-trip check that sends rollover components back to the
 Invalid-Date fail-soft path, and `in_timezone` passes it through UNSHIFTED —
-a day names no instant to re-express. The `iso` preset is idempotent on such
-inputs; Date instances, timestamps, and full ISO datetimes parse exactly as
-before.
+a day names no instant to re-express. `date`, `time` and `datetime` share the
+presets `short`, `medium` (default), `long` — `dateStyle`/`timeStyle` per
+formatter — and `iso`, which is RFC 3339 in the viewer's zone (`Z` for a zero
+offset) and returns the calendar date itself for a calendar-date input. An
+unknown preset logs one development `console.error` per `(formatter, preset)`
+and renders as `medium`; the retired preset names `date`/`time`/`datetime`
+point at the formatter of that name.

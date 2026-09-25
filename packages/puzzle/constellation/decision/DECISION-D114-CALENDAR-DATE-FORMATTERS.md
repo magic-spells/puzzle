@@ -37,15 +37,16 @@ notes:
     sha: d275a508b1281f6bae1cf4c8da979d0042f5cfc0
 ---
 
-The built-in date formatters (`date`, and through it `time`/`datetime`, plus
-`timeago` and `in_timezone`) treat a bare `YYYY-MM-DD` string as a **calendar
+The built-in date formatters (`date`, `time`, `datetime`, plus `timeago` and
+`in_timezone`) treat a bare `YYYY-MM-DD` string as a **calendar
 date**: `date`/`timeago` parse it as local midnight instead of letting
 `new Date(v)` apply the ES spec's UTC-midnight rule, and `in_timezone` passes
 it through untouched — a day names no instant, so there is nothing to
 re-express in another zone. `{ post.publishedAt | date }` of `"2026-07-24"`
-now renders `07/24/2026` for every reader; before, anyone west of UTC saw
-`07/23/2026`. Everything that carries its own time or zone — Date instances,
-timestamps, full ISO datetimes — is untouched.
+now renders `Jul 24, 2026` (the default `medium` preset, en-US) for every
+reader; before, anyone west of UTC saw the day before. Everything that carries
+its own time or zone — Date instances, timestamps, full ISO datetimes — is
+untouched.
 
 ## Context
 
@@ -69,9 +70,10 @@ and invisible to anyone testing east of UTC.
   March — TZ-dependently — while `"2026-13-01"` (which fails the grammar)
   returned raw; coercion makes every invalid component behave the same.
   Every other input passes straight to `new Date(v)`.
-- Used by `date()`, `timeago()`, and `in_timezone()` — one parse rule for the
-  whole family (`time`/`datetime` delegate to `date`). The same
-  one-identity-rule principle as [[DECISION-D112-STORE-ID-KEY-NORMALIZATION]].
+- Used by `date()`, `time()`, `datetime()`, `timeago()`, and `in_timezone()` —
+  one parse rule for the whole family (`date`/`time`/`datetime` share one
+  internal formatter). The same one-identity-rule principle as
+  [[DECISION-D112-STORE-ID-KEY-NORMALIZATION]].
 - **`in_timezone` is a no-op on calendar dates.** Its contract is "take an
   instant, re-express its wall clock in a named zone" — a calendar date has no
   instant, so it returns the parsed local-midnight Date unchanged. Shifting
@@ -105,8 +107,8 @@ and invisible to anyone testing east of UTC.
 - Date-only strings display as written everywhere; `timeago('2026-07-24')`
   measures from local midnight (the day the author named); `in_timezone`
   returns a calendar date unshifted, so
-  `'2026-07-24' | in_timezone: <any zone> | date` renders `07/24/2026` for
-  every viewer.
+  `'2026-07-24' | in_timezone(<any zone>) | date('short')` renders `7/24/26`
+  (en-US) for every viewer.
 - The `iso` preset's output for date-only input changes from
   `'2026-07-24T00:00:00.000Z'` to `'2026-07-24'` — deterministic and
   round-trippable where the old form was a UTC-midnight artifact.
