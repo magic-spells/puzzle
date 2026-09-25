@@ -8,7 +8,7 @@
     "build": "puzzle build"
   },
   "dependencies": {
-    "@magic-spells/puzzle": "^0.7.1"
+    "@magic-spells/puzzle": "^0.8.0"
   },
   "type": "module"
 }

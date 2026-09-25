@@ -195,7 +195,7 @@ import { GETTING_STARTED, SECTIONS, COMPONENTS, THEMES, SCHEME_PANELS, ICONS } f
 // Rail items: the Sidebar piece takes hrefs, and the demo is hash-routed, so
 // every href is `#` + path and the active match is `#` + the current path.
 // Shown in the bar; bump with package.json (the bundler has no JSON import).
-const VERSION = '0.7.1';
+const VERSION = '0.8.0';
 
 const KEYS = { '/': 'introduction', '/components': 'components', '/theming': 'theming' };
 

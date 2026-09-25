@@ -1,6 +1,6 @@
 {
   "name": "@magic-spells/puzzle-pieces",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "UI component registry for the Puzzle framework: copy-in pieces fetched by `puzzle add piece`, plus importable design tokens — four palettes × three modes as CSS, with the appearance helper and pre-paint snippet.",
   "license": "MIT",
   "type": "module",
