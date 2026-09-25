@@ -1759,6 +1759,15 @@ func (c *compiler) processChildren(children []parser.Node, scope scopeMap) ([]it
 	return items, nil
 }
 
+// normalizeNewlines turns CRLF and a lone CR into LF, the HTML input-stream
+// rule, for text whose bytes are otherwise kept.
+func normalizeNewlines(s string) string {
+	if !strings.Contains(s, "\r") {
+		return s
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
+}
+
 // preservesWhitespace reports whether an element's body keeps its source
 // whitespace byte for byte (D168 rule 6).
 func preservesWhitespace(tag string) bool {
@@ -1783,7 +1792,7 @@ func preservedBody(children []parser.Node) []parser.Node {
 	switch {
 	case strings.HasPrefix(v, "\r\n"):
 		v = v[2:]
-	case strings.HasPrefix(v, "\n"):
+	case strings.HasPrefix(v, "\n"), strings.HasPrefix(v, "\r"):
 		v = v[1:]
 	default:
 		return children
@@ -1822,8 +1831,11 @@ func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftSibling, 
 		case *parser.Text:
 			if t.Raw || c.preserveWS > 0 {
 				// {#raw} bytes, and every Text node inside a <pre>/<textarea>
-				// body, are emitted exactly as authored (D150, D168).
-				segs = append(segs, seg{text: t.Value, static: true})
+				// body, are emitted as authored (D150, D168) — except line
+				// endings, which normalize to LF as HTML's input stream does, so
+				// a CRLF checkout emits the same bundle and the mounted text
+				// matches the prerendered page.
+				segs = append(segs, seg{text: normalizeNewlines(t.Value), static: true})
 				continue
 			}
 			s, keep, padL, padR := processText(t.Value)

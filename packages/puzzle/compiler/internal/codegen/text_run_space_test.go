@@ -251,6 +251,23 @@ func TestPreAndTextareaBodiesPreserved(t *testing.T) {
 			want:     []string{"value: 'x  y'"},
 		},
 		{
+			name:     "CRLF and a lone CR inside pre and textarea normalize to LF",
+			template: "<pre>a\r\n  b\rc\r\n</pre><textarea>x\r\ny</textarea>",
+			want:     []string{`value: 'a\n  b\nc\n'`, `value: 'x\ny'`},
+			notWant:  []string{`\r`},
+		},
+		{
+			name:     "a lone CR after the start tag is the one dropped newline",
+			template: "<pre>\rx</pre>",
+			want:     []string{"value: 'x'"},
+		},
+		{
+			name:     "CRLF inside a {#raw} body normalizes to LF",
+			template: "<p>{#raw}a\r\nb{/raw}</p>",
+			want:     []string{`value: 'a\nb'`},
+			notWant:  []string{`\r`},
+		},
+		{
 			name:     "only one newline is dropped",
 			template: "<pre>\n\nx</pre>",
 			want:     []string{`value: '\nx'`},

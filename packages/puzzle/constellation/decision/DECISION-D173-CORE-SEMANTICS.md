@@ -106,17 +106,23 @@ notes:
       surface as new Sites compile errors.
   - kind: state
     text: >-
-      Group (c) — V10 whitespace — is built in PuzzleKit on feat/whitespace-rule (PR into
+      Group (c) — V10 whitespace — is built in PuzzleKit on feat/whitespace-rule (PR #154 into
       release/0.8.0); D168 states the rule and the implementation. Codegen only, no shared-parser
       change. Choices the card left open, now fixed on D168: `<Snippet>` and `<Portal>` count as
       elements for rules 3 and 4; the `<pre>`/`<textarea>` rule covers the whole subtree; the one
       newline after the start tag is dropped (HTML's parser rule), except from a `{#raw}` first
-      child; a `{#for}` body inside a `<pre>` still drops its own whitespace (a loop body is one
-      root element); and the SSG serializer doubles a leading newline in pre/textarea/listing so
-      prerendered text matches the mounted text. Measured corpus (607 files): 832 text runs in 131
-      files gain 1,007 spaces, none lose one, no pre/textarea body changes, no template needed
-      fixing (every icon + label pair sits in a flex item). Production size: hello-world and todos
-      byte-identical to a1a1fc9d (21,981 / 26,146 B gzip).
+      child; line endings in preserved and `{#raw}` text normalize to LF (HTML's input-stream rule);
+      a `{#for}` body inside a `<pre>` still drops its own whitespace (a loop body is one root
+      element); and the SSG serializer doubles a leading newline in pre/textarea/listing so
+      prerendered text matches the mounted text. Measured corpus (612 files, against 50acbfeb): 830
+      text runs in 131 files gain 1,004 spaces, none lose one, no pre/textarea body changes. Two
+      templates were fixed in the same PR: the pieces demo's MeterDoc had `(`, `)` and `,` on their
+      own lines beside `<code>` (it would render `gauge ( role="meter" ) for`, `Progress , which`),
+      so the punctuation moved onto the element's line; the DevTools "State layers" span went from
+      `ml-1.5` to `ml-1` to absorb the new space. The spaced slashes (`href / removable`) in
+      ChatAttachmentDoc, ToolbarDoc and DropdownMenuDoc are kept as they now read. Every icon +
+      label pair sits in a flex item and is unaffected. Production size against 50acbfeb:
+      hello-world 21,977 B and todos 26,144 B gzip, byte-identical.
 ---
 
 # D173 — Core semantics: one meaning for each shared construct

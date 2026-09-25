@@ -70,7 +70,10 @@ between buttons, and dropped the gap between an interpolation and a following
    same set as in rule 3 minus control blocks: elements, components, markers,
    `<Portal>`, `<Snippet>` and `{#svg}`. So `<b>{ user.name }</b>` + newline +
    `({ user.email })` renders `John (j@x)`, and the Theming prose above renders
-   `tokens — a, b and more`.
+   `tokens — a, b and more`. Punctuation that must touch an element goes on
+   the element's line: `(<code>x</code>)` and `<code>x</code>,`, not `(` +
+   newline + `<code>x</code>` + newline + `)`, which renders `( x )` exactly
+   as the same HTML does.
 5. **Between text or an interpolation and a control block, it keeps one
    space.** The space lands outside the block, where it sits in the source,
    so it renders whether or not the branch does.
@@ -88,11 +91,14 @@ no whitespace: `{ a }{ b }`, `<b>x</b>{ y }` and `{#if x}a{/if}{ b }` stay
 adjacent. Text inside `{#raw}` participates as static text, and a neighbour's
 space may be folded into its literal.
 
-Two edges of rule 6. A `{#raw}` body keeps its bytes: `<pre>{#raw}` + newline
-keeps that newline, because it does not follow the start tag in the source. And
-a `{#for}` body inside a `<pre>` still drops its own whitespace (rules 2 and
-3), because a loop body is exactly one root element and cannot hold text; the
-root's own descendants are preserved.
+Three edges of rule 6. A `{#raw}` body keeps its bytes: `<pre>{#raw}` + newline
+keeps that newline, because it does not follow the start tag in the source. A
+`{#for}` body inside a `<pre>` still drops its own whitespace (rules 2 and 3),
+because a loop body is exactly one root element and cannot hold text; the
+root's own descendants are preserved. And line endings normalize the way
+HTML's input stream normalizes them: CRLF and a lone CR in a preserved or
+`{#raw}` body become LF, so a CRLF checkout emits the same bundle and the
+mounted text matches the prerendered page.
 
 **How PuzzleKit implements it** (`compiler/internal/codegen/codegen.go`).
 `processText` collapses a text node and reports whether it stripped each
@@ -107,12 +113,12 @@ strip that no segment carries (a whitespace-only node dropped before anything
 else in the run). Rule 6 is a compiler flag, `preserveWS`, raised by
 `emitElement` and by the static-subtree analysis (`staticcache.go`) for a
 `pre` or `textarea` element, under which `buildTextRun` emits every Text node
-verbatim; `preservedBody` drops the one leading newline, and `forBodyRoot`
-clears the flag for the loop body's own children list. The SSG serializer
-(`client-runtime/ssg/serialize.js`) emits one extra newline when a `pre`,
-`textarea` or `listing` body starts with a newline, so the parser eats that
-one and prerendered text matches the mounted text. Pinned by
-`compiler/internal/codegen/text_run_space_test.go`
+verbatim apart from `normalizeNewlines`; `preservedBody` drops the one leading
+newline (LF, CRLF or CR), and `forBodyRoot` clears the flag for the loop body's
+own children list. The SSG serializer (`client-runtime/ssg/serialize.js`) emits
+one extra newline when a `pre`, `textarea` or `listing` body starts with a
+newline, so the parser eats that one and prerendered text matches the mounted
+text. Pinned by `compiler/internal/codegen/text_run_space_test.go`
 (`TestTextRunInternalNewlineKeepsOneSpace`,
 `TestTextRunControlFlowBoundaryKeepsOneSpace`,
 `TestTextElementBoundaryKeepsOneSpace`, `TestPreAndTextareaBodiesPreserved`),
@@ -154,15 +160,21 @@ checks the mounted DOM and the prerendered HTML of one compiled fixture.
 
 - Rule 4 changes PuzzleKit output widely. Measured on the 0.8.0 corpus (612
   `.pzl` files: examples, scaffold templates, the puzzle-pieces registry and
-  demo, and the DevTools panel), 832 text runs in 131 files gain 1,007 spaces
-  at text-to-element boundaries (938 of them in 98 puzzle-pieces demo files,
-  mostly prose around `<code>`), and no file loses one. Each is a
+  demo, and the DevTools panel), 830 text runs in 131 files gain 1,004 spaces
+  at text-to-element boundaries (935 of them in 98 puzzle-pieces demo files,
+  mostly prose around `<code>`), and no file loses one. Almost all are a
   visible-text fix or an inert space: a leading or trailing space inside a
   flex or grid item (every icon-plus-label pair in the corpus) is removed by
   CSS line layout, and one next to a block-level element does not render.
-  The one visible widening is a label followed by an inline `<span>` that
-  already had a left margin (the DevTools "State layers" heading), which now
-  shows the space plus the margin. The Sites repo's PuzzleKit apps have 7
+  Three spots rendered differently and were handled in the same change: the
+  pieces demo's Meter page wrote `(`, `)` and `,` on their own lines beside a
+  `<code>` (it would have rendered `gauge ( role="meter" ) for` and
+  `Progress , which`), so that punctuation moved onto the element's line;
+  the DevTools "State layers" heading, whose inline `<span>` already had a
+  left margin, drops it from `ml-1.5` to `ml-1` so the gap stays about where
+  it was; and the spaced slashes between two `<code>` names in the
+  ChatAttachment, Toolbar and DropdownMenu demo pages (`href / removable`)
+  now read as written and are kept. The Sites repo's PuzzleKit apps have 7
   more such line breaks.
 - Rule 6 changes no file in the corpus: every `<pre>` there holds a single
   interpolation and every `<textarea>` is value-bound. A template that wrote
