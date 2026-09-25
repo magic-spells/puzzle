@@ -3,7 +3,7 @@ package codegen
 import (
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 type autoBind struct {

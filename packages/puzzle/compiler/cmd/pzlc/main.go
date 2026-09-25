@@ -18,7 +18,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 func main() {

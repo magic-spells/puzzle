@@ -29,11 +29,12 @@ map.
 
 ## Required verification
 
-Before claiming success, run both suites:
+Before claiming success, run the suites:
 
 ```bash
 npx vitest run
-cd compiler && go test ./...
+(cd compiler && go test ./...)
+(cd ../puzzle-lang && go test ./...)   # the parser is its own Go module
 ```
 
 Run focused checks as well when appropriate: `npm run test:types`,
@@ -302,6 +303,16 @@ This package IS the framework, and it lives at `packages/puzzle` inside the
 plain `puzzle`) whose scripts delegate here. Everything
 that versions in lockstep with the framework is a sibling under `packages/`:
 
+- `../puzzle-lang` — the Puzzle language as its own Go module,
+  `github.com/magic-spells/puzzle/packages/puzzle-lang` (D172): `parser`
+  (section splitter, lexer, AST, template grammar, positioned errors) plus
+  the `jsident` and `textutil` helpers codegen, build, and pieces share. It is
+  outside `internal/` so other hosts (Magic Spells Sites) can import it. This
+  package's `go.mod` requires it at `v0.0.0` with
+  `replace ... => ../puzzle-lang`, so the compiler always builds against the
+  working tree; `go test ./...` here does NOT run its tests — run them inside
+  `../puzzle-lang` (CI does both). Outside consumers resolve it through a
+  `packages/puzzle-lang/vX.Y.Z` tag, which Cory creates alongside `vX.Y.Z`.
 - `../puzzle-pieces` — the `@magic-spells/puzzle-pieces` npm transport
   (registry + demo + its own constellation root). Version must equal this
   package's exactly (the D32 major.minor lock); `release:prep` asserts it and
@@ -311,8 +322,8 @@ that versions in lockstep with the framework is a sibling under `packages/`:
   vitest suite always runs against the working tree, and CI runs it on every
   push — a framework breaking change fails the build the day it lands.
 - `../puzzle-eslint` / `../puzzle-prettier` — the .pzl lint/format plugins.
-  Both vendor JS ports of this compiler's section splitter/lexer
-  (`compiler/internal/parser`), so grammar changes must land there too — CI
+  Both vendor JS ports of the section splitter/lexer in
+  `../puzzle-lang/parser`, so grammar changes must land there too — CI
   runs their suites on every push. Train-versioned, not yet published.
 
 Each package keeps its own npm install and lockfile — there are deliberately
@@ -376,8 +387,9 @@ GitHub, never deleted.
 
 ### Go compiler and CLI (`compiler/`)
 
-- `internal/parser`: `.pzl` section splitting, lexer, AST, template grammar,
-  positioned errors.
+- The parser is not here: `.pzl` section splitting, lexer, AST, template
+  grammar, and positioned errors live in `../puzzle-lang/parser` (imported as
+  `github.com/magic-spells/puzzle/packages/puzzle-lang/parser`).
 - `internal/codegen`: render-function emission, expression scoping, handlers,
   keys, inline SVG, conditional arity stabilization, golden files.
 - `internal/plugin` + `internal/build`: esbuild integration, aliases, CSS

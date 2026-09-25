@@ -10,13 +10,19 @@ live under `packages/` (decision D162):
   operating guide, and the constellation under `packages/puzzle/constellation/`
   is the source of truth (constellation MCP: pass `repo=packages/puzzle`;
   pieces' own constellation is `repo=packages/puzzle-pieces`).
+- `packages/puzzle-lang` — the Puzzle language as its own Go module
+  (`github.com/magic-spells/puzzle/packages/puzzle-lang`): the `.pzl` parser
+  (section splitter, lexer, AST, positioned errors) plus the `jsident` and
+  `textutil` helpers the compiler shares. The compiler imports it through a
+  `replace => ../puzzle-lang`; outside consumers need a
+  `packages/puzzle-lang/vX.Y.Z` tag, which Cory creates (D172).
 - `packages/puzzle-pieces` — the pieces registry (npm, version == framework).
 - `packages/puzzle-devtools` — the Chrome extension (`private: true`, ships as
   a zip; its framework dep is `file:../puzzle`, so its suite runs against the
   working tree).
 - `packages/puzzle-eslint` / `packages/puzzle-prettier` — the lint/format
-  plugins; both vendor JS ports of the compiler's section splitter/lexer that
-  must track grammar changes.
+  plugins; both vendor JS ports of the section splitter/lexer in
+  `packages/puzzle-lang/parser` that must track grammar changes.
 
 Repo-wide rules that do not move:
 

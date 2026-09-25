@@ -7,11 +7,14 @@ import (
 	"testing"
 )
 
-// repoFile resolves a path relative to the repository root (three levels up
-// from compiler/internal/parser).
-func repoFile(t *testing.T, rel string) string {
+// fixture resolves a path under testdata/. The files in testdata/todos are
+// copies of the canonical todos example (packages/puzzle/examples/todos in the
+// monorepo), vendored so this module's tests pass on their own — including
+// from the Go module cache, where no sibling package exists. Refresh a copy
+// when the example changes in a way these tests should follow.
+func fixture(t *testing.T, rel string) string {
 	t.Helper()
-	return filepath.Join("..", "..", "..", rel)
+	return filepath.Join("testdata", rel)
 }
 
 // walk visits every node in the tree depth-first.
@@ -41,7 +44,7 @@ func walk(n Node, fn func(Node)) {
 }
 
 func TestIntegrationHomePzl(t *testing.T) {
-	src, err := os.ReadFile(repoFile(t, "examples/todos/app/views/Home.pzl"))
+	src, err := os.ReadFile(fixture(t, "todos/app/views/Home.pzl"))
 	if err != nil {
 		t.Fatalf("read Home.pzl: %v", err)
 	}
@@ -98,7 +101,7 @@ func TestIntegrationHomePzl(t *testing.T) {
 		t.Errorf("for header: got item=%q collection=%q", fors[0].Item, fors[0].Collection)
 	}
 	// The {#for} body is now a single <TodoItem> component — the row markup was
-	// extracted into examples/todos/app/components/TodoItem.pzl (Step 3). Its props
+	// extracted into testdata/todos/app/components/TodoItem.pzl (Step 3). Its props
 	// carry the todo plus the toggle/remove callback props.
 	var todoItemComp *Component
 	walk(fors[0], func(n Node) {
@@ -153,7 +156,7 @@ func TestIntegrationHomePzl(t *testing.T) {
 // its own component (Step 3): the svg/path checkmark, the date formatter, the
 // checkbox @change, and the callback-prop handlers in <script>.
 func TestIntegrationTodoItemPzl(t *testing.T) {
-	src, err := os.ReadFile(repoFile(t, "examples/todos/app/components/TodoItem.pzl"))
+	src, err := os.ReadFile(fixture(t, "todos/app/components/TodoItem.pzl"))
 	if err != nil {
 		t.Fatalf("read TodoItem.pzl: %v", err)
 	}
@@ -234,7 +237,7 @@ func TestIntegrationTodoItemPzl(t *testing.T) {
 }
 
 func TestIntegrationDefaultPzl(t *testing.T) {
-	src, err := os.ReadFile(repoFile(t, "examples/todos/app/layouts/Default.pzl"))
+	src, err := os.ReadFile(fixture(t, "todos/app/layouts/Default.pzl"))
 	if err != nil {
 		t.Fatalf("read Default.pzl: %v", err)
 	}

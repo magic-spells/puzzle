@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // compileDedup compiles a .pzl at ModeView with SVGDedup on (the esbuild-plugin

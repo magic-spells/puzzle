@@ -1,6 +1,6 @@
 // Cross-boundary drift guard: the runtime's KEY_FILTERS table
 // (client-runtime/views/viewManager.js) hand-mirrors the compiler's
-// eventKeyFilters map (compiler/internal/parser/parser.go). Neither side imports
+// eventKeyFilters map (packages/puzzle-lang/parser/parser.go). Neither side imports
 // the other — the compiler emits '@event:enter' handlers and the runtime gates
 // them on KeyboardEvent.key at patch time — so a modifier added or renamed on one
 // side of the language boundary silently stops working unless BOTH tables carry
@@ -24,7 +24,7 @@ function parseGoEventKeyFilters(source) {
 }
 
 describe('event key-filter parity (runtime KEY_FILTERS ⇄ compiler eventKeyFilters)', () => {
-	const parserGo = fileURLToPath(new URL('../compiler/internal/parser/parser.go', import.meta.url));
+	const parserGo = fileURLToPath(new URL('../../puzzle-lang/parser/parser.go', import.meta.url));
 	const goFilters = parseGoEventKeyFilters(readFileSync(parserGo, 'utf8'));
 
 	it('extracts a non-empty map from parser.go', () => {

@@ -8,7 +8,7 @@ connections:
   - FILE-PARSER
   - FILE-PARSER-SECTIONS
   - FILE-PARSER-SCANNER
-  - FILE-COMPILER-INTERNAL-PARSER-SLOT
+  - FILE-PARSER-SLOT
   - DECISION-D03-SCRIPTS-REAL-JS
   - DECISION-D22-NO-ESCAPE-BY-DEFAULT
   - DECISION-D36-UNLESS
@@ -55,4 +55,11 @@ What they guarantee:
 Error positions and message text are treated as contract here; loosening one
 fails a test on purpose.
 
-Covers 8 `*_test.go` files under `compiler/internal/parser`.
+Covers 10 `*_test.go` files under `packages/puzzle-lang/parser`. That is its own
+Go module (D172), so the compiler's `go test ./...` does not run them: run
+`go test ./...` inside `packages/puzzle-lang` (CI's Go and Windows jobs do).
+`integration_test.go` parses copies of the todos example's `Home.pzl`,
+`TodoItem.pzl`, and `Default.pzl`, vendored under `parser/testdata/todos`, so
+the suite is self-contained and also passes from the Go module cache. Refresh
+a copy when `packages/puzzle/examples/todos` changes in a way the tests should
+follow.

@@ -1,7 +1,7 @@
 ---
 name: slot.go
 status: verified
-path: compiler/internal/parser/slot.go
+path: ../puzzle-lang/parser/slot.go
 language: Go
 summary: Load-bearing file for DECISION-D71-SLOT-FORWARDING, DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS.
 connections:
@@ -20,4 +20,4 @@ notes:
 
 # slot.go
 
-Source binding for [[DECISION-D71-SLOT-FORWARDING]], [[DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS]]. The path is the contract; keep behavioral detail on the owning card.
+Source binding for [[DECISION-D71-SLOT-FORWARDING]], [[DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS]]. The path is the contract; keep behavioral detail on the owning card. The file lives at `packages/puzzle-lang/parser/slot.go` (the Puzzle language module, D172); `path` is relative to this plan root, `packages/puzzle`.

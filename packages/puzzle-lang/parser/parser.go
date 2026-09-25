@@ -3,7 +3,7 @@ package parser
 import (
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/jsident"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
 )
 
 // parser.go is the recursive-descent parser over the lexer's token stream

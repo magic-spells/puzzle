@@ -9,8 +9,8 @@ connections:
   - DECISION-D08-MINIMAL-CONFIG
   - DECISION-D18-PER-NODE-LISTENERS
 code_refs:
-  - compiler/internal/parser/parser.go
-  - compiler/internal/parser/ast.go
+  - ../puzzle-lang/parser/parser.go
+  - ../puzzle-lang/parser/ast.go
   - compiler/internal/codegen/codegen.go
 verified_sha: c809db6680eb9355961897756f54e97f1164b88f
 notes:

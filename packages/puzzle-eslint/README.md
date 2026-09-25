@@ -28,8 +28,8 @@ This plugin is a **processor**, not a new parser:
   truncated by a stray close tag, stray top-level content) as ESLint messages
   under the rule id `puzzle/no-invalid-sections`.
 
-The section splitter is a direct port of the Puzzle compiler's
-`compiler/internal/parser/sections.go` (and its `lexskip.go` / `scan.go`
+The section splitter is a direct port of the Puzzle language module's
+`packages/puzzle-lang/parser/sections.go` (and its `lexskip.go` / `scan.go`
 helpers), so it carves sections and finds close tags exactly the way the real
 compiler does — a literal `</script>` inside a string, template literal,
 comment, or regex will **not** truncate the body.

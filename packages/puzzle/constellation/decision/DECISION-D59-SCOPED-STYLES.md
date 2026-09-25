@@ -26,7 +26,7 @@ notes:
     sha: c809db6680eb9355961897756f54e97f1164b88f
 code_refs:
   - compiler/internal/codegen/codegen.go
-  - compiler/internal/parser/sections.go
+  - ../puzzle-lang/parser/sections.go
   - compiler/internal/plugin/plugin.go
 verified_sha: c809db6680eb9355961897756f54e97f1164b88f
 ---

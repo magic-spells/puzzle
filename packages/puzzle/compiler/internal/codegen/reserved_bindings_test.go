@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // reserved_bindings_test.go — the module-scope collision between a <script>

@@ -34,18 +34,23 @@ notes:
       way Sites does (`||` stays logical OR). That is technically breaking for a bitwise OR in an
       attribute expression, which is almost certainly a bug wherever it appears today. Needs its own
       decision when scheduled.
+  - kind: state
+    text: >-
+      The parser lives in `packages/puzzle-lang`, a separate Go module that `packages/puzzle/go.mod`
+      requires through a `replace => ../puzzle-lang`. Its FILE cards bind to `../puzzle-lang/...`,
+      outside this plan's code root, so stale_report cannot track them.
 ---
 
 # D172 — One language, two dialects, one public name
 
 ## Context
 
-
 The `.pzl` template grammar now has two hosts. PuzzleKit (the SPA framework in
 this package) compiles it to `PuzzleView` render functions in JavaScript.
 Magic Spells Sites (a separate repo, `magic-spells/sites`) renders `.pzl` theme
-files server-side in Go at request time, using a vendored, pinned copy of
-`compiler/internal/parser`. The two already differ, deliberately:
+files server-side in Go at request time, using a vendored, pinned copy of the
+parser (taken from `compiler/internal/parser`, which now lives in the
+`packages/puzzle-lang` Go module). The two already differ, deliberately:
 
 - **Sites adds:** `{#let}` template variables, top-level `<schema>`, and
   implicit component props. A file's kind comes from its directory, so there is
@@ -177,16 +182,25 @@ or "Puzzle.js"; puzzlejs.dev is only the address.
 
 ## Consequences
 
-
 - **The parser accepts every construct and each host switches on its own.**
   Sites' post-parse rejection of `@event`/`<Portal>` becomes the dialect switch
   being off.
+- **Done (0.8.0): the parser is its own Go module.** It lives in
+  `packages/puzzle-lang` (module
+  `github.com/magic-spells/puzzle/packages/puzzle-lang`, packages `parser`,
+  `jsident`, `textutil`), outside any `internal/`, so another host can import
+  it ([[DECISION-D162-MONOREPO-PACKAGES]] lists it). It moved unchanged: no
+  dialect switches yet, and no Sites syntax. The compiler builds it from the
+  working tree through a `go.mod` `replace`. Outside consumers need a
+  `packages/puzzle-lang/vX.Y.Z` tag, created by hand next to `vX.Y.Z`. Sites
+  still vendors its pinned copy until it switches to importing a tagged
+  version.
 - **Follow-up: move Sites' syntax into the shared parser behind the Sites
   switch:** `{#let}`, `<schema>` lifting, and the unquoted attribute formatter
   pipe (which becomes core, see the gotcha note). Sites then drops its
   `sitesPatches` entry and the syntax files in its vendored copy, keeping only
-  its evaluator and renderer. Later, once the parser is a public Go module,
-  Sites stops vendoring altogether.
+  its evaluator and renderer. Once a tagged `packages/puzzle-lang` release
+  carries the switches, Sites imports it and stops vendoring altogether.
 - **Follow-up in Sites: layout slots** (built as Sites PR #9,
   `feat/layout-slots`, 2026-09-24; not merged yet). `<SitesHead/>` becomes
   `<Slot name="head-content"/>`; the page body is the plain `<Slot/>`; section
@@ -208,9 +222,10 @@ or "Puzzle.js"; puzzlejs.dev is only the address.
   the PuzzleKit dialect. Sites is not mentioned until it is public; its docs
   then describe "Puzzle, with these additions".
 - **Grammar changes are now cross-host.** A change to a core construct lands
-  in this parser, the JS ports in `../puzzle-eslint` / `../puzzle-prettier`,
-  the three editor grammars, **and** Sites' next parser sync. Shared
-  conformance fixtures (`.pzl` → AST/errors per dialect, run by every
-  implementation) are the planned way to keep them in agreement.
-- No code moves and nothing is renamed in this repo yet; the monorepo layout of
-  D162 stands.
+  in this parser (`packages/puzzle-lang/parser`), the JS ports in
+  `../puzzle-eslint` / `../puzzle-prettier`, the three editor grammars, **and**
+  Sites' next parser sync. Shared conformance fixtures (`.pzl` → AST/errors per
+  dialect, run by every implementation) are the planned way to keep them in
+  agreement.
+- Nothing is renamed: the package and CLI keep their names, and the rest of
+  D162's monorepo layout stands.

@@ -3,7 +3,7 @@ package codegen
 import (
 	"strconv"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // staticcache.go — build-once static subtrees

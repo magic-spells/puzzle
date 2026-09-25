@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // scriptcollide_test.go — the <script>-import collision warning. A template

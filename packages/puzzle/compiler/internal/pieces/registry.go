@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/textutil"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
 )
 
 // Registry is the parsed registry.json index.

@@ -48,7 +48,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // ScopeID derives the stable per-file scope id for <style scoped> (v1.27, D59):

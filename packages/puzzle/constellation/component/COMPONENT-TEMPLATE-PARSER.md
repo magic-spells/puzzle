@@ -26,7 +26,7 @@ notes:
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
   - kind: state
     text: >-
-      The package also exports `OverNestingDepth` (compiler/internal/parser/depth.go, D164): a
+      The package also exports `OverNestingDepth` (packages/puzzle-lang/parser/depth.go, D164): a
       token-level scan that reports whether a template nests past a caller-supplied limit, without
       building an AST. It exists for the playground's WASM compiler, whose process cannot survive a
       Go fatal error — the recursive-descent parser exhausts the stack on a pathologically deep
@@ -49,7 +49,15 @@ notes:
       `Cannot use 'in' operator` on the first render. A bare-identifier item on the left of a range
       is now a positioned error steering to `{#for 1...5, i}` (the counter always binds AFTER the
       range); spread and call collections still parse as before. Pinned in
-      compiler/internal/parser/parser_test.go.
+      packages/puzzle-lang/parser/parser_test.go.
+  - kind: state
+    text: >-
+      The parser lives in `packages/puzzle-lang` (module
+      `github.com/magic-spells/puzzle/packages/puzzle-lang`, package `parser`, with the `jsident`
+      and `textutil` helpers it imports; D172), a separate Go module that `packages/puzzle/go.mod`
+      requires through `require ... v0.0.0` + `replace => ../puzzle-lang`. Its FILE cards bind to
+      `../puzzle-lang/...`, outside this plan's code root, so stale_report cannot track them and
+      `code: direct` hydration does not reach the parser sources.
 ---
 
 # Template parser

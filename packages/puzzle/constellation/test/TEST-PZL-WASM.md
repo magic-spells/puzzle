@@ -26,7 +26,7 @@ the instance able to compile again; a throwing `options` getter does the same. I
 closes by timing 50 repeated compiles.
 
 The Go side of the same boundary is covered by `TestOverNestingDepth*` in
-`compiler/internal/parser/depth_test.go` — a native test, so CI runs the depth
-scan on every push — and by a CI step that builds the command under
-`GOOS=js GOARCH=wasm`, which the `js && wasm` build tag otherwise hides from
-`go build ./...`.
+`packages/puzzle-lang/parser/depth_test.go` — a native test in the language
+module, which CI's Go jobs test on every push — and by a CI step that builds the
+command under `GOOS=js GOARCH=wasm`, which the `js && wasm` build tag otherwise
+hides from `go build ./...`.

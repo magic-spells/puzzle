@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // module_stamp_test.go — the D81 `Class.__pzlModule = "<path>"` stamp the

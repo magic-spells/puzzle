@@ -11,7 +11,7 @@
 // file is normalized to end with exactly one newline.
 //
 // The splitter mirrors the compiler's canonical splitter,
-// compiler/internal/parser/sections.go (see src/split.js).
+// packages/puzzle-lang/parser/sections.go (see src/split.js).
 import { doc } from 'prettier';
 import { splitSections } from './split.js';
 

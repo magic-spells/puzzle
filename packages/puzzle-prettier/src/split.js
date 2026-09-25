@@ -1,5 +1,5 @@
 // split.js — a faithful JavaScript port of the Puzzle compiler's .pzl section
-// splitter (compiler/internal/parser/sections.go). It carves a .pzl file into its
+// splitter (packages/puzzle-lang/parser/sections.go). It carves a .pzl file into its
 // <puzzle-view> (required, exactly one), optional <puzzle-skeleton>, optional
 // <script>, and optional <style> sections, tolerant of whitespace, order, and
 // top-level HTML comments. The <script>/<style> close scans are language-aware
