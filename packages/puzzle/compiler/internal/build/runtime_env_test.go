@@ -78,7 +78,8 @@ func exportedSpecifiers(t *testing.T) []string {
 		if subpath != "." {
 			spec += strings.TrimPrefix(subpath, ".")
 		}
-		if spec == plugin.ManifestSpecifier {
+		// The two virtual manifests are served by the plugin, never aliased.
+		if spec == plugin.ManifestSpecifier || spec == plugin.I18nManifestSpecifier {
 			continue
 		}
 		var conditions map[string]string

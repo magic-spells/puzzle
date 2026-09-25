@@ -51,6 +51,7 @@ The organizing principle for v1: **the todos app compiling and running end-to-en
 
 
 
+
 The spec is split across six domain cards. Section numbers are globally unique and never change: `§22` is `§22` no matter which card holds it, so the `§N` citations in the other cards and in `client-runtime/` / `compiler/` comments stay valid. This card remains the entry point, and the binding contract is the six cards in aggregate. A reader following a `§N` citation from code should start here and use this table to find the section.
 
 Which of these sections define the Puzzle language core and which define the PuzzleKit dialect is mapped on [[DOC-LANGUAGE-CORE]] (D172).
@@ -122,6 +123,7 @@ Which of these sections define the Puzzle language core and which define the Puz
 | 63 | `puzzle check`: type-checking `.pzl` with the app's own tsc (v1.78) | [[DOC-SPEC-BUILD]] |
 | 64 | Snippets: `<Snippet>` + marker data attributes (v1.79) | [[DOC-SPEC-TEMPLATE]] |
 | 65 | Component families: dotted component tags (v1.80) | [[DOC-SPEC-TEMPLATE]] |
+| 66 | Translations: the `t` formatter and `ctx.i18n` (v1.81) | [[DOC-SPEC-TEMPLATE]] |
 | — | Deferred features (post-v1) | this card |
 | — | Open questions (tracked, not blocking) | this card |
 

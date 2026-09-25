@@ -18,6 +18,22 @@ notes:
   - kind: verified
     text: §15 popstate paragraph extended to cover path mode's same-document fragment-pop guard.
     sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+  - kind: state
+    text: >-
+      Translations and the router (v1.81, §66, [[DECISION-D175-TRANSLATIONS]]). (1) With `i18n`
+      configured, `mount()` awaits the locale table after `beforeMount` and before the HMR restore
+      and `router.start()`, so navigation zero — guards, `data()`, commit — never runs without its
+      strings. (2) `setLocale(tag)` ends in a **same-location rebuild**: the router re-runs the
+      committed path with keep = 0 (every routed view and layout constructed fresh, `data()` re-run,
+      one atomic commit), in replace mode — no history entry — with no scroll change (scrollBehavior
+      is not consulted), no focus move or route announcement, enter animations skipped and the
+      outgoing chain's exit animation skipped. Store records survive; `setData` local state does
+      not. Implementation: the internal `__failedView(null, true)` entry beside the D145 errorView
+      retry, flagged by a module-private `REBUILD` marker passed as `retryView` (the marker and its
+      branches are all behind `__PUZZLE_HAS_I18N__`, so an app without `i18n` carries none of it).
+      Nested components inside a rebuilt view are ordinary fresh mounts and may still play their own
+      enter animations. Route `meta.title` stays a static string (§45) — translated titles need a
+      D84 amendment and are not in v1.81.
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/router/modes.js

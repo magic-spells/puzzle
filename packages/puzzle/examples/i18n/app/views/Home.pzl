@@ -1,0 +1,50 @@
+<puzzle-view class="space-y-8">
+  <div class="space-y-3">
+    <h1 class="text-3xl font-semibold">{ 'home.greeting' | t(user) }</h1>
+    <p class="text-muted leading-relaxed">{ 'home.intro' | t }</p>
+  </div>
+
+  <section class="rounded-xl border border-line bg-surface p-6 space-y-5">
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold">{ 'home.cart.title' | t }</h2>
+      <!-- A plural entry: `count` picks the form through Intl.PluralRules
+           (pl has one/few/many/other), and {count} prints in the locale's
+           number format. -->
+      <p class="count tabular-nums">{ 'home.cart.items' | t(cart) }</p>
+    </div>
+    <div class="flex gap-2">
+      <button class="px-3 py-1.5 rounded-md border border-line hover:bg-page" @click={ change(-1) }>{ 'home.cart.remove' | t }</button>
+      <button class="px-3 py-1.5 rounded-md bg-brand text-white hover:bg-brand-dark" @click={ change(1) }>{ 'home.cart.add' | t }</button>
+    </div>
+    <dl class="grid grid-cols-2 gap-y-2 text-sm">
+      <dt class="text-muted">{ 'home.cart.total' | t }</dt>
+      <dd class="text-right tabular-nums">{ cart.count * 1249.5 | number_with_delimiter }</dd>
+      <dt class="text-muted">{ 'home.cart.updated' | t }</dt>
+      <dd class="text-right">{ updated | date('long') }</dd>
+    </dl>
+  </section>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Home extends PuzzleView {
+  // Variables reach `t` as one object: `t(user)` fills {name}, `t(cart)` fills
+  // {count} and picks the plural form. (An inline `t({ count: n })` works once
+  // object-literal formatter arguments land — D173 V8.)
+  data() {
+    return { user: { name: 'Ada' }, updated: '2026-09-25' };
+  }
+
+  created() {
+    this.setData({ cart: { count: 2 } });
+  }
+
+  events = {
+    change: (step) => {
+      const count = Math.max(0, this.getData().cart.count + step);
+      this.setData({ cart: { count } });
+    },
+  };
+}
+</script>

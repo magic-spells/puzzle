@@ -2,7 +2,7 @@
 name: >-
   D175 — Translations: the `t` formatter joins the standard set; one build-filled, hashed locale
   file per language, loaded before the first render
-status: planned
+status: building
 connections:
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D173-CORE-SEMANTICS
@@ -36,8 +36,50 @@ connections:
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
   - DECISION-D160-SPA-CODE-SPLITTING
+notes:
+  - kind: deviation
+    text: >-
+      Built on feat/translations (items 1–7 and 9–12; item 8 waits on PR #150). Where the card did
+      not pin a detail, the smallest consistent choice: (1) The define is read from the plugin
+      (`pl.I18nEnabled()` in `build/options.go`), set by `SetI18n` from the config, not threaded as
+      a separate bundle flag — same effect on every pass. (2) The rebuild entry is
+      `router.__failedView(null, true)` with a module-private `REBUILD` marker passed as
+      `retryView`, not a new method: esbuild never drops class members, so a new method would ship
+      in every app. (3) The `t` formatter is installed by `installTranslate(registry, i18n)` from
+      `i18n.js` right after `makeFormatterRegistry`, not inside it, so `formatters.js` never imports
+      the i18n module (zero bytes without i18n). (4) The manifest lists locales in config order; the
+      hash is sha256 → base32, first 8 characters; locale files are minified with sorted keys. (5)
+      `/testing`'s option is `{ locale, strings }` — one table, which is both the active and the
+      default locale. (6) `PuzzleApp` and `mountStatic` take an internal `__i18n` config seam (`{
+      manifest, tables, locale }`) used by tests and `/testing`; it is not public config. (7) Tests
+      are consolidated into `tests/i18n.test.js`, `tests/i18n-app.test.js` and
+      `tests/i18n-ssg.test.js` (static prerender, static-kernel swap, hybrid takeover, `</body>`
+      anchor, rawtext escape) instead of extending the five per-area files. (8) Nested components
+      inside a rebuilt view are ordinary fresh mounts and may play their own enter animations;
+      routed views and the layout skip theirs. (9) Template `t({ … })` waits on D173 V8: examples
+      and tests pass variables as a data field (`t(user)`), and the template-level object-literal
+      test is a `t.Skip("TODO(V8)")` in `compiler/internal/build/i18n_test.go`. (10) Size:
+      hello-world and todos raw bytes are identical; esbuild's minified identifier assignment shifts
+      because it counts symbol uses inside dead branches, so gzip moves by −1 byte (hello-world) / 0
+      (todos) and brotli by +4 / +12 bytes. The i18n cost measured on examples/i18n is +3.4 KB raw,
+      +1.3 KB gzip, +1.2 KB brotli (inside the 1–1.5 KB budget).
+  - kind: state
+    text: >-
+      Status is `building`, not `built`: everything that does not depend on PR #150 is on
+      feat/translations (config, locales package, manifest + define, scan checks, SPA/static dev
+      reload, the i18n service, the service-bound `t`, app wiring, the same-location rebuild,
+      prerender + static kernel + islands, `/testing`, types, examples/i18n, SPEC §66, SKILL,
+      README, CHANGELOG). Still open, all gated on #150 (feat/formatter-set) merging into
+      release/0.8.0: item 8 (`formatters/locale.js`, `setFormatLocale`, `localeNumber` moved,
+      `builtins.js` threading `formatLocale`, prerender `setFormatLocale(defaultLocale)`, the
+      service's `onLocale` hook wired to it); item 7's `t` in `STANDARD_FORMATTERS` with the shadow
+      warning and the conformance `t` rows; and D174's counts (35 / 24 / 38). Until then `{count}`
+      prints through the service's own cached `Intl.NumberFormat(locale)`, and
+      `date`/`number_with_delimiter` still follow the browser locale. The open questions stand with
+      the brief's defaults: selection order stored → exact → base → same-base configured tag →
+      default, storage key `__puzzleLocale`; `defaultLocale`; nested files allowed; no special
+      `zero` rule; `currency` locale-independent; route `meta.title` static.
 ---
-
 
 # D175 — Translations: `'key' | t`, one locale file per language
 

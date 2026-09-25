@@ -54,6 +54,31 @@ notes:
       app/components/ui/NavigationMenu/Item.pzl and a conflict on one member refuses the whole
       family by that full path. RenderSummary is unchanged too — it prints one ✓ line per unit with
       a file count, no file list and no import hints, so a family reads as one unit with N files.
+  - kind: state
+    text: >-
+      Translations build output (v1.81, §66 in DOC-SPEC-TEMPLATE, [[DECISION-D175-TRANSLATIONS]]).
+      Only when `puzzle.config.js` declares `i18n`: the compiler (package
+      `compiler/internal/locales`) loads every configured `app/locales/<tag>.json`, validates
+      (positioned errors: bad value type by key path, flatten collision, plural entry without
+      `other`, `_` in a file name, a configured locale without a file), flattens nesting to dotted
+      keys (plural entries stay objects), fills each locale's missing keys from `defaultLocale` (one
+      warning per locale, plus one for keys only a non-default locale has), and writes minified
+      sorted-key `dist/locales/<tag>.<HASH8>.json` (sha256 → base32, first 8, the D160 chunk-name
+      shape) into staging before the passes. `locales/` is a reserved public output name while
+      `i18n` is on (`ValidatePublic` takes the flag). The manifest is the virtual module
+      `@magic-spells/puzzle/i18n/manifest` (`{ defaultLocale, locales: { tag:
+      'locales/<tag>.<hash>.json' } }`, config order), fresh on every rebuild; package `exports` map
+      it to a `null` default for vitest/raw imports. `__PUZZLE_HAS_I18N__` is a config-fact define
+      on every pass; without `i18n` nothing ships and bundles are byte-identical (hello-world 67082
+      / todos 79495 raw, unchanged). Build warnings: `t` used without `i18n`; `app/locales/` without
+      `i18n`; a literal `'key' | t` missing from the default table (did-you-mean). Prerender
+      (`--hybrid`, `--static`): pages render in `defaultLocale` from the staged default file, and
+      every page carries `<script type="application/json" data-puzzle-locale="<tag">`
+      (escapeScriptJson) at the shell's `</body>` anchor — static `prerender:false` pages too; a
+      hybrid `prerender:false` page is the verbatim shell and fetches. Dev: `puzzle dev` (SPA)
+      re-emits locale files on an `app/locales/**` edit, refreshes the manifest, rebuilds and
+      reloads, pruning superseded hashed files after a successful build; static dev classifies a
+      locale edit as render-wide (D155's one-off edge, like `{#svg}`) on the warm staging swap.
 ---
 
 The frozen v1 contract for the toolchain: the CLI surface, dev HMR and build-error reporting, the `hybrid`/`static` output modes, update notification and `puzzle upgrade`, interactive `puzzle init`, the `/testing` utilities, the `--fixtures` switch, and the DevTools bridge. See [[DOC-SPEC]] for the section index and the rest of the contract.

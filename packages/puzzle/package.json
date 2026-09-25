@@ -45,7 +45,8 @@
 		"./puzzle-env": {
 			"types": "./puzzle-env.d.ts"
 		},
-		"./formatters/manifest": "./client-runtime/formatters/builtins-all.js"
+		"./formatters/manifest": "./client-runtime/formatters/builtins-all.js",
+		"./i18n/manifest": "./client-runtime/i18n-manifest.js"
 	},
 	"sideEffects": false,
 	"files": [
@@ -75,10 +76,11 @@
 		"build:core-semantics": "go run ./compiler/cmd/pzlc --mode component tests/fixtures/core-semantics/Chip.pzl tests/fixtures/core-semantics/Chip.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/core-semantics/CoreHost.pzl tests/fixtures/core-semantics/CoreHost.compiled.js",
 		"build:binding": "go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/LocalForm.pzl tests/fixtures/binding/LocalForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/RecordForm.pzl tests/fixtures/binding/RecordForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/PlainForm.pzl tests/fixtures/binding/PlainForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/TodoTitles.pzl tests/fixtures/binding/TodoTitles.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/ClobberForm.pzl tests/fixtures/binding/ClobberForm.compiled.js && go run ./compiler/cmd/pzlc --mode view tests/fixtures/binding/PrimitiveForm.pzl tests/fixtures/binding/PrimitiveForm.compiled.js",
 		"build:grimoire": "go run ./compiler/cmd/puzzle build examples/grimoire --mode development && node -e \"const fs=require('fs');['examples/grimoire/dist/app.js','examples/grimoire/dist/index.html','examples/grimoire/dist/styles.css'].map(f=>fs.accessSync(f))\"",
+		"build:i18n": "go run ./compiler/cmd/puzzle build examples/i18n --mode development && go run ./compiler/cmd/puzzle build examples/i18n --static && go run ./compiler/cmd/puzzle build examples/i18n --hybrid && node -e \"const fs=require('fs');const l=fs.readdirSync('examples/i18n/dist/locales');if(l.length!==3)throw new Error('examples/i18n: expected 3 locale files, got '+l.join(', '));if(!fs.readFileSync('examples/i18n/dist/about/index.html','utf8').includes('data-puzzle-locale'))throw new Error('examples/i18n: hybrid page is missing the locale island')\"",
 		"build:typed-todos": "go run ./compiler/cmd/puzzle build examples/typed-todos --mode development && node -e \"const fs=require('fs');const s=fs.readFileSync('examples/typed-todos/dist/app.js','utf8');['examples/typed-todos/dist/app.js','examples/typed-todos/dist/index.html','examples/typed-todos/dist/styles.css'].map(f=>fs.accessSync(f));if(/\\binterface\\b|: TodoRecord|import type/.test(s)){throw new Error('typed-todos bundle still contains TypeScript syntax')}\"",
 		"build": "node scripts/release-prep.mjs",
 		"build:compiler": "go build -o puzzle ./compiler/cmd/puzzle",
-		"pretest": "npm run build:example-modules && npm run build:blog && npm run build:grimoire && npm run build:typed-todos && npm run build:virtual-scroll && npm run build:slot-forwarding && npm run build:snippets && npm run build:binding && npm run build:core-semantics",
+		"pretest": "npm run build:example-modules && npm run build:blog && npm run build:grimoire && npm run build:i18n && npm run build:typed-todos && npm run build:virtual-scroll && npm run build:slot-forwarding && npm run build:snippets && npm run build:binding && npm run build:core-semantics",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:browser": "playwright test",

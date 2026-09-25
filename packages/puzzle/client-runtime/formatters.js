@@ -76,8 +76,9 @@ function editDistance(a, b) {
 
 // Nearest registered formatter name within edit distance ≤ 2, or null when nothing
 // is close (D43 did-you-mean). First match wins on ties. Module-level for the same
-// tree-shaking reason as editDistance above.
-function nearestFormatter(formatters, name) {
+// tree-shaking reason as editDistance above. Also the i18n service's did-you-mean
+// over a locale table's keys (D175), from behind the same development probe.
+export function nearestFormatter(formatters, name) {
 	let best = null;
 	let bestDist = 3; // strictly-less-than test below accepts ≤ 2
 	for (const key of Object.keys(formatters)) {
@@ -124,6 +125,14 @@ export class FormatterRegistry {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (!this._warnedMissing.has(name)) {
 					this._warnedMissing.add(name);
+					// `t` is service-bound (D175): it exists only when the app configures
+					// translations, so the useful hint is how to turn them on.
+					if (name === 't') {
+						console.error(
+							"[puzzle] the t formatter needs translations — add i18n: { locales: ['en'], defaultLocale: 'en' } to puzzle.config.js and app/locales/en.json; the key passes through unchanged",
+						);
+						return (v) => v;
+					}
 					if (Object.hasOwn(REMOVED_FORMATTERS, name)) {
 						console.error(
 							`[puzzle] formatter "${name}" was removed — ${REMOVED_FORMATTERS[name]}; value passed through unchanged`,

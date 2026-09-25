@@ -250,6 +250,30 @@ under Changed.
   missing value, `false`, `''` or an empty list; `0` is a real value and is
   kept.
 
+- **Translations: `{ 'cart.title' | t }` (D175).** Add
+  `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` to `puzzle.config.js`
+  and one `app/locales/<tag>.json` per locale. Files may nest (flattened to
+  dotted keys); an object whose keys are all CLDR categories is a plural entry
+  and must have `other`. The compiler validates every file (positioned errors
+  for bad types, collisions, a missing `other`, an `en_US`-style name), fills
+  each locale's missing keys from the default with a one-line warning, and
+  emits `dist/locales/<tag>.<hash>.json`; the browser fetches only the active
+  one. `t` looks the key up, prints the key itself on a miss, fills `{name}`
+  placeholders in one pass, and with a numeric `count` picks the plural form
+  through `Intl.PluralRules` and prints `{count}` in the locale's number
+  format. `this.ctx.i18n` / `app.i18n` carry `t(key, vars)`, `locale`,
+  `locales`, `defaultLocale` and `setLocale(tag)`, which fetches first, then
+  switches, remembers the choice (`localStorage.__puzzleLocale`), sets
+  `<html lang>` and rebuilds the page at the same location — no history entry,
+  no scroll jump, no animations. The startup locale is the stored choice, then
+  `navigator.languages` (exact tag, base language, then a configured tag with
+  the same base), then the default; the first render always has its strings.
+  `--hybrid` and `--static` pages prerender in the default locale and carry its
+  table inline, so a default-locale visitor makes no extra request.
+  `/testing`'s `mountView` and `createTestApp` take `i18n: { locale, strings }`.
+  Without `i18n` configured nothing ships: hello-world and todos are
+  byte-identical in raw size. See `examples/i18n` (en, es, pl).
+
 ### Changed
 
 - **BREAKING: the built-in formatters are the standard set (D174).** The

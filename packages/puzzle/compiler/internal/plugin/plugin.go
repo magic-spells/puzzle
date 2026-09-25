@@ -35,6 +35,10 @@ type Plugin struct {
 	formatters  map[string]bool
 	features    Features // DCE define bits from the most recent SetUsage
 	runtimeDir  string
+	// i18nEnabled/i18nManifest back the D175 locale manifest module and the
+	// __PUZZLE_HAS_I18N__ define (see SetI18n).
+	i18nEnabled  bool
+	i18nManifest string
 	// cache is the build-scoped .pzl transform memo shared with this build's
 	// other esbuild passes, or nil for "transform every time" (WatchBuilder).
 	cache *CompileCache
@@ -90,6 +94,17 @@ func (p *Plugin) setup(build api.PluginBuild) {
 			Loader:     loader,
 			ResolveDir: resolveDir,
 		}, nil
+	})
+
+	// The D175 locale manifest: re-served on every rebuild (esbuild re-runs a
+	// namespaced OnLoad each Rebuild — see TestFormatterManifestFreshAcrossIncrementalRebuilds),
+	// so a locale edit's new hashed file names reach the next bundle.
+	build.OnResolve(api.OnResolveOptions{Filter: "^" + I18nManifestSpecifier + "$"}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+		return api.OnResolveResult{Path: args.Path, Namespace: i18nManifestNamespace}, nil
+	})
+	build.OnLoad(api.OnLoadOptions{Filter: ".*", Namespace: i18nManifestNamespace}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+		out := p.i18nManifestSource()
+		return api.OnLoadResult{Contents: &out, Loader: api.LoaderJS}, nil
 	})
 
 	build.OnLoad(api.OnLoadOptions{Filter: `\.pzl$`}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {

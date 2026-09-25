@@ -9,7 +9,9 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -83,6 +85,20 @@ type WatchBuilder struct {
 	// scanner memoizes the project usage walk per file so an unchanged .pzl is
 	// not re-parsed on every rebuild.
 	scanner *plugin.UsageScanner
+	// usage is the most recent scan, kept for the translation warnings.
+	usage plugin.Usage
+
+	// i18n is the session's translation config (D175), nil without i18n. locales
+	// is the last successful locale load; a rebuild reloads it on the first pass
+	// and whenever the batch touches app/locales/. localeFiles is the set of
+	// dist-relative locale files the last successful rebuild served, so a string
+	// edit's superseded hashed file is pruned once the bundle naming its
+	// replacement has landed. lastI18nWarnings de-duplicates the warning print.
+	i18n             *config.I18n
+	locales          *locales.Result
+	nextLocales      *locales.Result
+	localeFiles      map[string]bool
+	lastI18nWarnings string
 
 	// Esbuild contexts freeze Define values when they are created. Track the
 	// usage bits baked into ctx so refreshUsage can replace the context only when a
@@ -124,6 +140,10 @@ type WatchOptions struct {
 	// watched directory and pruned from the usage scan, so writing it can never
 	// trigger a rebuild.
 	Fixtures bool
+	// I18n is the config's translation block (D175), nil without i18n. It turns
+	// __PUZZLE_HAS_I18N__ on for the session and makes app/locales/ edits
+	// re-emit the locale files before the rebuild that serves them.
+	I18n *config.I18n
 }
 
 // NewWatchBuilder creates the incremental builder for the app rooted at root
@@ -155,10 +175,14 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	}
 
 	pl := plugin.New(absRoot)
+	// The define is frozen into the context below, so the i18n bit is set now;
+	// the manifest itself arrives with the first rebuild's locale load.
+	pl.SetI18n(opts.I18n != nil, "")
 	// One scanner for the session: the usage walk parses every .pzl in the
 	// project, and a dev rebuild changes one of them (plugin.UsageScanner).
 	scanner := plugin.NewUsageScanner()
-	if _, err := scanUsage(absRoot, pl, scanner); err != nil {
+	usage, err := scanUsage(absRoot, pl, scanner)
+	if err != nil {
 		return nil, err
 	}
 
@@ -179,6 +203,8 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 		ctx:         ctx,
 		defined:     pl.Features(),
 		scanner:     scanner,
+		usage:       usage,
+		i18n:        opts.I18n,
 		fixtures:    fixtures,
 		useFixtures: opts.Fixtures,
 		splitting:   opts.Splitting,
@@ -242,6 +268,30 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		}
 		endScan()
 	}
+
+	// Translations (D175): on the first pass and on any app/locales/ edit, reload
+	// and re-emit the locale files, then point the manifest at them — BEFORE the
+	// bundle below, which bakes the manifest's hashed names into app.js. A broken
+	// locale file fails the rebuild with the last good files still served.
+	if b.i18n != nil && ((b.locales == nil && b.nextLocales == nil) || localesChanged(b.root, changed)) {
+		endLocales := prof.Phase("locales")
+		res, err := locales.Load(b.root, b.i18n)
+		if err == nil {
+			err = res.WriteTo(b.outdir, true)
+		}
+		endLocales()
+		if err != nil {
+			return out, err
+		}
+		b.pl.SetI18n(true, res.Manifest.JS())
+		// Committed (and the superseded files pruned) only once a bundle naming
+		// these files has landed — see commitLocales.
+		b.nextLocales = res
+		// A locale edit is not a scan input, and a public-only shortcut would skip
+		// the bundle that has to pick up the new manifest.
+		publicOnly = false
+	}
+	b.printI18nWarnings()
 
 	var result api.BuildResult
 	if !publicOnly {
@@ -320,9 +370,61 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		out.CSSChanged = b.commitCSS(!metafilePruned)
 		endCSS()
 		b.pendingBundleCommit = false
+		b.commitLocales()
 	}
 	b.landed = true
 	return out, nil
+}
+
+// commitLocales adopts the locale load the bundle that just landed was built
+// against, and deletes the locale files the previous one served but this one
+// does not — the old hash of an edited locale. Only paths this builder wrote
+// are ever candidates, so a public asset can never be touched.
+func (b *WatchBuilder) commitLocales() {
+	if b.nextLocales == nil {
+		return
+	}
+	if b.localeFiles == nil {
+		// The first landing: dist/ is warm from whatever built it last (a one-shot
+		// build, an earlier session), and dist/locales/ is compiler-owned while
+		// i18n is on (ValidatePublic reserves it), so every file there that this
+		// load did not produce is a stale hash.
+		b.localeFiles = map[string]bool{}
+		if entries, err := os.ReadDir(filepath.Join(b.outdir, locales.OutDirName)); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() {
+					b.localeFiles[locales.OutDirName+"/"+e.Name()] = true
+				}
+			}
+		}
+	}
+	for rel := range b.localeFiles {
+		if _, keep := b.nextLocales.Files[rel]; !keep {
+			_ = os.Remove(filepath.Join(b.outdir, filepath.FromSlash(rel)))
+		}
+	}
+	b.localeFiles = make(map[string]bool, len(b.nextLocales.Files))
+	for rel := range b.nextLocales.Files {
+		b.localeFiles[rel] = true
+	}
+	b.locales = b.nextLocales
+	b.nextLocales = nil
+}
+
+// printI18nWarnings prints the translation warnings when they differ from the
+// last set printed, so a dev session repeats nothing on an unrelated save.
+func (b *WatchBuilder) printI18nWarnings() {
+	res := b.nextLocales
+	if res == nil {
+		res = b.locales
+	}
+	warnings := i18nWarnings(b.root, config.Config{I18n: b.i18n}, b.usage, res)
+	joined := strings.Join(warnings, "\n")
+	if joined == b.lastI18nWarnings {
+		return
+	}
+	b.lastI18nWarnings = joined
+	printI18nWarnings(os.Stderr, warnings)
 }
 
 // writeSplitOutputs materializes a splitting rebuild's outputs into the warm
@@ -490,17 +592,19 @@ func metafileAllInputs(metafileJSON string) (map[string]bool, error) {
 // into an esbuild context, so replace that context only when one of the booleans
 // changes; ordinary rebuilds keep the incremental graph warm.
 func (b *WatchBuilder) refreshUsage() error {
-	if _, err := scanUsage(b.root, b.pl, b.scanner); err != nil {
+	usage, err := scanUsage(b.root, b.pl, b.scanner)
+	if err != nil {
 		return err
 	}
+	b.usage = usage
 	features := b.pl.Features()
 	if features == b.defined {
 		return nil
 	}
 
-	next, err := api.Context(watchBundleOptions(b.root, b.entry, b.outdir, b.pl, b.splitting, b.useFixtures, b.fixtures))
-	if err != nil {
-		return fmt.Errorf("puzzle dev: refreshing esbuild context: %s", err.Error())
+	next, ctxErr := api.Context(watchBundleOptions(b.root, b.entry, b.outdir, b.pl, b.splitting, b.useFixtures, b.fixtures))
+	if ctxErr != nil {
+		return fmt.Errorf("puzzle dev: refreshing esbuild context: %s", ctxErr.Error())
 	}
 	if b.ctx != nil {
 		b.ctx.Dispose()

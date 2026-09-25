@@ -31,6 +31,8 @@ import { mount } from '../views/viewManager.js';
 import { setPortalHost } from '../views/portal.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
+import { createI18n, installTranslate } from '../i18n.js';
+import { normalizeBase } from '../router/router.js';
 
 /**
  * Mount a prerendered static page's interactive layer.
@@ -62,6 +64,7 @@ export async function mountStatic({
 	storage,
 	adapter,
 	routerBase,
+	__i18n,
 } = {}) {
 	const targetEl = document.querySelector(target);
 	if (!targetEl) {
@@ -99,6 +102,26 @@ export async function mountStatic({
 	hydrateStore(ctx.store);
 	hydrateReadState(ctx.store, readIsland());
 
+	// Translations (D175): the page's own island answers the build locale with no
+	// request; a viewer whose locale differs fetches it here, BEFORE the mount, so
+	// the prerendered default-language page swaps to theirs exactly once. A switch
+	// re-assembles and re-mounts this page's chain (see remount below).
+	let remount = null;
+	if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
+		const i18n = createI18n({
+			// __i18n is an internal test seam ({ manifest, tables, locale }); a build
+			// reads the manifest module.
+			...__i18n,
+			url: (path) => normalizeBase(routerBase) + '/' + path,
+			refresh: () => remount?.(),
+		});
+		if (i18n) {
+			ctx.i18n = i18n;
+			installTranslate(ctx.formatters, i18n);
+			await i18n.__ready();
+		}
+	}
+
 	const { topVnode, instances } = await assembleChain(entry, ctx, routeSnapshot);
 
 	// A marked static page is replacing content-complete prerendered DOM. Prepare
@@ -116,11 +139,34 @@ export async function mountStatic({
 	// as the SSG takeover: skipEnter every preloaded instance).
 	for (const instance of instances) instance.skipEnter();
 
+	// A locale switch (D175) rebuilds this page the way the SPA router's
+	// same-location rebuild does: preload a fresh chain against the new table,
+	// then swap it in for the mounted one in one step. Last switch wins.
+	const armRemount = (root) => {
+		if (!(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) || !ctx.i18n) return;
+		let current = root;
+		let token = 0;
+		remount = async () => {
+			const my = ++token;
+			const next = await assembleChain(entry, ctx, routeSnapshot);
+			if (my !== token) {
+				for (const instance of next.instances) instance.destroy();
+				return;
+			}
+			for (const instance of next.instances) instance.skipEnter();
+			current.destroy();
+			targetEl.replaceChildren();
+			mount(next.topVnode, targetEl, null, ctx);
+			current = next.topVnode.instance;
+		};
+	};
+
 	// An unmarked prerender:false page has no fallback DOM to preserve and keeps the
 	// original mount path byte-for-byte.
 	if (!isTakeover) {
 		targetEl.replaceChildren();
 		mount(topVnode, targetEl, null, ctx);
+		armRemount(topVnode.instance);
 		return;
 	}
 
@@ -148,6 +194,7 @@ export async function mountStatic({
 		);
 		return;
 	}
+	armRemount(root);
 	// Kept OUTSIDE the mount try: a rejected playIn() must never tear down a
 	// component that mounted successfully (mountComponent's two-arg then() rule).
 	// After the skipEnter above this is a no-op today; the guard is for whatever

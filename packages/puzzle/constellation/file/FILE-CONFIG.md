@@ -15,6 +15,14 @@ notes:
       packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
       one — the path moved, the code did not. No content was re-checked, and none needed to be.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: state
+    text: >-
+      `i18n` config key (D175, v1.81): `Config.I18n *I18n{ Locales, DefaultLocale }`, nil when
+      absent; `I18nEnabled()`. Validation errors: not an object; `locales` missing, not an array, or
+      empty; a tag failing `ValidLocaleTag` (`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`, with a `_`→`-`
+      suggestion); a case-insensitive duplicate; `defaultLocale` missing (the message says the key
+      is `defaultLocale`, not `default`), not a string, or not in `locales`. `ValidLocaleTag` is
+      exported for the locales package's file-name check.
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/config/config.go`.

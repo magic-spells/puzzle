@@ -68,6 +68,21 @@ notes:
       `created()` pins the subprocess until the 120s timeout kills it and fails the build blaming
       `data()`. The callback is load-bearing — a bare `process.exit()` after a pipe write truncates
       the payload and turns the hang into a "missing sentinel" failure.
+  - kind: state
+    text: >-
+      Translations in prerender (D175, v1.81). `prerenderToDir` reads the staged default-locale file
+      named by the manifest (`loadBuildI18n`; `options.i18n` is a test override), builds ONE service
+      per pass over that table in `defaultLocale`, and hands it to `buildContext`, which sets
+      `ctx.i18n` and installs `t`. Every rendered page gets the locale island `<script
+      type="application/json" data-puzzle-locale="<tag>">` (escapeScriptJson, D113) at the shell
+      plan's `</body>` anchor: `injectShell` adds it as one more op at `plan.bodyCloseIndex`
+      (appended when the shell has none); `injectStaticShell` places it with the data/read islands
+      just before the per-page module script, including `prerender:false` pages. Pages without
+      `i18n` emit byte-identical HTML. Pending PR #150: `setFormatLocale(defaultLocale)` so
+      prerendered dates/numbers use the build locale. Gotcha found while building examples/i18n
+      (pre-existing, not D175): the shell plan's `</body>` anchor is the FIRST `</body>` match in
+      the shell, so a shell with the text `</body>` inside an HTML comment before the real one gets
+      every island and the module script injected inside the comment — the page never boots.
 ---
 
 # Static generation runtime

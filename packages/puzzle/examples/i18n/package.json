@@ -1,0 +1,17 @@
+{
+  "name": "i18n",
+  "version": "0.1.0",
+  "description": "Translations with the t formatter — en, es and pl, plurals, and a live locale switch",
+  "type": "module",
+  "scripts": {
+    "dev": "puzzle dev",
+    "build": "puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^0.7.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "tailwindcss": "^4.1.14"
+  }
+}

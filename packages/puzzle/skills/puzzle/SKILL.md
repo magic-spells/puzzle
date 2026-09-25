@@ -33,6 +33,7 @@ my-app/
     ├── layouts/*.pzl      # chrome with <Slot/>
     ├── views/*.pzl        # pages
     ├── components/*.pzl
+    ├── locales/<tag>.json # translations, only with `i18n` in puzzle.config.js (see Translations)
     └── models/*.js
 ```
 
@@ -394,6 +395,33 @@ Form controls bind themselves — write NO input handler:
   `mailto:`, `#anchor`). Hand-written `#/...` hrefs still work in hash mode,
   but piped links are the portable spelling.
 
+## Translations (puzzle ≥ 0.8.0)
+
+Configure `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` in
+`puzzle.config.js` (the key is `defaultLocale`, not `default`) and write one
+`app/locales/<tag>.json` per locale (BCP 47 with `-`: `pt-BR.json`, never
+`pt_BR.json`). Files may nest — `{ "cart": { "title": "…" } }` is the key
+`cart.title`. An object whose keys are ALL CLDR categories (`zero one two few
+many other`) is a plural entry and must have `other`.
+
+- Template: `{ 'cart.title' | t }`; variables come as ONE object argument —
+  `{ 'greeting' | t(user) }` fills `{name}` from `user.name`, and a numeric
+  `count` picks the plural form (`{ 'cart.items' | t(cart) }`). Inline object
+  literals (`t({ count: n })`) need D173 V8; until then pass a data field.
+  Runtime-built keys work: `{ ('status.' + order.status) | t }`.
+- Script: `this.ctx.i18n.t('key', vars)`, `.locale`, `.locales`,
+  `.defaultLocale`, and `this.ctx.i18n.setLocale('es')` — it fetches the file
+  first, then switches, stores the choice, sets `<html lang>`, and rebuilds the
+  page at the same location (store records survive; `setData` state does
+  not). `ctx.i18n` exists ONLY when `i18n` is configured.
+- A missing key prints the key itself (dev warns with a did-you-mean). The
+  build fills every locale's missing keys from the default and warns; a
+  literal key missing from the default locale is a build warning too.
+- Output is text: markup in a translation prints literally.
+- Route `meta.title` stays a static string — it is not translated.
+- Prerendered pages (`--hybrid`/`--static`) render in `defaultLocale` and carry
+  its table inline; a viewer in another locale sees one swap after load.
+
 ## Data layer
 
 Models live in `app/models/`, extend `PuzzleModel`, and declare a `static
@@ -633,12 +661,14 @@ await app.router.push('/todos/1');
 
 - `mountView(ViewClass, options)` mounts ONE view against a detached container.
   Options: `params`, `props`, `children`, `ref`, `route`, `models`, `store`,
-  `router`, `formatters`, `adapter`, `ctx`. Returns a handle: `instance`, `container`,
+  `router`, `formatters`, `adapter`, `ctx`, `i18n: { locale, strings }` (a
+  translated view with no fetch; `strings` is the flat dotted-key table).
+  Returns a handle: `instance`, `container`,
   `element`, `ctx`, `store`, `router`, `find(sel)`, `findAll(sel)`,
   `click(target)`, `setProps(props)`, `destroy()`.
 - `createTestApp(config)` boots a REAL `PuzzleApp` — `target` and memory
   routing are forced (`routerInitialPath` seeds it), everything else passes
-  through. Handle: `app`, `store`, `router`, `ctx`,
+  through (`i18n: { locale, strings }` too). Handle: `app`, `store`, `router`, `ctx`,
   `find`, `findAll`, `click`, `destroy()`.
 - `settled()` awaits the framework's pending render/flush work. `click()` and
   `setProps()` already await it; use it directly after mutating the store.

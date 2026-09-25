@@ -54,6 +54,15 @@ type Usage struct {
 	// views (D163) are declared in the app's JavaScript/TypeScript, so the walk
 	// reads those files too (see scanScriptUsage).
 	HasLazy bool
+	// TKeys maps each string-literal key piped straight into `t` (D175) to the
+	// app-relative files that use it, for the build's missing-key warning. It is
+	// diagnostics only and never feeds a define.
+	TKeys map[string][]string
+}
+
+// UsesT reports whether any template pipes a value into the `t` formatter.
+func (u Usage) UsesT() bool {
+	return u.Formatters[TranslateFormatter]
 }
 
 // Features are the build-wide DCE bits — one boolean per gated runtime module —
@@ -350,8 +359,96 @@ func collectPartFormatters(parts []parser.Part, used, allow map[string]bool) {
 
 func collectFormatterCalls(calls []parser.FormatterCall, used, allow map[string]bool) {
 	for _, call := range calls {
-		if allow[call.Name] {
+		// `t` is service-bound (D175), never a manifest builtin, but the build still
+		// needs to know it is used: `t` without i18n configured is a build warning.
+		// The manifest only ever emits allowlisted names, so recording it is inert
+		// there.
+		if allow[call.Name] || call.Name == TranslateFormatter {
 			used[call.Name] = true
 		}
 	}
+}
+
+// TranslateFormatter is the D175 translation formatter's name.
+const TranslateFormatter = "t"
+
+// collectTKeys records every STRING-LITERAL key that is piped straight into `t`
+// (`{ 'cart.title' | t }`), for the build's "key missing from the default
+// locale" warning (D175). Runtime-built keys (`('status.' + s) | t`) are not
+// checkable and are skipped. It is its own walk rather than a thread through
+// collectUsage so the formatter-union walk keeps its narrow shape.
+func collectTKeys(nodes []parser.Node, keys map[string]bool) {
+	for _, n := range nodes {
+		switch node := n.(type) {
+		case *parser.Element:
+			collectAttrTKeys(node.Attrs, keys)
+			collectTKeys(node.Children, keys)
+		case *parser.Component:
+			collectAttrTKeys(node.Props, keys)
+			collectTKeys(node.Children, keys)
+		case *parser.Slot:
+			collectAttrTKeys(node.Args, keys)
+			collectTKeys(node.Children, keys)
+		case *parser.Snippet:
+			collectTKeys(node.Body, keys)
+		case *parser.Portal:
+			collectTKeys(node.Children, keys)
+		case *parser.Interpolation:
+			noteTKey(node.Expr, node.Formatters, keys)
+		case *parser.If:
+			collectTKeys(node.Then, keys)
+			collectTKeys(node.Else, keys)
+		case *parser.Case:
+			for _, clause := range node.Clauses {
+				collectTKeys(clause.Body, keys)
+			}
+			collectTKeys(node.Else, keys)
+		case *parser.For:
+			collectTKeys(node.Body, keys)
+		}
+	}
+}
+
+func collectAttrTKeys(attrs []parser.Attr, keys map[string]bool) {
+	for _, attr := range attrs {
+		if mixed, ok := attr.(*parser.MixedAttr); ok {
+			collectPartTKeys(mixed.Parts, keys)
+		}
+	}
+}
+
+func collectPartTKeys(parts []parser.Part, keys map[string]bool) {
+	for _, part := range parts {
+		switch p := part.(type) {
+		case *parser.InterpPart:
+			if p.Interp != nil {
+				noteTKey(p.Interp.Expr, p.Interp.Formatters, keys)
+			}
+		case *parser.InlineIfPart:
+			collectPartTKeys(p.Then, keys)
+			collectPartTKeys(p.Else, keys)
+		}
+	}
+}
+
+// noteTKey records expr when it is a plain quoted string and the chain's FIRST
+// formatter is `t`. A quote of the same kind inside the literal (or a backslash)
+// means it is not a simple literal, and it is skipped rather than guessed at.
+func noteTKey(expr string, calls []parser.FormatterCall, keys map[string]bool) {
+	if len(calls) == 0 || calls[0].Name != TranslateFormatter {
+		return
+	}
+	s := strings.TrimSpace(expr)
+	if len(s) < 2 {
+		return
+	}
+	q := s[0]
+	if (q != '\'' && q != '"') || s[len(s)-1] != q {
+		return
+	}
+	body := s[1 : len(s)-1]
+	if strings.IndexByte(body, q) >= 0 || strings.IndexByte(body, '\\') >= 0 {
+		return
+	}
+	keys[body] = true
 }

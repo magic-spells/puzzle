@@ -445,6 +445,7 @@ expansion fast path it took before; an app that uses them pays about 50 B gzip.
 
 ## 65. Component families: dotted component tags (v1.80)
 
+
 Related components import as one unit and invoke with dot notation. Shipped in
 v1.80 ([[DECISION-D167-COMPONENT-FAMILIES]]); the §6 component bullet is the
 short form, this section is the contract.
@@ -492,3 +493,91 @@ all-or-nothing, and `--force` rewrites only the family's own files. Family stubs
 are composition-shaped (`<Children/>` plus a caller `class` override) because a
 closed stub would silently drop nested members. Without `--family`,
 `generate component` output is byte-identical to before.
+
+## 66. Translations: the `t` formatter and `ctx.i18n` (v1.81)
+
+Shipped in v1.81 ([[DECISION-D175-TRANSLATIONS]], which holds the rationale and
+rejected alternatives). This section is the contract; the build side is in
+[[DOC-SPEC-BUILD]] and the switch rebuild in [[DOC-SPEC-ROUTER]].
+
+**Opt-in by config.** `puzzle.config.js` declares
+`i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` (§11). Without it,
+nothing ships: `__PUZZLE_HAS_I18N__` is a config fact, not a usage-scan fact,
+and existing bundles stay byte-identical. `ctx.i18n` and `app.i18n` exist only
+when `i18n` is configured.
+
+**Locale files.** One `app/locales/<tag>.json` per configured locale, named by a
+BCP 47 tag with `-` (`pt-BR.json`; `pt_BR.json` is a build error suggesting the
+`-` spelling). Files may nest; nesting flattens to dotted keys, and a flat file
+with dotted keys is equally valid. An object whose keys are ALL CLDR category
+names (`zero`, `one`, `two`, `few`, `many`, `other`) is a plural entry and must
+have `other`; any other object is a namespace. Values are strings, namespaces
+or plural entries; anything else, a duplicated flattened key, or a plural entry
+without `other` is a positioned build error.
+
+**`{ key | t }` and `{ key | t(vars) }`.**
+
+- The key is looked up in the active locale's table, which the build has
+  already filled from the default locale. A miss prints the key itself — never
+  blank — with a development warning once per key and locale (did-you-mean from
+  the table's keys).
+- A `null`/`undefined` input prints nothing; any other input is stringified, so
+  runtime-built keys work (`{ ('status.' + order.status) | t }`).
+- `vars` is ONE object. `{name}` placeholders fill in a single pass, left to
+  right — inserted text is never substituted again. The name is the exact text
+  between the braces (no trimming). A name absent from `vars` stays visible as
+  written; a present name with a nullish value prints nothing; values print by
+  the §6 nullish-display rule. A `{` without a closing `}` is literal text.
+  Non-object `vars` are ignored with a development warning.
+- **Plurals.** With a numeric `count` in `vars`, a plural entry picks its form
+  by `Intl.PluralRules(locale).select(count)` (cached per locale); a missing
+  category falls back to `other`. A plural entry used without `count` renders
+  `other` with a development warning. There is no special `zero` rule: `zero`
+  is used only where the locale's CLDR rules select it.
+- `{count}`, when `count` is a finite number, prints in the active locale's
+  number format; other variables print unformatted.
+- Output is text: markup inside a translation prints literally.
+- Until object-literal formatter arguments land (D173 V8), pass `vars` as a
+  data field (`t(user)`, `t(cart)`) rather than an inline `t({ … })`. The
+  quoted attribute form `title="{ 'x' | t }"` works; the brace-only form waits
+  on V1.
+
+**The service.** `this.ctx.i18n` / `app.i18n` carry `t(key, vars?)` (the same
+function the formatter calls), `locale`, `locales` (config order),
+`defaultLocale`, and `setLocale(tag)`. The `t` formatter is service-bound like
+`link`: registered at mount only if the app registered no `t` of its own.
+Without `i18n`, a template `t` hits the D43 guard, whose development hint names
+the `i18n` config, and the key prints through.
+
+**Locale selection at startup.** (1) the stored choice
+`localStorage.__puzzleLocale`, read inside try/catch and used only if still
+configured; (2) each of `navigator.languages` in order — the exact tag
+(case-insensitive), then its base language (`es-CO` → `es`), then the first
+configured tag with that base (`pt` → `pt-BR`); (3) `defaultLocale`. The
+prerender always uses `defaultLocale`.
+
+**Loading.** `mount()` starts loading the chosen table while services are
+wired, so the fetch overlaps `beforeMount`, and awaits it after `beforeMount`,
+before the HMR restore and `router.start()`: navigation zero never renders
+without its strings. A prerendered page's inline table
+(`script[data-puzzle-locale]`) is used without a request when it matches. A
+failed load falls back once to the default locale; if that fails too, `mount()`
+rejects through the `beforeMount` teardown. A `t` call before the strings
+arrive prints the key, with a development warning.
+
+**`setLocale(tag)`.** An unconfigured tag throws a `RangeError` naming the
+configured locales (every build). Otherwise the new file is fetched first; only
+then do the table, `locale` and `<html lang>` switch together, the choice is
+stored (try/catch), and the page rebuilds once at the same location (§ Router:
+the same-location rebuild). A failed fetch rejects and changes nothing.
+Overlapping calls resolve last-wins. Called before the first commit, it
+replaces the pending startup load and rebuilds nothing. Store records survive a
+switch; `setData` local state does not. Static output re-assembles and
+re-mounts its page chain instead.
+
+**`<html lang>`** is set to the active locale on load and on every switch.
+
+**Not in v1.81 (future work):** locale-aware date/number formatters (D175
+Formatter locale, after the standard formatter set lands), translated route
+`meta.title` (static by §45), locale URL prefixes, rich-text translations,
+`dir="rtl"`, key types for `puzzle check`.

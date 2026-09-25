@@ -31,6 +31,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
@@ -44,6 +45,10 @@ type fileUsage struct {
 	hasRawAt    bool
 	hasLazy     bool
 	hasSnippets bool
+	// name is the app-relative file name and tKeys the literal `t` keys it uses
+	// (D175 diagnostics).
+	name  string
+	tKeys []string
 }
 
 // scanStamp identifies a file version cheaply enough to check without reading.
@@ -148,6 +153,12 @@ func mergeFileUsage(usage *Usage, fu fileUsage) {
 	if fu.hasSnippets {
 		usage.HasSnippets = true
 	}
+	for _, key := range fu.tKeys {
+		if usage.TKeys == nil {
+			usage.TKeys = map[string][]string{}
+		}
+		usage.TKeys[key] = append(usage.TKeys[key], fu.name)
+	}
 }
 
 // scanFileUsage reads and parses one .pzl and returns its contribution. It is
@@ -195,8 +206,10 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 	collectUsage(tree, &tpl, allow)
 	// Codegen also emits formatter calls inside renderSkeleton(), so a builtin
 	// used ONLY in a skeleton must be seeded too.
+	var skel parser.Node
 	if sec.HasSkeleton {
-		if skel, serr := parser.ParseSkeleton(sec, name); serr == nil && skel != nil {
+		if s, serr := parser.ParseSkeleton(sec, name); serr == nil && s != nil {
+			skel = s
 			collectUsage(skel, &tpl, allow)
 		}
 	}
@@ -207,6 +220,18 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 	one.hasSnippets = tpl.HasSnippets
 	for formatter := range tpl.Formatters {
 		one.formatters = append(one.formatters, formatter)
+	}
+	if tpl.Formatters[TranslateFormatter] {
+		keys := map[string]bool{}
+		collectTKeys([]parser.Node{tree}, keys)
+		if skel != nil {
+			collectTKeys([]parser.Node{skel}, keys)
+		}
+		one.name = name
+		for key := range keys {
+			one.tKeys = append(one.tKeys, key)
+		}
+		sort.Strings(one.tKeys)
 	}
 	return one
 }
