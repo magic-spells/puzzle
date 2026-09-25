@@ -196,8 +196,7 @@ enforced, not merely advised.
   are unchanged by the four late fixes that landed after the review round: the
   router guard self-redirect hang and D168 completed at control-flow boundaries
   (PR #127), the Tailwind stderr diagnostic (#128), and the pieces demo's npm
-  dependencies (#129). Cards truthed through D168; the next free decision
-  number is **D170** (D169 is the 0.7.1 registry version floors).
+  dependencies (#129).
   **Publish prerequisite, learned the hard way:** eight upstream web components
   had to be published to npm *before* 0.7.0 could ship, because the D167
   families were built against unpublished local versions and the pieces
@@ -206,24 +205,33 @@ enforced, not merely advised.
   select-dropdown 0.3.0, split-panel 0.2.0, panel-stack 0.2.0,
   scrolling-content 2.1.0, and quantity-input 1.1.0. The pieces demo now
   installs them from npm rather than local `file:` paths (PR #129). A registry
-  version-floor mechanism closes the gap as D169 (0.7.1); until it lands,
-  treat "every web component a piece depends on is published at the version the
-  piece was built against" as a hard release gate.
-- **`0.7.1` (in progress on `release/0.7.1`, NOT yet published — Cory tags and
-  publishes):** four items — post-release release-state truthing (this file,
-  `plan.md`, and the release cards recording 0.7.0 as shipped); the user
-  guide's Quick Start switching to `npm install -g @magic-spells/puzzle` +
-  `puzzle init` (the unpublished `create-puzzle-app` wrapper is retired per
-  D77, and `puzzle init` is the only onboarding path); **D169** registry
-  version floors, so a piece can declare the minimum version of each web
-  component it needs instead of trusting npm `latest`; and a D76 amendment to
-  the update notice.
-- Product line: v1 through v1.80 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
+  version-floor mechanism closes the gap as D169 (0.8.0): each piece manifest
+  now pins the floor it needs, so the gate becomes "every floor a manifest
+  declares is published on npm".
+- **`0.8.0` (in progress on `release/0.8.0`, NOT yet published — Cory tags
+  and publishes; `0.7.1` was never published and is folded in):** D170
+  incremental rendering (persistent `{#for}` row blocks, static-subtree
+  caching, record render revisions); D171 `puzzle add theme` and the pieces
+  theme system (four palettes × three modes, `appearance-picker`, 100 pieces);
+  D172 one language, two dialects, with the template parser extracted into the
+  `packages/puzzle-lang` Go module (tagged `packages/puzzle-lang/vX.Y.Z` beside
+  each `vX.Y.Z`); D173 core semantics (a pipe is a formatter in every value
+  position, none in a `{#for}` header, `?.` member guarding, loop domain,
+  slot-filled rule, value printing, object-literal args, script-less
+  components); D174 the 35-name standard formatter set, the list-formatter and
+  `noescape` removals, and sanitized `raw`; D175 translations (`t`,
+  `ctx.i18n`); D168 rewritten as the merged whitespace rule; plus D169 registry
+  version floors, the D76 background update notice, and the runtime preflight.
+  Heavily BREAKING for templates — the CHANGELOG opens the entry with an
+  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.5 KB
+  gzip**, todos **25.5 KB gzip**. Cards truthed through D175; the next free
+  decision number is **D176**.
+- Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
-  D161 = v1.76, D163 = v1.77, D165 = v1.78, D166 = v1.79, D167 = v1.80;
-  D146, D162, D164, and D168 are correctness or infrastructure decisions with
-  no product-line entry),
+  D161 = v1.76, D163 = v1.77, D165 = v1.78, D166 = v1.79, D167 = v1.80,
+  D175 = v1.81; D146, D162, D164, D168 and D170–D174 have no product-line
+  entry),
   plus the July
   21 pre-release correctness/performance hardening pass and the July 24
   deep-review round. The `constellation/decision/` cards are the authoritative

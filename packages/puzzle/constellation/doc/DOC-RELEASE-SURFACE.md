@@ -42,7 +42,8 @@ notes:
 # Puzzle release surface
 
 Compact inventory of what ships in `@magic-spells/puzzle` — kept current with
-the released surface (0.7.0 as of this writing), not pinned to one version. [[DOC-SPEC]] remains the binding contract; this card is the map, not a
+the released surface, not pinned to one version (0.7.0 is the published
+release; this card already describes 0.8.0, in progress on `release/0.8.0`). [[DOC-SPEC]] remains the binding contract; this card is the map, not a
 second specification. Decision cards hold rationale and git holds chronology.
 
 ## Package and application
@@ -51,9 +52,11 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `lazy` (the D163 route-view loader marker), and
-  compiler support exports (`ViewNode`, `SLOT_TAG`, `PORTAL_TAG`, and
+  compiler support exports (`ViewNode`, `SLOT_TAG`, `PORTAL_TAG`,
   `SNIPPET_TAG` — the D166 snippet marker tag, with `isSnippet` on the ViewNode
-  type surface).
+  type surface — `displayValue`, and the D170/D173 list runtime `listRows`,
+  `loopItems` and `loopRange`, each imported by a compiled module only when it
+  emits it).
 - Subpaths: `@magic-spells/puzzle/adapter`, `/morph`, `/router-modes`, `/ssg`,
   `/static`, `/testing`, `/fixtures`, and `/puzzle-env`. (`/router-modes` exports
   `hashRouter()` and `memoryRouter({ initialPath })`, the opt-in router modes —
@@ -66,7 +69,8 @@ second specification. Decision cards hold rationale and git holds chronology.
   exports the frozen `adapter` capability — plus `adapter.defaults()`, the
   app-wide dialect tier — and `PuzzleAdapterError`, D157/D158. A
   compiler-internal `/formatters/manifest` subpath also exists for the
-  tree-shaken formatter manifest.)
+  tree-shaken formatter manifest, and `/i18n/manifest` for the translation
+  runtime the compiler wires in only when `i18n` is configured, D175.)
 - `puzzle` binary shim selects one of five optional platform binary packages:
   macOS and Linux on arm64/x64, and Windows on x64 (`puzzle-win32-x64`, whose
   packed file is `bin/puzzle.exe`). The packages are keyed the way Node spells
@@ -83,6 +87,17 @@ second specification. Decision cards hold rationale and git holds chronology.
   (a mode object from `/router-modes`; a string throws), `routerBase`,
   `transitionMode`, `beforeMount`, `mounted`, `beforeUnmount`, `onError`, and
   `errorView`.
+- **Translations (D175):** `i18n: { locales, defaultLocale }` in
+  `puzzle.config.js` plus one `app/locales/<tag>.json` per locale (nested keys
+  flatten to dotted; CLDR-category objects are plural entries). The compiler
+  validates the files, fills missing keys from the default with a warning, and
+  emits `dist/locales/<tag>.<hash>.json`; the browser fetches only the active
+  one. `{ 'key' | t(vars) }` in templates; `this.ctx.i18n` / `app.i18n` carry
+  `t`, `locale`, `locales`, `defaultLocale` and `setLocale(tag)` (fetch, then
+  switch, persist to `localStorage.__puzzleLocale`, set `<html lang>`, rebuild
+  in place). Prerendered pages render the default locale with its table
+  inline. With `i18n` configured, the date and number formatters follow the
+  active locale. Unconfigured apps ship none of it (`__PUZZLE_HAS_I18N__`).
 - The app is SPA-first. Prerendered output comes in two modes (D67/D81), never a
   request-time SSR server or hydration protocol: `output: 'hybrid'` ships
   prerendered pages the SPA takes over at navigation zero; `output: 'static'`
@@ -101,7 +116,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
-- **Built-in formatters are the D174 standard set** — 34 names with the same
+- **Built-in formatters are the D174 standard set** — 35 names with the same
   arguments and meaning as Sites — plus the browser-only `link`, `timeago` and
   `in_timezone`. Numbers: `abs`, `ceil`, `floor`, `plus`, `minus`, `times`,
   `divided_by`, `modulo`, `round`, `currency`, `percentage`,
@@ -110,10 +125,32 @@ second specification. Decision cards hold rationale and git holds chronology.
   `strip_newlines`, `pluralize` (prints the count and the word). Markup:
   `escape`, `raw`, `newline_to_br`. Values: `default`, `size`, `join`, `json`.
   Dates: `date`, `time`, `datetime` with presets `short`, `medium` (default),
-  `long`, `iso`. No list formatters (list shaping is `data()`); a removed name
+  `long`, `iso`. Translation: `t` (D175). No list formatters (list shaping is `data()`); a removed name
   passes through with a development hint, and an app formatter shadowing a
   standard name draws a development warning. A shared JSON conformance table
   (`tests/conformance/formatters.json`) pins the identical-output part.
+- **`raw` and `newline_to_br` render live HTML (D174 group e).** `raw` always
+  runs an allowlist sanitizer — the same code in the browser and in prerender —
+  that keeps document markup, links and images, `class`/`id`/`title`/`lang`/
+  `dir`, and `target="_blank"` with a forced `rel="noopener noreferrer"`; drops
+  scripts, styles, embeds, SVG/MathML, every `on*`, `style` and `name`; and
+  keeps a URL only when relative or `http(s)` (links also `mailto:`/`tel:`).
+  Both must be the last formatter of a text interpolation (anywhere else is a
+  positioned compile error); the compiler lowers them to a `#html` vnode and
+  never calls them through the registry. Gated by `__PUZZLE_HAS_RAW_HTML__`
+  and, for the sanitizer, `__PUZZLE_HAS_RAW_SANITIZE__`.
+- **Core semantics (D173):** a `|` is a formatter pipe in every value position
+  (text, attributes, props, marker arguments, `{#if}`/`{#unless}`/`{#case}`
+  subjects) and must be followed by a formatter name; a pipe in a `{#for}`
+  header or a `{:when}` value is a compile error. Every member step in a
+  template value compiles to `?.`, so a missing intermediate prints nothing.
+  A loop over a non-list runs zero times (a non-array non-nullish value warns
+  in development); range bounds truncate. `NaN`, ±Infinity and any object,
+  `Date` included, print nothing (with a development warning); a list in a
+  brace-only attribute is a space-joined token list. Object literals are legal
+  as arguments (V8), a script-less component reads its props by name (V15), a
+  composition position counts as filled only when its content renders a node
+  (V14), and markers in exclusive branches are not duplicates (V13).
 - Template text follows the merged whitespace rule (D168, D173 V10): a run of
   whitespace collapses to one space; newline-bearing whitespace is dropped at
   a parent's first or last child and between two non-text siblings, and is one
@@ -200,6 +237,13 @@ second specification. Decision cards hold rationale and git holds chronology.
   keys never collide; a first-mount failure is torn down and re-mounted fresh.
 - Conditional branches are arity-stabilized with invisible placeholder vnodes,
   preventing unrelated trailing siblings from remounting on a toggle.
+- **Incremental rendering (D170):** an item-form `{#for}` keeps one row state
+  per key and returns the row's cached vnode subtree unless its inputs changed,
+  which the patcher skips by reference; static subtrees are built once per view
+  instance or row; a row handler capturing a loop variable is identity-stable.
+  A record prop carries a render revision, so a child refreshes on that
+  record's own mutations through `update()` or any store path — a direct field
+  assignment is not observed, and formatters must be pure.
 
 ## Data layer
 
@@ -413,7 +457,12 @@ second specification. Decision cards hold rationale and git holds chronology.
   `--path` — a family directory under `app/` prints the `@` alias form, anything
   else the project-relative path. Without `--family`, output is byte-identical
   to before.
-- `puzzle add tailwind` and `puzzle add piece`. The default piece source is
+- `puzzle add tailwind`, `puzzle add piece`, and `puzzle add theme <name…>`
+  (D171: copies a registry palette — the default into `app/styles/pieces.css`,
+  any other into `app/styles/themes/<name>.css` — recorded in `pieces.lock`;
+  refuses a locally modified copy without `--overwrite`, skips a palette
+  `styles.css` already imports from the package, never edits `styles.css`, and
+  with no name lists the palettes). The default piece source is
   the npm registry — `npm:@magic-spells/puzzle-pieces` resolved to the CLI's
   major.minor, older-only fallback with a printed notice, `--pieces-version`
   to pin (a D32 amendment); `--registry` accepts `npm:pkg[@version]`, a local
@@ -446,10 +495,20 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `puzzle doctor`, `puzzle info`, and `puzzle --version`.
 - `puzzle upgrade` / `upgrade --check`, plus a passive TTY-only update notice
   on `dev`/`build` (opt out with `PUZZLE_NO_UPDATE_CHECK=1`; skipped in CI).
+  The notice reads a cached answer and never fetches in-process; a cache over
+  an hour old is refreshed by a detached background helper (D76).
+- `puzzle build` and `puzzle dev` preflight the runtime: with no
+  `@magic-spells/puzzle` install they stop before bundling and name the install
+  command for the nearest lockfile.
   A successful upgrade offers to refresh installed skills by re-execing the
   newly installed binary (D97). `puzzle upgrade skills` does the same refresh
   from the running binary with no registry check (D99).
 - `pzlc` is the internal/test-facing single-file compiler.
+- **`packages/puzzle-lang` (D172):** the template parser, `jsident` and
+  `textutil` live in their own Go module in the monorepo, imported by the
+  compiler and by Go consumers such as Magic Spells Sites. Tagged
+  `packages/puzzle-lang/vX.Y.Z` beside each framework `vX.Y.Z`; it ships in no
+  npm package.
 
 ## Error handling (D145)
 

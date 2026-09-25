@@ -112,8 +112,6 @@ decision cards explain why the contract has its current shape.
 
 ## Current state
 
-
-
 - **Published:** `0.1.0` (2026-07-21), `0.1.1` (interactive `puzzle init`
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
   skills` installer, D78/v1.45) are live on npm — MIT, five packages, manual
@@ -198,11 +196,16 @@ decision cards explain why the contract has its current shape.
   figures: the router guard self-redirect hang and D168 completed at
   control-flow boundaries (PR #127), the Tailwind stderr diagnostic (#128), and
   the pieces demo's npm dependencies (#129).
-- **`0.7.1` is IN PROGRESS** on `release/0.7.1` ([[RELEASE-V0-7-1]]): a patch
-  release with no new framework surface — post-release release-state truthing,
-  the user guide's Quick Start moving to `npm install -g @magic-spells/puzzle`
-  + `puzzle init` (the `create-puzzle-app` wrapper is retired per D77), D169
-  registry version floors, and a D76 amendment to the update notice.
+- **`0.8.0` is IN PROGRESS** on `release/0.8.0` ([[RELEASE-V0-8-0]]), NOT yet
+  published: D170 incremental rendering, D171 `puzzle add theme` and the
+  pieces theme system, D172 one language / two dialects with the parser in the
+  `packages/puzzle-lang` Go module, D173 core semantics, D174 the 35-name
+  standard formatter set with sanitized `raw`, D175 translations (`t`, v1.81),
+  and D168 rewritten as the merged whitespace rule. Heavily breaking for
+  templates; the CHANGELOG opens with an "Upgrading from 0.7" checklist. The
+  never-published `0.7.1` ([[RELEASE-V0-7-1]] — Quick Start via `puzzle init`,
+  D169 registry version floors, the D76 background update notice) is folded
+  in; there will be no `v0.7.1` tag.
 - **0.6 errorView amendment (v1.71, breaking):**
   [[DECISION-D145-ERROR-BOUNDARIES]] rewritten — error fallback UI is one
   app-level `errorView` compiled view with `{ error, info, retry }` props;
@@ -283,8 +286,7 @@ decision cards explain why the contract has its current shape.
   only and independently versioned (all three stamped `0.3.0`); absorbed repos
   are archived, never deleted.
 - **Playground compiler Phase 1:** [[FEATURE-PLAYGROUND-WASM-COMPILER]] / [[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]] adds the esbuild-free parser+codegen WASM module, its synchronous JS globals, the pinned worker envelope, filesystem-free asset diagnostics, and size/dependency/smoke gates. The worker and UI remain later phases.
-- The next free decision number is D170 (D169 is 0.7.1's registry version
-  floors, written by a separate lane).
+- The next free decision number is **D176**.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
@@ -471,7 +473,6 @@ makes an open-ended `is={}` real design work, not sugar.)
 
 ### Contracts and release truth
 
-
 - [[DOC-SPEC]] — frozen public contract; every amendment requires a decision.
   Now the section index over six domain cards; `§N` numbers never move.
   - [[DOC-SPEC-ANATOMY]] — naming, config, `.pzl` anatomy, real-JS scripts,
@@ -489,8 +490,9 @@ makes an open-ended `is={}` real design work, not sugar.)
 - [[DOC-RELEASE-SURFACE]] — complete, compact shipped-surface inventory.
 - [[DOC-BUILD-PLAN]] — v1 implementation plan and release-phase status.
 - Release milestones — theme, outcome, and upgrade notes per version:
-  [[RELEASE-V0-6-0]], [[RELEASE-V0-7-0]] (the published `latest`), and
-  [[RELEASE-V0-7-1]] (in progress).
+  [[RELEASE-V0-6-0]], [[RELEASE-V0-7-0]] (the published `latest`),
+  [[RELEASE-V0-7-1]] (never published; folded into 0.8.0), and
+  [[RELEASE-V0-8-0]] (in progress).
 
 ### Runtime components
 

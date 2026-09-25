@@ -1,14 +1,19 @@
 ---
 name: 0.7.1 — the truth after the ship
-status: building
+status: built
 version: 0.7.1
 connections:
   - RELEASE-V0-7-0
   - DECISION-D76-CLI-UPGRADE
   - DOC-USER-GUIDE
   - FLOW-RELEASE
+notes:
+  - kind: state
+    text: >-
+      0.7.1 was never published or tagged. All four items merged, and they ship folded into 0.8.0
+      ([[RELEASE-V0-8-0]]); the 0.8.0 CHANGELOG entry carries them. `release/0.7.1` is kept for
+      history only. No `v0.7.1` tag will exist.
 ---
-
 
 # 0.7.1 — the truth after the ship
 

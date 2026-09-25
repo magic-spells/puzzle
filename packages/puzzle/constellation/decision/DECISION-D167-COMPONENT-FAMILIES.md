@@ -1,6 +1,6 @@
 ---
 name: 'D167 — component families: dotted component tags + the family barrel convention (v1.80)'
-status: built
+status: verified
 connections:
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
   - COMPONENT-TEMPLATE-PARSER
@@ -33,6 +33,17 @@ notes:
       `tag_name` already accepts dots — corpus test + highlight comment only). Sublime syntax tests
       can only run inside Sublime Text; the others ran green. None of the grammars flag invalid
       dotted names (`<Frame.>`, `<Frame-x>`) — the framework's positioned errors are the backstop.
+  - kind: verified
+    text: >-
+      Re-checked for the 0.8.0 release against compiler/internal/codegen/codegen.go. A component tag
+      still reaches emitElement as n.Name, verbatim with isComponent=true. The D173 V4 `?.` guarding
+      applies only to value expressions, never to the tag, so `<Frame.Wrapper>` still emits `new
+      ViewNode(Frame.Wrapper, …)`, and the component_family golden pins it. The name validation now
+      lives in packages/puzzle-lang/parser/parser.go (D172 move), with unchanged behavior. The
+      card's claims hold.
+    sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+verified_at: '2026-09-25T10:41:55.889Z'
+verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
 ---
 
 # D167 — component families: dotted component tags + the family barrel convention (v1.80)
