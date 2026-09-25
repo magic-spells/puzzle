@@ -45,17 +45,30 @@ notes:
       `time` included (D114 idempotence); for an instant, `iso` prints `Z` for a zero offset. (4)
       `json` prints `null` for an `undefined` object value (JSON.stringify would omit it) and for a
       cycle. (5) An unknown date preset renders as `medium` after the dev error.
+  - kind: deviation
+    text: >-
+      Group (e) build (feat/sanitized-raw), choices beyond the card's first draft, now written into
+      the body: (1) the allowlist widens SanitizeRichText with span, div, abbr, cite, dfn, kbd, q,
+      samp, var, mark, small, bdi, bdo, address, dl/dt/dd, ins, time, colgroup/col, details/summary
+      and wbr, plus lang/dir globally and
+      srcset/width/height/start/reversed/value/colspan/rowspan/scope/span/datetime/open where they
+      belong; (2) `tel:` is kept, on `<a href>` only, matching SanitizeRichText; (3) well-formed
+      character references pass through in text and plain attribute values instead of being decoded
+      and re-escaped, so the JS sanitizer needs no 2,000-entry entity table; (4) extra compile
+      errors: a markup formatter with arguments, and one inside <script>/<style>/<textarea>/<title>;
+      (5) the old note above saying group (e) is open and the table has no raw rows is superseded —
+      the table now carries 79 raw and 6 newline_to_br rows.
 ---
 
 # D174 — The standard formatter set
 
 Decided with Cory on 2026-09-25. The decisions below are adopted. PuzzleKit
-groups (a), the formatter set, and (g), standard-set alignment, are built;
-group (e), sanitized `raw` and `newline_to_br`, and the Sites half of the
-build list are still open. The build list at the end is the implementation
-order. The formatter table in [[DOC-LANGUAGE-CORE]] records where each host
-stands against this card. Core expression and rendering semantics (V1–V18)
-are on [[DECISION-D173-CORE-SEMANTICS]].
+groups (a), the formatter set, (g), standard-set alignment, and (e),
+sanitized `raw` and `newline_to_br`, are built; the Sites half of the build
+list is still open. The build list at the end is the implementation order.
+The formatter table in [[DOC-LANGUAGE-CORE]] records where each host stands
+against this card. Core expression and rendering semantics (V1–V18) are on
+[[DECISION-D173-CORE-SEMANTICS]].
 
 ## Context
 
@@ -182,41 +195,110 @@ value printed after the chain follows D173 V6.
 ### Markup and escaping
 
 - **`escape`** (F8): its output is plain text, so the page shows the value's
-  characters (`<b>` appears as `<b>`, never as `&lt;b&gt;`). In a plain
-  interpolation it is an identity; after a `raw` earlier in the chain, it
-  turns the value back into text.
+  characters (`<b>` appears as `<b>`, never as `&lt;b&gt;`). In a text
+  interpolation it is an identity. It can never follow `raw`, because a
+  markup formatter ends the chain (below).
 - **`raw`** (F16): injects the value as real HTML in both hosts, **always
-  through an allowlist sanitizer** (the Angular model). Safe tags and
-  attributes are kept. Removed: `<script>` together with its contents, every
-  `on*` attribute, `javascript:` and every other URL that is not http(s),
-  `mailto:` or relative, and `<iframe>`, `<object>`, `<embed>` and `<style>`.
-  The allowlist itself is shared and pinned by conformance fixtures. Its
-  starting point is Sites' save-time rich-text sanitizer
-  (`sites/server/internal/service/settings/richtext.go`, `SanitizeRichText`,
-  built on `golang.org/x/net/html`), which already keeps document markup,
-  links and images and drops scripts, embedded documents, forms and CSS.
-- **`newline_to_br`** (F12): escapes its input, then emits real `<br>`
-  elements for `\r\n`, `\r` and `\n`. Its output is safe by construction, so
-  it needs no sanitizer, but it renders through the same markup path as
+  through an allowlist sanitizer** (the Angular model). Cory: "make it safe
+  if you can." The allowlist is shared and pinned by the `raw` rows of the
+  conformance table — rich text that must survive, then an XSS corpus in
+  which every case must come out inert. It grew from Sites' save-time
+  rich-text sanitizer (`sites/server/internal/service/settings/richtext.go`,
+  `SanitizeRichText`), which keeps document markup, links and images and
+  drops scripts, embedded documents, forms and CSS:
+  - **Tags kept:** `a`, `abbr`, `address`, `b`, `bdi`, `bdo`, `blockquote`,
+    `br`, `caption`, `cite`, `code`, `col`, `colgroup`, `dd`, `del`,
+    `details`, `dfn`, `div`, `dl`, `dt`, `em`, `figcaption`, `figure`,
+    `h1`–`h6`, `hr`, `i`, `img`, `ins`, `kbd`, `li`, `mark`, `ol`, `p`,
+    `pre`, `q`, `s`, `samp`, `small`, `span`, `strike`, `strong`, `sub`,
+    `summary`, `sup`, `table`, `tbody`, `td`, `tfoot`, `th`, `thead`, `time`,
+    `tr`, `u`, `ul`, `var`, `wbr`.
+  - **Attributes kept:** `title`, `lang` and `dir` on any kept tag; `a`
+    `href`; `img` `src`, `srcset`, `alt`, `width`, `height`; `ol` `start`,
+    `reversed`; `li` `value`; `td` `colspan`, `rowspan`; `th` `colspan`,
+    `rowspan`, `scope`; `col`/`colgroup` `span`; `time`/`del`/`ins`
+    `datetime`; `details` `open`. Never `class`, `style`, `id`, `name` or
+    any `on*` handler.
+  - **URLs** in `href`, `src` and `srcset` (and `action`, `formaction` and
+    `xlink:href`, should the allowlist ever keep them) survive only when
+    relative or `http(s)`; `mailto:` and `tel:` survive on an `<a href>`
+    only. The scheme is read the way the URL parser reads it: after
+    character-reference decoding, with leading and trailing C0 controls and
+    spaces trimmed and every tab and newline removed, so `JaVaScRiPt:`,
+    `java&#x09;script:`, `javascript&colon;` and a leading control character
+    are all caught. A failing URL attribute is dropped; a `srcset` is dropped
+    whole when any candidate fails.
+  - **Dropped with their contents:** `script`, `style`, `iframe`, `noscript`,
+    `noembed`, `noframes`, `textarea`, `title` and `xmp` (scanned to their end
+    tag, as the browser's tokenizer does); `template`, `object`, `applet`,
+    `svg`, `math`, `select`, `head` and `frameset` (skipped to the balancing
+    end tag); `plaintext` (the rest of the value).
+  - **Unwrapped** (the tag goes, its text and kept descendants stay): every
+    other tag — `form`, `button`, `label`, `font`, `body`, custom elements. A
+    void one (`input`, `link`, `meta`, `base`, `embed`) simply disappears.
+  - **Canonical output** (what the conformance rows pin, so both hosts emit
+    the same bytes): kept tags re-emitted lowercase; attributes in source
+    order, the first of a repeated name winning (as in the browser), always
+    double-quoted, a valueless one as `name=""`; in text, `<` and `>` escaped
+    and `&` escaped unless it begins a well-formed character reference
+    (`&name;`, `&#N;`, `&#xH;`), which passes through for the browser to
+    decode; plain attribute values the same, plus `"`; URL values re-emitted
+    from their decoded, trimmed form with `&`, `<`, `>` and `"` escaped, so
+    the browser resolves exactly the string that was checked. Comments,
+    doctypes, CDATA and processing instructions are dropped, as is a tag cut
+    off by the end of the value; a stray end tag is dropped; every tag still
+    open at the end is closed, so a value cannot leak formatting into the
+    page around it; NUL characters are removed.
+- **`newline_to_br`** (F12): escapes its input (`&`, `<`, `>`), then emits a
+  real `<br>` for each CR LF, CR and LF. Its output is safe by construction,
+  so it needs no sanitizer, but it renders through the same markup path as
   `raw`.
 - **A markup formatter is the last link of a text interpolation's chain.**
   After it, the value is markup rather than text, so a following formatter,
-  or a markup formatter in an attribute or prop, is a compile error in both
-  hosts. This is what lets PuzzleKit decide at compile time which
-  interpolations render markup.
-- **How PuzzleKit renders markup.** Codegen lowers an interpolation whose
-  chain ends in `raw` or `newline_to_br` into a new runtime node kind that
-  holds live HTML and re-renders when the value changes. It splits a
-  coalesced text run the way an element does. The node kind and the
-  sanitizer ship only in apps that use them, behind a
-  `__PUZZLE_HAS_RAW_HTML__` define like the other `__PUZZLE_HAS_*__` flags,
-  so hello-world does not grow. The sanitizer is DOM-free JavaScript, so the
-  static and hybrid prerender (`client-runtime/ssg/`) uses the same code as
-  the browser. App formatters can never inject markup: only these two
-  built-in names reach the markup path.
-- **How Sites renders markup.** `raw` runs a Go allowlist sanitizer at render
-  time: the shared allowlist, either built on `SanitizeRichText` moved into
-  the engine, or on `github.com/microcosm-cc/bluemonday` configured to it.
+  or a markup formatter in an attribute, a prop, a marker argument or a block
+  subject, is a positioned compile error in both hosts. So is an argument
+  (`raw(1)`), and a markup interpolation inside `<script>`, `<style>`,
+  `<textarea>` or `<title>`, whose content is text. This is what lets
+  PuzzleKit decide at compile time which interpolations render markup.
+- **How PuzzleKit renders markup.** Codegen
+  (`compiler/internal/codegen/markup.go`) checks every placement before
+  emission, then lowers a text interpolation whose chain ends in `raw` or
+  `newline_to_br` to `new ViewNode('#html', { value })` (`br: true` for
+  `newline_to_br`): the chain before the markup formatter compiles as a text
+  chain does, the value takes the D173 V6 display coercion, and the markup
+  formatter itself is never called through the registry, so **app
+  formatters can never inject markup** — an app formatter registered as
+  `raw` is unreachable from templates and draws a development warning. The
+  node splits a coalesced text run the way an element does. At runtime
+  (`client-runtime/views/html.js`) the node holds its position with an
+  empty comment and owns the parsed nodes right after it: mount parses the
+  sanitized markup through an inert `<template>`, a changed value replaces
+  the owned nodes, an unchanged one touches nothing, removal takes the whole
+  range, and a keyed move carries it; the patcher never reconciles inside
+  it. The node kind and the sanitizer (`client-runtime/sanitize.js`, a small
+  DOM-free tokenizer plus the allowlist, with no top-level side effects) sit
+  behind the `__PUZZLE_HAS_RAW_HTML__` define, which the usage scan sets
+  from the two names like the other `__PUZZLE_HAS_*__` flags, so an app
+  that never uses them ships neither: hello-world and todos did not grow,
+  and a `raw`-using app pays about 2.3 KB gzip. A `'#html'` vnode that
+  reaches a build with the define false (a template the scan never read)
+  fails loudly at the metadata-tag guard, the snippet tag's posture. The
+  static and hybrid prerender (`client-runtime/ssg/serialize.js`) emits the
+  same `htmlOf()` string the browser parses, and takeover re-mounts over it.
+  `raw` and `newline_to_br` stay in `builtins.js`, returning those markup
+  strings for script code and the conformance table, but they never enter
+  the formatter manifest.
+- **How Sites renders markup.** Sites injects `raw` unsanitized today,
+  trusting save-time sanitizing, and must sanitize at render time with the
+  same allowlist and canonical output: either `SanitizeRichText` moved into
+  the engine and widened to the allowlist above, or
+  `github.com/microcosm-cc/bluemonday` configured to it. Either way the
+  shared `raw` and `newline_to_br` conformance rows are the contract. Two
+  details to watch: `golang.org/x/net/html` decodes every character
+  reference and re-escapes quotes and apostrophes in text, so a renderer
+  built on `html.Render` must pass well-formed references through and escape
+  only what the canonical rules name; and bluemonday's defaults add
+  `rel="nofollow"` and keep more URL schemes, both of which the rows reject.
 
 ### Values
 
@@ -289,9 +371,11 @@ we're the only ones using puzzle."
 An app may register a formatter under a standard name, and the app's function
 wins. PuzzleKit logs a **development-only warning** when it does, because the
 app's templates then no longer mean what the standard name means. It does not
-throw. Sites themes cannot register formatters, so the question does not
-arise there. `timeago` is PuzzleKit-only, not standard, so chirp's own
-`timeago` draws no warning.
+throw. The markup pair is the exception: templates never reach the registry
+for `raw` or `newline_to_br`, so the app's function is never called from a
+template, and the warning says so. Sites themes cannot register formatters,
+so the question does not arise there. `timeago` is PuzzleKit-only, not
+standard, so chirp's own `timeago` draws no warning.
 
 ## Alternatives rejected
 
@@ -311,6 +395,26 @@ arise there. `timeago` is PuzzleKit-only, not standard, so chirp's own
 - **Unsanitized `raw`** (Sites' old behavior, trusting save-time
   sanitizing). Rejected: one value that skipped the save path is an XSS hole,
   and render-time sanitizing makes the guarantee local to the formatter.
+- **DOMPurify as PuzzleKit's sanitizer.** Rejected: it is several times the
+  size of the whole markup path, and it needs a DOM, which the static and
+  hybrid prerender does not have. A tokenizer is enough because the output
+  is re-written, never copied: every kept tag and attribute is re-emitted
+  from its name with escaped, double-quoted values, and no RAWTEXT element,
+  `<template>`, `<noscript>` or foreign content is ever emitted, so a
+  browser parsing the output reads exactly the tags and attributes the
+  sanitizer wrote. How the tokenizer reads hostile input can only change
+  what gets dropped, which is the property mutation-XSS vectors
+  (`<svg><style><img onerror>`, `<noscript><p title="</noscript>…">`) rely
+  on breaking.
+- **A wrapper element for the markup node** (`<span>` or a custom element).
+  Rejected: it changes the markup the author wrote, breaks child selectors
+  and block content inside inline wrappers; a position comment plus an
+  owned node range costs one comment.
+- **Keep `class` on sanitized markup.** Rejected: in a utility-CSS app a
+  class list is a styling hook a value could use to cover the page
+  (`fixed inset-0`). `id` and `name` are dropped for DOM clobbering.
+- **Rename every differing formatter on one side.** Rejected: it doubles the
+  vocabulary for behavior nobody depends on.
 - **Identical dates, numbers and suffixes with a fixed en-US locale and UTC.**
   Rejected: a PuzzleKit app would show every reader a clock and number format
   that are not theirs. Sites cannot share the browser's `Intl` data, so exact
@@ -322,13 +426,10 @@ arise there. `timeago` is PuzzleKit-only, not standard, so chirp's own
   rejected too.
 - **`default` treats `0` as empty** (Sites' old behavior). Rejected: `0` is a
   real value, as in Liquid.
-- **Rename every differing formatter on one side.** Rejected: it doubles the
-  vocabulary for behavior nobody depends on.
 - **`percentage` as a ratio.** Rejected: content authors type `12.5`, Rails
   reads the number as written, and the ratio form is one `times(100)` away.
 
 ## Build list
-
 
 PuzzleKit first; Sites is lower priority because Cory is still designing it.
 Groups are separate feature branches off the release branch, lettered to
@@ -336,7 +437,7 @@ match D173's build list, which holds (b), (c), (d) and (f). No group here
 touches the shared parser in `packages/puzzle-lang`, the eslint/prettier
 ports or the editor grammars: formatter names are not grammar.
 
-**(a) The formatter set — PuzzleKit.**
+**(a) The formatter set — PuzzleKit. Built.**
 - `client-runtime/formatters/builtins.js`, `builtins.json`,
   `builtins-all.js`: remove `sort`, `where`, `map`, `uniq`, `reverse`,
   `compact`, `first`, `last`, `noescape`; add `compact_number` and `default`;
@@ -357,19 +458,28 @@ ports or the editor grammars: formatter names are not grammar.
 - Tests: `tests/formatters.test.js`, a shadow-warning test, the D31
   tree-shake tests, example builds.
 
-**(e) Sanitized `raw` and `newline_to_br` — PuzzleKit.**
-- Codegen (`compiler/internal/codegen`): lower a text interpolation whose
-  chain ends in `raw`/`newline_to_br` to the markup node; the compile error
-  for a markup formatter mid-chain or in an attribute or prop; set the
-  `__PUZZLE_HAS_RAW_HTML__` flag (`compiler/internal/build/options.go`).
-- Runtime: the markup node kind in `client-runtime/views/ViewNode.js` and
-  `viewManager.js` (mount, replace on change, unmount); a DOM-free sanitizer
-  module shared with `client-runtime/ssg/` for static and hybrid prerender.
-- Tests: the shared sanitizer fixture table (XSS vectors), codegen tests,
-  SSG/static output, hybrid takeover, and `npm run measure:size` proving
-  hello-world is unchanged.
+**(e) Sanitized `raw` and `newline_to_br` — PuzzleKit. Built.**
+- Codegen: `compiler/internal/codegen/markup.go` — the placement check
+  (positioned errors for a markup formatter mid-chain, in an attribute, a
+  prop, a marker argument or a block subject, with arguments, or inside a
+  text-only element) and the lowering to the `'#html'` vnode, hooked into
+  `processChildren` (the node ends a text run) and `emitItem`.
+- Usage scan and define: `plugin/scan.go` sets `HasRawHTML` from the two
+  names and keeps them out of the formatter manifest;
+  `build/options.go` emits `__PUZZLE_HAS_RAW_HTML__`.
+- Runtime: `client-runtime/sanitize.js` (the sanitizer and
+  `newline_to_br`), `client-runtime/views/html.js` (the node's mount, patch,
+  move and removal), the `HTML_TAG` constant in `ViewNode.js`, the gated
+  branches in `viewManager.js`, and `ssg/serialize.js`. `raw` is no longer
+  seeded by `FormatterRegistry`, so D31's always-kept list is `escape` alone.
+- Tests: the `raw` and `newline_to_br` rows of the conformance table,
+  `tests/sanitize.test.js` (every corpus case inert when parsed, output
+  idempotent, rich text kept), `tests/raw-html.test.js` (the node's DOM
+  contract, the compiled fixture `tests/fixtures/raw-html` in `{#if}` and
+  list-block rows, prerender plus hybrid takeover), `markup_test.go`, the
+  scan and DCE build tests, and `npm run measure:size`.
 
-**(g) Standard-set alignment — PuzzleKit.**
+**(g) Standard-set alignment — PuzzleKit. Built.**
 - `builtins.js`: F1 `capitalize`, F3 `currency`, F7 `divided_by`, F8
   `escape`, F9 `json`, F11 `modulo`, F14 `percentage`, F19 `round`, F20
   `size`, F22 `split`, F23 `strip_html`, F24 `strip_newlines`, F25
@@ -391,8 +501,13 @@ ports or the editor grammars: formatter names are not grammar.
 formatter table in [[DOC-LANGUAGE-CORE]].
 
 **Sites (later, its own repo):**
-- `raw` sanitizes at render time with the shared allowlist; drop `noescape`,
-  `upper`, `lower`.
+- `raw` sanitizes at render time. Sites injects it unsanitized today; it must
+  apply the allowlist and canonical output above, built on
+  `SanitizeRichText` (moved into the engine and widened) or on bluemonday
+  configured to match, and pass the shared `raw` and `newline_to_br`
+  conformance rows. The Sites-only compile rules follow too: a markup
+  formatter only ends a text interpolation. Drop `noescape`, `upper`,
+  `lower`.
 - `default` keeps `0`; `compact_number` with English suffix data;
   `number_with_delimiter` and the `pluralize` count formatted by the site
   locale; dates rendered in the site's time zone.
@@ -405,10 +520,13 @@ formatter table in [[DOC-LANGUAGE-CORE]].
 - PuzzleKit: 29. Every F-item except F17 (26: F1–F16 and F18–F27, counting
   the removals of `compact`, `map`, `noescape`, `reverse`, `sort`, `uniq`
   and `where`), plus removing `first` and `last`, plus the locale default of
-  `number_with_delimiter`. Existing templates change in 14 files: blog 2
-  (`pluralize`), chirp 4 and music 3 (`compact_number`), the 3
-  `date('short')` files, and stays 2 (`currency('$', 0)`). The app configs of
-  chirp, music, stays, typed-todos and the scaffold todos change too.
+  `number_with_delimiter`. F16 is the `raw` change itself: `raw` used to
+  print its value as text and now injects sanitized markup, and `raw` or
+  `newline_to_br` anywhere but the end of a text interpolation stops
+  compiling. Existing templates change in 14 files: blog 2 (`pluralize`),
+  chirp 4 and music 3 (`compact_number`), the 3 `date('short')` files, and
+  stays 2 (`currency('$', 0)`). The app configs of chirp, music, stays,
+  typed-todos and the scaffold todos change too.
 - Sites: 11. F4–F6 (the site's zone), F9, F13, F15 (the count is grouped),
   F16 (sanitized), F20, F22, `default` keeping `0`, and dropping `upper` and
   `lower`. No starter output changes: the starter's `raw` bodies are rich

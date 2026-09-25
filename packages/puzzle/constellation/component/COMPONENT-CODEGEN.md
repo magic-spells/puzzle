@@ -61,6 +61,26 @@ notes:
       drops the one newline after the start tag (never from a `{#raw}` first child), and
       `forBodyRoot` zeroes the counter for the loop body's own list, since a loop body is one root
       element and cannot hold text.
+  - kind: state
+    text: >-
+      Markup formatters (D174 group e, `markup.go`). `checkMarkupFormatters` walks the template and
+      the skeleton BEFORE any emission and rejects every placement of `raw`/`newline_to_br` except
+      the last link of a text interpolation: mid-chain, an attribute value (brace-only, quoted or
+      inline-if), a component prop, a marker argument, an `{#if}`/`{#case}`/inline-if subject, any
+      argument, and a text interpolation inside <script>/<style>/<textarea>/<title> — all positioned
+      errors (FormatterCall has no position, so the owning node's is used). Because every other
+      placement is gone before emission, `processChildren` only has to test the LAST link
+      (`isMarkupInterp`): such an interpolation is a non-text SIBLING under D168 — `flush(true)` and
+      `leftSibling = true`, exactly the element arm — so text wrapped next to it keeps one space;
+      `emitItem`'s `*parser.Interpolation` arm calls `emitMarkup`, which compiles the chain minus
+      its last link exactly as `buildTextRun` does (same fact sink, `resolveInterpBase`,
+      `applyFormatters`, `displayValue`) and emits `new ViewNode('#html', { value })` (`br: true`
+      for newline_to_br). The markup name itself never reaches `__f`, so a markup-only file emits no
+      `const __f` line. The node counts one slot in `condStaticLen` (the `default` arm) and is
+      dynamic to the static cache (it is an Interpolation). A markup interpolation cannot be a
+      component root or a `{#for}` body root (the existing element-or-component errors). Pinned by
+      markup_test.go (including the element-parity whitespace case). The usage scan (plugin/scan.go)
+      sets `HasRawHTML` from the same names and keeps them out of the manifest.
 ---
 
 # Render-function codegen

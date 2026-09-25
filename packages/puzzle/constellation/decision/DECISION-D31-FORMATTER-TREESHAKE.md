@@ -33,7 +33,10 @@ The ~40 built-in formatters ([[DECISION-D07-NAMING]]) were all registered uncond
 
 ## Consequences
 
-**Safety.** Because compiled calls are bare `__f.name(...)` with no `__missing` guard ([[DECISION-D25-BARE-FORMATTER-CALLS]]), a scan miss would crash (`undefined(...)`), so the scan walks every node / attr / part type codegen can emit a formatter from (text `Interpolation`, `MixedAttr` `InterpPart`, `InlineIfPart`) and `escape`/`raw` are always kept — the Go manifest always adds `escape`, and the registry seeds `escape` and `raw` itself when the manifest lacks them. Verified end-to-end: `examples/blog` drops unused built-ins from `dist/app.js` (~958 B gzip / 4.3 KB raw saved) with used ones present; 224 vitest + all Go tests green.
+
+**Safety.** Because compiled calls are bare `__f.name(...)` with no `__missing` guard ([[DECISION-D25-BARE-FORMATTER-CALLS]]), a scan miss would crash (`undefined(...)`), so the scan walks every node / attr / part type codegen can emit a formatter from (text `Interpolation`, `MixedAttr` `InterpPart`, `InlineIfPart`) and `escape` is always kept — the Go manifest always adds it, and the registry seeds it itself when the manifest lacks it. Verified end-to-end: `examples/blog` drops unused built-ins from `dist/app.js` (~958 B gzip / 4.3 KB raw saved) with used ones present; 224 vitest + all Go tests green.
+
+**The markup pair never enters the manifest.** `raw` and `newline_to_br` are lowered by codegen to the live-HTML node ([[DECISION-D174-STANDARD-FORMATTERS]]), so no template calls them through the registry: the scan records them only as the `__PUZZLE_HAS_RAW_HTML__` usage bit and keeps them out of the manifest set, and the registry no longer seeds `raw` — seeding it would pull the sanitizer into every bundle. The always-kept list is `escape` alone.
 
 **A built-in named by a reserved word.** The manifest imports each used name from `builtins.js` as a named binding, which a reserved word cannot be. D174's `default` formatter is therefore `builtins.js`'s default export (`export { defaultValue as default }`), and the virtual module binds it as `default as __puzzle_default` and re-exports it under the key `default`. `builtins.json` still lists it as `default`, so the name set and the export set stay identical and the drift test holds.
 

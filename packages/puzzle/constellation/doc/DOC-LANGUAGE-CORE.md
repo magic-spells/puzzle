@@ -502,6 +502,7 @@ Template-relevant sections in DOC-SPEC-VIEW are all PuzzleKit: §12 animations,
 ## Standard formatters
 
 
+
 [[DECISION-D174-STANDARD-FORMATTERS]] fixes the **standard set: 35 names**
 with the same arguments and meaning in both hosts, pinned for identical output
 by the shared conformance table (`tests/conformance/formatters.json` in
@@ -509,13 +510,15 @@ by the shared conformance table (`tests/conformance/formatters.json` in
 contract; this table records where each host stands against it. `t` joined
 the set with [[DECISION-D175-TRANSLATIONS]].
 
-**PuzzleKit implements D174 groups (a) and (g)**: `client-runtime/formatters/builtins.js`
+**PuzzleKit implements D174 groups (a), (g) and (e)**: `client-runtime/formatters/builtins.js`
 is the standard set plus `timeago` and `in_timezone`, with the router-backed
 `link` added by the registry and the service-bound `t` added by the i18n
 service when the app configures translations (38 names). With translations
 configured, the locale-rendered rows follow the app's active locale instead
-of the viewer's (D175). The one PuzzleKit gap is group (e): `raw` and
-`newline_to_br` still return plain text rather than sanitized markup.
+of the viewer's (D175). `raw` and `newline_to_br` render real markup: a text
+interpolation whose chain ends in either compiles to a live-HTML node, `raw`
+through the shared allowlist sanitizer, and either name anywhere else is a
+compile error.
 **Sites has not moved yet** (`sites/engine/engine/formatters/*.go`, 61 names
 including four aliases); its column describes today's registry.
 
@@ -536,8 +539,8 @@ Counts: 35 standard (28 identical-output, 6 locale-rendered, 1 translation),
 | `strip_html` | as D174: quote-aware scanner | same | standard (F23) |
 | `strip_newlines` | as D174: CR and LF | same | standard (F24) |
 | `escape` | as D174: identity on text | drops the trusted-markup mark | standard (F8) |
-| `raw` | `String(v)`; a text node never injects markup | trusted markup, unsanitized | standard; both pending group (e) (F16) |
-| `newline_to_br` | inserts `<br>` into plain text, LF only | escapes, then markup `<br>`; CR LF and CR too | standard; PuzzleKit pending group (e) (F12) |
+| `raw` | as D174: sanitized markup through the shared allowlist; only the last link of a text interpolation | trusted markup, unsanitized | standard; Sites pending the render-time sanitizer (F16) |
+| `newline_to_br` | as D174: escapes, then markup `<br>` for CR LF, CR and LF; only the last link of a text interpolation | same | standard (F12) |
 | `default` | as D174: `0` is kept | treats `0` as falsy | standard; Sites pending |
 | `size` | as D174: code points / items / keys, else `0` | runes; a missing value gives nil | standard; Sites pending (F20) |
 | `json` | as D174: sorted keys, missing / non-finite → `null` | Go encoder; NaN errors | standard; Sites pending (F9) |

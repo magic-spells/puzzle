@@ -334,6 +334,34 @@ under Changed.
   now-shadowing `pluralize`, and the DevTools panel its unused `json`.
   Scaffolded todos apps get the change with the next binary.
 
+- **BREAKING: `raw` renders sanitized HTML, and `newline_to_br` renders real
+  `<br>`s (D174).** `{ post.bodyHtml | raw }` used to print its value as text;
+  it now injects the value as HTML, always through an allowlist sanitizer that
+  runs identically in the browser and in `--hybrid`/`--static` prerender.
+  Document markup, links and images are kept. `<script>` (with its contents),
+  `<style>`, `<iframe>`, `<object>`, `<embed>`, `<svg>`, `<math>`,
+  `<template>` and `<noscript>` are dropped, forms and unknown tags are
+  unwrapped to their text, every `on*` handler and every `style`, `class`, `id`
+  and `name` attribute is removed, and an `href`/`src`/`srcset` URL survives
+  only when relative or `http(s)` (links also keep `mailto:`/`tel:`), with
+  entity-encoded, mixed-case and whitespace-split schemes caught.
+  `{ note | newline_to_br }` escapes the value and emits a `<br>` for each CR
+  LF, CR and LF. Both must be the **last** formatter of a **text**
+  interpolation: after either one, in an attribute value, a component prop, a
+  marker argument or an `{#if}`/`{#case}` subject, with arguments, or inside
+  `<script>`/`<style>`/`<textarea>`/`<title>`, the template no longer compiles
+  (a positioned error). The compiler lowers the pair itself, so an app
+  formatter registered as `raw` is never called from a template (a development
+  warning says so) and no app formatter can inject markup. The markup renders
+  as sibling nodes with no wrapper element and splits a run of text the way an
+  element does. The node and the sanitizer ship only in apps that use either
+  formatter (`__PUZZLE_HAS_RAW_HTML__`): hello-world and todos did not grow
+  (both are a few bytes smaller, since `raw` is no longer seeded into every
+  formatter registry); a `raw`-using app pays 2,294 bytes gzip. The shared
+  conformance table carries the allowlist as 79 `raw` rows — rich text that
+  must survive and an XSS corpus that must come out inert — plus 6
+  `newline_to_br` rows, for Sites to run too.
+
 - **A record prop now refreshes its child when that record changes.** Records
   mutate in place, so a record passed as a prop was always reference-equal and a
   child displaying it only re-rendered when some *other* prop happened to differ.

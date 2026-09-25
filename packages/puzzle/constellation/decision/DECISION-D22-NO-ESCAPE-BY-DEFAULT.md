@@ -17,7 +17,8 @@ Settled. Compiled interpolations emit `String(expr)` into text vnodes with no `_
 The escape-by-default wrapper was the prototype's string-concatenation-era contract. Under the vdom (D17), the ViewManager inserts text via `createTextNode`, which is literal — injection-safe by construction. The old wrapper double-encodes (`&` displays as `&amp;` — verified empirically, regression-tested in `tests/todos-app.test.js`).
 
 ## Decision
-Compiled interpolations emit `String(expr)` into text vnodes with **no** `__formatters.escape` wrapper. The `escape` formatter stays registered for explicit use; `raw` (HTML injection) is deferred post-v1 since the runtime deliberately has no `innerHTML` vnode.
+
+Compiled interpolations emit `String(expr)` into text vnodes with **no** `__formatters.escape` wrapper. The `escape` formatter stays registered for explicit use. Injecting a value as HTML is the one exception, and it is opt-in and sanitized: a text interpolation ending in the `raw` formatter compiles to a live-HTML vnode that parses the value only after an allowlist sanitizer has run ([[DECISION-D174-STANDARD-FORMATTERS]]).
 
 ## Alternatives rejected
 - **Keep escape-by-default** — double-encodes (`&` → `&amp;`).

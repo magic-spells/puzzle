@@ -136,19 +136,61 @@ too; irregular `pluralize('person', 'people')`). Numbers: `plus`, `minus`,
 number as written: `12.5` → `13%`), `number_with_delimiter` (viewer locale;
 an argument forces the delimiter), `compact_number` → `1.2K`. Values:
 `default('n/a')` (missing, `false`, `''`, `[]` — not `0`), `size`, `join`,
-`json`. Dates: `date`/`time`/`datetime` with presets `short`, `medium`
-(default), `long`, `iso`. There are **no list formatters** — no `sort`,
-`where`, `map`, `first`, `last`: shape lists in `data()` and index with
-`items[0]` / `items.at(-1)`. Don't register an app formatter under a
+`json`. Markup: `escape` (an identity on text), `raw` and `newline_to_br`
+(see Rendering HTML below). Dates: `date`/`time`/`datetime` with presets
+`short`, `medium` (default), `long`, `iso`. There are **no list formatters** —
+no `sort`, `where`, `map`, `first`, `last`: shape lists in `data()` and index
+with `items[0]` / `items.at(-1)`. Don't register an app formatter under a
 standard name (it wins, with a dev warning, and changes what the name means).
+
+### Rendering HTML: `raw` and `newline_to_br` (puzzle ≥ 0.8.0) — security
+
+`{ post.bodyHtml | raw }` renders a value as real HTML, and it is **always
+sanitized** — there is no unsanitized escape hatch, by design:
+
+```html
+<article class="prose">{ post.bodyHtml | raw }</article>
+<p>{ comment.text | newline_to_br }</p>        <!-- escaped text, real <br>s -->
+<div>{ post.bodyHtml | truncate(300) | raw }</div>
+```
+
+- **What survives:** paragraphs, headings, lists, tables, `b`/`i`/`em`/
+  `strong`/`code`/`pre`/`blockquote`/`br`/`hr`, `span`/`div`, links
+  (`<a href>`) and images (`<img src srcset alt width height>`), plus `title`,
+  `lang` and `dir`.
+- **What is removed:** `<script>` with its contents; `<style>`, `<iframe>`,
+  `<object>`, `<embed>`, `<svg>`, `<math>`, `<template>`, `<noscript>` with
+  their contents; forms and inputs (their text stays); every `on*` handler;
+  `style`, `class`, `id` and `name`; and any `href`/`src`/`srcset` URL that is
+  not relative or `http(s)` (links also keep `mailto:`/`tel:`) — obfuscated
+  `JaVaScRiPt:`, entity-encoded and whitespace-split schemes included. So a
+  value can't restyle or overlay your page with utility classes either.
+- **`raw` must be the LAST formatter of a TEXT interpolation.** Anything else
+  is a compile error: `{ x | raw | upcase }`, `title={ x | raw }`,
+  `<Card body={ x | raw } />`, `{#if x | raw}`, `raw(…)` with arguments, or
+  `{ x | raw }` inside `<script>`/`<style>`/`<textarea>`/`<title>`. Pass
+  markup to a component as a string prop and pipe it through `raw` inside the
+  component's own template.
+- **App formatters can't inject markup.** Registering your own `raw` does
+  nothing for templates (a dev warning says so): the compiler lowers the name
+  itself. Don't try to build HTML strings in a custom formatter — they print
+  as text.
+- **Still treat it as untrusted-content rendering.** Sanitizing makes the
+  markup inert, not trustworthy: a user can still post links and images.
+  Prefer `newline_to_br` (or plain `{ text }`) for user-typed text, and keep
+  `raw` for CMS/rich-text fields.
+- The output renders as sibling nodes with no wrapper element, prerenders
+  identically in `hybrid`/`static` output, and costs ~2 KB gzip — only in
+  apps that use `raw` or `newline_to_br`.
 
 Rules that bite:
 
 - **Text is text.** Template text is NOT HTML-entity decoded and interpolations
-  become text nodes — you cannot inject markup through `{ expr }`. The one
-  raw-markup exception is compile-time `{#svg 'path.svg'}` inline SVG.
-  `{#raw}` is not a second one — it only turns the brace lexer off; no runtime
-  value can reach inside it.
+  become text nodes — you cannot inject markup through a plain `{ expr }`. The
+  only ways markup gets in are compile-time `{#svg 'path.svg'}` inline SVG and
+  the sanitized `raw` formatter (see Rendering HTML above). `{#raw}` is
+  neither — it only turns the brace lexer off; no runtime value can reach
+  inside it.
 - **What prints.** `null`, `undefined`, `NaN`, ±Infinity and objects (a `Date`
   included — format it with `| date`) print nothing; an object also warns in
   development. A list prints comma-joined in text, but in a brace-only

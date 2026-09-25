@@ -123,6 +123,14 @@ notes:
       ChatAttachmentDoc, ToolbarDoc and DropdownMenuDoc are kept as they now read. Every icon +
       label pair sits in a flex item and is unaffected. Production size against 50acbfeb:
       hello-world 21,977 B and todos 26,144 B gzip, byte-identical.
+  - kind: state
+    text: >-
+      Group (e), sanitized `raw` and `newline_to_br` (D174), is built in PuzzleKit on
+      feat/sanitized-raw, so the intro's "(e) sanitized `raw` [is] not" is superseded. A text
+      interpolation ending in either name renders a live-HTML node (raw through the shared allowlist
+      sanitizer), a non-text sibling under the V10/D168 whitespace rule like an element; either name
+      anywhere else is a positioned compile error. D174's body holds the allowlist, the canonical
+      output the conformance rows pin, and what Sites must do.
 ---
 
 # D173 — Core semantics: one meaning for each shared construct
