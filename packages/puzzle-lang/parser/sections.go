@@ -378,8 +378,8 @@ func findStyleClose(s string, from int) int {
 	return -1
 }
 
-// skipCSSString returns the index just past a CSS string opened at s[i] (a '\” or
-// '"'), honoring backslash escapes; an unterminated string runs to EOF.
+// skipCSSString returns the index just past a CSS string opened at s[i] (a single or
+// double quote), honoring backslash escapes; an unterminated string runs to EOF.
 func skipCSSString(s string, i int) int {
 	q := s[i]
 	for j := i + 1; j < len(s); {

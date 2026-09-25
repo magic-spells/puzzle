@@ -43,6 +43,6 @@ cd packages/puzzle-lang
 go vet ./... && go test ./...
 ```
 
-The parser's integration tests parse the todos example from the sibling
-`packages/puzzle/examples/todos`, so run them inside a full checkout of the
-monorepo.
+The parser's integration tests parse copies of the todos example's `.pzl`
+files, vendored under `parser/testdata/todos`, so the module's tests are
+self-contained and run the same from a monorepo checkout or the module cache.
