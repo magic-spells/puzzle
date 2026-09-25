@@ -89,6 +89,17 @@ notes:
       (`setFormatLocale(defaultLocale)`, through the service's apply step) when it loads the default
       table, so prerendered dates and numbers render in the default locale rather than the build
       machine's — the earlier note's "pending PR #150" item is done.
+  - kind: state
+    text: >-
+      The `</body>` anchor gotcha in the translations note above is FIXED (PR #153 review round):
+      `compileShellPlan` now anchors `bodyCloseIndex` on the LAST `</body>` match in the shell
+      (`BODY_CLOSE_RE` is global and the plan walks every match), so the text `</body>` in a shell
+      comment or an inline script string before the real tag can no longer swallow the static
+      data/read/locale islands, the per-page module script, or the hybrid locale island. Pinned by
+      `tests/i18n-ssg.test.js` for both modes, with and without i18n. Also with i18n configured,
+      `prerenderToDir` rewrites the shell's `<html lang>` to `defaultLocale` once per build
+      (`withHtmlLang`: replaces an existing `lang`, adds one otherwise), so every prerendered page
+      declares the language it is written in.
 ---
 
 # Static generation runtime

@@ -1,6 +1,6 @@
 <puzzle-view class="space-y-8">
   <div class="space-y-3">
-    <h1 class="text-3xl font-semibold">{ 'home.greeting' | t(user) }</h1>
+    <h1 class="text-3xl font-semibold">{ 'home.greeting' | t({ name: user.name }) }</h1>
     <p class="text-muted leading-relaxed">{ 'home.intro' | t }</p>
   </div>
 
@@ -8,9 +8,9 @@
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">{ 'home.cart.title' | t }</h2>
       <!-- A plural entry: `count` picks the form through Intl.PluralRules
-           (pl has one/few/many/other), and {count} prints in the locale's
-           number format. -->
-      <p class="count tabular-nums">{ 'home.cart.items' | t(cart) }</p>
+           (pl has one/few/many/other), an exact 0 uses the entry's `zero`
+           form, and {count} prints in the locale's number format. -->
+      <p class="count tabular-nums">{ 'home.cart.items' | t({ count: cart.count }) }</p>
     </div>
     <div class="flex gap-2">
       <button class="px-3 py-1.5 rounded-md border border-line hover:bg-page" @click={ change(-1) }>{ 'home.cart.remove' | t }</button>
@@ -28,22 +28,26 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
+// The cart is a store record, so it survives a language switch (which rebuilds
+// every routed view — local setData() state does not survive it).
 export default class Home extends PuzzleView {
-  // Variables reach `t` as one object: `t(user)` fills {name}, `t(cart)` fills
-  // {count} and picks the plural form. (An inline `t({ count: n })` works once
-  // object-literal formatter arguments land — D173 V8.)
-  data() {
-    return { user: { name: 'Ada' }, updated: '2026-09-25' };
+  created() {
+    const { store } = this.ctx;
+    if (!store.findOne('cart', 'mine')) store.createRecord('cart', { id: 'mine' });
   }
 
-  created() {
-    this.setData({ cart: { count: 2 } });
+  data() {
+    return {
+      user: { name: 'Ada' },
+      cart: this.ctx.store.findOne('cart', 'mine'),
+      updated: '2026-09-25',
+    };
   }
 
   events = {
     change: (step) => {
-      const count = Math.max(0, this.getData().cart.count + step);
-      this.setData({ cart: { count } });
+      const cart = this.ctx.store.findOne('cart', 'mine');
+      cart.update({ count: Math.max(0, cart.count + step) });
     },
   };
 }

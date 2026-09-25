@@ -9,6 +9,7 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { memoryRouter } from '../client-runtime/router/modes.js';
 import { createTestApp, mountView } from '../client-runtime/testing/index.js';
+import { installFakeAnimate } from './helpers/fake-waapi.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -256,6 +257,159 @@ describe('PuzzleApp + i18n', () => {
 		await app.i18n.setLocale('es');
 		await app.router.push('/about');
 		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+	});
+
+	// A push still loading when the switch lands owns where the app is going: the
+	// rebuild waits for it, then rebuilds the page the push committed.
+	function gatedAbout() {
+		let release;
+		const gate = new Promise((r) => (release = r));
+		class SlowAbout extends PuzzleView {
+			async data() {
+				await gate;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'about' }, [h('h1', {}, [text(this.ctx.i18n.t('about'))])]);
+			}
+		}
+		return {
+			release,
+			routes: [
+				{ path: '/', view: Home, layout: Layout },
+				{ path: '/about', view: SlowAbout, layout: Layout },
+			],
+		};
+	}
+
+	it('a switch landing while a push loads waits for it, then rebuilds the new page', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const slow = gatedAbout();
+		const { app, el } = make({ routes: slow.routes });
+		await app.mount();
+		const before = history.length;
+		const push = app.router.push('/about');
+		await tick();
+		const switched = app.i18n.setLocale('es');
+		await tick();
+		slow.release();
+		await push;
+		await switched;
+		expect(location.pathname).toBe('/about');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+		expect(el.querySelectorAll('.about')).toHaveLength(1);
+		expect(history.length).toBe(before + 1);
+	});
+
+	it('setLocale then push (a login flow) ends on the pushed page in the new locale', async () => {
+		let releaseEs;
+		const esGate = new Promise((r) => (releaseEs = r));
+		stubFetch(
+			{ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES },
+			{ gates: { 'locales/es.BBBB.json': esGate } }
+		);
+		const slow = gatedAbout();
+		const { app, el } = make({ routes: slow.routes });
+		await app.mount();
+		const before = history.length;
+		const switched = app.i18n.setLocale('es');
+		const push = app.router.push('/about');
+		releaseEs();
+		await tick();
+		slow.release();
+		await Promise.all([switched, push]);
+		expect(location.pathname).toBe('/about');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+		expect(history.length).toBe(before + 1);
+	});
+
+	it('a switch plays no enter or out animation on the rebuilt chain', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const waapi = installFakeAnimate();
+		try {
+			const fade = { from: { opacity: 0 }, to: { opacity: 1 }, duration: 150 };
+			class AnimHome extends Home {
+				animations = { in: fade, out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 150 } };
+			}
+			class AnimLayout extends Layout {
+				animations = { in: fade, out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 150 } };
+			}
+			const { app, el } = make({ routes: [{ path: '/', view: AnimHome, layout: AnimLayout }] });
+			await app.mount();
+			waapi.finishAll();
+			await tick();
+			const calls = waapi.animations.length;
+			expect(calls).toBeGreaterThan(0); // the initial mount did animate
+			await app.i18n.setLocale('es');
+			expect(waapi.animations.length).toBe(calls);
+			expect(el.querySelector('h1').textContent).toBe('Inicio');
+			expect(el.querySelectorAll('.home')).toHaveLength(1);
+			expect(el.querySelectorAll('.layout')).toHaveLength(1);
+		} finally {
+			waapi.uninstall();
+		}
+	});
+
+	it('a switch never flashes a skeleton: the old page stays until the new one is ready', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		let gate = Promise.resolve();
+		class SkeletonHome extends PuzzleView {
+			async data() {
+				await gate;
+				return { heading: this.ctx.i18n.t('title') };
+			}
+			render() {
+				return h('puzzle-view', { class: 'home' }, [h('h1', {}, [text(this.getData().heading)])]);
+			}
+			renderSkeleton() {
+				return h('puzzle-view', { class: 'home is-loading' }, []);
+			}
+		}
+		const { app, el } = make({ routes: [{ path: '/', view: SkeletonHome, layout: Layout }] });
+		await app.mount();
+		await tick();
+		expect(el.querySelector('h1').textContent).toBe('Home');
+		let release;
+		gate = new Promise((r) => (release = r));
+		const switched = app.i18n.setLocale('es');
+		await tick();
+		await tick();
+		expect(el.querySelector('.is-loading')).toBeNull();
+		expect(el.querySelector('h1').textContent).toBe('Home');
+		release();
+		await switched;
+		expect(el.querySelector('.is-loading')).toBeNull();
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+	});
+
+	it('a rebuild whose data() fails rejects setLocale and keeps the old page', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const onError = vi.fn();
+		let fail = false;
+		class Fragile extends Home {
+			data() {
+				if (fail) throw new Error('boom');
+				return super.data();
+			}
+		}
+		const { app, el } = make({
+			onError,
+			routes: [
+				{ path: '/', view: Fragile, layout: Layout },
+				{ path: '/about', view: About, layout: Layout },
+			],
+		});
+		await app.mount();
+		fail = true;
+		await expect(app.i18n.setLocale('es')).rejects.toThrow(/could not be rebuilt/);
+		expect(el.querySelector('h1').textContent).toBe('Home');
+		expect(onError).toHaveBeenCalled();
+		// The next successful navigation rebuilds every level in the new locale.
+		fail = false;
+		await app.router.push('/about');
 		expect(el.querySelector('header').textContent).toBe('Tienda');
 	});
 

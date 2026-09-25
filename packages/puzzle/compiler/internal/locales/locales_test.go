@@ -220,7 +220,7 @@ func TestLoadPluralRecognition(t *testing.T) {
 }
 
 func TestLoadWarnsOnUnlistedFile(t *testing.T) {
-	root := writeLocales(t, map[string]string{"en.json": `{}`, "fr.json": `{}`, "README.md": "notes"})
+	root := writeLocales(t, map[string]string{"en.json": `{"a": "b"}`, "fr.json": `{}`, "README.md": "notes"})
 	res, err := Load(root, cfg("en", "en"))
 	if err != nil {
 		t.Fatal(err)
@@ -256,5 +256,28 @@ func TestWriteTo(t *testing.T) {
 		if err != nil || string(data) != `{"a":"A"}` {
 			t.Fatalf("en file = %q, %v", data, err)
 		}
+	}
+}
+
+func TestLoadWarnsOnEmptyObjects(t *testing.T) {
+	root := writeLocales(t, map[string]string{
+		"en.json": "{\n  \"cart\": {},\n  \"title\": \"Hi\"\n}",
+		"es.json": `{}`,
+	})
+	res, err := Load(root, cfg("en", "en", "es"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(res.Warnings, "\n")
+	for _, want := range []string{
+		`app/locales/en.json:2: "cart" is an empty object — it defines no keys`,
+		`app/locales/es.json is an empty object — it defines no translations`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing warning %q in:\n%s", want, joined)
+		}
+	}
+	if _, ok := table(t, res, "en")["cart"]; ok {
+		t.Fatal("an empty namespace must not become a key")
 	}
 }

@@ -376,9 +376,9 @@ With `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` in
 ```html
 { 'cart.title' | t }
 <!-- Your cart -->
-{ 'greeting' | t(user) }
-<!-- Hello, Ada! — fills {name} from the object -->
-{ 'cart.items' | t(cart) }
+{ 'greeting' | t({ name: user.name }) }
+<!-- Hello, Ada! — fills {name} -->
+{ 'cart.items' | t({ count: cart.count }) }
 <!-- 3 items — a numeric `count` picks the plural form -->
 ```
 

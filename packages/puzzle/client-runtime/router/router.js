@@ -2144,7 +2144,25 @@ export class Router {
 			// layout. It is left set if this navigation is superseded or fails, so the
 			// next navigation rebuilds every level too — no view keeps stale strings.
 			st.chainInvalid = st.layoutInvalid = true;
-			return this.#navigate(st.path, { push: false, replace: true, retryView: REBUILD });
+			// A push still loading owns where the app is going: rebuilding the committed
+			// location now would supersede it and strand the app on the old page. Let it
+			// land (or fail), then rebuild wherever the app ended up.
+			const pending = this.#pendingNavPath != null && this.#pendingNavPromise;
+			if (pending) {
+				const again = () => this.__failedView(null, true);
+				return pending.then(again, again);
+			}
+			// Resolves once the rebuilt chain commits (or a newer navigation takes over);
+			// rejects when the rebuild itself failed and the old chain is still on
+			// screen (a data() failure, already reported through onError), so
+			// setLocale's caller learns the page was not rebuilt.
+			const nav = this.#navigate(st.path, { push: false, replace: true, retryView: REBUILD });
+			const token = this.#token;
+			return nav.then(() => {
+				if (this.#token === token && this.#state === st) {
+					throw new Error('[puzzle] the page could not be rebuilt in the new locale');
+				}
+			});
 		}
 		const routed = st.layout === view || st.views.includes(view);
 		if (retry) {

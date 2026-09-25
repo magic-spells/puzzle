@@ -30,8 +30,12 @@ export default class LocaleSwitcher extends PuzzleView {
   events = {
     // setLocale fetches the new table first, then rebuilds the page at the same
     // location — no history entry, no scroll jump — and remembers the choice.
+    // It rejects when the new file fails to load (nothing changes) or the page
+    // could not be rebuilt (the error already went to onError).
     choose: (tag) => {
-      this.ctx.i18n.setLocale(tag);
+      this.ctx.i18n.setLocale(tag).catch((err) => {
+        console.error(err);
+      });
     },
   };
 }

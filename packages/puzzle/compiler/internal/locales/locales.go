@@ -155,8 +155,9 @@ func Load(appRoot string, cfg *config.I18n) (*Result, error) {
 			problems = append(problems, fmt.Sprintf("i18n.locales lists %q, but %s/%s.json does not exist%s", tag, DirName, tag, hint))
 			continue
 		}
-		table, errs := parseFile(path, DirName+"/"+tag+".json")
+		table, errs, warns := parseFile(path, DirName+"/"+tag+".json")
 		problems = append(problems, errs...)
+		warnings = append(warnings, warns...)
 		if len(errs) == 0 {
 			tables[tag] = table
 		}
@@ -305,11 +306,12 @@ func (d *lineDecoder) line() int {
 }
 
 // parseFile decodes one locale file and flattens it. It returns every problem
-// it found rather than stopping at the first.
-func parseFile(path, rel string) (map[string]any, []string) {
+// it found rather than stopping at the first, plus warnings (an empty object,
+// which defines no keys and is almost always an unfinished edit).
+func parseFile(path, rel string) (map[string]any, []string, []string) {
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return nil, []string{fmt.Sprintf("%s: %v", rel, err)}
+		return nil, []string{fmt.Sprintf("%s: %v", rel, err)}, nil
 	}
 	dec := &lineDecoder{Decoder: json.NewDecoder(bytes.NewReader(src)), src: src}
 	root, err := readValue(dec)
@@ -319,16 +321,19 @@ func parseFile(path, rel string) (map[string]any, []string) {
 		}
 	}
 	if err != nil {
-		return nil, []string{fmt.Sprintf("%s:%d: invalid JSON: %v", rel, dec.line(), err)}
+		return nil, []string{fmt.Sprintf("%s:%d: invalid JSON: %v", rel, dec.line(), err)}, nil
 	}
 	if root.kind != "object" {
-		return nil, []string{fmt.Sprintf("%s: a locale file must be a JSON object of keys to strings; got %s", rel, article(root.kind))}
+		return nil, []string{fmt.Sprintf("%s: a locale file must be a JSON object of keys to strings; got %s", rel, article(root.kind))}, nil
 	}
 	table := map[string]any{}
 	origin := map[string]string{}
-	var problems []string
-	flatten(rel, root, "", "", table, origin, &problems)
-	return table, problems
+	var problems, warnings []string
+	if len(root.keys) == 0 && len(root.dup) == 0 {
+		warnings = append(warnings, fmt.Sprintf("%s is an empty object — it defines no translations", rel))
+	}
+	flatten(rel, root, "", "", table, origin, &problems, &warnings)
+	return table, problems, warnings
 }
 
 func readValue(dec *lineDecoder) (*node, error) {
@@ -390,7 +395,7 @@ func readValue(dec *lineDecoder) (*node, error) {
 
 // flatten walks one object, writing dotted keys into table. origin remembers how
 // each flat key was spelled, so a collision can name both spellings.
-func flatten(rel string, obj *node, prefix, spelled string, table map[string]any, origin map[string]string, problems *[]string) {
+func flatten(rel string, obj *node, prefix, spelled string, table map[string]any, origin map[string]string, problems, warnings *[]string) {
 	for _, key := range obj.dup {
 		*problems = append(*problems, fmt.Sprintf("%s: %q is defined twice in the same object", rel, join(prefix, key)))
 	}
@@ -431,7 +436,11 @@ func flatten(rel string, obj *node, prefix, spelled string, table map[string]any
 				}
 				continue
 			}
-			flatten(rel, child, flat, spelling, table, origin, problems)
+			if len(child.keys) == 0 && len(child.dup) == 0 {
+				*warnings = append(*warnings, fmt.Sprintf("%s is an empty object — it defines no keys", where))
+				continue
+			}
+			flatten(rel, child, flat, spelling, table, origin, problems, warnings)
 		default:
 			*problems = append(*problems, fmt.Sprintf("%s: a translation must be a string, a nested object, or a plural entry; got %s", where, article(child.kind)))
 		}

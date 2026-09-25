@@ -192,6 +192,75 @@ describe('prerender with translations', () => {
 		})();
 	});
 
+	// The shell's `</body>` anchor is the LAST one: the text `</body>` in a comment
+	// or an inline script string before the real tag must not swallow the scripts.
+	const TRICKY_SHELL =
+		'<!doctype html><html lang="xx"><head><title>t</title></head><body>' +
+		'<!-- the islands go before </body>, never in here -->' +
+		'<script>const s = "</body>";</script>' +
+		'<div id="app"></div><script type="module" src="/app.js"></script></body></html>';
+	const outsideComment = (html, marker) => {
+		const at = html.indexOf(marker);
+		expect(at).toBeGreaterThan(html.indexOf('-->'));
+		expect(at).toBeGreaterThan(html.indexOf('"</body>"'));
+		expect(at).toBeLessThan(html.lastIndexOf('</body>'));
+	};
+
+	it('hybrid: a </body> in a shell comment or script string does not move the island anchor', async () => {
+		const dir = tmpDir();
+		fs.writeFileSync(path.join(dir, 'index.html'), TRICKY_SHELL);
+		const summary = await prerenderToDir(config(), {
+			outDir: dir,
+			shellPath: path.join(dir, 'index.html'),
+			mode: 'hybrid',
+			i18n: I18N,
+		});
+		const html = fs.readFileSync(summary.written[0].file, 'utf8');
+		outsideComment(html, 'data-puzzle-locale="en"');
+	});
+
+	it('static: a </body> in a shell comment or script string does not move the page module', async () => {
+		const dir = tmpDir();
+		fs.writeFileSync(path.join(dir, 'index.html'), TRICKY_SHELL);
+		const withI18n = await prerenderToDir(config(), {
+			outDir: dir,
+			shellPath: path.join(dir, 'index.html'),
+			mode: 'static',
+			i18n: I18N,
+		});
+		const html = fs.readFileSync(withI18n.written[0].file, 'utf8');
+		outsideComment(html, 'data-puzzle-locale="en"');
+		outsideComment(html, 'data-puzzle-static-data');
+		outsideComment(html, '/_puzzle/index.js');
+		// The same anchor without translations: the data island and page module.
+		const plain = injectStaticShell(TRICKY_SHELL, {
+			targetId: 'app',
+			content: '<p>x</p>',
+			title: null,
+			head: null,
+			slug: 'index',
+			data: {},
+		});
+		outsideComment(plain, 'data-puzzle-static-data');
+		outsideComment(plain, '/_puzzle/index.js');
+	});
+
+	it('prerendered pages declare <html lang> as the default locale', async () => {
+		for (const mode of ['hybrid', 'static']) {
+			const dir = tmpDir();
+			fs.writeFileSync(path.join(dir, 'index.html'), TRICKY_SHELL);
+			const summary = await prerenderToDir(config(), {
+				outDir: dir,
+				shellPath: path.join(dir, 'index.html'),
+				mode,
+				i18n: { manifest: { ...MANIFEST, defaultLocale: 'es' }, table: ES },
+			});
+			const html = fs.readFileSync(summary.written[0].file, 'utf8');
+			expect(html).toContain('<html lang="es">');
+			expect(html).not.toContain('lang="xx"');
+		}
+	});
+
 	it('an app without translations gets no island', () => {
 		const out = injectStaticShell(SHELL, {
 			targetId: 'app',

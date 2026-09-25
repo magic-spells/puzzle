@@ -115,7 +115,10 @@ export function fillPlaceholders(text, vars) {
 		if (close < 0) break;
 		const name = text.slice(open + 1, close);
 		out += text.slice(i, open);
-		if (Object.hasOwn(vars, name)) {
+		// Own properties, and ones a model record inherits from its class (computed
+		// getters, relationships) — but never Object.prototype's (`{constructor}`
+		// stays literal text).
+		if (Object.hasOwn(vars, name) || (name in vars && !(name in Object.prototype))) {
 			const value = vars[name];
 			out +=
 				name === 'count' && typeof value === 'number' && isFinite(value)
@@ -271,7 +274,12 @@ export function createI18n(options = {}) {
 					}
 					text = text.other;
 				} else {
-					text = text[pluralCategory(locale, Number(count))] ?? text.other;
+					// An exact 0 takes the entry's `zero` form when it has one, even where
+					// CLDR never selects `zero` (en) — the Rails/Shopify rule, so "No items"
+					// needs no template branch. Otherwise CLDR picks; a missing category
+					// falls back to `other`.
+					const n = Number(count);
+					text = (n === 0 ? text.zero : undefined) ?? text[pluralCategory(locale, n)] ?? text.other;
 				}
 			}
 			return hasVars ? fillPlaceholders(text, vars) : text;

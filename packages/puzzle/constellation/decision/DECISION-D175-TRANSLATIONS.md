@@ -39,71 +39,48 @@ connections:
 notes:
   - kind: deviation
     text: >-
-      Built on feat/translations (items 1–7 and 9–12; item 8 waits on PR #150). Where the card did
-      not pin a detail, the smallest consistent choice: (1) The define is read from the plugin
-      (`pl.I18nEnabled()` in `build/options.go`), set by `SetI18n` from the config, not threaded as
-      a separate bundle flag — same effect on every pass. (2) The rebuild entry is
-      `router.__failedView(null, true)` with a module-private `REBUILD` marker passed as
-      `retryView`, not a new method: esbuild never drops class members, so a new method would ship
-      in every app. (3) The `t` formatter is installed by `installTranslate(registry, i18n)` from
-      `i18n.js` right after `makeFormatterRegistry`, not inside it, so `formatters.js` never imports
-      the i18n module (zero bytes without i18n). (4) The manifest lists locales in config order; the
-      hash is sha256 → base32, first 8 characters; locale files are minified with sorted keys. (5)
-      `/testing`'s option is `{ locale, strings }` — one table, which is both the active and the
-      default locale. (6) `PuzzleApp` and `mountStatic` take an internal `__i18n` config seam (`{
-      manifest, tables, locale }`) used by tests and `/testing`; it is not public config. (7) Tests
-      are consolidated into `tests/i18n.test.js`, `tests/i18n-app.test.js` and
-      `tests/i18n-ssg.test.js` (static prerender, static-kernel swap, hybrid takeover, `</body>`
-      anchor, rawtext escape) instead of extending the five per-area files. (8) Nested components
+      Where the card did not pin a detail, the build took the smallest consistent choice: (1) The
+      define is read from the plugin (`pl.I18nEnabled()` in `build/options.go`), set by `SetI18n`
+      from the config, not threaded as a separate bundle flag — same effect on every pass. (2) The
+      rebuild entry is `router.__failedView(null, true)` with a module-private `REBUILD` marker
+      passed as `retryView`, not a new method: esbuild never drops class members, so a new method
+      would ship in every app. (3) The `t` formatter is installed by `installTranslate(registry,
+      i18n)` from `i18n.js` right after `makeFormatterRegistry`, not inside it, so `formatters.js`
+      never imports the i18n module (zero bytes without i18n). (4) The manifest lists locales in
+      config order; the hash is sha256 → base32, first 8 characters; locale files are minified with
+      sorted keys. (5) `/testing`'s option is `{ locale, strings }` — one table, which is both the
+      active and the default locale. (6) `PuzzleApp` and `mountStatic` take an internal `__i18n`
+      config seam (`{ manifest, tables, locale }`) used by tests and `/testing`; it is not public
+      config. (7) Tests are consolidated into `tests/i18n.test.js`, `tests/i18n-app.test.js` and
+      `tests/i18n-ssg.test.js` instead of extending the five per-area files. (8) Nested components
       inside a rebuilt view are ordinary fresh mounts and may play their own enter animations;
-      routed views and the layout skip theirs. (9) Template `t({ … })` waits on D173 V8: examples
-      and tests pass variables as a data field (`t(user)`), and the template-level object-literal
-      test is a `t.Skip("TODO(V8)")` in `compiler/internal/build/i18n_test.go`. (10) Size:
-      hello-world and todos raw bytes are identical; esbuild's minified identifier assignment shifts
-      because it counts symbol uses inside dead branches, so gzip moves by −1 byte (hello-world) / 0
-      (todos) and brotli by +4 / +12 bytes. The i18n cost measured on examples/i18n is +3.4 KB raw,
-      +1.3 KB gzip, +1.2 KB brotli (inside the 1–1.5 KB budget).
+      routed views and the layout skip theirs. (9) Formatter-locale caches are not keyed by locale:
+      `setFormatLocale` clears `localeNumber`'s per-digit cache and `compact_number`/`timeago`
+      rebuild their single-slot formatter when the slot moves — same result, and an app without i18n
+      keeps its exact code. (10) The rebuild waits only for a pending PUSH (`#pendingNavPromise`); a
+      replace or pop still loading when a switch lands is superseded by the rebuild. (11) The build
+      cannot detect an app-registered `t` (the compiler never reads app.js), so the `t`-without-i18n
+      warning says "unless the app registers its own t formatter" instead of being skipped. (12)
+      Size: hello-world and todos raw bytes are identical to the base; only minified identifier and
+      module order shift, moving gzip/brotli by a few bytes. The i18n cost measured on examples/i18n
+      is about +1.3 KB gzip.
   - kind: state
     text: >-
-      Status is `building`, not `built`: everything that does not depend on PR #150 is on
-      feat/translations (config, locales package, manifest + define, scan checks, SPA/static dev
-      reload, the i18n service, the service-bound `t`, app wiring, the same-location rebuild,
-      prerender + static kernel + islands, `/testing`, types, examples/i18n, SPEC §66, SKILL,
-      README, CHANGELOG). Still open, all gated on #150 (feat/formatter-set) merging into
-      release/0.8.0: item 8 (`formatters/locale.js`, `setFormatLocale`, `localeNumber` moved,
-      `builtins.js` threading `formatLocale`, prerender `setFormatLocale(defaultLocale)`, the
-      service's `onLocale` hook wired to it); item 7's `t` in `STANDARD_FORMATTERS` with the shadow
-      warning and the conformance `t` rows; and D174's counts (35 / 24 / 38). Until then `{count}`
-      prints through the service's own cached `Intl.NumberFormat(locale)`, and
-      `date`/`number_with_delimiter` still follow the browser locale. The open questions stand with
-      the brief's defaults: selection order stored → exact → base → same-base configured tag →
-      default, storage key `__puzzleLocale`; `defaultLocale`; nested files allowed; no special
-      `zero` rule; `currency` locale-independent; route `meta.title` static.
-  - kind: state
-    text: >-
-      Built — supersedes the `building` note above. PR #150 merged into release/0.8.0, and
-      feat/translations was rebased onto it (and onto #151). Item 8 is done:
-      `client-runtime/formatters/locale.js` (`formatLocale`, `setFormatLocale`, `localeNumber` moved
-      from builtins.js), builtins.js threading behind the `__PUZZLE_HAS_I18N__` probe, the service's
-      apply step calling `setFormatLocale` (so the prerender renders in the default locale; the
-      `onLocale` option was dropped as unneeded), and `t`'s `{count}` using `localeNumber`. Item 7's
-      remainder is done: `t` in `STANDARD_FORMATTERS` (35 names) with the shadow warning, and the
-      conformance table's `t` rows (top-level `translations`, per-row `locale`). D174's counts are
-      updated (35 standard, Sites-only 24 with 6 platform-bound, PuzzleKit 38). Deviation for item
-      8: instead of keying every cache by locale, `setFormatLocale` clears `localeNumber`'s
-      per-digit cache and `compact_number`/`timeago` rebuild their single-slot formatter when the
-      slot moves — same result, and an app without i18n keeps its exact code. The only D175 piece
-      left is template-level `t({ … })` coverage, which waits on D173 V8 (feat/core-expressions, PR
-      #152) and sits as a `t.Skip("TODO(V8)")` Go test.
+      Built on feat/translations (PR #153 into release/0.8.0, rebased onto #150, #151 and #152). All
+      twelve build items are in, plus the PR #153 review round: the rebuild waits for a pending
+      push; a failed rebuild rejects setLocale; the `zero` form at an exact 0 (open question 4,
+      adopted); variable names inherited from a model's class; `<html lang>` = defaultLocale in
+      prerendered pages; an empty-object build warning; the last-`</body>` shell anchor; brace-only
+      attribute keys in the missing-key scan; template-level `t({ … })` tests (D173 V8). D174
+      counts: 35 standard, 24 Sites-only (6 platform-bound), 38 PuzzleKit. The six open questions
+      are decided as recorded under Consequences.
 ---
 
 # D175 — Translations: `'key' | t`, one locale file per language
 
-Decided with Cory on 2026-09-25 for 0.8.0; nothing is built yet. The build
-list at the end is the implementation order. Two parts are **recommendations
-awaiting Cory's confirmation**, and say so where they appear: how the active
-locale is picked (Locale selection) and the config shape (Config). Everything
-else is decided.
+Decided with Cory on 2026-09-25 and built for 0.8.0 (PR #153). The build list
+at the end is the implementation order it followed. Every open question is
+decided; the answers are under Consequences.
 
 ## Context
 
@@ -139,8 +116,8 @@ The forces:
 
 ### `t` semantics (both hosts)
 
-`t` joins the standard set. D174's lists change when this card is built:
-standard 35 names, Sites-only 24 (platform-bound 6), PuzzleKit 38 names.
+`t` joins the standard set. D174's lists: standard 35 names, Sites-only 24
+(platform-bound 6), PuzzleKit 38 names.
 
 - **Lookup.** `{ 'cart.title' | t }` looks the key up in the active locale,
   then in the default locale. If both miss, it prints the key itself, so a
@@ -159,9 +136,13 @@ standard 35 names, Sites-only 24 (platform-bound 6), PuzzleKit 38 names.
   variables stays visible as written (`{name}`). A name that is present with a
   missing value prints nothing. Values print by the D173 V6 rule. A `{` with no
   closing `}` is literal text. Non-object variables are ignored, with a
-  development warning. Object-literal arguments depend on the D173 V8 codegen
-  fix (`feat/core-expressions`). In an attribute or prop, `title={ 'x' | t }`
-  depends on V1; the quoted form `title="{ 'x' | t }"` works today.
+  development warning. The variables are an inline object literal (D173 V8)
+  or any object value — a data field, a store record. A name is read from the
+  object itself or from what it inherits from its class (a model's computed
+  getters and relationships), never from `Object.prototype`, so
+  `{constructor}` stays literal. `t` runs in every value position (D173 V1):
+  text, quoted attributes, and brace-only attributes and props
+  (`placeholder={ 'search.hint' | t }`).
 - **Plurals (Shopify's model).** When the variables include `count`, the entry
   may be an object of CLDR plural categories (`zero`, `one`, `two`, `few`,
   `many`, `other`):
@@ -173,9 +154,12 @@ standard 35 names, Sites-only 24 (platform-bound 6), PuzzleKit 38 names.
   `{ 'item_count' | t({ count: cart.items.length }) }`. PuzzleKit picks the
   category with `Intl.PluralRules(locale).select(count)`, cached per locale.
   Sites picks it with `golang.org/x/text/feature/plural`. A category the entry
-  lacks falls back to `other`. A plural entry used without `count` renders
-  `other`, with a development warning. A plain-string entry used with `count`
-  just substitutes.
+  lacks falls back to `other`. **An exact `count` of 0 uses the entry's `zero`
+  form when it has one, in every locale** — even where CLDR never selects
+  `zero` (English). This is the Rails/Shopify rule: "Your cart is empty" needs
+  no template branch, and it never contradicts CLDR where `zero` exists. A
+  plural entry used without `count` renders `other`, with a development
+  warning. A plain-string entry used with `count` just substitutes.
 - **`{count}` is a localized number.** When `count` is a finite number, its
   placeholder prints in the active locale's number format (`1.234` in es), by
   the same helper that `pluralize` and `number_with_delimiter` use. Other
@@ -188,8 +172,8 @@ standard 35 names, Sites-only 24 (platform-bound 6), PuzzleKit 38 names.
 - Conformance rows (shared with Sites) pin lookup, fallback, a missing key,
   single-pass substitution, an unknown placeholder, the en `one`/`other`
   choice, a `few` locale (`pl`), a missing category falling back to `other`,
-  and `{count}` in `en`. Number strings in other locales are host-rendered,
-  like D174's locale-rendered set.
+  the `zero` form at 0, and `{count}` in `en`. Number strings in other locales
+  are host-rendered, like D174's locale-rendered set.
 
 ### Locale files
 
@@ -220,9 +204,10 @@ build error that suggests the `-` spelling.
   entry, and a namespace cannot use only category names as its keys.
 - Values are strings, namespaces or plural entries. A number, boolean, array or
   `null` is a build error, positioned by key path. So is the same flattened key
-  defined twice (`"a.b"` beside `"a": { "b": … }`).
+  defined twice (`"a.b"` beside `"a": { "b": … }`). An empty object — a whole
+  file or a namespace — defines no keys and is a build warning.
 
-### Config (recommendation, awaiting confirmation)
+### Config
 
 The locale list lives in `puzzle.config.js`, because the compiler emits the
 files:
@@ -294,10 +279,10 @@ nested files and never merges locales.
   - `setLocale(tag)`: switches the locale and returns a promise. It is the same
     method on `app.i18n`, so a language-switcher component calls
     `this.ctx.i18n.setLocale('es')`.
-- **The `t` formatter is service-bound, like `link`.** `makeFormatterRegistry`
-  registers `t` over the service when `i18n` is present, if the app did not
-  register its own. An app `t` wins, with D174's development shadow warning,
-  because `t` is standard.
+- **The `t` formatter is service-bound, like `link`.** It is registered over
+  the service when `i18n` is present, if the app did not register its own. An
+  app `t` wins, with D174's development shadow warning, because `t` is
+  standard.
 - **Why not `this.t()` on `PuzzleView`:** it would add a method to every view
   class in every app, collide with user methods named `t`, and give
   components a second way to reach a service that `ctx` already carries.
@@ -307,7 +292,7 @@ nested files and never merges locales.
   utilities take `i18n: { locale, strings }` so a test renders translated
   views without fetching.
 
-### Locale selection (recommendation, awaiting confirmation)
+### Locale selection
 
 In order, at startup:
 
@@ -361,8 +346,17 @@ The prerender (Node) has no `navigator` or storage and always uses
   focus is not moved. This path already exists: the errorView retry rebuild
   ([[DECISION-D145-ERROR-BOUNDARIES]]) is a same-location navigation. Store
   records survive. Local view state (`setData`) does not, the same as after a
-  reload, which is acceptable for a rare, user-started action. In static
-  output, the kernel re-assembles and re-mounts its page chain the same way.
+  reload, which is acceptable for a rare, user-started action; state that must
+  survive a switch belongs in the store. In static output, the kernel
+  re-assembles and re-mounts its page chain the same way.
+- **A push in flight wins.** If a push is still loading when the switch lands,
+  the rebuild waits for it and then rebuilds the page it committed, so neither
+  a mid-navigation switch nor a login flow (`setLocale(user.locale)` then
+  `push('/dashboard')`) strands the app on the previous page.
+- **A failed rebuild rejects `setLocale`.** When the rebuild's `data()` throws
+  (reported through `onError`), the old page stays on screen with the new
+  locale already active, and `setLocale` rejects. The next navigation rebuilds
+  every level in the new locale.
 - **URLs.** Manifest paths are relative to the dist root. Path-mode apps
   resolve them against the normalized `routerBase`, the base that D81's static
   entry script already uses. Hash and memory modes resolve them against the
@@ -377,38 +371,38 @@ locale in every locale-rendered formatter: `date`, `time`, `datetime`,
 `timeago` (`Intl.RelativeTimeFormat`). Without `i18n`, they keep D174's
 browser-locale behavior.
 
-The smallest change on top of PR #150 (`feat/formatter-set`), which passes
-`undefined` to `Intl.*`:
-
-- A new `client-runtime/formatters/locale.js` holds a module-level
-  `formatLocale` (`undefined` by default, meaning the browser locale),
-  `setFormatLocale(tag)`, and the `localeNumber` helper, moved there from
-  `builtins.js` because `pluralize`, `number_with_delimiter` and `t`'s
-  `{count}` all share it.
-- `builtins.js` passes `formatLocale` where it passes `undefined` today. The
-  date family passes `locale ?? formatLocale`, so an explicit `locale`
-  argument still wins. The single-slot `compact_number` and `timeago` caches,
-  and `localeNumber`'s per-digit cache, are keyed by locale.
-- Only the i18n service calls `setFormatLocale`. Without `i18n` the slot stays
-  `undefined`, and the reads cost a few bytes.
+- `client-runtime/formatters/locale.js` holds a module-level `formatLocale`
+  (`undefined` by default, meaning the browser locale), `setFormatLocale(tag)`,
+  and the `localeNumber` helper, moved there from `builtins.js` because
+  `pluralize`, `number_with_delimiter` and `t`'s `{count}` all share it.
+- `builtins.js` passes `formatLocale` where it passed `undefined`. The date
+  family passes `locale ?? formatLocale`, so an explicit `locale` argument
+  still wins. A locale change drops `localeNumber`'s per-digit cache and
+  rebuilds the single-slot `compact_number` and `timeago` formatters.
+- Only the i18n service calls `setFormatLocale`. Every read sits behind the
+  inline `__PUZZLE_HAS_I18N__` probe, so without `i18n` the formatters keep
+  their exact code.
 - The slot is per page, not per app. Two mounted apps with different locales
   on one page share it, and the last switch wins; this is accepted.
 - The prerender sets the slot to the build locale, so prerendered dates and
   numbers are in the default locale rather than the build machine's.
 
 `currency` is not in this list. D174 F3 makes it identical-output (a fixed
-symbol and `,` grouping, no `Intl`), so the active locale does not change it.
-See the open questions.
+symbol and `,` grouping, no `Intl`), so the active locale does not change it
+(decided, see Consequences).
 
 ### Static and hybrid output
 
 - **Pages prerender in `defaultLocale`.** The build's i18n service is built
   from the filled default table, which the Node pass reads from the staged
   `locales/` file named by the manifest, with no fetch.
+- **`<html lang>` is the default locale** in every prerendered page: the
+  build rewrites the shell's `lang` once per build, and the runtime keeps it in
+  step on every switch.
 - **Every prerendered page carries the table**, as
   `<script type="application/json" data-puzzle-locale="en">`, written through
   `escapeScriptJson` ([[DECISION-D113-SSG-RAWTEXT-RULE]]) at the shell's
-  `</body>` anchor with the static data island
+  last `</body>` with the static data island
   ([[DECISION-D151-SHELL-HEAD-OWNERSHIP]]). The first load in the default
   locale makes no extra request. This applies in both modes. Static
   `prerender: false` pages carry it too; a hybrid `prerender: false` page is
@@ -439,9 +433,12 @@ Build errors: a configured locale without a file; `defaultLocale` not in
 plural entry without `other`; a flatten collision; a `_` in a file name.
 
 Build warnings: keys filled from the default (one line per locale); keys that
-exist only in a non-default locale; a literal `t` key missing from the default
-locale; `t` used without `i18n`; `app/locales/` without `i18n`; an unlisted
-locale file.
+exist only in a non-default locale; an empty object (a whole file or a
+namespace) that defines no keys; a literal `t` key missing from the default
+locale, in text and in quoted and brace-only attributes; `t` used without
+`i18n` (worded "unless the app registers its own `t` formatter", because the
+compiler never reads `app.js` and cannot see one); `app/locales/` without
+`i18n`; an unlisted locale file.
 
 Development-only runtime warnings (behind `__PUZZLE_DEV__`, warn-once): a
 missing key, with a did-you-mean; `t` before the strings loaded; a plural
@@ -494,28 +491,31 @@ entry without `count`; non-object variables; the D43 hint for `t` without
 - **Flat files only, matching Sites today.** Plural entries are objects
   anyway, so Sites must change its locale parser either way. Nesting is what
   translators and Shopify themes use.
+- **Strict CLDR for `zero`** (use it only where the locale's rules select it).
+  It forces an `{#if count === 0}` branch around every "empty" message in
+  English, the most common case; the adopted rule never contradicts CLDR where
+  `zero` exists.
 
 ## Consequences
 
-**Open questions for Cory:**
+**Questions decided** (they were open when the card was written):
 
-1. Confirm the Locale selection order, including step 2's last fallback (a
-   configured tag with the same base language, `pt` → `pt-BR`), and the
-   storage key.
-2. Confirm `defaultLocale` over `default` in the config.
-3. Confirm that nested locale files are allowed. This means Sites adopts
-   flattening; Sites reads only flat files today.
-4. **The Rails/Shopify `zero` rule.** Should an exact `count` of 0 use a
-   `zero` entry when one exists, even in languages whose CLDR rules never pick
-   `zero` (English)? "No items" for 0 is a common need. The rule never
-   contradicts CLDR where `zero` exists. Not adopted until Cory says so.
-5. `currency` stays locale-independent per D174 F3. A locale-aware currency
+1. **Locale selection order:** as written under Locale selection — the stored
+   choice, then each viewer tag exact, by base language, then the first
+   configured tag with the same base (`pt` → `pt-BR`), then `defaultLocale`.
+   The storage key is `__puzzleLocale`, and every storage access sits in
+   try/catch.
+2. **Config shape:** `i18n: { locales, defaultLocale }`, not `default`.
+3. **Nested locale files** are allowed and flatten to dotted keys; Sites adopts
+   flattening.
+4. **The `zero` rule is adopted:** an exact `count` of 0 uses an entry's `zero`
+   form when it has one, in every locale (see Plurals).
+5. **`currency` stays locale-independent** per D174 F3. A locale-aware currency
    would change D174.
-6. **Translated route titles.** `meta.title` is a static string by contract
-   ([[DECISION-D84-HEAD-MANAGEMENT]], SPEC §45), so a tab title cannot be
-   translated today. This needs a D84 amendment, for example
-   `meta: { title: { t: 'products.title' } }` resolved through the service. It
-   is not decided here.
+6. **Route `meta.title` stays static** ([[DECISION-D84-HEAD-MANAGEMENT]], SPEC
+   §45). Translated tab titles need a D84 amendment, for example
+   `meta: { title: { t: 'products.title' } }` resolved through the service;
+   that is future work.
 
 **Future work, labeled as such:** locale URL prefixes (above); rich-text
 translations (a component or link inside a sentence); translation-key types
@@ -525,10 +525,11 @@ hint for the SPA.
 
 ### Build list — PuzzleKit
 
-Order: Go work first (items 1–5), then runtime (6–12). Items marked **[now]**
-can start before `feat/core-expressions` (D173 V1/V8) merges; only
-template-level tests that use `t({ … })` or a pipe in a brace-only attribute
-wait for it. Items marked **[after #150]** build on PR #150's `builtins.js`.
+Order: Go work first (items 1–5), then runtime (6–12). All twelve are built.
+Items marked **[now]** could start before `feat/core-expressions` (D173 V1/V8,
+PR #152) merged; the template-level `t({ … })` and brace-only attribute tests
+landed once it did. Items marked **[after #150]** build on PR #150's
+`builtins.js`.
 
 **Go compiler:**
 
@@ -568,7 +569,8 @@ wait for it. Items marked **[after #150]** build on PR #150's `builtins.js`.
      [[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]. Static dev stays on the warm
      staging swap of [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]].
    - Tests: watch tests for a string edit in both modes; the D155 equivalence
-     test gains a locale-edit step.
+     test runs with and without i18n, and its locale-edit step requires the
+     locale classification.
    - `puzzle check`: no change. Formatter calls already type-check through
      `__puzzle_check_formatter`. `types/index.d.ts` gains the service type (item
      6).
@@ -586,13 +588,11 @@ wait for it. Items marked **[after #150]** build on PR #150's `builtins.js`.
    vitest alias, and `types/index.d.ts` (`PuzzleI18n`, optional `ctx.i18n` and
    `app.i18n`). Tests: a new `tests/i18n.test.js` (selection order, lookup,
    missing key, substitution edge cases, plurals in en/pl/ar, the missing
-   category, a failed load falling back).
-7. **[now] The `t` formatter.** `client-runtime/formatters.js`:
-   `makeFormatterRegistry` registers the service-bound `t` if absent;
+   category, the zero form, a failed load falling back).
+7. **[now] The `t` formatter.** Registered over the service if absent;
    `STANDARD_FORMATTERS` gains `t`; the D43 development hint names `i18n` for
    `t`. Tests: `tests/formatters.test.js`, and the shared conformance table
-   gains the `t` rows (`tests/conformance/formatters.json`, which exists after
-   #150).
+   gains the `t` rows (`tests/conformance/formatters.json`).
 8. **[after #150] Formatter locale threading.** The new
    `client-runtime/formatters/locale.js` and the `builtins.js` edits described
    under Formatter locale. Tests: formatter locale cases in a child process
@@ -603,37 +603,34 @@ wait for it. Items marked **[after #150]** build on PR #150's `builtins.js`.
    `router.start()`; add `ctx.i18n` and `app.i18n`; `setLocale` drives the
    rebuild. Tests: an app test proving no render before the strings arrive,
    `setLocale` before first commit, a rejected switch changing nothing,
-   last-wins.
+   last-wins, a switch during or before a push, a failed rebuild.
 10. **[now] The same-location rebuild.** `client-runtime/router/router.js`: an
     internal entry beside `__failedView(view, true)` that re-runs the
     committed path with keep = 0, in replace mode, with no animations, no
-    scroll change and no focus move. Tests: router tests for no new history
-    entry, preserved scroll, and every level reconstructed.
+    skeleton, no scroll change and no focus move, after any pending push.
+    Tests: no new history entry, preserved scroll, every level reconstructed,
+    no enter/out animation, no skeleton flash.
 11. **[now] Prerender and static.** `client-runtime/ssg/index.js`: the build
-    service over the default table, `setFormatLocale(defaultLocale)`, and the
-    `data-puzzle-locale` island in both shell injectors.
-    `client-runtime/static/index.js`: read the island, fetch when the active
-    locale differs, re-mount on `setLocale`. Tests:
-    `tests/static-prerender.test.js`, `tests/static-kernel.test.js` (a page
-    in a non-default locale swaps once), `tests/ssg-router-takeover.test.js`
-    (hybrid takeover in a non-default locale), `tests/ssg-head.test.js` (the
-    island at the shell's `</body>` anchor), and `tests/ssg-rawtext.test.js`
-    (the island escapes `</script>`).
+    service over the default table, `setFormatLocale(defaultLocale)`, the
+    shell's `<html lang>`, and the `data-puzzle-locale` island in both shell
+    injectors. `client-runtime/static/index.js`: read the island, fetch when
+    the active locale differs, re-mount on `setLocale`. Tests in
+    `tests/i18n-ssg.test.js`: static prerender, the static kernel's single
+    swap, hybrid takeover in a non-default locale, the island at the shell's
+    last `</body>`, and the `</script>` escape.
 12. **An example and the size gate.** A new `examples/i18n` (en, es, pl for
-    `few`; SPA plus a `--static` build, built by the test `pretest`), and
+    `few`; SPA, `--hybrid` and `--static` builds in the test `pretest`), and
     `npm run measure:size` proving hello-world and todos are unchanged.
     `examples/i18n`'s own figure is the i18n cost (target 1–1.5 KB gzip).
 
 **Docs, with the runtime items:**
 
-- [[DOC-SPEC-TEMPLATE]] §6 (`t` in the standard set) and
-  [[DOC-LANGUAGE-CORE]]'s formatter table.
+- [[DOC-SPEC-TEMPLATE]] §66 and [[DOC-LANGUAGE-CORE]]'s formatter table.
 - [[DOC-SPEC-ANATOMY]] (`i18n` config, `app/locales/`),
   [[DOC-SPEC-BUILD]] (`dist/locales/`, the manifest, the island) and
   [[DOC-SPEC-ROUTER]] (strings load before navigation zero; the
   same-location rebuild).
-- D174's standard and Sites-only lists (35 / 24), after #150 merges, because
-  that PR also edits D174.
+- D174's standard and Sites-only lists (35 / 24).
 - [[COMPONENT-FORMATTERS]], [[COMPONENT-PUZZLE-APP]], [[COMPONENT-SSG]],
   `skills/puzzle/SKILL.md`, the README and the CHANGELOG.
 
@@ -643,13 +640,15 @@ Sites already has lookup, the `en` fallback, the key-on-miss and single-pass
 substitution. To match this card, it adds:
 
 - Plural entries: pick the category with `golang.org/x/text/feature/plural`
-  (the cardinal rules for the site locale), fall back to `other`, and use
-  `other` when `count` is absent.
+  (the cardinal rules for the site locale), use the `zero` form for an exact
+  0 when the entry has one, fall back to `other`, and use `other` when `count`
+  is absent.
 - `{count}` printed in the site locale's number format, the same helper as
   its `number_with_delimiter` and `pluralize` count.
 - Locale files that nest, flattened to dotted keys, with plural-entry
   recognition and the same build errors (`readLocales` in
   `engine/theme/compile.go` stops requiring a flat `map[string]string`).
 - A missing input prints nothing; non-map variables warn and are ignored
-  (today they are an error).
+  (today they are an error). Variable names may come from a value's inherited
+  fields, never from the object prototype.
 - The shared `t` conformance rows, run from its Go formatter tests.

@@ -11,6 +11,7 @@
     "cart": {
       "title": "Your cart",
       "items": {
+        "zero": "Your cart is empty",
         "one": "{count} item",
         "other": "{count} items"
       },

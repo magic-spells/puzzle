@@ -11,6 +11,7 @@
     "cart": {
       "title": "Twój koszyk",
       "items": {
+        "zero": "Koszyk jest pusty",
         "one": "{count} produkt",
         "few": "{count} produkty",
         "many": "{count} produktów",

@@ -189,9 +189,25 @@ describe('t — plurals', () => {
 		expect(arabic.t('n', { count: 2 })).toBe('two');
 		expect(arabic.t('n', { count: 11 })).toBe('other'); // "many" is absent
 	});
-	it('has no special zero rule in English — categories come from Intl.PluralRules', async () => {
-		const i18n = await service({ en: { n: { zero: 'none', one: 'one', other: '{count}' } } });
-		expect(i18n.t('n', { count: 0 })).toBe('0');
+	it('an exact 0 uses the entry’s zero form, even where CLDR never selects zero (en)', async () => {
+		const i18n = await service({
+			en: { n: { zero: 'No items', one: '{count} item', other: '{count} items' }, m: { one: '{count} item', other: '{count} items' } },
+		});
+		expect(i18n.t('n', { count: 0 })).toBe('No items');
+		expect(i18n.t('n', { count: '0' })).toBe('No items');
+		expect(i18n.t('n', { count: 0.5 })).toBe('0.5 items');
+		expect(i18n.t('n', { count: 1 })).toBe('1 item');
+		// Without a zero form, 0 falls to the CLDR category as before.
+		expect(i18n.t('m', { count: 0 })).toBe('0 items');
+	});
+	it('reads variables a model inherits (getters), never Object.prototype’s', async () => {
+		const i18n = await service({ en: { a: 'Hi {fullName}, {constructor} {toString}' } });
+		class Person {
+			get fullName() {
+				return 'Ada Lovelace';
+			}
+		}
+		expect(i18n.t('a', new Person())).toBe('Hi Ada Lovelace, {constructor} {toString}');
 	});
 	it('renders other for a plural entry used without count, with a warning', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

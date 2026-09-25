@@ -404,16 +404,22 @@ Configure `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` in
 `cart.title`. An object whose keys are ALL CLDR categories (`zero one two few
 many other`) is a plural entry and must have `other`.
 
-- Template: `{ 'cart.title' | t }`; variables come as ONE object argument —
-  `{ 'greeting' | t(user) }` fills `{name}` from `user.name`, and a numeric
-  `count` picks the plural form (`{ 'cart.items' | t(cart) }`). Inline object
-  literals (`t({ count: n })`) need D173 V8; until then pass a data field.
-  Runtime-built keys work: `{ ('status.' + order.status) | t }`.
+- Template: `{ 'cart.title' | t }`; variables come as ONE object —
+  `{ 'greeting' | t({ name: user.name }) }` fills `{name}`, and a numeric
+  `count` picks the plural form (`{ 'cart.items' | t({ count: cart.count }) }`).
+  A data field or a store record works too (`t(user)`; a model's getters count).
+  An exact `count` of 0 uses the entry's `zero` form when it has one, even in
+  English — the way to say "Your cart is empty". Brace-only attributes work:
+  `placeholder={ 'search.hint' | t }`. Runtime-built keys work:
+  `{ ('status.' + order.status) | t }`.
 - Script: `this.ctx.i18n.t('key', vars)`, `.locale`, `.locales`,
   `.defaultLocale`, and `this.ctx.i18n.setLocale('es')` — it fetches the file
   first, then switches, stores the choice, sets `<html lang>`, and rebuilds the
   page at the same location (store records survive; `setData` state does
-  not). `ctx.i18n` exists ONLY when `i18n` is configured.
+  not — keep state that must survive a switch in the store). A push still
+  loading lands first. `setLocale` rejects if the file fails to load or the
+  rebuild fails, so `.catch()` it in a switcher. `ctx.i18n` exists ONLY when
+  `i18n` is configured.
 - A missing key prints the key itself (dev warns with a did-you-mean). The
   build fills every locale's missing keys from the default and warns; a
   literal key missing from the default locale is a build warning too.

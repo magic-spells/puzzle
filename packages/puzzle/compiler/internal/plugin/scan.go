@@ -411,8 +411,13 @@ func collectTKeys(nodes []parser.Node, keys map[string]bool) {
 
 func collectAttrTKeys(attrs []parser.Attr, keys map[string]bool) {
 	for _, attr := range attrs {
-		if mixed, ok := attr.(*parser.MixedAttr); ok {
-			collectPartTKeys(mixed.Parts, keys)
+		switch a := attr.(type) {
+		case *parser.MixedAttr:
+			collectPartTKeys(a.Parts, keys)
+		case *parser.DynamicAttr:
+			// A brace-only attribute runs its formatter chain (D173 V1):
+			// `placeholder={ 'search.hint' | t }`.
+			noteTKey(a.Expr, a.Formatters, keys)
 		}
 	}
 }

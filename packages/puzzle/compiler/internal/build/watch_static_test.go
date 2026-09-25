@@ -67,15 +67,21 @@ export default app;
 	// A module that lives under public/ and is imported by one page — the case
 	// that separates "copied verbatim" from "compiled in".
 	files["app/public/tokens.js"] = "export const tone = 'ORIGINAL';\n"
-	// Translations (D175): every page carries the default table's island, so a
-	// locale edit is render-wide — the step at the end of the sequence.
+	return files
+}
+
+// staticEquivalenceFixtureI18n is the same fixture with translations configured
+// (D175): every page carries the default table's island, so a locale edit is
+// render-wide — the step at the end of the i18n sequence.
+func staticEquivalenceFixtureI18n() map[string]string {
+	files := staticEquivalenceFixture()
 	files["puzzle.config.js"] = "export default { i18n: { locales: ['en'], defaultLocale: 'en' } };\n"
 	files["app/locales/en.json"] = `{ "site": { "name": "ORIGINAL" } }`
 	return files
 }
 
-// equivalenceI18n mirrors the fixture's puzzle.config.js for the dev builder,
-// which (like puzzle dev) takes an already-loaded config.
+// equivalenceI18n mirrors the i18n fixture's puzzle.config.js for the dev
+// builder, which (like puzzle dev) takes an already-loaded config.
 var equivalenceI18n = &config.I18n{Locales: []string{"en"}, DefaultLocale: "en"}
 
 // wantFull / wantRoutes describe the classification a step must produce, so the
@@ -175,7 +181,18 @@ func diffTrees(warm, oneShot map[string]string) string {
 // through in dev is not the site that ships.
 func TestStaticWatchBuilderMatchesOneShot(t *testing.T) {
 	requireStaticRuntime(t)
-	root := writeSSGFixture(t, staticEquivalenceFixture())
+	// Both halves: an app without translations (the path every existing static
+	// app takes) and one with them, which adds the render-wide locale edit.
+	t.Run("without i18n", func(t *testing.T) { staticWatchMatchesOneShot(t, false) })
+	t.Run("with i18n", func(t *testing.T) { staticWatchMatchesOneShot(t, true) })
+}
+
+func staticWatchMatchesOneShot(t *testing.T, withI18n bool) {
+	fixture, cfg := staticEquivalenceFixture(), config.Config{Output: "static"}
+	if withI18n {
+		fixture, cfg.I18n = staticEquivalenceFixtureI18n(), equivalenceI18n
+	}
+	root := writeSSGFixture(t, fixture)
 
 	write := func(rel, body string) {
 		t.Helper()
@@ -195,7 +212,7 @@ func TestStaticWatchBuilderMatchesOneShot(t *testing.T) {
 	}
 	abs := func(rel string) string { return filepath.Join(root, filepath.FromSlash(rel)) }
 
-	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static", I18n: equivalenceI18n}})
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: cfg})
 	if err != nil {
 		t.Fatalf("creating the static dev builder: %v", err)
 	}
@@ -421,11 +438,19 @@ export default [
 		remove("app/views/Extra.pzl")
 	})
 
+	if !withI18n {
+		return
+	}
 	// A locale file is read from disk, never imported, so no metafile carries it
-	// — and every page embeds the default table's island. Render-wide (D175).
+	// — and every page embeds the default table's island. Render-wide (D175),
+	// and classified as a locale edit by route_deps.go rather than falling
+	// through to the generic unknown-path fallback.
 	step("locale edit (render-wide)", []string{abs("app/locales/en.json")}, &wantPlan{full: true}, func() {
 		write("app/locales/en.json", `{ "site": { "name": "REVISED" } }`)
 	})
+	if got := builder.lastPlan.reason; got != "a locale file changed" {
+		t.Errorf("locale edit classified as %q, want the locale classification", got)
+	}
 }
 
 // TestStaticWatchRecomposeStylesRendersNoRoutes: the warm Tailwind child
@@ -437,7 +462,7 @@ func TestStaticWatchRecomposeStylesRendersNoRoutes(t *testing.T) {
 	dist := filepath.Join(root, "dist")
 
 	layer := ".tw{color:red}"
-	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static", I18n: equivalenceI18n}})
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
 	if err != nil {
 		t.Fatalf("creating the static dev builder: %v", err)
 	}
@@ -509,7 +534,7 @@ func TestStaticWatchFailedSwapKeepsChangesPending(t *testing.T) {
 	root := writeSSGFixture(t, staticEquivalenceFixture())
 	dist := filepath.Join(root, "dist")
 
-	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static", I18n: equivalenceI18n}})
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
 	if err != nil {
 		t.Fatalf("creating the static dev builder: %v", err)
 	}
@@ -581,7 +606,7 @@ func TestStaticWatchBuilderFailureKeepsLastGoodSite(t *testing.T) {
 	root := writeSSGFixture(t, staticEquivalenceFixture())
 	dist := filepath.Join(root, "dist")
 
-	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static", I18n: equivalenceI18n}})
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
 	if err != nil {
 		t.Fatalf("creating the static dev builder: %v", err)
 	}
@@ -643,7 +668,7 @@ export default class About extends PuzzleView {}
 func TestStaticWatchFailedBuildKeepsCommittedCSS(t *testing.T) {
 	requireStaticRuntime(t)
 	root := writeSSGFixture(t, staticEquivalenceFixture())
-	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static", I18n: equivalenceI18n}})
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
 	if err != nil {
 		t.Fatalf("creating the static dev builder: %v", err)
 	}
@@ -719,7 +744,7 @@ func TestStaticWatchPartialFallsBackWithoutLastGood(t *testing.T) {
 	root := writeSSGFixture(t, staticEquivalenceFixture())
 	dist := filepath.Join(root, "dist")
 
-	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static", I18n: equivalenceI18n}})
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
 	if err != nil {
 		t.Fatalf("creating the static dev builder: %v", err)
 	}
@@ -767,7 +792,7 @@ func TestStaticWatchPendingChangesSurviveAFailedRebuild(t *testing.T) {
 	requireStaticRuntime(t)
 	root := writeSSGFixture(t, staticEquivalenceFixture())
 
-	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static", I18n: equivalenceI18n}})
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
 	if err != nil {
 		t.Fatalf("creating the static dev builder: %v", err)
 	}

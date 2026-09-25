@@ -82,6 +82,21 @@ function localeIsland(i18n) {
 	)}</script>`;
 }
 
+/**
+ * The shell with `<html lang>` set to the build locale, so a prerendered page
+ * declares the language it is written in before any script runs (the runtime
+ * keeps it in step on every switch). Replaces an existing `lang`, adds one
+ * otherwise; a shell without an `<html>` tag is returned unchanged.
+ */
+function withHtmlLang(shell, i18n) {
+	if (!i18n) return shell;
+	const lang = ` lang="${escapeAttr(i18n.manifest.defaultLocale)}"`;
+	return shell.replace(
+		/<html\b([^>]*)>/i,
+		(_, attrs) => `<html${attrs.replace(/\slang\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '')}${lang}>`
+	);
+}
+
 // ---- build-time reads -------------------------------------------------------
 
 /**
@@ -537,8 +552,8 @@ export async function prerenderToDir(config, options = {}) {
 	const routeRouter = new Router(config.routes ?? [], { mode: memoryRouter() });
 
 	const targetId = parseTargetId(config.target);
-	const shell = fs.readFileSync(shellPath, 'utf8');
 	const i18n = loadBuildI18n(outDir, options.i18n);
+	const shell = withHtmlLang(fs.readFileSync(shellPath, 'utf8'), i18n);
 	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only, i18n });
 	// Built once: every page carries the same default-locale table (D175).
 	const island = localeIsland(i18n);
@@ -1232,7 +1247,10 @@ const HEAD_OPEN_RE = /<head\b[^>]*>/i;
 const HEAD_CLOSE_RE = /<\/head>/i;
 const TITLE_ELEMENT_RE = /<title>[\s\S]*?<\/title>/;
 const TITLE_CLOSE_RE = /<\/title>/i;
-const BODY_CLOSE_RE = /<\/body>/i;
+// Global: the plan anchors on the LAST `</body>`, so the text `</body>` in a
+// shell comment or an inline script string before the real one can never
+// swallow the injected islands and page module.
+const BODY_CLOSE_RE = /<\/body>/gi;
 
 /**
  * One compiled marker matcher per managed tag. `spec.id` values are framework
@@ -1315,7 +1333,8 @@ function compileShellPlan(shell) {
 	}
 	edits.sort((a, b) => a.start - b.start);
 
-	const bodyClose = BODY_CLOSE_RE.exec(shell);
+	let bodyCloseIndex = -1;
+	for (const m of shell.matchAll(BODY_CLOSE_RE)) bodyCloseIndex = m.index;
 
 	return {
 		headStart,
@@ -1324,7 +1343,7 @@ function compileShellPlan(shell) {
 		titleSpan,
 		edits,
 		markerCounts,
-		bodyCloseIndex: bodyClose ? bodyClose.index : -1,
+		bodyCloseIndex,
 		targets: new Map(),
 	};
 }

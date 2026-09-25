@@ -1,7 +1,7 @@
 {
-	"about": "Standard formatter conformance table (D174). Each case pipes `input` through `name` with `args` and expects `expect`. Both hosts run it: PuzzleKit from tests/formatters.test.js, Sites from its Go formatter tests. JSON null is the missing value, as input and as expected output. A case with `zone` renders in that IANA time zone; every other case is zone-independent. Only locale-independent behavior belongs here: the locale-rendered formatters appear only through their iso presets, pluralize's word choice (small counts), and number_with_delimiter with an explicit delimiter. raw and newline_to_br join the table with the sanitized-markup build (D174 group e). The `t` rows (D175) add a `locale`: the key is looked up in `translations[locale]`, then in `translations.en` (the default locale); each host fills and loads the tables its own way (PuzzleKit fills at build time, Sites falls back at lookup). `{count}` rows stay in `en`.",
+	"about": "Standard formatter conformance table (D174). Each case pipes `input` through `name` with `args` and expects `expect`. Both hosts run it: PuzzleKit from tests/formatters.test.js, Sites from its Go formatter tests. JSON null is the missing value, as input and as expected output. A case with `zone` renders in that IANA time zone; every other case is zone-independent. Only locale-independent behavior belongs here: the locale-rendered formatters appear only through their iso presets, pluralize's word choice (small counts), and number_with_delimiter with an explicit delimiter. raw and newline_to_br join the table with the sanitized-markup build (D174 group e). The `t` rows (D175) add a `locale`: the key is looked up in `translations[locale]`, then in `translations.en` (the default locale); each host fills and loads the tables its own way (PuzzleKit fills at build time, Sites falls back at lookup). `{count}` rows stay in `en`. An exact count of 0 uses an entry's `zero` form when it has one, in every locale (D175).",
 	"translations": {
-		"en": { "cart.title": "Your cart", "nav.home": "Home", "greeting": "Hello, {name}!", "echo": "{a} and {b}", "item_count": { "one": "{count} item", "other": "{count} items" } },
+		"en": { "cart.title": "Your cart", "nav.home": "Home", "greeting": "Hello, {name}!", "echo": "{a} and {b}", "item_count": { "one": "{count} item", "other": "{count} items" }, "cart_items": { "zero": "Your cart is empty", "one": "{count} item", "other": "{count} items" } },
 		"pl": { "cart.title": "Twój koszyk", "files": { "one": "{count} plik", "few": "{count} pliki", "many": "{count} plików", "other": "{count} pliku" }, "pages": { "one": "{count} strona", "other": "{count} stron" } }
 	},
 	"cases": [
@@ -131,6 +131,8 @@
 		{ "name": "t", "input": "files", "args": [{"count": 3}], "locale": "pl", "expect": "3 pliki" },
 		{ "name": "t", "input": "files", "args": [{"count": 5}], "locale": "pl", "expect": "5 plików" },
 		{ "name": "t", "input": "pages", "args": [{"count": 3}], "locale": "pl", "expect": "3 stron" },
-		{ "name": "t", "input": "item_count", "args": [{"count": 1234}], "locale": "en", "expect": "1,234 items" }
+		{ "name": "t", "input": "item_count", "args": [{"count": 1234}], "locale": "en", "expect": "1,234 items" },
+		{ "name": "t", "input": "cart_items", "args": [{"count": 0}], "locale": "en", "expect": "Your cart is empty" },
+		{ "name": "t", "input": "cart_items", "args": [{"count": 3}], "locale": "en", "expect": "3 items" }
 	]
 }

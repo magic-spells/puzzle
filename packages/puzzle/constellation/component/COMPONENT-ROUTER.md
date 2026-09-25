@@ -109,6 +109,20 @@ notes:
       new class method would ship in every app (esbuild never drops class members), which is why it
       rides on the existing entry. Hello-world/todos raw bytes are unchanged; only esbuild's
       minified identifiers shift (gzip −1 byte on hello-world).
+  - kind: state
+    text: >-
+      Same-location rebuild, PR #153 review round (D175): (1) when a push is still loading
+      (`#pendingNavPath` set with its `#pendingNavPromise`), `__failedView(null, true)` sets the
+      invalid flags immediately, waits for that push to settle (commit or failure), and then
+      rebuilds whatever location is committed — before this, re-running the old `st.path` superseded
+      the push and stranded the app on the previous page (a switch landing mid-navigation, or a
+      login flow's `setLocale(user.locale)` then `push('/dashboard')`). Replace and pop navigations
+      carry no pending promise and are still superseded by a rebuild that lands mid-flight. (2) The
+      rebuild's promise rejects when it failed and the old chain is still committed at the same
+      token (a `data()` throw, already reported through onError); a newer navigation taking over
+      resolves it. Tests in tests/i18n-app.test.js pin both orderings, no enter/out animation on a
+      switch (fails if the skipEnter/#pendingOut block is removed) and no skeleton flash (fails if
+      REBUILD leaves the takeover-style exemption).
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

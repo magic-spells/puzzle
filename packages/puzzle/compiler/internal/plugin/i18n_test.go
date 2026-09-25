@@ -69,7 +69,8 @@ func TestI18nManifestModule(t *testing.T) {
 
 // TestScanUsageTranslateKeys: `t` use is recorded even though it is not a
 // manifest builtin, and every string-literal key piped straight into it is
-// collected per file — in text, attributes, inline ifs, and skeletons.
+// collected per file — in text, quoted and brace-only attributes, inline ifs,
+// and skeletons.
 // Runtime-built keys and `t` later in a chain are not checkable and are skipped.
 func TestScanUsageTranslateKeys(t *testing.T) {
 	root := writeApp(t, map[string]string{
@@ -80,6 +81,7 @@ func TestScanUsageTranslateKeys(t *testing.T) {
   <p>{ 'x' | upcase | t }</p>
   <p>{ 'it\'s' | t }</p>
   {#if a}<b>{ 'in.if' | t }</b>{/if}
+  <input placeholder={ 'search.hint' | t } />
 </puzzle-view>
 <puzzle-skeleton><p>{ 'loading' | t }</p></puzzle-skeleton>
 <script>
@@ -108,11 +110,12 @@ export default class Plain extends PuzzleView {}
 		t.Fatal("t usage not recorded")
 	}
 	want := map[string][]string{
-		"home.title": {"app/views/Home.pzl", "app/views/Other.pzl"},
-		"home.hint":  {"app/views/Home.pzl"},
-		"items":      {"app/views/Home.pzl"},
-		"in.if":      {"app/views/Home.pzl"},
-		"loading":    {"app/views/Home.pzl"},
+		"home.title":  {"app/views/Home.pzl", "app/views/Other.pzl"},
+		"home.hint":   {"app/views/Home.pzl"},
+		"items":       {"app/views/Home.pzl"},
+		"in.if":       {"app/views/Home.pzl"},
+		"loading":     {"app/views/Home.pzl"},
+		"search.hint": {"app/views/Home.pzl"},
 	}
 	for key := range usage.TKeys {
 		files := usage.TKeys[key]

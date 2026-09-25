@@ -152,7 +152,7 @@ func TestI18nWarnings(t *testing.T) {
 
 	// Without i18n: `t` used, and an app/locales folder.
 	got := i18nWarnings(root, config.Config{}, usage, nil)
-	if len(got) != 1 || !strings.Contains(got[0], "configures no i18n") {
+	if len(got) != 1 || !strings.Contains(got[0], "configures no i18n") || !strings.Contains(got[0], "unless the app registers its own t formatter") {
 		t.Fatalf("t without i18n: %q", got)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "app", "locales"), 0o755); err != nil {
@@ -223,17 +223,17 @@ func TestBuildHybridI18n(t *testing.T) {
 
 // templateVarsFixture is i18nFixture with a view that passes `t` its variables
 // from the template, in the given argument spelling.
-func templateVarsFixture(arg string) ssgFixtureFiles {
+func templateVarsFixture(arg, countArg string) ssgFixtureFiles {
 	files := i18nFixture()
 	files["app/locales/en.json"] = `{ "home": { "title": "Welcome" }, "greeting": "Hello, {name}!", "items": { "one": "{count} item", "other": "{count} items" } }`
 	files["app/views/Home.pzl"] = `<puzzle-view>
   <p class="greet">{ 'greeting' | t(` + arg + `) }</p>
-  <p class="count">{ 'items' | t(counts) }</p>
+  <p class="count">{ 'items' | t(` + countArg + `) }</p>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {
-  data() { return { who: { name: 'Ada' }, counts: { count: 1 } }; }
+  data() { return { who: { name: 'Ada' }, counts: { count: 1 }, n: 3 }; }
 }
 </script>
 `
@@ -244,7 +244,7 @@ export default class Home extends PuzzleView {
 // through the real compiler and prerender — variables passed as a data field.
 func TestPrerenderTemplateTranslateVars(t *testing.T) {
 	requireStaticRuntime(t)
-	root := writeSSGFixture(t, templateVarsFixture("who"))
+	root := writeSSGFixture(t, templateVarsFixture("who", "counts"))
 	cfg := config.Config{Output: "hybrid", I18n: enI18n}
 	if err := Build(root, Options{Config: &cfg, Development: true}); err != nil {
 		t.Fatalf("hybrid Build: %v", err)
@@ -257,21 +257,21 @@ func TestPrerenderTemplateTranslateVars(t *testing.T) {
 	}
 }
 
-// TestPrerenderTemplateTranslateObjectLiteral is the same through an inline
-// object literal, `t({ name: 'Ada' })`. TODO(V8): the object-literal argument
-// needs D173 V8's codegen fix (feat/core-expressions) — today codegen scopes the
-// KEY (`{ __d.name: … }`). Enable once that branch merges.
+// TestPrerenderTemplateTranslateObjectLiteral is the same through inline object
+// literals (D173 V8): `t({ name: 'Ada' })`, and a plural chosen by
+// `t({ count: n })` with `n` a data field.
 func TestPrerenderTemplateTranslateObjectLiteral(t *testing.T) {
-	t.Skip("TODO(V8): enable once feat/core-expressions (D173 V8 object-literal arguments) merges")
 	requireStaticRuntime(t)
-	root := writeSSGFixture(t, templateVarsFixture("{ name: 'Ada' }"))
+	root := writeSSGFixture(t, templateVarsFixture("{ name: 'Ada' }", "{ count: n }"))
 	cfg := config.Config{Output: "hybrid", I18n: enI18n}
 	if err := Build(root, Options{Config: &cfg, Development: true}); err != nil {
 		t.Fatalf("hybrid Build: %v", err)
 	}
 	home := readFile(t, filepath.Join(root, "dist", "index.html"))
-	if !strings.Contains(home, `<p class="greet">Hello, Ada!</p>`) {
-		t.Errorf("prerendered home missing the filled greeting:\n%s", home)
+	for _, want := range []string{`<p class="greet">Hello, Ada!</p>`, `<p class="count">3 items</p>`} {
+		if !strings.Contains(home, want) {
+			t.Errorf("prerendered home missing %s:\n%s", want, home)
+		}
 	}
 }
 

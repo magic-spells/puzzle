@@ -11,6 +11,7 @@
     "cart": {
       "title": "Tu carrito",
       "items": {
+        "zero": "Tu carrito está vacío",
         "one": "{count} artículo",
         "other": "{count} artículos"
       },
