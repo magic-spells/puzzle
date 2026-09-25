@@ -504,11 +504,7 @@ function expandChildList(kids, parts) {
 					// stays at the marker position; the nearest call-site context appends the
 					// metadata to the component's DIRECT children after this descent, so a
 					// marker nested under authored markup still reaches partitionSlots.
-					if (bucket && bucket.length) {
-						for (const sc of bucket) out.push(sc);
-					} else {
-						for (const fb of k.children) out.push(expandNode(fb, parts));
-					}
+					fill(out, bucket, k, parts);
 					parts.callSite.forwarded = true;
 					// Forward every snippet even if a different marker in this wrapper already
 					// consumed it — snippet functions are reusable, and two consumers may stamp
@@ -524,7 +520,9 @@ function expandChildList(kids, parts) {
 					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 						warnSnippetOutputMarker(stampedNodes, markerName, parts.component);
 					}
-					for (const stamped of stampedNodes) out.push(stamped);
+					// A stamp that rendered nothing leaves the position unfilled, so the
+					// marker's fallback shows for that stamp (D173 V14).
+					fill(out, stampedNodes, k, parts);
 					continue;
 				}
 				if (
@@ -535,18 +533,10 @@ function expandChildList(kids, parts) {
 				) {
 					warnPlainScopedContent(markerName, k.attrs.args || {}, parts.component);
 				}
-				if (bucket && bucket.length && !hasArgs) {
-					for (const sc of bucket) out.push(sc);
-				} else {
-					for (const fb of k.children) out.push(expandNode(fb, parts));
-				}
+				fill(out, hasArgs ? null : bucket, k, parts);
 				continue;
 			}
-			if (bucket && bucket.length) {
-				for (const sc of bucket) out.push(sc);
-			} else {
-				for (const fb of k.children) out.push(expandNode(fb, parts));
-			}
+			fill(out, bucket, k, parts);
 			continue;
 		}
 		const ek = expandNode(k, parts);
@@ -557,6 +547,40 @@ function expandChildList(kids, parts) {
 		}
 	}
 	return out;
+}
+
+/**
+ * Splice what fills marker `k` into `out`: the supplied `nodes`, or the
+ * marker's fallback body (D141) when the position is unfilled.
+ *
+ * Filled (D173 V14) means the content renders at least one node that is not
+ * whitespace-only text. A false call-site `{#if}` contributes only its arity
+ * placeholder and an empty `{#for}` nothing at all, so both leave the position
+ * unfilled. An element or a component always counts — whether a child
+ * component's own template renders anything is not knowable here. A text
+ * node's value is already display text (codegen wraps every interpolation in
+ * displayValue).
+ *
+ * The test runs only when the marker HAS a fallback. A marker without one
+ * splices the supplied nodes through as they are, placeholders included, so a
+ * toggling call-site `{#if}` keeps the marker's arity constant and the
+ * positional patcher never shifts — and remounts — the siblings after it. A
+ * fallback whose node count differs from the content's still shifts them on
+ * each flip; SPEC §24 tells authors to keep such a fallback to one root.
+ * `nodes` is null for an args-bearing marker filled with plain content, which
+ * always renders its fallback. The shared expansion serves the browser and
+ * both prerender modes, so SSG output agrees.
+ */
+function fill(out, nodes, k, parts) {
+	if (
+		nodes &&
+		(!k.children.length ||
+			nodes.some((n) => n.tag !== PLACEHOLDER_TAG && (!n.isText || /\S/.test(n.attrs.value))))
+	) {
+		for (const n of nodes) out.push(n);
+	} else {
+		for (const fb of k.children) out.push(expandNode(fb, parts));
+	}
 }
 
 const UNKNOWN_SNIPPET_OWNER = {};
@@ -1045,7 +1069,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
  * <progress>, <button>) never reach here and keep the vnode compare.
  */
 function syncControlValue(el, value, owner) {
-	if (el.value !== stringify(value)) setAttr(el, 'value', value, owner);
+	if (el.value !== stringify(value, 0, ' ')) setAttr(el, 'value', value, owner);
 }
 
 function syncControlChecked(el, value, owner) {
@@ -1131,7 +1155,7 @@ function reassertSelectValue(el, attrs) {
 	// already had and charged devperf a phantom DOM mutation. When the option list
 	// churned (or the user changed the selection out of band) the live value differs
 	// and the write still happens.
-	const next = stringify(attrs.value);
+	const next = stringify(attrs.value, 0, ' ');
 	if (el.value === next) return;
 	el.value = next;
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
@@ -1790,7 +1814,7 @@ function setAttr(el, name, value, owner = null) {
 		// by label, so an unlabeled `<input value={ missing }>` both warned as a
 		// nameless "undefined template value" and collapsed into the same '' key as
 		// every other unlabeled site — only the first of them ever warned.
-		el[name] = name === 'value' ? stringify(value, name) : Boolean(value);
+		el[name] = name === 'value' ? stringify(value, name, ' ') : Boolean(value);
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 			devperfMutation();
 		// keep boolean ATTRIBUTES coherent for CSS selectors like [disabled]
@@ -1803,23 +1827,25 @@ function setAttr(el, name, value, owner = null) {
 		return;
 	}
 
-	if (value === false || value == null) {
-		// Preserve attribute-removal semantics, but still hand an undefined binding
-		// to the shared display policy for its development diagnostic. The RESULT is
-		// discarded — the call exists only for that warning — so the probe leads and
-		// production pays nothing per nullish attribute. The attribute NAME rides
-		// along as the label: display.js dedups warnings by label, so without it every
-		// brace-only undefined in the app collapsed into the one '' key and only the
-		// first ever warned. Production is byte-neutral — the whole call folds away
-		// with this dev gate.
+	if (
+		value === false ||
+		value == null ||
+		(typeof value === 'object' && !Array.isArray(value))
+	) {
+		// `false`, `null`, `undefined` and an object (D173 V9) omit the attribute,
+		// but an undefined or object binding still gets the shared display policy's
+		// development diagnostic. The RESULT is discarded — the call exists only for
+		// that warning — so the probe leads and production pays nothing per omitted
+		// attribute. The attribute NAME rides along as the label: display.js dedups
+		// warnings by label, so without it every brace-only undefined in the app
+		// collapsed into the one '' key and only the first ever warned.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (value === undefined) stringify(value, name);
+			if (value !== false && value !== null) stringify(value, name);
 		}
 		el.removeAttribute(name);
-	} else if (value === true) {
-		el.setAttribute(name, '');
 	} else {
-		el.setAttribute(name, stringify(value));
+		// `true` writes the attribute empty; a list joins with spaces (V9).
+		el.setAttribute(name, value === true ? '' : stringify(value, 0, ' '));
 	}
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 		devperfMutation();

@@ -361,6 +361,46 @@ values every consumer sees and adds a mode and new exports, which is a
   cannot corrupt each other. The gates are unchanged: TTY only, skipped under
   `CI` and `PUZZLE_NO_UPDATE_CHECK`, registry overridable with `PUZZLE_REGISTRY`.
 
+- **BREAKING (edge case): a slot is filled only when its content renders
+  something (D173 V14).** A composition position — `<Children>`, `<Slot name>`,
+  or a snippet stamp — now counts as filled only when the content supplied for
+  it renders at least one node that is not whitespace-only text. A call-site
+  `{#if}` that is false now shows the marker's fallback body, the way an empty
+  `{#for}` already did, which gives the empty-state pattern for free:
+  `<List>{#for …}…{/for}</List>` with `<Children>Nothing here yet</Children>`
+  in `List`. A snippet stamp that renders nothing shows the fallback for that
+  stamp, and a wrapper forwarding an unfilled position hands on its own
+  fallback. Prerendered (`hybrid`/`static`) output matches. Only a caller whose
+  content can render nothing, passed to a marker with a fallback, sees a
+  change: a marker without a fallback passes its content through untouched, so
+  siblings after it keep their DOM and state. When siblings follow a marker,
+  keep its fallback to one root element — a fallback with a different node
+  count than the content shifts those siblings, and they remount on each flip.
+- **Two default markers in exclusive branches compile (D173 V13).** The
+  "duplicate default marker" check now counts per render path:
+  `{#if compact}<div><Children/></div>{:else}<section><Children/></section>{/if}`
+  is legal, as are markers in separate `{:else if}`/`{#case}` branches, and the
+  same holds for a `<Slot name="x">`. Two markers that can render together — one
+  before or after the block, two in one branch, two in one loop body, or two
+  separate `{#if}`s — are still an error. Not breaking.
+- **BREAKING (edge case): one value-printing rule (D173 V6).** `NaN` and
+  ±Infinity now print nothing instead of `NaN`/`Infinity`, and an object prints
+  nothing instead of `[object Object]` — with a development warning naming the
+  expression. That includes a `Date` — its development warning names `| date`,
+  `| datetime` and `| time` — and any object with its own `toString` (a `URL`,
+  a Decimal, a Temporal or Luxon value): format it or print a field instead.
+  Numbers otherwise print as JavaScript prints them, and a list still prints its
+  items joined with `,`.
+- **BREAKING (edge case): a list or object in a brace-only attribute (D173
+  V9).** A list in a brace-only attribute is now a space-joined token list (it
+  joined with commas) that drops `false` and every item that prints nothing
+  (`null`, `undefined`, `''`, …), so the clsx idiom
+  `class={ [active && 'on', 'btn'] }` writes `class="btn"` rather than
+  `class="false btn"`. An object value omits the attribute with a development
+  warning instead of writing `[object Object]`. A controlled `value={ list }`
+  prints the same way. Text and quoted attributes keep the plain comma join, and
+  a list passed as a component prop stays a list.
+
 ### Fixed
 
 ## 0.7.0 — 2026-09-09

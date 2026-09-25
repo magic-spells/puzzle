@@ -12,6 +12,7 @@ connections:
   - COMPONENT-SSG
   - DOC-COMPILER-DESIGN
   - DOC-SPEC-TEMPLATE
+  - DECISION-D173-CORE-SEMANTICS
 verified_at: '2026-07-27T04:56:00.000Z'
 verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
 notes:
@@ -56,21 +57,26 @@ router.
 
 ## The compiler disagreed with itself
 
+
 Within a single element, before this change:
 
 ```js
 class:    `a ${__d.cls}`,   // null -> "a null"
 title:    `${__d.t}`,       // null -> "null"
-'data-x': __d.x,            // null -> raw -> runtime stringify -> ""
+'data-x': __d.x,            // null -> raw -> setAttr removes the attribute
 ```
 
-A brace-only attribute passed the raw value through (so the runtime guard *did*
-fire), while a quoted attribute went through a template literal (so it did not).
+A brace-only attribute passed the raw value through to `setAttr`, which applies
+DOM attribute semantics — `false`, `null` and `undefined` remove the attribute —
+while a quoted attribute went through a template literal and printed the word.
 Same value, same element, two answers, decided by whether the author typed
 quotes. Fixing only the bare-interpolation case would have left this in place,
-which is why the quoted-attribute path is part of the change.
+which is why the quoted-attribute path is part of the change. The brace-only
+removal is the intended rule and stays: a brace-only value controls the
+attribute's presence, a quoted value is text.
 
 ## Decision
+
 
 `displayValue` in `client-runtime/display.js`, exported from the package root, is
 the single owner of "how a value becomes display text." Both former `stringify`
@@ -87,12 +93,25 @@ The import is **usage-gated** — emitted only when a module actually contains a
 stringifying interpolation — so templates without one stay byte-identical and the
 golden churn stayed at the predicted 13 files.
 
+In text and quoted-attribute positions:
+
 | value | renders | note |
 |---|---|---|
 | `null` | `''` | silent — ordinary optional data |
 | `undefined` | `''` | **plus a dev-only warning** |
-| `''`, `0`, `false` | unchanged | |
-| `NaN`, objects, symbols | unchanged | out of scope, see below |
+| `''`, `0`, `false` | `''`, `'0'`, `'false'` | |
+| other numbers | Number::toString | [[DECISION-D173-CORE-SEMANTICS]] V6 |
+| `NaN`, ±Infinity | `''` | D173 V6 |
+| a list | items by this rule, joined with `,` | D173 V6 |
+| any other object (a record, a `Date`) | `''` | **plus a dev-only warning** (D173 V6) |
+| a function, a symbol | `String(value)` | not display values; never interpolate one |
+
+A **brace-only attribute** (`data-x={ x }`) is not a text position: `setAttr`
+and the SSG serializer keep DOM attribute semantics, so `false`, `null`,
+`undefined` and an object **omit** the attribute (the last two with the same dev
+warnings), `true` writes it empty, a list joins with single spaces (D173 V9),
+and anything else goes through `displayValue`. That removal is the intended rule,
+not an inconsistency the helper should erase.
 
 **`??` semantics, never `||`.** `||` would blank `{ count }` when the count is
 `0` and `{ isActive }` when it is `false` — trading a visible wrong value for a
@@ -151,11 +170,14 @@ literal. Bound the pattern with quotes when re-checking this.
 
 ## Scope, stated honestly
 
-This fixes nullish only. `NaN` still renders `"NaN"`, an object still renders
-`"[object Object]"`, and a `Symbol` still throws. Those are a separate question
-about what interpolation should coerce in general, and answering it would mean
-deciding whether a template silently accepts a value that almost certainly
-indicates a bug. Not answered here.
+
+This card decides the owner and the nullish rule. What the helper prints for
+every other value — non-finite numbers, lists, objects — is decided on
+[[DECISION-D173-CORE-SEMANTICS]] (V6, V9), because the answer has to be the
+same in both Puzzle hosts; D127's single owner is what made that a runtime edit
+with no golden churn. A function or a symbol is still coerced by `String`: no
+correct template prints one, and guarding them would cost bytes on every
+interpolation for no author benefit.
 
 ## Consequences
 

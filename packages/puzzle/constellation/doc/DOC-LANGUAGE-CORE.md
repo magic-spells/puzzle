@@ -73,9 +73,18 @@ they mean in HTML, with these rules:
 ## Interpolation and formatters
 
 
-`{ expression }` writes a value into text or an attribute. `null` and
-`undefined` print as nothing; `true`/`false` print as `true`/`false`; numbers
-print in their shortest decimal form; a list prints its items joined with `,`.
+
+`{ expression }` writes a value into text or an attribute. Every host prints a
+value by one rule ([[DECISION-D173-CORE-SEMANTICS]] V6):
+
+- `null` and `undefined` print nothing: an empty string, never a word.
+- `true`/`false` print as `true`/`false`.
+- Numbers print by JavaScript's Number::toString: the shortest decimal that
+  round-trips, in exponent form at or above 1e21 and below 1e-6 (`1e+21`,
+  `1e-7`). `NaN` and ±Infinity print nothing.
+- A list prints its items by this same rule, joined with `,`.
+- Any other object prints nothing, and a host may warn in development (PuzzleKit
+  does). Format the value or print one of its fields.
 
 A **formatter** transforms a value for display. Write it after a pipe:
 
@@ -114,9 +123,22 @@ PuzzleKit contract: §6 and [[COMPONENT-FORMATTERS]].
 | inline branch | `class="btn {#if active}is-active{/if}"` | `{#if}…{:else}…{/if}` inside a quoted value; `{:else if}` is not allowed here |
 | brace-only | `disabled={ isLocked }` | the expression's value, not a string |
 
-A brace-only value controls the attribute's presence: `false`, `null` and
-`undefined` omit the attribute, `true` writes it with an empty value, and
-anything else is converted to text. An attribute name containing `:` is
+A brace-only value controls the attribute's presence
+([[DECISION-D173-CORE-SEMANTICS]] V9):
+
+- `false`, `null` and `undefined` omit the attribute; `true` writes it with an
+  empty value.
+- A list is a token list: its items, each printed by the value rule above, are
+  joined with single spaces, and `false` and every item that prints nothing
+  (`null`, `undefined`, `''`, …) are dropped. So the clsx idiom
+  `class={ [active && 'on', 'btn'] }` writes `class="btn"`. (Text and quoted
+  attributes keep the plain `,` join, and a list passed to a component as a
+  prop stays a list.)
+- An object omits the attribute, and a host may warn in development.
+- Anything else is printed by the value rule.
+
+A quoted value is text: `title="{ x }"` with a missing `x` writes an empty
+attribute rather than omitting it. An attribute name containing `:` is
 reserved, except the `xml`, `xlink` and `xmlns` namespaces.
 
 Each dialect reserves its own attribute names on top of this (PuzzleKit:
@@ -219,6 +241,7 @@ A **capitalized tag** is a component:
 
 ## Slots
 
+
 A slot is a placeholder filled from outside the file. §24,
 [[DECISION-D141-MARKER-FALLBACK-BODIES]].
 
@@ -240,10 +263,23 @@ A slot is a placeholder filled from outside the file. §24,
 - **`<Children/>`** receives the call site's children that carry no `slot`
   attribute.
 - **`<Slot name="x"/>`** receives the children marked `slot="x"`. The name is
-  static and unique in the file; `default` and `children` are reserved.
+  static; `default` and `children` are reserved.
+- **One marker per render path** ([[DECISION-D173-CORE-SEMANTICS]] V13). The
+  default marker (`<Children/>` or a bare `<Slot/>`), and a `<Slot name="x">`
+  for any one name, may appear once on any single render path. The exclusive
+  branches of one `{#if}`/`{:else}` or `{#case}` are separate paths, so
+  `{#if compact}<div><Children/></div>{:else}<section><Children/></section>{/if}`
+  is legal. A marker inside a `{#for}` body is one declaration, however many
+  times the loop runs.
 - **Fallback bodies.** Each marker is self-closing (no fallback) or paired. A
   paired body renders only when nothing fills that position; supplied content
   replaces it entirely. A marker cannot appear inside another marker's fallback.
+- **Filled means it rendered something** (V14). A position is filled only when
+  the content supplied for it renders at least one node that is not
+  whitespace-only text. A call-site `{#if}` that renders nothing and a `{#for}`
+  over an empty list both leave it unfilled, so the fallback shows:
+  `<List>{#for item in items}…{/for}</List>` with a fallback of "Nothing here
+  yet" is the empty state.
 - **The file's role decides who fills a slot.** In a component, the caller does.
   In a layout, the host does, and **the plain `<Slot/>` in a layout is the
   page**: the router's current view in PuzzleKit, the page template and its
@@ -467,7 +503,10 @@ Counts: 34 standard (28 identical-output, 6 locale-rendered), 3 PuzzleKit-only,
 ## Known divergences
 
 Same syntax, different result. Each is an open question for a later decision,
-not a fix. V1 is already on D172 as a gotcha with a proposed resolution.
+not a fix. V1 is already on D172 as a gotcha with a proposed resolution. An
+entry marked **PuzzleKit follows the core** is decided on
+[[DECISION-D173-CORE-SEMANTICS]] and built in PuzzleKit (the rule is stated in
+the core sections above); it stays listed until Sites changes too.
 
 - **V1 — formatter pipe outside text and quoted attributes.** In an unquoted
   attribute, Sites runs a formatter (`title={ price | money }`), while PuzzleKit
@@ -486,10 +525,9 @@ not a fix. V1 is already on D172 as a gotcha with a proposed resolution.
 - **V5 — arithmetic and comparison on non-numbers.** `'2' * 3`, `null + 1`,
   `-'2'`, `1 < '2'`: JavaScript coerces; Sites yields nil. Should core define
   these as nil, or leave them undefined?
-- **V6 — value printing.** `NaN` and `Infinity` print as `NaN`/`Infinity` in
-  PuzzleKit and as nothing in Sites. An object prints `[object Object]` versus
-  `[object]`. A number at or above 1e21 (or below 1e-6) prints in exponent form
-  in PuzzleKit and as plain digits in Sites. What is the core printing rule?
+- **V6 — value printing. PuzzleKit follows the core** (see Interpolation and
+  formatters). Sites still prints an object as `[object]` and a number at or
+  above 1e21 (or below 1e-6) as plain digits instead of exponent form.
 - **V7 — text units and Unicode.** `.length`, `truncate` and `size` count UTF-16
   units in PuzzleKit and runes in Sites, so emoji count 2 versus 1. Case mapping
   differs on special cases (`'ß' | upcase` is `SS` in PuzzleKit, `ß` in Sites),
@@ -500,10 +538,12 @@ not a fix. V1 is already on D172 as a gotcha with a proposed resolution.
   the start of an expression, and one inside a formatter argument compiles to
   invalid JavaScript (`{__d.height: 480}`) that only the bundler catches. Do
   object literals join the core?
-- **V9 — list and object values in a brace-only attribute.** A list joins with
-  spaces in Sites (useful for `class={ … }`) and with commas in PuzzleKit. An
-  object is dropped with a warning in Sites and written as `[object Object]` in
-  PuzzleKit. What is the core rule?
+- **V9 — list and object values in a brace-only attribute. PuzzleKit follows
+  the core** (see Attributes). Sites today joins a list with spaces and drops
+  an object with a warning; dropping `false` and empty items from the list is
+  still pending in Sites, so `class={ [active && 'on', 'btn'] }` can differ
+  there until it lands. Listed until the shared conformance fixture pins both
+  hosts.
 - **V10 — whitespace edges.** PuzzleKit drops newline-bearing whitespace at
   every element edge; Sites drops it only at the first and last child of a
   parent. So `Hello` + newline + `<b>x</b>` + newline + `world` renders
@@ -520,14 +560,12 @@ not a fix. V1 is already on D172 as a gotcha with a proposed resolution.
   PuzzleKit and runs zero times in Sites; a map warns in Sites. Non-integer
   range bounds truncate in PuzzleKit and warn and render nothing in Sites. What
   does core promise?
-- **V13 — two default markers in exclusive branches.** Sites allows
-  `<Children/>` in both branches of one `{#if}` (one per render path).
-  PuzzleKit rejects the second as "duplicate default marker". Should core
-  relax the rule to one per render path?
-- **V14 — when is a slot "filled"?** A call-site `{#if}` that renders nothing
-  counts as filled in both hosts, so the fallback stays hidden. An empty
-  `{#for}` counts as filled in Sites (the block is there) but not in PuzzleKit
-  (no nodes rendered), so only PuzzleKit shows the fallback. Which is core?
+- **V13 — markers in exclusive branches. PuzzleKit follows the core** (see
+  Slots): the check lives in the shared parser, so Sites follows it too at its
+  next parser sync; it already allowed one marker per render path.
+- **V14 — when is a slot "filled"? PuzzleKit follows the core** (see Slots).
+  Sites still counts an empty `{#for}` and a call-site `{#if}` that renders
+  nothing as filled, so its fallback stays hidden.
 - **V15 — how a component reads its props.** Sites exposes each prop as a bare
   name (`{ tone }`). In PuzzleKit the same `{ tone }` reads a `data()` field,
   which is empty unless `data(params, props)` returns it. D172 records implicit

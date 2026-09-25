@@ -14,6 +14,70 @@ connections:
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D174-STANDARD-FORMATTERS
   - DECISION-D167-COMPONENT-FAMILIES
+notes:
+  - kind: state
+    text: >-
+      2026-09-25: build groups (d) slot rules and (f) value printing are BUILT in PuzzleKit on
+      feat/slot-and-print-rules (PR into release/0.8.0). V14: `isFilled` in viewManager.js
+      `expandChildList`: a PLACEHOLDER_TAG vnode and whitespace-only text do not fill. It gates the
+      plain default/named arm, the D71 forwarding arm (which forwards the wrapper's own fallback)
+      and each snippet stamp. SSG/static share expandSlots. V13: `walkBranches` in
+      puzzle-lang/parser/slot.go walks each exclusive {#if}/{#case} branch against its own copy of
+      the markers on the path, then merges the result back. The eslint/prettier ports carry no slot
+      check, so they did not change. V6/V9: display.js `displayValue(value, expression, sep)`.
+      setAttr and serializeAttrs omit an object attribute and pass sep ' ' for a list. Controlled
+      `value` also joins a list with spaces, because V9 says "on an element" and a
+      property/attribute split would diverge from Sites. D127's "null brace-only attribute renders
+      ''" wording was wrong: removal is the rule, and D127, SPEC §6 and LANGUAGE-CORE now state it.
+      Cost: +87 B gzip hello-world, +80 B todos (not size-neutral). DOC-LANGUAGE-CORE marks
+      V6/V9/V13/V14 as "PuzzleKit follows the core" until Sites changes.
+  - kind: deviation
+    text: >-
+      V6 as built in PuzzleKit: (1) a FUNCTION (and a symbol) is not treated as an "object". It
+      still prints as String() would. JS functions are objects, but guarding them costs bytes on
+      every interpolation, and no correct template prints one. (2) A `Date` IS an object here, so `{
+      post.createdAt }` on a Puzzle.date() field now prints nothing (plus the dev warning) instead
+      of the locale string. The corpus scan found no such template. Authors format it with `| date`.
+      Flag this if Sites treats a date as a scalar. (3) V14 applies to snippet stamps too: a stamp
+      that renders nothing shows the marker's fallback for that stamp. This follows the card's
+      "content supplied for it renders at least one node" literally. D166 said only "when nothing
+      fills the position".
+  - kind: deviation
+    text: >-
+      Addendum to the V6 deviation note above (PR #151 review). (2) is wider than Date. Every object
+      prints nothing, whatever `toString` it defines. That includes a `URL`, a Decimal
+      (decimal.js/big.js), a Temporal value, a Luxon DateTime, and any app class with a custom
+      `toString`. Each used to print through String(), and each now needs a formatter or an explicit
+      field/method in `data()`. Cory keeps "a Date prints nothing" as built. A Date gets its own
+      dev-only warning ("format it with | date (or | datetime, | time)") inside the `__PUZZLE_DEV__`
+      block. The production displayValue carries no `instanceof Date`, so the warning costs zero
+      production bytes; checked in the todos production bundle.
+  - kind: state
+    text: >-
+      PR #151 review round. The state note above is superseded on three points.
+
+
+      (1) The V14 test now lives in ONE helper, `fill(out, nodes, marker, parts)` in viewManager.js,
+      which replaces `isFilled` and the four duplicated fill/fallback arms. The filled test runs
+      ONLY when the marker has a fallback. A marker without one splices the supplied nodes through
+      as they are, placeholders included. That keeps its arity constant when a call-site `{#if}`
+      toggles, so the positional patcher no longer shifts and remounts the siblings after it. The
+      first build dropped the placeholder, which cost input focus and rebuilt a stateful sibling 3x;
+      tests/slot-filled.test.js now pins this. The rendered result is identical to the V14 rule: an
+      unfilled marker without a fallback shows nothing either way.
+
+
+      (2) A fallback whose node count differs from the content's still shifts following siblings on
+      each flip. Padding to fix this was rejected (+32 B gzip). SPEC §24, D141 and SKILL.md instead
+      tell authors to keep such a fallback to one root element.
+
+
+      (3) V9 now drops `false` and every item that prints nothing from an attribute list (the clsx
+      idiom). The card's V9 text says so.
+
+
+      Cost vs the pre-D173 base: hello-world 21,933 → 22,040 B gzip (+107), todos 25,884 → 25,991 B
+      (+107).
 ---
 
 # D173 — Core semantics: one meaning for each shared construct
@@ -184,6 +248,7 @@ objects (4 starter uses, unchanged). Not breaking.
 
 ## Rendering, whitespace, escaping
 
+
 **V6 — value printing, one rule in both hosts.** A missing value prints
 nothing. Booleans print `true`/`false`. Numbers print by ECMAScript
 Number::toString (the shortest round-trip decimal, exponent form at or above
@@ -194,13 +259,18 @@ a development warning. PuzzleKit changes its runtime text coercion
 printing. Breaking in edge cases for both; no template found prints a
 non-finite literal or an object.
 
-**V9 — a list or object in a brace-only attribute.** On an element, a list
-prints its items (by V6) joined with single spaces, so `class={ classes }`
-takes a list. An object omits the attribute and raises a development warning.
-Text interpolation keeps V6's comma join, and a list passed as a prop stays a
-list. PuzzleKit changes `setAttr` stringification (breaking: a list attribute
-joined with commas now joins with spaces). None found: the one brace-only
-list literal in PuzzleKit (`InputOtpDoc.pzl`, `{ [3, 3] }`) is a prop.
+**V9 — a list or object in a brace-only attribute.** On an element, a list is
+an attribute token list: its items print by V6 and join with single spaces, and
+`false` and every item that prints nothing (`null`, `undefined`, `''`, and
+anything else V6 prints as nothing) are dropped. So `class={ classes }` takes a
+list, and the clsx idiom `class={ [active && 'on', 'btn'] }` writes
+`class="btn"`, never `class="false btn"`. An object omits the attribute and
+raises a development warning. Text interpolation keeps V6's plain comma join
+(`false` prints, empty items stay as empty slots), and a list passed as a prop
+stays a list. PuzzleKit changes `setAttr` stringification (breaking: a list
+attribute joined with commas now joins with spaces). None found: the one
+brace-only list literal in PuzzleKit (`InputOtpDoc.pzl`, `{ [3, 3] }`) is a
+prop.
 
 **V10 — whitespace: the merged rule, in both hosts.** Cory: "Yes this is a
 real bug. I agree with the merged rule." The rule is stated in full on
