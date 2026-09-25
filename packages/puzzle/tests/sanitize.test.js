@@ -85,7 +85,15 @@ function executableSurface(html) {
 		for (const attr of el.attributes) {
 			const name = attr.name.toLowerCase();
 			if (name.startsWith('on')) problems.push(`${tag}[${name}]`);
-			if (['style', 'class', 'id', 'name'].includes(name)) problems.push(`${tag}[${name}]`);
+			if (name === 'style' || name === 'name') problems.push(`${tag}[${name}]`);
+			if (name === 'rel' && attr.value !== 'noopener noreferrer') problems.push(`${tag}[rel=${attr.value}]`);
+			// DOM clobbering: an id naming a document or <form> property.
+			if (name === 'id' && (attr.value in document || attr.value in document.createElement('form'))) {
+				problems.push(`${tag}[id=${attr.value}]`);
+			}
+			if (name === 'target' && el.getAttribute('rel') !== 'noopener noreferrer') {
+				problems.push(`${tag}[target] without rel=noopener noreferrer`);
+			}
 			if (URL_ATTRS.includes(name)) {
 				const candidates = name === 'srcset' ? attr.value.split(',').map((c) => c.trim().split(/\s+/)[0]) : [attr.value];
 				for (const url of candidates) {
@@ -151,6 +159,34 @@ describe('raw sanitizer (D174)', () => {
 		expect(sanitizeHtml(undefined)).toBe('');
 		expect(sanitizeHtml(null)).toBe('');
 		expect(sanitizeHtml(42)).toBe('42');
+	});
+});
+
+describe('class, id and target (DOMPurify defaults)', () => {
+	it("keeps class and id, so content can use the app's CSS and anchors", () => {
+		expect(sanitizeHtml('<h2 id="faq" class="text-xl font-bold">FAQ</h2>')).toBe(
+			'<h2 id="faq" class="text-xl font-bold">FAQ</h2>'
+		);
+	});
+
+	it.each(['location', 'cookie', 'domain', 'forms', 'images', 'body', 'write', 'action', 'submit', 'elements'])(
+		'drops a clobbering id="%s"',
+		(id) => {
+			expect(sanitizeHtml(`<img id="${id}" src="/a.png"><p id="${id}">x</p>`)).toBe('<img src="/a.png"><p>x</p>');
+		}
+	);
+
+	it('checks the decoded id and re-emits it decoded', () => {
+		expect(sanitizeHtml('<p id="c&#111;okie">x</p>')).toBe('<p>x</p>');
+		expect(sanitizeHtml('<p id="a&amp;b">x</p>')).toBe('<p id="a&amp;b">x</p>');
+	});
+
+	it('forces rel="noopener noreferrer" on a kept target and never keeps an author rel', () => {
+		expect(sanitizeHtml('<a href="/x" target="_blank" rel="opener">x</a>')).toBe(
+			'<a href="/x" target="_blank" rel="noopener noreferrer">x</a>'
+		);
+		expect(sanitizeHtml('<a href="/x" rel="opener">x</a>')).toBe('<a href="/x">x</a>');
+		expect(sanitizeHtml('<p target="_blank">x</p>')).toBe('<p>x</p>');
 	});
 });
 

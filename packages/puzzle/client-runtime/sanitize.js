@@ -19,9 +19,15 @@
  * mutation-XSS vectors (`<svg><style>…`, `<noscript><p title="</noscript>…">`)
  * rely on breaking, and it is why a tokenizer can stand in for DOMPurify here.
  *
- * - Kept tags and attributes: TAG_ATTRS and PLAIN_TAGS below; `title`, `lang`
- *   and `dir` on any of them. No `class`, `style`, `id` or `name` (styling
- *   hooks, CSS and DOM clobbering), no `on*` handler.
+ * - Kept tags and attributes: TAG_ATTRS and PLAIN_TAGS below; `title`, `lang`,
+ *   `dir`, `class` and `id` on any of them (DOMPurify's defaults). `class`
+ *   lets the value use the app's CSS — an overlay risk for untrusted HTML, not
+ *   code execution. An `id` naming a `document` or `<form>` property
+ *   (CLOBBER_IDS, the DOM-free stand-in for DOMPurify's SANITIZE_DOM) is
+ *   dropped, and the kept value is re-emitted from its decoded form so the
+ *   browser sees exactly the string that was checked. No `style`, no `name`,
+ *   no `on*` handler. A kept `target` on `<a>` always carries
+ *   `rel="noopener noreferrer"`; an author `rel` is never kept.
  * - URL attributes (href, src, srcset, and action/formaction/xlink:href should
  *   the allowlist ever grow them) keep only http(s) and relative URLs; an `<a
  *   href>` also keeps mailto: and tel:. The check runs on the value after
@@ -49,7 +55,7 @@ const has = (list, name) => list.includes(' ' + name + ' ');
 // Tags kept with attributes beyond the global three, then the tags kept with
 // only the global three.
 const TAG_ATTRS = {
-	a: 'href',
+	a: 'href target',
 	img: 'src srcset alt width height',
 	ol: 'start reversed',
 	li: 'value',
@@ -66,7 +72,16 @@ const PLAIN_TAGS =
 	' p br hr h1 h2 h3 h4 h5 h6 blockquote pre code b i em strong u s strike sub sup small mark' +
 	' abbr cite dfn kbd q samp var bdi bdo span div address figure figcaption ul dl dt dd' +
 	' table caption thead tbody tfoot tr summary wbr ';
-const GLOBAL_ATTRS = ' title lang dir ';
+const GLOBAL_ATTRS = ' title lang dir class id ';
+// `id` values that would shadow a `document` or `<form>` property through
+// named access (DOM clobbering): `<img id="cookie">` makes `document.cookie`
+// the element. Short on purpose — the properties app and library code reads.
+const CLOBBER_IDS =
+	' location cookie domain referrer URL body head title forms images links scripts' +
+	' anchors embeds plugins currentScript defaultView documentElement activeElement' +
+	' write writeln open close getElementById getElementsByName querySelector' +
+	' querySelectorAll createElement action method target submit reset elements' +
+	' attributes nodeName parentNode ownerDocument ';
 const URL_ATTRS = ' href src srcset action formaction xlink:href ';
 
 /** The attributes a kept tag keeps beyond the global three, or null for a dropped tag. */
@@ -150,6 +165,10 @@ function safeUrl(url, link) {
 /** The emitted ` name="value"` for one attribute, or '' when it is dropped. */
 function keepAttr(allowed, tag, name, value) {
 	if (!has(GLOBAL_ATTRS, name) && !has(allowed, name)) return '';
+	if (name === 'id') {
+		const id = decodeRefs(value);
+		return has(CLOBBER_IDS, id) ? '' : ` id="${escapeAll(id, true)}"`;
+	}
 	if (!has(URL_ATTRS, name)) return ` ${name}="${escapeKeepRefs(value, true)}"`;
 	const url = decodeRefs(value).replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, '');
 	const ok =
@@ -296,6 +315,8 @@ export function sanitizeHtml(value) {
 			seen.add(attr);
 			attrs += keepAttr(allowed, name, attr, v);
 		}
+		// A value can never contain a raw `"`, so this only matches the name.
+		if (attrs.includes(' target="')) attrs += ' rel="noopener noreferrer"';
 		out += `<${name}${attrs}>`;
 		if (!has(VOID, name)) open.push(name);
 	}

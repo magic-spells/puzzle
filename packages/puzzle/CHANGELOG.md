@@ -341,10 +341,15 @@ under Changed.
   Document markup, links and images are kept. `<script>` (with its contents),
   `<style>`, `<iframe>`, `<object>`, `<embed>`, `<svg>`, `<math>`,
   `<template>` and `<noscript>` are dropped, forms and unknown tags are
-  unwrapped to their text, every `on*` handler and every `style`, `class`, `id`
-  and `name` attribute is removed, and an `href`/`src`/`srcset` URL survives
-  only when relative or `http(s)` (links also keep `mailto:`/`tel:`), with
-  entity-encoded, mixed-case and whitespace-split schemes caught.
+  unwrapped to their text, every `on*` handler and every `style` and `name`
+  attribute is removed, and an `href`/`src`/`srcset` URL survives only when
+  relative or `http(s)` (links also keep `mailto:`/`tel:`), with
+  entity-encoded, mixed-case and whitespace-split schemes caught. As in
+  DOMPurify's defaults, `class` and `id` are kept — minus an `id` that would
+  clobber a `document` or `<form>` property (`cookie`, `location`, `forms`, …)
+  — and a link keeps `target`, always with `rel="noopener noreferrer"`.
+  Because `class` survives, content can use the app's CSS: for untrusted user
+  HTML that is a UI-overlay risk, not code execution.
   `{ note | newline_to_br }` escapes the value and emits a `<br>` for each CR
   LF, CR and LF. Both must be the **last** formatter of a **text**
   interpolation: after either one, in an attribute value, a component prop, a
@@ -357,8 +362,8 @@ under Changed.
   element does. The node and the sanitizer ship only in apps that use either
   formatter (`__PUZZLE_HAS_RAW_HTML__`): hello-world and todos did not grow
   (both are a few bytes smaller, since `raw` is no longer seeded into every
-  formatter registry); a `raw`-using app pays 2,294 bytes gzip. The shared
-  conformance table carries the allowlist as 79 `raw` rows — rich text that
+  formatter registry); a `raw`-using app pays 2,528 bytes gzip. The shared
+  conformance table carries the allowlist as 88 `raw` rows — rich text that
   must survive and an XSS corpus that must come out inert — plus 6
   `newline_to_br` rows, for Sites to run too.
 

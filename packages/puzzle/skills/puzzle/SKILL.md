@@ -156,15 +156,23 @@ sanitized** — there is no unsanitized escape hatch, by design:
 
 - **What survives:** paragraphs, headings, lists, tables, `b`/`i`/`em`/
   `strong`/`code`/`pre`/`blockquote`/`br`/`hr`, `span`/`div`, links
-  (`<a href>`) and images (`<img src srcset alt width height>`), plus `title`,
-  `lang` and `dir`.
+  (`<a href target>` — a kept `target` always gets `rel="noopener noreferrer"`)
+  and images (`<img src srcset alt width height>`), plus `class`, `id`,
+  `title`, `lang` and `dir` on any of them (DOMPurify's defaults).
 - **What is removed:** `<script>` with its contents; `<style>`, `<iframe>`,
   `<object>`, `<embed>`, `<svg>`, `<math>`, `<template>`, `<noscript>` with
   their contents; forms and inputs (their text stays); every `on*` handler;
-  `style`, `class`, `id` and `name`; and any `href`/`src`/`srcset` URL that is
-  not relative or `http(s)` (links also keep `mailto:`/`tel:`) — obfuscated
-  `JaVaScRiPt:`, entity-encoded and whitespace-split schemes included. So a
-  value can't restyle or overlay your page with utility classes either.
+  `style`, `name` and any author `rel`; an `id` that names a `document` or
+  `<form>` property (`cookie`, `location`, `forms`, `body`, `submit`, … — DOM
+  clobbering); and any `href`/`src`/`srcset` URL that is not relative or
+  `http(s)` (links also keep `mailto:`/`tel:`) — obfuscated `JaVaScRiPt:`,
+  entity-encoded and whitespace-split schemes included.
+- **`class` survives, so content can use your app's CSS.** For HTML your own
+  editors write, that is the point (Tailwind `prose` tweaks, callouts). For
+  untrusted user HTML it is a UI-overlay risk — a `fixed inset-0 z-50` block
+  can cover your page or fake a dialog — not code execution. Render user HTML
+  inside a container that clips it (`relative overflow-hidden`, `contain:
+  paint`), or prefer `newline_to_br` for user-typed text.
 - **`raw` must be the LAST formatter of a TEXT interpolation.** Anything else
   is a compile error: `{ x | raw | upcase }`, `title={ x | raw }`,
   `<Card body={ x | raw } />`, `{#if x | raw}`, `raw(…)` with arguments, or
@@ -180,7 +188,7 @@ sanitized** — there is no unsanitized escape hatch, by design:
   Prefer `newline_to_br` (or plain `{ text }`) for user-typed text, and keep
   `raw` for CMS/rich-text fields.
 - The output renders as sibling nodes with no wrapper element, prerenders
-  identically in `hybrid`/`static` output, and costs ~2 KB gzip — only in
+  identically in `hybrid`/`static` output, and costs ~2.5 KB gzip — only in
   apps that use `raw` or `newline_to_br`.
 
 Rules that bite:
