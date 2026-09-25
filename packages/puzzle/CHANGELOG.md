@@ -516,7 +516,7 @@ under Changed.
   whitespace between them to keep them touching. A `<pre>` or `<textarea>`
   whose body was indented with the template now shows that indentation:
   dedent the body, or bind it (`{ code }`, `value={ text }`). Across the
-  0.8.0 corpus (607 files), 131 files gained a space in 832 text runs, none
+  0.8.0 corpus (612 files), 131 files gained a space in 832 text runs, none
   lost one, and no `<pre>`/`<textarea>` body changed.
 
 ### Fixed

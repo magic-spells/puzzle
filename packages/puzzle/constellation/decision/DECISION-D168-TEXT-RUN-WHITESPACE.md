@@ -152,8 +152,7 @@ checks the mounted DOM and the prerendered HTML of one compiled fixture.
 
 ## Consequences
 
-
-- Rule 4 changes PuzzleKit output widely. Measured on the 0.8.0 corpus (607
+- Rule 4 changes PuzzleKit output widely. Measured on the 0.8.0 corpus (612
   `.pzl` files: examples, scaffold templates, the puzzle-pieces registry and
   demo, and the DevTools panel), 832 text runs in 131 files gain 1,007 spaces
   at text-to-element boundaries (938 of them in 98 puzzle-pieces demo files,
