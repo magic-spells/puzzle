@@ -344,26 +344,32 @@ under Changed.
   unwrapped to their text, every `on*` handler and every `style` and `name`
   attribute is removed, and an `href`/`src`/`srcset` URL survives only when
   relative or `http(s)` (links also keep `mailto:`/`tel:`), with
-  entity-encoded, mixed-case and whitespace-split schemes caught. As in
-  DOMPurify's defaults, `class` and `id` are kept — minus an `id` that would
-  clobber a `document` or `<form>` property (`cookie`, `location`, `forms`, …)
-  — and a link keeps `target`, always with `rel="noopener noreferrer"`.
-  Because `class` survives, content can use the app's CSS: for untrusted user
-  HTML that is a UI-overlay risk, not code execution.
+  entity-encoded, mixed-case, control-character-prefixed and whitespace-split
+  schemes caught. As in DOMPurify's defaults, `class` and `id` are kept — `id`
+  verbatim, except on `<img>` (it would clobber properties of a `<form>` it
+  lands in) and except one starting with `__` — and a link keeps
+  `target="_blank"` (no other target), always with
+  `rel="noopener noreferrer"`. `name` is never kept. Because `class` and `id`
+  survive, content can use the app's CSS and can shadow an undefined global by
+  id: for untrusted user HTML that is a UI-overlay and naming risk, not code
+  execution (the agent skill describes the containment).
   `{ note | newline_to_br }` escapes the value and emits a `<br>` for each CR
   LF, CR and LF. Both must be the **last** formatter of a **text**
   interpolation: after either one, in an attribute value, a component prop, a
   marker argument or an `{#if}`/`{#case}` subject, with arguments, or inside
-  `<script>`/`<style>`/`<textarea>`/`<title>`, the template no longer compiles
+  a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`,
+  `<noscript>`, `<xmp>`, `<iframe>`, …), the template no longer compiles
   (a positioned error). The compiler lowers the pair itself, so an app
   formatter registered as `raw` is never called from a template (a development
   warning says so) and no app formatter can inject markup. The markup renders
   as sibling nodes with no wrapper element and splits a run of text the way an
-  element does. The node and the sanitizer ship only in apps that use either
-  formatter (`__PUZZLE_HAS_RAW_HTML__`): hello-world and todos did not grow
-  (both are a few bytes smaller, since `raw` is no longer seeded into every
-  formatter registry); a `raw`-using app pays 2,528 bytes gzip. The shared
-  conformance table carries the allowlist as 88 `raw` rows — rich text that
+  element does. The node ships only in apps that use either formatter
+  (`__PUZZLE_HAS_RAW_HTML__`), and the sanitizer only in apps that use `raw`
+  (`__PUZZLE_HAS_RAW_SANITIZE__`): hello-world and todos did not grow (both
+  are a few bytes smaller, since `raw` is no longer seeded into every
+  formatter registry), a `raw`-using app pays 2,318 bytes gzip, and a
+  `newline_to_br`-only app 374. The shared conformance table carries the
+  allowlist as 99 `raw` rows — rich text that
   must survive and an XSS corpus that must come out inert — plus 6
   `newline_to_br` rows, for Sites to run too.
 

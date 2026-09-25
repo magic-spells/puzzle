@@ -433,8 +433,10 @@ type definesFixture struct {
 	portal   bool
 	raw      bool
 	snippets bool
-	// rawHTML pipes a value through the D174 `raw` formatter.
-	rawHTML bool
+	// rawHTML pipes a value through the D174 `raw` formatter; newlineToBr
+	// through `newline_to_br` only.
+	rawHTML     bool
+	newlineToBr bool
 	// lazy adds a second route whose view is a D163 lazy() marker, declared in
 	// the routes module named by lazyRoutesExt (".js" when empty) so the same
 	// fixture can prove the usage scan reads TypeScript route tables too.
@@ -498,6 +500,9 @@ export default app;
 	}
 	if fx.rawHTML {
 		featureMarkup += "  <div>{ items | size | raw }</div>\n"
+	}
+	if fx.newlineToBr {
+		featureMarkup += "  <div>{ items | size | newline_to_br }</div>\n"
 	}
 	if fx.snippets {
 		featureMarkup += `  <ScopedList items={ items }>
@@ -682,6 +687,19 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	rawHTMLJS := readFile(t, filepath.Join(withRawHTML, "dist", "app.js"))
 	if !strings.Contains(rawHTMLJS, sanitizerMarker) {
 		t.Errorf("bundle with `| raw` should retain the sanitizer (%q)", sanitizerMarker)
+	}
+
+	// newline_to_br alone keeps the live-HTML node but not the sanitizer.
+	withBr := writeDefinesFixture(t, definesFixture{newlineToBr: true})
+	if err := Build(withBr, Options{Development: false}); err != nil {
+		t.Fatalf("Build with newline_to_br usage failed: %v", err)
+	}
+	brJS := readFile(t, filepath.Join(withBr, "dist", "app.js"))
+	if strings.Contains(brJS, sanitizerMarker) {
+		t.Errorf("bundle with only `| newline_to_br` retained the sanitizer (%q)", sanitizerMarker)
+	}
+	if !strings.Contains(brJS, "<br>") {
+		t.Errorf("bundle with `| newline_to_br` lost the <br> helper")
 	}
 
 	withSnippets := writeDefinesFixture(t, definesFixture{snippets: true})

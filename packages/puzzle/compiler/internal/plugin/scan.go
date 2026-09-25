@@ -54,6 +54,9 @@ type Usage struct {
 	// HasRawHTML: a text interpolation ends in `raw` or `newline_to_br` (D174),
 	// which keeps the live-HTML node and the sanitizer in the bundle.
 	HasRawHTML bool
+	// HasRawSanitize: one of those chains ends in `raw` itself, which keeps the
+	// sanitizer; an app that only uses `newline_to_br` does not ship it.
+	HasRawSanitize bool
 	// HasLazy is the one bit that does NOT come from a template: lazy() route
 	// views (D163) are declared in the app's JavaScript/TypeScript, so the walk
 	// reads those files too (see scanScriptUsage).
@@ -74,12 +77,13 @@ func (u Usage) UsesT() bool {
 // WatchBuilder can decide with one == whether the Define set frozen into its
 // esbuild context went stale.
 type Features struct {
-	Flip     bool
-	Portal   bool
-	RawAt    bool
-	Lazy     bool
-	Snippets bool
-	RawHTML  bool
+	Flip        bool
+	Portal      bool
+	RawAt       bool
+	Lazy        bool
+	Snippets    bool
+	RawHTML     bool
+	RawSanitize bool
 }
 
 // Features projects the scan result onto the define bits. It is exported for
@@ -87,12 +91,13 @@ type Features struct {
 // whether the Defines frozen into an esbuild context went stale.
 func (u Usage) Features() Features {
 	return Features{
-		Flip:     u.HasFlip,
-		Portal:   u.HasPortal,
-		RawAt:    u.HasRawAt,
-		Lazy:     u.HasLazy,
-		Snippets: u.HasSnippets,
-		RawHTML:  u.HasRawHTML,
+		Flip:        u.HasFlip,
+		Portal:      u.HasPortal,
+		RawAt:       u.HasRawAt,
+		Lazy:        u.HasLazy,
+		Snippets:    u.HasSnippets,
+		RawHTML:     u.HasRawHTML,
+		RawSanitize: u.HasRawSanitize,
 	}
 }
 
@@ -291,6 +296,9 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		for _, call := range node.Formatters {
 			if codegen.IsMarkupFormatter(call.Name) {
 				usage.HasRawHTML = true
+				if call.Name == "raw" {
+					usage.HasRawSanitize = true
+				}
 			}
 		}
 		collectFormatterCalls(node.Formatters, usage.Formatters, allow)

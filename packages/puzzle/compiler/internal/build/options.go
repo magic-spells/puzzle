@@ -133,8 +133,10 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		"__PUZZLE_HAS_LAZY__":     strconv.FormatBool(f.Lazy),
 		"__PUZZLE_HAS_SNIPPETS__": strconv.FormatBool(f.Snippets),
 		"__PUZZLE_HAS_RAW_HTML__": strconv.FormatBool(f.RawHTML),
-		"__PUZZLE_TAKEOVER__":     strconv.FormatBool(flags.Takeover),
-		"__PUZZLE_CAPTURE__":      strconv.FormatBool(flags.Capture),
+		// The sanitizer alone: only `raw` needs it, not `newline_to_br` (D174).
+		"__PUZZLE_HAS_RAW_SANITIZE__": strconv.FormatBool(f.RawSanitize),
+		"__PUZZLE_TAKEOVER__":         strconv.FormatBool(flags.Takeover),
+		"__PUZZLE_CAPTURE__":          strconv.FormatBool(flags.Capture),
 		// A CONFIG fact, not a usage-scan fact (D175): script code can call
 		// `this.ctx.i18n.t()` where no template scan can see it. It reads the plugin
 		// because the plugin also serves the locale manifest, so the define and the

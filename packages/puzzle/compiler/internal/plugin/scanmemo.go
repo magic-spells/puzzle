@@ -46,6 +46,7 @@ type fileUsage struct {
 	hasLazy     bool
 	hasSnippets bool
 	hasRawHTML  bool
+	hasRawSan   bool
 	// name is the app-relative file name and tKeys the literal `t` keys it uses
 	// (D175 diagnostics).
 	name  string
@@ -157,6 +158,9 @@ func mergeFileUsage(usage *Usage, fu fileUsage) {
 	if fu.hasRawHTML {
 		usage.HasRawHTML = true
 	}
+	if fu.hasRawSan {
+		usage.HasRawSanitize = true
+	}
 	for _, key := range fu.tKeys {
 		if usage.TKeys == nil {
 			usage.TKeys = map[string][]string{}
@@ -223,6 +227,7 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 	one.hasRawAt = tpl.HasRawAt
 	one.hasSnippets = tpl.HasSnippets
 	one.hasRawHTML = tpl.HasRawHTML
+	one.hasRawSan = tpl.HasRawSanitize
 	for formatter := range tpl.Formatters {
 		one.formatters = append(one.formatters, formatter)
 	}

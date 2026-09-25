@@ -68,6 +68,20 @@ notes:
       rejected-alternatives entries are rewritten to match; the earlier deviation note's allowlist
       is superseded. The conformance table now has 88 raw rows. Cost of a raw-using app: 2,528 B
       gzip (was 2,294).
+  - kind: decision
+    text: >-
+      PR #155 security review ("merge after fixes"; ~1.5M fuzz inputs, no script ran) — applied,
+      superseding the previous note's id and target rules: (F1) the scheme check strips leading C0
+      controls itself and srcset is checked on every whitespace/comma token, closing `<img
+      srcset="a.png 1x,&#1;javascript:…">`; (F2) `target` kept only as `_blank`; (F3) the forced rel
+      is a flag, not a substring test (`<p title="<a target=">` got a rel); (F4) the CLOBBER_IDS
+      list is gone — `document` is unreachable once `name` is stripped — replaced by dropping `id`
+      on `<img>` (form-listed; ~473 form properties) and ids starting with `__`, with the
+      `window[id]` risk documented and `user-content-` prefixing recorded as rejected; (F5) end tags
+      counted per name (40k stray `</i>` was quadratic); (F6) `__PUZZLE_HAS_RAW_SANITIZE__` keeps
+      the sanitizer out of `newline_to_br`-only apps (374 B vs 2,318 B gzip); (F7) raw-text parents
+      extended to noscript/xmp/iframe/noembed/noframes/plaintext; the named-entity table cut to 9
+      names. 99 raw conformance rows.
 ---
 
 # D174 — The standard formatter set
@@ -204,7 +218,6 @@ value printed after the chain follows D173 V6.
 
 ### Markup and escaping
 
-
 - **`escape`** (F8): its output is plain text, so the page shows the value's
   characters (`<b>` appears as `<b>`, never as `&lt;b&gt;`). In a text
   interpolation it is an identity. It can never follow `raw`, because a
@@ -227,40 +240,51 @@ value printed after the chain follows D173 V6.
     `summary`, `sup`, `table`, `tbody`, `td`, `tfoot`, `th`, `thead`, `time`,
     `tr`, `u`, `ul`, `var`, `wbr`.
   - **Attributes kept:** `class`, `id`, `title`, `lang` and `dir` on any kept
-    tag; `a` `href`, `target`; `img` `src`, `srcset`, `alt`, `width`,
-    `height`; `ol` `start`, `reversed`; `li` `value`; `td` `colspan`,
-    `rowspan`; `th` `colspan`, `rowspan`, `scope`; `col`/`colgroup` `span`;
-    `time`/`del`/`ins` `datetime`; `details` `open`. Never `style`, `name`, an
-    author `rel`, or any `on*` handler.
+    tag (with the `id` exceptions below); `a` `href`, `target`; `img` `src`,
+    `srcset`, `alt`, `width`, `height`; `ol` `start`, `reversed`; `li`
+    `value`; `td` `colspan`, `rowspan`; `th` `colspan`, `rowspan`, `scope`;
+    `col`/`colgroup` `span`; `time`/`del`/`ins` `datetime`; `details` `open`.
+    Never `style`, an author `rel`, or any `on*` handler — and **never
+    `name`, for good**: `name` is what makes an element reachable as
+    `document.<name>` and through a form's named properties, and keeping it
+    stripped is what leaves `document` unclobberable (0 of 511 probed names
+    reach it with `name` gone).
   - **`class`** lets sanitized content use the app's CSS. That is the point
     for HTML the app's own editors write; for untrusted user HTML it is a
     UI-overlay risk (a `fixed inset-0 z-50` block covering the page or faking
-    a dialog), not code execution, and the docs say so.
-  - **`id` and DOM clobbering** (DOMPurify's `SANITIZE_DOM`, done DOM-free):
-    an `id` whose value names a `document` or `<form>` property is dropped,
-    because named access would shadow it (`<img id="cookie">` makes
-    `document.cookie` the element). The list is short and fixed:
-    `location`, `cookie`, `domain`, `referrer`, `URL`, `body`, `head`,
-    `title`, `forms`, `images`, `links`, `scripts`, `anchors`, `embeds`,
-    `plugins`, `currentScript`, `defaultView`, `documentElement`,
-    `activeElement`, `write`, `writeln`, `open`, `close`, `getElementById`,
-    `getElementsByName`, `querySelector`, `querySelectorAll`,
-    `createElement`, `action`, `method`, `target`, `submit`, `reset`,
-    `elements`, `attributes`, `nodeName`, `parentNode`, `ownerDocument`. The
-    value is checked after character-reference decoding and re-emitted
-    decoded, so the browser sees the string that was checked. `name` is
-    never kept.
-  - **`target` on `<a>`** is kept, and whenever it is, the link gets
-    `rel="noopener noreferrer"`; an author `rel` is always discarded.
+    a dialog), not code execution. The docs tell authors to render untrusted
+    HTML inside a container with `contain: layout paint`.
+  - **`id`** is kept verbatim, for heading anchors and styling, with two
+    exceptions. **Never on `<img>`**: it is the one kept tag that is a
+    form-associated "listed" element, so `<img id="action">` inside the app's
+    own `<form>` would shadow `form.action` (about 473 form properties are
+    reachable that way). **Never starting with `__`**: that keeps the
+    framework's `window.__PUZZLE_*` globals and dev hooks out of reach. The
+    value is checked and re-emitted decoded, so the browser sees the string
+    that was checked. The remaining risk, documented for untrusted HTML: any
+    other kept id becomes a `window[id]` named property when no global of
+    that name exists (`<a id="CONFIG" href>` shadows an undefined
+    `window.CONFIG` the app reads optionally), and a user id can collide with
+    the app's own ids — skip-link targets, `label for`, `aria-labelledby`.
+  - **`target` on `<a>`** is kept only as `_blank` (any case, after
+    character-reference decoding), re-emitted as `target="_blank"`, and the
+    link then gets `rel="noopener noreferrer"`; any other value is dropped (a
+    named target sets `window.name` in the opened page, a known XSS gadget,
+    and `_top`/`_parent` escape a frame). An author `rel` is always
+    discarded, and the forced `rel` is decided by a flag set when `target` is
+    kept, never by searching the emitted attribute text.
   - **URLs** in `href`, `src` and `srcset` (and `action`, `formaction` and
     `xlink:href`, should the allowlist ever keep them) survive only when
     relative or `http(s)`; `mailto:` and `tel:` survive on an `<a href>`
     only. The scheme is read the way the URL parser reads it: after
-    character-reference decoding, with leading and trailing C0 controls and
-    spaces trimmed and every tab and newline removed, so `JaVaScRiPt:`,
-    `java&#x09;script:`, `javascript&colon;` and a leading control character
-    are all caught. A failing URL attribute is dropped; a `srcset` is dropped
-    whole when any candidate fails.
+    character-reference decoding, with every leading C0 control or space
+    (U+0000–U+0020, which JavaScript's `trim()` does not all cover) removed
+    and every tab and newline removed, so `JaVaScRiPt:`, `java&#x09;script:`,
+    `javascript&colon;` and `&#1;javascript:` are all caught. A `srcset` is
+    checked token by token — every whitespace- or comma-separated token, so
+    a candidate URL is checked wherever the srcset parser could start one —
+    and dropped whole when any token fails. A failing URL attribute is
+    dropped.
   - **Dropped with their contents:** `script`, `style`, `iframe`, `noscript`,
     `noembed`, `noframes`, `textarea`, `title` and `xmp` (scanned to their end
     tag, as the browser's tokenizer does); `template`, `object`, `applet`,
@@ -272,17 +296,22 @@ value printed after the chain follows D173 V6.
   - **Canonical output** (what the conformance rows pin, so both hosts emit
     the same bytes): kept tags re-emitted lowercase; attributes in source
     order, the first of a repeated name winning (as in the browser), always
-    double-quoted, a valueless one as `name=""`, and a forced
-    `rel="noopener noreferrer"` appended last; in text, `<` and `>` escaped
-    and `&` escaped unless it begins a well-formed character reference
-    (`&name;`, `&#N;`, `&#xH;`), which passes through for the browser to
-    decode; plain attribute values the same, plus `"`; URL and `id` values
-    re-emitted from their decoded form (URLs also trimmed) with `&`, `<`, `>`
-    and `"` escaped, so the browser reads exactly the string that was
-    checked. Comments, doctypes, CDATA and processing instructions are
-    dropped, as is a tag cut off by the end of the value; a stray end tag is
-    dropped; every tag still open at the end is closed, so a value cannot
-    leak formatting into the page around it; NUL characters are removed.
+    double-quoted, a valueless one as `name=""`, `target` always as
+    `target="_blank"`, and a forced `rel="noopener noreferrer"` appended
+    last; in text, `<` and `>` escaped and `&` escaped unless it begins a
+    well-formed character reference (`&name;`, `&#N;`, `&#xH;`), which passes
+    through for the browser to decode; plain attribute values the same, plus
+    `"`; URL and `id` values re-emitted from their decoded form (URLs also
+    trimmed) with `&`, `<`, `>` and `"` escaped, so the browser reads exactly
+    the string that was checked. The decoder knows only `amp`, `lt`, `gt`,
+    `quot`, `apos`, `nbsp`, `colon`, `Tab` and `NewLine` by name, plus every
+    numeric reference; an unknown named reference stays literal, for the
+    checker and — because the `&` is re-escaped — for the browser. Comments,
+    doctypes, CDATA and processing instructions are dropped, as is a tag cut
+    off by the end of the value; a stray end tag is dropped (in constant
+    time: open tags are counted per name); every tag still open at the end is
+    closed, so a value cannot leak formatting into the page around it; NUL
+    characters are removed.
 - **`newline_to_br`** (F12): escapes its input (`&`, `<`, `>`), then emits a
   real `<br>` for each CR LF, CR and LF. Its output is safe by construction,
   so it needs no sanitizer, but it renders through the same markup path as
@@ -291,9 +320,11 @@ value printed after the chain follows D173 V6.
   After it, the value is markup rather than text, so a following formatter,
   or a markup formatter in an attribute, a prop, a marker argument or a block
   subject, is a positioned compile error in both hosts. So is an argument
-  (`raw(1)`), and a markup interpolation inside `<script>`, `<style>`,
-  `<textarea>` or `<title>`, whose content is text. This is what lets
-  PuzzleKit decide at compile time which interpolations render markup.
+  (`raw(1)`), and a markup interpolation inside a raw-text element whose
+  content is text: `<script>`, `<style>`, `<textarea>`, `<title>`,
+  `<noscript>`, `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>`,
+  `<plaintext>`. This is what lets PuzzleKit decide at compile time which
+  interpolations render markup.
 - **How PuzzleKit renders markup.** Codegen
   (`compiler/internal/codegen/markup.go`) checks every placement before
   emission, then lowers a text interpolation whose chain ends in `raw` or
@@ -309,33 +340,37 @@ value printed after the chain follows D173 V6.
   mount parses the sanitized markup through an inert `<template>`, a changed
   value replaces the owned nodes, an unchanged one touches nothing, removal
   takes the whole range, and a keyed move carries it; the patcher never
-  reconciles inside it. The node kind and the sanitizer
+  reconciles inside it. Two defines gate it, both set by the usage scan: the
+  node behind `__PUZZLE_HAS_RAW_HTML__` (either name used) and the sanitizer
   (`client-runtime/sanitize.js`, a small DOM-free tokenizer plus the
-  allowlist, with no top-level side effects) sit behind the
-  `__PUZZLE_HAS_RAW_HTML__` define, which the usage scan sets from the two
-  names like the other `__PUZZLE_HAS_*__` flags, so an app that never uses
-  them ships neither: hello-world and todos did not grow, and a `raw`-using
-  app pays about 2.5 KB gzip. A `'#html'` vnode that reaches a build with the
-  define false (a template the scan never read) fails loudly at the
-  metadata-tag guard, the snippet tag's posture. The static and hybrid
-  prerender (`client-runtime/ssg/serialize.js`) emits the same `htmlOf()`
-  string the browser parses, and takeover re-mounts over it. `raw` and
-  `newline_to_br` stay in `builtins.js`, returning those markup strings for
-  script code and the conformance table, but they never enter the formatter
-  manifest.
+  allowlist, with no top-level side effects) behind
+  `__PUZZLE_HAS_RAW_SANITIZE__` (`raw` used). An app that uses neither ships
+  nothing (hello-world and todos did not grow), a `newline_to_br`-only app
+  pays about 0.4 KB gzip, and a `raw` app about 2.3 KB. A `'#html'` vnode
+  that reaches a build with the node's define false (a template the scan
+  never read) fails loudly at the metadata-tag guard, the snippet tag's
+  posture; a `raw` vnode in a build without the sanitizer renders nothing,
+  never unsanitized markup. The static and hybrid prerender
+  (`client-runtime/ssg/serialize.js`) emits the same `htmlOf()` string the
+  browser parses, and takeover re-mounts over it. `raw` and `newline_to_br`
+  stay in `builtins.js`, returning those markup strings for script code and
+  the conformance table, but they never enter the formatter manifest.
 - **How Sites renders markup.** Sites injects `raw` unsanitized today,
   trusting save-time sanitizing, and must sanitize at render time with the
-  same allowlist and canonical output: either `SanitizeRichText` moved into
-  the engine and widened to the allowlist above, or
-  `github.com/microcosm-cc/bluemonday` configured to it (bluemonday's
-  `AllowAttrs("class", "id")`, `RequireNoReferrerOnLinks`-style rel forcing,
-  and a custom id filter for the clobbering list). Either way the shared
-  `raw` and `newline_to_br` conformance rows are the contract. Two details to
-  watch: `golang.org/x/net/html` decodes every character reference and
-  re-escapes quotes and apostrophes in text, so a renderer built on
-  `html.Render` must pass well-formed references through and escape only
-  what the canonical rules name; and bluemonday's defaults add
-  `rel="nofollow"` and keep more URL schemes, both of which the rows reject.
+  same allowlist, the same `id`, `target` and `name` rules, and the same
+  canonical output: either `SanitizeRichText` moved into the engine and
+  widened to the allowlist above, or `github.com/microcosm-cc/bluemonday`
+  configured to it (`AllowAttrs("class", "id")` with an id filter for
+  `<img>` and `__`, `target` matched to `_blank` only with the rel forced,
+  and no `name`). Either way the shared `raw` and `newline_to_br`
+  conformance rows are the contract. Details to watch:
+  `golang.org/x/net/html` decodes every character reference and re-escapes
+  quotes and apostrophes in text, so a renderer built on `html.Render` must
+  pass well-formed references through and escape only what the canonical
+  rules name; a Go scheme check must strip leading C0 controls the way the
+  URL parser does (`strings.TrimSpace` misses U+0001–U+0008 and
+  U+000E–U+001F); and bluemonday's defaults add `rel="nofollow"` and keep
+  more URL schemes, both of which the rows reject.
 
 ### Values
 
@@ -416,7 +451,6 @@ standard, so chirp's own `timeago` draws no warning.
 
 ## Alternatives rejected
 
-
 - **Promote Sites' list formatters into the standard set.** Rejected: in
   PuzzleKit, list shaping belongs in JavaScript, where it is typed, testable
   and visible to the data layer.
@@ -443,8 +477,8 @@ standard, so chirp's own `timeago` draws no warning.
   sanitizer wrote. How the tokenizer reads hostile input can only change
   what gets dropped, which is the property mutation-XSS vectors
   (`<svg><style><img onerror>`, `<noscript><p title="</noscript>…">`) rely
-  on breaking. Its attribute defaults are kept, though (`class`, `id` with
-  clobbering protection, `target`).
+  on breaking. Its attribute defaults are kept, though (`class`, `id`,
+  `target`), with the `id` and `target` rules above.
 - **A wrapper element for the markup node** (`<span>` or a custom element).
   Rejected: it changes the markup the author wrote, breaks child selectors
   and block content inside inline wrappers; a position comment plus an
@@ -454,8 +488,23 @@ standard, so chirp's own `timeago` draws no warning.
   by Cory ("it should keep class and ID"): rich text from the app's own
   editors needs its classes and anchor ids, DOMPurify keeps both by default,
   and the overlay risk is not code execution. It is documented for untrusted
-  user HTML instead, and `id`'s real hazard, DOM clobbering, is handled by
-  the fixed clobbering list. `name` stays stripped.
+  user HTML instead (render it inside `contain: layout paint`).
+- **A fixed list of `document`/`<form>` property names to drop as ids** (the
+  second build's stand-in for DOMPurify's `SANITIZE_DOM`). Rejected after
+  the PR #155 security review: with `name` stripped, `document` is not
+  reachable by id at all (0 of 511 probed names), so the list guarded
+  nothing there, while the surfaces that are reachable — an `<img id>`
+  inside the app's own `<form>` (about 473 form properties) and `window[id]`
+  for undefined globals — were not what it listed. Dropping `id` on `<img>`
+  and ids starting with `__` closes the first and protects the framework's
+  own globals, for about 0.25 KB less.
+- **GitHub-style `user-content-` id prefixing**, which would close the
+  `window[id]` and id-collision risks outright. Rejected: Cory wants ids kept
+  verbatim, so in-content anchors (`#section-2`) and CSS keep working. The
+  remaining risk is documented for untrusted HTML instead.
+- **Keep any `target` value.** Rejected: a named target sets `window.name` in
+  the opened page (a known XSS gadget) and `_top`/`_parent` escape a frame;
+  `_blank` is the one value rich text needs.
 - **Rename every differing formatter on one side.** Rejected: it doubles the
   vocabulary for behavior nobody depends on.
 - **Identical dates, numbers and suffixes with a fixed en-US locale and UTC.**
@@ -505,22 +554,28 @@ ports or the editor grammars: formatter names are not grammar.
 - Codegen: `compiler/internal/codegen/markup.go` — the placement check
   (positioned errors for a markup formatter mid-chain, in an attribute, a
   prop, a marker argument or a block subject, with arguments, or inside a
-  text-only element) and the lowering to the `'#html'` vnode, hooked into
-  `processChildren` (the node ends a text run) and `emitItem`.
-- Usage scan and define: `plugin/scan.go` sets `HasRawHTML` from the two
-  names and keeps them out of the formatter manifest;
-  `build/options.go` emits `__PUZZLE_HAS_RAW_HTML__`.
+  raw-text element) and the lowering to the `'#html'` vnode, hooked into
+  `processChildren` (the node is a non-text sibling) and `emitItem`.
+- Usage scan and defines: `plugin/scan.go` sets `HasRawHTML` from either
+  name and `HasRawSanitize` from `raw`, and keeps both names out of the
+  formatter manifest; `build/options.go` emits `__PUZZLE_HAS_RAW_HTML__` and
+  `__PUZZLE_HAS_RAW_SANITIZE__`.
 - Runtime: `client-runtime/sanitize.js` (the sanitizer and
   `newline_to_br`), `client-runtime/views/html.js` (the node's mount, patch,
-  move and removal), the `HTML_TAG` constant in `ViewNode.js`, the gated
-  branches in `viewManager.js`, and `ssg/serialize.js`. `raw` is no longer
-  seeded by `FormatterRegistry`, so D31's always-kept list is `escape` alone.
+  move and removal, and the sanitizer gate), the `HTML_TAG` constant in
+  `ViewNode.js`, the gated branches in `viewManager.js`, and
+  `ssg/serialize.js`. `raw` is no longer seeded by `FormatterRegistry`, so
+  D31's always-kept list is `escape` alone.
 - Tests: the `raw` and `newline_to_br` rows of the conformance table,
   `tests/sanitize.test.js` (every corpus case inert when parsed, output
-  idempotent, rich text kept), `tests/raw-html.test.js` (the node's DOM
-  contract, the compiled fixture `tests/fixtures/raw-html` in `{#if}` and
-  list-block rows, prerender plus hybrid takeover), `markup_test.go`, the
-  scan and DCE build tests, and `npm run measure:size`.
+  idempotent, rich text kept, the `id`/`target`/C0 rules, linear-time end
+  tags), `tests/raw-html.test.js` (the node's DOM contract, the compiled
+  fixture `tests/fixtures/raw-html` in `{#if}` and list-block rows,
+  prerender plus hybrid takeover, the sanitizer compiled out),
+  `markup_test.go`, the scan and DCE build tests (a `newline_to_br`-only
+  bundle carries no sanitizer), and `npm run measure:size`. The PR #155
+  security review's fuzz harness (parse5, jsdom and Chromium, about 1.5M
+  inputs) found no script execution.
 
 **(g) Standard-set alignment — PuzzleKit. Built.**
 - `builtins.js`: F1 `capitalize`, F3 `currency`, F7 `divided_by`, F8
@@ -545,12 +600,16 @@ formatter table in [[DOC-LANGUAGE-CORE]].
 
 **Sites (later, its own repo):**
 - `raw` sanitizes at render time. Sites injects it unsanitized today; it must
-  apply the allowlist and canonical output above, built on
-  `SanitizeRichText` (moved into the engine and widened) or on bluemonday
-  configured to match, and pass the shared `raw` and `newline_to_br`
-  conformance rows. The Sites-only compile rules follow too: a markup
-  formatter only ends a text interpolation. Drop `noescape`, `upper`,
-  `lower`.
+  apply the same allowlist, the same attribute rules — `class` kept, `id`
+  kept verbatim except on `<img>` and except a `__` prefix, `name` never,
+  `target` only as `_blank` with `rel="noopener noreferrer"` forced and any
+  author `rel` dropped, URL schemes checked after stripping leading C0
+  controls — and the same canonical output, built on `SanitizeRichText`
+  (moved into the engine and widened) or on bluemonday configured to match,
+  and pass the shared `raw` and `newline_to_br` conformance rows. The
+  compile rules follow too: a markup formatter only ends a text
+  interpolation, and never inside a raw-text element. Drop `noescape`,
+  `upper`, `lower`.
 - `default` keeps `0`; `compact_number` with English suffix data;
   `number_with_delimiter` and the `pluralize` count formatted by the site
   locale; dates rendered in the site's time zone.

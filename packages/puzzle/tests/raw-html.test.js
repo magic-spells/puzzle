@@ -121,6 +121,17 @@ describe('live-HTML node — ViewManager contract', () => {
 		expect(markup(el)).toBe('<div><b>new</b><span>2</span></div>');
 	});
 
+	it('with the sanitizer compiled out, newline_to_br still renders and raw renders nothing', () => {
+		globalThis.__PUZZLE_HAS_RAW_SANITIZE__ = false;
+		try {
+			const el = container();
+			new ViewManager(el).render(h('div', {}, [brText('a\nb'), html('<b>x</b>')]));
+			expect(markup(el)).toBe('<div>a<br>b</div>');
+		} finally {
+			delete globalThis.__PUZZLE_HAS_RAW_SANITIZE__;
+		}
+	});
+
 	it('serializes to the same markup it mounts', async () => {
 		const tree = () =>
 			h('div', {}, [text('a < b '), html('<p title="t">x &amp; y</p><a href="javascript:alert(1)">l</a>'), brText('1\n2')]);

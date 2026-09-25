@@ -22,12 +22,21 @@
  * - Kept tags and attributes: TAG_ATTRS and PLAIN_TAGS below; `title`, `lang`,
  *   `dir`, `class` and `id` on any of them (DOMPurify's defaults). `class`
  *   lets the value use the app's CSS — an overlay risk for untrusted HTML, not
- *   code execution. An `id` naming a `document` or `<form>` property
- *   (CLOBBER_IDS, the DOM-free stand-in for DOMPurify's SANITIZE_DOM) is
- *   dropped, and the kept value is re-emitted from its decoded form so the
- *   browser sees exactly the string that was checked. No `style`, no `name`,
- *   no `on*` handler. A kept `target` on `<a>` always carries
- *   `rel="noopener noreferrer"`; an author `rel` is never kept.
+ *   code execution. No `style`, no `on*` handler, and never `name`: `name` is
+ *   what makes an element reachable through `document.<name>` and a form's
+ *   named properties, so keeping it stripped is what keeps `document`
+ *   unclobberable — it must stay off this allowlist for good.
+ * - `id` is kept verbatim (heading anchors, styling) with two exceptions: never
+ *   on `<img>` — the one kept tag that is a form-associated "listed" element,
+ *   so `<img id="action">` inside the app's own `<form>` would shadow
+ *   `form.action` and hundreds of other form properties — and never when it
+ *   starts with `__`, which keeps `window.__…` framework globals and dev hooks
+ *   out of reach. Any other id still becomes a `window[id]` named property when
+ *   the page has no global of that name; see the security notes in SKILL.md.
+ * - `target` is kept on `<a>` only as `_blank` (any case), re-emitted as
+ *   `target="_blank"` with `rel="noopener noreferrer"`; an author `rel` is
+ *   never kept. Any other value is dropped: a named target sets `window.name`
+ *   in the opened page, and `_top`/`_parent` escape a frame.
  * - URL attributes (href, src, srcset, and action/formaction/xlink:href should
  *   the allowlist ever grow them) keep only http(s) and relative URLs; an `<a
  *   href>` also keeps mailto: and tel:. The check runs on the value after
@@ -72,16 +81,8 @@ const PLAIN_TAGS =
 	' p br hr h1 h2 h3 h4 h5 h6 blockquote pre code b i em strong u s strike sub sup small mark' +
 	' abbr cite dfn kbd q samp var bdi bdo span div address figure figcaption ul dl dt dd' +
 	' table caption thead tbody tfoot tr summary wbr ';
+// Never add `name` here (see the header): it is the clobbering surface.
 const GLOBAL_ATTRS = ' title lang dir class id ';
-// `id` values that would shadow a `document` or `<form>` property through
-// named access (DOM clobbering): `<img id="cookie">` makes `document.cookie`
-// the element. Short on purpose — the properties app and library code reads.
-const CLOBBER_IDS =
-	' location cookie domain referrer URL body head title forms images links scripts' +
-	' anchors embeds plugins currentScript defaultView documentElement activeElement' +
-	' write writeln open close getElementById getElementsByName querySelector' +
-	' querySelectorAll createElement action method target submit reset elements' +
-	' attributes nodeName parentNode ownerDocument ';
 const URL_ATTRS = ' href src srcset action formaction xlink:href ';
 
 /** The attributes a kept tag keeps beyond the global three, or null for a dropped tag. */
@@ -102,15 +103,13 @@ const DROP_RAW = ' script style xmp iframe noembed noframes noscript textarea ti
 // documents; select/head/frameset hold no document markup.
 const DROP_NESTED = ' template object applet svg math select head frameset ';
 
-// The attribute-value decoder's named references: the markup characters and the
-// punctuation that obfuscated URLs spell out (`javascript&colon;`). Anything not
-// here stays literal text, and since URL values are re-emitted with `&` escaped,
-// the browser reads it literally too.
+// The attribute-value decoder's named references: the markup characters, and
+// the ones obfuscated URLs spell a scheme with (`javascript&colon;`,
+// `java&Tab;script:`). Anything not here stays literal text, and since decoded
+// values are re-emitted with `&` escaped, the browser reads it literally too.
 const NAMED = {
-	amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', Tab: '\t',
-	NewLine: '\n', colon: ':', sol: '/', bsol: '\\', num: '#', quest: '?', equals: '=',
-	percnt: '%', period: '.', comma: ',', semi: ';', lpar: '(', rpar: ')', excl: '!',
-	commat: '@', plus: '+', lowbar: '_', dollar: '$', ast: '*', grave: '`',
+	amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0', colon: ':', Tab: '\t',
+	NewLine: '\n',
 };
 
 const WS = /[\t\n\f\r ]/;
@@ -146,17 +145,18 @@ function decodeRefs(s) {
 		const code = dec ? parseInt(dec, 10) : parseInt(hex, 16);
 		return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff)
 			? String.fromCodePoint(code)
-			: '�';
+			: '\ufffd';
 	});
 }
 
 /**
  * A URL the page may keep: relative, http(s), or — for a link — mailto:/tel:.
- * The URL parser strips leading/trailing C0 controls and spaces and removes
- * every tab and newline before it reads a scheme, so the check does the same.
+ * The URL parser strips leading C0 controls and spaces (U+0000–U+0020, which
+ * `trim()` does not all cover) and removes every tab and newline before it
+ * reads a scheme, so the check does the same.
  */
 function safeUrl(url, link) {
-	const scheme = /^([a-z][a-z\d+.-]*):/i.exec(url.replace(/[\t\n\r]/g, ''));
+	const scheme = /^([a-z][a-z\d+.-]*):/i.exec(url.replace(/[\t\n\r]/g, '').replace(/^[\x00-\x20]+/, ''));
 	if (!scheme) return true;
 	const s = scheme[1].toLowerCase();
 	return s === 'http' || s === 'https' || (link && (s === 'mailto' || s === 'tel'));
@@ -166,14 +166,21 @@ function safeUrl(url, link) {
 function keepAttr(allowed, tag, name, value) {
 	if (!has(GLOBAL_ATTRS, name) && !has(allowed, name)) return '';
 	if (name === 'id') {
+		// Checked and re-emitted decoded, so the browser reads the string checked.
 		const id = decodeRefs(value);
-		return has(CLOBBER_IDS, id) ? '' : ` id="${escapeAll(id, true)}"`;
+		return tag === 'img' || id.startsWith('__') ? '' : ` id="${escapeAll(id, true)}"`;
+	}
+	if (name === 'target') {
+		return decodeRefs(value).toLowerCase() === '_blank' ? ' target="_blank"' : '';
 	}
 	if (!has(URL_ATTRS, name)) return ` ${name}="${escapeKeepRefs(value, true)}"`;
 	const url = decodeRefs(value).replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, '');
 	const ok =
 		name === 'srcset'
-			? url.split(',').every((c) => safeUrl(c.trim().split(/[\t\n\f\r ]/)[0], false))
+			? // Every whitespace- or comma-separated token, so a candidate URL is
+				// checked wherever the srcset parser would start one; descriptors
+				// (`2x`, `640w`) carry no scheme and pass.
+				url.split(/[\s,]+/).every((t) => safeUrl(t, false))
 			: safeUrl(url, tag === 'a' && name === 'href');
 	return ok ? ` ${name}="${escapeAll(url, true)}"` : '';
 }
@@ -239,6 +246,9 @@ function rawtextEnd(s, i, name) {
 export function sanitizeHtml(value) {
 	const s = String(value ?? '').replace(/\0/g, '');
 	const open = [];
+	// How many of each tag name are open, so an end tag is O(1) to reject
+	// (a stray `</i>` must not scan the stack: 40k of them would be quadratic).
+	const openCount = Object.create(null);
 	let out = '';
 	// While skipping a DROP_NESTED element: its name and nesting depth.
 	let skip = null;
@@ -279,10 +289,11 @@ export function sanitizeHtml(value) {
 		if (endTag) {
 			if (skip) {
 				if (name === skip && --depth === 0) skip = null;
-			} else if (open.includes(name)) {
+			} else if (openCount[name] > 0) {
 				let top;
 				do {
 					top = open.pop();
+					openCount[top]--;
 					out += `</${top}>`;
 				} while (top !== name);
 			}
@@ -309,16 +320,21 @@ export function sanitizeHtml(value) {
 		if (allowed == null) continue;
 		const seen = new Set();
 		let attrs = '';
+		let blank = false;
 		for (const [attr, v] of tag.attrs) {
 			// The browser keeps the FIRST of a repeated attribute.
 			if (seen.has(attr)) continue;
 			seen.add(attr);
-			attrs += keepAttr(allowed, name, attr, v);
+			const kept = keepAttr(allowed, name, attr, v);
+			if (attr === 'target' && kept) blank = true;
+			attrs += kept;
 		}
-		// A value can never contain a raw `"`, so this only matches the name.
-		if (attrs.includes(' target="')) attrs += ' rel="noopener noreferrer"';
+		if (blank) attrs += ' rel="noopener noreferrer"';
 		out += `<${name}${attrs}>`;
-		if (!has(VOID, name)) open.push(name);
+		if (!has(VOID, name)) {
+			open.push(name);
+			openCount[name] = (openCount[name] || 0) + 1;
+		}
 	}
 	while (open.length) out += `</${open.pop()}>`;
 	return out;

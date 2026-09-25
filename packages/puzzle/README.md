@@ -351,14 +351,15 @@ safe by construction:
 ```
 
 `raw` keeps document markup, links and images, `class` and `id` (DOMPurify's
-defaults), and `target` on links (always with `rel="noopener noreferrer"`). It
-removes `<script>` (with its contents), `<style>`, `<iframe>`, `<object>`,
-`<embed>`, `<svg>`, forms, every `on*` handler, `style`, `name`, an `id` that
-would clobber a `document` property (`cookie`, `location`, …), and any URL that
-is not relative or `http(s)` (links also keep `mailto:` and `tel:`). Because
-`class` survives, sanitized content can use your app's CSS — for untrusted user
-HTML that is a UI-overlay risk (a `fixed inset-0` block over your page), not
-code execution. A markup formatter must be the last formatter of a text
+defaults; no `id` on `<img>` and none starting with `__`), and
+`target="_blank"` on links (always with `rel="noopener noreferrer"`; any other
+target is dropped). It removes `<script>` (with its contents), `<style>`,
+`<iframe>`, `<object>`, `<embed>`, `<svg>`, forms, every `on*` handler,
+`style`, `name`, and any URL that is not relative or `http(s)` (links also keep
+`mailto:` and `tel:`). Because `class` and `id` survive, sanitized content can
+use your app's CSS and name its elements — for untrusted user HTML that is a
+UI-overlay and naming risk (a `fixed inset-0` block over your page, an `id`
+that shadows an undefined global), not code execution. A markup formatter must be the last formatter of a text
 interpolation — in an attribute, a prop, a block subject or mid-chain it is a
 compile error — so an app formatter can never inject markup. Apps that never
 use either formatter ship none of this code.

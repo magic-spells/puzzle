@@ -33,10 +33,13 @@ func isMarkupInterp(n parser.Node) bool {
 	return ok && len(in.Formatters) > 0 && IsMarkupFormatter(in.Formatters[len(in.Formatters)-1].Name)
 }
 
-// textOnlyTags hold text content in the HTML parser (RAWTEXT/RCDATA), so
-// markup inside them would never render as markup — and inside <script> the
-// sanitized text would run as code.
-var textOnlyTags = map[string]bool{"script": true, "style": true, "textarea": true, "title": true}
+// textOnlyTags hold text content in the HTML parser (RAWTEXT/RCDATA/PLAINTEXT;
+// noscript whenever scripting is on), so markup inside them would never render
+// as markup — and inside <script> the sanitized text would run as code.
+var textOnlyTags = map[string]bool{
+	"script": true, "style": true, "textarea": true, "title": true, "noscript": true,
+	"xmp": true, "iframe": true, "noembed": true, "noframes": true, "plaintext": true,
+}
 
 // checkMarkupFormatters rejects every placement of a markup formatter other
 // than the last link of a text interpolation, with a positioned error. It runs

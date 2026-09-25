@@ -618,6 +618,11 @@ export default class Home extends PuzzleView {}
 			if usage.Features().RawHTML != tt.want {
 				t.Errorf("Features().RawHTML = %v, want %v", usage.Features().RawHTML, tt.want)
 			}
+			// Only `raw` keeps the sanitizer; `newline_to_br` alone does not.
+			wantSanitize := tt.want && strings.Contains(tt.template+tt.skeleton, "| raw")
+			if usage.HasRawSanitize != wantSanitize {
+				t.Errorf("HasRawSanitize = %v, want %v", usage.HasRawSanitize, wantSanitize)
+			}
 			for _, name := range []string{"raw", "newline_to_br"} {
 				if usage.Formatters[name] {
 					t.Errorf("markup formatter %q entered the manifest set: %v", name, usage.Formatters)

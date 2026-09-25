@@ -156,27 +156,42 @@ sanitized** — there is no unsanitized escape hatch, by design:
 
 - **What survives:** paragraphs, headings, lists, tables, `b`/`i`/`em`/
   `strong`/`code`/`pre`/`blockquote`/`br`/`hr`, `span`/`div`, links
-  (`<a href target>` — a kept `target` always gets `rel="noopener noreferrer"`)
-  and images (`<img src srcset alt width height>`), plus `class`, `id`,
-  `title`, `lang` and `dir` on any of them (DOMPurify's defaults).
+  (`<a href>`, plus `target` only as `_blank`, which always gets
+  `rel="noopener noreferrer"`) and images (`<img src srcset alt width
+  height>`), plus `class`, `id`, `title`, `lang` and `dir` (DOMPurify's
+  defaults). `id` is kept verbatim for heading anchors and styling — except
+  on `<img>` (it would clobber properties of a `<form>` it lands in) and
+  except an id starting with `__` (framework globals and dev hooks).
 - **What is removed:** `<script>` with its contents; `<style>`, `<iframe>`,
   `<object>`, `<embed>`, `<svg>`, `<math>`, `<template>`, `<noscript>` with
   their contents; forms and inputs (their text stays); every `on*` handler;
-  `style`, `name` and any author `rel`; an `id` that names a `document` or
-  `<form>` property (`cookie`, `location`, `forms`, `body`, `submit`, … — DOM
-  clobbering); and any `href`/`src`/`srcset` URL that is not relative or
-  `http(s)` (links also keep `mailto:`/`tel:`) — obfuscated `JaVaScRiPt:`,
-  entity-encoded and whitespace-split schemes included.
-- **`class` survives, so content can use your app's CSS.** For HTML your own
-  editors write, that is the point (Tailwind `prose` tweaks, callouts). For
-  untrusted user HTML it is a UI-overlay risk — a `fixed inset-0 z-50` block
-  can cover your page or fake a dialog — not code execution. Render user HTML
-  inside a container that clips it (`relative overflow-hidden`, `contain:
-  paint`), or prefer `newline_to_br` for user-typed text.
+  `style`, `name` (never kept — it is what reaches `document.<name>`) and any
+  author `rel`; any `target` other than `_blank` (a named target sets
+  `window.name` in the opened page; `_top`/`_parent` escape a frame); and any
+  `href`/`src`/`srcset` URL that is not relative or `http(s)` (links also
+  keep `mailto:`/`tel:`) — obfuscated `JaVaScRiPt:`, entity-encoded,
+  control-character-prefixed and whitespace-split schemes included.
+- **`class` and `id` survive, so untrusted HTML can reach your CSS and your
+  global names.** For HTML your own editors write, that is the point
+  (Tailwind `prose` tweaks, callouts, `#section` anchors). For untrusted user
+  HTML it is a UI and naming risk, not code execution:
+  - `class` can pull in your overlay utilities — a `fixed inset-0 z-50` block
+    can cover the page or fake a dialog. Render user HTML inside a container
+    that contains it: `contain: layout paint` (plus `relative
+    overflow-hidden`), so fixed/absolute children are clipped to the box.
+  - Every kept `id` becomes a `window[id]` named property when the page has no
+    global of that name: `<a id="CONFIG" href="…">` makes `window.CONFIG` that
+    element for code that reads an optional global (`window.CONFIG ??
+    defaults`). Don't read optional globals by bare name, and expect a user
+    id to collide with your own ids — skip-link targets, `label for`,
+    `aria-labelledby`. (GitHub-style `user-content-` id prefixing would avoid
+    both; PuzzleKit keeps ids verbatim instead, so in-content anchors work.)
+  - Prefer `newline_to_br` (or plain `{ text }`) for user-typed text.
 - **`raw` must be the LAST formatter of a TEXT interpolation.** Anything else
   is a compile error: `{ x | raw | upcase }`, `title={ x | raw }`,
   `<Card body={ x | raw } />`, `{#if x | raw}`, `raw(…)` with arguments, or
-  `{ x | raw }` inside `<script>`/`<style>`/`<textarea>`/`<title>`. Pass
+  `{ x | raw }` inside a raw-text element (`<script>`, `<style>`, `<textarea>`,
+  `<title>`, `<noscript>`, `<xmp>`, `<iframe>`, …). Pass
   markup to a component as a string prop and pipe it through `raw` inside the
   component's own template.
 - **App formatters can't inject markup.** Registering your own `raw` does
@@ -187,9 +202,10 @@ sanitized** — there is no unsanitized escape hatch, by design:
   markup inert, not trustworthy: a user can still post links and images.
   Prefer `newline_to_br` (or plain `{ text }`) for user-typed text, and keep
   `raw` for CMS/rich-text fields.
-- The output renders as sibling nodes with no wrapper element, prerenders
-  identically in `hybrid`/`static` output, and costs ~2.5 KB gzip — only in
-  apps that use `raw` or `newline_to_br`.
+- The output renders as sibling nodes with no wrapper element and prerenders
+  identically in `hybrid`/`static` output. Cost: ~2.3 KB gzip in an app that
+  uses `raw` (the sanitizer), ~0.4 KB in one that only uses `newline_to_br`,
+  nothing otherwise.
 
 Rules that bite:
 

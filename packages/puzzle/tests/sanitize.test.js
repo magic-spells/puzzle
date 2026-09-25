@@ -87,12 +87,12 @@ function executableSurface(html) {
 			if (name.startsWith('on')) problems.push(`${tag}[${name}]`);
 			if (name === 'style' || name === 'name') problems.push(`${tag}[${name}]`);
 			if (name === 'rel' && attr.value !== 'noopener noreferrer') problems.push(`${tag}[rel=${attr.value}]`);
-			// DOM clobbering: an id naming a document or <form> property.
-			if (name === 'id' && (attr.value in document || attr.value in document.createElement('form'))) {
+			// Clobbering: an id on <img> (a form-listed element) or a `__` id.
+			if (name === 'id' && (tag === 'img' || attr.value.startsWith('__'))) {
 				problems.push(`${tag}[id=${attr.value}]`);
 			}
-			if (name === 'target' && el.getAttribute('rel') !== 'noopener noreferrer') {
-				problems.push(`${tag}[target] without rel=noopener noreferrer`);
+			if (name === 'target' && (attr.value !== '_blank' || el.getAttribute('rel') !== 'noopener noreferrer')) {
+				problems.push(`${tag}[target=${attr.value}] rel=${el.getAttribute('rel')}`);
 			}
 			if (URL_ATTRS.includes(name)) {
 				const candidates = name === 'srcset' ? attr.value.split(',').map((c) => c.trim().split(/\s+/)[0]) : [attr.value];
@@ -169,24 +169,57 @@ describe('class, id and target (DOMPurify defaults)', () => {
 		);
 	});
 
-	it.each(['location', 'cookie', 'domain', 'forms', 'images', 'body', 'write', 'action', 'submit', 'elements'])(
-		'drops a clobbering id="%s"',
-		(id) => {
-			expect(sanitizeHtml(`<img id="${id}" src="/a.png"><p id="${id}">x</p>`)).toBe('<img src="/a.png"><p>x</p>');
-		}
-	);
+	it('keeps ids verbatim, but never on <img> and never starting with __', () => {
+		expect(sanitizeHtml('<p id="cookie">x</p><h2 id="forms">y</h2>')).toBe('<p id="cookie">x</p><h2 id="forms">y</h2>');
+		// <img> is the one kept tag that is form-listed: <img id="action"> in the
+		// app's own <form> would shadow form.action.
+		expect(sanitizeHtml('<img id="action" src="/a.png">')).toBe('<img src="/a.png">');
+		expect(sanitizeHtml('<p id="__PUZZLE_DEV__">x</p><p id="_&#95;x">y</p>')).toBe('<p>x</p><p>y</p>');
+	});
+
+	it('an <img id> cannot clobber a form property in the browser', () => {
+		const form = document.createElement('form');
+		form.innerHTML = sanitizeHtml('<img id="action" src="/a.png"><img id="submit">');
+		expect(typeof form.submit).toBe('function');
+		expect(form.getAttribute('action')).toBe(null);
+		expect(form.action).not.toBeInstanceOf(HTMLElement);
+	});
 
 	it('checks the decoded id and re-emits it decoded', () => {
-		expect(sanitizeHtml('<p id="c&#111;okie">x</p>')).toBe('<p>x</p>');
+		expect(sanitizeHtml('<p id="c&#111;okie">x</p>')).toBe('<p id="cookie">x</p>');
 		expect(sanitizeHtml('<p id="a&amp;b">x</p>')).toBe('<p id="a&amp;b">x</p>');
 	});
 
-	it('forces rel="noopener noreferrer" on a kept target and never keeps an author rel', () => {
+	it('keeps target only as _blank, forces rel="noopener noreferrer", never keeps an author rel', () => {
 		expect(sanitizeHtml('<a href="/x" target="_blank" rel="opener">x</a>')).toBe(
 			'<a href="/x" target="_blank" rel="noopener noreferrer">x</a>'
 		);
+		expect(sanitizeHtml('<a href="/x" target="_Blank">x</a>')).toBe(
+			'<a href="/x" target="_blank" rel="noopener noreferrer">x</a>'
+		);
+		for (const t of ['_top', '_parent', '_self', 'win', ' _blank', '_blank ']) {
+			expect(sanitizeHtml(`<a href="/x" target="${t}">x</a>`)).toBe('<a href="/x">x</a>');
+		}
 		expect(sanitizeHtml('<a href="/x" rel="opener">x</a>')).toBe('<a href="/x">x</a>');
 		expect(sanitizeHtml('<p target="_blank">x</p>')).toBe('<p>x</p>');
+		// The rel decision is a flag, not a substring test on the emitted attributes.
+		expect(sanitizeHtml('<p title="<a target=">x</p>')).toBe('<p title="&lt;a target=">x</p>');
+	});
+
+	it('catches a scheme behind leading C0 controls in srcset and href', () => {
+		for (const c of ['\u0001', '&#1;', '\u001f', '&#x0E;']) {
+			expect(sanitizeHtml(`<img srcset="a.png 1x,${c}javascript:alert(1) 2x">`)).toBe('<img>');
+			expect(sanitizeHtml(`<a href="${c}javascript:alert(1)">x</a>`)).toBe('<a>x</a>');
+		}
+	});
+
+	it('handles end tags in linear time', () => {
+		const input = '<b>'.repeat(40000) + '</i>'.repeat(40000);
+		const t0 = performance.now();
+		const out = sanitizeHtml(input);
+		const ms = performance.now() - t0;
+		expect(out.endsWith('</b>')).toBe(true);
+		expect(ms).toBeLessThan(500);
 	});
 });
 

@@ -2,7 +2,8 @@
  * The live-HTML node (D174): what an interpolation ending in `raw` or
  * `newline_to_br` renders as. Every export is reached from viewManager.js only
  * behind the inline `__PUZZLE_HAS_RAW_HTML__` probe, so an app whose templates
- * never use either formatter ships neither this module nor the sanitizer.
+ * never use either formatter ships neither this module nor the sanitizer, and
+ * the sanitizer itself also needs `__PUZZLE_HAS_RAW_SANITIZE__` (see htmlOf).
  *
  * DOM shape: `vnode.el` is an empty comment that holds the position, and
  * `vnode.nodes` are the parsed nodes right after it. The comment comes FIRST so
@@ -15,10 +16,20 @@
 
 import { sanitizeHtml, newlineToBr } from '../sanitize.js';
 
-/** The markup a live-HTML vnode renders — shared with the SSG serializer. */
+/**
+ * The markup a live-HTML vnode renders — shared with the SSG serializer. The
+ * sanitizer sits behind its own define, `__PUZZLE_HAS_RAW_SANITIZE__` (set only
+ * when a template pipes to `raw`), so an app that uses just `newline_to_br`
+ * ships the escape-and-<br> helper without the sanitizer. A `raw` vnode that
+ * reaches such a build (a template the usage scan never read) renders nothing:
+ * never unsanitized markup.
+ */
 export function htmlOf(vnode) {
 	const { value, br } = vnode.attrs;
-	return br ? newlineToBr(value) : sanitizeHtml(value);
+	if (br) return newlineToBr(value);
+	return typeof __PUZZLE_HAS_RAW_SANITIZE__ === 'undefined' || __PUZZLE_HAS_RAW_SANITIZE__
+		? sanitizeHtml(value)
+		: '';
 }
 
 // Parsed through <template>: its content document is inert, so nothing in the
