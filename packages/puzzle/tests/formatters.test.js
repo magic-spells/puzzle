@@ -269,8 +269,8 @@ describe('FormatterRegistry', () => {
 			expect(f.pluralize(0, 'todo')).toBe('0 todos');
 			expect(f.pluralize(2, 'person', 'people')).toBe('2 people');
 			expect(f.pluralize(1, 'man', 'men')).toBe('1 man');
-			// The count is formatted in the viewer's locale.
-			expect(f.pluralize(1234, 'comment')).toBe(`${new Intl.NumberFormat().format(1234)} comments`);
+			// The count is formatted in the viewer's locale — pinned for de-DE in
+			// the child-process block at the end of this file.
 			// A missing count prints nothing.
 			expect(f.pluralize(undefined, 'todo')).toBe('');
 			expect(f.pluralize(null, 'todo')).toBe('');
@@ -359,17 +359,13 @@ describe('FormatterRegistry', () => {
 			expect(f.percentage(25.6, '1')).toBe('25.6%'); // → 1
 		});
 
-		it('number_with_delimiter follows the viewer locale by default', () => {
-			const expected = (n, digits) =>
-				new Intl.NumberFormat(undefined, {
-					minimumFractionDigits: digits,
-					maximumFractionDigits: digits,
-				}).format(n);
-			expect(f.number_with_delimiter(1234567)).toBe(expected(1234567, 0));
-			// The decimals print as given — never Intl's default three-digit rounding.
-			expect(f.number_with_delimiter(1234.5678)).toBe(expected(1234.5678, 4));
-			expect(f.number_with_delimiter(1234.5)).toBe(expected(1234.5, 1));
+		// The viewer-locale defaults (number_with_delimiter, the pluralize count,
+		// compact_number) are pinned against real de-DE strings in the
+		// child-process block at the end of this file; here only the
+		// locale-independent paths.
+		it('number_with_delimiter prints nothing for a missing value', () => {
 			expect(f.number_with_delimiter(null)).toBe('');
+			expect(f.number_with_delimiter(undefined)).toBe('');
 		});
 
 		it('number_with_delimiter with an explicit delimiter forces it and keeps "." decimals', () => {
@@ -379,11 +375,7 @@ describe('FormatterRegistry', () => {
 			expect(f.number_with_delimiter(-1234567.5, ' ')).toBe('-1 234 567.5');
 		});
 
-		it('compact_number shortens with a localized suffix', () => {
-			const compact = new Intl.NumberFormat(undefined, { notation: 'compact' });
-			for (const n of [847, 1234, 45000, 3400000]) {
-				expect(f.compact_number(n)).toBe(compact.format(n));
-			}
+		it('compact_number fails soft on a missing or non-numeric value', () => {
 			expect(f.compact_number(null)).toBe('');
 			expect(f.compact_number('abc')).toBe('abc');
 		});
@@ -792,7 +784,10 @@ describe('standard formatter conformance table (D174)', () => {
 		const script = `
 import * as f from ${JSON.stringify(builtins)};
 const cases = ${JSON.stringify(cases)};
-process.stdout.write(JSON.stringify(cases.map((c) => f[c.name](c.input ?? undefined, ...c.args) ?? null)));
+const fromJSON = ${fromJSON.toString()};
+process.stdout.write(
+	JSON.stringify(cases.map((c) => f[c.name](fromJSON(c.input), ...c.args.map(fromJSON)) ?? null)),
+);
 `;
 		const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
 			cwd: fileURLToPath(new URL('..', import.meta.url)),
@@ -800,5 +795,62 @@ process.stdout.write(JSON.stringify(cases.map((c) => f[c.name](c.input ?? undefi
 			encoding: 'utf8',
 		});
 		expect(JSON.parse(out)).toEqual(cases.map((c) => c.expect));
+	});
+});
+
+// The locale-rendered formatters follow the VIEWER's locale (Intl's default), so
+// an in-process expectation built from Intl would move with the process locale
+// and never fail. Pin real strings instead: a child process whose ICU default
+// locale is de-DE, set through LC_ALL/LANG, which ICU reads at startup on POSIX.
+// Windows derives the ICU default locale from the user's system settings, not
+// from these variables, so the block is skipped there (CI runs vitest on Linux
+// only; the Windows job is Go + CLI smoke).
+describe.skipIf(process.platform === 'win32')('locale-rendered formatters in a de-DE viewer locale (D174)', () => {
+	const builtins = new URL('../client-runtime/formatters/builtins.js', import.meta.url).href;
+	const script = `
+import * as f from ${JSON.stringify(builtins)};
+process.stdout.write(JSON.stringify({
+	locale: new Intl.NumberFormat().resolvedOptions().locale,
+	delimited: f.number_with_delimiter(1234.5),
+	delimitedWhole: f.number_with_delimiter(1234567),
+	delimitedDecimals: f.number_with_delimiter(1234.5678),
+	forced: f.number_with_delimiter(1234.5, ','),
+	pluralMany: f.pluralize(1234, 'Kommentar', 'Kommentare'),
+	pluralOne: f.pluralize(1, 'Kommentar', 'Kommentare'),
+	compactSmall: f.compact_number(847),
+	compactMillions: f.compact_number(3400000),
+}));
+`;
+	const results = JSON.parse(
+		execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+			cwd: fileURLToPath(new URL('..', import.meta.url)),
+			env: { ...process.env, LC_ALL: 'de_DE.UTF-8', LANG: 'de_DE.UTF-8' },
+			encoding: 'utf8',
+		}),
+	);
+
+	it('spawned the child in the locale it asked for', () => {
+		// Guards the mechanism: if LC_ALL stopped reaching ICU, every assertion
+		// below would fail for the wrong reason — fail here with the real one.
+		expect(results.locale).toBe('de-DE');
+	});
+
+	it('number_with_delimiter groups and marks decimals the German way, keeping the decimals as given', () => {
+		expect(results.delimited).toBe('1.234,5');
+		expect(results.delimitedWhole).toBe('1.234.567');
+		expect(results.delimitedDecimals).toBe('1.234,5678');
+		// An explicit delimiter overrides the locale and keeps "." as the decimal point.
+		expect(results.forced).toBe('1,234.5');
+	});
+
+	it('pluralize formats the count in the locale', () => {
+		expect(results.pluralMany).toBe('1.234 Kommentare');
+		expect(results.pluralOne).toBe('1 Kommentar');
+	});
+
+	it('compact_number uses the locale suffix', () => {
+		expect(results.compactSmall).toBe('847');
+		// CLDR separates the number and the German suffix with a no-break space.
+		expect(results.compactMillions).toBe('3,4\u00A0Mio.');
 	});
 });

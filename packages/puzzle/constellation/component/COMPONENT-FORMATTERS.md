@@ -57,6 +57,13 @@ notes:
       matched the runtime, and the card was rewritten to state what the code actually does. Verified
       at this sha with the framework suite green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: gotcha
+    text: >-
+      `in_timezone(...) | datetime('iso')` (and `time('iso')`) prints the TARGET zone's wall clock
+      with the VIEWER's offset — e.g. Tokyo's 09:00 stamped `-04:00` for a New York viewer — because
+      `in_timezone` returns a shifted local Date, not a zoned value. The Intl presets look right
+      because they print no offset. Known limitation of `in_timezone`'s shifted-Date contract; not
+      an `iso` bug.
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 

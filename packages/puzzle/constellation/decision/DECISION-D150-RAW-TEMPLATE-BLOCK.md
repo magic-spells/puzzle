@@ -30,7 +30,7 @@ notes:
 
 Template braces always enter Puzzle grammar, so static JSON, JavaScript, CSS,
 and examples containing literal block syntax cannot be written directly in a
-template. Value-level `escape`, `raw`, and `noescape` formatters run after the
+template. Value-level `escape` and `raw` formatters run after the
 lexer and cannot solve a lexer failure. `{#comment}` already proves that a block
 body can be located without lexing it, but comments discard that body.
 
