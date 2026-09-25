@@ -15,9 +15,9 @@ import "strings"
 //   (D30).
 //
 //   <Slot name="x" item={ item }>…fallback…</Slot> — a NAMED slot. `name` is
-//   static, non-empty, and per-template-unique; "default" and "children" are
+//   static, non-empty, and unique per render path; "default" and "children" are
 //   reserved and steer to <Children/>. Other valued attrs hand data to a scoped
-//   Snippet. Local shape checks run in slotMarkerFromAttrs; the per-body
+//   Snippet. Local shape checks run in slotMarkerFromAttrs; the per-render-path
 //   uniqueness check runs in validateSlots.
 //
 //   Call site (<Card><h2 slot="header">…</h2></Card>): the parser's job is
@@ -176,7 +176,8 @@ func snippetMarkerAttrs(attrs []Attr, file string) (fits string, params []string
 }
 
 // validateSlots runs the per-body named-slot post-pass over a parsed template or
-// skeleton root: it rejects duplicate slot names within the body and validates
+// skeleton root: it rejects a marker declared twice on one render path (D173
+// V13 — exclusive branches are separate paths) and validates
 // the call-site `slot` rules on every component invocation. Called once per body
 // (template and skeleton separately) so the same slot name is legal in each.
 func validateSlots(root *Element, file string) *ParseError {
@@ -205,12 +206,14 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 				seen[node.Name] = node.Pos
 			} else {
 				// The default marker (<Children/> or <Slot/>, D134) is unique per
-				// body too: distinct AST declarations share one reconciliation
-				// namespace even when they hand args to a snippet. One marker
-				// declaration inside a {#for} remains legal because this walk visits
-				// that AST site once; runtime stamping supplies the N instances. Both
-				// spellings produce a Name-less *Slot and key under "default" (a
-				// reserved, unreachable name — slotMarkerFromAttrs rejects it).
+				// render path too (D173 V13 — exclusive {#if}/{#case} branches are
+				// separate paths, see walkBranches): distinct AST declarations on one
+				// path share one reconciliation namespace even when they hand args to
+				// a snippet. One marker declaration inside a {#for} remains legal
+				// because this walk visits that AST site once; runtime stamping
+				// supplies the N instances. Both spellings produce a Name-less *Slot
+				// and key under "default" (a reserved, unreachable name —
+				// slotMarkerFromAttrs rejects it).
 				if prev, dup := seen["default"]; dup {
 					return errAt(file, node.Pos, "duplicate default marker (<Children/>/<Slot/>) — already declared at %d:%d", prev.Line, prev.Col)
 				}
@@ -238,7 +241,7 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 			// D71 named-forwarding rejection applies through nested elements,
 			// control flow, and deeper component invocations alike. `seen` still
 			// flows through: a default marker inside AND outside the invocation
-			// would splice the same default bucket twice, so the per-body
+			// would splice the same default bucket twice, so the per-path
 			// uniqueness check must keep counting in here.
 			for _, child := range node.Children {
 				if snippet, ok := child.(*Snippet); ok {
@@ -263,26 +266,60 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 		case *Snippet:
 			return errAt(file, node.Pos, "<Snippet> is only allowed as a direct child of a component invocation")
 		case *If:
-			if perr := walkSlots(node.Then, file, seen, inCallSite); perr != nil {
-				return perr
-			}
-			if perr := walkSlots(node.Else, file, seen, inCallSite); perr != nil {
+			// Exclusive branches are separate render paths (D173 V13): each
+			// branch starts from the markers declared before the block, and
+			// whatever either branch declares is on the path of everything after
+			// it. {:else if} and {#unless} desugar to nested *If, so they follow.
+			if perr := walkBranches(file, seen, inCallSite, node.Then, node.Else); perr != nil {
 				return perr
 			}
 		case *For:
+			// A loop body is ONE declaration site visited once; runtime iteration
+			// supplies the N instances (the snippet stamp case).
 			if perr := walkSlots(node.Body, file, seen, inCallSite); perr != nil {
 				return perr
 			}
 		case *Case:
+			branches := make([][]Node, 0, len(node.Clauses)+1)
 			for _, cl := range node.Clauses {
-				if perr := walkSlots(cl.Body, file, seen, inCallSite); perr != nil {
-					return perr
-				}
+				branches = append(branches, cl.Body)
 			}
-			if perr := walkSlots(node.Else, file, seen, inCallSite); perr != nil {
+			if perr := walkBranches(file, seen, inCallSite, append(branches, node.Else)...); perr != nil {
 				return perr
 			}
 		}
+	}
+	return nil
+}
+
+// walkBranches validates the mutually exclusive branches of one control-flow
+// block. At most one default marker, and one <Slot name="x"> per name, may sit
+// on any single render path (D173 V13): each branch is walked against its own
+// copy of the markers already on the path, so the same marker in two exclusive
+// branches is legal, and every marker a branch declares is then merged back into
+// `seen`, so a marker after the block (or in a later, non-exclusive block)
+// still collides with it.
+func walkBranches(file string, seen map[string]Position, inCallSite bool, branches ...[]Node) *ParseError {
+	merged := map[string]Position{}
+	for _, branch := range branches {
+		path := make(map[string]Position, len(seen))
+		for k, v := range seen {
+			path[k] = v
+		}
+		if perr := walkSlots(branch, file, path, inCallSite); perr != nil {
+			return perr
+		}
+		for k, v := range path {
+			if _, onPath := seen[k]; onPath {
+				continue
+			}
+			if _, dup := merged[k]; !dup {
+				merged[k] = v
+			}
+		}
+	}
+	for k, v := range merged {
+		seen[k] = v
 	}
 	return nil
 }

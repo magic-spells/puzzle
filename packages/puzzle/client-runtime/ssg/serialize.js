@@ -15,8 +15,8 @@
  * - attribute handling mirrors setAttr(): `key`/`island`/`ref`/`flip`/`@event`
  *   directives are dropped, controlled value is emitted as real HTML for each form element
  *   (`input value`, `textarea` text, selected `<option>`), truthy boolean props
- *   and `true` become bare attrs, `false`/null/undefined omit, everything else is
- *   an escaped string;
+ *   and `true` become bare attrs, `false`/null/undefined and an object omit, a
+ *   list joins with spaces (D173 V9), everything else is an escaped string;
  * - a component vnode renders inline with NO wrapper element (D20), adopting a
  *   pinned `instance` or constructing + preloading a fresh one;
  * - slot markers are expanded via the shared expandSlots() (viewManager.js), so
@@ -104,20 +104,25 @@ function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false
 		if (name === 'value' && (tag === 'select' || tag === 'textarea')) continue;
 		if (name === 'selected' && controlledSelect && tag === 'option') continue;
 		if (name === 'value') {
-			out += ` value="${escapeAttr(stringify(value))}"`;
+			out += ` value="${escapeAttr(stringify(value, 0, ' '))}"`;
 		} else if (BOOLEAN_PROPS.has(name)) {
 			if (value) out += ` ${name}`;
-		} else if (value === false || value == null) {
-			// Omitted to mirror ViewManager attribute semantics, but an undefined
-			// binding still gets its development diagnostic — the result is
-			// discarded, the call is only there for the warning. The attribute NAME is
-			// the dedup label (display.js keys warned-once by it); without it every
-			// unlabeled undefined collapsed into one '' key and only the first warned.
-			if (value === undefined) stringify(value, name);
+		} else if (
+			value === false ||
+			value == null ||
+			(typeof value === 'object' && !Array.isArray(value))
+		) {
+			// Omitted to mirror ViewManager attribute semantics (an object omits too,
+			// D173 V9), but an undefined or object binding still gets its development
+			// diagnostic — the result is discarded, the call is only there for the
+			// warning. The attribute NAME is the dedup label (display.js keys
+			// warned-once by it); without it every unlabeled undefined collapsed into
+			// one '' key and only the first warned.
+			if (value !== false && value !== null) stringify(value, name);
 		} else if (value === true) {
 			out += ` ${name}`;
 		} else {
-			out += ` ${name}="${escapeAttr(stringify(value))}"`;
+			out += ` ${name}="${escapeAttr(stringify(value, 0, ' '))}"`;
 		}
 	}
 	if (selected) out += ' selected';
@@ -182,7 +187,7 @@ async function serializeNode(vnode, ctx, selectState) {
 	if (tag === 'select' && 'value' in vnode.attrs) {
 		// Single-select semantics: the first matching option wins. multiple-select
 		// array matching is deliberately out of scope for the D67 SSG pass.
-		childSelectState = { value: stringify(vnode.attrs.value), matched: false };
+		childSelectState = { value: stringify(vnode.attrs.value, 0, ' '), matched: false };
 	}
 
 	let selected = false;
@@ -202,7 +207,7 @@ async function serializeNode(vnode, ctx, selectState) {
 	if (tag === 'textarea' && 'value' in vnode.attrs) {
 		// Pathological template case: if a textarea has both value={...} and
 		// children, the browser's value property wins, so SSG replaces the children.
-		return `${open}${escapeText(stringify(vnode.attrs.value))}</${tag}>`;
+		return `${open}${escapeText(stringify(vnode.attrs.value, 0, ' '))}</${tag}>`;
 	}
 
 	if (tag === 'script' || tag === 'style') {
@@ -231,7 +236,7 @@ async function serializeChildren(children, ctx, selectState) {
 
 function optionValue(vnode) {
 	if (Object.prototype.hasOwnProperty.call(vnode.attrs, 'value')) {
-		return stringify(vnode.attrs.value);
+		return stringify(vnode.attrs.value, 0, ' ');
 	}
 	return collectTextContent(vnode.children);
 }
