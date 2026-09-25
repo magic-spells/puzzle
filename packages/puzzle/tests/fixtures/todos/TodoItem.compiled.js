@@ -84,7 +84,7 @@ TodoItem.prototype.render = function () {
         new ViewNode('text', { value: String(__d.todo.text) }),
       ]),
       new ViewNode('span', { class: 'ml-4 shrink-0 font-mono text-[11px] text-faint tabular-nums' }, [
-        new ViewNode('text', { value: String((__f["date"] || __f.__missing("date"))(__d.todo.createdAt, 'short')) }),
+        new ViewNode('text', { value: String((__f["datetime"] || __f.__missing("datetime"))(__d.todo.createdAt, 'short')) }),
       ]),
       new ViewNode('button', {
         class: 'ml-3 w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-xl leading-none text-faint hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all',

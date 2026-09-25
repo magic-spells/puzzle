@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { FormatterRegistry, makeFormatterRegistry } from '../client-runtime/formatters.js';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import {
+	FormatterRegistry,
+	makeFormatterRegistry,
+	STANDARD_FORMATTERS,
+} from '../client-runtime/formatters.js';
 import fullBuiltins from '../client-runtime/formatters/builtins-all.js';
 import builtinNames from '../client-runtime/formatters/builtins.json';
-import { CalendarDate } from '../client-runtime/dates.js';
+import conformance from './conformance/formatters.json';
 
 const f = new FormatterRegistry().getAll();
 
@@ -25,7 +31,7 @@ describe('built-in Intl formatter caches', () => {
 		const { date } = await import('../client-runtime/formatters/builtins.js');
 
 		expect(date('2026-07-24', 'long', 'en-US')).toBe('July 24, 2026');
-		expect(date('2026-01-01', 'long', 'en-US')).toBe('January 01, 2026');
+		expect(date('2026-01-01', 'long', 'en-US')).toBe('January 1, 2026');
 		expect(constructor).toHaveBeenCalledTimes(1);
 	});
 
@@ -34,21 +40,36 @@ describe('built-in Intl formatter caches', () => {
 		const constructor = spyOnIntlConstructor('DateTimeFormat');
 		const { date } = await import('../client-runtime/formatters/builtins.js');
 
-		expect(date('2026-07-24', 'date', 'en-US')).toBe('07/24/2026');
+		expect(date('2026-07-24', 'short', 'en-US')).toBe('7/24/26');
 		expect(date('2026-07-24', 'long', 'en-US')).toBe('July 24, 2026');
-		expect(date('2026-01-01', 'date', 'en-US')).toBe('01/01/2026');
-		expect(date('2026-01-01', 'long', 'en-US')).toBe('January 01, 2026');
+		expect(date('2026-01-01', 'short', 'en-US')).toBe('1/1/26');
+		expect(date('2026-01-01', 'long', 'en-US')).toBe('January 1, 2026');
 		expect(constructor).toHaveBeenCalledTimes(2);
 	});
 
-	it('shares the resolved date cache entry across unknown presets', async () => {
+	it('shares the medium cache entry across unknown presets', async () => {
 		vi.resetModules();
 		const constructor = spyOnIntlConstructor('DateTimeFormat');
+		vi.spyOn(console, 'error').mockImplementation(() => {});
 		const { date } = await import('../client-runtime/formatters/builtins.js');
 
-		expect(date('2026-07-24', 'bogus-one', 'en-US')).toBe('07/24/2026');
-		expect(date('2026-01-01', 'bogus-two', 'en-US')).toBe('01/01/2026');
+		expect(date('2026-07-24', 'bogus-one', 'en-US')).toBe('Jul 24, 2026');
+		expect(date('2026-01-01', 'bogus-two', 'en-US')).toBe('Jan 1, 2026');
+		expect(date('2026-01-01', 'medium', 'en-US')).toBe('Jan 1, 2026');
 		expect(constructor).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps date, time and datetime presets in separate cache entries', async () => {
+		vi.resetModules();
+		const constructor = spyOnIntlConstructor('DateTimeFormat');
+		const { date, time, datetime } = await import('../client-runtime/formatters/builtins.js');
+		const at = new Date(2026, 8, 24, 15, 4, 5);
+
+		expect(date(at, 'short', 'en-US')).toBe('9/24/26');
+		expect(time(at, 'short', 'en-US')).toBe('3:04 PM');
+		expect(datetime(at, 'short', 'en-US')).toBe('9/24/26, 3:04 PM');
+		expect(date(at, 'short', 'en-US')).toBe('9/24/26');
+		expect(constructor).toHaveBeenCalledTimes(3);
 	});
 
 	it('leaves invalid locales uncached without poisoning a later valid call', async () => {
@@ -76,13 +97,13 @@ describe('built-in Intl formatter caches', () => {
 		// private, so the construction count is the observable proxy for its size:
 		// keying on the list would make the repeated `list` calls hit.)
 		expect(date('2026-07-24', 'long', list)).toBe('July 24, 2026');
-		expect(date('2026-01-01', 'long', list)).toBe('January 01, 2026');
+		expect(date('2026-01-01', 'long', list)).toBe('January 1, 2026');
 		expect(date('2026-07-24', 'long', ['en-US'])).toBe('July 24, 2026');
 		expect(constructor).toHaveBeenCalledTimes(3);
 
 		// And they leave the string cache alone: one construction, then hits.
 		expect(date('2026-07-24', 'long', 'en-US')).toBe('July 24, 2026');
-		expect(date('2026-01-01', 'long', 'en-US')).toBe('January 01, 2026');
+		expect(date('2026-01-01', 'long', 'en-US')).toBe('January 1, 2026');
 		expect(constructor).toHaveBeenCalledTimes(4);
 	});
 
@@ -177,8 +198,10 @@ describe('FormatterRegistry', () => {
 		});
 	});
 
-	it('escapes HTML by default', () => {
-		expect(f.escape('<b>"a" & \'b\'</b>')).toBe('&lt;b&gt;&quot;a&quot; &amp; &#39;b&#39;&lt;/b&gt;');
+	it('escape is an identity on text: the page shows the characters (D174 F8)', () => {
+		// A text interpolation already escapes, so escaping again printed the
+		// entities (`&lt;b&gt;`) instead of the characters.
+		expect(f.escape('<b>"a" & \'b\'</b>')).toBe('<b>"a" & \'b\'</b>');
 	});
 
 	it('renders null and undefined as empty string, not literals', () => {
@@ -188,29 +211,69 @@ describe('FormatterRegistry', () => {
 		expect(f.trim(undefined)).toBe('');
 	});
 
-	it('raw/noescape pass content through for the skip-escape path', () => {
+	it('raw passes content through', () => {
 		expect(f.raw('<br>')).toBe('<br>');
-		expect(f.noescape('<br>')).toBe('<br>');
 	});
 
 	describe('string formatters', () => {
-		it('capitalize', () => {
-			expect(f.capitalize('hELLO')).toBe('Hello');
+		it('capitalize upper-cases the first character and leaves the rest (D174 F1)', () => {
+			expect(f.capitalize('hELLO')).toBe('HELLO');
+			expect(f.capitalize('iPhone')).toBe('IPhone');
+			expect(f.capitalize('élan')).toBe('Élan');
+			// The first CODE POINT: an astral first character is not torn in half.
+			expect(f.capitalize('𐐨x')).toBe('𐐀x');
+			// The old behavior is one chain away.
+			expect(f.capitalize(f.downcase('hELLO'))).toBe('Hello');
 		});
 
-		it('truncate honors length and ellipsis', () => {
+		it('truncate counts code points and never exceeds the length (D174 F25)', () => {
 			expect(f.truncate('hello world', 8)).toBe('hello w…');
 			expect(f.truncate('short', 100)).toBe('short');
+			expect(f.truncate('😀😀😀😀', 3)).toBe('😀😀…');
+			expect(f.truncate('😀😀😀', 3)).toBe('😀😀😀');
+			expect(f.truncate('hello', 3, '.....')).toBe('...');
+			expect(f.truncate('hello', -2)).toBe('');
+			expect(f.truncate('x'.repeat(120))).toBe('x'.repeat(99) + '…');
 		});
 
 		it('replace replaces ALL occurrences for string search (Liquid semantics)', () => {
 			expect(f.replace('a-b-c', '-', '+')).toBe('a+b+c');
+			expect(f.replace('a-b-c', '-')).toBe('abc');
+			// A RegExp search stays a PuzzleKit addition.
+			expect(f.replace('a1b22', /\d+/g, '#')).toBe('a#b#');
 		});
 
-		it('pluralize', () => {
-			expect(f.pluralize(1, 'todo')).toBe('todo');
-			expect(f.pluralize(3, 'todo')).toBe('todos');
-			expect(f.pluralize(2, 'person', 'people')).toBe('people');
+		it('split: code points for an empty separator, an empty list for a missing value (D174 F22)', () => {
+			expect(f.split('a,b')).toEqual(['a', 'b']);
+			expect(f.split('a😀', '')).toEqual(['a', '😀']);
+			expect(f.split(null)).toEqual([]);
+			expect(f.split(undefined, ' ')).toEqual([]);
+		});
+
+		it('strip_html is quote-aware and leaves a bare < alone (D174 F23)', () => {
+			expect(f.strip_html('<p>Hi <b>there</b></p>')).toBe('Hi there');
+			expect(f.strip_html('a < b and 1<2')).toBe('a < b and 1<2');
+			expect(f.strip_html('<a title="x>y" data-q=\'>\'>link</a>')).toBe('link');
+			expect(f.strip_html('x<!-- a <b> comment -->y')).toBe('xy');
+			expect(f.strip_html('open <!-- never closed')).toBe('open <!-- never closed');
+			expect(f.strip_html('Tom &amp; Jerry')).toBe('Tom &amp; Jerry');
+		});
+
+		it('strip_newlines removes CR and LF (D174 F24)', () => {
+			expect(f.strip_newlines('a\r\nb\nc\rd')).toBe('abcd');
+		});
+
+		it('pluralize prints the count and the word (D174 F15)', () => {
+			expect(f.pluralize(1, 'todo')).toBe('1 todo');
+			expect(f.pluralize(3, 'todo')).toBe('3 todos');
+			expect(f.pluralize(0, 'todo')).toBe('0 todos');
+			expect(f.pluralize(2, 'person', 'people')).toBe('2 people');
+			expect(f.pluralize(1, 'man', 'men')).toBe('1 man');
+			// The count is formatted in the viewer's locale.
+			expect(f.pluralize(1234, 'comment')).toBe(`${new Intl.NumberFormat().format(1234)} comments`);
+			// A missing count prints nothing.
+			expect(f.pluralize(undefined, 'todo')).toBe('');
+			expect(f.pluralize(null, 'todo')).toBe('');
 		});
 	});
 
@@ -221,130 +284,207 @@ describe('FormatterRegistry', () => {
 			expect(f.times(f.round(2.6), 2)).toBe(6);
 		});
 
-		it('round clamps a negative decimals instead of throwing (fail-soft)', () => {
-			// toFixed(-1) would throw RangeError; clamp to 0 decimals like a whole round.
-			expect(() => f.round(5, -1)).not.toThrow();
-			expect(f.round(5, -1)).toBe(5);
-			expect(f.round(3.7, -2)).toBe(4);
+		it('round goes half away from zero on the DECIMAL value (D174 F19)', () => {
+			expect(f.round(1.005, 2)).toBe(1.01);
+			expect(f.round(2.5)).toBe(3);
+			expect(f.round(-2.5)).toBe(-3);
+			expect(f.round(0.5)).toBe(1);
+			expect(f.round(1.45, 1)).toBe(1.5);
+			// Tiny and huge values survive String()'s exponent form.
+			expect(f.round(1.5e-7, 7)).toBe(2e-7);
+			expect(f.round(1e21)).toBe(1e21);
 		});
 
-		it('round clamps an oversized decimals instead of throwing (fail-soft)', () => {
-			// toFixed(101) would throw RangeError; clamp to toFixed's max of 100.
-			expect(() => f.round(3.14159, 101)).not.toThrow();
-			expect(f.round(3.14159, 101)).toBe(3.14159);
-			expect(f.round(3.14159, 100)).toBe(3.14159);
-			expect(f.round(2.5, 1e9)).toBe(2.5);
+		it('round takes negative places for tens and hundreds (D174 F19)', () => {
+			expect(f.round(5, -1)).toBe(10);
+			expect(f.round(1234.5, -2)).toBe(1200);
+			expect(f.round(1250, -2)).toBe(1300);
+			expect(f.round(-1250, -2)).toBe(-1300);
 		});
 
-		it('currency and percentage', () => {
-			expect(f.currency(9.5)).toBe('$9.50');
-			expect(f.currency(9.5, '€', 0)).toBe('€10');
-			expect(f.percentage(0.256)).toBe('26%');
-			expect(f.percentage(0.256, 1)).toBe('25.6%');
-		});
-
-		it('decimals argument fails soft across round/currency/percentage', () => {
-			// A bad `decimals` — negative, oversized, Infinity, NaN, or a non-numeric
-			// string — must never throw RangeError; it normalizes (integer-coerce +
-			// clamp 0–100, else the formatter default) via the shared helper.
-			for (const bad of [-5, 1e9, Infinity, -Infinity, NaN, 'abc', {}, [1, 2]]) {
+		it('round fails soft on a bad places argument', () => {
+			for (const bad of [1e9, Infinity, -Infinity, NaN, 'abc', {}, [1, 2]]) {
 				expect(() => f.round(3.14159, bad)).not.toThrow();
-				expect(() => f.currency(9.5, '$', bad)).not.toThrow();
-				expect(() => f.percentage(0.256, bad)).not.toThrow();
 			}
-			// Negative/oversized/non-finite fall back correctly.
-			expect(f.round(3.14159, Infinity)).toBe(3);   // → 0 decimals
-			expect(f.round(3.14159, NaN)).toBe(3);        // → default 0
-			expect(f.round(3.14159, -2)).toBe(3);         // → 0
-			expect(f.round(3.14159, 101)).toBe(3.14159);  // → 100
+			expect(f.round(3.14159, NaN)).toBe(3); // → default 0
+			expect(f.round(3.14159, 'abc')).toBe(3);
+			expect(f.round(3.14159, 101)).toBe(3.14159); // clamped to 100
 			// A numeric STRING is coerced (integer-truncated), matching a number.
 			expect(f.round(3.14159, '2')).toBe(3.14);
-			expect(f.round(3.14159, 2.9)).toBe(3.14);     // truncated to 2
-			expect(f.currency(9.5, '$', Infinity)).toBe('$9.50'); // → default 2
-			expect(f.currency(9.5, '$', '0')).toBe('$10');        // → 0
-			expect(f.percentage(0.256, NaN)).toBe('26%');         // → default 0
-			expect(f.percentage(0.256, '1')).toBe('25.6%');       // → 1
+			expect(f.round(3.14159, 2.9)).toBe(3.14);
 		});
 
-		it('number_with_delimiter groups thousands and keeps decimals', () => {
-			expect(f.number_with_delimiter(1234567)).toBe('1,234,567');
-			expect(f.number_with_delimiter(1234.56)).toBe('1,234.56');
+		it('divided_by and modulo give a missing value for a zero divisor (D174 F7, F11)', () => {
+			expect(f.divided_by(7, 2)).toBe(3.5);
+			expect(f.divided_by(1, 0)).toBeUndefined();
+			expect(f.modulo(-7, 3)).toBe(-1);
+			expect(f.modulo(7, 0)).toBeUndefined();
+			// The missing value flows on: the next formatter sees it, not Infinity.
+			expect(f.plus(f.divided_by(1, 0), 1)).toBeNaN();
+			expect(f.escape(f.divided_by(1, 0))).toBe('');
+		});
+
+		it('currency groups thousands and puts the sign before the symbol (D174 F3)', () => {
+			expect(f.currency(9.5)).toBe('$9.50');
+			expect(f.currency(9.5, '€', 0)).toBe('€10');
+			expect(f.currency(1234567.891)).toBe('$1,234,567.89');
+			expect(f.currency(-1234.5)).toBe('-$1,234.50');
+			expect(f.currency(1.005)).toBe('$1.01');
+			// An amount that rounds to zero carries no sign.
+			expect(f.currency(-0.001)).toBe('$0.00');
+			// A `$` in the symbol is inserted literally.
+			expect(f.currency(1000, '$$')).toBe('$$1,000.00');
+			// A missing amount prints nothing.
+			expect(f.currency(null)).toBe('');
+			expect(f.currency('abc')).toBe('abc');
+		});
+
+		it('percentage takes the number as written (D174 F14)', () => {
+			expect(f.percentage(12.5, 1)).toBe('12.5%');
+			expect(f.percentage(12.5)).toBe('13%');
+			expect(f.percentage(0.256)).toBe('0%');
+			// A ratio is one times(100) away.
+			expect(f.percentage(f.times(0.256, 100), 1)).toBe('25.6%');
+		});
+
+		it('places argument fails soft for currency and percentage', () => {
+			for (const bad of [-5, 1e9, Infinity, -Infinity, NaN, 'abc', {}, [1, 2]]) {
+				expect(() => f.currency(9.5, '$', bad)).not.toThrow();
+				expect(() => f.percentage(25.6, bad)).not.toThrow();
+			}
+			expect(f.currency(9.5, '$', Infinity)).toBe('$9.50'); // → default 2
+			expect(f.currency(9.5, '$', '0')).toBe('$10'); // → 0
+			expect(f.currency(9.5, '$', -5)).toBe('$10'); // → clamped to 0
+			expect(f.percentage(25.6, NaN)).toBe('26%'); // → default 0
+			expect(f.percentage(25.6, '1')).toBe('25.6%'); // → 1
+		});
+
+		it('number_with_delimiter follows the viewer locale by default', () => {
+			const expected = (n, digits) =>
+				new Intl.NumberFormat(undefined, {
+					minimumFractionDigits: digits,
+					maximumFractionDigits: digits,
+				}).format(n);
+			expect(f.number_with_delimiter(1234567)).toBe(expected(1234567, 0));
+			// The decimals print as given — never Intl's default three-digit rounding.
+			expect(f.number_with_delimiter(1234.5678)).toBe(expected(1234.5678, 4));
+			expect(f.number_with_delimiter(1234.5)).toBe(expected(1234.5, 1));
+			expect(f.number_with_delimiter(null)).toBe('');
+		});
+
+		it('number_with_delimiter with an explicit delimiter forces it and keeps "." decimals', () => {
+			expect(f.number_with_delimiter(1234567, ',')).toBe('1,234,567');
+			expect(f.number_with_delimiter(1234.56, ',')).toBe('1,234.56');
 			expect(f.number_with_delimiter(1234567, '.')).toBe('1.234.567');
+			expect(f.number_with_delimiter(-1234567.5, ' ')).toBe('-1 234 567.5');
+		});
+
+		it('compact_number shortens with a localized suffix', () => {
+			const compact = new Intl.NumberFormat(undefined, { notation: 'compact' });
+			for (const n of [847, 1234, 45000, 3400000]) {
+				expect(f.compact_number(n)).toBe(compact.format(n));
+			}
+			expect(f.compact_number(null)).toBe('');
+			expect(f.compact_number('abc')).toBe('abc');
 		});
 	});
 
-	describe('array formatters', () => {
-		it('join / first / last / size', () => {
+	describe('value formatters', () => {
+		it('default replaces missing, false, empty text and an empty list — not 0', () => {
+			for (const empty of [null, undefined, false, '', []]) {
+				expect(f.default(empty, 'n/a')).toBe('n/a');
+			}
+			for (const kept of [0, 'x', true, [0], {}]) {
+				expect(f.default(kept, 'n/a')).toBe(kept);
+			}
+		});
+
+		it('join / size', () => {
 			expect(f.join(['a', 'b'])).toBe('a, b');
 			expect(f.join(['a', 'b'], ' | ')).toBe('a | b');
-			expect(f.first([1, 2, 3])).toBe(1);
-			expect(f.last([1, 2, 3])).toBe(3);
 			expect(f.size([1, 2, 3])).toBe(3);
 			expect(f.size('abcd')).toBe(4);
 		});
 
-		it('sort by key, uniq, where', () => {
-			const items = [{ n: 'b' }, { n: 'a' }];
-			expect(f.sort(items, 'n').map(i => i.n)).toEqual(['a', 'b']);
-			expect(f.uniq([1, 1, 2])).toEqual([1, 2]);
-			expect(f.where([{ ok: true }, { ok: false }], 'ok', true)).toEqual([{ ok: true }]);
+		it('size counts code points, keys, and 0 for anything else (D174 F20)', () => {
+			expect(f.size('a😀')).toBe(2);
+			expect(f.size({ a: 1, b: 2 })).toBe(2);
+			for (const other of [null, undefined, 5, true]) expect(f.size(other)).toBe(0);
 		});
 
-		it('keyless sort is NUMERIC for numbers (not lexicographic) and lexical for strings', () => {
-			// bare Array.sort() string-coerces → [1,10,2]; the comparator fixes it.
-			expect(f.sort([2, 10, 1])).toEqual([1, 2, 10]);
-			expect(f.sort(['b', 'a'])).toEqual(['a', 'b']);
-			// NaN is pushed to the end
-			expect(f.sort([3, NaN, 1])).toEqual([1, 3, NaN]);
+		it('json sorts keys by code point and prints null for missing and non-finite (D174 F9)', () => {
+			expect(f.json({ b: 1, a: 2 })).toBe('{"a":2,"b":1}');
+			// Integer-like keys sort as text, not first as a JS object enumerates them.
+			expect(f.json({ b: 1, 9: 2, 10: 3 })).toBe('{"10":3,"9":2,"b":1}');
+			// Code-point order puts an astral key after U+FFFD (UTF-16 order would not).
+			expect(f.json({ '😀': 1, '�': 2 })).toBe('{"�":2,"😀":1}');
+			expect(f.json(undefined)).toBe('null');
+			expect(f.json(NaN)).toBe('null');
+			expect(f.json([1, undefined, Infinity, () => 1])).toBe('[1,null,null,null]');
+			expect(f.json({ a: undefined, f() {} })).toBe('{"a":null}');
+			expect(f.json('<b>')).toBe('"<b>"');
+			expect(f.json(new Date(0))).toBe('"1970-01-01T00:00:00.000Z"');
+			const cycle = { a: 1 };
+			cycle.self = cycle;
+			expect(f.json(cycle)).toBe('{"a":1,"self":null}');
 		});
+	});
 
-		it('keyed sort on a numeric field stays numeric', () => {
-			const items = [{ price: 2 }, { price: 10 }, { price: 1 }];
-			expect(f.sort(items, 'price').map(i => i.price)).toEqual([1, 2, 10]);
-		});
-
-		it('keyed sort on a Date field is chronological', () => {
-			// String comparison would order these by WEEKDAY name (Sun/Mon/Tue/Wed).
-			const items = [
-				{ at: new Date(2024, 11, 31) },
-				{ at: new Date(2026, 0, 5) },
-				{ at: new CalendarDate(2025, 5, 15) },
-				{ at: new Date(2026, 2, 1) },
-			];
-			expect(f.sort(items, 'at').map(i => i.at.getFullYear())).toEqual([2024, 2025, 2026, 2026]);
-			expect(f.sort(items, 'at').map(i => i.at.getMonth())).toEqual([11, 5, 0, 2]);
-
-			// An Invalid Date is NaN once timed, so it rides the numeric rule to the end.
-			const withInvalid = [
-				{ at: new Date('nope') },
-				{ at: new Date(2026, 0, 5) },
-				{ at: new Date(2024, 11, 31) },
-			];
-			const years = f.sort(withInvalid, 'at').map(i => i.at.getFullYear());
-			expect(years.slice(0, 2)).toEqual([2024, 2026]);
-			expect(Number.isNaN(years[2])).toBe(true);
-		});
-
-		it('does not mutate the input array', () => {
-			const input = [2, 10, 1];
-			const out = f.sort(input);
-			expect(input).toEqual([2, 10, 1]); // original untouched
-			expect(out).not.toBe(input);
-		});
-
-		it('reverse reverses arrays and strings by CODE POINT (no surrogate mangling)', () => {
-			expect(f.reverse([1, 2, 3])).toEqual([3, 2, 1]);
-			expect(f.reverse('abc')).toBe('cba');
-			// The emoji is a surrogate pair — code-unit reversal would split it into
-			// two lone surrogates; code-point reversal keeps it intact and whole.
-			expect(f.reverse('ab😀')).toBe('😀ba');
+	describe('removed list formatters (D174)', () => {
+		it('are gone from the built-in set', () => {
+			for (const name of ['sort', 'where', 'map', 'uniq', 'reverse', 'compact', 'first', 'last', 'noescape']) {
+				expect(Object.hasOwn(fullBuiltins, name)).toBe(false);
+				expect(builtinNames).not.toContain(name);
+				expect(f[name]).toBeUndefined();
+			}
 		});
 	});
 
 	describe('date formatters', () => {
 		it('date presets format and invalid input passes through', () => {
-			expect(f.date('2026-01-15T12:00:00Z', 'iso')).toBe('2026-01-15T12:00:00.000Z');
 			expect(f.date('not a date')).toBe('not a date');
+		});
+
+		it('short / medium / long presets per formatter, medium by default (D174 F4–F6)', () => {
+			const at = new Date(2026, 8, 24, 15, 4, 5);
+			expect(f.date(at, 'short', 'en-US')).toBe('9/24/26');
+			expect(f.date(at, 'medium', 'en-US')).toBe('Sep 24, 2026');
+			expect(f.date(at, 'long', 'en-US')).toBe('September 24, 2026');
+			expect(f.time(at, 'short', 'en-US')).toBe('3:04 PM');
+			expect(f.time(at, 'medium', 'en-US')).toBe('3:04:05 PM');
+			// long adds the zone name, whatever zone the suite runs in.
+			expect(f.time(at, 'long', 'en-US')).toMatch(/^3:04:05 PM \S+/);
+			expect(f.datetime(at, 'short', 'en-US')).toBe('9/24/26, 3:04 PM');
+			expect(f.datetime(at, 'medium', 'en-US')).toBe('Sep 24, 2026, 3:04:05 PM');
+			// No preset means medium, in the viewer's locale.
+			const medium = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+			expect(f.date(at)).toBe(medium.format(at));
+		});
+
+		it('iso presets are RFC 3339 in the viewer zone', () => {
+			const at = new Date(2026, 8, 24, 15, 4, 5);
+			const offset = -at.getTimezoneOffset();
+			const pad = (n) => String(n).padStart(2, '0');
+			const zone =
+				offset === 0
+					? 'Z'
+					: `${offset < 0 ? '-' : '+'}${pad(Math.trunc(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
+			expect(f.date(at, 'iso')).toBe('2026-09-24');
+			expect(f.time(at, 'iso')).toBe(`15:04:05${zone}`);
+			expect(f.datetime(at, 'iso')).toBe(`2026-09-24T15:04:05${zone}`);
+		});
+
+		it('an unknown preset is a development error, reported once, and renders as medium', () => {
+			const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+			const at = new Date(2026, 8, 24, 15, 4, 5);
+			expect(f.date(at, 'fancy', 'en-US')).toBe('Sep 24, 2026');
+			expect(f.date(at, 'fancy', 'en-US')).toBe('Sep 24, 2026');
+			expect(spy).toHaveBeenCalledTimes(1);
+			expect(spy.mock.calls[0][0]).toContain('unknown date preset "fancy"');
+			// The retired preset names point at the formatter that replaced them.
+			expect(f.date(at, 'datetime', 'en-US')).toBe('Sep 24, 2026');
+			expect(spy.mock.calls[1][0]).toContain('use the datetime formatter instead');
+			spy.mockRestore();
 		});
 
 		it('date/time formatters fail soft on invalid date, locale, or time zone', () => {
@@ -357,7 +497,7 @@ describe('FormatterRegistry', () => {
 			// fall back to the raw value instead of crashing the render.
 			expect(() => f.date('2026-01-15T12:00:00Z', 'long', 'en US')).not.toThrow();
 			expect(f.date('2026-01-15T12:00:00Z', 'long', 'en US')).toBe('2026-01-15T12:00:00Z');
-			expect(() => f.datetime('2026-01-15T12:00:00Z', 'datetime', 'not-a-locale-!!')).not.toThrow();
+			expect(() => f.datetime('2026-01-15T12:00:00Z', 'medium', 'not-a-locale-!!')).not.toThrow();
 
 			// Invalid time-zone identifier throws RangeError — in_timezone must fail
 			// soft (to the un-shifted date) rather than throw.
@@ -411,7 +551,8 @@ describe('FormatterRegistry', () => {
 
 		it('numeric 0 stays a legitimate epoch timestamp', () => {
 			// The one falsy input that IS a date. `0` and `'0'` both name the epoch.
-			expect(f.date(0, 'iso')).toBe('1970-01-01T00:00:00.000Z');
+			expect(f.date(0, 'iso')).toBe(f.date(new Date(0), 'iso'));
+			expect(f.datetime(0, 'iso')).toMatch(/^19(70-01-01|69-12-31)T/);
 			expect(f.date(0, 'long', 'en-US')).not.toBe('');
 			expect(f.timeago(0)).not.toBe('');
 			expect(Number.isNaN(f.in_timezone(0, 'UTC').getTime())).toBe(false);
@@ -420,19 +561,19 @@ describe('FormatterRegistry', () => {
 
 	// Every assertion here must hold in ANY machine time zone — that IS the fix.
 	describe('date/time formatters — calendar dates display as written (D114)', () => {
-		const DATE_OPTS = { year: 'numeric', month: '2-digit', day: '2-digit' };
+		const DATE_OPTS = { dateStyle: 'short' };
 		const fmt = (d) => new Intl.DateTimeFormat('en-US', DATE_OPTS).format(d);
 
 		it('renders a bare YYYY-MM-DD as the day written, not UTC-shifted', () => {
 			// The regression: date-only strings parse as UTC midnight per the ES spec,
 			// so before D114 everyone west of UTC saw 07/23/2026 here.
-			expect(f.date('2026-07-24', 'date', 'en-US')).toBe('07/24/2026');
-			expect(f.date('2026-01-01', 'long', 'en-US')).toBe('January 01, 2026');
+			expect(f.date('2026-07-24', 'short', 'en-US')).toBe('7/24/26');
+			expect(f.date('2026-01-01', 'long', 'en-US')).toBe('January 1, 2026');
 		});
 
 		it('datetime on a calendar date lands on local midnight of that day', () => {
-			const out = f.datetime('2026-07-24', 'datetime', 'en-US');
-			expect(out).toContain('07/24/2026');
+			const out = f.datetime('2026-07-24', 'short', 'en-US');
+			expect(out).toContain('7/24/26');
 			expect(out).toContain('12:00');
 		});
 
@@ -441,15 +582,17 @@ describe('FormatterRegistry', () => {
 			// midnight would emit a time-zone-dependent instant instead.
 			expect(f.date('2026-07-24', 'iso')).toBe('2026-07-24');
 			expect(f.date('2026-01-01', 'iso')).toBe('2026-01-01');
+			expect(f.datetime('2026-07-24', 'iso')).toBe('2026-07-24');
+			expect(f.time('2026-07-24', 'iso')).toBe('2026-07-24');
 		});
 
 		it('leaves full ISO datetimes, Date instances, and timestamps untouched', () => {
-			expect(f.date('2026-07-24T12:00:00Z', 'iso')).toBe('2026-07-24T12:00:00.000Z');
+			expect(f.datetime('2026-07-24T12:00:00Z', 'iso')).toMatch(/^2026-07-2[45]T\d\d:\d\d:00(Z|[+-]\d\d:\d\d)$/);
 			// A Date/number formats exactly as the pre-D114 `new Date(v)` path did.
 			const inst = new Date(2026, 6, 24, 15, 30);
-			expect(f.date(inst, 'date', 'en-US')).toBe(fmt(new Date(inst)));
-			expect(f.date(inst.getTime(), 'date', 'en-US')).toBe(fmt(new Date(inst.getTime())));
-			expect(f.date('2026-07-24T12:00:00Z', 'date', 'en-US')).toBe(fmt(new Date('2026-07-24T12:00:00Z')));
+			expect(f.date(inst, 'short', 'en-US')).toBe(fmt(new Date(inst)));
+			expect(f.date(inst.getTime(), 'short', 'en-US')).toBe(fmt(new Date(inst.getTime())));
+			expect(f.date('2026-07-24T12:00:00Z', 'short', 'en-US')).toBe(fmt(new Date('2026-07-24T12:00:00Z')));
 		});
 
 		it('fails soft to the raw value on any invalid calendar components', () => {
@@ -458,14 +601,14 @@ describe('FormatterRegistry', () => {
 			// "2026-02-31" is spec-LEGAL (DD ≤ 31) and would roll into March —
 			// TZ-dependently. D114's round-trip check coerces it to Invalid Date
 			// instead, so a nonexistent day fails soft exactly like a nonexistent month.
-			expect(f.date('2026-02-31', 'date', 'en-US')).toBe('2026-02-31');
+			expect(f.date('2026-02-31', 'short', 'en-US')).toBe('2026-02-31');
 			expect(f.timeago('2026-02-31')).toBe('2026-02-31');
 		});
 
 		it('does not claim non-strict date-only forms', () => {
 			// "2026-7-24" misses the leading zero, so the calendar rule never applies;
 			// it stays on whatever the engine's fallback parser does, without throwing.
-			expect(() => f.date('2026-7-24', 'date', 'en-US')).not.toThrow();
+			expect(() => f.date('2026-7-24', 'short', 'en-US')).not.toThrow();
 			expect(() => f.date('2026-7-24', 'iso')).not.toThrow();
 		});
 
@@ -485,9 +628,9 @@ describe('FormatterRegistry', () => {
 			expect(f.in_timezone('2026-07-24', 'UTC').getTime()).toBe(midnight);
 			expect(f.in_timezone('2026-07-24', 'Asia/Tokyo').getTime()).toBe(midnight);
 			expect(f.in_timezone('2026-07-24', 'Pacific/Honolulu').getTime()).toBe(midnight);
-			expect(f.date(f.in_timezone('2026-07-24', 'America/New_York'), 'date', 'en-US')).toBe('07/24/2026');
-			expect(f.date(f.in_timezone('2026-03-01', 'America/New_York'), 'date', 'en-US')).toBe('03/01/2026');
-			expect(f.date(f.in_timezone('2026-07-24', 'Asia/Tokyo'), 'date', 'en-US')).toBe('07/24/2026');
+			expect(f.date(f.in_timezone('2026-07-24', 'America/New_York'), 'short', 'en-US')).toBe('7/24/26');
+			expect(f.date(f.in_timezone('2026-03-01', 'America/New_York'), 'short', 'en-US')).toBe('3/1/26');
+			expect(f.date(f.in_timezone('2026-07-24', 'Asia/Tokyo'), 'short', 'en-US')).toBe('7/24/26');
 		});
 
 		it('in_timezone still re-expresses a real instant in the target zone', () => {
@@ -557,5 +700,105 @@ describe('FormatterRegistry', () => {
 		const reg = new FormatterRegistry();
 		reg.register('pluralize', () => 'custom');
 		expect(reg.getAll().pluralize(1, 'x')).toBe('custom');
+	});
+});
+
+describe('the standard set (D174)', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('is the 34 standard names, all built in; timeago and in_timezone are PuzzleKit-only', () => {
+		expect(STANDARD_FORMATTERS).toHaveLength(34);
+		expect(new Set(STANDARD_FORMATTERS).size).toBe(34);
+		for (const name of STANDARD_FORMATTERS) expect(builtinNames).toContain(name);
+		expect(builtinNames.filter((name) => !STANDARD_FORMATTERS.includes(name)).sort()).toEqual([
+			'in_timezone',
+			'timeago',
+		]);
+	});
+
+	it('warns in development when an app formatter shadows a standard name, and the app wins', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const registry = makeFormatterRegistry({ pluralize: () => 'mine', plural: () => 'other' });
+		expect(registry.getAll().pluralize(2, 'x')).toBe('mine');
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('app formatter "pluralize" shadows the standard formatter');
+	});
+
+	it('does not warn for PuzzleKit-only names or the app-supplied link', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		makeFormatterRegistry({ timeago: () => 'now', in_timezone: (v) => v, link: (v) => v, compact: (v) => v });
+		expect(warn).not.toHaveBeenCalled();
+	});
+
+	it('names the replacement when a template uses a removed formatter', () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const missing = new FormatterRegistry().getAll().__missing;
+		const hints = {
+			sort: 'data()',
+			where: 'data()',
+			map: 'data()',
+			uniq: 'data()',
+			reverse: 'data()',
+			compact: 'compact_number',
+			first: 'items[0]',
+			last: 'items.at(-1)',
+			noescape: 'use raw',
+		};
+		for (const [name, hint] of Object.entries(hints)) {
+			// Still a pass-through, like any unknown name (D43).
+			expect(missing(name)('value')).toBe('value');
+			const message = error.mock.calls.at(-1)[0];
+			expect(message).toContain(`formatter "${name}" was removed`);
+			expect(message).toContain(hint);
+		}
+		expect(error).toHaveBeenCalledTimes(Object.keys(hints).length);
+	});
+});
+
+// The shared conformance table: the same cases Sites' Go tests run. JSON null is
+// the missing value in both directions. A case with a `zone` must render in that
+// zone, and Node only reads TZ at startup, so those run in one child process per
+// zone (the same mechanism as tests/formatters-timezone.test.js).
+describe('standard formatter conformance table (D174)', () => {
+	const fromJSON = (v) => (v === null ? undefined : v);
+	const toJSONValue = (v) => (v === undefined ? null : v);
+	const local = conformance.cases.filter((c) => !c.zone);
+	const zoned = conformance.cases.filter((c) => c.zone);
+
+	it('covers every identical-output standard name except the markup pair (group e)', () => {
+		const covered = new Set(conformance.cases.map((c) => c.name));
+		const localeRendered = ['date', 'time', 'datetime', 'number_with_delimiter', 'compact_number', 'pluralize'];
+		for (const name of STANDARD_FORMATTERS) {
+			if (localeRendered.includes(name) || name === 'raw' || name === 'newline_to_br') continue;
+			expect(covered.has(name), name).toBe(true);
+		}
+		for (const name of covered) expect(STANDARD_FORMATTERS).toContain(name);
+	});
+
+	it.each(local.map((c) => [`${c.name}(${JSON.stringify(c.input)}, ${JSON.stringify(c.args)})`, c]))(
+		'%s',
+		(_label, c) => {
+			const out = f[c.name](fromJSON(c.input), ...c.args.map(fromJSON));
+			expect(toJSONValue(out)).toEqual(c.expect);
+		},
+	);
+
+	const zones = [...new Set(zoned.map((c) => c.zone))];
+	it.each(zones)('zone %s', (zone) => {
+		const cases = zoned.filter((c) => c.zone === zone);
+		const builtins = new URL('../client-runtime/formatters/builtins.js', import.meta.url).href;
+		const script = `
+import * as f from ${JSON.stringify(builtins)};
+const cases = ${JSON.stringify(cases)};
+process.stdout.write(JSON.stringify(cases.map((c) => f[c.name](c.input ?? undefined, ...c.args) ?? null)));
+`;
+		const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+			cwd: fileURLToPath(new URL('..', import.meta.url)),
+			env: { ...process.env, TZ: zone },
+			encoding: 'utf8',
+		});
+		expect(JSON.parse(out)).toEqual(cases.map((c) => c.expect));
 	});
 });

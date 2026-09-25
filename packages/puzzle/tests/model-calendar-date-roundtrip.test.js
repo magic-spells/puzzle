@@ -90,18 +90,18 @@ process.stdout.write(
 			String(record.publishedOn.getDate()).padStart(2, '0'),
 			String(record.publishedOn.getHours()).padStart(2, '0'),
 		].join('-'),
-		shown: date(record.publishedOn, 'date', 'en-US'),
+		shown: date(record.publishedOn, 'short', 'en-US'),
 
 		// The two consumers the same root cause defeated. Both were testing
 		// \`typeof v === 'string'\`, which a revived field is not.
 		isoOfRevived: date(record.publishedOn, 'iso'),
 		isoAfterTimezone: date(in_timezone(record.publishedOn, 'UTC'), 'iso'),
-		shownAfterTimezone: date(in_timezone(record.publishedOn, 'Pacific/Honolulu'), 'date', 'en-US'),
-		datetimeAfterTimezone: datetime(in_timezone(record.publishedOn, 'Asia/Tokyo'), 'datetime', 'en-US'),
+		shownAfterTimezone: date(in_timezone(record.publishedOn, 'Pacific/Honolulu'), 'short', 'en-US'),
+		datetimeAfterTimezone: datetime(in_timezone(record.publishedOn, 'Asia/Tokyo'), 'short', 'en-US'),
 
 		// An instant is NOT a calendar date and must be untouched by all of this.
 		instantSaved: wire(record).startsAt,
-		instantIso: date(record.startsAt, 'iso'),
+		instantIso: datetime(record.startsAt, 'iso'),
 
 		// A Date the app built itself carries no calendar-date claim — the
 		// framework cannot read intent off a plain Date, so it stays an instant.
@@ -161,7 +161,7 @@ describe('a date-only field round-trips byte-identically under any process time 
 		it('is still a Date at LOCAL midnight, so D114 display is unchanged', () => {
 			expect(results[tz].isDate).toBe(true);
 			expect(results[tz].localWall).toBe('2026-08-23-00');
-			expect(results[tz].shown).toBe('08/23/2026');
+			expect(results[tz].shown).toBe('8/23/26');
 		});
 
 		it("keeps date(v,'iso') and in_timezone working on a REVIVED value", () => {
@@ -169,13 +169,15 @@ describe('a date-only field round-trips byte-identically under any process time 
 			// store has revived the field — so both silently took the instant path.
 			expect(results[tz].isoOfRevived).toBe('2026-08-23');
 			expect(results[tz].isoAfterTimezone).toBe('2026-08-23');
-			expect(results[tz].shownAfterTimezone).toBe('08/23/2026');
-			expect(results[tz].datetimeAfterTimezone).toBe('08/23/2026, 12:00 AM');
+			expect(results[tz].shownAfterTimezone).toBe('8/23/26');
+			expect(results[tz].datetimeAfterTimezone).toBe('8/23/26, 12:00 AM');
 		});
 
 		it('leaves real instants and plain Dates alone', () => {
 			expect(results[tz].instantSaved).toBe('2026-08-23T10:00:00.000Z');
-			expect(results[tz].instantIso).toBe('2026-08-23T10:00:00.000Z');
+			// RFC 3339 in the process zone (D174), naming the same instant.
+			expect(results[tz].instantIso).toMatch(/T\d\d:00:00(Z|[+-]\d\d:\d\d)$/);
+			expect(new Date(results[tz].instantIso).toISOString()).toBe('2026-08-23T10:00:00.000Z');
 			// No calendar-date claim on a Date the app constructed itself.
 			expect(results[tz].plainDateSaved).toBe('2026-08-23T12:00:00.000Z');
 		});

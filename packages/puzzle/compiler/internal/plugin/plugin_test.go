@@ -429,6 +429,47 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// `default` (D174) is a reserved word, so builtins.js exports it as the module's
+// default export. The virtual manifest must bind it under a local name: a bare
+// `import { default }` is a syntax error that would fail every build using it.
+func TestFormatterManifestAliasesDefault(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/views/Home.pzl": `<puzzle-view>
+  <p>{ subtitle | default('Untitled') | upcase }</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`,
+	})
+
+	got, err := ScanFormatters(filepath.Join(root, "app"))
+	if err != nil {
+		t.Fatalf("ScanFormatters: %v", err)
+	}
+	if !got["default"] {
+		t.Fatalf("ScanFormatters missing built-in formatter \"default\" in %#v", got)
+	}
+
+	pl := New(root)
+	pl.SetRuntimeDir("/runtime")
+	pl.SetFormatters(got)
+	manifest, err := pl.formatterManifest()
+	if err != nil {
+		t.Fatalf("formatterManifest: %v", err)
+	}
+	for _, want := range []string{
+		`import { escape, upcase, default as __puzzle_default } from "/runtime/formatters/builtins.js";`,
+		`export default { escape, upcase, default: __puzzle_default };`,
+	} {
+		if !strings.Contains(manifest, want) {
+			t.Errorf("manifest missing %q:\n%s", want, manifest)
+		}
+	}
+}
+
 func TestScanUsageFlip(t *testing.T) {
 	for _, tt := range []struct {
 		name string
