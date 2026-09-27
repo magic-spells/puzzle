@@ -68,6 +68,16 @@ Formatters transform a value for display, Liquid-style. They chain left to right
 { comments.length | pluralize('comment') }   <!-- 3 comments -->
 ```
 
+**Pipes go in values, never in conditions (D173 V1).** A formatter works in text, in attribute values (`title={ price | currency }`, `href="{ path | link }"`), in component props and in marker arguments. A pipe in an `{#if}`, `{:else if}`, `{#unless}`, `{#case}` or `{#for}` header, in a `{:when}` value, or in an inline `{#if}` inside an attribute value is a compile error: formatters are for display, and the value a branch tests belongs in `data()`. `||` still works in every header, and a bitwise OR goes in parentheses (`{#if (flags | mask)}`).
+
+```html
+<!-- Error: formatter pipes are not allowed in an {#if} condition -->
+{#if post.tags | size}<p>Tagged</p>{/if}
+
+<!-- Do: compute it in data() and test the field -->
+{#if hasTags}<p>Tagged</p>{/if}
+```
+
 Custom formatters are registered in the `PuzzleApp` config (`formatters: { ... }` in `app.js`) and used the same way; `this.ctx.formatters` exposes the registry if you ever need it in JS.
 
 **The built-ins are the standard set (D174)** — the same names, arguments and meaning in PuzzleKit and Sites — plus the browser-only `link`, `timeago` and `in_timezone`: numbers (`abs`, `ceil`, `floor`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`), text (`downcase`, `upcase`, `capitalize`, `trim`, `strip`, `truncate`, `replace`, `split`, `strip_html`, `strip_newlines`, `pluralize`), markup (`escape`, `raw`, `newline_to_br`), values (`default`, `size`, `join`, `json`) and dates (`date`, `time`, `datetime` with the presets `short`, `medium` — the default — `long` and `iso`). DOC-SPEC-TEMPLATE §6 has each one's contract. An app formatter registered under a standard name wins, with a development warning.
@@ -80,7 +90,7 @@ Custom formatters are registered in the `PuzzleApp` config (`formatters: { ... }
 <div>{ post.bodyHtml | truncate(200) | raw }</div>   <!-- the chain before raw runs as text formatters -->
 ```
 
-A markup formatter must be the **last** formatter of a **text** interpolation. After it the value is markup, not text, so `{ x | raw | upcase }`, `title={ x | raw }`, `<Card body={ x | raw } />`, `{#if x | raw}`, `raw(…)` with arguments, and a markup interpolation inside a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`, `<noscript>`, `<xmp>`, `<iframe>`, …) are all positioned compile errors. Because the compiler lowers these two names itself, an app formatter registered as `raw` is never called from a template (it draws a development warning), so no app code can inject markup. The value renders as sibling nodes with no wrapper element — for whitespace it counts as a non-text sibling, like an element — and the markup path is compiled out of apps that never use it (the sanitizer, of apps that only use `newline_to_br`). Neither formatter is related to `{#raw}`: formatters run on a runtime value after the template has already lexed, while a raw block makes author-written source braces literal at compile time.
+A markup formatter must be the **last** formatter of a **text** interpolation. After it the value is markup, not text, so `{ x | raw | upcase }`, `title={ x | raw }`, `<Card body={ x | raw } />`, `raw(…)` with arguments, and a markup interpolation inside a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`, `<noscript>`, `<xmp>`, `<iframe>`, …) are all positioned compile errors. Because the compiler lowers these two names itself, an app formatter registered as `raw` is never called from a template (it draws a development warning), so no app code can inject markup. The value renders as sibling nodes with no wrapper element — for whitespace it counts as a non-text sibling, like an element — and the markup path is compiled out of apps that never use it (the sanitizer, of apps that only use `newline_to_br`). Neither formatter is related to `{#raw}`: formatters run on a runtime value after the template has already lexed, while a raw block makes author-written source braces literal at compile time.
 
 **Typos don't crash (v1.12, D43).** A formatter name that isn't registered renders the value **unchanged** and logs one `console.error` naming it — `[puzzle] unknown formatter "captialize" — value passed through unchanged (did you mean "capitalize"?)`. Formatters are resolved at render time (custom ones are registered in the app config), so this can't be a compile error — watch the console when a formatter seems to do nothing. A removed built-in (`sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last`, `noescape`) passes through the same way, and the message names its replacement.
 

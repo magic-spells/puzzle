@@ -216,7 +216,7 @@ enforced, not merely advised.
   D172 one language, two dialects, with the template parser extracted into the
   `packages/puzzle-lang` Go module (tagged `packages/puzzle-lang/vX.Y.Z` beside
   each `vX.Y.Z`); D173 core semantics (a pipe is a formatter in every value
-  position, none in a `{#for}` header, `?.` member guarding, loop domain,
+  position, none in a condition or `{#for}` header, `?.` member guarding, loop domain,
   slot-filled rule, value printing, object-literal args, script-less
   components); D174 the 35-name standard formatter set, the list-formatter and
   `noescape` removals, and sanitized `raw`; D175 translations (`t`,
@@ -224,7 +224,7 @@ enforced, not merely advised.
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
   "Upgrading from 0.7" checklist. Production sizes: hello-world **21.5 KB
-  gzip**, todos **25.5 KB gzip**. Cards truthed through D175; the next free
+  gzip**, todos **25.6 KB gzip**. Cards truthed through D175; the next free
   decision number is **D176**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView

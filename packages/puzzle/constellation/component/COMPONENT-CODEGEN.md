@@ -96,6 +96,15 @@ notes:
       packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
       corrected.
     sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+  - kind: state
+    text: >-
+      Condition headers take no formatter chain (D173 V1): `{#if x | raw}`, `{#case x | raw}` and an
+      inline-if `{#if on | raw}` are now rejected by the parser's condition-pipe error before
+      `checkMarkupFormatters` runs, so the markup note's "an `{#if}`/`{#case}`/inline-if subject"
+      placements no longer reach `markup.go` — it checks attribute values, props, marker arguments
+      and text chains only. `emitIf`/`emitCase` and the inline-if emitters resolve the condition
+      with `resolveValue(cond, nil, …)`, and the D31 scan (`plugin/scan.go`) and the `puzzle check`
+      emitter no longer read a header chain.
 ---
 
 # Render-function codegen
@@ -158,9 +167,11 @@ interpolation braces.
 
 **A pipe is a formatter chain in every value position** (D173 V1):
 `resolveChain` resolves the base, then wraps it in the same `__f[...]` calls text
-interpolation uses, for `DynamicAttr` values and props, if/else-if/unless/case
-headers (an unless chain negates AFTER the formatters, via `If.Negate`), and
-inline-if conditions. A chained form-control value never auto-binds (it is a
+interpolation uses, for `DynamicAttr` values, props and marker arguments.
+Condition headers (if/else-if/unless/case and an attribute's inline-if) carry
+no chain — the parser rejects a pipe there — so codegen resolves them as plain
+guarded expressions (`resolveValue(cond, nil, …)`) and they never read `__f`.
+A chained form-control value never auto-binds (it is a
 display projection, not a writable path), and a chained explicit `key=` reads
 `__f`, so that loop site keeps `.map`.
 
@@ -371,6 +382,7 @@ conservative meta, the `listRows as __l` import appearing only for a file that
 lowers a site, the `mapDepth` exclusions, the row-scope shadow mangling, the
 cache threshold, the static island-seed case and every exclusion —
 `core_semantics_test.go` pins the D173 value rules (chains in every value
-position, the member guard and its exemptions, object-literal arguments, the
-loop-guard imports and the literal-range fold), and the todos fixtures remain
-the byte contract the emitter is matched to, not the other way round.
+position, the condition-header pipe error and `||` in headers, the member
+guard and its exemptions, object-literal arguments, the loop-guard imports and
+the literal-range fold), and the todos fixtures remain the byte contract the
+emitter is matched to, not the other way round.

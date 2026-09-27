@@ -68,21 +68,17 @@ func (c *compiler) checkMarkupFormatters(nodes []parser.Node, parentTag string) 
 		case *parser.Portal:
 			err = c.checkMarkupFormatters(node.Children, "")
 		case *parser.If:
-			if err = c.checkNoMarkup(node.Formatters, node.Pos, "an {#if} subject"); err == nil {
-				if err = c.checkMarkupFormatters(node.Then, parentTag); err == nil {
-					err = c.checkMarkupFormatters(node.Else, parentTag)
-				}
+			if err = c.checkMarkupFormatters(node.Then, parentTag); err == nil {
+				err = c.checkMarkupFormatters(node.Else, parentTag)
 			}
 		case *parser.Case:
-			if err = c.checkNoMarkup(node.Formatters, node.Pos, "a {#case} subject"); err == nil {
-				for _, clause := range node.Clauses {
-					if err = c.checkMarkupFormatters(clause.Body, parentTag); err != nil {
-						break
-					}
+			for _, clause := range node.Clauses {
+				if err = c.checkMarkupFormatters(clause.Body, parentTag); err != nil {
+					break
 				}
-				if err == nil {
-					err = c.checkMarkupFormatters(node.Else, parentTag)
-				}
+			}
+			if err == nil {
+				err = c.checkMarkupFormatters(node.Else, parentTag)
 			}
 		case *parser.For:
 			err = c.checkMarkupFormatters(node.Body, parentTag)
@@ -145,9 +141,6 @@ func (c *compiler) checkMarkupParts(parts []parser.Part, pos parser.Position, wh
 				}
 			}
 		case *parser.InlineIfPart:
-			if err := c.checkNoMarkup(p.Formatters, p.Pos, "an inline {#if} condition"); err != nil {
-				return err
-			}
 			if err := c.checkMarkupParts(p.Then, pos, where); err != nil {
 				return err
 			}

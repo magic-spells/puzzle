@@ -5,7 +5,7 @@ A SPA-first JavaScript framework with single-file components, reactive data bind
 **[▶ Live demo](https://puzzle-music-demo.vercel.app/)** — the [music example app](examples/music) built with Puzzle.
 
 - **~200 ms production builds** — compile, bundle, Tailwind, and minify, end to end (todos example, Apple Silicon)
-- **Small apps, honestly measured** — a minimal app is 21.5 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 25.5 KB gzip. Regenerated every release by `npm run measure:size`
+- **Small apps, honestly measured** — a minimal app is 21.5 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 25.6 KB gzip. Regenerated every release by `npm run measure:size`
 - **Zero JavaScript toolchain** — the CLI is one prebuilt Go binary; no Babel, no bundler config, no postinstall scripts
 
 ## Quick start
@@ -360,7 +360,7 @@ target is dropped). It removes `<script>` (with its contents), `<style>`,
 use your app's CSS and name its elements — for untrusted user HTML that is a
 UI-overlay and naming risk (a `fixed inset-0` block over your page, an `id`
 that shadows an undefined global), not code execution. A markup formatter must be the last formatter of a text
-interpolation — in an attribute, a prop, a block subject or mid-chain it is a
+interpolation — in an attribute, a prop or mid-chain it is a
 compile error — so an app formatter can never inject markup. Apps that never
 use either formatter ship none of this code.
 

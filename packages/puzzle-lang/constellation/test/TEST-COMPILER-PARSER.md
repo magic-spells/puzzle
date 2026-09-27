@@ -45,10 +45,12 @@ What they guarantee:
   the raw block, composition markers, Portal, snippets, and dotted component
   family tags.
 - the formatter-chain rule holds in every value position (D173 V1): a
-  top-level single `|` splits into a chain in attributes, props, marker
-  arguments and block subjects; what follows a pipe must be a formatter name;
-  and a pipe in a `{#for}` header or a `{:when}` value is a positioned error
-  (`chain_test.go`).
+  top-level single `|` splits into a chain in attributes, props and marker
+  arguments; what follows a pipe must be a formatter name; and a pipe in a
+  condition header (`{#if}`, `{:else if}`, `{#unless}`, `{#case}`, an
+  attribute's inline `{#if}`), a `{#for}` header or a `{:when}` value is a
+  positioned error at the header's position, while `||` and a parenthesized,
+  quoted or regex `|` in those headers stay JavaScript (`chain_test.go`).
 - composition markers are unique per render path, not per file (D173 V13):
   exclusive branches may each carry the same marker, and a marker on the same
   path collides (`slot_paths_test.go`).

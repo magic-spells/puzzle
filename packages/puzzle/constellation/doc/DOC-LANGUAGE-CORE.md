@@ -78,8 +78,6 @@ they mean in HTML, with these rules:
 
 ## Interpolation and formatters
 
-
-
 `{ expression }` writes a value into text or an attribute. Every host prints a
 value by one rule ([[DECISION-D173-CORE-SEMANTICS]] V6):
 
@@ -99,7 +97,6 @@ A **formatter** transforms a value for display. Write it after a pipe:
 <p>{ post.body | truncate(120) }</p>
 <p>{ product.name | trim | capitalize }</p>
 <a title={ price | currency }>…</a>
-{#if post.tags | size}<p>Tagged</p>{/if}
 ```
 
 - `{ value | name }` or `{ value | name(arg, arg) }`. Arguments are
@@ -116,14 +113,16 @@ A **formatter** transforms a value for display. Write it after a pipe:
   formatters for them.
 
 **A pipe is a formatter in every value position** (D173 V1): text
-interpolation, quoted and brace-only attribute values, component props, and the
-`{#if}`, `{:else if}`, `{#unless}` and `{#case}` subjects. `{#unless x | f}`
-negates the formatted value. **A pipe in a `{#for}` header is a compile
-error**, in the collection and in range bounds: name the list first (PuzzleKit:
-shape it in `data()` and loop over that field; Sites: `{#let}`). So is a pipe in
-a `{:when}` value, which takes no chain. `@event` handler bodies are PuzzleKit
-JavaScript, not value positions. PuzzleKit builds all of this; Sites still
-rejects a chain in `{#if}`/`{#case}` headers until its next parser sync.
+interpolation, quoted and brace-only attribute values, component props and
+marker arguments. **Formatters never go in a condition or loop header:** a
+top-level pipe in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` header, in
+an attribute value's inline `{#if}`, in a `{:when}` value, or in a `{#for}`
+header (the collection or a range bound) is a compile error, never a bitwise OR.
+Name the value first (PuzzleKit: compute it in `data()` and test or loop over
+that field; Sites: `{#let}`). `||` keeps working in every header, and a
+parenthesized `(a | b)` is still a bitwise OR. `@event` handler bodies are
+PuzzleKit JavaScript, not value positions. PuzzleKit builds all of this; Sites
+already rejects a chain in `{#if}`/`{#case}` headers.
 
 Which formatter names exist is a host decision; the names both hosts implement
 identically are the **standard set** (see Standard formatters below). Full
@@ -162,7 +161,6 @@ Each dialect reserves its own attribute names on top of this (PuzzleKit:
 
 ## Control blocks
 
-
 ```html
 {#if items.length > 3}
   <p>many</p>
@@ -183,10 +181,12 @@ Each dialect reserves its own attribute names on top of this (PuzzleKit:
 
 - **`{#if}`** takes any number of `{:else if cond}` clauses and one optional
   trailing `{:else}`. `{#unless}` is the inverted form; it allows `{:else}` but
-  not `{:else if}`. Each condition may carry a formatter chain
-  (`{#if post.tags | size}`). §6.
-- **`{#case expr}`** compares with strict equality. The subject may carry a
-  formatter chain; `{:when}` values are plain expressions. A `{:when}` may list
+  not `{:else if}`. Each condition is a plain expression: a formatter pipe in
+  it is an error (D173 V1), so compute the value in `data()`
+  (`{#if hasTags}`). §6.
+- **`{#case expr}`** compares with strict equality. The subject and the
+  `{:when}` values are plain expressions; a formatter pipe in either is an
+  error (D173 V1). A `{:when}` may list
   several values, separated by commas, as alternatives. The first match wins and
   there is no fall-through. Only whitespace may appear before the first
   `{:when}`, and `{:else}` must be last. §6.
@@ -566,13 +566,14 @@ rule is stated in the core sections above); it stays listed until Sites changes
 too.
 
 **Resolved in the core above** (group (b), expressions and loops): V1 (a pipe is
-a formatter in every value position; banned in `{#for}` headers and `{:when}`
-values), V2 (`==`/`!=` are JavaScript loose equality), V3 (`x == null` is the
+a formatter in every value position; banned in condition headers, `{#for}`
+headers and `{:when}` values), V2 (`==`/`!=` are JavaScript loose equality), V3 (`x == null` is the
 portable absence test; strict comparison against `null`/`undefined` is
 host-defined), V4 (reading through a missing value prints nothing), V8 (object
 literals in argument and nested positions) and V15 (a script-less PuzzleKit
 component reads its props). PuzzleKit implements all of them. Sites still has to
-adopt V1 (chains in `{#if}`/`{#case}` headers and the `{#for}` error) and V2
+adopt V1's `{#for}`-header error (it already rejects a chain in a condition
+header) and V2
 (loose equality in its evaluator) on its next parser sync.
 
 **Still open:**

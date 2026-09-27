@@ -303,8 +303,6 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		}
 		collectFormatterCalls(node.Formatters, usage.Formatters, allow)
 	case *parser.If:
-		// Block subjects take a chain too (D173 V1).
-		collectFormatterCalls(node.Formatters, usage.Formatters, allow)
 		for _, child := range node.Then {
 			collectUsage(child, usage, allow)
 		}
@@ -312,7 +310,6 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Case:
-		collectFormatterCalls(node.Formatters, usage.Formatters, allow)
 		for _, clause := range node.Clauses {
 			for _, child := range clause.Body {
 				collectUsage(child, usage, allow)
@@ -372,7 +369,6 @@ func collectPartFormatters(parts []parser.Part, used, allow map[string]bool) {
 				collectFormatterCalls(p.Interp.Formatters, used, allow)
 			}
 		case *parser.InlineIfPart:
-			collectFormatterCalls(p.Formatters, used, allow)
 			collectPartFormatters(p.Then, used, allow)
 			collectPartFormatters(p.Else, used, allow)
 		}

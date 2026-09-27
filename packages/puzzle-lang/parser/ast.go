@@ -100,21 +100,14 @@ type Interpolation struct {
 
 // If is `{#if cond} Then {:else} Else {/if}`. Else is nil when absent.
 // `{:else if}` desugars into an If nested in Else, and `{#unless}` into an If
-// whose condition is negated.
-//
-// Formatters is the header's formatter chain (D173 V1: a top-level single `|`
-// in an `{#if}`, `{:else if}` or `{#unless}` subject is a formatter pipe, as it
-// is in text), applied to Cond. Negate is set only by an `{#unless}` WITH a
-// chain: the chain has to run before the negation, so Cond stays the bare base
-// expression and the host negates the formatted result. An `{#unless}` without a
-// chain folds the negation into Cond as `!(…)` and leaves Negate false.
+// whose condition is negated as `!(…)`. Cond is a plain expression: a
+// condition header takes no formatter chain (D173 V1), so a top-level `|` in
+// it is a parse error.
 type If struct {
-	Cond       string
-	Formatters []FormatterCall
-	Negate     bool
-	Then       []Node
-	Else       []Node
-	Pos        Position
+	Cond string
+	Then []Node
+	Else []Node
+	Pos  Position
 }
 
 // For is `{#for item in collection}` or the range form `{#for from...to}`
@@ -140,14 +133,13 @@ type For struct {
 // desugar to If: codegen emits an IIFE that binds Expr to a temp ONCE, so a
 // getter-backed data value is evaluated a single time.
 //
-// Formatters is the subject's formatter chain (D173 V1), applied to Expr before
-// the comparison. `{:when}` values are plain expressions.
+// Expr and the `{:when}` values are plain expressions: a branching header
+// takes no formatter chain (D173 V1).
 type Case struct {
-	Expr       string
-	Formatters []FormatterCall
-	Clauses    []WhenClause
-	Else       []Node
-	Pos        Position
+	Expr    string
+	Clauses []WhenClause
+	Else    []Node
+	Pos     Position
 }
 
 // WhenClause is one `{:when v1, v2, …}` arm of a Case: its comma-separated
@@ -270,14 +262,13 @@ type InterpPart struct {
 
 // InlineIfPart is `{#if cond} Then {:else} Else {/if}` inside an attribute
 // value. Then/Else may contain only static text and interpolations — no
-// elements and no {#for} (parse error otherwise). Formatters is the
-// condition's formatter chain (D173 V1), as on If.
+// elements and no {#for} (parse error otherwise). Cond is a plain expression,
+// as on If: a condition takes no formatter chain (D173 V1).
 type InlineIfPart struct {
-	Cond       string
-	Formatters []FormatterCall
-	Then       []Part
-	Else       []Part
-	Pos        Position
+	Cond string
+	Then []Part
+	Else []Part
+	Pos  Position
 }
 
 func (*StaticPart) isPart()   {}

@@ -140,9 +140,10 @@ second specification. Decision cards hold rationale and git holds chronology.
   never calls them through the registry. Gated by `__PUZZLE_HAS_RAW_HTML__`
   and, for the sanitizer, `__PUZZLE_HAS_RAW_SANITIZE__`.
 - **Core semantics (D173):** a `|` is a formatter pipe in every value position
-  (text, attributes, props, marker arguments, `{#if}`/`{#unless}`/`{#case}`
-  subjects) and must be followed by a formatter name; a pipe in a `{#for}`
-  header or a `{:when}` value is a compile error. Every member step in a
+  (text, attributes, props, marker arguments) and must be followed by a
+  formatter name; a pipe in a condition header (`{#if}`, `{:else if}`,
+  `{#unless}`, `{#case}`, an attribute's inline `{#if}`), a `{#for}` header or
+  a `{:when}` value is a compile error, never a bitwise OR. Every member step in a
   template value compiles to `?.`, so a missing intermediate prints nothing.
   A loop over a non-list runs zero times (a non-array non-nullish value warns
   in development); range bounds truncate. `NaN`, ±Infinity and any object,

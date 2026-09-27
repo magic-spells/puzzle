@@ -5,8 +5,8 @@ path: parser/parser.go
 language: go
 summary: >-
   Recursive-descent template parser and grammar validation, including the D173 V1 formatter-chain
-  rule (parseChain, isFormatterName, the {#for}/{:when} pipe bans) and D167 component-name
-  validation.
+  rule (parseChain, isFormatterName, the condition-header / {#for} / {:when} pipe bans) and D167
+  component-name validation.
 verified_at: '2026-09-25T10:41:32.868Z'
 verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
 notes:
@@ -31,7 +31,7 @@ Source binding for the template parser. Behavioral intent stays on the owning co
 
 Where the 0.8.0 rules live in this file:
 
-- `parseChain` is the one pipe rule for every value position that takes a chain: text interpolation, attribute values, component props, marker arguments, and the `{#if}`/`{:else if}`/`{#unless}`/`{#case}` subjects (D173 V1). Only a top-level single `|` splits. The actual splitting is `scan.go`'s top-level splitter.
+- `parseChain` is the one pipe rule for every value position that takes a chain: text interpolation, attribute values, component props and marker arguments (D173 V1). Only a top-level single `|` splits. The actual splitting is `scan.go`'s top-level splitter.
 - `isFormatterName` requires each link after a pipe to be a name (`[A-Za-z_$][A-Za-z0-9_$-]*`, bare or called). Otherwise it reports the positioned "wrap a bitwise OR in parentheses" error.
-- `hasTopLevelPipe` and `forPipeError` implement the `{#for}` header ban (the collection or either range bound). The `{:when}` ban is inline in the case-clause parser. Both are positioned errors that name the fix.
+- `hasTopLevelPipe` detects a pipe by `parseChain`'s rule for the header bans. `conditionPipeError` is the condition-header ban: the `{#if}`, `{:else if}`, `{#unless}` and `{#case}` headers here, and an inline `{#if}` inside an attribute value in `attr.go` — "formatter pipes are not allowed in <header> — compute the value in data() and test that field (e.g. …); for a logical OR, write ||". `forPipeError` is the `{#for}` header ban (the collection or either range bound), and the `{:when}` ban is inline in the case-clause parser. All are positioned errors that name the fix, and none falls back to a bitwise OR. So `If`, `Case` and `InlineIfPart` carry no formatter chain.
 - Capitalized tag names are validated as `Ident('.'Ident)*` (D167).

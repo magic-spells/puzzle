@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // D173 group (b), expressions and loops: the runtime half of V1 (formatter pipes
-// in attributes and block headers), V2 (`==` keeps its JavaScript meaning), V4
+// in attributes; plain JavaScript, `||` included, in block headers), V2 (`==` keeps its JavaScript meaning), V4
 // (reading through a missing value prints nothing), V8 (object literals as
 // formatter arguments), V12 (a non-list loops zero times; range bounds truncate)
 // and V15 (a script-less component reads its props). The fixture graph is
@@ -50,7 +50,7 @@ describe('D173 core semantics — compiled output', () => {
 
 		// V1: a pipe in a brace-only attribute is a formatter call, not bitwise OR.
 		expect(el.querySelector('.title').getAttribute('title')).toBe('$5');
-		// V1: chains in {#if}, {#unless} and {#case} subjects.
+		// V1: condition headers take no chain; `||` stays logical OR there.
 		expect(el.querySelector('.has-tags')).toBeNull();
 		expect(text(el, '.no-tags')).toBe('none');
 		expect(text(el, '.unless')).toBe('empty');

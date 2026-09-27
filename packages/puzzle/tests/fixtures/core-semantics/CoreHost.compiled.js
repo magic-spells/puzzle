@@ -13,6 +13,7 @@ export default class CoreHost extends PuzzleView {
       n: 3,
       unit: 'items',
       tags: [],
+      flagged: false,
       status: 'open',
       one: 1,
       word: 'abc',
@@ -51,7 +52,7 @@ CoreHost.prototype.render = function () {
     new ViewNode('p', { class: 'nested' }, [
       new ViewNode('text', { value: __s((__f["echo"] || __f.__missing("echo"))('x', { outer: { inner: __d.n }, 'quoted-key': __d.unit }), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? '\'x\'' : 0) }),
     ]),
-    ...((__f["size"] || __f.__missing("size"))(__d.tags)
+    ...(__d.tags?.length || __d.flagged
       ? [
           new ViewNode('p', { class: 'has-tags' }, [
             new ViewNode('text', { value: 'tags' }),
@@ -62,7 +63,7 @@ CoreHost.prototype.render = function () {
             new ViewNode('text', { value: 'none' }),
           ]),
         ]),
-    ...(!((__f["size"] || __f.__missing("size"))(__d.tags))
+    ...(!(__d.tags?.length || __d.flagged)
       ? [
           new ViewNode('p', { class: 'unless' }, [
             new ViewNode('text', { value: 'empty' }),
@@ -72,7 +73,7 @@ CoreHost.prototype.render = function () {
           new ViewNode('#'),
         ]),
     ...(((__c) =>
-      __c === ('OPEN')
+      __c === ('open')
         ? [
             new ViewNode('p', { class: 'case' }, [
               new ViewNode('text', { value: 'open' }),
@@ -82,7 +83,7 @@ CoreHost.prototype.render = function () {
             new ViewNode('p', { class: 'case' }, [
               new ViewNode('text', { value: 'other' }),
             ]),
-          ])((__f["upcase"] || __f.__missing("upcase"))(__d.status))),
+          ])(__d.status || 'none')),
     new ViewNode('p', { class: 'eq' }, [
       new ViewNode('text', { value: __s(__d.one == '1' ? 'loose' : 'strict', typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'one == \'1\' ? \'loose\' : \'strict\'' : 0) }),
     ]),

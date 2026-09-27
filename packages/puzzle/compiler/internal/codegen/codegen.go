@@ -915,11 +915,9 @@ func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (stri
 // an unstable conditional emits both branches unpadded, byte-identically to the
 // pre-padding form. Nested conditionals make this decision independently.
 func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, error) {
-	cond := c.resolveValue(n.Cond, n.Formatters, scope)
-	if n.Negate {
-		// `{#unless x | f}`: the chain runs first, then the negation (If.Negate).
-		cond = "!(" + cond + ")"
-	}
+	// A condition takes no formatter chain (D173 V1: the parser rejects a pipe
+	// in a condition header), but it is a value position for guarded access.
+	cond := c.resolveValue(n.Cond, nil, scope)
 	thenItems, err := c.processChildren(n.Then, scope)
 	if err != nil {
 		return "", err
@@ -1108,7 +1106,7 @@ func (c *compiler) caseStaticLen(n *parser.Case, scope scopeMap) (int, bool, err
 // cleanly in nested cases: user expressions never resolve to it, and each arm
 // only ever compares its own `__c`.
 func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, error) {
-	caseExpr := c.resolveValue(n.Expr, n.Formatters, scope)
+	caseExpr := c.resolveValue(n.Expr, nil, scope)
 
 	// Pre-process every clause body + the else and compute the max static arity.
 	// Padding applies only when every branch has provably fixed occupancy; an
@@ -1690,7 +1688,7 @@ func (c *compiler) emitMixedFacts(parts []parser.Part, scope scopeMap, facts *ex
 			b.WriteString(c.displayValue(expr, pp.Interp.Expr))
 			b.WriteString("}")
 		case *parser.InlineIfPart:
-			cond := c.resolveChain(pp.Cond, pp.Formatters, scope, facts)
+			cond := c.resolveChain(pp.Cond, nil, scope, facts)
 			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
@@ -1722,7 +1720,7 @@ func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprF
 			expr := c.applyFormatters(resolved, pp.Interp.Formatters, scope, facts)
 			segs = append(segs, c.displayValue(expr, pp.Interp.Expr))
 		case *parser.InlineIfPart:
-			cond := c.resolveChain(pp.Cond, pp.Formatters, scope, facts)
+			cond := c.resolveChain(pp.Cond, nil, scope, facts)
 			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
