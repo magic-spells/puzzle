@@ -572,17 +572,40 @@ function expandChildList(kids, parts) {
  * `nodes` is null for an args-bearing marker filled with plain content, which
  * always renders its fallback. The shared expansion serves the browser and
  * both prerender modes, so SSG output agrees.
+ *
+ * Compiled markers carry the fallback LAZILY, as the `attrs.fallback` thunk:
+ * it is neither evaluated nor built unless the fallback is needed, so a filled
+ * position never runs its fallback's expressions (or their value-printing
+ * diagnostics). It runs at most once per marker vnode: the built body moves
+ * into the marker's otherwise empty `children` — where a hand-built marker
+ * keeps an eager fallback — and the thunk is cleared, so a marker reused
+ * across renders (a clean list-block row, D170) hands back the same fallback
+ * vnodes and patch()'s identity short-circuit keeps them free. A body that
+ * builds nothing (`{#for}` over an empty list) leaves the marker exactly as a
+ * marker without a fallback: the supplied nodes pass through, placeholders
+ * included, so the arity stays constant as it did when fallbacks were eager.
  */
 function fill(out, nodes, k, parts) {
 	if (
 		nodes &&
-		(!k.children.length ||
+		((!k.attrs.fallback && !k.children.length) ||
 			nodes.some((n) => n.tag !== PLACEHOLDER_TAG && (!n.isText || /\S/.test(n.attrs.value))))
 	) {
 		for (const n of nodes) out.push(n);
-	} else {
-		for (const fb of k.children) out.push(expandNode(fb, parts));
+		return;
 	}
+	const lazy = k.attrs.fallback;
+	if (lazy) {
+		// Built before the thunk is cleared, so a throwing body leaves the marker
+		// as it was and the next render retries it.
+		k.children = lazy();
+		k.attrs.fallback = null;
+	}
+	if (nodes && !k.children.length) {
+		for (const n of nodes) out.push(n);
+		return;
+	}
+	for (const fb of k.children) out.push(expandNode(fb, parts));
 }
 
 const UNKNOWN_SNIPPET_OWNER = {};

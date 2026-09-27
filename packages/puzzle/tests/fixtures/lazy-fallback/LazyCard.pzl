@@ -1,0 +1,22 @@
+<puzzle-view>
+<div class="lazy-card">
+  <h3><Slot name="label"><em class="lazy-card-fallback">{ label | probe }</em></Slot></h3>
+  <Children>{#for tip in tips}<i class="lazy-tip">{ tip }</i>{/for}</Children>
+  <input class="lazy-card-input" />
+</div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Argument-free markers, so plain call-site content fills them. `label`'s
+// fallback counts its evaluations through `probe`; the default marker's
+// fallback is a loop that builds NOTHING when `tips` is empty, and the input
+// after it is the sibling whose identity must survive a toggling call-site
+// {#if} (a fallback that builds nothing keeps the marker's arity constant).
+export default class LazyCard extends PuzzleView {
+  data(params, props) {
+    return { label: props.label, tips: Array.isArray(props.tips) ? props.tips : [] };
+  }
+}
+</script>

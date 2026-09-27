@@ -1,0 +1,22 @@
+<puzzle-view class="lazy-host">
+  <LazyRows items={ items }>
+    <Snippet fits="row" item index>
+      <span class="lazy-row">{ index }:{ item.name }</span>
+    </Snippet>
+
+    <Snippet fits="note" item>
+      <b class="lazy-note-filled">{ item.name }</b>
+    </Snippet>
+  </LazyRows>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import LazyRows from './LazyRows.compiled.js';
+
+export default class LazyHost extends PuzzleView {
+  data() {
+    return { items: [{ id: 1, name: 'Ada' }, { id: 2, name: 'Grace' }] };
+  }
+}
+</script>

@@ -36,6 +36,14 @@ Guarantees:
   the router, and through the SSG serializer.
 - marker fallback bodies: a paired marker's body renders only while nothing
   fills the position, and disappears the moment something does.
+- lazy fallbacks (`tests/lazy-slot-fallback.test.js`, compiled fixtures in
+  `tests/fixtures/lazy-fallback/` shaped like the VirtualList piece's row): a
+  snippet-filled marker never evaluates its fallback — no formatter call, no
+  "object template value" warning — in the browser and in prerendered output;
+  an unfilled fallback is built once per marker and a clean cached row keeps
+  its fallback vnodes and DOM; a stamp that renders nothing builds only its own
+  fallback; a fallback deferred on a cached row builds correctly when a later
+  render unfills the position.
 - Snippet parsing/emission and runtime stamping: marker/ref body
   exclusions, distinct marker-site uniqueness, per-stamp args/fresh vnodes,
   stateful variable-length output under the legal loop shape, caller/component
