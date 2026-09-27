@@ -8,8 +8,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC-TEMPLATE
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-09-27T00:25:55.351Z'
+verified_sha: 3957beaf4eb72e0fe9fb06853a96761b66a209b8
 code_refs:
   - client-runtime/views/viewManager.js
   - client-runtime/ssg/preload.js
@@ -21,6 +21,22 @@ notes:
       card was found true as written, so nothing changed but the baseline. Bound code was read at
       this sha; the framework suite is green at 1871 tests.
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - kind: decision
+    text: >-
+      0.8.0: fallback bodies became lazy (a compiled `attrs.fallback` thunk) instead of eager marker
+      children, because an eager body ran for filled positions and 0.8's value-printing check warned
+      about content that never rendered (the VirtualList "object template value for row.item"
+      report). Two behaviors had to be carried over by hand, since the move from render() to slot
+      expansion changed them silently: (1) a body that builds nothing still counts as no fallback,
+      so arity placeholders pass through; (2) expansion stays inside each caller's render error
+      boundary, so the takeover preload keeps its per-component fail-soft.
+    sha: 3957beaf
+  - kind: verified
+    text: >-
+      Rewritten for lazy fallbacks and checked against codegen.go emitSlot, viewManager.js
+      fill/expandChildList and ssg/preload.js at this sha. At this sha npm test passes (138 files,
+      2624 tests), as do go test in compiler and puzzle-lang and test:types.
+    sha: 3957beaf4eb72e0fe9fb06853a96761b66a209b8
 ---
 
 Composition markers accept a paired form whose body is fallback content —
