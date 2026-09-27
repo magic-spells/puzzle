@@ -116,6 +116,17 @@ func TestMarkupFormatterPlacementErrors(t *testing.T) {
 		{"component root", `<puzzle-view>{ body | raw }</puzzle-view>`, "root must be an element or component", ModeComponent},
 		{"for body root", `<puzzle-view><ul>{#for c in cs}{ c | raw }{/for}</ul></puzzle-view>`, "{#for} body root must be an element or component", ModeView},
 		{"skeleton", "<puzzle-view><p>x</p></puzzle-view>\n<puzzle-skeleton><p title={ a | raw }>x</p></puzzle-skeleton>", "not an attribute value", ModeView},
+		// The <puzzle-view> root's own attributes are checked like any element's.
+		{"root brace-only attribute", `<puzzle-view title={ x | raw }><p>x</p></puzzle-view>`, "not an attribute value", ModeView},
+		// Foreign content: the prerender would parse the markup as SVG/MathML.
+		{"inside svg", `<puzzle-view><svg>{ body | raw }</svg></puzzle-view>`, "cannot render inside <svg>", ModeView},
+		{"nested in svg", `<puzzle-view><svg><g><text>{#if on}{ body | raw }{/if}</text></g></svg></puzzle-view>`, "cannot render inside <svg>", ModeView},
+		{"inside math", `<puzzle-view><math><mi>{ body | newline_to_br }</mi></math></puzzle-view>`, "cannot render inside <math>", ModeView},
+		// A component renders inline, so its children and snippet bodies keep the
+		// surrounding element's context.
+		{"component child in script", `<puzzle-view><script type="text/plain"><Card>{ body | raw }</Card></script></puzzle-view>`, "cannot render inside <script>", ModeView},
+		{"snippet body in textarea", `<puzzle-view><textarea><Card><Snippet fits="row">{ body | raw }</Snippet></Card></textarea></puzzle-view>`, "cannot render inside <textarea>", ModeView},
+		{"component child in svg", `<puzzle-view><svg><Icon>{ body | raw }</Icon></svg></puzzle-view>`, "cannot render inside <svg>", ModeView},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := compileMarkup(t, tt.template, tt.mode)
@@ -130,6 +141,28 @@ func TestMarkupFormatterPlacementErrors(t *testing.T) {
 				t.Errorf("error is not positioned: %v", err)
 			}
 		})
+	}
+}
+
+// An SVG <foreignObject> hosts HTML again (the runtime's namespace rule and
+// the HTML parser's integration point agree), so a markup interpolation there
+// is legal; a <Portal> body renders at the framework outlet, not inside the
+// element around it.
+func TestMarkupInterpolationAllowedOutsideForeignContent(t *testing.T) {
+	for _, template := range []string{
+		`<puzzle-view><svg><foreignObject><div>{ body | raw }</div></foreignObject></svg></puzzle-view>`,
+		`<puzzle-view><svg><foreignObject>{ body | raw }</foreignObject></svg></puzzle-view>`,
+		`<puzzle-view><Card><Snippet fits="row"><p>{ body | raw }</p></Snippet></Card></puzzle-view>`,
+		`<puzzle-view><textarea><Portal><div>{ body | raw }</div></Portal></textarea></puzzle-view>`,
+	} {
+		got, err := compileMarkup(t, template, ModeView)
+		if err != nil {
+			t.Errorf("%s: unexpected error %v", template, err)
+			continue
+		}
+		if !strings.Contains(got, "new ViewNode('#html'") {
+			t.Errorf("%s: expected the live-HTML node:\n%s", template, got)
+		}
 	}
 }
 

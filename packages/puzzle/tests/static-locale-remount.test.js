@@ -1,0 +1,106 @@
+// @vitest-environment jsdom
+//
+// The static kernel's locale remount (D175). setLocale on an `output: 'static'`
+// page re-assembles the chain and swaps it in for the mounted one — the static
+// counterpart of the SPA's same-location rebuild, which preloads everything
+// before it commits and animates nothing. Two things pinned here: nested
+// non-routed components are prepared BEFORE the swap (not mounted late, after
+// setLocale already resolved), and a mount that throws leaves the old page on
+// screen and rejects setLocale instead of blanking the page.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mountStatic } from '../client-runtime/static/index.js';
+import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
+import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { setFormatLocale } from '../client-runtime/formatters/locale.js';
+
+const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
+const text = (value) => new ViewNode('text', { value });
+
+const EN = { title: 'Welcome', badge: 'new' };
+const ES = { title: 'Bienvenido', badge: 'nuevo' };
+const MANIFEST = { defaultLocale: 'en', locales: { en: 'locales/en.json', es: 'locales/es.json' } };
+
+function memoryStorage() {
+	const map = new Map();
+	return { getItem: (k) => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, String(v)) };
+}
+
+beforeEach(() => {
+	document.body.innerHTML = '<div id="app"></div>';
+	vi.stubGlobal('localStorage', memoryStorage());
+});
+afterEach(() => {
+	setFormatLocale(undefined);
+	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
+	document.body.innerHTML = '';
+});
+
+async function mountPage(views) {
+	let i18n;
+	class Probe extends views[0] {
+		created() {
+			i18n = this.ctx.i18n;
+		}
+	}
+	await mountStatic({
+		target: '#app',
+		views: [Probe],
+		route: { path: '/', params: {}, chain: [{ path: '/' }] },
+		__i18n: { manifest: MANIFEST, tables: { en: EN, es: ES }, locale: 'en' },
+	});
+	return i18n;
+}
+
+describe('static kernel: setLocale remount', () => {
+	it('prepares nested components before the swap, so the new page is complete when setLocale resolves', async () => {
+		class Badge extends PuzzleView {
+			async data() {
+				await new Promise((r) => setTimeout(r, 10));
+				return {};
+			}
+			render() {
+				return h('em', { class: 'badge' }, [text(this.ctx.i18n.t('badge'))]);
+			}
+		}
+		class Home extends PuzzleView {
+			render() {
+				return h('section', { class: 'home' }, [
+					h('h1', {}, [text(this.ctx.i18n.t('title'))]),
+					new ViewNode(Badge, {}, []),
+				]);
+			}
+		}
+
+		const i18n = await mountPage([Home]);
+		await new Promise((r) => setTimeout(r, 30));
+		expect(document.querySelector('.badge').textContent).toBe('new');
+
+		await i18n.setLocale('es');
+
+		expect(document.querySelector('h1').textContent).toBe('Bienvenido');
+		expect(document.querySelectorAll('.badge')).toHaveLength(1);
+		expect(document.querySelector('.badge').textContent).toBe('nuevo');
+	});
+
+	it('keeps the old page and rejects when the new page fails to mount', async () => {
+		const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+		class Home extends PuzzleView {
+			render() {
+				if (this.ctx.i18n.locale === 'es') throw new Error('boom');
+				return h('section', { class: 'home' }, [h('h1', {}, [text(this.ctx.i18n.t('title'))])]);
+			}
+		}
+
+		const i18n = await mountPage([Home]);
+		await new Promise((r) => setTimeout(r, 0));
+		const before = document.querySelector('.home');
+		expect(before.querySelector('h1').textContent).toBe('Welcome');
+
+		await expect(i18n.setLocale('es')).rejects.toThrow('boom');
+
+		expect(document.querySelector('#app').firstChild).toBe(before);
+		expect(document.querySelector('h1').textContent).toBe('Welcome');
+		errors.mockRestore();
+	});
+});

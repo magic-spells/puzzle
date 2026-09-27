@@ -5,9 +5,10 @@ import (
 	"strings"
 )
 
-// lexer.go is the HTML-aware template lexer (constellation/doc/DOC-COMPILER-DESIGN.md §c). It
-// tokenizes the <puzzle-view> CONTENT only — <script>/<style> bodies are
-// never scanned for template syntax (that split happens in sections.go).
+// lexer.go is the HTML-aware template lexer
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c). It tokenizes the
+// <puzzle-view> CONTENT only — <script>/<style> bodies are never scanned for
+// template syntax (that split happens in sections.go).
 //
 // The one salvage from the prototype is the idea of line/col bookkeeping; the
 // implementation here is index-based (jumpTo replays consumed bytes to keep
@@ -192,7 +193,7 @@ func (l *lexer) lexRawText() (Token, error) {
 }
 
 // lexText scans literal text until the next '<' or unescaped '{'. \{ and \}
-// become literal braces (constellation/doc/DOC-COMPILER-DESIGN.md §c).
+// become literal braces (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c).
 func (l *lexer) lexText() (Token, error) {
 	line, col, off := l.line, l.col, l.baseOffset+l.pos
 	var sb strings.Builder

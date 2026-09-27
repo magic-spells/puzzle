@@ -8,10 +8,11 @@ import (
 )
 
 // parser.go is the recursive-descent parser over the lexer's token stream
-// (constellation/doc/DOC-COMPILER-DESIGN.md §c). It produces the AST in ast.go. Blocks and
-// elements are cross-checked so a {/if} closing across an unclosed <div> (or
-// vice versa) is a positioned error naming BOTH the opener and the offender
-// (constellation/doc/DOC-COMPILER-DESIGN.md §e).
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c). It produces the
+// AST in ast.go. Blocks and elements are cross-checked so a {/if} closing
+// across an unclosed <div> (or vice versa) is a positioned error naming BOTH the
+// opener and the offender
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §e).
 
 type parser struct {
 	lex  *lexer
@@ -1269,7 +1270,7 @@ func splitForIn(rest string) (item, coll string, ok bool) {
 
 // parseInterpolationExpr splits an interpolation's inner text into a base
 // expression and a formatter chain, splitting pipes at top level only (|| is
-// not a pipe) — constellation/doc/DOC-COMPILER-DESIGN.md §c.
+// not a pipe) — packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c.
 func parseInterpolationExpr(raw string, pos Position, file string) (*Interpolation, *ParseError) {
 	expr, fmts, perr := parseChain(raw, pos, file, "interpolation")
 	if perr != nil {
@@ -1336,6 +1337,8 @@ func conditionPipeError(pos Position, file, header, example string) *ParseError 
 
 // parseFormatter parses "name" or "name(arg, arg)". Arguments split at
 // depth-zero commas outside quotes and are kept as raw JS expression strings.
+// The ')' matching the name's '(' must end the segment: `f(1) + g(2)` or
+// `f(b)(c)` is an error, never f called with the argument text `1) + g(2`.
 func parseFormatter(s string, pos Position, file string) (FormatterCall, *ParseError) {
 	open := strings.IndexByte(s, '(')
 	if open < 0 {
@@ -1351,10 +1354,14 @@ func parseFormatter(s string, pos Position, file string) (FormatterCall, *ParseE
 	if !isFormatterName(name) {
 		return FormatterCall{}, notFormatterError(name, pos, file)
 	}
-	if !strings.HasSuffix(s, ")") {
+	end := matchingClose(s, open)
+	if end < 0 || s[end] != ')' {
 		return FormatterCall{}, errAt(file, pos, "formatter %q: missing closing ')'", name)
 	}
-	argsRaw := s[open+1 : len(s)-1]
+	if rest := strings.TrimSpace(s[end+1:]); rest != "" {
+		return FormatterCall{}, errAt(file, pos, "formatter %q: unexpected %q after its closing ')' — a segment after a pipe is only a formatter name or call; compute anything else in the expression before the pipe", name, rest)
+	}
+	argsRaw := s[open+1 : end]
 	var args []string
 	if strings.TrimSpace(argsRaw) != "" {
 		for _, a := range splitTopLevel(argsRaw, ',', false) {
@@ -1364,20 +1371,24 @@ func parseFormatter(s string, pos Position, file string) (FormatterCall, *ParseE
 	return FormatterCall{Name: name, Args: args}, nil
 }
 
-// isFormatterName reports whether s can name a formatter: `[A-Za-z_$]` then
-// `[A-Za-z0-9_$-]*`. Anything else after a top-level `|` — a number
-// (`{ w / 2 | 0 }`), an operator (`a |= 2`), two words — was meant as JavaScript,
-// and silently compiling it to a registry lookup would turn a bitwise OR into a
-// missing-formatter pass-through.
+// isFormatterName reports whether s can name a formatter:
+// `[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*` — an identifier,
+// optionally kebab-cased, where every '-' starts a word with a letter. Anything
+// else after a top-level `|` — a number (`{ w / 2 | 0 }`), an operator
+// (`a |= 2`), arithmetic (`mask | bit-1`), a member (`FLAGS.bold`), two words —
+// was meant as JavaScript, and silently compiling it to a registry lookup would
+// turn a bitwise OR into a missing-formatter pass-through.
 func isFormatterName(s string) bool {
 	if s == "" {
 		return false
 	}
+	isLetter := func(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
-		case c == '_' || c == '$' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
-		case i > 0 && (c == '-' || (c >= '0' && c <= '9')):
+		case c == '_' || c == '$' || isLetter(c):
+		case i > 0 && c >= '0' && c <= '9':
+		case i > 0 && c == '-' && i+1 < len(s) && isLetter(s[i+1]):
 		default:
 			return false
 		}
@@ -1386,7 +1397,7 @@ func isFormatterName(s string) bool {
 }
 
 func notFormatterError(name string, pos Position, file string) *ParseError {
-	return errAt(file, pos, "%q is not a formatter name — a top-level `|` in a template expression is a formatter pipe; to use a bitwise OR, wrap it in parentheses, e.g. (a | b)", name)
+	return errAt(file, pos, "%q is not a formatter name (an identifier, optionally kebab-case like my-format) — a top-level `|` in a template expression is a formatter pipe; to use a bitwise OR, wrap it in parentheses, e.g. (a | b)", name)
 }
 
 // firstWord returns the leading identifier-ish run of s (after leading space).

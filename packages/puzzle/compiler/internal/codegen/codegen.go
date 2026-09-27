@@ -237,8 +237,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	scope := scopeMap{}
 
 	// Markup formatters (D174) may only end a text interpolation's chain; every
-	// other placement is a positioned error before anything is emitted.
-	if err := c.checkMarkupFormatters(root.Children, ""); err != nil {
+	// other placement is a positioned error before anything is emitted. The root
+	// itself goes through the check so its <puzzle-view> attributes are covered.
+	if err := c.checkMarkupFormatters([]parser.Node{root}, ""); err != nil {
 		return "", err
 	}
 
@@ -1992,8 +1993,10 @@ func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, sco
 		b.WriteString(out)
 		for _, a := range fc.Args {
 			b.WriteString(", ")
-			arg := resolveValueScan(a, scope, facts)
-			b.WriteString(arg)
+			// An argument is handed to the formatter exactly as the base is, so
+			// a whole loop record passed as one (`'by' | byline(post)`) is as
+			// opaque as `post | byline`.
+			b.WriteString(resolveOpaqueScan(a, scope, facts))
 		}
 		b.WriteString(")")
 		out = b.String()
@@ -2008,8 +2011,18 @@ func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, sco
 // cover, so the site goes conservative exactly as a relation read makes it.
 // `{ post }` alone — the display of the record — stays on identity.
 func (c *compiler) resolveInterpBase(expr string, fmts []parser.FormatterCall, scope scopeMap, facts *exprFacts) string {
-	if facts == nil || len(fmts) == 0 {
+	if len(fmts) == 0 {
 		return resolveValueScan(expr, scope, facts)
+	}
+	return resolveOpaqueScan(expr, scope, facts)
+}
+
+// resolveOpaqueScan is resolveValueScan for a value handed to a formatter — a
+// pipe base or a formatter argument: a whole-value read of a loop local there
+// is OPAQUE (see resolveInterpBase).
+func resolveOpaqueScan(expr string, scope scopeMap, facts *exprFacts) string {
+	if facts == nil {
+		return resolveValueScan(expr, scope, nil)
 	}
 	sub := &exprFacts{}
 	out := resolveValueScan(expr, scope, sub)

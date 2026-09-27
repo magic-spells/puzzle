@@ -6,7 +6,7 @@ import (
 )
 
 // scan.go holds THE shared balanced-brace scanner and the top-level splitters
-// that build on the same quote/depth awareness. Per constellation/doc/DOC-COMPILER-DESIGN.md
+// that build on the same quote/depth awareness. Per packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md
 // §c, a single balanced scan MUST back interpolations, block headers, and
 // attribute-value expression mode — three divergent scanners is how the
 // prototype died.
@@ -275,7 +275,7 @@ func isTemplateRawInner(inner string) bool {
 // sep, respecting strings/regex/comments (via LexSkip) and (), [], {} nesting.
 // When skipDoubled is true a doubled separator (e.g. "||") is treated as an
 // operator and is NOT a split point — this is how the formatter pipe split
-// avoids breaking a logical-OR (constellation/doc/DOC-COMPILER-DESIGN.md §c).
+// avoids breaking a logical-OR (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c).
 // Used for pipe splitting (sep '|', skipDoubled) and formatter-argument
 // splitting (sep ',', not doubled). Skipping regex is what keeps a '|' inside
 // `/a|b/` out of the formatter split.
@@ -340,6 +340,35 @@ func lastTopLevelIndexByte(s string, sep byte) int {
 		i++
 	}
 	return last
+}
+
+// matchingClose returns the index of the bracket that closes the '(', '[' or
+// '{' at s[open] (respecting strings/regex/comments via LexSkip and (), [], {}
+// nesting, like splitTopLevel), or -1 when it is never closed. Used to find
+// where a formatter call's argument list ends.
+func matchingClose(s string, open int) int {
+	depth := 0
+	prevEndsExpr := false
+	for i := open; i < len(s); {
+		if next, pee, consumed := LexSkip(s, i, prevEndsExpr); consumed {
+			prevEndsExpr = pee
+			i = next
+			continue
+		}
+		c := s[i]
+		switch c {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+		prevEndsExpr = LexPlainEndsExpr(c, prevEndsExpr)
+		i++
+	}
+	return -1
 }
 
 // topLevelIndex returns the index of the first top-level occurrence of sub in s

@@ -170,6 +170,37 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 	}
 }
 
+// TestReservedLoopHelperExplanations pins the explanation for each loop
+// helper's import local (D170 `__l`, D173 V12 `__e`/`__r`): the error names
+// the runtime export the compiler imports, never the {#svg} fallback.
+func TestReservedLoopHelperExplanations(t *testing.T) {
+	for _, tc := range []struct {
+		name, template, script, want string
+	}{
+		{"__l", "<puzzle-view>\n  {#for row in rows}<li>{ row.n }</li>{/for}\n</puzzle-view>", "const __l = 1;", "listRows as __l"},
+		// A loop inside a range keeps `.map`, which guards its collection with __e.
+		{"__e", "<puzzle-view>\n  <ul>{#for 1...2, n}<li>{#for row in rows}<b>{ row.n }</b>{/for}</li>{/for}</ul>\n</puzzle-view>", "const __e = 1;", "loopItems as __e"},
+		// A literal range folds to an array; a data bound goes through __r.
+		{"__r", "<puzzle-view>\n  {#for 1...count, n}<li>{ n }</li>{/for}\n</puzzle-view>", "const __r = 1;", "loopRange as __r"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := tc.template + "\n\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\n" +
+				tc.script + "\nexport default class T extends PuzzleView {}\n</script>\n"
+			_, err := compileSrcOpts(t, src, Options{Mode: ModeView})
+			if err == nil {
+				t.Fatalf("expected a reserved module-scope binding error for %q", tc.name)
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, `"`+tc.name+`"`) || !strings.Contains(msg, tc.want) {
+				t.Errorf("error %q should name %q and explain it as %q", msg, tc.name, tc.want)
+			}
+			if strings.Contains(msg, "{#svg}") {
+				t.Errorf("error %q must not explain a loop helper as a {#svg} asset", msg)
+			}
+		})
+	}
+}
+
 // TestReservedBindingPositionsAtTheDeclaration pins that the diagnostic points at
 // the offending <script> line, not at the section start — the whole point of
 // catching the collision here is that esbuild's duplicate-binding error quotes

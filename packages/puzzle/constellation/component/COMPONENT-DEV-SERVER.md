@@ -49,6 +49,20 @@ notes:
       locale file is read from disk and never imported, so no metafile carries it (the D155
       `{#svg}`-style edge); locale files land in the warm staging swap. `dev.go` passes `cfg.I18n`
       and `ValidatePublic(..., cfg.I18nEnabled())` reserves `locales/`.
+  - kind: gotcha
+    text: >-
+      Locale reloads must remember failure, not just watch the current burst. SPA `WatchBuilder`
+      keeps a `localesFailed` flag, and every rebuild after a failed `locales.Load` retries the load
+      until it succeeds. Without it, a broken es.json followed by an unrelated Home.pzl save landed
+      on the last-good tables and cleared the overlay while the file was still broken. Static
+      `StaticWatchBuilder` gets the same behavior by testing the accumulated `pending` batch
+      (cleared only when a swap lands), not the burst. The SPA builder writes each successful load
+      straight into the live dist. When a load that never landed a bundle is replaced (`nextLocales`
+      superseded), `dropNextLocales` deletes its files unless the committed set (`localeFiles`) or
+      the new load names them; before the first landing, commitLocales' directory sweep handles it.
+      Tests: TestWatchBuilderBrokenLocaleStaysFailedAcrossUnrelatedSaves,
+      TestStaticWatchBrokenLocaleStaysFailedAcrossUnrelatedSaves,
+      TestWatchBuilderPrunesSupersededUncommittedLocale.
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 

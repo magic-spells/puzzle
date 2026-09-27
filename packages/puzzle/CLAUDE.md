@@ -223,7 +223,7 @@ enforced, not merely advised.
   `ctx.i18n`); D168 rewritten as the merged whitespace rule; plus D169 registry
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
-  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.5 KB
+  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.6 KB
   gzip**, todos **25.6 KB gzip**. Cards truthed through D175; the next free
   decision number is **D176**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,

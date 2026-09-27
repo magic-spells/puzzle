@@ -29,3 +29,18 @@ func TestBuildRuntimePreflightStopsBeforeEsbuild(t *testing.T) {
 		t.Fatalf("preflight leaked esbuild output: %v", err)
 	}
 }
+
+// TestBuildMissingDirSaysDirectoryNotFound: a mistyped directory argument is
+// reported as such, not as a missing @magic-spells/puzzle install.
+func TestBuildMissingDirSaysDirectoryNotFound(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "typo-dir")
+	t.Setenv("PUZZLE_RUNTIME", "")
+
+	err := buildCmd.RunE(buildCmd, []string{dir})
+	if err == nil {
+		t.Fatal("build unexpectedly succeeded on a missing directory")
+	}
+	if !strings.Contains(err.Error(), "directory not found: "+dir) || strings.Contains(err.Error(), "not installed") {
+		t.Fatalf("error = %q, want a directory-not-found error", err)
+	}
+}

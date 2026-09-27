@@ -17,6 +17,42 @@ func fixture(t *testing.T, rel string) string {
 	return filepath.Join("testdata", rel)
 }
 
+// TestFixturesMatchCanonicalExample guards the vendored copies against drift:
+// when the monorepo's canonical todos example sits beside this module, every
+// file in testdata/todos must equal its original byte for byte. From the Go
+// module cache there is no sibling, and the test skips.
+func TestFixturesMatchCanonicalExample(t *testing.T) {
+	canon := filepath.Join("..", "..", "puzzle", "examples")
+	if _, err := os.Stat(filepath.Join(canon, "todos")); err != nil {
+		t.Skip("canonical example not present (outside the monorepo)")
+	}
+	err := filepath.WalkDir(filepath.Join("testdata", "todos"), func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rel, err := filepath.Rel("testdata", path)
+		if err != nil {
+			return err
+		}
+		got, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		want, err := os.ReadFile(filepath.Join(canon, rel))
+		if err != nil {
+			t.Errorf("%s: canonical copy unreadable: %v", rel, err)
+			return nil
+		}
+		if string(got) != string(want) {
+			t.Errorf("testdata/%s drifted from packages/puzzle/examples/%s — refresh the copy", rel, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // walk visits every node in the tree depth-first.
 func walk(n Node, fn func(Node)) {
 	fn(n)
@@ -194,19 +230,19 @@ func TestIntegrationTodoItemPzl(t *testing.T) {
 		t.Errorf("expected <svg> and <path> elements (svg=%v path=%v)", sawSvg, sawPath)
 	}
 
-	// The { todo.createdAt | date('short') } interpolation moved here too.
+	// The { todo.createdAt | datetime('short') } interpolation moved here too.
 	var sawDateFmt bool
 	walk(root, func(n Node) {
 		if in, ok := n.(*Interpolation); ok {
 			for _, f := range in.Formatters {
-				if f.Name == "date" && len(f.Args) == 1 && f.Args[0] == "'short'" {
+				if f.Name == "datetime" && len(f.Args) == 1 && f.Args[0] == "'short'" {
 					sawDateFmt = true
 				}
 			}
 		}
 	})
 	if !sawDateFmt {
-		t.Errorf("expected the { todo.createdAt | date('short') } interpolation")
+		t.Errorf("expected the { todo.createdAt | datetime('short') } interpolation")
 	}
 
 	// The checkbox carries a bare `checked={ todo.completed }` and NO author

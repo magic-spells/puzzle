@@ -6,9 +6,9 @@ import (
 )
 
 // ParseError is the structured error type for the template parser
-// (constellation/doc/DOC-COMPILER-DESIGN.md §e). It carries the file and 1-based line/column of
-// the offending construct and implements error, so the esbuild plugin (Step 3)
-// can surface it directly as an api.Message.
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §e). It carries the
+// file and 1-based line/column of the offending construct and implements error,
+// so the esbuild plugin (Step 3) can surface it directly as an api.Message.
 type ParseError struct {
 	File    string
 	Line    int
@@ -25,7 +25,7 @@ func (e *ParseError) Error() string {
 
 // ErrorList is a batch of parse errors. The parser may collect more than one
 // error per file to improve reporting, but any error means the parse failed —
-// there is never a best-effort AST (constellation/doc/DOC-COMPILER-DESIGN.md §e).
+// there is never a best-effort AST (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §e).
 type ErrorList []*ParseError
 
 func (l ErrorList) Error() string {

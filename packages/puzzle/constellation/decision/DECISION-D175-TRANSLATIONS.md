@@ -74,6 +74,29 @@ notes:
       attribute keys in the missing-key scan; template-level `t({ … })` tests (D173 V8). D174
       counts: 35 standard, 24 Sites-only (6 platform-bound), 38 PuzzleKit. The six open questions
       are decided as recorded under Consequences.
+  - kind: state
+    text: >-
+      Static kernel remount on setLocale (`client-runtime/static/index.js` armRemount): it
+      re-assembles the chain AND runs `preloadTakeoverComponents` over it, so nested non-routed
+      components are constructed, preloaded and `skipEnter()`ed before the swap — the page is
+      complete when setLocale resolves and nothing animates in, like the SPA rebuild's routed
+      levels. The swap keeps the old page alive until the new root's `mount(..., { preloaded: true
+      })` resolves; only then is the old root destroyed. A mount that throws destroys the new root,
+      puts the old DOM nodes back, and rethrows, so setLocale rejects with the old page on screen
+      and the new locale already active — the SPA's failed-rebuild contract. An overtaken remount
+      destroys both its routed and its nested preloaded instances. Tests:
+      tests/static-locale-remount.test.js.
+  - kind: gotcha
+    text: >-
+      Known limitation of the URLs rule, NOT fixed (needs a decision): "hash and memory modes always
+      serve the shell from the dist root" is false for a memory-mode widget embedded in a foreign
+      page — `app.js` resolves locale paths against `document.baseURI`, so a widget loaded from
+      /widget/app.js on /blog/post/1 fetches /blog/post/locales/<tag>.<hash>.json. `import.meta.url`
+      inside the runtime is NOT a fix: with `build.splitting` on, esbuild moves the runtime
+      (PuzzleApp, i18n.js) into a shared `dist/chunks/chunk-*.js` (verified on examples/blog), so
+      its URL is one directory too deep. The dist-root URL has to come from the entry module, which
+      always stays at `dist/app.js` — e.g. the compiler passing `new URL('.', import.meta.url)` from
+      the entry into the i18n options — a compiler + D175 change.
 ---
 
 # D175 — Translations: `'key' | t`, one locale file per language
@@ -177,9 +200,19 @@ The forces:
 
 ### Locale files
 
+
 Authors write one file per locale at `app/locales/<locale>.json`. The file name
 is a BCP 47 tag (`en`, `es`, `pt-BR`). A name with `_` (`en_US.json`) is a
-build error that suggests the `-` spelling.
+build error that suggests the `-` spelling. A tag, in the config or as a file
+name, must have the langtag structure the browser's `Intl` constructors accept,
+because the runtime hands it straight to them and a tag they throw on breaks
+rendering. That structure is a 2–3 letter language, an optional 4-letter script,
+an optional 2-letter or 3-digit region, then variants (5–8 alphanumerics, or a
+digit plus 3), none repeated, so `zh-Hant-TW`, `es-419` and `de-DE-1996` pass.
+`en-12`, `en-US-US`, `de-DE-1` and `fr-x` are errors that name the offending
+subtag. The rule is a subset of `Intl`: the 5–8 letter language form (`english`)
+and extension, private-use and grandfathered tags are refused. One validator,
+`config.ValidLocaleTag`, serves both the config and the file names.
 
 ```json
 {
@@ -294,6 +327,7 @@ nested files and never merges locales.
 
 ### Locale selection
 
+
 In order, at startup:
 
 1. **The stored choice**: `localStorage['__puzzleLocale']`, read inside
@@ -316,7 +350,12 @@ The prerender (Node) has no `navigator` or storage and always uses
   `locale`, the format locale and `<html lang>` switch together, the choice is
   stored (try/catch), and the app refreshes once (see Loading). A failed fetch
   rejects the promise and changes nothing.
-- Overlapping calls resolve last-wins, through a token.
+- Overlapping calls resolve last-wins, through a token. A call a later one
+  overtook drops its table and settles with the LATER call's outcome — it
+  resolves once that switch lands and rejects if that switch fails — so a
+  promise never reports a switch that did not happen (`setLocale('fr')` then a
+  failing `setLocale('de')` leaves the page in its old locale and both reject).
+  An overtaken call whose own fetch failed rejects with its own error.
 - Called before the first commit (in `beforeMount`, for example, from a
   user-profile setting), it replaces the pending startup load and does not
   refresh anything.
@@ -365,6 +404,7 @@ The prerender (Node) has no `navigator` or storage and always uses
 
 ### Formatter locale
 
+
 When `i18n` is configured, the active locale replaces the browser's default
 locale in every locale-rendered formatter: `date`, `time`, `datetime`,
 `number_with_delimiter`, `compact_number`, the `pluralize` count, and
@@ -382,6 +422,13 @@ browser-locale behavior.
 - Only the i18n service calls `setFormatLocale`. Every read sits behind the
   inline `__PUZZLE_HAS_I18N__` probe, so without `i18n` the formatters keep
   their exact code.
+- **A tag `Intl` rejects never throws mid-render.** The build's tag validator
+  is the first line; the runtime is fail-soft behind it, the way the date
+  formatters already treat a bad `locale` argument: `setFormatLocale` checks
+  the tag once with `Intl.getCanonicalLocales` and stores `undefined` (the
+  viewer's locale) for one that throws, so `localeNumber`, `compact_number` and
+  `timeago` never construct with it; and plural selection falls back to the
+  viewer's `Intl.PluralRules`, cached under the rejected tag.
 - The slot is per page, not per app. Two mounted apps with different locales
   on one page share it, and the last switch wins; this is accepted.
 - The prerender sets the slot to the build locale, so prerendered dates and

@@ -45,12 +45,13 @@ What they guarantee:
   the raw block, composition markers, Portal, snippets, and dotted component
   family tags.
 - the formatter-chain rule holds in every value position (D173 V1): a
-  top-level single `|` splits into a chain in attributes, props and marker
-  arguments; what follows a pipe must be a formatter name; and a pipe in a
-  condition header (`{#if}`, `{:else if}`, `{#unless}`, `{#case}`, an
-  attribute's inline `{#if}`), a `{#for}` header or a `{:when}` value is a
-  positioned error at the header's position, while `||` and a parenthesized,
-  quoted or regex `|` in those headers stay JavaScript (`chain_test.go`).
+  top-level single `|` splits into a chain in attributes, props, marker
+  arguments and block subjects; what follows a pipe must be a formatter name
+  (a `-` must start a letter word, so `bit-1` is rejected, and a dotted
+  `fmt.eur` is not a name); a called formatter's matching `)` must end the
+  segment (`f(1) + g(2)`, `f(b)(c)` are errors, and a `)` inside a string,
+  regex or template is not the close); and a pipe in a `{#for}` header or a
+  `{:when}` value is a positioned error (`chain_test.go`).
 - composition markers are unique per render path, not per file (D173 V13):
   exclusive branches may each carry the same marker, and a marker on the same
   path collides (`slot_paths_test.go`).
@@ -70,9 +71,10 @@ Covers 12 `*_test.go` files under `packages/puzzle-lang/parser`: `chain`,
 `go test ./...` inside `packages/puzzle-lang` (CI's Go and Windows jobs do).
 `integration_test.go` parses copies of the todos example's `Home.pzl`,
 `TodoItem.pzl`, and `Default.pzl`, vendored under `parser/testdata/todos`, so
-the suite is self-contained and also passes from the Go module cache. Refresh
-a copy when `packages/puzzle/examples/todos` changes in a way the tests should
-follow.
+the suite is self-contained and also passes from the Go module cache.
+`TestFixturesMatchCanonicalExample` fails when a copy drifts from
+`packages/puzzle/examples/todos` (it skips outside the monorepo), so a change
+to the example must refresh the copy in the same change.
 
 ## Contracts it pins (in the connected `puzzle` plan)
 

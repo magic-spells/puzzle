@@ -1599,6 +1599,20 @@ function patchChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 // passes its range's closing comment so teleported children stay inside their
 // own bracketed span of the shared outlet.
 function patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
+	// A cached vnode (D170: `this.__c[n]`, a row's `s.c[n]`) is the SAME object in
+	// both lists, and index pairing assumes it stays at its index. A
+	// variable-length unkeyed run before it (an unkeyed `{#for}`, slot content)
+	// shifts it, and pairing by index would then patch another old vnode INTO it
+	// and unmount it as a leftover — the one live element it describes. A fresh
+	// vnode has no `el`, so a mounted one at a different index is the only sign;
+	// such a list takes the keyed path, which pairs it with itself and moves it.
+	for (let i = 0; i < newChildren.length; i++) {
+		const child = newChildren[i];
+		if (child.el != null && child !== oldChildren[i]) {
+			patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
+			return;
+		}
+	}
 	const common = Math.min(oldChildren.length, newChildren.length);
 	for (let i = 0; i < common; i++) {
 		patch(oldChildren[i], newChildren[i], el, ctx, owner);
@@ -1698,6 +1712,8 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 	const matched = new Set();
 	let oldUnkeyed = oldChildren.filter((c) => c.key == null);
 	let unkeyedIdx = 0;
+	let shifted = false;
+	let reused = null;
 	let seenNewKeys = null; // dev-only duplicate-key detection: tag -> Set<rawKey>
 	// FLIP fast path (D85): one property check per new child during the pairing
 	// map we already run. Lists without any `flip` attr never call into flip.js
@@ -1720,7 +1736,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 	let hasFlip = false;
 
 	// First pass: pair every new child with its old counterpart (or none)
-	const pairs = newChildren.map((newChild) => {
+	const pairChild = (newChild) => {
 		if (!hasFlip && 'flip' in newChild.attrs) hasFlip = true;
 		if (newChild.key != null) {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -1742,13 +1758,37 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 		// disappeared (e.g. a conditional's placeholder ↔ real element swap, or a
 		// dropped sibling above a stable one): the index never advanced past the
 		// mismatch, so the survivor paired against the wrong old node and got torn down.
+		if (reused?.has(newChild)) {
+			matched.add(newChild);
+			return [newChild, newChild];
+		}
 		if (unkeyedIdx < oldUnkeyed.length) {
 			const candidate = oldUnkeyed[unkeyedIdx++];
+			if (newChild !== candidate && newChild.el != null) shifted = true;
 			matched.add(candidate);
 			return [candidate, newChild];
 		}
+		if (newChild.el != null) shifted = true;
 		return [null, newChild];
-	});
+	};
+	let pairs = newChildren.map(pairChild);
+
+	// A cached unkeyed vnode (D170) that moved to another unkeyed index is the
+	// same object as an old child, so positional pairing just handed it to a
+	// DIFFERENT old node — see patchIndexedChildren. Pair again: every new child
+	// that is also an old one pairs with itself, and the rest consume the old
+	// nodes nothing reused, still positionally. The move pass below then puts
+	// each in place. Reached only when a mounted vnode sat off its positional
+	// partner, so an ordinary pass pays one test per unkeyed child.
+	if (shifted) {
+		const old = new Set(oldUnkeyed);
+		reused = new Set(newChildren.filter((c) => c.key == null && old.has(c)));
+		oldUnkeyed = oldUnkeyed.filter((c) => !reused.has(c));
+		unkeyedIdx = 0;
+		matched.clear();
+		seenNewKeys = null;
+		pairs = newChildren.map(pairChild);
+	}
 
 	// FLIP First-measure (D85): retained `flip` rows record their pre-patch
 	// rects NOW — before removals reflow the survivors and before the move pass.

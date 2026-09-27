@@ -38,6 +38,19 @@ notes:
       and yields no iterations for a missing or non-finite bound (dev warns for either). The same
       "never import from inside client-runtime/" rule covers both: they ride the module only for
       apps whose templates loop.
+  - kind: state
+    text: >-
+      `collectControls` walks THROUGH a component vnode into its children — the parent's slot
+      content, which the child places by reference — without testing the component itself; that
+      matches codegen's `forBodyHasControl`, which already counted a control inside a Component's
+      children toward the site's `ctrl` flag. A cached row stops the patch at the component (no
+      applyParentUpdate, no child re-render), so without this `{#for t in todos}<Card><input value={
+      t.title } @change=…></Card>{/for}` kept typed-but-uncommitted text across an unrelated parent
+      render. Still NOT reached (residual, stamped/cloned by the child so the parent holds no live
+      link): a control inside a `<Snippet>` body (stamped fresh per expansion by the child) and a
+      control that is ITSELF a named-slot fill (`<input slot="x" value=…>` — stripSlotAttr clones
+      it, so the parent's vnode never gets an `el`); a control nested inside a named-slot fill
+      element IS reached (the clone shares its children). Tests: tests/list-control-slot.test.js.
 ---
 
 Source binding for the owning component cards. Behavioral intent stays in [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] and [[COMPONENT-PUZZLE-VIEW]]; this card anchors that decision to `client-runtime/views/listBlock.js`.

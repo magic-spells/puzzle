@@ -352,3 +352,121 @@ func TestStaticWatchLocaleEditIsRenderWide(t *testing.T) {
 		t.Errorf("the edited string did not reach the page:\n%s", home)
 	}
 }
+
+// TestWatchBuilderBrokenLocaleStaysFailedAcrossUnrelatedSaves: a broken locale
+// file keeps failing the dev rebuild on a later save that does not touch
+// app/locales/ — the builder remembers the failed load rather than succeeding on
+// the last good tables and clearing the error overlay.
+func TestWatchBuilderBrokenLocaleStaysFailedAcrossUnrelatedSaves(t *testing.T) {
+	root := writeSSGFixture(t, i18nFixture())
+	b, err := NewWatchBuilder(root, WatchOptions{I18n: enI18n})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial rebuild: %v", err)
+	}
+	es := filepath.Join(root, "app", "locales", "es.json")
+	write(t, es, `{ "home": `)
+	if _, err := b.Rebuild([]string{es}); err == nil {
+		t.Fatal("a broken locale file must fail the rebuild")
+	}
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	write(t, home, readFile(t, home)+"\n")
+	if _, err := b.Rebuild([]string{home}); err == nil {
+		t.Fatal("an unrelated save must not succeed while app/locales/es.json is still broken")
+	}
+	write(t, es, `{ "home": { "title": "Hola" } }`)
+	if _, err := b.Rebuild([]string{home}); err != nil {
+		t.Fatalf("a fixed locale file must let the next rebuild land: %v", err)
+	}
+	for _, name := range localeFiles(t, filepath.Join(root, "dist")) {
+		if strings.HasPrefix(name, "es.") && !strings.Contains(readFile(t, filepath.Join(root, "dist", "locales", name)), "Hola") {
+			t.Errorf("the fixed es table did not reach dist: %s", name)
+		}
+	}
+}
+
+// TestStaticWatchBrokenLocaleStaysFailedAcrossUnrelatedSaves is the same under
+// static dev, where the accumulated pending set carries the locale edit.
+func TestStaticWatchBrokenLocaleStaysFailedAcrossUnrelatedSaves(t *testing.T) {
+	requireStaticRuntime(t)
+	root := writeSSGFixture(t, i18nFixture())
+	b, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static", I18n: enI18n}})
+	if err != nil {
+		t.Fatalf("NewStaticWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+	if err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial rebuild: %v", err)
+	}
+	es := filepath.Join(root, "app", "locales", "es.json")
+	write(t, es, `{ "home": `)
+	if err := b.Rebuild([]string{es}); err == nil {
+		t.Fatal("a broken locale file must fail the rebuild")
+	}
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	write(t, home, readFile(t, home)+"\n")
+	if err := b.Rebuild([]string{home}); err == nil {
+		t.Fatal("an unrelated save must not succeed while app/locales/es.json is still broken")
+	}
+	write(t, es, `{ "home": { "title": "Hola" } }`)
+	if err := b.Rebuild([]string{home}); err != nil {
+		t.Fatalf("a fixed locale file must let the next rebuild land: %v", err)
+	}
+}
+
+// TestWatchBuilderPrunesSupersededUncommittedLocale: a locale load whose bundle
+// never landed is replaced by the next load; its hashed file, already written to
+// the live dist, must be pruned too once a bundle lands.
+func TestWatchBuilderPrunesSupersededUncommittedLocale(t *testing.T) {
+	root := writeSSGFixture(t, i18nFixture())
+	b, err := NewWatchBuilder(root, WatchOptions{I18n: enI18n})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial rebuild: %v", err)
+	}
+	dist := filepath.Join(root, "dist")
+	es := filepath.Join(root, "app", "locales", "es.json")
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	good := readFile(t, home)
+	write(t, es, `{ "home": { "title": "B" } }`)
+	write(t, home, "<puzzle-view><h1>{#if}</h1></puzzle-view>")
+	if _, err := b.Rebuild([]string{es, home}); err == nil {
+		t.Fatal("a broken view must fail the rebuild")
+	}
+	// The served bundle still names the first es file: it must survive.
+	served := localeFiles(t, dist)
+	if len(served) != 3 {
+		t.Fatalf("dist/locales after the failed pass = %v, want the served pair plus es.B", served)
+	}
+	write(t, home, good)
+	write(t, es, `{ "home": { "title": "C" } }`)
+	if _, err := b.Rebuild([]string{es, home}); err != nil {
+		t.Fatalf("recovering rebuild: %v", err)
+	}
+	after := localeFiles(t, dist)
+	if len(after) != 2 {
+		t.Fatalf("dist/locales = %v, want exactly one file per locale", after)
+	}
+	appJS := readFile(t, filepath.Join(dist, "app.js"))
+	for _, name := range after {
+		if !strings.Contains(appJS, "locales/"+name) {
+			t.Errorf("dist/locales/%s is not named by app.js", name)
+		}
+	}
+}
+
+// TestNearestKeyCountsRunes: the did-you-mean distance is per character, so a
+// non-ASCII key one accent away still gets its hint (a byte count would make
+// it two edits per accent).
+func TestNearestKeyCountsRunes(t *testing.T) {
+	defaults := []string{"menú.título", "menu.total"}
+	if got := nearestKey(defaults, "menu.titulo"); got != "menú.título" {
+		t.Fatalf("nearestKey = %q", got)
+	}
+}

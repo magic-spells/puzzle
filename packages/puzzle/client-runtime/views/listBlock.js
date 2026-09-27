@@ -368,8 +368,13 @@ function isConservativeSite(block) {
  * Returns null when there are none, so the common row stores nothing and
  * `patch()`'s `newVnode.controls` test reads undefined.
  *
- * Skipped: component vnodes (a child owns its own subtree and re-asserts its own
- * controls when it patches), string children (an inline-SVG seed is verbatim
+ * A COMPONENT vnode is walked through, never checked itself: its children are the
+ * parent's slot content, which the child places by reference, and a cached row
+ * stops the patch at the component — no applyParentUpdate, no re-render — so this
+ * list is the only thing that reaches them. The child's OWN template is not in
+ * these children; it re-asserts its controls whenever it patches.
+ *
+ * Skipped: string children (an inline-SVG seed is verbatim
  * markup, never vnodes), and an ISLAND element's children — the D44 contract is
  * that the patcher never reconciles them after the seed, so replaying identity
  * into one would reset a user-edited input inside a third-party widget back to
@@ -388,7 +393,6 @@ function collectControls(vnode) {
 
 function collectInto(vnode, out) {
 	const tag = vnode.tag;
-	if (typeof tag !== 'string') return;
 	const attrs = vnode.attrs;
 	if (tag === 'input' || tag === 'textarea' || tag === 'select') {
 		if ('value' in attrs || 'checked' in attrs) out.push(vnode);

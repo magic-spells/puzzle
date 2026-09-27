@@ -7,9 +7,10 @@ import (
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
 )
 
-// sections.go is the .pzl section splitter (constellation/doc/DOC-COMPILER-DESIGN.md §b step 1).
-// It carves a file into its <puzzle-view> (with attributes preserved for the
-// root vnode), the optional <puzzle-skeleton> loading template (v1.8, D39),
+// sections.go is the .pzl section splitter
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §b step 1). It carves
+// a file into its <puzzle-view> (with attributes preserved for the root vnode),
+// the optional <puzzle-skeleton> loading template (v1.8, D39),
 // the opaque <script> body, and the optional <style> body. The
 // <script>/<style> bodies are returned verbatim and are NEVER scanned for
 // template syntax.
@@ -69,8 +70,8 @@ var sectionNames = []string{"puzzle-view", "puzzle-skeleton", "script", "style"}
 
 // SplitSections splits src into its sections, tolerant of whitespace and order.
 // A missing <puzzle-view>, or more than one of any section, is an error with a
-// position (constellation/doc/DOC-COMPILER-DESIGN.md §b, §e). <script> is OPTIONAL
-// (DOC-SPEC.md §4): a template-only .pzl leaves Scripts == "" and codegen
+// position (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §b, §e).
+// <script> is OPTIONAL (DOC-SPEC.md §4): a template-only .pzl leaves Scripts == "" and codegen
 // synthesizes a PuzzleView subclass named from the filename.
 func SplitSections(src, filename string) (*Sections, error) {
 	sec := &Sections{}

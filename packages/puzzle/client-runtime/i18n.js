@@ -92,7 +92,16 @@ const pluralRules = new Map();
 
 function pluralCategory(locale, count) {
 	let rules = pluralRules.get(locale);
-	if (!rules) pluralRules.set(locale, (rules = new Intl.PluralRules(locale)));
+	if (!rules) {
+		// A configured tag Intl rejects (`en_US`) throws RangeError here, mid-render;
+		// fall back to the viewer's rules like the formatter locale does.
+		try {
+			rules = new Intl.PluralRules(locale);
+		} catch {
+			rules = new Intl.PluralRules();
+		}
+		pluralRules.set(locale, rules);
+	}
 	return rules.select(count);
 }
 
@@ -246,12 +255,17 @@ export function createI18n(options = {}) {
 			}
 			if (!Object.hasOwn(table, key)) {
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-					const near = nearestFormatter(table, key);
-					warnOnce(
-						locale + '\0' + key,
-						`[puzzle] translation "${key}" is missing from "${locale}" — printing the key` +
-							(near ? ` (did you mean "${near}"?)` : '')
-					);
+					// The suggestion walks the whole table, so only a warning that will
+					// actually print pays for it — not every render of a missing key.
+					const once = locale + '\0' + key;
+					if (!warned?.has(once)) {
+						const near = nearestFormatter(table, key);
+						warnOnce(
+							once,
+							`[puzzle] translation "${key}" is missing from "${locale}" — printing the key` +
+								(near ? ` (did you mean "${near}"?)` : '')
+						);
+					}
 				}
 				return key;
 			}
@@ -288,8 +302,10 @@ export function createI18n(options = {}) {
 		/**
 		 * Switch to a configured locale. The new table is fetched FIRST; only once it
 		 * arrives does anything change, and then the app re-renders once. A failed
-		 * fetch rejects and changes nothing. Overlapping calls resolve last-wins.
-		 * An unconfigured tag throws a RangeError.
+		 * fetch rejects and changes nothing. Overlapping calls resolve last-wins: a
+		 * call a later one overtook settles with the LATER call's outcome, so it
+		 * never reports a switch that did not happen. An unconfigured tag throws a
+		 * RangeError.
 		 */
 		setLocale(tag) {
 			const match = canonical(tag);
@@ -301,7 +317,9 @@ export function createI18n(options = {}) {
 			const my = ++token;
 			const p = load(match).then(
 				(strings) => {
-					if (my !== token) return;
+					// Overtaken: this table is dropped, so follow whatever is now the latest
+					// load — which follows its own successor the same way.
+					if (my !== token) return pending;
 					apply(match, strings);
 					storeLocale(match);
 					return refresh?.();

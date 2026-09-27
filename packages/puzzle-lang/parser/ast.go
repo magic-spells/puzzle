@@ -1,9 +1,10 @@
 package parser
 
-// ast.go defines the template AST produced by the parser (constellation/doc/DOC-COMPILER-DESIGN.md
-// §c). Every node carries the Position of its opening token for error reporting
-// and downstream codegen (Step 2). The tree is what the compiler consumes; there
-// is no intermediate string form.
+// ast.go defines the template AST produced by the parser
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c). Every node carries
+// the Position of its opening token for error reporting and downstream codegen
+// (Step 2). The tree is what the compiler consumes; there is no intermediate
+// string form.
 
 // Node is any template tree node.
 type Node interface{ isNode() }
@@ -234,8 +235,9 @@ type EventAttr struct {
 }
 
 // MixedAttr is a quoted attribute value that interleaves static text,
-// interpolations, and inline {#if} blocks (constellation/doc/DOC-COMPILER-DESIGN.md §c
-// attribute-value mini-grammar). Codegen concatenates the parts.
+// interpolations, and inline {#if} blocks
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c attribute-value
+// mini-grammar). Codegen concatenates the parts.
 type MixedAttr struct {
 	Name  string
 	Parts []Part

@@ -37,8 +37,7 @@ constructs mean one thing changes what some existing templates print.
   with the template parser extracted into the `packages/puzzle-lang` Go module
   (its own constellation root and its own `packages/puzzle-lang/vX.Y.Z` tag).
 - **Core semantics** — [[DECISION-D173-CORE-SEMANTICS]]: pipes are formatters
-  in every value position and banned from condition headers, `{#for}` headers
-  and `{:when}`,
+  in every value position and banned from `{#for}` headers and `{:when}`,
   `?.` member guarding, loop domain, the slot-filled rule, value printing,
   object-literal arguments, script-less components.
 - **The standard formatter set** — [[DECISION-D174-STANDARD-FORMATTERS]]: 35
@@ -53,7 +52,7 @@ constructs mean one thing changes what some existing templates print.
   morph-engine `^0.4.2` floor, [[DECISION-D169-REGISTRY-VERSION-FLOORS]], the
   D76 background update notice, and the runtime preflight.
 
-Production sizes: hello-world 21.5 KB gzip, todos 25.6 KB gzip.
+Production sizes: hello-world 21.6 KB gzip, todos 25.6 KB gzip.
 
 ## Upgrade notes
 

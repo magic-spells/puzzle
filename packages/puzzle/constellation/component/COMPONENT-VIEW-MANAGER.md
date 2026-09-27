@@ -174,6 +174,16 @@ notes:
       packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
       corrected.
     sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+  - kind: gotcha
+    text: >-
+      Unkeyed pairing is positional EXCEPT for identity: a vnode object present in both the old and
+      the new unkeyed children (a D170 `__c`/`s.c` cached subtree whose index shifted behind a
+      variable-length unkeyed run) always pairs with itself and is moved, never patched against
+      another old node — that pairing destroyed the cached element. patchIndexedChildren pre-scans
+      for a child with `el != null` that is not `oldChildren[i]` and delegates to
+      patchKeyedChildren, which re-pairs its unkeyed run with an identity Set when its pairing loop
+      saw the same sign. Ordinary lists pay one property test per child. See the D170 gotcha note;
+      tests/static-cache-shift.test.js.
 verified_at: '2026-09-25T10:47:50.423Z'
 verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
