@@ -20,6 +20,13 @@ notes:
       Cacheability detection re-truthed against expr.go: one resolveExprTrackingScope pass,
       referencesLoopScope ANDed with the __d. check.
     sha: c809db6680eb9355961897756f54e97f1164b88f
+  - kind: state
+    text: >-
+      The cacheability pass is `compileEventHandler`'s one `resolveExprScan(args, evScope, scope,
+      argFacts)` call (trackedScope = the loop scope → `referencesLoopScope`), ANDed with the `__d.`
+      check; the separate `resolveExprTrackingScope` wrapper named in the verified note above had no
+      callers and is gone. The argument facts feed only `refs` and their `__d` roots — loop-local
+      reads are fire-time and record no row fact (D170).
 ---
 
 # D62 — data-independent `@event` handlers emit per-instance cached closures

@@ -39,7 +39,10 @@ type ThemeState string
 const (
 	// ThemeCopied — the file was written on this run.
 	ThemeCopied ThemeState = "copied"
-	// ThemeUpToDate — already present and not locally modified; skipped.
+	// ThemeUpdated — an unmodified copy of an older registry version (it matched
+	// its pieces.lock hash) was replaced with the current file on this run.
+	ThemeUpdated ThemeState = "updated"
+	// ThemeUpToDate — already identical to the registry file; skipped.
 	ThemeUpToDate ThemeState = "up to date"
 	// ThemeWired — the app's styles.css already carries these tokens.
 	ThemeWired ThemeState = "wired"
@@ -97,6 +100,10 @@ type plannedThemeCopy struct {
 	// advisory is the manual import line printed for this palette.
 	advisory string
 	name     string
+	// updated marks a refresh of an unmodified older copy: the palette is
+	// already wired, so neither its import line nor the switch advisory repeats
+	// (advisory is "" unless an up-to-date copy would print it too).
+	updated bool
 }
 
 // fetchRegistry loads and parses registry.json, adding the "your source yielded
@@ -439,30 +446,36 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			return nil, fmt.Errorf("checking %s: %w", rel, lerr)
 		}
 
-		// Already installed: identical bytes, or a copy still matching the hash
-		// pieces.lock recorded, is up to date. Anything else is the user's own
-		// edit, refused rather than discarded.
+		// Already installed: identical bytes are up to date. A copy still matching
+		// the hash pieces.lock recorded is an unmodified OLDER registry version —
+		// nothing local would be lost, so it is refreshed. Anything else is the
+		// user's own edit, refused rather than discarded.
+		outcome.State = ThemeCopied
 		if lerr == nil {
 			existing, rerr := os.ReadFile(abs)
 			if rerr != nil {
 				return nil, fmt.Errorf("reading %s: %w", rel, rerr)
 			}
 			locked := lock.Pieces[t.File].Files[rel]
-			if hashBytes(existing) == hashBytes(data) || (locked != "" && hashBytes(existing) == locked) {
+			switch h := hashBytes(existing); {
+			case h == hashBytes(data):
 				outcome.State = ThemeUpToDate
 				if adviseWhenUpToDate {
 					result.NextSteps = append(result.NextSteps, advisory)
 				}
 				result.Themes = append(result.Themes, outcome)
 				continue
-			}
-			if !opts.Overwrite {
+			case locked != "" && h == locked:
+				outcome.State = ThemeUpdated
+				if !adviseWhenUpToDate {
+					advisory = ""
+				}
+			case !opts.Overwrite:
 				refusals = append(refusals, rel)
 				continue
 			}
 		}
 
-		outcome.State = ThemeCopied
 		planned = append(planned, plannedThemeCopy{
 			file: plannedFile{rel: rel, abs: abs, data: data},
 			// Keyed by its registry path ("theme/dim.css"), same lock shape as the
@@ -470,6 +483,7 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			unit:     Unit{Name: t.File, Files: []FileWrite{{Rel: rel, Abs: abs, Hash: hashBytes(data)}}},
 			advisory: advisory,
 			name:     t.Name,
+			updated:  outcome.State == ThemeUpdated,
 		})
 		result.Themes = append(result.Themes, outcome)
 	}
@@ -489,8 +503,12 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			return nil, err
 		}
 		units = append(units, p.unit)
-		result.NextSteps = append(result.NextSteps, p.advisory)
-		copied = append(copied, p.name)
+		if p.advisory != "" {
+			result.NextSteps = append(result.NextSteps, p.advisory)
+		}
+		if !p.updated {
+			copied = append(copied, p.name)
+		}
 	}
 	if len(copied) > 0 {
 		result.NextSteps = append(result.NextSteps, schemeAdvisory(reg, copied))
@@ -574,12 +592,15 @@ func RenderThemeSummary(w io.Writer, out *ui.Printer, res *ThemeResult) {
 	fmt.Fprintf(w, "%s %s\n", out.Cyan(out.Bold("puzzle add theme")), out.Dim("· "+res.Source))
 	for _, t := range res.Themes {
 		mark := out.Dim("·")
-		if t.State == ThemeCopied {
+		if t.State == ThemeCopied || t.State == ThemeUpdated {
 			mark = out.Green("✓")
 		}
 		detail := string(t.State)
-		if t.State == ThemeCopied {
+		switch t.State {
+		case ThemeCopied:
 			detail = t.Rel
+		case ThemeUpdated:
+			detail = "updated · " + t.Rel
 		}
 		fmt.Fprintf(w, "  %s %s %s\n", mark, out.Bold(t.Name), out.Dim("· "+detail))
 	}

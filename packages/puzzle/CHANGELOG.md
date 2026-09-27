@@ -167,7 +167,7 @@ module, the pieces theme system with `puzzle add theme`, and 100 pieces. The
 never-published 0.7.1 notes (registry version floors, the background update
 notice) are folded in here.
 
-Production sizes: hello-world **21.5 KB gzip**, todos **25.5 KB gzip** (from
+Production sizes: hello-world **21.6 KB gzip**, todos **25.6 KB gzip** (from
 20.8 / 23.8 in 0.7.0). Apps that configure no translations and use no `raw`
 pay nothing for either.
 
@@ -473,10 +473,15 @@ and keep formatters pure functions of their input.
   bitwise OR, wrap it in parentheses (`{ (a | b) }`).
 - **BREAKING: what follows a pipe must be a formatter name.** Everywhere a pipe
   is a formatter — text interpolation included — the text after it must be a
-  name (`[A-Za-z_$][A-Za-z0-9_$-]*`, bare or called). `{ flags | 4 }`,
-  `{ w / 2 | 0 }` and `{ a |= 2 }` used to compile to a lookup of a formatter
-  named `4` (a silent pass-through); they are now positioned errors that say to
-  parenthesize a bitwise OR.
+  name (`[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*` — an identifier,
+  optionally kebab-case, where every `-` starts a word with a letter), bare or
+  with one call whose `)` ends the segment. `{ flags | 4 }`, `{ w / 2 | 0 }`,
+  `{ a |= 2 }` and `{ mask | bit-1 }` used to compile to a lookup of a formatter
+  named `4` or `bit-1` (a silent pass-through), and `{ a | f(1) + g(2) }`
+  compiled to `f(a, 1) + g(2)`; they are now positioned errors that say to
+  parenthesize a bitwise OR or compute the value before the pipe. A dotted or
+  non-ASCII formatter name (`{ price | fmt.eur }`), which 0.7 looked up in the
+  registry, is now an error too: register the formatter under an identifier name.
 - **BREAKING: a pipe in a `{#for}` header or a `{:when}` value is a compile
   error (D173 V1).** In a loop's collection or range bound, shape the list in
   `data()` and loop over that field (`{#for item in sortedItems}`); a

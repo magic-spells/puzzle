@@ -396,9 +396,11 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	b.cache.Evict(changed)
 	endEvict()
 
-	// Translations (D175): reload on the first rebuild and on any locale edit.
-	// A broken file fails the rebuild and leaves the last good site serving.
-	if b.cfg.I18nEnabled() && (b.locales == nil || localesChanged(b.root, changed)) {
+	// Translations (D175): reload on the first rebuild and on any locale edit
+	// since the last landed swap — the accumulated batch, not just this burst, so
+	// a broken file keeps failing an unrelated later save until it is fixed. A
+	// broken file fails the rebuild and leaves the last good site serving.
+	if b.cfg.I18nEnabled() && (b.locales == nil || localesChanged(b.root, batch)) {
 		endLocales := prof.phase("locales")
 		res, err := locales.Load(b.root, b.cfg.I18n)
 		endLocales()

@@ -67,11 +67,19 @@ func i18nWarnings(absRoot string, cfg config.Config, usage plugin.Usage, res *lo
 		}
 	}
 	sort.Strings(keys)
+	var defaults []string // sorted once, only when some key is missing
+	if len(keys) > 0 {
+		defaults = make([]string, 0, len(res.DefaultKeys))
+		for k := range res.DefaultKeys {
+			defaults = append(defaults, k)
+		}
+		sort.Strings(defaults)
+	}
 	for _, key := range keys {
 		files := append([]string(nil), usage.TKeys[key]...)
 		sort.Strings(files)
 		hint := ""
-		if near := nearestKey(res.DefaultKeys, key); near != "" {
+		if near := nearestKey(defaults, key); near != "" {
 			hint = fmt.Sprintf(" (did you mean %q?)", near)
 		}
 		out = append(out, fmt.Sprintf("%s: t key %q is not in %s/%s.json%s — it will print as written",
@@ -88,16 +96,11 @@ func printI18nWarnings(w io.Writer, warnings []string) {
 	}
 }
 
-// nearestKey returns the default-locale key within edit distance 2 of key, or
-// "" when nothing is that close. Ties go to the alphabetically first key so the
-// hint is stable.
-func nearestKey(keys map[string]bool, key string) string {
+// nearestKey returns the default-locale key (sorted holds them in order) within
+// edit distance 2 of key, or "" when nothing is that close. Ties go to the
+// alphabetically first key so the hint is stable.
+func nearestKey(sorted []string, key string) string {
 	best, bestDist := "", 3
-	sorted := make([]string, 0, len(keys))
-	for k := range keys {
-		sorted = append(sorted, k)
-	}
-	sort.Strings(sorted)
 	for _, k := range sorted {
 		if d := editDistance(key, k); d < bestDist {
 			best, bestDist = k, d
@@ -106,6 +109,9 @@ func nearestKey(keys map[string]bool, key string) string {
 	return best
 }
 
+// editDistance is Levenshtein over runes. It is not textutil.EditDistance, which
+// counts bytes: a translation key may be non-ASCII ("menú.título"), and one
+// accented letter must cost one edit, not two.
 func editDistance(a, b string) int {
 	ra, rb := []rune(a), []rune(b)
 	prev := make([]int, len(rb)+1)

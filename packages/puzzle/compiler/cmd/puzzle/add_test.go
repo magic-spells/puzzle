@@ -1113,3 +1113,14 @@ func TestAddUnknownIntegrationListsTheme(t *testing.T) {
 		t.Fatalf("expected supported set to include theme, got: %v", err)
 	}
 }
+
+// TestAddOverwriteHelpNamesThemes: --overwrite applies to `add theme` too, and
+// its help line says so.
+func TestAddOverwriteHelpNamesThemes(t *testing.T) {
+	usage := addCmd.Flags().Lookup("overwrite").Usage
+	for _, want := range []string{"pieces", "themes", "skills"} {
+		if !strings.Contains(usage, want) {
+			t.Errorf("--overwrite help %q does not mention %s", usage, want)
+		}
+	}
+}

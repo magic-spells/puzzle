@@ -415,6 +415,12 @@ func reservedBindingEmission(name string) (verb, what, why string) {
 		return "imports", "PORTAL_TAG", "this template contains a <Portal>"
 	case "__s":
 		return "imports", "the display helper as __s", "this template coerces an interpolation for display"
+	case "__l":
+		return "imports", "listRows as __l", "this template has an item-form {#for} lowered to a persistent list block"
+	case "__e":
+		return "imports", "loopItems as __e", "this template has an item-form {#for} that keeps `.map`, whose collection it guards"
+	case "__r":
+		return "imports", "loopRange as __r", "this template has a range {#for}"
 	}
 	if strings.HasPrefix(name, "__L") {
 		// D170: one module-scope meta const per item-form {#for} site.

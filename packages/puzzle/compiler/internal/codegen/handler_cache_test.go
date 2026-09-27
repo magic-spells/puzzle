@@ -221,7 +221,7 @@ func TestRowHandlerConditionalNeverCached(t *testing.T) {
 		"  {#for item in items}<button @click={ item.on ? pick : null }>x</button>{/for}",
 		plainScripts,
 	))
-	if !strings.Contains(got, "'@click': (s.item.on) ? ") {
+	if !strings.Contains(got, "'@click': (s.item?.on) ? ") {
 		t.Errorf("expected the conditional handler value:\n%s", got)
 	}
 	if strings.Contains(got, "s.h0") {

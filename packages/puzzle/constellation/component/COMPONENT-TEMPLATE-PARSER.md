@@ -78,6 +78,7 @@ notes:
 
 # Template parser
 
+
 HTML-aware lexer and recursive-descent parser for `.pzl` files. It returns a
 positioned AST or an error list; there is no partial/best-effort output.
 
@@ -126,9 +127,15 @@ a regex is never a split point. An `{#unless}` with a chain keeps the bare base
 in `Cond` and sets `If.Negate`, so codegen negates after the formatters run;
 without a chain `Cond` stays `!(cond)` and the AST is unchanged. Every segment
 after a pipe must be a formatter name — `isFormatterName`,
-`[A-Za-z_$][A-Za-z0-9_$-]*`, bare or called — in text interpolation as well, so
-`{ flags | 4 }`, `{ w / 2 | 0 }` and `{ a |= 2 }` are positioned errors steering
-to a parenthesized bitwise OR rather than lookups of a formatter named `4`.
+`[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*` (an identifier, optionally
+kebab-cased, every `-` starting a word with a letter), bare or called — in text
+interpolation as well, so `{ flags | 4 }`, `{ w / 2 | 0 }`, `{ a |= 2 }`,
+`{ mask | bit-1 }` and `{ x | FLAGS.bold }` are positioned errors steering to a
+parenthesized bitwise OR rather than lookups of a formatter named `4`. A called
+formatter's `(` must be closed by the segment's last `)` — `parseFormatter`
+finds the match with the shared scanner — so `{ a | f(1) + g(2) }` and
+`f(b)(c)` are positioned errors, never `f` called with the argument text
+`1) + g(2`.
 Event handlers take no chain. `{:when}` values take none either, and a
 top-level pipe in one is a positioned error (`parseWhenValues`) rather than a
 silent bitwise OR. A top-level pipe in a `{#for}` header (collection or range

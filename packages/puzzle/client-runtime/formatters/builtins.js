@@ -122,11 +122,13 @@ export function truncate(v, length = 100, ellipsis = '…') {
 
 export function replace(v, search, replacement = '') {
 	const s = str(v);
-	// A string search replaces ALL occurrences, literally (Liquid semantics); a
-	// RegExp is applied as given — a PuzzleKit addition.
-	return typeof search === 'string'
-		? s.split(search).join(str(replacement))
-		: s.replace(search, str(replacement));
+	// A RegExp is applied as given — a PuzzleKit addition. Anything else is a
+	// literal search, coerced like the input (`{ n | replace(0, '-') }`), that
+	// replaces ALL occurrences (Liquid semantics); a missing or empty one leaves
+	// the input alone rather than matching "undefined" or every gap.
+	if (search instanceof RegExp) return s.replace(search, str(replacement));
+	const needle = str(search);
+	return needle === '' ? s : s.split(needle).join(str(replacement));
 }
 
 // `''` splits into code points; a missing input is an empty list (D174 F22).
@@ -157,26 +159,56 @@ function tagEnd(s, start) {
 	return -1;
 }
 
+// tagEnd for EVERY start at once, in one right-to-left pass: ends[i] is
+// tagEnd(s, i). Tracking the answer for each quote state at i + 1 is what makes
+// it exact — a scan from a later `<` is not simply the tail of an earlier one,
+// because it starts outside any quote.
+function tagEnds(s) {
+	const ends = new Int32Array(s.length + 1);
+	let open = -1; // from i + 1, outside a quote
+	let single = -1; // from i + 1, inside '…'
+	let double = -1; // from i + 1, inside "…"
+	ends[s.length] = -1;
+	for (let i = s.length - 1; i >= 0; i--) {
+		const c = s[i];
+		const here = c === '>' ? i : c === '"' ? double : c === "'" ? single : open;
+		if (c === "'") single = open;
+		if (c === '"') double = open;
+		open = ends[i] = here;
+	}
+	return ends;
+}
+
 // Removes tags and comments, quote-aware, without decoding entities. A `<` not
 // followed by a tag name, and unfinished markup, stay as text (D174 F23 — the
 // same scanner as Sites' stripHTML).
+//
+// Linear: a tag scan that runs off the end would otherwise repeat from every
+// later `<` (`'<a'.repeat(40000)` took seconds), so the first failure switches
+// to the precomputed tagEnds table, and a comment with no `-->` means no later
+// one has one either.
 export function strip_html(v) {
 	const s = str(v);
 	let out = '';
 	let i = 0;
+	let ends = null;
+	let commentsClose = true;
 	while (i < s.length) {
 		if (s.startsWith('<!--', i)) {
-			const end = s.indexOf('-->', i + 4);
+			const end = commentsClose ? s.indexOf('-->', i + 4) : -1;
 			if (end >= 0) {
 				i = end + 3;
 				continue;
 			}
+			commentsClose = false;
 		} else if (s[i] === '<' && i + 1 < s.length) {
 			let start = i + 1;
 			if (s[start] === '/' && start + 1 < s.length) start++;
 			const c = s[start];
 			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '!' || c === '?') {
-				const end = tagEnd(s, start + 1);
+				let end;
+				if (ends !== null) end = ends[start + 1];
+				else if ((end = tagEnd(s, start + 1)) < 0) ends = tagEnds(s);
 				if (end >= 0) {
 					i = end + 1;
 					continue;

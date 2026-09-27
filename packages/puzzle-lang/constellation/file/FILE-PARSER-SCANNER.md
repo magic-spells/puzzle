@@ -25,3 +25,5 @@ notes:
 ---
 
 Source binding for the template parser. Behavioral intent stays on the owning component card, COMPONENT-TEMPLATE-PARSER in the connected `puzzle` plan (`repo=puzzle`); this card anchors that contract to `packages/puzzle-lang/parser/scan.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle-lang`).
+
+Every balanced scan here routes through the one `LexSkip` helper (`lexskip.go`): `scanBraceGroup`, the top-level splitters (`splitTopLevel`, `lastTopLevelIndexByte`, `topLevelIndex`), and `matchingClose`, which returns the bracket closing a given `(`/`[`/`{` and is how `parseFormatter` finds where a formatter call's argument list ends.

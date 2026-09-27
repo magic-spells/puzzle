@@ -147,9 +147,10 @@ func Load(appRoot string, cfg *config.I18n) (*Result, error) {
 		path, ok := onDisk[tag]
 		if !ok {
 			hint := ""
-			for stem := range onDisk {
+			for _, stem := range stems {
 				if strings.EqualFold(stem, tag) {
 					hint = fmt.Sprintf(" (found %s/%s.json — rename it to %s.json)", DirName, stem, tag)
+					break
 				}
 			}
 			problems = append(problems, fmt.Sprintf("i18n.locales lists %q, but %s/%s.json does not exist%s", tag, DirName, tag, hint))
@@ -236,11 +237,6 @@ func (r *Result) WriteTo(dir string, atomic bool) error {
 	return nil
 }
 
-// ReadDefault returns the default locale's emitted table bytes.
-func (r *Result) ReadDefault() []byte {
-	return r.Files[r.Manifest.Paths[r.Manifest.DefaultLocale]]
-}
-
 // encode writes a flat table as minified JSON with sorted keys (json.Marshal
 // sorts map keys), so the bytes — and therefore the hash — depend only on the
 // content. HTML escaping is off: the file is fetched as JSON, and the prerender
@@ -295,6 +291,10 @@ type node struct {
 type lineDecoder struct {
 	*json.Decoder
 	src []byte
+	// pos and lines are the offset line() last counted up to and the newlines
+	// before it. The decoder only moves forward, so each call counts just the
+	// bytes since the previous one — linear in the file, not keys × size.
+	pos, lines int
 }
 
 func (d *lineDecoder) line() int {
@@ -302,7 +302,12 @@ func (d *lineDecoder) line() int {
 	if off > len(d.src) {
 		off = len(d.src)
 	}
-	return bytes.Count(d.src[:off], []byte("\n")) + 1
+	if off < d.pos {
+		d.pos, d.lines = 0, 0
+	}
+	d.lines += bytes.Count(d.src[d.pos:off], []byte("\n"))
+	d.pos = off
+	return d.lines + 1
 }
 
 // parseFile decodes one locale file and flattens it. It returns every problem

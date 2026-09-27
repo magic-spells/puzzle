@@ -96,6 +96,25 @@ notes:
       packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
       corrected.
     sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+  - kind: state
+    text: >-
+      Render facts vs fire-time reads (expr.go / codegen.go). (1) A value handed to a formatter is
+      opaque whether it is the pipe BASE or a formatter ARGUMENT: `applyFormatters` scans each
+      argument through `resolveOpaqueScan` (the same whole→opaque promotion `resolveInterpBase`
+      applies to a piped base), so `{ 'by' | byline(post) }` marks the site `deep` in every chain
+      position — text, attributes, inline-if, props, marker args, block subjects, markup chains. (2)
+      `compileEventHandler` records the handler ARGUMENTS' in-scope reads only as `refs` (for the
+      row-cache verdict) and drops them from the facts entirely — no field, no `deep`, no counter
+      read — because listRows refreshes `s.item`/`s.i` on a cached row and the arguments read them
+      at fire time; their `__d` roots still reach the mask (a closure over the render's `__d` needs
+      the row rebuilt). Consequence: `localRead.renderRead` is now true for every recorded read. (3)
+      The CONDITION of a handler-valued conditional is a render read and a value position: it goes
+      through `resolveValueScan` (guarded, D173 V4) and keeps its facts; the branches stay unguarded
+      fire-time handler code. (4) `checkMarkupFormatters` is entered with the root element itself,
+      so `<puzzle-view>` attributes are checked; it tracks foreign content (`<svg>`/`<math>` down to
+      `<foreignObject>`) and passes the surrounding context through components and snippet bodies
+      (only `<Portal>` resets it). Pinned by row_facts_test.go, event_handler_test.go
+      (TestEventHandlerConditionalConditionIsGuarded), markup_test.go.
 ---
 
 # Render-function codegen

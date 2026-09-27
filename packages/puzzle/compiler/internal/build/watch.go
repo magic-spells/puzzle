@@ -89,14 +89,17 @@ type WatchBuilder struct {
 	usage plugin.Usage
 
 	// i18n is the session's translation config (D175), nil without i18n. locales
-	// is the last successful locale load; a rebuild reloads it on the first pass
-	// and whenever the batch touches app/locales/. localeFiles is the set of
-	// dist-relative locale files the last successful rebuild served, so a string
-	// edit's superseded hashed file is pruned once the bundle naming its
+	// is the last successful locale load; a rebuild reloads it on the first pass,
+	// whenever the batch touches app/locales/, and on every pass after a failed
+	// load (localesFailed) — a later unrelated save must keep failing until the
+	// broken file is fixed, not land on the last good tables. localeFiles is the
+	// set of dist-relative locale files the last successful rebuild served, so a
+	// string edit's superseded hashed file is pruned once the bundle naming its
 	// replacement has landed. lastI18nWarnings de-duplicates the warning print.
 	i18n             *config.I18n
 	locales          *locales.Result
 	nextLocales      *locales.Result
+	localesFailed    bool
 	localeFiles      map[string]bool
 	lastI18nWarnings string
 
@@ -273,7 +276,7 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 	// and re-emit the locale files, then point the manifest at them — BEFORE the
 	// bundle below, which bakes the manifest's hashed names into app.js. A broken
 	// locale file fails the rebuild with the last good files still served.
-	if b.i18n != nil && ((b.locales == nil && b.nextLocales == nil) || localesChanged(b.root, changed)) {
+	if b.i18n != nil && ((b.locales == nil && b.nextLocales == nil) || b.localesFailed || localesChanged(b.root, changed)) {
 		endLocales := prof.Phase("locales")
 		res, err := locales.Load(b.root, b.i18n)
 		if err == nil {
@@ -281,11 +284,15 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		}
 		endLocales()
 		if err != nil {
+			b.localesFailed = true
 			return out, err
 		}
+		b.localesFailed = false
 		b.pl.SetI18n(true, res.Manifest.JS())
 		// Committed (and the superseded files pruned) only once a bundle naming
-		// these files has landed — see commitLocales.
+		// these files has landed — see commitLocales. A still-uncommitted earlier
+		// load is superseded now, and its files are already in the live dist.
+		b.dropNextLocales(res)
 		b.nextLocales = res
 		// A locale edit is not a scan input, and a public-only shortcut would skip
 		// the bundle that has to pick up the new manifest.
@@ -409,6 +416,23 @@ func (b *WatchBuilder) commitLocales() {
 	}
 	b.locales = b.nextLocales
 	b.nextLocales = nil
+}
+
+// dropNextLocales deletes the files of an uncommitted locale load that res
+// replaces: no landed bundle names them, and commitLocales only prunes what
+// the last COMMITTED load served. A file the served bundle (localeFiles) or res
+// itself names stays. Before the first landing localeFiles is nil and nothing
+// is dropped here — commitLocales' directory sweep catches it then.
+func (b *WatchBuilder) dropNextLocales(res *locales.Result) {
+	if b.nextLocales == nil || b.localeFiles == nil {
+		return
+	}
+	for rel := range b.nextLocales.Files {
+		if _, keep := res.Files[rel]; keep || b.localeFiles[rel] {
+			continue
+		}
+		_ = os.Remove(filepath.Join(b.outdir, filepath.FromSlash(rel)))
+	}
 }
 
 // printI18nWarnings prints the translation warnings when they differ from the

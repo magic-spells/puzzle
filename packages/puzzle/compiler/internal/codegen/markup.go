@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
@@ -41,6 +42,22 @@ var textOnlyTags = map[string]bool{
 	"xmp": true, "iframe": true, "noembed": true, "noframes": true, "plaintext": true,
 }
 
+// foreignContentTags open foreign content: inside <svg> or <math> the HTML
+// parser reads markup as SVG/MathML, so the prerendered page would parse a
+// markup value differently from the browser runtime, which inserts HTML nodes.
+// The whole subtree is foreign down to an SVG <foreignObject>, which hosts HTML
+// again (the runtime's namespace rule, viewManager.js inSvgNamespace).
+var foreignContentTags = map[string]string{"svg": "SVG", "math": "MathML"}
+
+// markupContext is the parentTag an element's children are checked under: its
+// own tag, unless the element sits in foreign content, which it then continues.
+func markupContext(parentTag, tag string) string {
+	if foreignContentTags[parentTag] != "" && !strings.EqualFold(tag, "foreignObject") {
+		return parentTag
+	}
+	return tag
+}
+
 // checkMarkupFormatters rejects every placement of a markup formatter other
 // than the last link of a text interpolation, with a positioned error. It runs
 // over the whole template (and skeleton) before emission, so the emitters can
@@ -53,18 +70,20 @@ func (c *compiler) checkMarkupFormatters(nodes []parser.Node, parentTag string) 
 			err = c.checkTextChain(node, parentTag)
 		case *parser.Element:
 			if err = c.checkMarkupAttrs(node.Attrs, "an attribute value"); err == nil {
-				err = c.checkMarkupFormatters(node.Children, node.Tag)
+				err = c.checkMarkupFormatters(node.Children, markupContext(parentTag, node.Tag))
 			}
 		case *parser.Component:
+			// A component renders inline, so its children and snippets render
+			// inside the element around it: the parent's context carries through.
 			if err = c.checkMarkupAttrs(node.Props, "a component prop"); err == nil {
-				err = c.checkMarkupFormatters(node.Children, "")
+				err = c.checkMarkupFormatters(node.Children, parentTag)
 			}
 		case *parser.Slot:
 			if err = c.checkMarkupAttrs(node.Args, "a marker argument"); err == nil {
 				err = c.checkMarkupFormatters(node.Children, parentTag)
 			}
 		case *parser.Snippet:
-			err = c.checkMarkupFormatters(node.Body, "")
+			err = c.checkMarkupFormatters(node.Body, parentTag)
 		case *parser.Portal:
 			err = c.checkMarkupFormatters(node.Children, "")
 		case *parser.If:
@@ -95,7 +114,8 @@ func (c *compiler) checkMarkupFormatters(nodes []parser.Node, parentTag string) 
 }
 
 // checkTextChain validates one text interpolation: a markup formatter must be
-// the last link, take no arguments, and not sit inside a text-only element.
+// the last link, take no arguments, and not sit inside a text-only element or
+// foreign content.
 func (c *compiler) checkTextChain(in *parser.Interpolation, parentTag string) error {
 	last := len(in.Formatters) - 1
 	for i, fc := range in.Formatters {
@@ -114,6 +134,11 @@ func (c *compiler) checkTextChain(in *parser.Interpolation, parentTag string) er
 			return c.cgErr(in.Pos, fmt.Sprintf(
 				"`%s` cannot render inside <%s>, whose content is text — drop the formatter or move the interpolation out",
 				fc.Name, parentTag))
+		}
+		if lang := foreignContentTags[parentTag]; lang != "" {
+			return c.cgErr(in.Pos, fmt.Sprintf(
+				"`%s` cannot render inside <%s>, whose content is %s, not HTML — move the interpolation out (or into a <foreignObject>) (D174)",
+				fc.Name, parentTag, lang))
 		}
 	}
 	return nil

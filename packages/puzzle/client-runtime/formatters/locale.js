@@ -21,6 +21,14 @@ export let formatLocale;
  * single-slot caches in builtins.js compare the locale they were built for.
  */
 export function setFormatLocale(tag) {
+	// A tag Intl rejects (`en_US`) would throw RangeError from every
+	// locale-rendered formatter mid-render; use the viewer's locale instead, the
+	// fail-soft the date formatters apply to a bad locale argument.
+	try {
+		Intl.getCanonicalLocales(tag);
+	} catch {
+		tag = undefined;
+	}
 	if (tag !== formatLocale) {
 		formatLocale = tag;
 		NUMBER_FORMATTERS.clear();

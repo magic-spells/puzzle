@@ -341,6 +341,54 @@ func TestAddThemeDivergedRefusesThenOverwrites(t *testing.T) {
 	}
 }
 
+// An unmodified copy of an OLDER registry palette (it still matches the hash
+// pieces.lock recorded, but not the file the registry serves now) is not "up to
+// date": nothing local would be lost, so it is refreshed and re-locked.
+func TestAddThemeRefreshesUnmodifiedOlderCopy(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	if _, err := AddThemes(themeOpts(reg, app, "dim")); err != nil {
+		t.Fatal(err)
+	}
+	const newer = "/* dim v2 */\n:root { --brand: #456; }\n"
+	write(t, reg, "theme/dim.css", newer)
+
+	res, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatalf("an unmodified older copy must not be refused: %v", err)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeUpdated {
+		t.Errorf("state = %q, want %q", st, ThemeUpdated)
+	}
+	dest := filepath.Join(app, "app", "styles", "themes", "dim.css")
+	if got, _ := os.ReadFile(dest); string(got) != newer {
+		t.Errorf("the older copy was not refreshed, got %q", got)
+	}
+	lock, err := readLock(filepath.Join(app, LockFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := lock.Pieces["theme/dim.css"].Files["app/styles/themes/dim.css"]; got != hashBytes([]byte(newer)) {
+		t.Errorf("pieces.lock still records the old hash %q", got)
+	}
+	// Already wired, so no import line or switch advisory is repeated.
+	if len(res.NextSteps) != 0 {
+		t.Errorf("a refresh needs no next steps; got %+v", res.NextSteps)
+	}
+	if out := renderThemes(res); !strings.Contains(out, "updated · app/styles/themes/dim.css") {
+		t.Errorf("summary should report the refresh:\n%s", out)
+	}
+
+	// A second run is now genuinely up to date.
+	res, err = AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeUpToDate {
+		t.Errorf("state = %q, want %q", st, ThemeUpToDate)
+	}
+}
+
 // One refused palette refuses the whole run — the other is not written either.
 func TestAddThemeRefusalIsAllOrNothing(t *testing.T) {
 	reg := multiThemeFixture(t)

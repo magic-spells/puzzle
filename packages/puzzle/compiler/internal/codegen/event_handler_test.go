@@ -110,6 +110,25 @@ func TestOutsideNullToggleCompiles(t *testing.T) {
 	}
 }
 
+// The condition of a handler-valued conditional is evaluated during render, so
+// it is a value position: member steps are guarded (D173 V4) and a missing
+// `user` binds no handler instead of throwing. The handler branches stay
+// fire-time code, unguarded.
+func TestEventHandlerConditionalConditionIsGuarded(t *testing.T) {
+	got := compileEventPZL(t,
+		"  <button @click={ user.profile.admin ? promote(user.profile.id) : null }>go</button>\n"+
+			"  {#for todo in todos}<li @click={ todo.done ? undo(todo.meta.id) : null }>x</li>{/for}",
+	)
+	for _, want := range []string{
+		"'@click': (__d.user?.profile?.admin) ? (event) => this.events.promote(__d.user.profile.id) : null",
+		"'@click': (s.item?.done) ? (event) => this.events.undo(s.item.meta.id) : null",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestEventHandlerRejectedFormsRemainPositionedErrors(t *testing.T) {
 	cases := []struct {
 		name    string

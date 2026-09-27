@@ -131,6 +131,13 @@ notes:
       sanitizer), a non-text sibling under the V10/D168 whitespace rule like an element; either name
       anywhere else is a positioned compile error. D174's body holds the allowlist, the canonical
       output the conformance rows pin, and what Sites must do.
+  - kind: state
+    text: >-
+      V4 in PuzzleKit covers the condition of a handler-valued conditional (`@click={
+      user.profile.admin ? promote() : null }`, the D86 form): the condition is evaluated during
+      render, so codegen guards it like any value position (`(__d.user?.profile?.admin) ? … : null`)
+      and a missing `user` binds no handler instead of throwing. The handler branches themselves are
+      fire-time code and stay unguarded, as do handler arguments.
 ---
 
 # D173 — Core semantics: one meaning for each shared construct
@@ -212,7 +219,6 @@ answer depends on runtime values, the item says so.
 
 ## Expressions
 
-
 **V1 — the formatter pipe.**
 - **A top-level single `|` is a formatter pipe in every template value
   position, in both hosts:** text interpolation, quoted and brace-only
@@ -225,6 +231,17 @@ answer depends on runtime values, the item says so.
   `@event` handler bodies are PuzzleKit JavaScript, not value positions, and
   are untouched. Sites' `{#let}` value is also a pipe position (a Sites
   addition).
+- **Each segment after a pipe is a formatter name, bare or called, and
+  nothing else.** A name is
+  `[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*`: an identifier,
+  optionally kebab-cased, where every `-` starts a word with a letter. A
+  call's `(` must be closed by the segment's last `)`. Anything else —
+  `{ flags | 4 }`, `{ a |= 2 }`, `{ mask | bit-1 }`, `{ x | FLAGS.bold }`,
+  `{ a | f(1) + g(2) }`, `{ a | f(b)(c) }` — is a positioned compile error
+  steering to a parenthesized bitwise OR, because it was meant as JavaScript
+  and a registry lookup of that text would pass the value through silently.
+  A dotted name (`fmt.eur`) is therefore not a formatter name, although the
+  runtime registry accepts any non-empty string as a key.
 - **A pipe inside a `{#for}` header is a positioned compile error in both
   dialects,** in the collection and in range bounds. Cory: "No formatters in
   for loop headers in both - it adds too much to one line." The fix-it names
@@ -234,11 +251,15 @@ answer depends on runtime values, the item says so.
     `{#for p in filtered}`.
 - **Breaking:** PuzzleKit. A bitwise OR in an attribute, prop or `{#if}` /
   `{#case}` header becomes a formatter call, and one in a `{#for}` header
-  becomes an error. Sites gains chains in `{#if}`/`{#case}` headers, which it
-  rejected; not breaking.
+  becomes an error. A segment after a pipe that is not a name or a single
+  call (a number, an operator, `bit-1`, a dotted or non-ASCII name, trailing
+  text after the call's `)`) was a registry lookup or a mis-split call in
+  0.7 and is now an error. Sites gains chains in `{#if}`/`{#case}` headers,
+  which it rejected; not breaking.
 - **Templates:** none found. PuzzleKit and PK apps have 0 pipes in
   brace-only attributes, props or headers; Sites has 1 of each, both in the
-  `errors/sections/let-misuse.pzl` fixture.
+  `errors/sections/let-misuse.pzl` fixture. No `.pzl` in the monorepo uses a
+  formatter name the name rule rejects.
 
 **V2 — `==` and `!=` mean what they mean in JavaScript, in both hosts.**
 Cory: "it's valid js so we should allow valid js."

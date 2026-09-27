@@ -102,3 +102,23 @@ func TestPreflightRuntimeGenericMessageIsShort(t *testing.T) {
 		t.Fatalf("error = %v, want generic install guidance", err)
 	}
 }
+
+func TestPreflightRuntimeMissingDir(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "typo-dir")
+	// An env runtime must not paper over the typo either.
+	runtimeRoot := t.TempDir()
+	writePreflightRuntime(t, runtimeRoot)
+	t.Setenv(RuntimeEnvVar, runtimeRoot)
+	err := PreflightRuntime(root)
+	if err == nil || err.Error() != "puzzle: directory not found: "+root {
+		t.Fatalf("error = %v, want a directory-not-found error", err)
+	}
+
+	file := filepath.Join(t.TempDir(), "app.js")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := PreflightRuntime(file); err == nil || err.Error() != "puzzle: "+file+" is not a directory" {
+		t.Fatalf("error = %v, want a not-a-directory error", err)
+	}
+}

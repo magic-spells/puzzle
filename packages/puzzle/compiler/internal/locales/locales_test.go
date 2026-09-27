@@ -1,6 +1,7 @@
 package locales
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -279,5 +280,33 @@ func TestLoadWarnsOnEmptyObjects(t *testing.T) {
 	}
 	if _, ok := table(t, res, "en")["cart"]; ok {
 		t.Fatal("an empty namespace must not become a key")
+	}
+}
+
+// TestLoadCaseMismatchHintIsDeterministic: with two case variants of a
+// configured tag on disk, the rename hint names the same one on every run.
+func TestLoadCaseMismatchHintIsDeterministic(t *testing.T) {
+	root := writeLocales(t, map[string]string{"en.json": `{}`, "PT-br.json": `{}`, "pt-br.json": `{}`, "Pt-bR.json": `{}`})
+	for i := 0; i < 50; i++ {
+		_, err := Load(root, cfg("en", "en", "pt-BR"))
+		if err == nil || !strings.Contains(err.Error(), "(found app/locales/PT-br.json — rename it to pt-BR.json)") {
+			t.Fatalf("run %d: want the sorted-first case variant in the hint, got %v", i, err)
+		}
+	}
+}
+
+// TestLineDecoderLines: the incremental line count matches a full recount at
+// every key, including a key on the first line and one after blank lines.
+func TestLineDecoderLines(t *testing.T) {
+	src := []byte("{\"a\": \"x\",\n\n  \"b\": {\n    \"c\": \"y\", \"d\": \"z\"\n  },\n\n\n\"e\": \"w\"}")
+	dec := &lineDecoder{Decoder: json.NewDecoder(bytes.NewReader(src)), src: src}
+	root, err := readValue(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{"a": root.lines["a"], "b": root.lines["b"], "c": root.items["b"].lines["c"], "d": root.items["b"].lines["d"], "e": root.lines["e"]}
+	want := map[string]int{"a": 1, "b": 3, "c": 4, "d": 4, "e": 8}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("lines = %v, want %v", got, want)
 	}
 }

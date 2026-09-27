@@ -140,8 +140,12 @@ export async function mountStatic({
 	for (const instance of instances) instance.skipEnter();
 
 	// A locale switch (D175) rebuilds this page the way the SPA router's
-	// same-location rebuild does: preload a fresh chain against the new table,
-	// then swap it in for the mounted one in one step. Last switch wins.
+	// same-location rebuild does: preload a fresh chain — nested components too,
+	// so nothing mounts late or animates in — against the new table, then swap it
+	// in for the mounted one in one step. The old page is destroyed only once the
+	// new one has mounted; a mount that throws is destroyed instead, the old DOM
+	// goes back, and setLocale rejects (the SPA's failed-rebuild contract: the
+	// old page stays, the new locale is already active). Last switch wins.
 	const armRemount = (root) => {
 		if (!(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) || !ctx.i18n) return;
 		let current = root;
@@ -149,15 +153,29 @@ export async function mountStatic({
 		remount = async () => {
 			const my = ++token;
 			const next = await assembleChain(entry, ctx, routeSnapshot);
+			const nested = await preloadTakeoverComponents(next.topVnode, ctx);
 			if (my !== token) {
 				for (const instance of next.instances) instance.destroy();
+				for (const instance of nested) instance.destroy();
 				return;
 			}
 			for (const instance of next.instances) instance.skipEnter();
-			current.destroy();
+			for (const instance of nested) instance.skipEnter();
+			const previous = [...targetEl.childNodes];
 			targetEl.replaceChildren();
-			mount(next.topVnode, targetEl, null, ctx);
-			current = next.topVnode.instance;
+			const top = next.topVnode;
+			const root = top.instance;
+			top.component = root;
+			try {
+				await root.mount(targetEl, { props: top.props, children: top.children, preloaded: true });
+				top.el = root.element;
+			} catch (err) {
+				root.destroy();
+				targetEl.replaceChildren(...previous);
+				throw err;
+			}
+			current.destroy();
+			current = root;
 		};
 	};
 

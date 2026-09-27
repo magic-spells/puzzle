@@ -71,14 +71,38 @@ func TestI18nValidation(t *testing.T) {
 }
 
 func TestValidLocaleTag(t *testing.T) {
-	for _, tag := range []string{"en", "es", "pt-BR", "zh-Hant-TW", "yue", "sr-Latn"} {
+	for _, tag := range []string{"en", "es", "pt-BR", "zh-Hant-TW", "yue", "sr-Latn", "zh-Hant", "es-419",
+		"sr-Latn-RS", "de-DE-1996", "ca-ES-valencia", "sl-rozaj-biske", "EN-us", "de-1901", "es-ES", "en-1abc"} {
 		if ok, msg := ValidLocaleTag(tag); !ok {
 			t.Errorf("%q rejected: %s", tag, msg)
 		}
 	}
-	for _, tag := range []string{"", "e", "english", "en-", "en--US", "en US", "../en", "en.json"} {
+	// Each of these is shaped like a tag but is one Intl throws on — a RangeError
+	// at render time in the browser, so the config must refuse it up front.
+	for _, tag := range []string{"", "e", "english", "en-", "en--US", "en US", "../en", "en.json",
+		"en-12", "en-a", "de-DE-1", "en-US-US", "fr-x", "en-Latn-Latn", "en-1996-1996", "sl-rozaj-ROZAJ",
+		"abcd", "abcde", "i-klingon", "en-x-foo", "en-US-u-ca-gregory", "1en", "en-Latn-US-us"} {
 		if ok, _ := ValidLocaleTag(tag); ok {
 			t.Errorf("%q accepted", tag)
+		}
+	}
+}
+
+// TestValidLocaleTagNamesTheBadSubtag: the message points at the subtag that
+// breaks the tag, not just the whole tag.
+func TestValidLocaleTagNamesTheBadSubtag(t *testing.T) {
+	cases := map[string]string{
+		"en-12":        `"12"`,
+		"en-US-US":     `"US" appears twice`,
+		"de-DE-1":      `"1"`,
+		"fr-x":         `"x"`,
+		"abcd":         `"abcd"`,
+		"en-1996-1996": `"1996" appears twice`,
+	}
+	for tag, want := range cases {
+		ok, msg := ValidLocaleTag(tag)
+		if ok || !strings.Contains(msg, want) || !strings.Contains(msg, "not a BCP 47 locale tag") {
+			t.Errorf("ValidLocaleTag(%q) = %v, %q; want a message containing %s", tag, ok, msg, want)
 		}
 	}
 }

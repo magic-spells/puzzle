@@ -2483,9 +2483,9 @@ export class PuzzleView {
 	 * The FIRST render reports every bit set (-1), because no row has been built
 	 * against any of these values yet.
 	 *
-	 * A mask is 32 bits wide; a template reading more than 32 distinct roots from
-	 * loop bodies wraps and reports extra rows dirty, which is conservative in the
-	 * only direction that is safe.
+	 * The compiler caps `__roots` at 31 entries (bits 0–30 of a signed 32-bit
+	 * AND); a site reading a root past the cap is compiled `volatile` — always
+	 * dirty — so no bit ever wraps onto another root's.
 	 */
 	#computeDirty() {
 		// One bump per render pass, BEFORE the `__roots` bail-out: a template whose

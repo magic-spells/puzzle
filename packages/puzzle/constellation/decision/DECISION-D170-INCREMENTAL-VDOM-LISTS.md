@@ -180,6 +180,34 @@ notes:
       the deviation note). Tests in `listblock_test.go` / `static_cache_test.go`; `island.golden.js`
       reverts to its uncached shape and no other golden or fixture moved. `go vet ./...` + `go test
       ./...` ok, `npx vitest run` 130 files / 2105 tests, `test:types` clean.
+  - kind: decision
+    text: >-
+      Handler ARGUMENTS contribute no row facts at all — not only exempt from volatile/opaque, but
+      also from `fields`, `deep` and the counter read. They are evaluated when the event fires
+      against `s.item`/`s.i`, which listRows reassigns on every pass even for a cached row, so they
+      can never see a stale value; only their `__d` roots stay in the mask (a closure over the
+      render's `__d` must be rebuilt). Without this, `remove(todo.id, todo.author.id)` made every
+      row rebuild every render, and a handler argument naming a field the schema does not declare
+      turned the whole site conservative through the runtime schema check. Conversely, a formatter
+      ARGUMENT is opaque exactly like a piped base: `{ 'by' | byline(post) }` hands the record to
+      the formatter, so the site is `deep`. The condition of a handler-valued conditional stays a
+      render read.
+  - kind: gotcha
+    text: >-
+      A cached vnode can change sibling INDEX without changing identity: a variable-length unkeyed
+      run before it (an unkeyed `{#for}` over primitives, slot content, a row's inner keyless loop
+      before its `s.c[n]`) shifts `this.__c[n]`/`s.c[n]`. Positional pairing then handed the cached
+      object to a DIFFERENT old vnode — patch() adopted that old element into it, and the trailing
+      unmount of the cached object (still in the old list) removed the element it now described,
+      orphaning the original (static markup duplicated, rows vanished). Rule the patcher now keeps:
+      a vnode present in both old and new unkeyed lists pairs with ITSELF. Detection is one test per
+      child — a vnode with `el != null` (mounted before, so reused; a fresh vnode's `el` is null)
+      that is not its positional partner. patchIndexedChildren pre-scans and hands such a list to
+      patchKeyedChildren; the keyed path flags it during pairing and re-pairs the unkeyed run once
+      with an identity Set (reused nodes pair with themselves, the rest consume the unclaimed old
+      nodes positionally), and its move pass places them. A reused-but-unmounted vnode (a branch
+      toggled back on) is a false positive that just takes the re-pair and pairs positionally, as
+      before. Tests: tests/static-cache-shift.test.js.
 ---
 
 # D170 — Persistent list blocks and an incremental virtual DOM
