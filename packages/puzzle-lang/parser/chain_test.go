@@ -76,15 +76,20 @@ func TestChainInComponentPropAndMarkerArg(t *testing.T) {
 // bitwise OR.
 func TestConditionHeaderPipeIsError(t *testing.T) {
 	for _, tc := range []struct {
-		src, header string
-		line, col   int
+		src, header, example string
+		line, col            int
 	}{
-		{"{#if post.tags | size}<b>a</b>{/if}", "an {#if} condition", 2, 3},
-		{"{#if flags | 4}<b>a</b>{/if}", "an {#if} condition", 2, 3},
-		{"{#if ok}<b>a</b>\n  {:else if other | size}<b>b</b>{/if}", "an {:else if} condition", 3, 3},
-		{"{#unless user.name | blank}<b>c</b>{/unless}", "an {#unless} condition", 2, 3},
-		{"{#case status | downcase}{:when 'a'}<b>e</b>{/case}", "a {#case} expression", 2, 3},
-		{`<p class="x {#if on | truthy}on{/if}">z</p>`, "an {#if} condition in an attribute value", 2, 15},
+		{"{#if post.tags | size}<b>a</b>{/if}", "an {#if} condition", "{#if hasTags}", 2, 3},
+		{"{#if flags | 4}<b>a</b>{/if}", "an {#if} condition", "{#if hasTags}", 2, 3},
+		// A pipe in a ternary branch is still top-level: the ternary does not
+		// nest it, so it is the ban, never a bitwise OR.
+		{"{#if a ? b | c : d}<b>a</b>{/if}", "an {#if} condition", "{#if hasTags}", 2, 3},
+		{"{#if ok}<b>a</b>\n  {:else if other | size}<b>b</b>{/if}", "an {:else if} condition", "{:else if hasTags}", 3, 3},
+		{"{#unless user.name | blank}<b>c</b>{/unless}", "an {#unless} condition", "{#unless hasTags}", 2, 3},
+		{"{#case status | downcase}{:when 'a'}<b>e</b>{/case}", "a {#case} expression", "{#case statusLabel}", 2, 3},
+		// A bitwise OR before 0.8; the message steers it to (a | b), not to ||.
+		{"{#case mode | 1}{:when 3}<b>e</b>{/case}", "a {#case} expression", "{#case statusLabel}", 2, 3},
+		{`<p class="x {#if on | truthy}on{/if}">z</p>`, "an {#if} condition in an attribute value", "{#if isActive}", 2, 15},
 	} {
 		src := "<puzzle-view>\n  " + tc.src + "</puzzle-view>"
 		_, err := Parse([]byte(src), "t.pzl")
@@ -93,9 +98,11 @@ func TestConditionHeaderPipeIsError(t *testing.T) {
 			t.Errorf("%s: got %v, want a *ParseError", tc.src, err)
 			continue
 		}
-		want := "formatter pipes are not allowed in " + tc.header + " — compute the value in data()"
-		if !strings.Contains(pe.Message, want) || !strings.Contains(pe.Message, "||") {
-			t.Errorf("%s: message %q, want it to contain %q", tc.src, pe.Message, want)
+		want := "formatter pipes are not allowed in " + tc.header +
+			" — compute the value in data() and test that field (e.g. " + tc.example +
+			"), write || for a logical OR, or wrap a bitwise OR in parentheses, e.g. (a | b)"
+		if pe.Message != want {
+			t.Errorf("%s: message\n  %q\nwant\n  %q", tc.src, pe.Message, want)
 		}
 		if pe.Line != tc.line || pe.Col != tc.col {
 			t.Errorf("%s: position %d:%d, want %d:%d", tc.src, pe.Line, pe.Col, tc.line, tc.col)
@@ -110,7 +117,8 @@ func TestConditionHeaderKeepsJavaScriptOr(t *testing.T) {
 	root := parseContent(t, `{#if a || b}<b>a</b>{:else if c || d}<b>b</b>{/if}`+
 		`{#unless a || b}<b>c</b>{/unless}`+
 		`{#case a || b}{:when 'a'}<b>e</b>{/case}`+
-		`{#if (flags | 4) && /x|y/.test(s) && s !== 'p|q' && f(a | b)}<b>f</b>{/if}`)
+		`{#if (flags | 4) && /x|y/.test(s) && s !== 'p|q' && f(a | b)}<b>f</b>{/if}`+
+		"{#if `x${a | b}` === s}<b>g</b>{/if}")
 	kids := elementChildren(root.Children)
 
 	ifn := kids[0].(*If)
@@ -128,6 +136,10 @@ func TestConditionHeaderKeepsJavaScriptOr(t *testing.T) {
 	}
 	if nested := kids[3].(*If); nested.Cond != "(flags | 4) && /x|y/.test(s) && s !== 'p|q' && f(a | b)" {
 		t.Errorf("nested pipes: got %q", nested.Cond)
+	}
+	// A `|` inside a template literal's ${…} is nested JavaScript, not a pipe.
+	if tpl := kids[4].(*If); tpl.Cond != "`x${a | b}` === s" {
+		t.Errorf("template literal: got %q", tpl.Cond)
 	}
 
 	root = parseContent(t, `<p class="x {#if a || b}on{/if}">z</p>`)

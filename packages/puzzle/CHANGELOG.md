@@ -485,7 +485,8 @@ and keep formatters pure functions of their input.
   or in an inline `{#if}` inside an attribute value, no longer compiles to a
   bitwise OR: it is a positioned error, `formatter pipes are not allowed in an
   {#if} condition — compute the value in data() and test that field (e.g.
-  {#if hasTags}); for a logical OR, write ||`. In a loop's collection or range
+  {#if hasTags}), write || for a logical OR, or wrap a bitwise OR in
+  parentheses, e.g. (a | b)`. In a loop's collection or range
   bound, shape the list in `data()` and loop over that field
   (`{#for item in sortedItems}`); a `{:when}` value takes no chain, so list
   alternatives with commas or compute the value in `data()`. `||` keeps

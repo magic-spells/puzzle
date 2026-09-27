@@ -80,30 +80,32 @@ notes:
       (+107).
   - kind: state
     text: >-
-      Group (b) — V1 (pipe in attributes, props, if/else-if/unless/case headers, inline-if), the V1
-      `{#for}`-header pipe ban, V2/V3 (`==` unchanged, pinned by a test), V4 (guarded member access
-      in value positions), V8 (object literals as formatter/call arguments), V12 (missing/non-list
-      collection loops zero times, dev warning) and V15 (script-less component's data() returns its
-      props) — is built in PuzzleKit on feat/core-expressions (PR #152 into release/0.8.0).
-      PuzzleKit goes beyond the core subset on V8: shorthand, quoted, computed and spread keys all
-      work (JS superset; the core still names only `key: value`). Beyond the card as first written,
-      the review round added: a segment after a pipe must be a formatter name (anything else — `{
-      flags | 4 }`, `{ a |= 2 }` — is a positioned error steering to `(a | b)`), a `|` in a
-      `{:when}` value is a positioned error, and integer-literal ranges are constant-folded without
-      the loopRange import. Sites adoption of V1, V2 and V12 is still pending the dialect switch, as
-      is the Sites wording of the `{#for}` fix-it. Measured cost: hello-world +0 B gzip, todos +35 B
-      gzip.
+      Group (b) — V1 (a pipe is a formatter in brace-only attributes, props and marker arguments; a
+      pipe in a condition header, a `{#for}` header or a `{:when}` value is a positioned error),
+      V2/V3 (`==` unchanged, pinned by a test), V4 (guarded member access in value positions), V8
+      (object literals as formatter/call arguments), V12 (missing/non-list collection loops zero
+      times, dev warning) and V15 (script-less component's data() returns its props) — is built in
+      PuzzleKit (release/0.8.0). PuzzleKit goes beyond the core subset on V8: shorthand, quoted,
+      computed and spread keys all work (JS superset; the core still names only `key: value`). A
+      segment after a pipe must be a formatter name (anything else — `{ flags | 4 }`, `{ a |= 2 }` —
+      is a positioned error steering to `(a | b)`), every header pipe error steers a bitwise OR to
+      `(a | b)` the same way, and integer-literal ranges are constant-folded without the loopRange
+      import. Sites adoption of V1's `{#for}` error, V2 and V12 is still pending the dialect switch,
+      as is the Sites wording of the `{#for}` fix-it. Measured cost: hello-world +0 B gzip, todos
+      +35 B gzip.
   - kind: gotcha
     text: >-
       Sites vendors the 0.7.0 parser, and its renderer reads `DynamicAttr.Expr`, `If.Cond` and
       `Case.Expr` directly. After its next `make sync-parser` picks up the D173 (b) parser, a
-      chained value position arrives as a bare base in `Expr`/`Cond` with the chain in the new
-      `Formatters` fields (`DynamicAttr`, `If`, `Case`, `InlineIfPart`), and an `{#unless}` with a
-      chain arrives un-negated with `If.Negate` set. A renderer that ignores those fields silently
-      DROPS the formatters and inverts chained unless blocks — no error, just wrong output. Update
-      the Sites renderer to apply `Formatters` (and honor `Negate`) in the same sync, and note the
-      parser now also rejects a non-name after a pipe and a `|` in `{:when}` values, which may
-      surface as new Sites compile errors.
+      chained brace-only attribute, prop or marker argument arrives as a bare base in
+      `DynamicAttr.Expr` with the chain in the new `DynamicAttr.Formatters` field. A renderer that
+      ignores that field silently DROPS the formatters — no error, just wrong output — so apply
+      `DynamicAttr.Formatters` in the same sync. `If.Cond`, `Case.Expr` and `InlineIfPart.Cond` stay
+      plain expressions: those nodes carry no chain, because a pipe in any condition header is a
+      parse error (`conditionPipeError`), and an `{#unless}` is always folded into `!(…)`. The
+      parser also rejects a non-name after a pipe, a `|` in `{:when}` values and a `|` in `{#for}`
+      headers, which may surface as new Sites compile errors; the condition-header error matches
+      what Sites already rejects.
   - kind: state
     text: >-
       Group (c) — V10 whitespace — is built in PuzzleKit on feat/whitespace-rule (PR #154 into
@@ -131,17 +133,6 @@ notes:
       sanitizer), a non-text sibling under the V10/D168 whitespace rule like an element; either name
       anywhere else is a positioned compile error. D174's body holds the allowlist, the canonical
       output the conformance rows pin, and what Sites must do.
-  - kind: gotcha
-    text: >-
-      Corrects the Sites parser-sync gotcha above: only `DynamicAttr` carries a `Formatters` chain.
-      `If`, `Case` and `InlineIfPart` have no `Formatters` field and `If` has no `Negate` — a
-      top-level `|` in an `{#if}`/`{:else if}`/`{#unless}`/`{#case}` header or an attribute's inline
-      `{#if}` is a positioned parse error (`conditionPipeError` in puzzle-lang/parser/parser.go), so
-      `If.Cond`/`Case.Expr`/`InlineIfPart.Cond` are always plain expressions and an `{#unless}` is
-      always folded into `!(…)`. The Sites renderer only has to apply `DynamicAttr.Formatters` after
-      its next `make sync-parser`; the new header error matches what Sites already rejected.
-      Condition chains were built on PR #152 and removed on feat/no-pipes-in-conditions before 0.8.0
-      shipped.
 ---
 
 # D173 — Core semantics: one meaning for each shared construct
@@ -246,7 +237,8 @@ answer depends on runtime values, the item says so.
   `(a | b)` is still one. The fix-it names the value first:
   - PuzzleKit conditions: `formatter pipes are not allowed in an {#if}
     condition — compute the value in data() and test that field (e.g. {#if
-    hasTags}); for a logical OR, write ||`. Each header names itself (`an
+    hasTags}), write || for a logical OR, or wrap a bitwise OR in
+    parentheses, e.g. (a | b)`. Each header names itself (`an
     {:else if} condition`, `an {#unless} condition`, `a {#case} expression`,
     `an {#if} condition in an attribute value`).
   - PuzzleKit loops: shape the list in `data()` and loop over that field.

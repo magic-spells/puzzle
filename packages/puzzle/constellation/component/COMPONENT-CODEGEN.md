@@ -65,22 +65,25 @@ notes:
     text: >-
       Markup formatters (D174 group e, `markup.go`). `checkMarkupFormatters` walks the template and
       the skeleton BEFORE any emission and rejects every placement of `raw`/`newline_to_br` except
-      the last link of a text interpolation: mid-chain, an attribute value (brace-only, quoted or
-      inline-if), a component prop, a marker argument, an `{#if}`/`{#case}`/inline-if subject, any
+      the last link of a text interpolation: mid-chain, an attribute value (brace-only, quoted, or
+      an interpolation inside an inline-if branch), a component prop, a marker argument, any
       argument, and a text interpolation inside <script>/<style>/<textarea>/<title> — all positioned
-      errors (FormatterCall has no position, so the owning node's is used). Because every other
-      placement is gone before emission, `processChildren` only has to test the LAST link
-      (`isMarkupInterp`): such an interpolation is a non-text SIBLING under D168 — `flush(true)` and
-      `leftSibling = true`, exactly the element arm — so text wrapped next to it keeps one space;
-      `emitItem`'s `*parser.Interpolation` arm calls `emitMarkup`, which compiles the chain minus
-      its last link exactly as `buildTextRun` does (same fact sink, `resolveInterpBase`,
-      `applyFormatters`, `displayValue`) and emits `new ViewNode('#html', { value })` (`br: true`
-      for newline_to_br). The markup name itself never reaches `__f`, so a markup-only file emits no
-      `const __f` line. The node counts one slot in `condStaticLen` (the `default` arm) and is
-      dynamic to the static cache (it is an Interpolation). A markup interpolation cannot be a
-      component root or a `{#for}` body root (the existing element-or-component errors). Pinned by
-      markup_test.go (including the element-parity whitespace case). The usage scan (plugin/scan.go)
-      sets `HasRawHTML` from the same names and keeps them out of the manifest.
+      errors (FormatterCall has no position, so the owning node's is used). A condition header never
+      reaches this check with a chain: the parser rejects any pipe in an `{#if}`/`{:else
+      if}`/`{#unless}`/`{#case}` header or an inline-if condition (D173 V1), so `If`, `Case` and
+      `InlineIfPart` carry none. Because every other placement is gone before emission,
+      `processChildren` only has to test the LAST link (`isMarkupInterp`): such an interpolation is
+      a non-text SIBLING under D168 — `flush(true)` and `leftSibling = true`, exactly the element
+      arm — so text wrapped next to it keeps one space; `emitItem`'s `*parser.Interpolation` arm
+      calls `emitMarkup`, which compiles the chain minus its last link exactly as `buildTextRun`
+      does (same fact sink, `resolveInterpBase`, `applyFormatters`, `displayValue`) and emits `new
+      ViewNode('#html', { value })` (`br: true` for newline_to_br). The markup name itself never
+      reaches `__f`, so a markup-only file emits no `const __f` line. The node counts one slot in
+      `condStaticLen` (the `default` arm) and is dynamic to the static cache (it is an
+      Interpolation). A markup interpolation cannot be a component root or a `{#for}` body root (the
+      existing element-or-component errors). Pinned by markup_test.go (including the element-parity
+      whitespace case). The usage scan (plugin/scan.go) sets `HasRawHTML` from the same names and
+      keeps them out of the manifest.
   - kind: state
     text: >-
       Since D172 the parser half of the scanner pair lives in the sibling module:
@@ -96,15 +99,6 @@ notes:
       packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
       corrected.
     sha: 5c21245a984c2fe5c86abf097189af44266f3b13
-  - kind: state
-    text: >-
-      Condition headers take no formatter chain (D173 V1): `{#if x | raw}`, `{#case x | raw}` and an
-      inline-if `{#if on | raw}` are now rejected by the parser's condition-pipe error before
-      `checkMarkupFormatters` runs, so the markup note's "an `{#if}`/`{#case}`/inline-if subject"
-      placements no longer reach `markup.go` — it checks attribute values, props, marker arguments
-      and text chains only. `emitIf`/`emitCase` and the inline-if emitters resolve the condition
-      with `resolveValue(cond, nil, …)`, and the D31 scan (`plugin/scan.go`) and the `puzzle check`
-      emitter no longer read a header chain.
 ---
 
 # Render-function codegen

@@ -1326,10 +1326,12 @@ func forPipeError(pos Position, file string) *ParseError {
 // top-level `|` in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` header, or
 // in an inline `{#if}` inside an attribute value. Formatters are display helpers
 // and stay out of branching logic, so the fix-it moves the computation into
-// data(). The ban never falls back to a bitwise OR; `||` is not a pipe and
-// keeps working, and a parenthesized `(a | b)` is still a bitwise OR.
+// data(). The ban never falls back to a bitwise OR: `||` is not a pipe and
+// keeps working, and the message steers a bitwise OR to `(a | b)`, exactly as
+// the {:when} and not-a-formatter-name errors do — otherwise `{#case mode | 1}`
+// (a bitwise OR before 0.8) would be steered to `||` and match another value.
 func conditionPipeError(pos Position, file, header, example string) *ParseError {
-	return errAt(file, pos, "formatter pipes are not allowed in %s — compute the value in data() and test that field (e.g. %s); for a logical OR, write ||", header, example)
+	return errAt(file, pos, "formatter pipes are not allowed in %s — compute the value in data() and test that field (e.g. %s), write || for a logical OR, or wrap a bitwise OR in parentheses, e.g. (a | b)", header, example)
 }
 
 // parseFormatter parses "name" or "name(arg, arg)". Arguments split at

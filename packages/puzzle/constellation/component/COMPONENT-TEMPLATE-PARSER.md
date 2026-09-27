@@ -124,10 +124,11 @@ regex is never a split point. **Condition headers take no chain:** a top-level
 pipe (`hasTopLevelPipe`) in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}`
 header, or in an inline `{#if}` inside an attribute value (`attr.go`), is a
 positioned error from `conditionPipeError` — `formatter pipes are not allowed
-in <header> — compute the value in data() and test that field (e.g. …); for a
-logical OR, write ||` — never a bitwise OR, so `If.Cond`, `Case.Expr` and
+in <header> — compute the value in data() and test that field (e.g. …), write
+|| for a logical OR, or wrap a bitwise OR in parentheses, e.g. (a | b)` — never
+a bitwise OR, so `If.Cond`, `Case.Expr` and
 `InlineIfPart.Cond` are always plain expressions (an `{#unless}` folds to
-`!(cond)` as it always did). Every segment
+`!(cond)`). Every segment
 after a pipe must be a formatter name — `isFormatterName`,
 `[A-Za-z_$][A-Za-z0-9_$-]*`, bare or called — in text interpolation as well, so
 `{ flags | 4 }`, `{ w / 2 | 0 }` and `{ a |= 2 }` are positioned errors steering
