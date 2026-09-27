@@ -13,19 +13,19 @@ ScopedMarkerArgs.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('div', { class: 'list' }, [
-    new ViewNode(SLOT_TAG, { args: { user: __d.lead } }, [
+    new ViewNode(SLOT_TAG, { args: { user: __d.lead }, fallback: () => [
       new ViewNode('text', { value: 'No lead' }),
-    ]),
+    ] }),
     ...__l(this, this, 0, __d.users, (s) =>
       new ViewNode('div', {
         key: s.k,
         class: 'row',
       }, [
-        new ViewNode(SLOT_TAG, { name: 'row', args: { user: s.item, group: __d.group } }, [
+        new ViewNode(SLOT_TAG, { name: 'row', args: { user: s.item, group: __d.group }, fallback: () => [
           new ViewNode('span', {}, [
             new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
           ]),
-        ]),
+        ] }),
       ])
     , __L0),
   ]);

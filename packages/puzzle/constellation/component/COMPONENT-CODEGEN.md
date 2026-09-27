@@ -188,8 +188,11 @@ the copy path slices `expr[i:j]`.
 Emission covers host/component vnodes, coalesced text/interpolation,
 formatters, dynamic/mixed attrs, events, slots, snippets, portals, refs,
 islands, inline SVG, conditionals/case, and item/range loops. Markers emit
-`new ViewNode(SLOT_TAG)` with optional `name`, per-render `args`, and fallback
-children. Caller `<Snippet>` declarations emit `SNIPPET_TAG` metadata vnodes:
+`new ViewNode(SLOT_TAG)` with optional `name`, per-render `args`, and a lazy
+`fallback: () => [ … ]` thunk carrying the fallback body (D141): it is compiled
+in the enclosing scope like any child list but runs only when the position
+renders its fallback, so a filled marker never evaluates it.
+Caller `<Snippet>` declarations emit `SNIPPET_TAG` metadata vnodes:
 their ordered `params` plus a fresh `fn({ ...params })` closure whose body keeps
 caller scope while parameters shadow it. `<Portal>` (D144) emits one
 `PORTAL_TAG` vnode carrying the teleported children through that same

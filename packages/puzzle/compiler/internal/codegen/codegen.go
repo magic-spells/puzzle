@@ -834,22 +834,30 @@ func (c *compiler) emitSlot(n *parser.Slot, ind int, scope scopeMap) (string, er
 		}
 		attrs = append(attrs, "args: { "+strings.Join(kvs, ", ")+" }")
 	}
+	if len(n.Children) > 0 {
+		// The fallback body (D141) is emitted as a thunk, never as the marker's
+		// children: it renders only when nothing fills the position, so it must not
+		// be evaluated or built otherwise. Built eagerly, a snippet-filled marker
+		// still ran every fallback expression — one per row in a loop — and its
+		// value-printing diagnostics (D173 V6) fired for content that never
+		// renders. The runtime's fill() calls it at most once per marker vnode. The
+		// body is compiled in the enclosing scope exactly as before (row scopes,
+		// handler and static caches, list-block read tracking), only deferred.
+		items, err := c.processChildren(n.Children, scope)
+		if err != nil {
+			return "", err
+		}
+		body, err := c.emitArray(items, ind+2, scope)
+		if err != nil {
+			return "", err
+		}
+		attrs = append(attrs, "fallback: () => "+body)
+	}
 	attrsExpr := "{}"
 	if len(attrs) > 0 {
 		attrsExpr = "{ " + strings.Join(attrs, ", ") + " }"
 	}
-	if len(n.Children) == 0 {
-		return "new ViewNode(SLOT_TAG, " + attrsExpr + ")", nil
-	}
-	items, err := c.processChildren(n.Children, scope)
-	if err != nil {
-		return "", err
-	}
-	children, err := c.emitArray(items, ind+2, scope)
-	if err != nil {
-		return "", err
-	}
-	return "new ViewNode(SLOT_TAG, " + attrsExpr + ", " + children + ")", nil
+	return "new ViewNode(SLOT_TAG, " + attrsExpr + ")", nil
 }
 
 // emitSnippet emits the pinned D166 caller-side contract. The arrow receives

@@ -572,15 +572,26 @@ function expandChildList(kids, parts) {
  * `nodes` is null for an args-bearing marker filled with plain content, which
  * always renders its fallback. The shared expansion serves the browser and
  * both prerender modes, so SSG output agrees.
+ *
+ * Compiled markers carry the fallback LAZILY, as the `attrs.fallback` thunk:
+ * it is neither evaluated nor built unless the fallback renders, so a filled
+ * position never runs its fallback's expressions (or their value-printing
+ * diagnostics). The first use stores the built body in the marker's otherwise
+ * empty `children`, which is also where a hand-built marker keeps an eager
+ * fallback — so a marker vnode reused across renders (a clean list-block row,
+ * D170) hands back the same fallback vnodes and patch()'s identity
+ * short-circuit keeps them free, exactly as an eager body did.
  */
 function fill(out, nodes, k, parts) {
+	const lazy = k.attrs.fallback;
 	if (
 		nodes &&
-		(!k.children.length ||
+		(!(lazy || k.children.length) ||
 			nodes.some((n) => n.tag !== PLACEHOLDER_TAG && (!n.isText || /\S/.test(n.attrs.value))))
 	) {
 		for (const n of nodes) out.push(n);
 	} else {
+		if (lazy && !k.children.length) k.children = lazy();
 		for (const fb of k.children) out.push(expandNode(fb, parts));
 	}
 }

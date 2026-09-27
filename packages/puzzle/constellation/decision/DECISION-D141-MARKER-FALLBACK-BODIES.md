@@ -30,6 +30,7 @@ positioned compile errors steering to the capitalized forms (D134).
 
 ## Contract
 
+
 - **Uniform across the one mechanism.** `<Children>` and bare `<Slot>` are the
   same AST node, so fallback behaves identically in all three positions:
   component default content, named-slot fallback, and the router outlet — which
@@ -41,6 +42,22 @@ positioned compile errors steering to the capitalized forms (D134).
   call-site `{#if}` and an empty `{#for}` both leave it unfilled, so the
   fallback shows — the empty-state pattern needs no extra syntax. The same test
   applies to each snippet stamp and to a forwarded position.
+- **A fallback is lazy: neither evaluated nor built unless it renders.** Codegen
+  emits the body as a thunk on the marker (`attrs.fallback: () => [ … ]`), not
+  as its children, and the runtime `fill` calls it only when the position is
+  unfilled. A filled position — a snippet stamping every row of a VirtualList —
+  therefore never runs its fallback's expressions, formatters, or their
+  development diagnostics (the D173 V6 value-printing warnings), and never
+  allocates its vnodes. The first call stores the built body in the marker's
+  otherwise empty `children`, so a marker vnode reused across renders (a clean
+  [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] row) hands back the same fallback
+  vnodes and `patch()`'s identity short-circuit keeps them free. The thunk
+  closes over the render scope it was built in; that is sound because a
+  cached row is only reused while everything its body reads — fallback
+  included, since the body is compiled in the row's scope — is unchanged. A
+  hand-built marker may still carry an eager fallback as `children`; the
+  runtime accepts both. Hybrid and static prerender share `expandSlots`, so
+  prerendered output is lazy too.
 - **Keep a fallback to one root element when siblings follow the marker.** The
   unkeyed patcher pairs children by position, so a fallback whose node count
   differs from the content it swaps with shifts every sibling after the marker
@@ -51,19 +68,21 @@ positioned compile errors steering to the capitalized forms (D134).
 - **A fallback body is ordinary template content.** Interpolations (including
   formatter pipes), `{#if}`/`{#for}`/`{#case}` blocks, components, event
   bindings, refs, and `{#svg}` inline SVG (D46) all parse and compile through
-  the same paths as any element body — the fallback children ride
-  `emitElement`'s child emission; nothing is special-cased. A composition
-  marker inside another marker's fallback body is a positioned compile error
-  (no coherent expansion order; relaxable if a real case appears).
+  the same paths as any element body — `emitSlot` runs the ordinary child
+  emission in the enclosing scope and only wraps the resulting array in the
+  thunk; nothing else is special-cased. A composition marker inside another
+  marker's fallback body is a positioned compile error (no coherent expansion
+  order; relaxable if a real case appears).
 - **No public is-slot-filled probe.** The runtime's marker expansion knows
   whether a position was filled, which is all fallback needs. A testable-slots
   API remains a separate, unclaimed decision.
 - **Implementation surface:** `Slot.Children` in the AST, paired-marker
-  parsing, codegen fallback emission, the runtime `fill` helper in
+  parsing, codegen's thunk emission in `emitSlot`, the runtime `fill` helper in
   `expandChildList` (the filled test runs only for a marker that has a
   fallback), and fallback-content traversal in a11y, refs, and the class scan.
-  Golden churn is acceptable (compiler-over-runtime-bytes: the runtime cost is
-  one branch).
+  Pinned by `tests/lazy-slot-fallback.test.js` (compiled fixtures in
+  `tests/fixtures/lazy-fallback/`, the VirtualList row shape) and the
+  `marker_fallbacks` golden.
 
 ## Rationale
 
@@ -95,3 +114,16 @@ bodies cover that need with zero new public API.
 - **Fallback on named slots only (outlet excluded)** — would enforce a
   Slot/Children split the compiler keeps as one mechanism, and discards the
   empty-outlet case.
+- **An eager fallback: the body emitted as the marker's children** — built and
+  evaluated on every render whether or not it showed. Beyond the wasted
+  allocation (measured ~17% of build+expand time on 1,000 snippet-filled
+  rows), it ran the fallback's expressions for positions a snippet filled, so
+  0.8's value-printing check warned "object template value for row.item" on
+  every VirtualList whose rows were snippet-stamped, for content that never
+  renders. The thunk costs one closure per unfilled marker per built row
+  (~5% of build+expand when every row shows its fallback, nothing on a clean
+  cached row).
+- **Silencing the diagnostics during fallback construction instead** — a flag
+  around fallback evaluation would hide the warning but keep the wasted work,
+  keep the side effects of fallback formatters, and would also suppress the
+  warning in the case where the fallback DOES render and it is correct.

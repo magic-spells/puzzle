@@ -303,8 +303,11 @@ paths retain the normal diff.
 Composition uses `SLOT_TAG` and shared `expandSlots`: `<Children/>` fills
 the default bucket, `<Slot name="x"/>` fills named buckets, and `<Slot/>` is
 the router outlet by convention. An unfilled marker expands its fallback
-children — supplied content wins completely — and contributes no nodes when it
-has none (D141).
+— supplied content wins completely — and contributes no nodes when it has none
+(D141). A compiled fallback arrives as the `attrs.fallback` thunk and `fill`
+calls it only when the fallback renders, storing the result in the marker's
+otherwise empty `children` so a reused marker (a clean cached row) keeps the
+same fallback vnodes; a hand-built marker's eager `children` still work.
 `SNIPPET_TAG` children form a third bucket keyed by `fits`; an args-bearing
 marker calls the matching Snippet function for fresh vnodes on every stamp.
 Development diagnoses shape mismatches, plain fills for args-bearing markers,

@@ -1,0 +1,41 @@
+<puzzle-view>
+<div class="lazy-lists">
+<ul class="lazy-rows">
+  {#for row in rows}
+    <li key={ row.key }>
+      <Slot name="row" item={ row.item } index={ row.index }>{ row.item }</Slot>
+      <Slot name="note" item={ row.item }><em class="lazy-note">{ row.item | probe }</em></Slot>
+    </li>
+  {/for}
+</ul>
+<ol class="lazy-names">
+  {#for name in names}
+    <li key={ name }>
+      <Slot name="name" value={ name }><i class="lazy-name">{ name | probeName }</i></Slot>
+    </li>
+  {/for}
+</ol>
+</div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The VirtualList piece's row shape (puzzle-pieces registry/ui/virtual-list):
+// an args-bearing marker inside a keyed, list-block-lowered {#for} whose
+// fallback prints the whole item. `note` counts its fallback evaluations
+// through the `probe` formatter the tests register.
+//
+// Those rows wrap each item in a fresh plain object, so the list block rebuilds
+// them on every render. `names` loops over primitives instead — a clean row is
+// handed back cached — and `probeName` counts that marker's fallback builds.
+export default class LazyRows extends PuzzleView {
+  data(params, props) {
+    const items = Array.isArray(props.items) ? props.items : [];
+    return {
+      rows: items.map((item, index) => ({ item, index, key: item?.id ?? index })),
+      names: Array.isArray(props.names) ? props.names : [],
+    };
+  }
+}
+</script>

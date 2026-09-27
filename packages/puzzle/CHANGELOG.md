@@ -657,6 +657,15 @@ and keep formatters pure functions of their input.
 
 ### Fixed
 
+- **A slot's fallback body is built only when it renders (D141).** A paired
+  marker's fallback used to be evaluated on every render, even when a snippet
+  or call-site content filled the position, so its expressions ran for nothing
+  and the 0.8 value-printing check warned about content that never showed —
+  a VirtualList whose rows a `<Snippet>` stamped logged
+  `object template value for "row.item"`. The fallback now compiles to a lazy
+  body that runs only when the position is unfilled, in the browser and in
+  prerendered output. Filled slots also render faster; nothing changes in what
+  renders.
 - **Prerendered pages anchor their injected scripts on the shell's last
   `</body>`.** A `</body>` inside a shell comment or an inline script string
   used to capture the static data island and the page module (and, with
