@@ -423,7 +423,8 @@ export interface PuzzleI18n {
 	/**
 	 * Fetch `tag`'s strings, then switch the locale, store the choice and
 	 * rebuild the page at the same location. Rejects (changing nothing) when the
-	 * fetch fails; overlapping calls resolve last-wins. Throws a RangeError for a
+	 * fetch fails; overlapping calls resolve last-wins, and a call a later one
+	 * overtook settles with the later call's outcome. Throws a RangeError for a
 	 * tag that is not configured.
 	 */
 	setLocale(tag: string): Promise<void>;

@@ -558,7 +558,9 @@ viewer's in every locale-rendered formatter — `date`, `time`, `datetime`,
 `currency` stays locale-independent. The locale is one slot per page (two
 mounted apps share it; the last switch wins), set by the service on load and
 on every switch; prerendered pages render dates and numbers in the default
-locale. Without `i18n`, those formatters keep the viewer's locale.
+locale. Without `i18n`, those formatters keep the viewer's locale. A tag the
+browser's `Intl` rejects never throws during render: the formatter locale and
+plural selection fall back to the viewer's locale.
 
 **Locale selection at startup.** (1) the stored choice
 `localStorage.__puzzleLocale`, read inside try/catch and used only if still
@@ -585,11 +587,15 @@ is let finish first, and the rebuild runs on the page it committed. A failed
 fetch rejects and changes nothing. A rebuild that fails (a `data()` throw,
 reported through `onError`) rejects too, and leaves the old page on screen with
 the new locale already active — the next navigation rebuilds every level in it.
-Overlapping calls resolve last-wins. Called before the first commit, it
-replaces the pending startup load and rebuilds nothing. Store records survive a
-switch; `setData` local state does not, so state that must survive a language
-switch belongs in the store. Static output re-assembles and re-mounts its page
-chain instead.
+Overlapping calls resolve last-wins: a call that a later one overtook settles
+with the later call's outcome (it resolves once that switch lands and rejects if
+it fails), so no promise reports a switch that did not happen. Called before
+the first commit, it replaces the pending startup load and rebuilds nothing.
+Store records survive a switch; `setData` local state does not, so state that
+must survive a language switch belongs in the store. Static output
+re-assembles its page chain — nested components included, so nothing animates
+in — and swaps it in only once it has mounted; a mount that throws keeps the old
+page and rejects.
 
 **`<html lang>`** is the default locale in every prerendered page (the build
 rewrites the shell's `lang`), and the runtime sets it to the active locale on

@@ -52,7 +52,7 @@ constructs mean one thing changes what some existing templates print.
   morph-engine `^0.4.2` floor, [[DECISION-D169-REGISTRY-VERSION-FLOORS]], the
   D76 background update notice, and the runtime preflight.
 
-Production sizes: hello-world 21.5 KB gzip, todos 25.5 KB gzip.
+Production sizes: hello-world 21.6 KB gzip, todos 25.6 KB gzip.
 
 ## Upgrade notes
 

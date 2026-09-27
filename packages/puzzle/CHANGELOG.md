@@ -167,7 +167,7 @@ module, the pieces theme system with `puzzle add theme`, and 100 pieces. The
 never-published 0.7.1 notes (registry version floors, the background update
 notice) are folded in here.
 
-Production sizes: hello-world **21.5 KB gzip**, todos **25.5 KB gzip** (from
+Production sizes: hello-world **21.6 KB gzip**, todos **25.6 KB gzip** (from
 20.8 / 23.8 in 0.7.0). Apps that configure no translations and use no `raw`
 pay nothing for either.
 

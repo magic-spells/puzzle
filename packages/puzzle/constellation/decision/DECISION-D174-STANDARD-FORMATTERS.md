@@ -98,6 +98,20 @@ notes:
       }</Card></script>` lands inside the script); only a `<Portal>` body resets the context, since
       it renders at the framework outlet. Sites should adopt the same foreign-content rule when it
       implements the compile rules.
+  - kind: decision
+    text: >-
+      F17 `replace` edges pinned in PuzzleKit: a RegExp search is applied as given; ANY other search
+      is coerced with the same `str()` as the input (`{ n | replace(0, '-') }` replaces every `0`,
+      not only the first) and replaced literally everywhere; a missing (`null`/`undefined`) or empty
+      search returns the input unchanged — never `replace(undefined, '')` deleting a literal
+      "undefined", never `''` splitting between every character. F23 `strip_html` stays Sites'
+      quote-aware scanner, output-identical (differentially checked against the previous
+      implementation on 200k random inputs), but LINEAR: after the first tag scan that runs off the
+      end it switches to a precomputed right-to-left table of "next unquoted `>` from here"
+      (tracking all three quote states, since a later `<` scans from outside any quote), and a
+      `<!--` with no `-->` means no later one has one. `'<a'.repeat(40000)` went from ~6 s to ~5 ms.
+      Tests: tests/formatters-hardening.test.js. Sites' implementation should get the same `replace`
+      edges if it differs (not checked from here).
 ---
 
 # D174 — The standard formatter set
