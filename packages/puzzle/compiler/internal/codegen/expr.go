@@ -92,8 +92,8 @@ type localRead struct {
 	// handed the record itself).
 	opaque bool
 	// renderRead marks a read evaluated during RENDER. A handler ARGUMENT is
-	// not one: it is re-read at fire time against the live row scope, so it
-	// neither makes an enclosing-local read volatile nor counts as opaque —
+	// not one: it is re-read at fire time against the live row scope, so
+	// compileEventHandler drops its local reads before they reach the caller —
 	// the same carve-out `this` in a handler argument already has.
 	renderRead bool
 }
@@ -348,12 +348,6 @@ func ResolveCheckExpr(expr string, scope map[string]bool) string {
 func ResolveCheckEvent(expr string, scope map[string]bool) (string, error) {
 	ev, err := compileEventValueMode(expr, boolScope(scope), true, nil)
 	return ev.js, err
-}
-
-// resolveExprTrackingScope resolves expr exactly like resolveExpr and also
-// reports whether it references an identifier from trackedScope.
-func resolveExprTrackingScope(expr string, scope, trackedScope scopeMap) (string, bool) {
-	return resolveExprScan(expr, scope, trackedScope, nil)
 }
 
 // resolveExprScan is the single expression pass. It resolves expr exactly like
@@ -1177,8 +1171,11 @@ func compileEventValueMode(expr string, scope scopeMap, bareAsReference bool, fa
 		}
 		// The condition is evaluated during render and may toggle function ↔
 		// null, so the conditional value itself must never be cached — by the
-		// instance cache OR by a row scope.
-		cond, _ := resolveExprScan(condition, scope, nil, facts)
+		// instance cache OR by a row scope. Being a render-time read, it is a
+		// value position: member steps are guarded (D173 V4), so a missing
+		// `user` binds no handler instead of throwing a render error. The
+		// branches stay fire-time handler code.
+		cond := resolveValueScan(condition, scope, facts)
 		return eventValue{js: "(" + cond + ") ? " + truthyJS + " : " + falsyJS}, nil
 	}
 	return compileEventHandler(expr, scope, eventParam, bareAsReference, facts)
@@ -1244,19 +1241,17 @@ func compileEventHandler(expr string, scope scopeMap, eventParam string, bareAsR
 	// roots stay in the mask and keep the row rebuilding.
 	argFacts.usesThis = false
 	argFacts.volatileRead = false
-	// Loop locals in an argument are read at fire time off the LIVE row scope
-	// too, so they neither count as opaque whole-value reads nor make a site
-	// reading an enclosing row's local volatile — the same carve-out as `this`.
-	for _, read := range argFacts.locals {
-		read.opaque = false
-		read.whole = false
-		read.renderRead = false
-	}
-	facts.merge(argFacts)
 	refs := make([]string, 0, len(argFacts.locals))
 	for name := range argFacts.locals {
 		refs = append(refs, name)
 	}
+	// Loop locals in an argument are read at fire time off the LIVE row scope
+	// too (listRows refreshes `s.item`/`s.i` on a cached row), so they record no
+	// render fact at all — no field, no `deep`, no counter read, no opaque or
+	// volatile-making read — the same carve-out as `this`. Only the refs above
+	// survive, for the row-cache verdict.
+	argFacts.locals = nil
+	facts.merge(argFacts)
 	dataFree := !strings.Contains(argsJS, "__d.")
 	return eventValue{
 		js:           "(" + eventParam + ") => this.events." + callee + "(" + argsJS + ")",

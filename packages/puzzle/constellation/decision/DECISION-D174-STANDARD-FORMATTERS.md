@@ -82,6 +82,22 @@ notes:
       the sanitizer out of `newline_to_br`-only apps (374 B vs 2,318 B gzip); (F7) raw-text parents
       extended to noscript/xmp/iframe/noembed/noframes/plaintext; the named-entity table cut to 9
       names. 99 raw conformance rows.
+  - kind: decision
+    text: >-
+      Placement rule, completed (codegen `markup.go`): a markup interpolation is also a positioned
+      compile error inside foreign content — anywhere in an `<svg>` or `<math>` subtree, down to an
+      SVG `<foreignObject>`, which hosts HTML again (the HTML parser's integration point and the
+      runtime's `inSvgNamespace` rule agree). Why: the prerender emits the sanitized string inside
+      `<svg>`, where the HTML parser reads it as foreign content (and an HTML breakout tag like
+      `<p>` closes the svg), while the browser runtime inserts HTML-namespace nodes from an inert
+      `<template>` — the two pages would differ. The whole `<math>` subtree is rejected, including
+      MathML's text/HTML integration points, because the runtime has no MathML namespace handling at
+      all. Two more gaps closed with it: the `<puzzle-view>` root's own attributes are checked like
+      any element's, and a component's children and `<Snippet>` bodies are checked in the context of
+      the element AROUND the component (a component renders inline, so `<script><Card>{ x | raw
+      }</Card></script>` lands inside the script); only a `<Portal>` body resets the context, since
+      it renders at the framework outlet. Sites should adopt the same foreign-content rule when it
+      implements the compile rules.
 ---
 
 # D174 — The standard formatter set

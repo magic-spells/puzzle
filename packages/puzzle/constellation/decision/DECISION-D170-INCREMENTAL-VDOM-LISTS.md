@@ -180,6 +180,18 @@ notes:
       the deviation note). Tests in `listblock_test.go` / `static_cache_test.go`; `island.golden.js`
       reverts to its uncached shape and no other golden or fixture moved. `go vet ./...` + `go test
       ./...` ok, `npx vitest run` 130 files / 2105 tests, `test:types` clean.
+  - kind: decision
+    text: >-
+      Handler ARGUMENTS contribute no row facts at all — not only exempt from volatile/opaque, but
+      also from `fields`, `deep` and the counter read. They are evaluated when the event fires
+      against `s.item`/`s.i`, which listRows reassigns on every pass even for a cached row, so they
+      can never see a stale value; only their `__d` roots stay in the mask (a closure over the
+      render's `__d` must be rebuilt). Without this, `remove(todo.id, todo.author.id)` made every
+      row rebuild every render, and a handler argument naming a field the schema does not declare
+      turned the whole site conservative through the runtime schema check. Conversely, a formatter
+      ARGUMENT is opaque exactly like a piped base: `{ 'by' | byline(post) }` hands the record to
+      the formatter, so the site is `deep`. The condition of a handler-valued conditional stays a
+      render read.
 ---
 
 # D170 — Persistent list blocks and an incremental virtual DOM
