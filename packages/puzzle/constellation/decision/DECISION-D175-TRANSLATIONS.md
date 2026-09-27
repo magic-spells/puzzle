@@ -177,9 +177,19 @@ The forces:
 
 ### Locale files
 
+
 Authors write one file per locale at `app/locales/<locale>.json`. The file name
 is a BCP 47 tag (`en`, `es`, `pt-BR`). A name with `_` (`en_US.json`) is a
-build error that suggests the `-` spelling.
+build error that suggests the `-` spelling. A tag, in the config or as a file
+name, must have the langtag structure the browser's `Intl` constructors accept,
+because the runtime hands it straight to them and a tag they throw on breaks
+rendering. That structure is a 2–3 letter language, an optional 4-letter script,
+an optional 2-letter or 3-digit region, then variants (5–8 alphanumerics, or a
+digit plus 3), none repeated, so `zh-Hant-TW`, `es-419` and `de-DE-1996` pass.
+`en-12`, `en-US-US`, `de-DE-1` and `fr-x` are errors that name the offending
+subtag. The rule is a subset of `Intl`: the 5–8 letter language form (`english`)
+and extension, private-use and grandfathered tags are refused. One validator,
+`config.ValidLocaleTag`, serves both the config and the file names.
 
 ```json
 {

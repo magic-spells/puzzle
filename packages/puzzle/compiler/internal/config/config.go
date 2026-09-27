@@ -19,7 +19,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -414,25 +413,93 @@ func validate(raw rawConfig) (Config, error) {
 	return cfg, nil
 }
 
-// localeTagRe is the well-formedness check for a configured locale: a 2–3 letter
-// language subtag followed by any number of 1–8 character alphanumeric subtags
-// joined with '-'. It is deliberately a SHAPE check, not a registry lookup — the
-// tag also names a file (app/locales/<tag>.json) and a URL segment, so what must
-// be rejected is anything that cannot safely be either.
-var localeTagRe = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`)
-
 // ValidLocaleTag reports whether tag is a well-formed locale tag, and when it is
 // not, a message naming the problem. Shared with the locale-file loader, which
 // applies the same rule to file names (and the same '_' → '-' suggestion).
+//
+// The rule is the BCP 47 langtag structure the browser's Intl constructors
+// accept, since the runtime hands the tag straight to them and a tag they throw
+// on breaks rendering: a 2–3 letter language, an optional 4-letter script, an
+// optional 2-letter or 3-digit region, then variants (5–8 alphanumerics, or a
+// digit and 3 alphanumerics), none repeated. It is a subset of what Intl takes:
+// the 5–8 letter language form is refused because no registered language uses
+// it and "english" is far likelier a mistake, and extensions, private use and
+// grandfathered tags are out — the tag also names a file
+// (app/locales/<tag>.json) and a URL segment. It is deliberately a SHAPE check,
+// not a registry lookup.
 func ValidLocaleTag(tag string) (bool, string) {
-	if localeTagRe.MatchString(tag) {
-		return true, ""
-	}
 	if strings.Contains(tag, "_") {
 		fixed := strings.ReplaceAll(tag, "_", "-")
-		return false, fmt.Sprintf("%q is not a BCP 47 locale tag — use %q (a hyphen, not an underscore)", tag, fixed)
+		if ok, _ := ValidLocaleTag(fixed); ok {
+			return false, fmt.Sprintf("%q is not a BCP 47 locale tag — use %q (a hyphen, not an underscore)", tag, fixed)
+		}
 	}
-	return false, fmt.Sprintf("%q is not a BCP 47 locale tag (expected a language code like 'en', 'es' or 'pt-BR')", tag)
+	generic := fmt.Sprintf("%q is not a BCP 47 locale tag (expected a language code like 'en', 'es' or 'pt-BR')", tag)
+	subtags := strings.Split(tag, "-")
+	lang := subtags[0]
+	if !isAlpha(lang) || len(lang) < 2 || len(lang) > 3 {
+		if lang != "" && isAlnum(lang) {
+			return false, fmt.Sprintf("%q is not a BCP 47 locale tag: the language %q must be 2–3 letters (like 'en')", tag, lang)
+		}
+		return false, generic
+	}
+	// stage: 0 = script next, 1 = region next, 2 = variants only.
+	stage := 0
+	seen := map[string]bool{}
+	for i, sub := range subtags[1:] {
+		if sub == "" || !isAlnum(sub) {
+			return false, generic
+		}
+		key := strings.ToLower(sub)
+		switch {
+		case stage == 0 && len(sub) == 4 && isAlpha(sub):
+			stage = 1
+			continue
+		case stage <= 1 && (len(sub) == 2 && isAlpha(sub) || len(sub) == 3 && isDigit(sub)):
+			stage = 2
+			continue
+		case len(sub) >= 5 && len(sub) <= 8 || len(sub) == 4 && isDigit(sub[:1]):
+			if !seen[key] {
+				seen[key] = true
+				stage = 2
+				continue
+			}
+		}
+		for _, prev := range subtags[:i+1] {
+			if strings.EqualFold(prev, sub) {
+				return false, fmt.Sprintf("%q is not a BCP 47 locale tag: %q appears twice", tag, sub)
+			}
+		}
+		return false, fmt.Sprintf("%q is not a BCP 47 locale tag: %q is not a script (4 letters, like 'Hant'), region (2 letters or 3 digits, like 'BR' or '419') or variant (5–8 characters) in that position", tag, sub)
+	}
+	return true, ""
+}
+
+func isAlpha(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if c := s[i] | 0x20; c < 'a' || c > 'z' {
+			return false
+		}
+	}
+	return true
+}
+
+func isDigit(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isAlnum(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if !isAlpha(s[i:i+1]) && !isDigit(s[i:i+1]) {
+			return false
+		}
+	}
+	return true
 }
 
 // validateI18n checks the `i18n` block: an object with a non-empty `locales`

@@ -86,9 +86,11 @@ Themes (palettes):
                                @magic-spells/puzzle-pieces/themes/<name>.css by
                                app/styles/styles.css is reported and skipped. Like
                                "add piece" it never edits styles.css — the @import
-                               and the data-scheme switch are printed (D3) — and it
-                               refuses to replace a locally modified copy unless
-                               --overwrite is given.
+                               and the data-scheme switch are printed (D3). An
+                               unmodified copy of an older registry version (it
+                               still matches its pieces.lock hash) is refreshed; a
+                               locally modified copy is refused unless --overwrite
+                               is given.
 
 Agent skill:
   puzzle add skills            installs the CLI's embedded Puzzle skill into every
@@ -136,7 +138,7 @@ directory, or an http(s) URL; --pieces-version pins the npm release exactly.`,
 func init() {
 	addCmd.Flags().String("registry", "", "Piece registry source: npm:<package>[@version], a local directory, or an http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the @magic-spells/puzzle-pieces npm package)")
 	addCmd.Flags().String("pieces-version", "", "Exact @magic-spells/puzzle-pieces release to fetch (default: the newest release matching this CLI's major.minor)")
-	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces or skills")
+	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces, themes, or skills")
 	addCmd.Flags().String("dir", "", "App root to add pieces into (default: walk up from the current directory for package.json/puzzle.config.js)")
 	addCmd.Flags().StringArray("skill-root", nil, "Config dir to install the skill into (repeatable); skips detection and the target prompt")
 	rootCmd.AddCommand(addCmd)

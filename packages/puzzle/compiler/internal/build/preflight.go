@@ -1,7 +1,10 @@
 package build
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
@@ -11,7 +14,19 @@ import (
 // has at least one source available before a command constructs an esbuild
 // bundle. The CLI is often installed globally, so a missing project install
 // must be reported here instead of being left to esbuild's resolver walk.
+//
+// root is the raw command-line directory, so it is checked first: a mistyped
+// `puzzle build typo-dir` must say the directory is missing, not send the user
+// to npm install.
 func PreflightRuntime(root string) error {
+	if info, err := os.Stat(root); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("puzzle: directory not found: %s", root)
+		}
+		return fmt.Errorf("puzzle: %w", err)
+	} else if !info.IsDir() {
+		return fmt.Errorf("puzzle: %s is not a directory", root)
+	}
 	if envRuntime() != "" || FindRuntime(root) != "" || FindInstalledRuntime(root) != "" {
 		return nil
 	}

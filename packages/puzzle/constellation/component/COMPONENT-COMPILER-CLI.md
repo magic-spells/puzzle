@@ -101,6 +101,16 @@ notes:
       or the network, it would guess the package manager, and a global CLI version could install a
       mismatched runtime. check/generate/preview are deliberately not gated: they never bundle.
     sha: 9996ca0
+  - kind: state
+    text: >-
+      PreflightRuntime now checks the directory before the runtime. `puzzle build` hands it the raw
+      CLI argument, so a mistyped `puzzle build typo-dir` used to say "@magic-spells/puzzle is not
+      installed… Run npm install". The first check is now os.Stat(root): a missing path is `puzzle:
+      directory not found: <dir>`, a file is `puzzle: <path> is not a directory`, and even
+      PUZZLE_RUNTIME cannot bypass it. `puzzle dev` gets the same message through its startup
+      preflight. The `add --overwrite` help now names themes too. Tests:
+      TestPreflightRuntimeMissingDir, TestBuildMissingDirSaysDirectoryNotFound,
+      TestAddOverwriteHelpNamesThemes.
 ---
 
 # Compiler CLI
