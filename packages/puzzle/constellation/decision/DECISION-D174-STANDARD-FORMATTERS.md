@@ -348,8 +348,8 @@ value printed after the chain follows D173 V6.
   `raw`.
 - **A markup formatter is the last link of a text interpolation's chain.**
   After it, the value is markup rather than text, so a following formatter,
-  or a markup formatter in an attribute, a prop, a marker argument or a block
-  subject, is a positioned compile error in both hosts. So is an argument
+  or a markup formatter in an attribute, a prop or a marker argument, is a
+  positioned compile error in both hosts. So is an argument
   (`raw(1)`), and a markup interpolation inside a raw-text element whose
   content is text: `<script>`, `<style>`, `<textarea>`, `<title>`,
   `<noscript>`, `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>`,
@@ -583,7 +583,7 @@ ports or the editor grammars: formatter names are not grammar.
 **(e) Sanitized `raw` and `newline_to_br` — PuzzleKit. Built.**
 - Codegen: `compiler/internal/codegen/markup.go` — the placement check
   (positioned errors for a markup formatter mid-chain, in an attribute, a
-  prop, a marker argument or a block subject, with arguments, or inside a
+  prop or a marker argument, with arguments, or inside a
   raw-text element) and the lowering to the `'#html'` vnode, hooked into
   `processChildren` (the node is a non-text sibling) and `emitItem`.
 - Usage scan and defines: `plugin/scan.go` sets `HasRawHTML` from either

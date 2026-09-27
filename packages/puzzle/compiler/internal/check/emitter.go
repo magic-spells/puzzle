@@ -538,9 +538,7 @@ func (e *emitter) emitParts(parts []parser.Part, scope map[string]bool, indent i
 				return err
 			}
 			e.b.WriteString(spaces(indent) + "if (")
-			if err := e.writeCondition(span, p.Cond, p.Formatters, scope); err != nil {
-				return err
-			}
+			e.writeResolved(span, scope)
 			e.b.WriteString(") {\n")
 			if err := e.emitParts(p.Then, scope, indent+2); err != nil {
 				return err
@@ -591,22 +589,6 @@ func (e *emitter) writeChain(spans []sourceExpr, fmts []parser.FormatterCall, sc
 	}
 }
 
-// writeCondition writes a block subject located at span: the plain expression,
-// or — when the header carries a formatter chain (D173 V1) — the chain, whose
-// base is base.
-func (e *emitter) writeCondition(span sourceExpr, base string, fmts []parser.FormatterCall, scope map[string]bool) error {
-	if len(fmts) == 0 {
-		e.writeResolved(span, scope)
-		return nil
-	}
-	spans, err := chainSpans(span.text, span.offset, base, fmts)
-	if err != nil {
-		return err
-	}
-	e.writeChain(spans, fmts, scope)
-	return nil
-}
-
 func (e *emitter) emitIf(n *parser.If, scope map[string]bool, indent int) error {
 	span, negate, err := e.conditionExpr(n.Pos.Offset, n.Cond)
 	if err != nil {
@@ -616,9 +598,7 @@ func (e *emitter) emitIf(n *parser.If, scope map[string]bool, indent int) error 
 	if negate {
 		e.b.WriteString("!(")
 	}
-	if err := e.writeCondition(span, n.Cond, n.Formatters, scope); err != nil {
-		return err
-	}
+	e.writeResolved(span, scope)
 	if negate {
 		e.b.WriteString(")")
 	}
@@ -706,20 +686,12 @@ func (e *emitter) emitSnippet(n *parser.Snippet, scope map[string]bool, indent i
 }
 
 func (e *emitter) emitCase(n *parser.Case, scope map[string]bool, indent int) error {
-	var caseSpan sourceExpr
-	var err error
-	if len(n.Formatters) > 0 {
-		caseSpan, err = e.directiveRest(n.Pos.Offset, "case")
-	} else {
-		caseSpan, err = e.directiveExpr(n.Pos.Offset, "case", n.Expr)
-	}
+	caseSpan, err := e.directiveExpr(n.Pos.Offset, "case", n.Expr)
 	if err != nil {
 		return err
 	}
 	e.b.WriteString(spaces(indent) + "switch (")
-	if err := e.writeCondition(caseSpan, n.Expr, n.Formatters, scope); err != nil {
-		return err
-	}
+	e.writeResolved(caseSpan, scope)
 	e.b.WriteString(") {\n")
 	for _, clause := range n.Clauses {
 		values, err := e.whenExprs(clause.Pos.Offset, clause.Values)
@@ -818,24 +790,6 @@ func (e *emitter) attrInner(anchor int) (string, int, error) {
 	}
 	inner, start, _, err := braceInner(e.source, anchor+open)
 	return inner, start, err
-}
-
-// directiveRest locates everything after a block keyword (`{#case …}`) — the
-// subject including any formatter chain.
-func (e *emitter) directiveRest(anchor int, keyword string) (sourceExpr, error) {
-	inner, start, _, err := braceInner(e.source, anchor)
-	if err != nil {
-		return sourceExpr{}, err
-	}
-	prefix := "#" + keyword
-	trimmed := strings.TrimSpace(inner)
-	if !strings.HasPrefix(trimmed, prefix) {
-		return sourceExpr{}, fmt.Errorf("expected {%s} at byte %d", prefix, anchor)
-	}
-	rest := trimmed[len(prefix):]
-	leadingInner := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
-	leadingRest := len(rest) - len(strings.TrimLeft(rest, " \t\r\n"))
-	return sourceExpr{text: strings.TrimSpace(rest), offset: start + leadingInner + len(prefix) + leadingRest}, nil
 }
 
 func (e *emitter) attrExpr(anchor int, expr string) (sourceExpr, error) {

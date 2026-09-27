@@ -201,16 +201,18 @@ work through this list. Every item but 13, a new warning, is marked
    `number_with_delimiter` (follows the viewer's locale), `escape`, `json`,
    `size`, `truncate`, and `divided_by`/`modulo` by zero. The number formatters
    print nothing for a missing value instead of `$0.00` or `0`.
-6. **A pipe in an attribute, prop or block header is a formatter.**
+6. **A pipe in an attribute, prop or marker argument is a formatter.**
    `title={ price | currency }` calls `currency` where it used to compile to a
-   bitwise OR. The same applies to `{#if}`, `{:else if}`, `{#unless}` and
-   `{#case}` headers. To keep a bitwise OR, wrap it in parentheses:
-   `{ (a | b) }`. What follows a pipe must be a formatter name, so
-   `{ w / 2 | 0 }` is now a compile error. Parenthesize it.
-7. **No pipe in a `{#for}` header or a `{:when}` value.** Shape the list in
-   `data()` and loop over that field (`{#for item in sortedItems}`). For
-   `{:when}`, list the alternatives with commas or format in the `{#case}`
-   header. Both are positioned compile errors.
+   bitwise OR. To keep a bitwise OR, wrap it in parentheses: `{ (a | b) }`.
+   What follows a pipe must be a formatter name, so `{ w / 2 | 0 }` is now a
+   compile error. Parenthesize it.
+7. **No pipe in a condition or loop header.** A top-level `|` in an `{#if}`,
+   `{:else if}`, `{#unless}`, `{#case}` or `{#for}` header, in a `{:when}`
+   value, or in an inline `{#if}` inside an attribute value is a positioned
+   compile error; it no longer compiles to a bitwise OR. Compute the value in
+   `data()` and test that field (`{#if hasTags}`), or shape the list there and
+   loop over it (`{#for item in sortedItems}`). `||` still works, and a
+   bitwise OR in parentheses (`{#if (flags | mask)}`) is still JavaScript.
 8. **Some values print nothing.** A bare `Date`, any other object (including one
    with its own `toString`, such as a `URL` or a Decimal), `NaN` and ±Infinity
    print nothing. Development logs a warning that names the expression. Format
@@ -230,7 +232,7 @@ work through this list. Every item but 13, a new warning, is marked
     interpolation.** `{ html | raw }` used to print markup as text. It now
     renders the HTML through an allowlist sanitizer. `newline_to_br` renders
     real `<br>`s. Either one after another formatter, in an attribute or prop,
-    in a block header, with arguments, or inside `<script>`, `<style>`,
+    with arguments, or inside `<script>`, `<style>`,
     `<textarea>` or `<title>` is a compile error. An app formatter registered
     as `raw` is no longer called from a template.
 12. **A false `{#if}` passed to a marker shows the marker's fallback.** A
@@ -445,8 +447,8 @@ and keep formatters pure functions of their input.
   execution (the agent skill describes the containment).
   `{ note | newline_to_br }` escapes the value and emits a `<br>` for each CR
   LF, CR and LF. Both must be the **last** formatter of a **text**
-  interpolation: after either one, in an attribute value, a component prop, a
-  marker argument or an `{#if}`/`{#case}` subject, with arguments, or inside
+  interpolation: after either one, in an attribute value, a component prop or
+  a marker argument, with arguments, or inside
   a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`,
   `<noscript>`, `<xmp>`, `<iframe>`, …), the template no longer compiles
   (a positioned error). The compiler lowers the pair itself, so an app
@@ -463,9 +465,9 @@ and keep formatters pure functions of their input.
   must survive and an XSS corpus that must come out inert — plus 6
   `newline_to_br` rows, for Sites to run too.
 - **BREAKING: a `|` is a formatter pipe in every value position (D173 V1).**
-  Brace-only attribute values, component props, and the `{#if}`,
-  `{:else if}`, `{#unless}` and `{#case}` headers now split a top-level `|`
-  into a formatter chain, exactly as text interpolation always has:
+  Brace-only attribute values, component props and marker arguments now split
+  a top-level `|` into a formatter chain, exactly as text interpolation always
+  has:
   `title={ price | currency }` calls `currency` where it used to compile to a
   bitwise OR. `||`, and a `|` inside a string, a regex, parentheses or
   brackets, are not pipes; `@event` handlers are untouched. A chained
@@ -482,11 +484,19 @@ and keep formatters pure functions of their input.
   parenthesize a bitwise OR or compute the value before the pipe. A dotted or
   non-ASCII formatter name (`{ price | fmt.eur }`), which 0.7 looked up in the
   registry, is now an error too: register the formatter under an identifier name.
-- **BREAKING: a pipe in a `{#for}` header or a `{:when}` value is a compile
-  error (D173 V1).** In a loop's collection or range bound, shape the list in
-  `data()` and loop over that field (`{#for item in sortedItems}`); a
-  `{:when}` value takes no chain, so list alternatives with commas or format in
-  the `{#case}` header. The positioned errors say so.
+- **BREAKING: a pipe in a condition or loop header is a compile error (D173
+  V1).** Formatters are display helpers and stay out of branching logic, so a
+  top-level `|` in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` header,
+  or in an inline `{#if}` inside an attribute value, no longer compiles to a
+  bitwise OR: it is a positioned error, `formatter pipes are not allowed in an
+  {#if} condition — compute the value in data() and test that field (e.g.
+  {#if hasTags}), write || for a logical OR, or wrap a bitwise OR in
+  parentheses, e.g. (a | b)`. In a loop's collection or range
+  bound, shape the list in `data()` and loop over that field
+  (`{#for item in sortedItems}`); a `{:when}` value takes no chain, so list
+  alternatives with commas or compute the value in `data()`. `||` keeps
+  working in every header, and a parenthesized `(a | b)` is still a bitwise
+  OR.
 - **Member access in a template never throws (D173 V4).** Every `.` and `[`
   step in a value expression — text, attributes and props, `{#if}`/`{#case}`
   headers, formatter arguments, loop collections and keys — compiles to `?.`,

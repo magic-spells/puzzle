@@ -80,30 +80,32 @@ notes:
       (+107).
   - kind: state
     text: >-
-      Group (b) — V1 (pipe in attributes, props, if/else-if/unless/case headers, inline-if), the V1
-      `{#for}`-header pipe ban, V2/V3 (`==` unchanged, pinned by a test), V4 (guarded member access
-      in value positions), V8 (object literals as formatter/call arguments), V12 (missing/non-list
-      collection loops zero times, dev warning) and V15 (script-less component's data() returns its
-      props) — is built in PuzzleKit on feat/core-expressions (PR #152 into release/0.8.0).
-      PuzzleKit goes beyond the core subset on V8: shorthand, quoted, computed and spread keys all
-      work (JS superset; the core still names only `key: value`). Beyond the card as first written,
-      the review round added: a segment after a pipe must be a formatter name (anything else — `{
-      flags | 4 }`, `{ a |= 2 }` — is a positioned error steering to `(a | b)`), a `|` in a
-      `{:when}` value is a positioned error, and integer-literal ranges are constant-folded without
-      the loopRange import. Sites adoption of V1, V2 and V12 is still pending the dialect switch, as
-      is the Sites wording of the `{#for}` fix-it. Measured cost: hello-world +0 B gzip, todos +35 B
-      gzip.
+      Group (b) — V1 (a pipe is a formatter in brace-only attributes, props and marker arguments; a
+      pipe in a condition header, a `{#for}` header or a `{:when}` value is a positioned error),
+      V2/V3 (`==` unchanged, pinned by a test), V4 (guarded member access in value positions), V8
+      (object literals as formatter/call arguments), V12 (missing/non-list collection loops zero
+      times, dev warning) and V15 (script-less component's data() returns its props) — is built in
+      PuzzleKit (release/0.8.0). PuzzleKit goes beyond the core subset on V8: shorthand, quoted,
+      computed and spread keys all work (JS superset; the core still names only `key: value`). A
+      segment after a pipe must be a formatter name (anything else — `{ flags | 4 }`, `{ a |= 2 }` —
+      is a positioned error steering to `(a | b)`), every header pipe error steers a bitwise OR to
+      `(a | b)` the same way, and integer-literal ranges are constant-folded without the loopRange
+      import. Sites adoption of V1's `{#for}` error, V2 and V12 is still pending the dialect switch,
+      as is the Sites wording of the `{#for}` fix-it. Measured cost: hello-world +0 B gzip, todos
+      +35 B gzip.
   - kind: gotcha
     text: >-
       Sites vendors the 0.7.0 parser, and its renderer reads `DynamicAttr.Expr`, `If.Cond` and
       `Case.Expr` directly. After its next `make sync-parser` picks up the D173 (b) parser, a
-      chained value position arrives as a bare base in `Expr`/`Cond` with the chain in the new
-      `Formatters` fields (`DynamicAttr`, `If`, `Case`, `InlineIfPart`), and an `{#unless}` with a
-      chain arrives un-negated with `If.Negate` set. A renderer that ignores those fields silently
-      DROPS the formatters and inverts chained unless blocks — no error, just wrong output. Update
-      the Sites renderer to apply `Formatters` (and honor `Negate`) in the same sync, and note the
-      parser now also rejects a non-name after a pipe and a `|` in `{:when}` values, which may
-      surface as new Sites compile errors.
+      chained brace-only attribute, prop or marker argument arrives as a bare base in
+      `DynamicAttr.Expr` with the chain in the new `DynamicAttr.Formatters` field. A renderer that
+      ignores that field silently DROPS the formatters — no error, just wrong output — so apply
+      `DynamicAttr.Formatters` in the same sync. `If.Cond`, `Case.Expr` and `InlineIfPart.Cond` stay
+      plain expressions: those nodes carry no chain, because a pipe in any condition header is a
+      parse error (`conditionPipeError`), and an `{#unless}` is always folded into `!(…)`. The
+      parser also rejects a non-name after a pipe, a `|` in `{:when}` values and a `|` in `{#for}`
+      headers, which may surface as new Sites compile errors; the condition-header error matches
+      what Sites already rejects.
   - kind: state
     text: >-
       Group (c) — V10 whitespace — is built in PuzzleKit on feat/whitespace-rule (PR #154 into
@@ -131,13 +133,6 @@ notes:
       sanitizer), a non-text sibling under the V10/D168 whitespace rule like an element; either name
       anywhere else is a positioned compile error. D174's body holds the allowlist, the canonical
       output the conformance rows pin, and what Sites must do.
-  - kind: state
-    text: >-
-      V4 in PuzzleKit covers the condition of a handler-valued conditional (`@click={
-      user.profile.admin ? promote() : null }`, the D86 form): the condition is evaluated during
-      render, so codegen guards it like any value position (`(__d.user?.profile?.admin) ? … : null`)
-      and a missing `user` binds no handler instead of throwing. The handler branches themselves are
-      fire-time code and stay unguarded, as do handler arguments.
 ---
 
 # D173 — Core semantics: one meaning for each shared construct
@@ -198,7 +193,7 @@ answer depends on runtime values, the item says so.
 
 | Item | Outcome | Host that changes | Breaking | Templates that change |
 |---|---|---|---|---|
-| V1 pipes | Unify: a pipe is a formatter in every value position; banned in `{#for}` headers | both | PuzzleKit | none found |
+| V1 pipes | Unify: a pipe is a formatter in every value position; banned in condition and loop headers | both | PuzzleKit | none found |
 | V2 `==` / `!=` | Unify: JavaScript loose equality | Sites | Sites (edge cases) | none found |
 | V3 `null` vs `undefined` | Host-specific for strict comparison; `x == null` is the portable absence test | none | no | none found |
 | V4 access through absent | Unify: yields absent, prints nothing | PuzzleKit | no | none found |
@@ -222,44 +217,41 @@ answer depends on runtime values, the item says so.
 **V1 — the formatter pipe.**
 - **A top-level single `|` is a formatter pipe in every template value
   position, in both hosts:** text interpolation, quoted and brace-only
-  attribute values, component props, and the `{#if}`, `{:else if}`,
-  `{#unless}` and `{#case}` subjects. So `title={ price | currency }` calls
-  `currency` in PuzzleKit, where it used to compile to a bitwise OR. The
-  splitting rule is the one text interpolation already uses: `||` stays
-  logical OR, and a `|` inside a string, parentheses or brackets is not a
-  pipe. A chained position reads `expr | chain` as a whole, as text does.
-  `@event` handler bodies are PuzzleKit JavaScript, not value positions, and
-  are untouched. Sites' `{#let}` value is also a pipe position (a Sites
-  addition).
-- **Each segment after a pipe is a formatter name, bare or called, and
-  nothing else.** A name is
-  `[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*`: an identifier,
-  optionally kebab-cased, where every `-` starts a word with a letter. A
-  call's `(` must be closed by the segment's last `)`. Anything else —
-  `{ flags | 4 }`, `{ a |= 2 }`, `{ mask | bit-1 }`, `{ x | FLAGS.bold }`,
-  `{ a | f(1) + g(2) }`, `{ a | f(b)(c) }` — is a positioned compile error
-  steering to a parenthesized bitwise OR, because it was meant as JavaScript
-  and a registry lookup of that text would pass the value through silently.
-  A dotted name (`fmt.eur`) is therefore not a formatter name, although the
-  runtime registry accepts any non-empty string as a key.
-- **A pipe inside a `{#for}` header is a positioned compile error in both
-  dialects,** in the collection and in range bounds. Cory: "No formatters in
-  for loop headers in both - it adds too much to one line." The fix-it names
-  the list first:
-  - PuzzleKit: shape the list in `data()` and loop over that field.
-  - Sites: `{#let filtered = products | where('inStock', true)}`, then
-    `{#for p in filtered}`.
-- **Breaking:** PuzzleKit. A bitwise OR in an attribute, prop or `{#if}` /
-  `{#case}` header becomes a formatter call, and one in a `{#for}` header
-  becomes an error. A segment after a pipe that is not a name or a single
-  call (a number, an operator, `bit-1`, a dotted or non-ASCII name, trailing
-  text after the call's `)`) was a registry lookup or a mis-split call in
-  0.7 and is now an error. Sites gains chains in `{#if}`/`{#case}` headers,
-  which it rejected; not breaking.
+  attribute values, component props and marker arguments. So
+  `title={ price | currency }` calls `currency` in PuzzleKit, where it used to
+  compile to a bitwise OR. The splitting rule is the one text interpolation
+  already uses: `||` stays logical OR, and a `|` inside a string, parentheses
+  or brackets is not a pipe. A chained position reads `expr | chain` as a
+  whole, as text does. `@event` handler bodies are PuzzleKit JavaScript, not
+  value positions, and are untouched. Sites' `{#let}` value is also a pipe
+  position (a Sites addition).
+- **A pipe in a condition or loop header is a positioned compile error in both
+  dialects:** the `{#if}`, `{:else if}`, `{#unless}` and `{#case}` headers, an
+  inline `{#if}` inside an attribute value, a `{:when}` value, and a `{#for}`
+  header (the collection and either range bound). Formatters are display
+  helpers; the value a branch tests, and the list a loop walks, are named
+  first. Cory, on conditions: "I don't like the idea of formatters being mixed
+  in with logic conditions." On loops: "No formatters in for loop headers in
+  both - it adds too much to one line." The error never falls back to a
+  bitwise OR: `||` keeps working in every header, and a parenthesized
+  `(a | b)` is still one. The fix-it names the value first:
+  - PuzzleKit conditions: `formatter pipes are not allowed in an {#if}
+    condition — compute the value in data() and test that field (e.g. {#if
+    hasTags}), write || for a logical OR, or wrap a bitwise OR in
+    parentheses, e.g. (a | b)`. Each header names itself (`an
+    {:else if} condition`, `an {#unless} condition`, `a {#case} expression`,
+    `an {#if} condition in an attribute value`).
+  - PuzzleKit loops: shape the list in `data()` and loop over that field.
+  - Sites: name the value with `{#let}`, e.g.
+    `{#let filtered = products | where('inStock', true)}`, then
+    `{#for p in filtered}`, or `{#let tagCount = post.tags | size}`, then
+    `{#if tagCount}`.
+- **Breaking:** PuzzleKit. A bitwise OR in an attribute or prop becomes a
+  formatter call, and a top-level one in a condition or loop header becomes an
+  error. Sites: no; it already rejected chains in `{#if}`/`{#case}` headers.
 - **Templates:** none found. PuzzleKit and PK apps have 0 pipes in
   brace-only attributes, props or headers; Sites has 1 of each, both in the
-  `errors/sections/let-misuse.pzl` fixture. No `.pzl` in the monorepo uses a
-  formatter name the name rule rejects.
+  `errors/sections/let-misuse.pzl` fixture.
 
 **V2 — `==` and `!=` mean what they mean in JavaScript, in both hosts.**
 Cory: "it's valid js so we should allow valid js."
@@ -462,9 +454,13 @@ the prefix.
 - **V1: pipes in `{#for}` headers.** Rejected: it puts filtering, sorting and
   the loop on one line. Naming the list first (`data()` in PuzzleKit,
   `{#let}` in Sites) reads better and keeps list shaping out of the header.
-- **V1: keep every block header plain.** Rejected: a formatter in an `{#if}`
-  or `{#case}` subject (`{#if post.tags | size}`) is short and useful, and
-  the loop header is the one position where a chain grows long.
+- **V1: formatter chains in condition headers** (`{#if post.tags | size}`,
+  `{#case status | downcase}`, an `{#unless}` that negates the formatted
+  value). Rejected: it mixes display formatting into branching logic. Cory: "I
+  don't like the idea of formatters being mixed in with logic conditions." The
+  value a branch tests belongs in `data()` (or a Sites `{#let}`), where it has
+  a name; and a chained `{#unless}` needs a negate-after-the-chain rule in
+  every host and every AST consumer.
 - **V2: `==` means `===` in templates.** Rejected: a PuzzleKit template's
   `==` would mean something different from the same file's `<script>`, which
   redefines valid JavaScript.
@@ -501,7 +497,6 @@ the prefix.
 
 ## Build list
 
-
 PuzzleKit first. Sites is lower priority because Cory is still designing it.
 Groups are separate feature branches off the release branch, in this order
 across both cards: (a) the formatter set (D174), (b) expressions and loops,
@@ -514,14 +509,17 @@ checked.
 
 **(b) Expressions and loops — PuzzleKit codegen + shared parser.**
 - V1 **[shared parser]**: `parser` splits a formatter chain in brace-only
-  attributes, props and `{#if}`/`{:else if}`/`{#unless}`/`{#case}` subjects
-  (the AST gains a chain on those nodes); `compiler/internal/codegen`
+  attributes, props and marker arguments (`DynamicAttr` carries the chain;
+  `If`, `Case` and `InlineIfPart` carry none); `compiler/internal/codegen`
   (`expr.go`, `codegen.go`) emits the calls and includes them in the
-  formatter manifest scan (D31). The `{#for}`-header pipe ban is a positioned
-  parser error with the PuzzleKit fix-it; the Sites fix-it wording arrives
-  with the dialect switch (D172). Editor grammars: highlight the pipe and
-  formatter name in those positions. eslint port: mirror the new error if it
-  reports parse errors.
+  formatter manifest scan (D31). A top-level pipe in a condition header
+  (`{#if}`, `{:else if}`, `{#unless}`, `{#case}`, an attribute's inline
+  `{#if}`), a `{:when}` value or a `{#for}` header is a positioned parser
+  error with the PuzzleKit fix-it (`conditionPipeError`, `forPipeError`); the
+  Sites fix-it wording arrives with the dialect switch (D172). Editor
+  grammars: highlight the pipe and formatter name in value positions and mark
+  a pipe in a header as illegal. eslint port: mirror the errors if it reports
+  parse errors.
 - V4: codegen emits guarded member and index access in template value
   expressions (`expr.go`). Measure bytes and render time against the D170
   bench gates (`npm run bench`, after `build:compiler`).
@@ -530,8 +528,8 @@ checked.
   (missing → empty, non-list → empty plus a dev warning) and range bounds.
 - V15: codegen synthesizes `data(params, props)` for a script-less component.
 - Tests: `expr_test.go`, `range_for_parens_test.go`, `listblock_test.go`, new
-  codegen tests per item, parser tests for the header chain and the ban,
-  vitest for the loop guard; goldens re-blessed.
+  codegen tests per item, parser tests for the value-position chain and the
+  header bans, vitest for the loop guard; goldens re-blessed.
 
 **(c) Whitespace — the merged rule (D168).** `compiler/internal/codegen/
 codegen.go` (`processText`, `buildTextRun`, `processChildren`): text next to
@@ -562,9 +560,9 @@ where each landed item moves from "Known divergences" into the core rules. The
 `eqeqeq`-style `puzzle-eslint` rule (V2) is optional and unscheduled.
 
 **Sites (later, its own repo and cards):**
-- Evaluator: JavaScript loose equality (V2); chains in `{#if}`/`{#case}`
-  headers and the `{#for}`-header error with the `{#let}` fix-it (V1); value
-  printing (V6).
+- Evaluator: JavaScript loose equality (V2); the `{#for}`-header error with
+  the `{#let}` fix-it (V1; Sites already rejects a chain in a condition
+  header); value printing (V6).
 - Renderer: whitespace (V10), raw-block escaping (V11), loop bounds (V12), the
   slot-filled rule (V14), the `{#svg}` prefix error (V18), and the dotted-tag
   error (V16).

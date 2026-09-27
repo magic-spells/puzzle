@@ -65,22 +65,25 @@ notes:
     text: >-
       Markup formatters (D174 group e, `markup.go`). `checkMarkupFormatters` walks the template and
       the skeleton BEFORE any emission and rejects every placement of `raw`/`newline_to_br` except
-      the last link of a text interpolation: mid-chain, an attribute value (brace-only, quoted or
-      inline-if), a component prop, a marker argument, an `{#if}`/`{#case}`/inline-if subject, any
+      the last link of a text interpolation: mid-chain, an attribute value (brace-only, quoted, or
+      an interpolation inside an inline-if branch), a component prop, a marker argument, any
       argument, and a text interpolation inside <script>/<style>/<textarea>/<title> — all positioned
-      errors (FormatterCall has no position, so the owning node's is used). Because every other
-      placement is gone before emission, `processChildren` only has to test the LAST link
-      (`isMarkupInterp`): such an interpolation is a non-text SIBLING under D168 — `flush(true)` and
-      `leftSibling = true`, exactly the element arm — so text wrapped next to it keeps one space;
-      `emitItem`'s `*parser.Interpolation` arm calls `emitMarkup`, which compiles the chain minus
-      its last link exactly as `buildTextRun` does (same fact sink, `resolveInterpBase`,
-      `applyFormatters`, `displayValue`) and emits `new ViewNode('#html', { value })` (`br: true`
-      for newline_to_br). The markup name itself never reaches `__f`, so a markup-only file emits no
-      `const __f` line. The node counts one slot in `condStaticLen` (the `default` arm) and is
-      dynamic to the static cache (it is an Interpolation). A markup interpolation cannot be a
-      component root or a `{#for}` body root (the existing element-or-component errors). Pinned by
-      markup_test.go (including the element-parity whitespace case). The usage scan (plugin/scan.go)
-      sets `HasRawHTML` from the same names and keeps them out of the manifest.
+      errors (FormatterCall has no position, so the owning node's is used). A condition header never
+      reaches this check with a chain: the parser rejects any pipe in an `{#if}`/`{:else
+      if}`/`{#unless}`/`{#case}` header or an inline-if condition (D173 V1), so `If`, `Case` and
+      `InlineIfPart` carry none. Because every other placement is gone before emission,
+      `processChildren` only has to test the LAST link (`isMarkupInterp`): such an interpolation is
+      a non-text SIBLING under D168 — `flush(true)` and `leftSibling = true`, exactly the element
+      arm — so text wrapped next to it keeps one space; `emitItem`'s `*parser.Interpolation` arm
+      calls `emitMarkup`, which compiles the chain minus its last link exactly as `buildTextRun`
+      does (same fact sink, `resolveInterpBase`, `applyFormatters`, `displayValue`) and emits `new
+      ViewNode('#html', { value })` (`br: true` for newline_to_br). The markup name itself never
+      reaches `__f`, so a markup-only file emits no `const __f` line. The node counts one slot in
+      `condStaticLen` (the `default` arm) and is dynamic to the static cache (it is an
+      Interpolation). A markup interpolation cannot be a component root or a `{#for}` body root (the
+      existing element-or-component errors). Pinned by markup_test.go (including the element-parity
+      whitespace case). The usage scan (plugin/scan.go) sets `HasRawHTML` from the same names and
+      keeps them out of the manifest.
   - kind: state
     text: >-
       Since D172 the parser half of the scanner pair lives in the sibling module:
@@ -177,9 +180,11 @@ interpolation braces.
 
 **A pipe is a formatter chain in every value position** (D173 V1):
 `resolveChain` resolves the base, then wraps it in the same `__f[...]` calls text
-interpolation uses, for `DynamicAttr` values and props, if/else-if/unless/case
-headers (an unless chain negates AFTER the formatters, via `If.Negate`), and
-inline-if conditions. A chained form-control value never auto-binds (it is a
+interpolation uses, for `DynamicAttr` values, props and marker arguments.
+Condition headers (if/else-if/unless/case and an attribute's inline-if) carry
+no chain — the parser rejects a pipe there — so codegen resolves them as plain
+guarded expressions (`resolveValue(cond, nil, …)`) and they never read `__f`.
+A chained form-control value never auto-binds (it is a
 display projection, not a writable path), and a chained explicit `key=` reads
 `__f`, so that loop site keeps `.map`.
 
@@ -390,6 +395,7 @@ conservative meta, the `listRows as __l` import appearing only for a file that
 lowers a site, the `mapDepth` exclusions, the row-scope shadow mangling, the
 cache threshold, the static island-seed case and every exclusion —
 `core_semantics_test.go` pins the D173 value rules (chains in every value
-position, the member guard and its exemptions, object-literal arguments, the
-loop-guard imports and the literal-range fold), and the todos fixtures remain
-the byte contract the emitter is matched to, not the other way round.
+position, the condition-header pipe error and `||` in headers, the member
+guard and its exemptions, object-literal arguments, the loop-guard imports and
+the literal-range fold), and the todos fixtures remain the byte contract the
+emitter is matched to, not the other way round.

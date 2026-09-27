@@ -360,7 +360,7 @@ target is dropped). It removes `<script>` (with its contents), `<style>`,
 use your app's CSS and name its elements — for untrusted user HTML that is a
 UI-overlay and naming risk (a `fixed inset-0` block over your page, an `id`
 that shadows an undefined global), not code execution. A markup formatter must be the last formatter of a text
-interpolation — in an attribute, a prop, a block subject or mid-chain it is a
+interpolation — in an attribute, a prop or mid-chain it is a
 compile error — so an app formatter can never inject markup. Apps that never
 use either formatter ship none of this code.
 

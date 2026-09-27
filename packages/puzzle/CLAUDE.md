@@ -216,7 +216,7 @@ enforced, not merely advised.
   D172 one language, two dialects, with the template parser extracted into the
   `packages/puzzle-lang` Go module (tagged `packages/puzzle-lang/vX.Y.Z` beside
   each `vX.Y.Z`); D173 core semantics (a pipe is a formatter in every value
-  position, none in a `{#for}` header, `?.` member guarding, loop domain,
+  position, none in a condition or `{#for}` header, `?.` member guarding, loop domain,
   slot-filled rule, value printing, object-literal args, script-less
   components); D174 the 35-name standard formatter set, the list-formatter and
   `noescape` removals, and sanitized `raw`; D175 translations (`t`,

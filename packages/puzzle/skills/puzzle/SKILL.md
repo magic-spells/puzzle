@@ -189,7 +189,7 @@ sanitized** — there is no unsanitized escape hatch, by design:
   - Prefer `newline_to_br` (or plain `{ text }`) for user-typed text.
 - **`raw` must be the LAST formatter of a TEXT interpolation.** Anything else
   is a compile error: `{ x | raw | upcase }`, `title={ x | raw }`,
-  `<Card body={ x | raw } />`, `{#if x | raw}`, `raw(…)` with arguments, or
+  `<Card body={ x | raw } />`, `raw(…)` with arguments, or
   `{ x | raw }` inside a raw-text element (`<script>`, `<style>`, `<textarea>`,
   `<title>`, `<noscript>`, `<xmp>`, `<iframe>`, …). Pass
   markup to a component as a string prop and pipe it through `raw` inside the
@@ -232,12 +232,14 @@ Rules that bite:
   `value={ text }`) or dedent.
 - **Template expressions are forgiving** (puzzle ≥ 0.8.0). A `|` is a
   formatter pipe in every value position — text, brace-only attributes
-  (`title={ price | currency }`), component props, and the `{#if}`,
-  `{:else if}`, `{#unless}` and `{#case}` headers; `||` stays logical OR, and
-  a bitwise OR must be parenthesized (`{ (a | b) }`) — a pipe followed by
-  anything but a formatter name is a compile error. A pipe in a `{#for}` header
-  or a `{:when}` value is a compile error: shape the list in `data()` and loop
-  over that field. Member access is guarded, so `{ user.address.city }`
+  (`title={ price | currency }`), component props and marker arguments; `||`
+  stays logical OR, and a bitwise OR must be parenthesized (`{ (a | b) }`) — a
+  pipe followed by anything but a formatter name is a compile error.
+  **Formatters never go in a condition or loop header:** a pipe in an `{#if}`,
+  `{:else if}`, `{#unless}`, `{#case}` or `{#for}` header, a `{:when}` value, or
+  an inline `{#if}` inside an attribute value is a compile error. Compute the
+  value in `data()` and test that field (`{#if hasTags}`), or shape the list
+  there and loop over it (`{#for item in sortedItems}`). Member access is guarded, so `{ user.address.city }`
   prints nothing when `address` is missing instead of throwing (`?.` is legal
   but unnecessary). A missing collection or a non-list loops zero times (dev
   warns on a non-list; range bounds truncate to whole numbers). `==` keeps its

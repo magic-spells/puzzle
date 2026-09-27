@@ -120,12 +120,16 @@ A top-level `|` is a formatter pipe in every value position
 ([[DECISION-D173-CORE-SEMANTICS]] V1), not only in text interpolation:
 `parseChain` splits base + chain once, and its result lands on
 `DynamicAttr.Formatters` (brace-only non-event attribute values and component
-props, including marker args), `If.Formatters` (`{#if}`, `{:else if}`,
-`{#unless}`), `Case.Formatters`, and `InlineIfPart.Formatters` (an inline
-`{#if}` inside an attribute value). `||`, a pipe inside parentheses, a string, or
-a regex is never a split point. An `{#unless}` with a chain keeps the bare base
-in `Cond` and sets `If.Negate`, so codegen negates after the formatters run;
-without a chain `Cond` stays `!(cond)` and the AST is unchanged. Every segment
+props, including marker args). `||`, a pipe inside parentheses, a string, or a
+regex is never a split point. **Condition headers take no chain:** a top-level
+pipe (`hasTopLevelPipe`) in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}`
+header, or in an inline `{#if}` inside an attribute value (`attr.go`), is a
+positioned error from `conditionPipeError` — `formatter pipes are not allowed
+in <header> — compute the value in data() and test that field (e.g. …), write
+|| for a logical OR, or wrap a bitwise OR in parentheses, e.g. (a | b)` — never
+a bitwise OR, so `If.Cond`, `Case.Expr` and
+`InlineIfPart.Cond` are always plain expressions (an `{#unless}` folds to
+`!(cond)`). Every segment
 after a pipe must be a formatter name — `isFormatterName`,
 `[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*` (an identifier, optionally
 kebab-cased, every `-` starting a word with a letter), bare or called — in text

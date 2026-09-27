@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // core_semantics_test.go — D173 group (b), expressions and loops: V1 formatter
@@ -33,10 +35,7 @@ func wantAll(t *testing.T, got string, wants ...string) {
 func TestPipeIsAFormatterInEveryValuePosition(t *testing.T) {
 	got := compileSrc(t, coreSrc(`  <a title={ price | currency } data-or={ a || b }>x</a>
   <Card items={ list | join(', ') | truncate(20) } />
-  {#if tags | size}<b>a</b>{:else if others | size}<b>b</b>{/if}
-  {#unless user | blank}<b>c</b>{/unless}
-  {#case status | downcase}{:when 'a'}<b>d</b>{/case}
-  <p class="x {#if on | truthy}on{/if}">y</p>`))
+  <p class="x {#if on}{ label | upcase }{/if}">y</p>`))
 	wantAll(t, got,
 		// A brace-only attribute: a call, never `__d.price | __d.currency`.
 		`title: (__f["currency"] || __f.__missing("currency"))(__d.price),`,
@@ -44,14 +43,8 @@ func TestPipeIsAFormatterInEveryValuePosition(t *testing.T) {
 		`'data-or': __d.a || __d.b,`,
 		// A component prop, with a chain applied left to right.
 		`items: (__f["truncate"] || __f.__missing("truncate"))((__f["join"] || __f.__missing("join"))(__d.list, ', '), 20)`,
-		// Block subjects.
-		`...((__f["size"] || __f.__missing("size"))(__d.tags)`,
-		`...((__f["size"] || __f.__missing("size"))(__d.others)`,
-		// {#unless} negates the FORMATTED value.
-		`...(!((__f["blank"] || __f.__missing("blank"))(__d.user))`,
-		`])((__f["downcase"] || __f.__missing("downcase"))(__d.status))),`,
-		// An attribute value's inline {#if}.
-		"class: `x ${(__f[\"truthy\"] || __f.__missing(\"truthy\"))(__d.on) ? 'on' : ''}`",
+		// An interpolation inside an attribute value's inline {#if} branch.
+		`(__f["upcase"] || __f.__missing("upcase"))(__d.label)`,
 		// The registry read the chain needs.
 		"const __f = this.ctx.formatters.getAll();",
 	)
@@ -59,6 +52,57 @@ func TestPipeIsAFormatterInEveryValuePosition(t *testing.T) {
 		t.Errorf("a pipe compiled to a bitwise OR:\n%s", got)
 	}
 	nodeCheck(t, got)
+}
+
+// Formatters stay out of branching logic (D173 V1): a condition header keeps
+// `||` as logical OR and a parenthesized `|` as a bitwise OR, and reads no
+// formatter registry. The header pipe itself is a parse error, pinned in
+// TestConditionHeaderPipeIsACompileError.
+func TestConditionHeadersKeepJavaScriptOr(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  {#if tags || others}<b>a</b>{:else if a || b}<b>b</b>{/if}
+  {#unless user || guest}<b>c</b>{/unless}
+  {#case status || 'none'}{:when 'a'}<b>d</b>{/case}
+  {#if (flags | 4) === 4}<b>e</b>{/if}
+  <p class="x {#if on || off}on{/if}">y</p>`))
+	wantAll(t, got,
+		"...(__d.tags || __d.others",
+		"...(__d.a || __d.b",
+		"...(!(__d.user || __d.guest)",
+		"])(__d.status || 'none')),",
+		"...((__d.flags | 4) === 4",
+		"class: `x ${__d.on || __d.off ? 'on' : ''}`",
+	)
+	if strings.Contains(got, "__f") {
+		t.Errorf("a condition header read the formatter registry:\n%s", got)
+	}
+	nodeCheck(t, got)
+}
+
+// TestConditionHeaderPipeIsACompileError: a top-level `|` in any condition or
+// branching header fails the compile with the positioned fix-it, and never
+// falls back to a bitwise OR.
+func TestConditionHeaderPipeIsACompileError(t *testing.T) {
+	for _, tc := range []struct{ body, header string }{
+		{"{#if tags | size}<b>a</b>{/if}", "an {#if} condition"},
+		{"{#if ok}<b>a</b>{:else if others | size}<b>b</b>{/if}", "an {:else if} condition"},
+		{"{#unless user | blank}<b>c</b>{/unless}", "an {#unless} condition"},
+		{"{#case status | downcase}{:when 'a'}<b>d</b>{/case}", "a {#case} expression"},
+		{`<p class="x {#if on | truthy}on{/if}">y</p>`, "an {#if} condition in an attribute value"},
+	} {
+		sec, err := parser.SplitSections(coreSrc("  "+tc.body), "T.pzl")
+		if err == nil {
+			_, err = Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
+		}
+		if err == nil {
+			t.Errorf("%s: expected a compile error", tc.body)
+			continue
+		}
+		want := "T.pzl:2:"
+		if msg := err.Error(); !strings.Contains(msg, want) ||
+			!strings.Contains(msg, "formatter pipes are not allowed in "+tc.header+" — compute the value in data() and test that field") {
+			t.Errorf("%s: error %q", tc.body, msg)
+		}
+	}
 }
 
 // A formatted form value displays a transformed value; there is no field to

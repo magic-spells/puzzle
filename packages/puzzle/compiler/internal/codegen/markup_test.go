@@ -102,11 +102,11 @@ func TestMarkupFormatterPlacementErrors(t *testing.T) {
 		{"brace-only attribute", `<puzzle-view><p title={ body | raw }>x</p></puzzle-view>`, "not an attribute value", ModeView},
 		{"quoted attribute", `<puzzle-view><p title="a { body | raw }">x</p></puzzle-view>`, "not an attribute value", ModeView},
 		{"inline if attribute", `<puzzle-view><p class="{#if on}{ a | raw }{/if}">x</p></puzzle-view>`, "not an attribute value", ModeView},
-		{"inline if condition", `<puzzle-view><p class="{#if on | raw}a{/if}">x</p></puzzle-view>`, "not an inline {#if} condition", ModeView},
+		{"inline if condition", `<puzzle-view><p class="{#if on | raw}a{/if}">x</p></puzzle-view>`, "formatter pipes are not allowed in an {#if} condition in an attribute value", ModeView},
 		{"component prop", `<puzzle-view><Card body={ body | raw } /></puzzle-view>`, "not a component prop", ModeView},
 		{"marker argument", `<puzzle-view><Slot name="row" text={ body | newline_to_br } /></puzzle-view>`, "not a marker argument", ModeComponent},
-		{"if subject", `<puzzle-view>{#if body | raw}<p>x</p>{/if}</puzzle-view>`, "not an {#if} subject", ModeView},
-		{"case subject", `<puzzle-view>{#case body | raw}{:when 'a'}<p>a</p>{/case}</puzzle-view>`, "not a {#case} subject", ModeView},
+		{"if subject", `<puzzle-view>{#if body | raw}<p>x</p>{/if}</puzzle-view>`, "formatter pipes are not allowed in an {#if} condition", ModeView},
+		{"case subject", `<puzzle-view>{#case body | raw}{:when 'a'}<p>a</p>{/case}</puzzle-view>`, "formatter pipes are not allowed in a {#case} expression", ModeView},
 		{"arguments", `<puzzle-view><p>{ body | raw(1) }</p></puzzle-view>`, "`raw` takes no arguments", ModeView},
 		{"inside textarea", `<puzzle-view><textarea>{ body | raw }</textarea></puzzle-view>`, "cannot render inside <textarea>", ModeView},
 		{"inside script", `<puzzle-view><script type="text/plain">{ body | raw }</script></puzzle-view>`, "cannot render inside <script>", ModeView},
@@ -118,7 +118,6 @@ func TestMarkupFormatterPlacementErrors(t *testing.T) {
 		{"skeleton", "<puzzle-view><p>x</p></puzzle-view>\n<puzzle-skeleton><p title={ a | raw }>x</p></puzzle-skeleton>", "not an attribute value", ModeView},
 		// The <puzzle-view> root's own attributes are checked like any element's.
 		{"root brace-only attribute", `<puzzle-view title={ x | raw }><p>x</p></puzzle-view>`, "not an attribute value", ModeView},
-		{"root inline if condition", `<puzzle-view class="a {#if y | newline_to_br}b{/if}"><p>x</p></puzzle-view>`, "not an inline {#if} condition", ModeView},
 		// Foreign content: the prerender would parse the markup as SVG/MathML.
 		{"inside svg", `<puzzle-view><svg>{ body | raw }</svg></puzzle-view>`, "cannot render inside <svg>", ModeView},
 		{"nested in svg", `<puzzle-view><svg><g><text>{#if on}{ body | raw }{/if}</text></g></svg></puzzle-view>`, "cannot render inside <svg>", ModeView},

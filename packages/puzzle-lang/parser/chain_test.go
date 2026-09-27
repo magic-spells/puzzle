@@ -7,9 +7,9 @@ import (
 
 // chain_test.go — D173 V1: a top-level single `|` is a formatter pipe in every
 // template value position (brace-only attributes, component props, marker
-// arguments, and the {#if}/{:else if}/{#unless}/{#case} subjects, plus an
-// attribute value's inline {#if}), exactly as in text interpolation. A pipe in a
-// {#for} header is a positioned error.
+// arguments), exactly as in text interpolation. A pipe in a condition or
+// branching header — {#if}, {:else if}, {#unless}, {#case}, {:when}, {#for}, and
+// an attribute value's inline {#if} — is a positioned error.
 
 func fmtNames(fmts []FormatterCall) string {
 	names := make([]string, len(fmts))
@@ -69,57 +69,88 @@ func TestChainInComponentPropAndMarkerArg(t *testing.T) {
 	}
 }
 
-func TestChainInBlockHeaders(t *testing.T) {
-	root := parseContent(t, `{#if post.tags | size}<b>a</b>{:else if other | size}<b>b</b>{/if}`+
-		`{#unless user.name | blank}<b>c</b>{/unless}`+
-		`{#unless ready}<b>d</b>{/unless}`+
-		`{#case status | downcase}{:when 'a'}<b>e</b>{/case}`+
-		`{#if a || b}<b>f</b>{/if}`)
-	kids := elementChildren(root.Children)
-
-	ifn := kids[0].(*If)
-	if ifn.Cond != "post.tags" || fmtNames(ifn.Formatters) != "size" || ifn.Negate {
-		t.Errorf("{#if}: got %q | %q negate=%v", ifn.Cond, fmtNames(ifn.Formatters), ifn.Negate)
-	}
-	elseIf := elementChildren(ifn.Else)[0].(*If)
-	if elseIf.Cond != "other" || fmtNames(elseIf.Formatters) != "size" {
-		t.Errorf("{:else if}: got %q | %q", elseIf.Cond, fmtNames(elseIf.Formatters))
-	}
-
-	// {#unless} with a chain keeps the bare base and sets Negate, so the chain
-	// runs before the negation.
-	unless := kids[1].(*If)
-	if unless.Cond != "user.name" || fmtNames(unless.Formatters) != "blank" || !unless.Negate {
-		t.Errorf("{#unless} chain: got %q | %q negate=%v", unless.Cond, fmtNames(unless.Formatters), unless.Negate)
-	}
-	// Without a chain the negation stays folded into Cond, as it always was.
-	plain := kids[2].(*If)
-	if plain.Cond != "!(ready)" || plain.Negate || len(plain.Formatters) != 0 {
-		t.Errorf("{#unless} plain: got %q negate=%v", plain.Cond, plain.Negate)
-	}
-
-	cs := kids[3].(*Case)
-	if cs.Expr != "status" || fmtNames(cs.Formatters) != "downcase" {
-		t.Errorf("{#case}: got %q | %q", cs.Expr, fmtNames(cs.Formatters))
-	}
-
-	or := kids[4].(*If)
-	if or.Cond != "a || b" || len(or.Formatters) != 0 {
-		t.Errorf("`||` must stay logical OR: got %q | %q", or.Cond, fmtNames(or.Formatters))
+// TestConditionHeaderPipeIsError: formatters are display helpers and stay out of
+// branching logic, so a top-level `|` in an {#if}, {:else if}, {#unless} or
+// {#case} header, or in an attribute value's inline {#if}, is a positioned error
+// whose fix-it moves the computation into data(). It never compiles to a
+// bitwise OR.
+func TestConditionHeaderPipeIsError(t *testing.T) {
+	for _, tc := range []struct {
+		src, header, example string
+		line, col            int
+	}{
+		{"{#if post.tags | size}<b>a</b>{/if}", "an {#if} condition", "{#if hasTags}", 2, 3},
+		{"{#if flags | 4}<b>a</b>{/if}", "an {#if} condition", "{#if hasTags}", 2, 3},
+		// A pipe in a ternary branch is still top-level: the ternary does not
+		// nest it, so it is the ban, never a bitwise OR.
+		{"{#if a ? b | c : d}<b>a</b>{/if}", "an {#if} condition", "{#if hasTags}", 2, 3},
+		{"{#if ok}<b>a</b>\n  {:else if other | size}<b>b</b>{/if}", "an {:else if} condition", "{:else if hasTags}", 3, 3},
+		{"{#unless user.name | blank}<b>c</b>{/unless}", "an {#unless} condition", "{#unless hasTags}", 2, 3},
+		{"{#case status | downcase}{:when 'a'}<b>e</b>{/case}", "a {#case} expression", "{#case statusLabel}", 2, 3},
+		// A bitwise OR before 0.8; the message steers it to (a | b), not to ||.
+		{"{#case mode | 1}{:when 3}<b>e</b>{/case}", "a {#case} expression", "{#case statusLabel}", 2, 3},
+		{`<p class="x {#if on | truthy}on{/if}">z</p>`, "an {#if} condition in an attribute value", "{#if isActive}", 2, 15},
+	} {
+		src := "<puzzle-view>\n  " + tc.src + "</puzzle-view>"
+		_, err := Parse([]byte(src), "t.pzl")
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Errorf("%s: got %v, want a *ParseError", tc.src, err)
+			continue
+		}
+		want := "formatter pipes are not allowed in " + tc.header +
+			" — compute the value in data() and test that field (e.g. " + tc.example +
+			"), write || for a logical OR, or wrap a bitwise OR in parentheses, e.g. (a | b)"
+		if pe.Message != want {
+			t.Errorf("%s: message\n  %q\nwant\n  %q", tc.src, pe.Message, want)
+		}
+		if pe.Line != tc.line || pe.Col != tc.col {
+			t.Errorf("%s: position %d:%d, want %d:%d", tc.src, pe.Line, pe.Col, tc.line, tc.col)
+		}
 	}
 }
 
-func TestChainInAttributeInlineIf(t *testing.T) {
-	root := parseContent(t, `<p class="x {#if on | truthy}on{/if}">z</p>`)
-	el := elementChildren(root.Children)[0].(*Element)
-	mixed := el.Attrs[0].(*MixedAttr)
+// TestConditionHeaderKeepsJavaScriptOr: `||`, and a `|` inside parentheses, a
+// string, a regex or a call, are not pipes, so every condition header keeps
+// them as JavaScript.
+func TestConditionHeaderKeepsJavaScriptOr(t *testing.T) {
+	root := parseContent(t, `{#if a || b}<b>a</b>{:else if c || d}<b>b</b>{/if}`+
+		`{#unless a || b}<b>c</b>{/unless}`+
+		`{#case a || b}{:when 'a'}<b>e</b>{/case}`+
+		`{#if (flags | 4) && /x|y/.test(s) && s !== 'p|q' && f(a | b)}<b>f</b>{/if}`+
+		"{#if `x${a | b}` === s}<b>g</b>{/if}")
+	kids := elementChildren(root.Children)
+
+	ifn := kids[0].(*If)
+	if ifn.Cond != "a || b" {
+		t.Errorf("{#if}: got %q", ifn.Cond)
+	}
+	if elseIf := elementChildren(ifn.Else)[0].(*If); elseIf.Cond != "c || d" {
+		t.Errorf("{:else if}: got %q", elseIf.Cond)
+	}
+	if unless := kids[1].(*If); unless.Cond != "!(a || b)" {
+		t.Errorf("{#unless}: got %q", unless.Cond)
+	}
+	if cs := kids[2].(*Case); cs.Expr != "a || b" {
+		t.Errorf("{#case}: got %q", cs.Expr)
+	}
+	if nested := kids[3].(*If); nested.Cond != "(flags | 4) && /x|y/.test(s) && s !== 'p|q' && f(a | b)" {
+		t.Errorf("nested pipes: got %q", nested.Cond)
+	}
+	// A `|` inside a template literal's ${…} is nested JavaScript, not a pipe.
+	if tpl := kids[4].(*If); tpl.Cond != "`x${a | b}` === s" {
+		t.Errorf("template literal: got %q", tpl.Cond)
+	}
+
+	root = parseContent(t, `<p class="x {#if a || b}on{/if}">z</p>`)
+	mixed := elementChildren(root.Children)[0].(*Element).Attrs[0].(*MixedAttr)
 	var inline *InlineIfPart
 	for _, p := range mixed.Parts {
 		if ip, ok := p.(*InlineIfPart); ok {
 			inline = ip
 		}
 	}
-	if inline == nil || inline.Cond != "on" || fmtNames(inline.Formatters) != "truthy" {
+	if inline == nil || inline.Cond != "a || b" {
 		t.Fatalf("inline {#if}: got %+v", inline)
 	}
 }
@@ -175,7 +206,8 @@ func TestForHeaderPipeIsError(t *testing.T) {
 // TestPipeMustNameAFormatter: after a top-level `|`, anything that is not a
 // formatter name — a number, an operator, two words — is a positioned error
 // steering to a parenthesized bitwise OR, in text interpolation and in every
-// chained value position alike.
+// chained value position alike. (In a condition header the pipe itself is the
+// error — see TestConditionHeaderPipeIsError.)
 func TestPipeMustNameAFormatter(t *testing.T) {
 	for _, src := range []string{
 		"<puzzle-view>\n  <p>{ flags | 4 }</p></puzzle-view>",
@@ -184,7 +216,6 @@ func TestPipeMustNameAFormatter(t *testing.T) {
 		"<puzzle-view>\n  <p>{ a | b c }</p></puzzle-view>",
 		"<puzzle-view>\n  <p>{ a | 9x(1) }</p></puzzle-view>",
 		"<puzzle-view>\n  <a title={ flags | 4 }>x</a></puzzle-view>",
-		"<puzzle-view>\n  {#if flags | 4}<b>x</b>{/if}</puzzle-view>",
 		"<puzzle-view>\n  <Card n={ a | -1 }/></puzzle-view>",
 	} {
 		_, err := Parse([]byte(src), "t.pzl")
@@ -247,7 +278,7 @@ func TestWhenValuePipeIsError(t *testing.T) {
 func TestFormatterCallMustEndTheSegment(t *testing.T) {
 	for _, src := range []string{
 		"<puzzle-view>\n  <p>{ a | f(1) + g(2) }</p></puzzle-view>",
-		"<puzzle-view>\n  {#if x | f(a) && g(b)}<b>x</b>{/if}</puzzle-view>",
+		"<puzzle-view>\n  <p>{ x | f(a) && g(b) }</p></puzzle-view>",
 		"<puzzle-view>\n  <a title={ a | f(1) g(2) }>x</a></puzzle-view>",
 		"<puzzle-view>\n  <p>{ a | f(b)(c) }</p></puzzle-view>",
 		"<puzzle-view>\n  <p>{ a | f(1)) }</p></puzzle-view>",

@@ -855,9 +855,8 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#if} requires a condition")
 		}
-		cond, condFmts, perr := parseChain(rest, pos, p.file, "{#if} condition")
-		if perr != nil {
-			return nil, perr
+		if hasTopLevelPipe(rest) {
+			return nil, conditionPipeError(pos, p.file, "an {#if} condition", "{#if hasTags}")
 		}
 		thenNodes, perr := p.parseChildren(openCtx{kind: ctxBlockIf, pos: pos})
 		if perr != nil {
@@ -865,19 +864,18 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		}
 		type elseIfClause struct {
 			cond string
-			fmts []FormatterCall
 			body []Node
 			pos  Position
 		}
 		var clauses []elseIfClause
 		for p.cur.Type == TokElseIf {
 			cpos := tokPos(p.cur)
-			if p.cur.Value == "" {
+			cond := p.cur.Value
+			if cond == "" {
 				return nil, errAt(p.file, cpos, "{:else if} requires a condition")
 			}
-			cond, fmts, cerr := parseChain(p.cur.Value, cpos, p.file, "{:else if} condition")
-			if cerr != nil {
-				return nil, cerr
+			if hasTopLevelPipe(cond) {
+				return nil, conditionPipeError(cpos, p.file, "an {:else if} condition", "{:else if hasTags}")
 			}
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
@@ -886,7 +884,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			if e != nil {
 				return nil, e
 			}
-			clauses = append(clauses, elseIfClause{cond: cond, fmts: fmts, body: body, pos: cpos})
+			clauses = append(clauses, elseIfClause{cond: cond, body: body, pos: cpos})
 		}
 		var elseNodes []Node
 		if p.cur.Type == TokElse {
@@ -916,9 +914,9 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		tail := elseNodes
 		for i := len(clauses) - 1; i >= 0; i-- {
 			c := clauses[i]
-			tail = []Node{&If{Cond: c.cond, Formatters: c.fmts, Then: c.body, Else: tail, Pos: c.pos}}
+			tail = []Node{&If{Cond: c.cond, Then: c.body, Else: tail, Pos: c.pos}}
 		}
-		return &If{Cond: cond, Formatters: condFmts, Then: thenNodes, Else: tail, Pos: pos}, nil
+		return &If{Cond: rest, Then: thenNodes, Else: tail, Pos: pos}, nil
 
 	case "unless":
 		// {#unless expr} desugars to the If node with a negated condition, so
@@ -929,9 +927,8 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#unless} requires a condition")
 		}
-		cond, condFmts, perr := parseChain(rest, pos, p.file, "{#unless} condition")
-		if perr != nil {
-			return nil, perr
+		if hasTopLevelPipe(rest) {
+			return nil, conditionPipeError(pos, p.file, "an {#unless} condition", "{#unless hasTags}")
 		}
 		thenNodes, perr := p.parseChildren(openCtx{kind: ctxBlockUnless, pos: pos})
 		if perr != nil {
@@ -954,11 +951,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if err := p.advance(); err != nil {
 			return nil, toPE(err)
 		}
-		if len(condFmts) > 0 {
-			// The chain runs first and the host negates its result (see If).
-			return &If{Cond: cond, Formatters: condFmts, Negate: true, Then: thenNodes, Else: elseNodes, Pos: pos}, nil
-		}
-		return &If{Cond: "!(" + cond + ")", Then: thenNodes, Else: elseNodes, Pos: pos}, nil
+		return &If{Cond: "!(" + rest + ")", Then: thenNodes, Else: elseNodes, Pos: pos}, nil
 
 	case "case":
 		// {#case expr} … {:when v1, v2} … {:else} … {/case}. Unlike {#unless},
@@ -967,9 +960,8 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#case} requires an expression")
 		}
-		caseExpr, caseFmts, perr := parseChain(rest, pos, p.file, "{#case} expression")
-		if perr != nil {
-			return nil, perr
+		if hasTopLevelPipe(rest) {
+			return nil, conditionPipeError(pos, p.file, "a {#case} expression", "{#case statusLabel}")
 		}
 		// Only whitespace may sit between {#case expr} and the first {:when}; a
 		// stray element/interpolation there is a positioned error.
@@ -1022,7 +1014,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if len(clauses) == 0 {
 			return nil, errAt(p.file, pos, "{#case} has no {:when} clauses")
 		}
-		return &Case{Expr: caseExpr, Formatters: caseFmts, Clauses: clauses, Else: elseNodes, Pos: pos}, nil
+		return &Case{Expr: rest, Clauses: clauses, Else: elseNodes, Pos: pos}, nil
 
 	case "svg":
 		// {#svg 'path'} is a VOID block (v1.14, D46): it inlines a file at compile
@@ -1085,11 +1077,12 @@ func parseWhenValues(raw string, pos Position, file string) ([]string, *ParseErr
 		if v == "" {
 			return nil, errAt(file, pos, "{:when} has an empty value (check for a stray comma)")
 		}
-		// A `|` is a formatter pipe in every other value position (D173 V1), and
-		// a {:when} value takes no chain; letting it compile as a bitwise OR
-		// would read as a formatter and silently match something else.
+		// A `|` is a formatter pipe in value positions (D173 V1), and a {:when}
+		// value, like every branching header, takes no chain; letting it compile
+		// as a bitwise OR would read as a formatter and silently match something
+		// else.
 		if hasTopLevelPipe(v) {
-			return nil, errAt(file, pos, "formatter pipes are not allowed in a {:when} value — list alternatives with commas ({:when 'a', 'b'}), apply the formatter in the {#case} header, or wrap a bitwise OR in parentheses, e.g. (a | b)")
+			return nil, errAt(file, pos, "formatter pipes are not allowed in a {:when} value — list alternatives with commas ({:when 'a', 'b'}), compute the value in data(), or wrap a bitwise OR in parentheses, e.g. (a | b)")
 		}
 		vals = append(vals, v)
 	}
@@ -1289,8 +1282,8 @@ func parseInterpolationExpr(raw string, pos Position, file string) (*Interpolati
 // parseChain splits any template value position into its base expression and
 // formatter chain. It is the one pipe rule for every position that takes a
 // chain (D173 V1): text interpolation, quoted and brace-only attribute values,
-// component props and marker arguments, and the `{#if}`, `{:else if}`,
-// `{#unless}` and `{#case}` subjects. Only a top-level single `|` is a pipe:
+// component props and marker arguments. Condition and branching headers take
+// none (see conditionPipeError). Only a top-level single `|` is a pipe:
 // `||` stays logical OR, and a `|` inside a string, a regex, parentheses,
 // brackets or braces is not a split point. what names the position in the
 // empty-expression errors ("interpolation", "{#if} condition", …).
@@ -1316,7 +1309,8 @@ func parseChain(raw string, pos Position, file, what string) (string, []Formatte
 }
 
 // hasTopLevelPipe reports whether s contains a formatter pipe by parseChain's
-// rule. The `{#for}` header uses it to reject a chain (D173 V1).
+// rule. The `{#for}`, `{#if}`, `{:else if}`, `{#unless}`, `{#case}` and
+// `{:when}` headers use it to reject a chain (D173 V1).
 func hasTopLevelPipe(s string) bool {
 	return len(splitTopLevel(s, '|', true)) > 1
 }
@@ -1327,6 +1321,18 @@ func hasTopLevelPipe(s string) bool {
 // the loop iterates that field.
 func forPipeError(pos Position, file string) *ParseError {
 	return errAt(file, pos, "formatter pipes are not allowed in a {#for} header — shape the list in data() and loop over that field (e.g. {#for item in sortedItems})")
+}
+
+// conditionPipeError is the positioned condition-header pipe ban (D173 V1): a
+// top-level `|` in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` header, or
+// in an inline `{#if}` inside an attribute value. Formatters are display helpers
+// and stay out of branching logic, so the fix-it moves the computation into
+// data(). The ban never falls back to a bitwise OR: `||` is not a pipe and
+// keeps working, and the message steers a bitwise OR to `(a | b)`, exactly as
+// the {:when} and not-a-formatter-name errors do — otherwise `{#case mode | 1}`
+// (a bitwise OR before 0.8) would be steered to `||` and match another value.
+func conditionPipeError(pos Position, file, header, example string) *ParseError {
+	return errAt(file, pos, "formatter pipes are not allowed in %s — compute the value in data() and test that field (e.g. %s), write || for a logical OR, or wrap a bitwise OR in parentheses, e.g. (a | b)", header, example)
 }
 
 // parseFormatter parses "name" or "name(arg, arg)". Arguments split at

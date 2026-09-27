@@ -23,10 +23,7 @@ func TestRowFactsFormatterArgumentIsOpaque(t *testing.T) {
 		{"text interpolation", "<p>{ 'by' | byline(post) }</p>", true},
 		{"brace-only attribute", "<p title={ 'by' | byline(post) }>x</p>", true},
 		{"quoted attribute", `<p title="a { 'by' | byline(post) }">x</p>`, true},
-		{"inline if condition", `<p class="{#if on | owns(post)}mine{/if}">x</p>`, true},
 		{"component prop", "<Row label={ 'by' | byline(post) } />", true},
-		{"if subject", "{#if on | owns(post)}<p>x</p>{:else}<p>y</p>{/if}", true},
-		{"case subject", "{#case kind | of(post)}{:when 'a'}<p>a</p>{:else}<p>b</p>{/case}", true},
 		{"markup chain", "<p>{ 'by' | byline(post) | raw }</p>", true},
 		// A depth-one member as an argument stays a field read.
 		{"member argument", "<p>{ 'by' | byline(post.title) }</p>", false},
