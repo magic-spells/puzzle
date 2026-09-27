@@ -4,7 +4,7 @@ package parser
 // offset into the ORIGINAL .pzl file. Positions are computed relative to the
 // original file so that template parse errors report file-accurate coordinates
 // even though the lexer only ever sees the <puzzle-view> content (see
-// constellation/doc/DOC-COMPILER-DESIGN.md §c and §e).
+// packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c and §e).
 //
 // Position lives in one place; every token and AST node carries one.
 type Position struct {

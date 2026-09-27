@@ -238,3 +238,93 @@ func TestWhenValuePipeIsError(t *testing.T) {
 		}
 	}
 }
+
+// TestFormatterCallMustEndTheSegment: a called formatter's '(' must be matched
+// by the segment's last ')'. The parser used to check only for a trailing ')'
+// and slice between the first '(' and it, so `{ a | f(1) + g(2) }` became
+// f with the single argument `1) + g(2` and compiled silently to
+// `f(a, 1) + g(2)`. Anything after the matching ')' is a positioned error.
+func TestFormatterCallMustEndTheSegment(t *testing.T) {
+	for _, src := range []string{
+		"<puzzle-view>\n  <p>{ a | f(1) + g(2) }</p></puzzle-view>",
+		"<puzzle-view>\n  {#if x | f(a) && g(b)}<b>x</b>{/if}</puzzle-view>",
+		"<puzzle-view>\n  <a title={ a | f(1) g(2) }>x</a></puzzle-view>",
+		"<puzzle-view>\n  <p>{ a | f(b)(c) }</p></puzzle-view>",
+		"<puzzle-view>\n  <p>{ a | f(1)) }</p></puzzle-view>",
+		"<puzzle-view>\n  <Card n={ a | f(1).x }/></puzzle-view>",
+	} {
+		_, err := Parse([]byte(src), "t.pzl")
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Errorf("%s: got %v, want a *ParseError", src, err)
+			continue
+		}
+		if !strings.Contains(pe.Message, "after its closing ')'") {
+			t.Errorf("%s: message %q", src, pe.Message)
+		}
+		if pe.Line != 2 {
+			t.Errorf("%s: line %d, want 2", src, pe.Line)
+		}
+	}
+	// An argument list that never closes keeps its own error.
+	_, err := Parse([]byte("<puzzle-view><p>{ a | f(1 }</p></puzzle-view>"), "t.pzl")
+	if pe, ok := err.(*ParseError); !ok || !strings.Contains(pe.Message, "missing closing ')'") {
+		t.Errorf("unclosed call: got %v", err)
+	}
+	// A ')' inside a string, regex, template or nested group is not the close.
+	for src, want := range map[string]string{
+		`{ a | replace(')', '(') | upcase }`: `replace(')', '(') | upcase`,
+		`{ a | f(/\)/, "x)") }`:              `f(/\)/, "x)")`,
+		"{ a | f(`)${ (b) }`) }":             "f(`)${ (b) }`)",
+		`{ a | t({ n: (1) }) }`:              `t({ n: (1) })`,
+		`{ a | f((1), [2]) }`:                `f((1), [2])`,
+		`{ a | f() }`:                        `f`,
+	} {
+		root := parseContent(t, "<p>"+src+"</p>")
+		p := elementChildren(root.Children)[0].(*Element)
+		in := p.Children[0].(*Interpolation)
+		if got := fmtNames(in.Formatters); got != want {
+			t.Errorf("%s: chain %q, want %q", src, got, want)
+		}
+	}
+}
+
+// TestFormatterNameHyphenStartsAWord: a '-' in a formatter name must start a
+// kebab segment — a letter follows it — so `{ mask | bit-1 }` is arithmetic
+// the author meant as JavaScript, not a lookup of a formatter named `bit-1`
+// that would pass the value through silently at runtime.
+func TestFormatterNameHyphenStartsAWord(t *testing.T) {
+	for _, src := range []string{
+		"<puzzle-view>\n  <a title={ mask | bit-1 }>x</a></puzzle-view>",
+		"<puzzle-view>\n  <p>{ a | b-2(3) }</p></puzzle-view>",
+		"<puzzle-view>\n  <p>{ a | b- }</p></puzzle-view>",
+		"<puzzle-view>\n  <p>{ a | b--c }</p></puzzle-view>",
+		"<puzzle-view>\n  <p>{ a | b-_c }</p></puzzle-view>",
+		// A dotted name is a member expression, not a formatter name (the
+		// DOC-LANGUAGE-CORE grammar has no '.').
+		"<puzzle-view>\n  <p>{ price | fmt.eur }</p></puzzle-view>",
+	} {
+		_, err := Parse([]byte(src), "t.pzl")
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Errorf("%s: got %v, want a *ParseError", src, err)
+			continue
+		}
+		if !strings.Contains(pe.Message, "is not a formatter name") {
+			t.Errorf("%s: message %q", src, pe.Message)
+		}
+		if pe.Line != 2 {
+			t.Errorf("%s: line %d, want 2", src, pe.Line)
+		}
+	}
+	for _, src := range []string{
+		"<p>{ a | foo-bar }</p>",
+		"<p>{ a | strip-html-v2 }</p>",
+		"<p>{ a | a-b-c(1) }</p>",
+		"<p>{ a | x2-y_z$ }</p>",
+	} {
+		if _, err := Parse([]byte("<puzzle-view>"+src+"</puzzle-view>"), "t.pzl"); err != nil {
+			t.Errorf("%s: unexpected error %v", src, err)
+		}
+	}
+}

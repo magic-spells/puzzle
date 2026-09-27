@@ -78,8 +78,6 @@ they mean in HTML, with these rules:
 
 ## Interpolation and formatters
 
-
-
 `{ expression }` writes a value into text or an attribute. Every host prints a
 value by one rule ([[DECISION-D173-CORE-SEMANTICS]] V6):
 
@@ -108,9 +106,12 @@ A **formatter** transforms a value for display. Write it after a pipe:
 - Chains run left to right and have no length limit.
 - Only a **top-level single `|`** is a pipe. `||` is logical OR, and a `|`
   inside a string, parentheses or brackets is not a pipe.
-- **What follows a pipe must be a formatter name** (`[A-Za-z_$][A-Za-z0-9_$-]*`,
-  bare or called). `{ flags | 4 }` or `{ a |= 2 }` is a compile error; a bitwise
-  OR goes in parentheses, `{ (a | b) }`.
+- **What follows a pipe must be a formatter name**
+  (`[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*`: an identifier,
+  optionally kebab-cased, every `-` starting a word with a letter), bare or
+  called, and a call's `)` ends the segment. `{ flags | 4 }`, `{ a |= 2 }`,
+  `{ mask | bit-1 }` or `{ a | f(1) + g(2) }` is a compile error; a bitwise OR
+  goes in parentheses, `{ (a | b) }`.
 - A formatter should be a pure function of its input. In PuzzleKit, filtering
   and sorting belong in `data()`; Sites, which has no script, provides list
   formatters for them.
