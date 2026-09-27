@@ -62,9 +62,14 @@ async function preloadNode(vnode, ctx, instances) {
 		}
 	}
 
-	let tree;
+	// Slot expansion sits inside the same fail-soft try as render(): a marker's
+	// fallback body is built lazily during expansion (D141), so a fallback that
+	// throws must degrade this one component exactly as a throwing render() does,
+	// not reject the whole takeover.
+	let expanded;
 	try {
-		tree = instance.render();
+		const tree = instance.render();
+		expanded = tree == null ? tree : expandSlots(tree, vnode.children, vnode.tag);
 	} catch (err) {
 		if (!nested) return;
 		console.error('[puzzle] child mount failed:', err);
@@ -79,7 +84,6 @@ async function preloadNode(vnode, ctx, instances) {
 		instances.push(instance);
 	}
 
-	const expanded = tree == null ? tree : expandSlots(tree, vnode.children, vnode.tag);
 	instance.__takeoverTree = expanded;
 	await preloadNode(expanded, ctx, instances);
 }

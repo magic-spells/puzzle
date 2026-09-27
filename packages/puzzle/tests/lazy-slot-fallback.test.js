@@ -13,11 +13,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FormatterRegistry } from '../client-runtime/formatters.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode, SNIPPET_TAG } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG, SNIPPET_TAG, PLACEHOLDER_TAG } from '../client-runtime/views/ViewNode.js';
+import { expandSlots } from '../client-runtime/views/viewManager.js';
 import { serialize } from '../client-runtime/ssg/serialize.js';
+import { preloadTakeoverComponents } from '../client-runtime/ssg/preload.js';
 import { settled } from '../client-runtime/testing/settled.js';
 import LazyRows from './fixtures/lazy-fallback/LazyRows.compiled.js';
 import LazyHost from './fixtures/lazy-fallback/LazyHost.compiled.js';
+import LazyCard from './fixtures/lazy-fallback/LazyCard.compiled.js';
+import LazyCardHost from './fixtures/lazy-fallback/LazyCardHost.compiled.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -193,5 +197,144 @@ describe('lazy marker fallbacks (D141)', () => {
 		expect(el.querySelector('.lazy-name')).toBeNull();
 		expect(probe).toHaveBeenCalledTimes(2);
 		expect(probeName).toHaveBeenCalledTimes(2);
+	});
+
+	it('builds an unfilled compiled fallback in prerendered output', async () => {
+		const { formatters, probe, probeName } = probeFormatters();
+		const rows = await serialize(new ViewNode(LazyRows, { items: ['Ada', 'Grace'], names: ['x'] }), {
+			ctx: { formatters },
+		});
+		expect(rows).toContain('<em class="lazy-note">note:Ada</em>');
+		expect(rows).toContain('<em class="lazy-note">note:Grace</em>');
+		expect(rows).toContain('<i class="lazy-name">name:x</i>');
+		expect(probe).toHaveBeenCalledTimes(2);
+		expect(probeName).toHaveBeenCalledTimes(1);
+
+		const card = await serialize(new ViewNode(LazyCard, { label: 'L' }), { ctx: { formatters } });
+		expect(card).toContain('<em class="lazy-card-fallback">note:L</em>');
+		expect(probe).toHaveBeenCalledTimes(3);
+	});
+
+	it('never evaluates a fallback that plain call-site content fills', async () => {
+		const { formatters, probe } = probeFormatters();
+		const host = new LazyCardHost({ formatters });
+		mounted.push(host);
+		const el = container();
+		await host.mount(el);
+		expect(el.querySelector('.lazy-card-custom').textContent).toBe('Custom');
+		expect(el.querySelector('.lazy-card-fallback')).toBeNull();
+
+		const html = await serialize(new ViewNode(LazyCardHost), { ctx: { formatters } });
+		expect(html).toContain('<span class="lazy-card-custom">Custom</span>');
+		expect(html).not.toContain('lazy-card-fallback');
+		expect(probe).not.toHaveBeenCalled();
+	});
+
+	it('shows a fallback again after it was hidden by filled content', async () => {
+		const { formatters, probe } = probeFormatters();
+
+		class Host extends PuzzleView {
+			created() {
+				this.setData({ custom: false });
+			}
+			render() {
+				const children = this.getData().custom
+					? [h('span', { slot: 'label', class: 'lazy-card-custom' }, [text('Custom')])]
+					: [];
+				return h('div', {}, [new ViewNode(LazyCard, { label: 'L' }, children)]);
+			}
+		}
+
+		const host = new Host({ formatters });
+		mounted.push(host);
+		const el = container();
+		await host.mount(el);
+		expect(el.querySelector('.lazy-card-fallback').textContent).toBe('note:L');
+
+		host.setData('custom', true);
+		host.flushUpdates();
+		expect(el.querySelector('.lazy-card-fallback')).toBeNull();
+		expect(el.querySelector('.lazy-card-custom').textContent).toBe('Custom');
+		const calls = probe.mock.calls.length;
+
+		host.setData('custom', false);
+		host.flushUpdates();
+		expect(el.querySelector('.lazy-card-custom')).toBeNull();
+		expect(el.querySelector('.lazy-card-fallback').textContent).toBe('note:L');
+		expect(probe.mock.calls.length).toBeGreaterThan(calls);
+	});
+
+	it('keeps the marker arity constant when the fallback builds nothing', async () => {
+		const { formatters } = probeFormatters();
+		const host = new LazyCardHost({ formatters });
+		mounted.push(host);
+		const el = container();
+		await host.mount(el);
+		const input = el.querySelector('.lazy-card-input');
+		input.value = 'typed';
+		expect(el.querySelector('.lazy-tip')).toBeNull();
+
+		// `tips` is empty, so the default marker's fallback builds nothing. The
+		// false call-site {#if}'s placeholder must stay in the position, or the
+		// true branch adds a node, shifts the input and remounts it.
+		host.setData('show', true);
+		host.flushUpdates();
+		expect(el.querySelector('.lazy-card-shown')).not.toBeNull();
+		expect(el.querySelector('.lazy-card-input')).toBe(input);
+
+		host.setData('show', false);
+		host.flushUpdates();
+		expect(el.querySelector('.lazy-card-shown')).toBeNull();
+		expect(el.querySelector('.lazy-card-input')).toBe(input);
+		expect(input.value).toBe('typed');
+	});
+
+	it('runs a fallback thunk at most once per marker vnode, empty or not', () => {
+		const empty = vi.fn(() => []);
+		const emptyTree = h('div', {}, [new ViewNode(SLOT_TAG, { fallback: empty })]);
+		const placeholder = new ViewNode(PLACEHOLDER_TAG);
+		for (let i = 0; i < 2; i++) {
+			const out = expandSlots(emptyTree, [placeholder]);
+			expect(out.children).toEqual([placeholder]);
+		}
+		expect(empty).toHaveBeenCalledTimes(1);
+
+		const body = vi.fn(() => [h('p', {}, [text('fallback')])]);
+		const tree = h('div', {}, [new ViewNode(SLOT_TAG, { fallback: body })]);
+		const first = expandSlots(tree, []).children[0];
+		const second = expandSlots(tree, []).children[0];
+		expect(body).toHaveBeenCalledTimes(1);
+		expect(second).toBe(first);
+	});
+
+	it('degrades one component, not the takeover, when a fallback throws', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		class Boom extends PuzzleView {
+			render() {
+				return h('div', {}, [
+					new ViewNode(SLOT_TAG, {
+						fallback: () => {
+							throw new Error('fallback boom');
+						},
+					}),
+				]);
+			}
+		}
+		class Fine extends PuzzleView {
+			render() {
+				return h('p', {}, [text('fine')]);
+			}
+		}
+
+		const boom = new ViewNode(Boom);
+		const fine = new ViewNode(Fine);
+		const instances = await preloadTakeoverComponents(h('main', {}, [boom, fine]), {});
+
+		expect(boom.takeoverFailed).toBe(true);
+		expect(boom.instance).toBeNull();
+		expect(fine.takeoverPreloaded).toBe(true);
+		expect(instances).toEqual([fine.instance]);
+		expect(error).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		for (const instance of instances) instance.destroy();
 	});
 });

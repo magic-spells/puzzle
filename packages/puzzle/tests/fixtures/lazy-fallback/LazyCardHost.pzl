@@ -1,0 +1,17 @@
+<puzzle-view class="lazy-card-host">
+  <LazyCard label="Default" tips={ tips }>
+    <span slot="label" class="lazy-card-custom">Custom</span>
+    {#if show}<b class="lazy-card-shown">shown</b>{/if}
+  </LazyCard>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import LazyCard from './LazyCard.compiled.js';
+
+export default class LazyCardHost extends PuzzleView {
+  created() {
+    this.setData({ show: false, tips: [] });
+  }
+}
+</script>
