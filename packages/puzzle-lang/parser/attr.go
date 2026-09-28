@@ -89,8 +89,8 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 			if cond == "" {
 				return nil, "", errAt(c.file, pos, "{#if} requires a condition")
 			}
-			if hasTopLevelPipe(cond) {
-				return nil, "", conditionPipeError(pos, c.file, "an {#if} condition in an attribute value", "{#if isActive}")
+			if perr := headerPipeError(cond, pos, c.file, "an {#if} condition in an attribute value", "{#if isActive}"); perr != nil {
+				return nil, "", perr
 			}
 			flush()
 			c.i = end

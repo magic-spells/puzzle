@@ -92,7 +92,8 @@ type Text struct {
 }
 
 // Interpolation is `{ expr | fmt(args) | ... }`: a base expression plus an
-// optional formatter chain.
+// optional formatter chain. Only a top-level `|` is a pipe; a nested single `|`
+// is a parse error (D176 — there is no bitwise OR).
 type Interpolation struct {
 	Expr       string
 	Formatters []FormatterCall
@@ -101,9 +102,9 @@ type Interpolation struct {
 
 // If is `{#if cond} Then {:else} Else {/if}`. Else is nil when absent.
 // `{:else if}` desugars into an If nested in Else, and `{#unless}` into an If
-// whose condition is negated as `!(…)`. Cond is a plain expression: a
-// condition header takes no formatter chain (D173 V1), so a top-level `|` in
-// it is a parse error.
+// whose condition is negated as `!(…)` — its one AST shape (D176). Cond is a
+// plain expression: a condition header takes no formatter chain (D173 V1,
+// D176), so any `|` in it other than `||` is a parse error.
 type If struct {
 	Cond string
 	Then []Node
@@ -135,7 +136,8 @@ type For struct {
 // getter-backed data value is evaluated a single time.
 //
 // Expr and the `{:when}` values are plain expressions: a branching header
-// takes no formatter chain (D173 V1).
+// takes no formatter chain (D173 V1, D176), so any `|` other than `||` in them
+// is a parse error.
 type Case struct {
 	Expr    string
 	Clauses []WhenClause
@@ -265,7 +267,7 @@ type InterpPart struct {
 // InlineIfPart is `{#if cond} Then {:else} Else {/if}` inside an attribute
 // value. Then/Else may contain only static text and interpolations — no
 // elements and no {#for} (parse error otherwise). Cond is a plain expression,
-// as on If: a condition takes no formatter chain (D173 V1).
+// as on If: a condition takes no formatter chain (D173 V1, D176).
 type InlineIfPart struct {
 	Cond string
 	Then []Part

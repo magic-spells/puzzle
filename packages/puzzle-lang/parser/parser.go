@@ -855,8 +855,8 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#if} requires a condition")
 		}
-		if hasTopLevelPipe(rest) {
-			return nil, conditionPipeError(pos, p.file, "an {#if} condition", "{#if hasTags}")
+		if perr := headerPipeError(rest, pos, p.file, "an {#if} condition", "{#if hasTags}"); perr != nil {
+			return nil, perr
 		}
 		thenNodes, perr := p.parseChildren(openCtx{kind: ctxBlockIf, pos: pos})
 		if perr != nil {
@@ -874,8 +874,8 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			if cond == "" {
 				return nil, errAt(p.file, cpos, "{:else if} requires a condition")
 			}
-			if hasTopLevelPipe(cond) {
-				return nil, conditionPipeError(cpos, p.file, "an {:else if} condition", "{:else if hasTags}")
+			if perr := headerPipeError(cond, cpos, p.file, "an {:else if} condition", "{:else if hasTags}"); perr != nil {
+				return nil, perr
 			}
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
@@ -927,8 +927,8 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#unless} requires a condition")
 		}
-		if hasTopLevelPipe(rest) {
-			return nil, conditionPipeError(pos, p.file, "an {#unless} condition", "{#unless hasTags}")
+		if perr := headerPipeError(rest, pos, p.file, "an {#unless} condition", "{#unless hasTags}"); perr != nil {
+			return nil, perr
 		}
 		thenNodes, perr := p.parseChildren(openCtx{kind: ctxBlockUnless, pos: pos})
 		if perr != nil {
@@ -960,8 +960,8 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#case} requires an expression")
 		}
-		if hasTopLevelPipe(rest) {
-			return nil, conditionPipeError(pos, p.file, "a {#case} expression", "{#case statusLabel}")
+		if perr := headerPipeError(rest, pos, p.file, "a {#case} expression", "{#case statusLabel}"); perr != nil {
+			return nil, perr
 		}
 		// Only whitespace may sit between {#case expr} and the first {:when}; a
 		// stray element/interpolation there is a positioned error.
@@ -1078,11 +1078,13 @@ func parseWhenValues(raw string, pos Position, file string) ([]string, *ParseErr
 			return nil, errAt(file, pos, "{:when} has an empty value (check for a stray comma)")
 		}
 		// A `|` is a formatter pipe in value positions (D173 V1), and a {:when}
-		// value, like every branching header, takes no chain; letting it compile
-		// as a bitwise OR would read as a formatter and silently match something
-		// else.
+		// value, like every branching header, takes no chain; a nested `|` is
+		// the D176 error, since there is no bitwise OR to fall back to.
 		if hasTopLevelPipe(v) {
-			return nil, errAt(file, pos, "formatter pipes are not allowed in a {:when} value — list alternatives with commas ({:when 'a', 'b'}), compute the value in data(), or wrap a bitwise OR in parentheses, e.g. (a | b)")
+			return nil, errAt(file, pos, "formatter pipes are not allowed in a {:when} value — list alternatives with commas ({:when 'a', 'b'}) or compute the value in data()")
+		}
+		if nestedPipeIndex(v) >= 0 {
+			return nil, nestedPipeError(pos, file)
 		}
 		vals = append(vals, v)
 	}
@@ -1131,9 +1133,12 @@ func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) 
 	}
 	// A pipe anywhere in the header — the collection or either range bound — is
 	// the D173 V1 ban, reported before the header is taken apart so every
-	// spelling gets the same fix-it.
+	// spelling gets the same fix-it; a nested `|` is the D176 error.
 	if hasTopLevelPipe(rest) {
 		return nil, forPipeError(pos, file)
+	}
+	if nestedPipeIndex(rest) >= 0 {
+		return nil, nestedPipeError(pos, file)
 	}
 	if perr := loopBindingIdentError(counter, pos, file); perr != nil {
 		return nil, perr
@@ -1281,13 +1286,19 @@ func parseInterpolationExpr(raw string, pos Position, file string) (*Interpolati
 
 // parseChain splits any template value position into its base expression and
 // formatter chain. It is the one pipe rule for every position that takes a
-// chain (D173 V1): text interpolation, quoted and brace-only attribute values,
-// component props and marker arguments. Condition and branching headers take
-// none (see conditionPipeError). Only a top-level single `|` is a pipe:
-// `||` stays logical OR, and a `|` inside a string, a regex, parentheses,
-// brackets or braces is not a split point. what names the position in the
-// empty-expression errors ("interpolation", "{#if} condition", …).
+// chain (D173 V1, D176 rule 4): text interpolation, quoted and brace-only
+// attribute values, component props, `key=` and marker arguments. Condition
+// and branching headers take none (see headerPipeError). Only a top-level
+// single `|` is a pipe and `||` stays logical OR; a `|` inside a string, a
+// regex, a template literal or a comment is text. A single `|` inside
+// parentheses, brackets or braces — a formatter argument included — is an
+// error pointing at it: the language has no bitwise OR. raw is the text just
+// after the value's opening `{` at pos; what names the position in the
+// empty-expression errors ("interpolation", "attribute expression for …").
 func parseChain(raw string, pos Position, file, what string) (string, []FormatterCall, *ParseError) {
+	if i := nestedPipeIndex(raw); i >= 0 {
+		return "", nil, nestedPipeError(pos.advance("{"+raw[:i]), file)
+	}
 	segs := splitTopLevel(raw, '|', true)
 	expr := strings.TrimSpace(segs[0])
 	if expr == "" {
@@ -1315,6 +1326,13 @@ func hasTopLevelPipe(s string) bool {
 	return len(splitTopLevel(s, '|', true)) > 1
 }
 
+// nestedPipeError is the positioned D176 rule-4 error for a single `|` below
+// the top level of a value (see nestedPipeIndex). A value position points at
+// the `|`; a block header, whose text arrives trimmed, points at its `{`.
+func nestedPipeError(pos Position, file string) *ParseError {
+	return errAt(file, pos, "a formatter pipe must be at the top level of the value — there is no bitwise OR in templates; compute the value first (a data() field in PuzzleKit, {#let} in Sites)")
+}
+
 // forPipeError is the positioned `{#for}`-header pipe ban (D173 V1). A chain in
 // a loop header puts list shaping, sorting and the loop on one line, so the
 // fix-it names the list first: in PuzzleKit, the script's data() shapes it and
@@ -1323,16 +1341,21 @@ func forPipeError(pos Position, file string) *ParseError {
 	return errAt(file, pos, "formatter pipes are not allowed in a {#for} header — shape the list in data() and loop over that field (e.g. {#for item in sortedItems})")
 }
 
-// conditionPipeError is the positioned condition-header pipe ban (D173 V1): a
-// top-level `|` in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` header, or
-// in an inline `{#if}` inside an attribute value. Formatters are display helpers
-// and stay out of branching logic, so the fix-it moves the computation into
-// data(). The ban never falls back to a bitwise OR: `||` is not a pipe and
-// keeps working, and the message steers a bitwise OR to `(a | b)`, exactly as
-// the {:when} and not-a-formatter-name errors do — otherwise `{#case mode | 1}`
-// (a bitwise OR before 0.8) would be steered to `||` and match another value.
-func conditionPipeError(pos Position, file, header, example string) *ParseError {
-	return errAt(file, pos, "formatter pipes are not allowed in %s — compute the value in data() and test that field (e.g. %s), write || for a logical OR, or wrap a bitwise OR in parentheses, e.g. (a | b)", header, example)
+// headerPipeError is the positioned condition-header pipe ban (D173 V1, D176
+// rule 4) for an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` subject, or an
+// inline `{#if}` inside an attribute value; nil when cond holds no `|`. A pipe
+// appears only where a value is displayed, so a top-level `|` gets the fix-it
+// that computes the value first — a data() field in PuzzleKit, {#let} in
+// Sites — and tests that field; `||` is not a pipe and keeps working. A nested
+// `|` is the nestedPipeError, as in every other position.
+func headerPipeError(cond string, pos Position, file, header, example string) *ParseError {
+	if hasTopLevelPipe(cond) {
+		return errAt(file, pos, "formatter pipes are not allowed in %s — compute the value first (a data() field in PuzzleKit, {#let} in Sites) and test that field, e.g. %s; write || for a logical OR", header, example)
+	}
+	if nestedPipeIndex(cond) >= 0 {
+		return nestedPipeError(pos, file)
+	}
+	return nil
 }
 
 // parseFormatter parses "name" or "name(arg, arg)". Arguments split at
@@ -1376,8 +1399,8 @@ func parseFormatter(s string, pos Position, file string) (FormatterCall, *ParseE
 // optionally kebab-cased, where every '-' starts a word with a letter. Anything
 // else after a top-level `|` — a number (`{ w / 2 | 0 }`), an operator
 // (`a |= 2`), arithmetic (`mask | bit-1`), a member (`FLAGS.bold`), two words —
-// was meant as JavaScript, and silently compiling it to a registry lookup would
-// turn a bitwise OR into a missing-formatter pass-through.
+// is an error, never a registry lookup that would pass the value through
+// silently as a missing formatter.
 func isFormatterName(s string) bool {
 	if s == "" {
 		return false
@@ -1397,7 +1420,7 @@ func isFormatterName(s string) bool {
 }
 
 func notFormatterError(name string, pos Position, file string) *ParseError {
-	return errAt(file, pos, "%q is not a formatter name (an identifier, optionally kebab-case like my-format) — a top-level `|` in a template expression is a formatter pipe; to use a bitwise OR, wrap it in parentheses, e.g. (a | b)", name)
+	return errAt(file, pos, "%q is not a formatter name (an identifier, optionally kebab-case like my-format) — a top-level `|` in a template expression is a formatter pipe", name)
 }
 
 // firstWord returns the leading identifier-ish run of s (after leading space).

@@ -160,13 +160,13 @@ func TestIntegrationHomePzl(t *testing.T) {
 	if events < 5 {
 		t.Errorf("expected several event handlers, got %d", events)
 	}
-	// Block-level {#if}: todos.length>0 (+else), completedTodos>0, activeTodos>0.
+	// Block-level {#if}: todos.size>0 (+else), completedTodos>0, activeTodos>0.
 	// The checkmark {#if todo.completed} moved into TodoItem with the row.
 	if ifs < 3 {
 		t.Errorf("expected several top-level {#if} blocks, got %d", ifs)
 	}
 
-	// The top-level {#if todos.length > 0} ... {:else} ... {/if} has an else.
+	// The top-level {#if todos.size > 0} ... {:else} ... {/if} has an else.
 	var topIf *If
 	for _, c := range root.Children {
 		if el, ok := c.(*Element); ok { // the outer wrapper div
@@ -180,7 +180,7 @@ func TestIntegrationHomePzl(t *testing.T) {
 	if topIf == nil {
 		t.Fatalf("expected a top-level {#if} inside the wrapper div")
 	}
-	if topIf.Cond != "todos.length > 0" {
+	if topIf.Cond != "todos.size > 0" {
 		t.Errorf("top if cond: got %q", topIf.Cond)
 	}
 	if len(topIf.Else) == 0 {
