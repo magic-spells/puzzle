@@ -168,7 +168,7 @@ describe('list block — the row cache', () => {
 		expect(built).toEqual(['a', 'a']);
 	});
 
-	it('rebuilds every pass for a volatile site (a body reaching through `this`)', () => {
+	it('rebuilds every pass for a volatile site (a body reading a mutable global or the clock)', () => {
 		const store = new Store({ todo: Todo });
 		const a = store.createRecord('todo', { id: 'a' });
 		const view = host();
@@ -178,8 +178,9 @@ describe('list block — the row cache', () => {
 		listRows(view, view, 0, [a], recorder(built), meta);
 		listRows(view, view, 0, [a], recorder(built), meta);
 
-		// `{ this.ctx.router.current.path }` in a row body depends on state neither
-		// the root mask nor the record revision covers, so the site gives up caching.
+		// `{ window.location.hash }` or `| timeago` in a row body depends on state
+		// neither the root mask nor the record revision covers, so the site gives up
+		// caching.
 		expect(built).toEqual(['a', 'a']);
 	});
 

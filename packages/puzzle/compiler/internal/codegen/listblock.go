@@ -40,7 +40,8 @@ import (
 // counter, whether it contains a controlled form value, which parent data roots
 // it reads (a bitmask over the class's `__roots`), the item members it reads at
 // depth one plus a `deep` flag for anything the record revision cannot cover,
-// and `volatile` for a body that reads `this`. Defaults are omitted, so the
+// and `volatile` for a body whose output can change with no data mutation (a
+// mutable global, a clock-reading formatter). Defaults are omitted, so the
 // common site is one short const.
 //
 // Two loops are deliberately NOT lowered:
@@ -136,11 +137,11 @@ func (c *compiler) factSink() *exprFacts {
 }
 
 // absorb distributes one expression's facts to every enclosing lowered loop.
-// Roots, `this` and mutable-global reads reach all of them (the read happens
-// inside every enclosing body). An item/counter read is attributed by matching
-// the name's CURRENT resolution against the site's own rewrite, so a <Snippet>
-// parameter or an inner range variable that shadows a row local is not mistaken
-// for it.
+// Roots and volatile reads (a mutable global, a clock-reading formatter) reach
+// all of them (the read happens inside every enclosing body). An item/counter
+// read is attributed by matching the name's CURRENT resolution against the
+// site's own rewrite, so a <Snippet> parameter or an inner range variable that
+// shadows a row local is not mistaken for it.
 //
 // A read of a local owned by an ENCLOSING site makes the READING site volatile,
 // and every site between it and the owner with it: a nested block only runs at
@@ -159,7 +160,7 @@ func (c *compiler) absorb(f *exprFacts, scope scopeMap) {
 			site.addRoot(bit)
 		}
 	}
-	if f.usesThis || f.volatileRead {
+	if f.volatileRead {
 		for _, site := range c.loops {
 			site.volatile = true
 		}
@@ -240,9 +241,10 @@ func (c *compiler) bareBinding(scope scopeMap, name string) (scopeMap, string) {
 }
 
 // resolve is resolveExpr plus fact collection. Every template expression the
-// emitter resolves goes through it, so a loop body's roots/fields/`this` reads
-// are gathered by the SAME pass that rewrites them — handler arguments and
-// interpolations inside template literals included (D170, compiler lowering).
+// emitter resolves goes through it, so a loop body's roots/fields/volatile
+// reads are gathered by the SAME pass that rewrites them — handler arguments
+// and interpolations inside template literals included (D170, compiler
+// lowering).
 func (c *compiler) resolve(expr string, scope scopeMap) string {
 	f := c.factSink()
 	out := resolveValueScan(expr, scope, f)
@@ -326,8 +328,8 @@ func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow
 // `key={ … }` moves into the meta with the loop locals left BARE (they are the
 // arrow's own parameters), which is only possible while the expression reads
 // nothing that lives inside render(): the const sits at module scope, where
-// `__d`, `__f` and `this` do not exist. A key that reads any of them keeps
-// today's `.map(…)` emission for the whole site rather than emitting an arrow
+// `__d` and `__f` do not exist. A key that reads either keeps today's
+// `.map(…)` emission for the whole site rather than emitting an arrow
 // that throws on its first call.
 func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lowerable bool, err error) {
 	root, explicitKey, err := c.forBodyRoot(f, scope)
@@ -367,7 +369,7 @@ func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lo
 	default:
 		return "", false, nil
 	}
-	if len(facts.roots) > 0 || facts.usesThis || strings.Contains(js, "__f[") {
+	if len(facts.roots) > 0 || strings.Contains(js, "__f[") {
 		return "", false, nil
 	}
 	params := f.Item

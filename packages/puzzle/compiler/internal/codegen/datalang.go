@@ -9,11 +9,13 @@ import (
 // datalang.go enforces D176: a template VALUE expression is data plus
 // operators, not JavaScript. It is a pre-check over the authored template
 // (and skeleton), run before anything is emitted, so the emitters can trust
-// that every value they resolve is in the data language. Two doors into
-// JavaScript stay open (D176 rule 5): a `this.` chain — from `this` through
-// every member step, index and call argument that follows it — and an @event
-// handler body. A handler-valued conditional's CONDITION is a render-time
-// value and is checked; its branches are handler bodies and are not.
+// that every value they resolve is in the data language. One door into
+// JavaScript stays open (D176 rule 5): an @event handler body, which reaches
+// the view through its own handler name. A handler-valued conditional's
+// CONDITION is a render-time value and is checked; its branches are handler
+// bodies and are not. `this` is not a template identifier anywhere — not in a
+// value, not in a handler argument — so no template expression ever reaches
+// the view instance: every value a template shows comes through data().
 
 // The positioned D176 messages, worded as Puzzle Sites words its expression
 // errors ("… are not available in template expressions"), each naming the
@@ -32,6 +34,10 @@ const (
 	// `|` there is neither a formatter pipe (those format a displayed value)
 	// nor a bitwise OR (the template language has none, D176 rule 4).
 	dataHandlerPipeMsg = "a `|` is not available in an event handler — formatter pipes format a displayed value and there is no bitwise OR in templates; format the value in the handler method instead"
+	// `this` is rejected in every template expression, handler arguments and
+	// the handler ternary's condition included (D176 rule 5), and positioned at
+	// the `this` token itself.
+	dataThisMsg = "`this` is not available in template expressions — return the value from data() (a getter or a computed field), or use a formatter for a display transform"
 )
 
 // dataKeywordMsg names an operator keyword the data language does not have.
@@ -159,91 +165,86 @@ func lexDataExpr(expr string) []dataTok {
 	return toks
 }
 
-// matchDataBrackets maps each opening bracket token to its closing token (-1
-// when unclosed).
-func matchDataBrackets(toks []dataTok) []int {
-	match := make([]int, len(toks))
-	var stack []int
-	for k, t := range toks {
-		match[k] = -1
-		if t.kind != dtPunct {
-			continue
-		}
-		switch t.text {
-		case "(", "[", "{":
-			stack = append(stack, k)
-		case ")", "]", "}":
-			if len(stack) > 0 {
-				match[stack[len(stack)-1]] = k
-				stack = stack[:len(stack)-1]
-			}
-		}
-	}
-	return match
-}
-
 // isMemberDot reports whether toks[k] is a member-access dot (`.` or `?.`).
 func isMemberDot(toks []dataTok, k int) bool {
 	return k >= 0 && k < len(toks) && toks[k].kind == dtPunct && (toks[k].text == "." || toks[k].text == "?.")
 }
 
-// thisChainTokens marks the tokens of every `this.` chain: the `this` root and
-// every member step, index, call argument list and tagged template after it.
-// Such a chain is the view instance — PuzzleKit JavaScript (D176 rule 5) — so
-// nothing in it is checked or rewritten.
-func thisChainTokens(toks []dataTok) []bool {
-	exempt := make([]bool, len(toks))
-	match := matchDataBrackets(toks)
-	closeOf := func(k int) int {
-		if match[k] < 0 {
-			return len(toks) - 1
-		}
-		return match[k]
+// isThisRef reports whether toks[k] is a bare `this` reference — the view
+// instance, which no template expression may reach (D176 rule 5). A member
+// named `this` (`x.this`, `x?.this`) and an object-literal key (`{ this: 1 }`)
+// are names, not references. stack is the open-bracket stack at toks[k].
+func isThisRef(toks []dataTok, k int, stack []string) bool {
+	t := toks[k]
+	if t.kind != dtIdent || t.text != "this" || isMemberDot(toks, k-1) {
+		return false
 	}
-	for k := 0; k < len(toks); k++ {
-		t := toks[k]
-		if t.kind != dtIdent || t.text != "this" || isMemberDot(toks, k-1) {
-			continue
-		}
-		end := k + 1
-	chain:
-		for end < len(toks) {
-			next := toks[end]
-			switch {
-			case isMemberDot(toks, end) && end+1 < len(toks) && toks[end+1].kind == dtIdent:
-				end += 2
-			case next.text == "?." && end+1 < len(toks) && (toks[end+1].text == "(" || toks[end+1].text == "["):
-				end = closeOf(end+1) + 1
-			case next.kind == dtPunct && (next.text == "(" || next.text == "["):
-				end = closeOf(end) + 1
-			case next.kind == dtTemplate:
-				end++
-			default:
-				break chain
+	objectKey := len(stack) > 0 && stack[len(stack)-1] == "{" && k > 0 &&
+		toks[k-1].kind == dtPunct && (toks[k-1].text == "{" || toks[k-1].text == ",") &&
+		k+1 < len(toks) && toks[k+1].text == ":"
+	return !objectKey
+}
+
+// firstThisRef returns the byte offset of the first bare `this` in a handler
+// expression, or -1. A handler argument is JavaScript, so a template literal is
+// legal there — and its `${…}` interpolations are scanned too.
+func firstThisRef(expr string) int {
+	toks := lexDataExpr(expr)
+	var stack []string
+	for k, t := range toks {
+		switch {
+		case t.kind == dtTemplate:
+			if at := thisInTemplate(t.text); at >= 0 {
+				return t.start + at
 			}
+		case t.kind == dtPunct && (t.text == "(" || t.text == "[" || t.text == "{"):
+			stack = append(stack, t.text)
+		case t.kind == dtPunct && (t.text == ")" || t.text == "]" || t.text == "}"):
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		case isThisRef(toks, k, stack):
+			return t.start
 		}
-		for j := k; j < end && j < len(toks); j++ {
-			exempt[j] = true
-		}
-		k = end - 1
 	}
-	return exempt
+	return -1
+}
+
+// thisInTemplate returns the offset in lit (a whole template literal, backticks
+// included) of the first bare `this` inside one of its `${…}` interpolations,
+// or -1.
+func thisInTemplate(lit string) int {
+	for j := 1; j < len(lit); j++ {
+		switch {
+		case lit[j] == '\\':
+			j++
+		case lit[j] == '$' && j+1 < len(lit) && lit[j+1] == '{':
+			end := matchBalanced(lit, j+1, '{', '}')
+			if end < 0 {
+				return -1
+			}
+			if at := firstThisRef(lit[j+2 : end]); at >= 0 {
+				return j + 2 + at
+			}
+			j = end
+		}
+	}
+	return -1
 }
 
 // sizeSteps returns the byte offsets of the `size` names in expr that are the
-// D176 count: a member step (`.size`, `?.size`) outside a `this.` chain and not
-// called. The resolver lowers exactly these to the `__z` helper, and the
-// pre-check reads the same set to import the helper, so the two can never
-// disagree about whether a module uses it.
+// D176 count: a member step (`.size`, `?.size`) that is not called. The
+// resolver lowers exactly these to the `__z` helper, and the pre-check reads
+// the same set to import the helper, so the two can never disagree about
+// whether a module uses it.
 func sizeSteps(expr string) map[int]bool {
 	if !strings.Contains(expr, "size") {
 		return nil
 	}
 	toks := lexDataExpr(expr)
-	exempt := thisChainTokens(toks)
 	var steps map[int]bool
 	for k, t := range toks {
-		if exempt[k] || t.kind != dtIdent || t.text != "size" || !isMemberDot(toks, k-1) {
+		if t.kind != dtIdent || t.text != "size" || !isMemberDot(toks, k-1) {
 			continue
 		}
 		if k+1 < len(toks) && toks[k+1].text == "(" {
@@ -259,40 +260,42 @@ func sizeSteps(expr string) map[int]bool {
 
 // dataExprError returns the D176 message for the first construct in expr that
 // is not in the template data language, or "" when expr is a data expression.
-func dataExprError(expr string) string {
+// at is the byte offset in expr of the offending token when the error is
+// positioned at that token (a `this`), and -1 when it is positioned at its
+// node, as every other D176 error is.
+func dataExprError(expr string) (msg string, at int) {
 	toks := lexDataExpr(expr)
-	exempt := thisChainTokens(toks)
 	var stack []string
 	for k, t := range toks {
-		if exempt[k] {
-			continue
-		}
 		var prev *dataTok
 		if k > 0 {
 			prev = &toks[k-1]
 		}
 		switch t.kind {
 		case dtTemplate:
-			return dataTemplateMsg
+			return dataTemplateMsg, -1
 		case dtRegex:
-			return dataRegexMsg
+			return dataRegexMsg, -1
 		case dtIdent:
 			if isMemberDot(toks, k-1) {
 				if t.text == "length" {
-					return dataLengthMsg
+					return dataLengthMsg, -1
 				}
 				continue
+			}
+			if isThisRef(toks, k, stack) {
+				return dataThisMsg, t.start
 			}
 			objectKey := len(stack) > 0 && stack[len(stack)-1] == "{" &&
 				k+1 < len(toks) && toks[k+1].text == ":"
 			if dataKeywords[t.text] && !objectKey {
-				return dataKeywordMsg(t.text)
+				return dataKeywordMsg(t.text), -1
 			}
 		case dtPunct:
 			switch {
 			case t.text == "(" || t.text == "[" || t.text == "{":
 				if t.text == "(" && prev != nil && prev.endsExpr {
-					return dataCallMsg
+					return dataCallMsg, -1
 				}
 				stack = append(stack, t.text)
 			case t.text == ")" || t.text == "]" || t.text == "}":
@@ -300,21 +303,21 @@ func dataExprError(expr string) string {
 					stack = stack[:len(stack)-1]
 				}
 			case t.text == "?." && k+1 < len(toks) && toks[k+1].text == "(":
-				return dataCallMsg
+				return dataCallMsg, -1
 			case t.text == "=>":
-				return dataArrowMsg
+				return dataArrowMsg, -1
 			case t.text == "++" || t.text == "--":
-				return dataUpdateMsg
+				return dataUpdateMsg, -1
 			case dataAssignOps[t.text]:
-				return dataAssignMsg
+				return dataAssignMsg, -1
 			case dataBitwiseOps[t.text]:
-				return dataBitwiseMsg
+				return dataBitwiseMsg, -1
 			case t.text == "," && len(stack) == 0:
-				return dataCommaMsg
+				return dataCommaMsg, -1
 			}
 		}
 	}
-	return ""
+	return "", -1
 }
 
 // hasSinglePipe reports whether expr holds a `|` operator (not `||` or `|=`)
@@ -333,8 +336,17 @@ func hasSinglePipe(expr string) bool {
 // text interpolations, attribute values and props (brace-only and quoted,
 // inline-if conditions and branches), marker arguments, `key=`, the
 // `{#if}`/`{#case}`/`{:when}` subjects, loop collections and range bounds,
-// every formatter argument, and a handler-valued conditional's condition.
-func (c *compiler) checkDataLanguage(nodes []parser.Node) error {
+// every formatter argument, and a handler-valued conditional's condition. A
+// `this` is rejected in all of those and in a handler's arguments too.
+//
+// src and srcPos are the section the nodes were parsed from (the template or
+// the skeleton), so a `this` error can be positioned at its own token.
+func (c *compiler) checkDataLanguage(nodes []parser.Node, src string, srcPos parser.Position) error {
+	c.exprSrc, c.exprSrcPos = src, srcPos
+	return c.checkDataNodes(nodes)
+}
+
+func (c *compiler) checkDataNodes(nodes []parser.Node) error {
 	for _, n := range nodes {
 		var err error
 		switch node := n.(type) {
@@ -342,24 +354,24 @@ func (c *compiler) checkDataLanguage(nodes []parser.Node) error {
 			err = c.checkDataInterp(node, node.Pos)
 		case *parser.Element:
 			if err = c.checkDataAttrs(node.Attrs); err == nil {
-				err = c.checkDataLanguage(node.Children)
+				err = c.checkDataNodes(node.Children)
 			}
 		case *parser.Component:
 			if err = c.checkDataAttrs(node.Props); err == nil {
-				err = c.checkDataLanguage(node.Children)
+				err = c.checkDataNodes(node.Children)
 			}
 		case *parser.Slot:
 			if err = c.checkDataAttrs(node.Args); err == nil {
-				err = c.checkDataLanguage(node.Children)
+				err = c.checkDataNodes(node.Children)
 			}
 		case *parser.Snippet:
-			err = c.checkDataLanguage(node.Body)
+			err = c.checkDataNodes(node.Body)
 		case *parser.Portal:
-			err = c.checkDataLanguage(node.Children)
+			err = c.checkDataNodes(node.Children)
 		case *parser.If:
 			if err = c.checkDataExpr(node.Cond, node.Pos); err == nil {
-				if err = c.checkDataLanguage(node.Then); err == nil {
-					err = c.checkDataLanguage(node.Else)
+				if err = c.checkDataNodes(node.Then); err == nil {
+					err = c.checkDataNodes(node.Else)
 				}
 			}
 		case *parser.Case:
@@ -371,11 +383,11 @@ func (c *compiler) checkDataLanguage(nodes []parser.Node) error {
 					}
 				}
 				if err == nil {
-					err = c.checkDataLanguage(clause.Body)
+					err = c.checkDataNodes(clause.Body)
 				}
 			}
 			if err == nil {
-				err = c.checkDataLanguage(node.Else)
+				err = c.checkDataNodes(node.Else)
 			}
 		case *parser.For:
 			if node.IsRange {
@@ -386,7 +398,7 @@ func (c *compiler) checkDataLanguage(nodes []parser.Node) error {
 				err = c.checkDataExpr(node.Collection, node.Pos)
 			}
 			if err == nil {
-				err = c.checkDataLanguage(node.Body)
+				err = c.checkDataNodes(node.Body)
 			}
 		}
 		if err != nil {
@@ -406,9 +418,13 @@ func (c *compiler) checkDataAttrs(attrs []parser.Attr) error {
 			err = c.checkDataParts(a.Parts, a.Pos)
 		case *parser.EventAttr:
 			// The handler body is JavaScript; only a handler-valued
-			// conditional's condition is evaluated during render.
+			// conditional's condition is evaluated during render. It is still
+			// written in a template, so it cannot reach the view through `this`
+			// — its handler name is how it does.
 			if hasSinglePipe(a.Expr) {
 				err = c.cgErr(a.Pos, dataHandlerPipeMsg)
+			} else if at := firstThisRef(a.Expr); at >= 0 {
+				err = c.cgErr(c.exprTokenPos(a.Pos, a.Expr, at), dataThisMsg)
 			} else if cond, _, _, ok := splitEventConditional(a.Expr); ok {
 				err = c.checkDataExpr(cond, a.Pos)
 			}
@@ -466,8 +482,46 @@ func (c *compiler) checkDataExpr(expr string, pos parser.Position) error {
 	if len(sizeSteps(expr)) > 0 {
 		c.usesSize = true
 	}
-	if msg := dataExprError(expr); msg != "" {
-		return c.cgErr(pos, msg)
+	if msg, at := dataExprError(expr); msg != "" {
+		return c.cgErr(c.exprTokenPos(pos, expr, at), msg)
 	}
 	return nil
+}
+
+// exprTokenPos maps the byte offset at inside expr to file coordinates. The AST
+// positions a node (its `{`, attribute name or block tag), not the expression
+// inside it, so expr is found in the section source at or after the node, as a
+// whole identifier-bounded match, and the node position advanced to the token.
+// A folded `{#unless}` condition (`!(…)`, D176) is found by its authored inner
+// text. When at is negative or expr cannot be found, the node position stands.
+func (c *compiler) exprTokenPos(pos parser.Position, expr string, at int) parser.Position {
+	from := pos.Offset - c.exprSrcPos.Offset
+	if at < 0 || from < 0 || from > len(c.exprSrc) {
+		return pos
+	}
+	find := func(needle string) int {
+		for base := from; base <= len(c.exprSrc); {
+			i := strings.Index(c.exprSrc[base:], needle)
+			if i < 0 {
+				return -1
+			}
+			start, end := base+i, base+i+len(needle)
+			if (start == 0 || !isIdentChar(c.exprSrc[start-1])) &&
+				(end == len(c.exprSrc) || !isIdentChar(c.exprSrc[end])) {
+				return start
+			}
+			base = start + 1
+		}
+		return -1
+	}
+	start := find(expr)
+	if start < 0 && at >= 2 && strings.HasPrefix(expr, "!(") && strings.HasSuffix(expr, ")") {
+		if start = find(expr[2 : len(expr)-1]); start >= 0 {
+			at -= 2
+		}
+	}
+	if start < 0 {
+		return pos
+	}
+	return pos.Advance(c.exprSrc[from : start+at])
 }

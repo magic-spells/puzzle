@@ -78,10 +78,10 @@ export function listRows(view, owner, id, items, factory, meta) {
 	// A body reading a parent root the render changed (`selectedId === todo.id`)
 	// dirties every row of this site, once, for the whole pass (§3.6).
 	const rootsDirty = roots !== 0 && (view.__dirty & roots) !== 0;
-	// `volatile` is the compiler's "I could not analyse this body" flag: an
-	// expression reaching through `this` (`{ this.ctx.router.current.path }`)
-	// depends on state no root mask and no record revision covers, so the site
-	// gives up caching exactly as a plain-object row does.
+	// `volatile` is the compiler's "I could not analyse this body" flag: a
+	// body reading a mutable global (`{ window.location.hash }`) or the clock
+	// (`| timeago`) depends on state no root mask and no record revision
+	// covers, so the site gives up caching exactly as a plain-object row does.
 	const volatile = meta.volatile === true;
 	// A `deep` site is conservative for every class, so it needs no schema check
 	// at all; a site with `fields` needs one verdict per model class (cached on

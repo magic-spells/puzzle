@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -9,8 +10,8 @@ import (
 
 // datalang_test.go — D176: a template value is data plus operators. `.size`
 // lowers to the `__z` helper, `.length` and every JavaScript-only construct is
-// a positioned compile error, and `this.` chains and handler bodies stay
-// JavaScript.
+// a positioned compile error, handler bodies stay JavaScript, and `this` is not
+// a template identifier anywhere.
 
 func compileCore(t *testing.T, body string) (string, error) {
 	t.Helper()
@@ -49,7 +50,6 @@ func TestDataLanguageRejections(t *testing.T) {
 		{"range bound", "  {#for 1...Math.max(n, 1)}<li>x</li>{/for}", dataCallMsg},
 		{"formatter argument", "  <p>{ title | truncate(n.max()) }</p>", dataCallMsg},
 		{"handler condition", "  <button @click={ a.ok() ? save : null }>x</button>", dataCallMsg},
-		{"call on a grouped this chain", "  <p>{ (this.f)(x) }</p>", dataCallMsg},
 		// (b)–(d) the rest of JavaScript.
 		{"arrow", "  <p>{ items | join(x => x) }</p>", dataArrowMsg},
 		{"template literal", "  <p>{ `${a} ${b}` }</p>", dataTemplateMsg},
@@ -91,16 +91,102 @@ func TestDataLanguageRejections(t *testing.T) {
 	}
 }
 
+// `this` is not a template identifier (D176 rule 5): every value a template
+// shows comes through data(), and a handler reaches the view through its own
+// name. The error is positioned at the `this` token itself; at names the
+// source text that starts there, so the expected line and column are derived
+// from the body rather than hand-counted.
+func TestDataLanguageRejectsThis(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, at string
+	}{
+		// Every value position.
+		{"interpolation", "  <p>{ this.fmt(x) }</p>", "this.fmt"},
+		{"negated getter in an attribute", "  <button disabled={ !this.canAdd }>x</button>", "this.canAdd"},
+		{"chain with an arrow", "  <p>{ this.items.filter(i => i.done) }</p>", "this.items"},
+		{"chain with .length", "  <p>{ this.items.length }</p>", "this.items"},
+		{"chain with .size", "  <p>{ this.items.size }</p>", "this.items"},
+		{"template literal argument", "  <p>{ this.t(`${a}`) }</p>", "this.t"},
+		{"optional member", "  <p>{ this?.x }</p>", "this?.x"},
+		{"grouped", "  <p>{ (this).x }</p>", "this).x"},
+		{"computed member", "  <p>{ this['x'] }</p>", "this['x']"},
+		{"call on a grouped chain", "  <p>{ (this.f)(x) }</p>", "this.f)"},
+		{"bare this", "  <p>{ this }</p>", "this }"},
+		{"quoted attribute", `  <p title="a { this.x } b">y</p>`, "this.x"},
+		{"inline-if condition", `  <p class="x {#if this.on}on{/if}">y</p>`, "this.on"},
+		{"inline-if branch", `  <p class="x {#if on}{ this.x }{/if}">y</p>`, "this.x"},
+		{"if subject", "  {#if this.ready}<b>a</b>{/if}", "this.ready"},
+		{"unless subject", "  {#unless this.ready}<b>a</b>{/unless}", "this.ready"},
+		{"else-if subject", "  {#if a}<b>a</b>{:else if this.b}<b>b</b>{/if}", "this.b"},
+		{"case subject", "  {#case this.kind}{:when 'a'}<b>d</b>{/case}", "this.kind"},
+		{"when value", "  {#case kind}{:when this.a}<b>d</b>{/case}", "this.a"},
+		{"for collection", "  {#for t in this.items}<li>x</li>{/for}", "this.items"},
+		{"range bound", "  {#for 1...this.n}<li>x</li>{/for}", "this.n"},
+		{"key", "  {#for t in todos}<li key={ this.k }>x</li>{/for}", "this.k"},
+		{"formatter argument", "  <p>{ title | truncate(this.max) }</p>", "this.max"},
+		{"object literal value", "  <p>{ label | t({ n: this.count }) }</p>", "this.count"},
+		{"component prop", "  <Card items={ this.items } />", "this.items"},
+		{"marker argument", `  <Slot name="row" item={ this.item } />`, "this.item"},
+		// Handler arguments and the handler ternary's condition too.
+		{"handler argument", "  <button @click={ save(this.x) }>x</button>", "this.x"},
+		{"handler bare argument", "  <button @click={ save(this) }>x</button>", "this)"},
+		{"handler template literal argument", "  <button @click={ save(`${this.x}`) }>x</button>", "this.x"},
+		{"handler ternary condition", "  <button @click={ this.ok ? save : null }>x</button>", "this.ok"},
+		{"handler branch argument", "  <button @click={ ok ? save(this.x) : null }>x</button>", "this.x"},
+		{"handler callee", "  <button @click={ this.save() }>x</button>", "this.save"},
+		// The position is the token's own, across lines and past a name that
+		// merely starts with `this`.
+		{"second line", "  <p>\n    { a } { this.x }\n  </p>", "this.x"},
+		{"after a longer name", "  <p>{ thisx | truncate(this) }</p>", "this)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := compileCore(t, tc.body)
+			if err == nil {
+				t.Fatalf("expected a compile error")
+			}
+			m := strings.Index(tc.body, tc.at)
+			if m < 0 {
+				t.Fatalf("bad case: %q not in body", tc.at)
+			}
+			line := 2 + strings.Count(tc.body[:m], "\n")
+			col := m - strings.LastIndex(tc.body[:m], "\n")
+			want := fmt.Sprintf("T.pzl:%d:%d: %s", line, col, dataThisMsg)
+			if err.Error() != want {
+				t.Errorf("error %q\n  want %q", err, want)
+			}
+			if _, ok := err.(*parser.ParseError); !ok {
+				t.Errorf("error must be a positioned *parser.ParseError, got %T", err)
+			}
+		})
+	}
+}
+
+// A skeleton is a template too, and its `this` error is positioned in the
+// skeleton section.
+func TestDataLanguageRejectsThisInSkeleton(t *testing.T) {
+	src := "<puzzle-view><p>{ a }</p></puzzle-view>\n\n<puzzle-skeleton>\n  <p>{ this.label }</p>\n</puzzle-skeleton>\n\n" +
+		"<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class T extends PuzzleView {}\n</script>\n"
+	sec, err := parser.SplitSections(src, "T.pzl")
+	if err != nil {
+		t.Fatalf("split: %v", err)
+	}
+	_, err = Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
+	if want := "T.pzl:4:8: " + dataThisMsg; err == nil || err.Error() != want {
+		t.Fatalf("want %q, got %v", want, err)
+	}
+}
+
 func TestDataLanguageAllows(t *testing.T) {
 	for _, tc := range []struct {
 		name, body, want string
 	}{
-		// `this.` chains are JavaScript, in full.
-		{"this method", "  <p>{ this.fmt(x) }</p>", "this.fmt(__d.x)"},
-		{"this chain with an arrow", "  <p>{ this.items.filter(i => i.done) }</p>", "this.items.filter("},
-		{"this .length", "  <p>{ this.items.length }</p>", "this.items?.length"},
-		{"this template literal", "  <p>{ this.t(`${a}`) }</p>", "this.t(`${__d.a}`)"},
-		{"negated this getter", "  <button disabled={ !this.canAdd }>x</button>", "disabled: !this.canAdd"},
+		// A member or object key NAMED `this` is a name, not the view.
+		{"member named this", "  <p>{ x.this }</p>", "__d.x?.this"},
+		{"optional member named this", "  <p>{ x?.this }</p>", "__d.x?.this"},
+		{"object key named this", "  <p>{ label | t({ this: 1 }) }</p>", "{ this: 1 }"},
+		{"string containing this", "  <p>{ 'this' }</p>", "'this'"},
+		{"handler string argument", "  <button @click={ save('this') }>x</button>", "this.events.save('this')"},
+		{"handler member named this", "  <button @click={ save(event.this) }>x</button>", "this.events.save(event.this)"},
 		// A field named `length` through a computed step, or as a root.
 		{"computed length", "  <p>{ obj['length'] }</p>", "__d.obj?.['length']"},
 		{"root named length", "  <p>{ length }</p>", "__s(__d.length,"},
@@ -150,9 +236,7 @@ func TestSizeLowering(t *testing.T) {
 		{"x ? y.size : z.size - 1", "__d.x ? __z(__d.y) : __z(__d.z) - 1"},
 		{"!items.size", "!__z(__d.items)"},
 		{"{ n: items.size }", "{ n: __z(__d.items) }"},
-		// Not a count: a `this.` chain, a call, a key, a root named size.
-		{"this.items.size", "this.items?.size"},
-		{"this.f(items.size)", "this.f(__d.items?.size)"},
+		// Not a count: a call, a key, a root named size.
 		{"items.size(1)", "__d.items?.size(1)"},
 		{"{ size: 1 }", "{ size: 1 }"},
 		{"size", "__d.size"},
@@ -191,7 +275,7 @@ func TestSizeRowFacts(t *testing.T) {
 }
 
 // The helper is imported only by a module whose template reads a count —
-// never for a `this.` chain or a handler argument — and a skeleton read counts.
+// never for a handler argument — and a skeleton read counts.
 func TestSizeHelperImport(t *testing.T) {
 	const imp = "sizeOf as __z"
 	for _, tc := range []struct {
@@ -202,7 +286,6 @@ func TestSizeHelperImport(t *testing.T) {
 		{"condition", "  {#if items.size > 0}<b>a</b>{/if}", true},
 		{"handler condition", "  <button @click={ items.size ? save : null }>x</button>", true},
 		{"none", "  <p>{ items }</p>", false},
-		{"this chain", "  <p>{ this.items.size }</p>", false},
 		{"handler argument", "  <button @click={ save(items.size) }>x</button>", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

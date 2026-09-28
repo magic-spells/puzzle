@@ -35,7 +35,6 @@ func TestClassifyBindExpr(t *testing.T) {
 		{name: "computed member", raw: "todo[k]"},
 		{name: "optional member", raw: "a?.b"},
 		{name: "formatter", raw: "x | money"},
-		{name: "this root", raw: "this.x"},
 		{name: "keyword", raw: "true"},
 		{name: "global", raw: "window"},
 		{name: "event member", raw: "event.target"},

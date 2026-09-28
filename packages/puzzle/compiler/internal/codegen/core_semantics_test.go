@@ -177,7 +177,6 @@ func TestMemberGuard(t *testing.T) {
 		{"existing optional step", "a?.b.c", nil, "__d.a?.b?.c"},
 		{"existing optional index", "a?.[0]", nil, "__d.a?.[0]"},
 		{"call result", "name.trim().length", nil, "__d.name?.trim()?.length"},
-		{"this: first step plain", "this.ctx.router", nil, "this.ctx?.router"},
 		{"global: first step plain", "Math.max(a.b, 1)", nil, "Math.max(__d.a?.b, 1)"},
 		{"global call result guarded", "JSON.parse(s).k", nil, "JSON.parse(__d.s)?.k"},
 		{"new callee stays plain", "new Intl.NumberFormat('en').format(n)", nil, "new Intl.NumberFormat('en')?.format(__d.n)"},

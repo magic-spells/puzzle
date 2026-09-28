@@ -6,10 +6,6 @@ export default class SizeCount extends PuzzleView {
     return { items: [], user: { name: '' }, list: [], a: null, tags: [], file: null, todos: [] };
   }
 
-  count(list) {
-    return list;
-  }
-
   events = {
     pick: () => {},
   };
@@ -48,9 +44,6 @@ SizeCount.prototype.render = function () {
       : [
           new ViewNode('#'),
         ]),
-    new ViewNode('p', {}, [
-      new ViewNode('text', { value: __s(this.items?.size, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'this.items.size' : 0) + ' ' + __s(this.count(__d.items)?.size, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'this.count(items).size' : 0) }),
-    ]),
   ]);
 };
 SizeCount.__pzlModule = 'size_count.pzl';

@@ -49,16 +49,15 @@ func boolScope(names map[string]bool) scopeMap {
 // lexical pass that rewrites it (D170, compiler lowering). A list block needs three
 // things from a loop body — which parent data roots it reads (the `roots`
 // dirty mask), which members it reads off the row item (`fields`/`deep`), and
-// whether it touches `this` (`volatile`) — and deriving them from a second
-// scanner would be a second set of rules to keep in sync with resolveExpr.
+// whether it reads a value that can change with no data mutation
+// (`volatile`) — and deriving them from a second scanner would be a second set
+// of rules to keep in sync with resolveExpr.
 type exprFacts struct {
 	// roots are the identifier roots rewritten to `__d.<name>`, in first-read
 	// order, distinct.
 	roots []string
 	// locals records how each in-scope binding was read.
 	locals map[string]*localRead
-	// usesThis is set by a bare `this` reference (not a property named "this").
-	usesThis bool
 	// volatileRead is set by a read of a mutable global or a clock-reading
 	// built-in formatter — a value that can differ between two renders with no
 	// data mutation at all, so a cached row would freeze it (D170 volatile).
@@ -94,7 +93,7 @@ type localRead struct {
 	// renderRead marks a read evaluated during RENDER. A handler ARGUMENT is
 	// not one: it is re-read at fire time against the live row scope, so
 	// compileEventHandler drops its local reads before they reach the caller —
-	// the same carve-out `this` in a handler argument already has.
+	// the same carve-out a mutable global in a handler argument has.
 	renderRead bool
 }
 
@@ -135,9 +134,6 @@ func (f *exprFacts) merge(other *exprFacts) {
 	}
 	for _, r := range other.roots {
 		f.addRoot(r)
-	}
-	if other.usesThis {
-		f.usesThis = true
 	}
 	if other.volatileRead {
 		f.volatileRead = true
@@ -200,15 +196,14 @@ func volatileGlobalRead(name, src string, at int) bool {
 // the current time rather than on their input alone, so a cached row using one
 // would display a frozen value ("1 second ago", forever). A site whose body
 // pipes through one is `volatile`. USER-defined formatters are pure functions of
-// their input by contract (SPEC §6); a row that must re-evaluate every render
-// reads through `this`, which is already volatile.
+// their input by contract (SPEC §6).
 var clockFormatters = map[string]bool{"timeago": true}
 
 // jsKeywords are identifier ROOTS that must never be rewritten to __d.<name>:
 // JS literals and operator-keywords that can appear in a template expression.
 var jsKeywords = map[string]bool{
 	"true": true, "false": true, "null": true, "undefined": true,
-	"this": true, "new": true, "typeof": true, "instanceof": true,
+	"new": true, "typeof": true, "instanceof": true,
 	"in": true, "of": true, "void": true, "delete": true,
 	"NaN": true, "Infinity": true, "arguments": true,
 }
@@ -216,8 +211,8 @@ var jsKeywords = map[string]bool{
 // jsGlobals are standard JS global values/constructors that may be referenced
 // directly in a template expression and must NOT be rewritten to __d.<name>
 // (e.g. { Math.PI * r } → Math.PI * __d.r, not __d.Math.PI; a call such as
-// Math.max(…) survives the D176 pre-check only in a handler or a `this.`
-// chain). A data variable that happens to share one of these names is not
+// Math.max(…) survives the D176 pre-check only in a handler argument). A data
+// variable that happens to share one of these names is not
 // distinguishable here and stays un-prefixed; that is an accepted trade-off for
 // making the standard globals usable in templates.
 var jsGlobals = map[string]bool{
@@ -378,14 +373,14 @@ func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts
 // prints nothing instead of throwing a render error (D173 V4). A path that
 // exists evaluates exactly as before.
 //
-// Three kinds of step stay plain because they can never be nullish or because
-// an optional step there is a syntax error: the first step off `this`, a
-// standard global (`Math.max`) or a literal (`'a'.length`), and every step of a
-// `new` callee (`new Intl.NumberFormat(…)` — `new a?.B()` does not parse). An
+// Two kinds of step stay plain because they can never be nullish or because
+// an optional step there is a syntax error: the first step off a standard
+// global (`Math.max`) or a literal (`'a'.length`), and every step of a `new`
+// callee (`new Intl.NumberFormat(…)` — `new a?.B()` does not parse). An
 // expression the optional form cannot express at all — a tagged template, an
 // update operator, an assignment — is emitted unguarded, byte-for-byte as
-// resolveExprScan would (after the D176 pre-check, only a `this.` chain can
-// still hold one).
+// resolveExprScan would (the D176 pre-check rejects all three in a template
+// value, so this is only a safety net).
 func resolveValueScan(expr string, scope scopeMap, facts *exprFacts) string {
 	if facts == nil {
 		out, _, ok := resolveGuardedIn(expr, scope, nil, false)
@@ -447,9 +442,9 @@ type chainFrame struct {
 // value turns on the D176 `.size` lowering: a member step named `size`
 // wraps the chain before it in the `__z` helper — `a.b.size` →
 // `__z(__d.a?.b)`, and a step after it continues the chain
-// (`__z(__d.x)?.y`). sizeSteps decides which steps those are: a `this.` chain
-// is JavaScript and is left as written, as is a call `x.size(…)` (rejected
-// by the D176 pre-check in any case).
+// (`__z(__d.x)?.y`). sizeSteps decides which steps those are: a call
+// `x.size(…)` is left as written (rejected by the D176 pre-check in any
+// case).
 //
 // Object literals (D173 V8) are recognized by their braces: inside `{…}` an
 // identifier in KEY position — right after the `{` or a `,` at that level — is
@@ -481,7 +476,7 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 	var brackets []chainFrame
 	keyPos := false
 	// safeSteps is how many following member steps of the current chain need no
-	// guard: 1 after `this`, a global or a literal; -1 (all of them) through a
+	// guard: 1 after a global or a literal; -1 (all of them) through a
 	// `new` callee; 0 otherwise. afterNew marks the `new` keyword itself, whose
 	// operand root opens an unguarded callee.
 	safeSteps := 0
@@ -572,7 +567,7 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 					}
 					inner := expr[j+2 : end]
 					// value is off inside `${…}`: a template literal survives the
-					// D176 pre-check only inside a `this.` chain, which is JavaScript.
+					// D176 pre-check only in a handler argument, which is JavaScript.
 					resolved, referencesScope := resolveExprScanFull(inner, scope, trackedScope, facts, true, guard, false, unguardable)
 					b.WriteString("${")
 					b.WriteString(resolved)
@@ -707,14 +702,8 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 					safeSteps = 1
 				}
 			case jsKeywords[name]:
-				if facts != nil && name == "this" {
-					facts.usesThis = true
-				}
 				b.WriteString(name)
 				safeSteps = 0
-				if name == "this" {
-					safeSteps = 1
-				}
 				if name == "new" {
 					afterNew = true
 				}
@@ -1306,12 +1295,11 @@ func compileEventHandler(expr string, scope scopeMap, eventParam string, bareAsR
 	if !eventIsBinding {
 		delete(argFacts.locals, "event")
 	}
-	// A `this.…` argument is evaluated at FIRE time inside the closure, against
-	// an instance that outlives every render, so it cannot make a row volatile —
-	// D62 already classifies such an argument as data-independent. A `__d.…`
-	// argument is different: it is captured from the render's snapshot, so its
-	// roots stay in the mask and keep the row rebuilding.
-	argFacts.usesThis = false
+	// A mutable-global argument (`go(window.scrollY)`) is evaluated at FIRE
+	// time inside the closure, not during render, so it cannot make a row
+	// volatile — D62 already classifies such an argument as data-independent. A
+	// `__d.…` argument is different: it is captured from the render's
+	// snapshot, so its roots stay in the mask and keep the row rebuilding.
 	argFacts.volatileRead = false
 	refs := make([]string, 0, len(argFacts.locals))
 	for name := range argFacts.locals {
@@ -1320,8 +1308,8 @@ func compileEventHandler(expr string, scope scopeMap, eventParam string, bareAsR
 	// Loop locals in an argument are read at fire time off the LIVE row scope
 	// too (listRows refreshes `s.item`/`s.i` on a cached row), so they record no
 	// render fact at all — no field, no `deep`, no counter read, no opaque or
-	// volatile-making read — the same carve-out as `this`. Only the refs above
-	// survive, for the row-cache verdict.
+	// volatile-making read — the same carve-out as a mutable global. Only the
+	// refs above survive, for the row-cache verdict.
 	argFacts.locals = nil
 	facts.merge(argFacts)
 	dataFree := !strings.Contains(argsJS, "__d.")
