@@ -220,10 +220,12 @@ enforced, not merely advised.
   slot-filled rule, value printing, object-literal args, script-less
   components); D174 the 27-name standard formatter set, the list-formatter and
   `noescape` removals, and sanitized `raw`; D175 translations (`t`,
-  `ctx.i18n`); D176 template expressions as a data language (`.size` for
-  every count, `.length` and calls on data values compile errors, `??` the
-  fallback, the arithmetic/`default`/`size` formatters removed, pipes only
-  where a value is displayed); D168 rewritten as the merged whitespace rule; plus D169 registry
+  `ctx.i18n`); D176 the expression language — REWRITTEN 2026-09-28 (D13 in
+  `.constellation/working.md`): a closed JavaScript-shaped grammar parsed once
+  in `packages/puzzle-lang/expr`, functions instead of `|` pipes, a method table
+  as the boundary, a Go evaluator in Sites; the branch still compiles the
+  pipe/`.size` language until phases P2–P4 land, and the 0.8.0 tag waits for
+  P1–P5 (see DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
   "Upgrading from 0.7" checklist. Production sizes: hello-world **21.6 KB
