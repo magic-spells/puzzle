@@ -351,7 +351,7 @@ There is no `$emit`, no bubbling, no event bus — functions passed down, called
 
 ### Handler identity (v1.29, D62)
 
-A callback prop whose handler is **data-independent** — the bare form (`@save={ savePost }`) or a call form whose arguments use only literals, `event`, `this.…`, or JS globals — compiles to a **per-instance cached closure**: the child receives the *same function object* on every parent render, so callback props no longer make the child's props shallow-differ, and the child's `data()` re-runs only when a prop really changes ([[DOC-SPEC-TEMPLATE]] §31).
+A callback prop whose handler is **data-independent** — the bare form (`@save={ savePost }`) or a call form whose arguments use only literals, `event`, or JS globals — compiles to a **per-instance cached closure**: the child receives the *same function object* on every parent render, so callback props no longer make the child's props shallow-differ, and the child's `data()` re-runs only when a prop really changes ([[DOC-SPEC-TEMPLATE]] §31). (A handler argument never reads the view through `this` — `this` is not a template identifier; the handler reaches the view through its own name.)
 
 A call form that captures render data or a loop variable (`@remove={ removeCard(card.id) }`) is still a fresh closure per render — its capture genuinely changes — so a child receiving one re-runs `data()` on each parent render. That's correct, but worth knowing: if a child should *not* re-run per parent render, prefer passing the datum as its own prop and using a bare handler.
 

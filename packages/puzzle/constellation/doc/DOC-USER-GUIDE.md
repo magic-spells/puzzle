@@ -568,7 +568,8 @@ params and props** in `data(params, props)` — the router does not inject a
 
       <form class="comment-form" @submit={ addComment(event) }>
         <!-- value={ … } on a bare local key is the whole binding (D147): each
-             keystroke lands in local state, so disabled= below stays honest. -->
+             keystroke lands in local state and re-runs data(), so disabled=
+             below stays honest. -->
         <input
           class="comment-form__name"
           type="text"
@@ -578,7 +579,7 @@ params and props** in `data(params, props)` — the router does not inject a
           class="comment-form__text"
           placeholder="Write a comment…"
           value={ commentText }></textarea>
-        <button class="btn btn--primary" type="submit" disabled={ !this.canComment }>
+        <button class="btn btn--primary" type="submit" disabled={ !canComment }>
           Add comment
         </button>
       </form>
@@ -631,16 +632,12 @@ export default class PostDetailView extends PuzzleView {
       author,
       comments,
       commentText: local.commentText,
-      authorName: local.authorName
+      authorName: local.authorName,
+      // A template reads data and never calls JavaScript on it (no `.trim()`
+      // there, D176), and it has no `this`: the flag is a data() field. The
+      // two-way binds re-run data() on every keystroke, so it stays current.
+      canComment: (local.commentText ?? '').trim() !== ''
     };
-  }
-
-  // Read by the template as `this.canComment`. A template reads data and never
-  // calls JavaScript on it (no `.trim()` there, D176), and a getter re-reads
-  // local state on every render — setData() re-renders without re-running
-  // data().
-  get canComment() {
-    return (this.getData().commentText ?? '').trim() !== '';
   }
 
   events = {
@@ -660,6 +657,7 @@ export default class PostDetailView extends PuzzleView {
       });
 
       this.setData({ commentText: '', authorName: '' });
+      this.refresh(); // canComment is derived in data() from the draft
     },
 
     removeComment: (comment) => {
@@ -735,7 +733,7 @@ Notes on this view:
 - **The data story is D161 end-to-end:** the tracked `findOne('post', …)` faults the post in (round 1), the follow-up `findOne('user', post.authorId)` faults the author (round 2), and the view commits once settled — so the `{:else}` branch means a genuine 404 (the model's custom `loadOne` returns a 404 Response for unknown ids), never "still loading". No seed, no loading flag.
 - **`post.comments` is a relationship traversal** — reactive, local-only, never a request; sorting happens in `data()` like any query.
 - The comment form carries **no field handlers at all**: `value={ authorName }` and `value={ commentText }` are two-way bindings on bare local keys (D147), so `events` only has to `createRecord('comment', …)` on submit and clear the draft.
-- **`comments.size`** is the template's count (D176) — `.length` is a compile error — and `disabled={ !this.canComment }` goes through the one door a template has into the view's JavaScript: a template never calls `.trim()` on a value, so the getter computes the flag and the template reads it.
+- **`comments.size`** is the template's count (D176) — `.length` is a compile error — and **`canComment` is a `data()` field**: a template never calls `.trim()` on a value and never reaches the view instance (`this` is not a template identifier), so `data()` computes the flag and the template reads it. The two-way binds refresh on every keystroke, and `addComment` calls `this.refresh()` after clearing the draft, so the flag follows the text.
 - `<CommentItem @remove={ removeComment(comment) }>` is a **callback prop** carrying the loop variable; the child reports intent and the **parent owns the mutation** (`comment.destroy()`).
 - The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see the D27 decision card), so this section no longer mirrors that file verbatim.
 

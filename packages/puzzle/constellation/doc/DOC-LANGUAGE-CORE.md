@@ -370,22 +370,28 @@ rejects them until it does.
 
 
 
+
 **A template expression is data plus operators, not JavaScript**
 ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]). The **core expression language**
 is the part of JavaScript expression syntax that both hosts evaluate the same
 way; it is based on Sites' `DECISION-EXPRESSION-SUBSET`
 (`sites/constellation/decision/`). Both hosts accept exactly the core and
-reject the rest with the same positioned errors. PuzzleKit adds two explicit
-doors into the view's JavaScript, and only those: a `this.` chain
-(`{ this.ago(createdAt) }`, `disabled={ !this.canAdd }`) and an `@event`
-handler body. Anything else that needs code is a formatter, or is computed
-first — in a `data()` field (PuzzleKit) or a `{#let}` (Sites) — and read as a
-plain value. Sites' `==` is still strict equality until it adopts V2, below.
+reject the rest with the same positioned errors. **A template expression never
+reaches the view instance:** every value it shows comes through `data()` and
+the model (PuzzleKit) or the render context (Sites). Anything else that needs
+code is a formatter, or is computed first — in a `data()` field (PuzzleKit) or
+a `{#let}` (Sites) — and read as a plain value. PuzzleKit's one door into the
+view's JavaScript is an `@event` handler, which reaches the view through its
+own name (`@click={ save(x) }` calls the view's `save`) and runs at fire time.
+Sites' `==` is still strict equality until it adopts V2, below.
 
 **Names.** An identifier reads from the scope the host supplies (PuzzleKit:
 `data()` fields; Sites: the render context and props) plus the loop variables
 of enclosing `{#for}` blocks. Identifiers may use letters from any script, `_`
-and `$`.
+and `$`. **`this` is not a name** in any template expression: PuzzleKit rejects
+it with a positioned compile error, handler arguments included, that steers to
+a `data()` field or a formatter (D176 rule 5). A field named `this` is still an
+ordinary member read (`x.this`).
 
 **Literals.**
 
@@ -458,25 +464,27 @@ and function calls on a value (`s.trim()`, `items.filter(…)`, `Math.round(x)`,
 `String(x)`, `items.at(-1)` — a formatter is the portable way to run code),
 assignment, `++`/`--`, arrow functions, `new`, `typeof`, `instanceof`, `in`,
 template literals, regular expressions, the comma operator, bitwise operators
-(a nested single `|` included), spread, and `.length`. In PuzzleKit a `this.`
-chain and an `@event` handler body are exempt: they are JavaScript by
-definition. Arithmetic or comparison on operands of mixed or non-number types
-is not portable either (V5).
+(a nested single `|` included), spread, and `.length`. In PuzzleKit an
+`@event` handler body is exempt: it is JavaScript evaluated at fire time,
+though `this` is rejected there as everywhere else. Arithmetic or comparison on
+operands of mixed or non-number types is not portable either (V5).
 
 ## Dialects
+
 
 
 
 | | PuzzleKit | Sites |
 |---|---|---|
 | File structure | `<puzzle-view>` root (§3); optional `<puzzle-skeleton>` (§16), `<script>` class (§4, `lang="ts"` §25), `<style>` / `<style scoped>` (§29) | No wrapper; the directory decides the file kind; optional `<schema>`, `<script>` (browser JavaScript), `<style>` / `<style scoped>` — `sites/constellation/decision/DECISION-TEMPLATE-GRAMMAR.md`, `DECISION-NO-VIEW-WRAPPERS-IN-THEMES.md` |
-| Expressions | The core, plus two explicit doors into the view's JavaScript: a `this.` chain and an `@event` handler body ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]); everything else JavaScript-only is a compile error | The core subset, with `==` still spelled as `===` until V2 lands — `DECISION-EXPRESSION-SUBSET.md` |
+| Expressions | The core, plus one door into the view's JavaScript: an `@event` handler, which reaches the view through its own name ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]); `this` and everything else JavaScript-only is a compile error | The core subset, with `==` still spelled as `===` until V2 lands — `DECISION-EXPRESSION-SUBSET.md` |
 | Naming a computed value | a `data()` field (no `{#let}`: logic belongs in the script) | `{#let}` |
 | Adds | `@event` + modifiers (§5, §47); callback props (§6); implicit two-way binding (§6, [[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); `<Portal>` ([[DECISION-D144-PORTAL]]); `island` (§17); `key` (§28); `ref` (§38); `flip` (§46); formatters `link`, `timeago`, `in_timezone`; a script-less component reads its props (V15) | `{#let}` template variables (its value is a formatter-chain position); implicit props (bare names); `<Form>`; reserved layout slots and section groups; Sites formatters (`split`, `url`, `image_url`, `t`, the list formatters, …) — `sites/engine/constellation/doc/DOC-TEMPLATE-LANGUAGE.md` |
 | Restricts | — | `@event` and `<Portal>` are compile errors; `ref`/`key`/`flip`/`island` are dropped with a warning; an unknown formatter or a wrong argument count is a compile error; interpolation is not allowed in `<script>`/`<style>` bodies or event-handler attributes — `DECISION-AUTO-ESCAPE.md` |
 | Not yet built | — | `<Snippet>` and marker arguments (core; planned) |
 
 ## Section map
+
 
 
 SPEC section numbers never move. This map says which sections describe the core
@@ -506,7 +514,7 @@ which part.
 | §6 item | Layer |
 |---|---|
 | Interpolation and nullish display | core (the undefined-value dev warning is PuzzleKit) |
-| Expression boundary | core (data plus operators, D176); the `this.` and handler-body doors are PuzzleKit |
+| Expression boundary | core (data plus operators, no `this`, D176); the handler-body door is PuzzleKit |
 | Formatters | core syntax; the purity contract (D170), the unknown-formatter guard, `link` and the calendar-date rule are PuzzleKit |
 | Conditionals, `{:else if}`, `{#unless}`, `{#case}` | core |
 | Loops | core forms; auto-keying is PuzzleKit (§28) |

@@ -215,6 +215,15 @@ notes:
       deep read. Calls on items and on globals are no longer possible in a value position, so the
       "call on the item → opaque/deep" and the volatile-global paths are reachable only through
       `this.` chains and handler arguments, which were already exempt or volatile.
+  - kind: state
+    text: >-
+      Supersedes the last clause of the "Row facts after D176" note: `this` is not a template
+      identifier (D176 rule 5, handler arguments included), so no row fact comes from the view
+      instance and there is no `this`-reads-volatile case. `volatile` comes from a `timeago` pipe
+      and from mutable-global reads (while `jsGlobals` exists), plus the structural cases in the
+      body (an enclosing site's loop local, a root past the mask cap). The call-on-item and
+      call-on-global fact paths have no template source: calls are rejected in values and handler
+      arguments record no row facts.
 ---
 
 # D170 — Persistent list blocks and an incremental virtual DOM
@@ -251,6 +260,7 @@ this paragraph and on [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] are its record.
 
 
 
+
 Keep the virtual DOM and make it incremental. Six additive pieces; `.pzl`
 syntax is unchanged.
 
@@ -274,11 +284,13 @@ syntax is unchanged.
    primitives on `!==` alone; the index when the body reads the counter; a
    parent root the body reads, via a per-render `__dirty` mask over the
    compiler-emitted `Class.__roots`; and a `volatile` body — one whose
-   expressions reach through `this`, read a mutable global, pipe through a
-   clock-reading built-in formatter, or read a loop local belonging to an
-   ENCLOSING site. Sites reading a relation, a computed
-   getter or a deep path are **conservative** (checked once per model class
-   against the schema, cached on the block) and never cache their record rows.
+   expressions read a mutable global, pipe through a clock-reading built-in
+   formatter, or read a loop local belonging to an ENCLOSING site. A template
+   expression never reaches the view instance (`this` is not a template
+   identifier, [[DECISION-D176-TEMPLATE-DATA-LANGUAGE]] rule 5), so the view
+   itself is never a row input. Sites reading a relation, a computed getter or
+   a deep path are **conservative** (checked once per model class against the
+   schema, cached on the block) and never cache their record rows.
    A null key builds uncached (today's positional path, already warned by
    `ViewNode.keyOf`); a duplicate key within one render builds uncached and
    warns once in dev. Site ids are per file and share the `__h`/`__c`
@@ -331,12 +343,9 @@ syntax is unchanged.
    only lowered-loop locals rewrites those locals to the row scope and caches
    the closure on the row (`(s.h<n> ??= …)`), reading the current item at fire
    time. A handler reading `__d.` keeps its fresh closure and its roots join
-   the site's mask. A `this.…` argument is evaluated at fire time against an
-   instance that outlives every render, so `this` inside a handler **argument**
-   does not make a site volatile — only `this` in the body's own expressions
-   does. The same carve-out covers everything else a handler argument reads: a
-   mutable global there, and an enclosing row's local there, are fire-time reads
-   against live state and make no site volatile.
+   the site's mask. A handler argument is evaluated at fire time against live
+   state, so a mutable global there, and an enclosing row's local there, make
+   no site volatile — only the body's own render-time expressions do.
 6. **One flush, one `data()` run** for a child that both receives a record
    prop and queries that record: `Store` publishes `_flushSeq` for the
    duration of delivery, and a refresh started inside it stamps `_settleMark`
@@ -355,7 +364,7 @@ positions, where a change to the source array reaches only the last one, and one
 static vnode whose `el`, `ref=` and outside-listener teardown all point at the
 last iteration. An **explicit `key=` moves into the site meta** as
 `(item) => <expr>` only when it reads nothing that lives inside `render()`; a
-key reading `__d`, `__f` or `this` keeps `.map` for the whole site rather than
+key reading `__d` or `__f` keeps `.map` for the whole site rather than
 emitting a module-scope arrow that would throw — and that fallback body is one
 of the non-lowered bodies above.
 
@@ -422,8 +431,9 @@ fixtures. It is the same mechanism that renames the DOM event parameter to
   so one that reads the clock or any other ambient value would freeze its
   output. The shipped built-ins that do (`timeago` today) are known to the
   compiler and make a site `volatile`; a user-defined formatter is pure by
-  contract. A row that must re-evaluate every render reads through `this` —
-  `{ this.ago(createdAt) }` — which is already volatile.
+  contract. A value that depends on the clock or other ambient state is
+  computed in `data()` and read as a field: a parent root that changed this
+  render dirties every row that reads it.
 - The root dirty mask is 32-bit and the compiler caps `__roots` at 31 entries;
   a site reading a root past the cap is marked `volatile` (always dirty) rather
   than silently landing in the wrong bit. A template whose loops read no parent

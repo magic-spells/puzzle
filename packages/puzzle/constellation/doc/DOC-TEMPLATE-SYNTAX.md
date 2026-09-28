@@ -56,7 +56,9 @@ Single braces evaluate an expression against the component model (the object ret
 
 `.size` counts a list's items or a string's characters (code points, the same count `truncate` uses); on any other value it is an ordinary field read, so `file.size` still works. `.length` is a positioned compile error ("use `.size`"); a data field genuinely named `length` is `obj['length']`.
 
-**No calls on data.** A template never calls JavaScript on a value, and each of these is a positioned compile error naming its replacement: method calls (`name.trim()`, `set.has(x)`, `items.at(-1)` — that one is `items[items.size - 1]`), function calls (`String(x)`, `Number(x)`, `Math.round(x)`, `JSON.stringify(x)` — display coercion is automatic, and `| round` exists), arrow functions, template literals (`{ a } { b }` or `a + ' ' + b`), `new`, `typeof`, `instanceof`, `in`, regex literals, `++` / `--`, assignment and the comma operator. Compute the value first — a `data()` field — and read that. PuzzleKit keeps exactly two doors into JavaScript: **`this.`**, a view getter or method (`disabled={ !this.canSend }`, `{ this.ago(createdAt) }`), and **`@event` handler bodies**, which run at fire time. Formatter calls (`| truncate(20)`) are not calls on data and are unaffected.
+**No calls on data.** A template never calls JavaScript on a value, and each of these is a positioned compile error naming its replacement: method calls (`name.trim()`, `set.has(x)`, `items.at(-1)` — that one is `items[items.size - 1]`), function calls (`String(x)`, `Number(x)`, `Math.round(x)`, `JSON.stringify(x)` — display coercion is automatic, and `| round` exists), arrow functions, template literals (`{ a } { b }` or `a + ' ' + b`), `new`, `typeof`, `instanceof`, `in`, regex literals, `++` / `--`, assignment and the comma operator. Compute the value first — a `data()` field — and read that. Formatter calls (`| truncate(20)`) are not calls on data and are unaffected.
+
+**A template never reaches the view instance.** `this` is not available in any template expression — values, conditions, `{#for}` headers, `key=`, formatter and marker arguments, and `@event` handler arguments alike — and writing it is a positioned compile error that says to return the value from `data()` (a getter or a computed field) or use a formatter for a display transform. The one door into the view's JavaScript is an `@event` handler, which reaches the view through its own name (`@click={ save(x) }` calls the view's `save`) and runs at fire time.
 
 Model getters work too: computed properties defined as plain getters on a `PuzzleModel` class (`get fullName() { ... }`) can be read directly in templates — `{ user.fullName }`.
 
@@ -286,7 +288,7 @@ Bind an attribute to an expression by using braces as the entire attribute value
 </button>
 ```
 
-`canAdd` is a `data()` field (`canAdd: localData.newTodoText.trim() !== ''`): the template reads the flag rather than calling `.trim()` itself. When the state it depends on changes through a bare `setData()` (which re-renders without re-running `data()`), a `this.` getter keeps it fresh instead — `disabled={ !this.canSend }`.
+`canAdd` is a `data()` field (`canAdd: localData.newTodoText.trim() !== ''`): the template reads the flag rather than calling `.trim()` itself, and it never reads a getter through `this` — a template has no `this`. When the state the flag depends on changes through a bare `setData()` (which re-renders without re-running `data()`), follow it with `this.refresh()` so `data()` recomputes the flag; a two-way-bound input does that for you (next section).
 
 ```html
 <!-- From TodoItem.pzl: checkbox reflects the record -->
@@ -341,7 +343,7 @@ Every condition must hold. Anything else compiles as a plain one-way display bin
 | Condition | Binds | Stays one-way |
 | --------- | ----- | ------------- |
 | Element | plain `<input>`, `<textarea>`, `<select>` | any component tag — `<Field value={ x } />` passes an ordinary prop |
-| Expression | a bare identifier or one-member path: `draft`, `todo.completed`, `profile.name` | anything else: `draft \|\| ''`, `draft ?? ''`, `a.b.c`, `items[i]`, `x?.y`, `this.x`, ternaries, formatter chains |
+| Expression | a bare identifier or one-member path: `draft`, `todo.completed`, `profile.name` | anything else: `draft \|\| ''`, `draft ?? ''`, `a.b.c`, `items[i]`, `x?.y`, ternaries, formatter chains |
 | Handlers | no `@input` or `@change` on the element | an author-written `@input` / `@change` (with any modifiers) — you own the write |
 | Attributes | no static `readonly` or `disabled` | either one present |
 | `type` | absent, or a static string the matrix below classifies | dynamic `type={ … }`; `file`, `radio`, `submit`, `button`, `reset`, `image`, `hidden`; `<select multiple>`; `value=` on a checkbox (that is the submit value) |

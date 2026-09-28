@@ -155,6 +155,17 @@ notes:
       plain-object member too"). `ident.size` classifies like any two-segment path: the display
       reads `__z(__d.profile)` (the field, on an object) and the bind writes `profile.size`. Binding
       the count of a list or string is meaningless and is not special-cased.
+  - kind: decision
+    text: >-
+      Correction to the D176 note above (D176 rule 5 — `this` is not a template identifier; lands
+      with `feat/remove-this-from-templates`): `datalang.go` keeps ONE exemption, `@event` handler
+      bodies. There is no `this.` chain exemption (`thisChainTokens` goes), and a bare `this` token
+      — not a member named `this`, so `x.this` stays legal — is a positioned error at the token in
+      every position the pass walks, plus handler arguments and the handler ternary condition;
+      `this?.`, `(this)` and `this[…]` get the same error. `sizeSteps` has no `this.`-chain case and
+      the resolver no `this` root. The `jsGlobals` volatile classification is reached by a
+      mutable-global READ in a value (`window.innerWidth`); calls are rejected there and handler
+      arguments record no facts, so no row fact comes from `this`.
 ---
 
 # Render-function codegen
@@ -189,18 +200,24 @@ Expression scoping is a **scopeMap** — a name mapped to the JavaScript it
 resolves to. An unmapped identifier is prefixed as model data (`__d.x`); a
 mapped one resolves to its value, which is how a loop local becomes the row
 scope's member (`todo` → `s.item`, a counter → `s.i`) through every consumer at
-once, and how `event`, `this`, JS keywords/globals, numeric literals and
+once, and how `event`, JS keywords/globals, numeric literals and
 template-literal static text stay intact. An in-scope binding shadows a
 keyword-ish global, so a `{#for document of docs}` row reads `s.item`, not
 `window.document`. Reads of names imported by the script emit a warning because
-imports are not template scope.
+imports are not template scope. **`this` never reaches the resolver from a
+template:** the D176 pre-pass (`datalang.go`) rejects it with a positioned error
+at the `this` token in every template expression, handler arguments and the
+handler ternary condition included, while a member named `this` (`x.this`) stays
+an ordinary field read ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]] rule 5). The
+`this` in emitted code (`this.events.h`, `this.__h`, `this.__bind`) is the
+compiler's own, never an author's.
 
 **Value positions are member-guarded** (D173 V4, `resolveValueScan`): in text
 interpolation, attribute values and props, `{#if}`/`{#case}` headers, inline-if
 conditions, formatter arguments, loop collections and keys, each `.`/`[` after a
 value-ending token is emitted as `?.`/`?.[`, so a missing link in a path yields
 `undefined` (which prints nothing) instead of a TypeError. Exempt: the first
-step after `this`, a JS global, a literal, or `ViewNode`; a `new` callee; and
+step after a JS global, a literal, or `ViewNode`; a `new` callee; and
 the whole expression when it contains a construct optional chaining cannot sit
 under (an assignment, `++`/`--`, a tagged template) — that expression falls back
 to the plain scan. The assignment detector tells a shift assignment (`<<=`,
@@ -227,9 +244,9 @@ display projection, not a writable path), and a chained explicit `key=` reads
 
 The same single scan also **classifies** what an expression read — the data
 roots it touched, the loop item's members at depth one, whether it reached
-deeper or through a call, whether it used `this`, and whether it read a mutable
-global — so a loop site's meta is derived from exactly the lexical rules that
-rewrote it, with no second pass and no second scanner to keep in sync. Facts are
+deeper or through a call, and whether it read a mutable global — so a loop
+site's meta is derived from exactly the lexical rules that rewrote it, with no
+second pass and no second scanner to keep in sync. Facts are
 collected only inside a lowered loop body and never during a look-ahead pass
 (conditional arity, `{#for}` root extraction), which re-resolve expressions in a
 scope they will not be emitted in.
@@ -290,7 +307,7 @@ surrounding layout — first argument the view, second the owner the rows hang o
 emitted after the injected import line — non-default fields only, in a fixed
 order, so the common site is one short const. The key function carries D58's
 resolver (`(todo) => ViewNode.keyOf(todo)`) or an explicit `key=` rewritten
-against the arrow's own parameters; a key that reads `__d`, `__f` or `this`
+against the arrow's own parameters; a key that reads `__d` or `__f`
 cannot live at module scope, so that site keeps `.map` entirely. The row root
 always carries the block's `key: s.k` (the author's `key` attribute is dropped,
 having become the meta's function), loop locals resolve through the scope map,
@@ -324,7 +341,7 @@ runs when its enclosing row runs, so "this body depends on what the outer row
 supplies" is exact rather than an over-approximation, and a middle site that
 cached its rows would otherwise never re-invoke the inner block. Handler
 ARGUMENTS are exempt everywhere above: they are re-read at fire time off the
-live row scope, the same carve-out `this` in a handler argument already has.
+live row scope.
 
 Because the row scope objects are named `s`, `s1`, …, an authored binding
 spelled the same way is mangled to `__pzl<name>` wherever it would stay BARE
@@ -366,8 +383,7 @@ fire time; a capture of a range-loop variable or a snippet parameter stays
 fresh, because those bindings are re-created per iteration or per expansion.
 Sites whose arguments read model data keep fresh closures so their captured
 values stay correct, and the roots they read count toward the enclosing loop
-site's mask. A `this.…` argument is evaluated at fire time and never makes a
-site volatile. Modifiers remain encoded in vnode attribute names for ViewManager
+site's mask. Modifiers remain encoded in vnode attribute names for ViewManager
 to apply.
 
 Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) lives in

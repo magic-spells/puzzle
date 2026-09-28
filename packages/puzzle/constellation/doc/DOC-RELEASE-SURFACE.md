@@ -143,9 +143,12 @@ second specification. Decision cards hold rationale and git holds chronology.
   `+ - * / %`, comparisons, `&&`/`||`/`!`, `??` and the ternary. `.length`,
   calls on data values (`x.trim()`, `String(x)`, `set.has(x)`, `Math.*`),
   arrow functions, template literals and a `|` nested inside brackets are
-  positioned compile errors; `this.` chains and `@event` handler bodies are
-  the two JavaScript doors. `size`, `plus`, `minus`, `times`, `divided_by`,
-  `modulo` and `default` are no longer formatters, and `split` is Sites-only.
+  positioned compile errors. A template expression never reaches the view
+  instance: `this` is a positioned compile error in every template expression,
+  `@event` handler arguments included, and an `@event` handler body is the one
+  door into the view's JavaScript. `size`, `plus`, `minus`, `times`,
+  `divided_by`, `modulo` and `default` are no longer formatters, and `split` is
+  Sites-only.
 - **Core semantics (D173):** a `|` is a formatter pipe in every value position
   (text, attributes, props, marker arguments) and must be followed by a
   formatter name; a pipe in a condition header (`{#if}`, `{:else if}`,

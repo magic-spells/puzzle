@@ -20,8 +20,9 @@ connections:
 
 **Status: adopted and built for PuzzleKit (2026-09-28, one PR into
 `release/0.8.0`).** Decided with Cory; the in-place edits listed under
-*Changes to existing cards* are made. The Sites half of the build list is
-open in its own repo.
+*Changes to existing cards* are made. Rule 5's `this` rejection is building on
+`feat/remove-this-from-templates` (build list item 9). The Sites half of the
+build list is open in its own repo.
 
 ## Context
 
@@ -53,7 +54,7 @@ devtools, Sites themes and Sites' admin app) sized the two splits:
 | a pipe inside an `{#if}`/`{#case}` condition | 0 real (1 test fixture) |
 | method calls on data (`draft.trim()`, `set.has(x)`) | 7 |
 | `String(x)` | ~10 |
-| `this.`, arrow functions, template literals, `Math.*` | 0 |
+| `this`, arrow functions, template literals, `Math.*` | 0 |
 
 The JavaScript-only surface is used about 17 times in total. The duplicate
 formatters are used zero times.
@@ -64,8 +65,9 @@ formatters are used zero times.
 value is a formatter, and a formatter appears only where a value is
 displayed.** PuzzleKit enforces this at compile time with the same errors
 Sites gives, so a template that compiles in one dialect is the same language
-in the other. PuzzleKit keeps exactly two explicit doors into JavaScript:
-`this.` and `@event` handlers.
+in the other. A template expression never reaches the view instance: `this`
+is not a template identifier, and PuzzleKit's one door into JavaScript is the
+`@event` handler.
 
 ### 1. Values are JSON-shaped, and `.size` is the one built-in property
 
@@ -146,7 +148,8 @@ codegen pre-pass (`compiler/internal/codegen/datalang.go`) over every value
 position — text, attributes, inline-if branches, props, marker arguments,
 `key=`, block subjects, `{:when}` values, `{#for}` collections and range
 bounds, formatter arguments, and the condition of a handler ternary — with
-strings, regex bodies and comments opaque.
+strings, regex bodies and comments opaque. The same pass rejects `this` in
+every one of those positions and in handler arguments (rule 5).
 
 ### 4. A pipe appears only where a value is displayed
 
@@ -170,20 +173,33 @@ strings, regex bodies and comments opaque.
 - `{#unless}` therefore has one AST shape: the parser folds the negation into
   `Cond` as `!(…)` and the `Negate` field goes.
 
-### 5. PuzzleKit's two doors into JavaScript
+### 5. One door into JavaScript: handlers
 
-- **`this.`** — a view getter or method, `{ this.ago(createdAt) }`,
-  `disabled={ !this.canAdd }`. It is unambiguously the view instance, so it
-  creates no "which way?" question, it is greppable, and it keeps the D170
-  volatile-row idiom. Calls are allowed only through `this.`, and the whole
-  chain is JavaScript — its member steps, indexes, call arguments and
-  template literals included — so `this.items.length` is legal there.
-- **`@event={ handler(args) }`** — a fire-time JavaScript call, as today. The
-  arguments are JavaScript too: `@click={ pick(todo.tags.size) }` reads the
-  plain `size` property (undefined on an array), and the JavaScript count is
-  `.length` there. The handler ternary's condition is a data expression.
-- Both are dialect extensions in the D172 sense, like `<Portal>`: Sites
-  rejects them with an error that says so.
+- **A template expression never reaches the view instance.** `this` is not an
+  identifier in any template expression: interpolation, attribute value,
+  `{#if}`/`{#unless}`/`{#case}`/`{:when}` condition, `{#for}` header, `key=`,
+  formatter argument, marker or prop argument, inline `{#if}`, skeleton — and
+  `@event` handler arguments and handler ternary conditions too. Writing it is
+  a positioned compile error at the `this` token: "`this` is not available in
+  template expressions — return the value from data() (a getter or a computed
+  field), or use a formatter for a display transform". `this?.`, `(this)` and
+  `this[…]` get the same error; a field named `this` (`x.this`) is an ordinary
+  member read.
+- **Every value a template shows comes through `data()` and the model; a
+  display transform is a formatter.** A flag or a derived value is a `data()`
+  field (`canAdd: draft.trim() !== ''`), and a relative time is a formatter
+  (`{ createdAt | timeago }`). A template that compiles in PuzzleKit therefore
+  never depends on a view instance, which is what lets the same template be
+  core Puzzle for Sites, which has none.
+- **`@event={ handler(args) }`** — the one door: a fire-time JavaScript call
+  that reaches the view through the handler's own name (`@click={ save(x) }`
+  calls the view's `save`); nothing else in a template reaches the view. The
+  arguments are JavaScript evaluated at fire time:
+  `@click={ pick(todo.tags.size) }` reads the plain `size` property (undefined
+  on an array), and the JavaScript count is `.length` there. The handler
+  ternary's condition is a data expression.
+- The handler is a dialect extension in the D172 sense, like `<Portal>`: Sites
+  rejects `@event` with an error that says so.
 - **No `{#let}` in PuzzleKit.** Cory: it "would allow people to put logic in
   the templates instead of in the JS and that's an anti-pattern for PuzzleKit
   but a necessity for Puzzle Sites." The docs state the mapping once:
@@ -199,7 +215,8 @@ strings, regex bodies and comments opaque.
 | transform a displayed value | `{ x \| formatter }` |
 | branch on a transformed value | compute it first, branch on the name |
 | shape a list | `data()` (PuzzleKit) / `{#let}` + list formatters (Sites) |
-| run JavaScript | `this.` or a handler (PuzzleKit only) |
+| reach the view instance | never: `this` is not a template identifier |
+| run JavaScript | an `@event` handler (PuzzleKit only) |
 
 ## Alternatives
 
@@ -227,6 +244,23 @@ strings, regex bodies and comments opaque.
   `draft.trim()` from being the thing an author types first.
 - **Add `{#let}` to PuzzleKit so both dialects share the compute-first
   spelling.** Rejected (rule 5).
+- **`this.` as a door into the view** — `{ this.ago(createdAt) }`,
+  `disabled={ !this.canAdd }`, with the whole chain JavaScript and calls
+  allowed through it. Rejected: it bypasses `data()`, the one path data takes
+  into a view, and Sites has no view instance, so it could never be core. In
+  review it produced an arrow-parameter miscompile
+  (`this.items.filter(i => i.done)` compiled to invalid JavaScript), a silent
+  `.size` trap (`{#if this.items.size > 0}` is always false, because the chain
+  is JavaScript and an array has no `size`), and a host-only escape hatch. Its
+  only uses in the shipped corpus were three `disabled={ !this.getter }`
+  flags, each expressible as a `data()` field. Cory: "lets remove this from
+  templates, we don't need it, the templates are set up to have all data pass
+  through data() and go into the model and then get rendered in the view
+  template. I feel like adding "this" breaks that and lets them call the
+  object directly and that's an anti-pattern in PuzzleKit and can't be used at
+  all in Puzzle-lang in Sites."
+- **Keep `this` as a data-language root (reads only, calls rejected).**
+  Rejected: still a second path into the view; `data()` is the path.
 - **Warn in 0.8.0, error in 0.9.** Rejected: 0.8.0 is already the breaking
   template release with an upgrade checklist, and the whole-monorepo cost is
   ~17 expressions plus a mechanical `.length` → `.size` sweep.
@@ -238,9 +272,10 @@ strings, regex bodies and comments opaque.
 ## Consequences
 
 - **Breaking for PuzzleKit templates.** `.length`, calls on data, arrows,
-  template literals, bitwise operators, nested pipes and pipes in conditions
-  stop compiling; the eight formatters are gone (the unknown-name guard names
-  each replacement). The CHANGELOG's "Upgrading from 0.7" checklist gains the
+  template literals, bitwise operators, nested pipes, pipes in conditions and
+  `this` anywhere in a template (handler arguments included) stop compiling;
+  the eight formatters are gone (the unknown-name guard names each
+  replacement). The CHANGELOG's "Upgrading from 0.7" checklist gains the
   rows. The scaffold's `disabled={ !newTodoText.trim() }` is `go:embed`ed, so
   the fix ships only with rebuilt binaries.
 - **Sites:** `.length` becomes the same compile error; `.size` on a string
@@ -252,13 +287,18 @@ strings, regex bodies and comments opaque.
   for both dialects.** The call/arrow/literal rejection is PuzzleKit codegen's
   (Sites' expression parser already rejects them), applied where codegen
   resolves a template value: text, attributes, props, subjects, `key=`.
-  Handler bodies and `this.` chains are exempt.
+  Handler bodies are exempt from it; `this` is rejected everywhere, handler
+  arguments included.
 - **`.size` costs one helper call per count read** (the helper is ~30 B gzip
   once, plus a few bytes per site). Row-cache facts (D170) treat `x.size` as
   a field read of `x`, exactly as `x.length` was: `todo.size` is the field
   `size`, `todo.tags.size` is a deep read. Calls on items and on globals are
-  no longer possible in values, so those fact paths are reachable only
-  through `this.` chains and handlers.
+  not possible in a value, and handler arguments record no row facts, so no
+  template reaches the call-on-item fact path. No template expression reaches
+  the view instance either, so a site is `volatile` only through a
+  clock-reading formatter (`timeago`) or a mutable-global read (while
+  `jsGlobals` exists), plus D170's structural cases (an enclosing site's loop
+  local, a root past the mask cap).
 - `puzzle check` maps `__z(` as inserted text and the authored `.size` to the
   `)`, so a diagnostic after the step still lands on the author's bytes.
 - The "parenthesize a bitwise OR" fix-it, D173 V7's `.length` clause, D174's
@@ -268,8 +308,8 @@ strings, regex bodies and comments opaque.
 
 - **D172:** the core expression language sentence becomes "paths, literals,
   `.size`, arithmetic, comparison, `&&`/`||`/`??`, ternary; no calls". The
-  dialect table's PuzzleKit *Expressions* row becomes "the core, plus `this.`
-  and handler bodies".
+  dialect table's PuzzleKit *Expressions* row becomes "the core, plus the
+  `@event` handler; `this` is not a template identifier".
 - **D173 V1:** pipe positions are display positions only; the subjects join
   `{#for}`/`{:when}` as errors; a nested `|` is an error; the "bitwise OR"
   fix-it goes; the "keep every block header plain" rejection flips to
@@ -287,6 +327,12 @@ strings, regex bodies and comments opaque.
   mapping.
 - **COMPONENT-CODEGEN / COMPONENT-TEMPLATE-PARSER / COMPONENT-FORMATTERS:**
   the new checks, the `__z` helper, the registry changes.
+- **Rule 5 (`this`):** D170's volatile-row list loses its `this` case (a row
+  that must follow the clock or other ambient state reads a `data()` field);
+  DOC-LANGUAGE-CORE, DOC-SPEC-TEMPLATE §6/§28/§31, DOC-TEMPLATE-SYNTAX,
+  DOC-USER-GUIDE, DOC-EVENTS, DOC-VIEW-LIFECYCLE, DOC-RELEASE-SURFACE, D62, D72
+  and COMPONENT-CODEGEN state the one door, and their template snippets read
+  `data()` fields instead of `this.` getters.
 
 ## Build list
 
@@ -297,9 +343,9 @@ strings, regex bodies and comments opaque.
 2. **Built.** Codegen: `.size` → `__z(base)` with `sizeOf` exported from the
    package root (imported only when used); `.length` error; call/arrow/
    template-literal/`new`/`typeof`/regex/bitwise rejection on data values
-   (`datalang.go`), exempting `this.` chains, formatter calls and handler
-   bodies; row-fact treatment of `.size`; the `puzzle check` shim's `__z`
-   overloads and source mapping.
+   (`datalang.go`), exempting formatter calls and handler bodies; row-fact
+   treatment of `.size`; the `puzzle check` shim's `__z` overloads and source
+   mapping.
 3. **Built.** Runtime: `client-runtime/size.js`; the eight formatters leave
    `builtins.js`, `builtins.json` and the manifest; the D43 guard's
    replacement table.
@@ -315,3 +361,10 @@ strings, regex bodies and comments opaque.
 8. **Confirmed.** Editor grammars and the eslint/prettier ports: no lexer
    change (the ports vendor the section splitter and token lexer only; the
    rules live in the chain parser and codegen).
+9. **Building** (`feat/remove-this-from-templates` → `release/0.8.0`): reject
+   `this` in every template expression — handler arguments and the handler
+   ternary condition included — with the rule 5 message; drop the `this`
+   chain exemption in `datalang.go`, the `this`-root handling in the resolver
+   and the `this`-reads-volatile row fact; move the three corpus uses
+   (typed-todos `Home.pzl`, chat `Composer.pzl`, blog `PostDetail.pzl`) into
+   `data()`; the CHANGELOG checklist row, the agent skill and the README.

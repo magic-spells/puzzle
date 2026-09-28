@@ -52,7 +52,7 @@ DOC-EVENTS had explicitly deferred a first-class ref directive "until demand app
 ## Alternatives rejected
 
 - **`ref={ varName }` (the braces form)** — collides with the §6 expression boundary: identifiers in braces ARE data reads, and a lexer cannot see binding positions. Rejected for the same reason arrow functions and destructuring are.
-- **Callback refs as the public API (React-style `ref={ this.setChart }`)** — same braces problem, plus it puts lifecycle bookkeeping on the user (the cached-setter machinery exists internally; users get the declarative string).
+- **Callback refs as the public API (React-style `ref={ this.setChart }`)** — same braces problem, and a template has no `this` to name the setter with (`this` is not a template identifier, [[DECISION-D176-TEMPLATE-DATA-LANGUAGE]] rule 5); it also puts lifecycle bookkeeping on the user (the cached-setter machinery exists internally; users get the declarative string).
 - **`this.$refs` (Vue spelling)** — Puzzle has no `$`-prefix convention; `refs` matches `memo`/`events`/`animations`.
 - **Array refs inside `{#for}`** — Vue 2's v-for ref arrays were order-unstable and widely confusing; deferred until a real use case, with a compile error holding the space.
 - **Repurposing `@ready` on plain elements** — overloads D18's per-node listener model with lifecycle semantics; `@anything` on a plain element is an addEventListener today, and silently changing that for one name is a trap.

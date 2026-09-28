@@ -120,7 +120,7 @@ core that Shopify extends with its own tags and objects.
 |---|---|---|
 | File structure | `<puzzle-view>`/`<puzzle-skeleton>` wrapper + `<script>` class (layouts are `<puzzle-view>` files too) | No wrapper; the directory decides the kind; top-level `<schema>` |
 | Adds | `@event` + modifiers, `<Portal>`, `ref`/`key`/`flip`/`island`, implicit binding | `{#let}`, implicit props |
-| Expressions | The core, plus two explicit doors into the view's JavaScript: a `this.` chain and an `@event` handler body (D176) | The core |
+| Expressions | The core, plus one door into the view's JavaScript: an `@event` handler, which reaches the view through its own name (D176); `this` is not a template identifier | The core |
 | Naming a computed value | a `data()` field (no `{#let}`: logic belongs in the script) | `{#let}` |
 | Not yet built | — | `<Snippet>` (core; planned) |
 

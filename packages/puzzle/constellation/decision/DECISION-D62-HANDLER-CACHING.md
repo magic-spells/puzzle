@@ -68,11 +68,12 @@ The cache lives on the component instance, so the same function object is
 passed on every render of that instance. Handler *semantics* are unchanged —
 `this.events` lookup still happens at fire time.
 
-A site is data-independent when it is the bare form `@click={ h }` (captures
-only `this`), or the call form `@click={ h(args) }` whose arguments reference
-**nothing from the render scope beyond `event`**: literals, `event`, `this.…`,
-and JS globals are all fine, because they are evaluated at fire time *inside*
-the closure.
+A site is data-independent when it is the bare form `@click={ h }` (the
+compiled closure captures only the instance), or the call form
+`@click={ h(args) }` whose arguments reference **nothing from the render scope
+beyond `event`**: literals, `event` and JS globals are all fine, because they
+are evaluated at fire time *inside* the closure. (`this` is not a template
+identifier, so an argument never reads the view directly — D176 rule 5.)
 
 **Loop-capturing sites cache on the row scope.** Inside a lowered item-form
 `{#for}` ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]) the loop locals rewrite to
