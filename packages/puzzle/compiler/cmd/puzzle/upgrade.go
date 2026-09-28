@@ -194,8 +194,12 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 	}
 	switch ctx.kind {
 	case installManual:
-		fmt.Fprintln(stdout, "Install the latest release with:")
-		fmt.Fprintln(stdout, "  go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest")
+		// A checkout build, never `go install …@latest`: the module lives in
+		// packages/puzzle, and its go.mod `replace` for puzzle-lang makes
+		// `go install pkg@version` refuse it outright.
+		fmt.Fprintln(stdout, "Build the latest release from source with Go:")
+		fmt.Fprintln(stdout, "  git clone https://github.com/magic-spells/puzzle")
+		fmt.Fprintln(stdout, "  cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle")
 		return nil
 	case installWorkspace:
 		// Guessing a member would install into a package the user never named,

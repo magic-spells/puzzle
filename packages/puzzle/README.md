@@ -119,10 +119,12 @@ who clone it only need `npm install` — no global CLI required.
 ### Other platforms, or building from source
 
 The prebuilt binaries cover macOS, Linux, and Windows. On any other platform — or
-if you prefer to build the CLI yourself — install it from source with Go:
+if you prefer to build the CLI yourself — build it from a checkout with Go, then
+put the `puzzle` binary on your `PATH`:
 
 ```bash
-go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest
+git clone https://github.com/magic-spells/puzzle
+cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle
 ```
 
 ## Project Structure

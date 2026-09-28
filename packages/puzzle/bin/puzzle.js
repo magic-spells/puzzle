@@ -54,8 +54,9 @@ if (!binPath) {
 			`copied from a different OS/arch, or the install skipped optional deps\n` +
 			`(--no-optional / --omit=optional). Reinstall on THIS machine:\n` +
 			`  npm install\n\n` +
-			`For unsupported platforms, install the CLI from source:\n` +
-			`  go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest\n`
+			`For unsupported platforms, build the CLI from source with Go:\n` +
+			`  git clone https://github.com/magic-spells/puzzle\n` +
+			`  cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle\n`
 	);
 	process.exit(1);
 }

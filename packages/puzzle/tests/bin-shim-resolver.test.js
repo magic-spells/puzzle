@@ -125,6 +125,9 @@ describe('bin/puzzle.js platform resolution', () => {
 		const { status, stderr } = resolveAs('sunos', 'x64');
 		expect(status).toBe(1);
 		expect(stderr).toContain('no prebuilt CLI binary available for this platform (sunos-x64)');
-		expect(stderr).toContain('go install');
+		// A checkout build — `go install …@latest` cannot resolve the module.
+		expect(stderr).toContain('git clone https://github.com/magic-spells/puzzle');
+		expect(stderr).toContain('cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle');
+		expect(stderr).not.toContain('go install');
 	});
 });

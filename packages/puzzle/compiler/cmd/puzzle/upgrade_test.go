@@ -647,8 +647,19 @@ func TestUpgradeManualInstallInstructions(t *testing.T) {
 	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), binary, false, emptyHomeEnvironment(t)); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest") {
-		t.Fatalf("manual install output missing go install command:\n%s", stdout.String())
+	// A checkout build: `go install …@latest` cannot work — the module lives in
+	// packages/puzzle, and its go.mod `replace` for puzzle-lang forbids
+	// `go install pkg@version` outright.
+	for _, want := range []string{
+		"git clone https://github.com/magic-spells/puzzle",
+		"cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("manual install output missing %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), "go install") {
+		t.Fatalf("manual install output still prints go install:\n%s", stdout.String())
 	}
 }
 
