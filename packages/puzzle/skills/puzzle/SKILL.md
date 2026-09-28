@@ -291,7 +291,7 @@ Rules that bite:
   </UserList>
 
   <!-- inside UserList.pzl: one marker in the loop produces N stamps -->
-  {#for user in users}<Slot name="row" user={ user } />{/for}
+  {#for user in users}<li key={ user.id }><Slot name="row" user={ user } /></li>{/for}
   ```
 
 - **Component families are dotted tags + a barrel** (puzzle ≥ 0.7.0). A
@@ -941,7 +941,7 @@ Tailwind v4 is the supported pipeline (`styles: { use: ['tailwindcss'] }` — th
 CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`;
 wire it with `puzzle add tailwind`). For puzzle-pieces apps, import the theme after
 `@import "tailwindcss"` — `@import "@magic-spells/puzzle-pieces/themes/default.css"`
-(or the copied `theme/pieces.css`) plus any palette you offer
+(or the copied `app/styles/pieces.css`) plus any palette you offer
 (`/themes/dim.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via
 its semantic tokens (`bg-surface`, `text-ink`, `bg-brand`, `border-border`,
 shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`…). Two attributes on
