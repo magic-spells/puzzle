@@ -201,9 +201,12 @@ var clockFormatters = map[string]bool{"timeago": true}
 
 // jsKeywords are identifier ROOTS that must never be rewritten to __d.<name>:
 // JS literals and operator-keywords that can appear in a template expression.
+// `this` stays listed although the D176 pre-check rejects it in every template
+// expression: a path that ever bypassed the check must still not compile it as
+// the data field `__d.this`, nor classify `this.x` as a bindable data path.
 var jsKeywords = map[string]bool{
 	"true": true, "false": true, "null": true, "undefined": true,
-	"new": true, "typeof": true, "instanceof": true,
+	"this": true, "new": true, "typeof": true, "instanceof": true,
 	"in": true, "of": true, "void": true, "delete": true,
 	"NaN": true, "Infinity": true, "arguments": true,
 }

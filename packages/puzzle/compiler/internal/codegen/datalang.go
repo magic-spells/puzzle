@@ -185,17 +185,19 @@ func isThisRef(toks []dataTok, k int, stack []string) bool {
 	return !objectKey
 }
 
-// firstThisRef returns the byte offset of the first bare `this` in a handler
-// expression, or -1. A handler argument is JavaScript, so a template literal is
-// legal there — and its `${…}` interpolations are scanned too.
-func firstThisRef(expr string) int {
-	toks := lexDataExpr(expr)
+// thisRefs returns the byte offset of every bare `this` in s, in source order.
+// Strings, comments and regex literals are opaque; a template literal's `${…}`
+// interpolations are scanned, since a handler argument is JavaScript and may
+// hold one.
+func thisRefs(s string) []int {
+	toks := lexDataExpr(s)
+	var refs []int
 	var stack []string
 	for k, t := range toks {
 		switch {
 		case t.kind == dtTemplate:
-			if at := thisInTemplate(t.text); at >= 0 {
-				return t.start + at
+			for _, at := range thisInTemplate(t.text) {
+				refs = append(refs, t.start+at)
 			}
 		case t.kind == dtPunct && (t.text == "(" || t.text == "[" || t.text == "{"):
 			stack = append(stack, t.text)
@@ -204,16 +206,25 @@ func firstThisRef(expr string) int {
 				stack = stack[:len(stack)-1]
 			}
 		case isThisRef(toks, k, stack):
-			return t.start
+			refs = append(refs, t.start)
 		}
+	}
+	return refs
+}
+
+// firstThisRef returns the byte offset of the first bare `this` in a handler
+// expression, or -1.
+func firstThisRef(expr string) int {
+	if refs := thisRefs(expr); len(refs) > 0 {
+		return refs[0]
 	}
 	return -1
 }
 
-// thisInTemplate returns the offset in lit (a whole template literal, backticks
-// included) of the first bare `this` inside one of its `${…}` interpolations,
-// or -1.
-func thisInTemplate(lit string) int {
+// thisInTemplate returns the offsets in lit (a whole template literal, backticks
+// included) of every bare `this` inside its `${…}` interpolations.
+func thisInTemplate(lit string) []int {
+	var refs []int
 	for j := 1; j < len(lit); j++ {
 		switch {
 		case lit[j] == '\\':
@@ -221,15 +232,15 @@ func thisInTemplate(lit string) int {
 		case lit[j] == '$' && j+1 < len(lit) && lit[j+1] == '{':
 			end := matchBalanced(lit, j+1, '{', '}')
 			if end < 0 {
-				return -1
+				return refs
 			}
-			if at := firstThisRef(lit[j+2 : end]); at >= 0 {
-				return j + 2 + at
+			for _, at := range thisRefs(lit[j+2 : end]) {
+				refs = append(refs, j+2+at)
 			}
 			j = end
 		}
 	}
-	return -1
+	return refs
 }
 
 // sizeSteps returns the byte offsets of the `size` names in expr that are the
@@ -338,15 +349,7 @@ func hasSinglePipe(expr string) bool {
 // `{#if}`/`{#case}`/`{:when}` subjects, loop collections and range bounds,
 // every formatter argument, and a handler-valued conditional's condition. A
 // `this` is rejected in all of those and in a handler's arguments too.
-//
-// src and srcPos are the section the nodes were parsed from (the template or
-// the skeleton), so a `this` error can be positioned at its own token.
-func (c *compiler) checkDataLanguage(nodes []parser.Node, src string, srcPos parser.Position) error {
-	c.exprSrc, c.exprSrcPos = src, srcPos
-	return c.checkDataNodes(nodes)
-}
-
-func (c *compiler) checkDataNodes(nodes []parser.Node) error {
+func (c *compiler) checkDataLanguage(nodes []parser.Node) error {
 	for _, n := range nodes {
 		var err error
 		switch node := n.(type) {
@@ -354,24 +357,24 @@ func (c *compiler) checkDataNodes(nodes []parser.Node) error {
 			err = c.checkDataInterp(node, node.Pos)
 		case *parser.Element:
 			if err = c.checkDataAttrs(node.Attrs); err == nil {
-				err = c.checkDataNodes(node.Children)
+				err = c.checkDataLanguage(node.Children)
 			}
 		case *parser.Component:
 			if err = c.checkDataAttrs(node.Props); err == nil {
-				err = c.checkDataNodes(node.Children)
+				err = c.checkDataLanguage(node.Children)
 			}
 		case *parser.Slot:
 			if err = c.checkDataAttrs(node.Args); err == nil {
-				err = c.checkDataNodes(node.Children)
+				err = c.checkDataLanguage(node.Children)
 			}
 		case *parser.Snippet:
-			err = c.checkDataNodes(node.Body)
+			err = c.checkDataLanguage(node.Body)
 		case *parser.Portal:
-			err = c.checkDataNodes(node.Children)
+			err = c.checkDataLanguage(node.Children)
 		case *parser.If:
 			if err = c.checkDataExpr(node.Cond, node.Pos); err == nil {
-				if err = c.checkDataNodes(node.Then); err == nil {
-					err = c.checkDataNodes(node.Else)
+				if err = c.checkDataLanguage(node.Then); err == nil {
+					err = c.checkDataLanguage(node.Else)
 				}
 			}
 		case *parser.Case:
@@ -383,11 +386,11 @@ func (c *compiler) checkDataNodes(nodes []parser.Node) error {
 					}
 				}
 				if err == nil {
-					err = c.checkDataNodes(clause.Body)
+					err = c.checkDataLanguage(clause.Body)
 				}
 			}
 			if err == nil {
-				err = c.checkDataNodes(node.Else)
+				err = c.checkDataLanguage(node.Else)
 			}
 		case *parser.For:
 			if node.IsRange {
@@ -398,7 +401,7 @@ func (c *compiler) checkDataNodes(nodes []parser.Node) error {
 				err = c.checkDataExpr(node.Collection, node.Pos)
 			}
 			if err == nil {
-				err = c.checkDataNodes(node.Body)
+				err = c.checkDataLanguage(node.Body)
 			}
 		}
 		if err != nil {
@@ -424,7 +427,7 @@ func (c *compiler) checkDataAttrs(attrs []parser.Attr) error {
 			if hasSinglePipe(a.Expr) {
 				err = c.cgErr(a.Pos, dataHandlerPipeMsg)
 			} else if at := firstThisRef(a.Expr); at >= 0 {
-				err = c.cgErr(c.exprTokenPos(a.Pos, a.Expr, at), dataThisMsg)
+				err = c.cgErr(c.exprTokenPos(a.Pos, a.Expr, at, a.Pos), dataThisMsg)
 			} else if cond, _, _, ok := splitEventConditional(a.Expr); ok {
 				err = c.checkDataExpr(cond, a.Pos)
 			}
@@ -436,16 +439,19 @@ func (c *compiler) checkDataAttrs(attrs []parser.Attr) error {
 	return nil
 }
 
+// checkDataParts checks a quoted attribute value's parts. Every error is
+// reported on the attribute (pos); a part's own position anchors the search for
+// a `this` token, so `title="{ 'this' } { this }"` lands on the second one.
 func (c *compiler) checkDataParts(parts []parser.Part, pos parser.Position) error {
 	for _, part := range parts {
 		var err error
 		switch p := part.(type) {
 		case *parser.InterpPart:
 			if p.Interp != nil {
-				err = c.checkDataInterp(p.Interp, pos)
+				err = c.checkDataChainAt(p.Interp.Expr, p.Interp.Formatters, pos, p.Interp.Pos)
 			}
 		case *parser.InlineIfPart:
-			if err = c.checkDataExpr(p.Cond, pos); err == nil {
+			if err = c.checkDataExprAt(p.Cond, pos, p.Pos); err == nil {
 				if err = c.checkDataParts(p.Then, pos); err == nil {
 					err = c.checkDataParts(p.Else, pos)
 				}
@@ -465,12 +471,18 @@ func (c *compiler) checkDataInterp(in *parser.Interpolation, pos parser.Position
 // checkDataChain checks a value's base expression and every formatter
 // argument. The formatter call itself is not a call on data (D176 rule 3).
 func (c *compiler) checkDataChain(expr string, fmts []parser.FormatterCall, pos parser.Position) error {
-	if err := c.checkDataExpr(expr, pos); err != nil {
+	return c.checkDataChainAt(expr, fmts, pos, pos)
+}
+
+// checkDataChainAt is checkDataChain with a separate anchor for placing a
+// `this` token (see checkDataExprAt).
+func (c *compiler) checkDataChainAt(expr string, fmts []parser.FormatterCall, pos, anchor parser.Position) error {
+	if err := c.checkDataExprAt(expr, pos, anchor); err != nil {
 		return err
 	}
 	for _, fc := range fmts {
 		for _, arg := range fc.Args {
-			if err := c.checkDataExpr(arg, pos); err != nil {
+			if err := c.checkDataExprAt(arg, pos, anchor); err != nil {
 				return err
 			}
 		}
@@ -479,49 +491,119 @@ func (c *compiler) checkDataChain(expr string, fmts []parser.FormatterCall, pos 
 }
 
 func (c *compiler) checkDataExpr(expr string, pos parser.Position) error {
+	return c.checkDataExprAt(expr, pos, pos)
+}
+
+// checkDataExprAt checks one value expression. pos is the node an error is
+// reported on; a `this` error is placed on its own token instead, searched for
+// in the brace group that starts at or after anchor.
+func (c *compiler) checkDataExprAt(expr string, pos, anchor parser.Position) error {
 	if len(sizeSteps(expr)) > 0 {
 		c.usesSize = true
 	}
 	if msg, at := dataExprError(expr); msg != "" {
-		return c.cgErr(c.exprTokenPos(pos, expr, at), msg)
+		return c.cgErr(c.exprTokenPos(anchor, expr, at, pos), msg)
 	}
 	return nil
 }
 
-// exprTokenPos maps the byte offset at inside expr to file coordinates. The AST
-// positions a node (its `{`, attribute name or block tag), not the expression
-// inside it, so expr is found in the section source at or after the node, as a
-// whole identifier-bounded match, and the node position advanced to the token.
-// A folded `{#unless}` condition (`!(…)`, D176) is found by its authored inner
-// text. When at is negative or expr cannot be found, the node position stands.
-func (c *compiler) exprTokenPos(pos parser.Position, expr string, at int) parser.Position {
-	from := pos.Offset - c.exprSrcPos.Offset
-	if at < 0 || from < 0 || from > len(c.exprSrc) {
-		return pos
+// exprTokenPos is the file position of the token at byte offset at of expr (a
+// `this`), or fallback when it cannot be placed (at < 0, or no file source).
+// The AST positions a node — its `{`, a block tag, an attribute name — not the
+// expression inside it, so the search is bounded to the node's own brace group:
+// the first `{` at or after anchor through its matching `}`. Inside that span
+// expr is matched as written, token-aware: an occurrence must start outside a
+// string, comment or regex literal, as a whole word, and not as a member step
+// (`x.this`). The checks run in source order and stop at the first error, so
+// the first such occurrence is the one that failed. A folded `{#unless}`
+// condition (`!(…)`, D176) is matched by its authored inner text first.
+func (c *compiler) exprTokenPos(anchor parser.Position, expr string, at int, fallback parser.Position) parser.Position {
+	src := c.src
+	if at < 0 || anchor.Offset < 0 || anchor.Offset >= len(src) {
+		return fallback
 	}
-	find := func(needle string) int {
-		for base := from; base <= len(c.exprSrc); {
-			i := strings.Index(c.exprSrc[base:], needle)
+	open := -1
+	for i := anchor.Offset; i < len(src); i++ {
+		if src[i] == '\\' {
+			i++
+			continue
+		}
+		if src[i] == '{' {
+			open = i
+			break
+		}
+	}
+	if open < 0 {
+		return fallback
+	}
+	end := matchBalanced(src, open, '{', '}')
+	if end < 0 {
+		return fallback
+	}
+	body := src[open+1 : end]
+	opaque := opaqueSpans(body)
+	place := func(needle string, at int) int {
+		if needle == "" || at >= len(needle) {
+			return -1
+		}
+		for from := 0; from <= len(body)-len(needle); {
+			i := strings.Index(body[from:], needle)
 			if i < 0 {
 				return -1
 			}
-			start, end := base+i, base+i+len(needle)
-			if (start == 0 || !isIdentChar(c.exprSrc[start-1])) &&
-				(end == len(c.exprSrc) || !isIdentChar(c.exprSrc[end])) {
-				return start
+			s := from + i
+			from = s + 1
+			if opaque[s] {
+				continue
 			}
-			base = start + 1
+			if e := s + len(needle); e < len(body) && isIdentChar(needle[len(needle)-1]) && isIdentChar(body[e]) {
+				continue
+			}
+			if s > 0 && isIdentChar(needle[0]) && isIdentChar(body[s-1]) {
+				continue
+			}
+			// A member step, not a reference — unless the dots are a spread or
+			// a range (`...this`, `1...this.n`).
+			if s > 0 && body[s-1] == '.' && !(s >= 3 && body[s-3:s] == "...") {
+				continue
+			}
+			return s + at
 		}
 		return -1
 	}
-	start := find(expr)
-	if start < 0 && at >= 2 && strings.HasPrefix(expr, "!(") && strings.HasSuffix(expr, ")") {
-		if start = find(expr[2 : len(expr)-1]); start >= 0 {
-			at -= 2
+	ref := -1
+	if at >= 2 && strings.HasPrefix(expr, "!(") && strings.HasSuffix(expr, ")") {
+		ref = place(expr[2:len(expr)-1], at-2)
+	}
+	if ref < 0 {
+		ref = place(expr, at)
+	}
+	if ref < 0 {
+		return fallback
+	}
+	return anchor.Advance(src[anchor.Offset : open+1+ref])
+}
+
+// opaqueSpans marks every byte of s inside a string, template literal, regex
+// literal or comment. parser.LexSkip consumes those whole — and identifier
+// runs too, which are not opaque, so only a run that opens with a quote, a
+// backtick or a slash is marked.
+func opaqueSpans(s string) []bool {
+	opaque := make([]bool, len(s))
+	prevEndsExpr := false
+	for i := 0; i < len(s); {
+		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
+			if c := s[i]; c == '\'' || c == '"' || c == '`' || c == '/' {
+				for j := i; j < next && j < len(s); j++ {
+					opaque[j] = true
+				}
+			}
+			prevEndsExpr = pee
+			i = next
+			continue
 		}
+		prevEndsExpr = parser.LexPlainEndsExpr(s[i], prevEndsExpr)
+		i++
 	}
-	if start < 0 {
-		return pos
-	}
-	return pos.Advance(c.exprSrc[from : start+at])
+	return opaque
 }

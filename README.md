@@ -123,11 +123,14 @@ export default class TrackList extends PuzzleView {
 `pluralize` prints `2 tracks` and `compact_number` prints `45K`. A template
 expression is data plus operators: fields, `.size` for a count, `+ - * / %`,
 comparisons and `??` for a fallback. It never calls JavaScript on a value
-(`name.trim()` and `.length` are compile errors); that work goes in `data()`,
-or behind `this.` and `@event` handlers. Formatters chain left to right and
-take arguments. They go in values only: an `{#if}` or `{#for}` header takes no
-pipe, so compute that value in `data()`. A path like `{ user.address.city }`
-prints nothing instead of throwing when `address` is missing.
+(`name.trim()` and `.length` are compile errors); that work goes in `data()`.
+A template never reaches the view instance: `this` is a compile error in every
+template expression, and an `@event` handler reaches the view through its own
+name (`@click={ save(x) }` calls the view's `save`). Formatters chain left to
+right and take arguments. They go in values only: an `{#if}` or `{#for}` header
+takes no pipe, so compute that value in `data()`. A path like
+`{ user.address.city }` prints nothing instead of throwing when `address` is
+missing.
 
 ### Routes
 

@@ -32,6 +32,10 @@ func TestResolveExpr(t *testing.T) {
 		{"string contents untouched", "'a.b + c'", nil, "'a.b + c'"},
 		{"double-quoted string", "\"x + y\"", nil, "\"x + y\""},
 		{"keyword true", "true", nil, "true"},
+		// The D176 pre-check rejects `this` in a template; below it the resolver
+		// still never reads `this` as a data root.
+		{"keyword this", "this", nil, "this"},
+		{"this is never a data root", "this.x", nil, "this.x"},
 		{"null/undefined", "a || null || undefined", nil, "__d.a || null || undefined"},
 		{"optional chaining property", "user.profile?.name", nil, "__d.user.profile?.name"},
 		{"event in scope", "handler(event)", scope("event"), "__d.handler(event)"},
@@ -373,6 +377,9 @@ func TestCompileEventValue(t *testing.T) {
 		{"call with string arg", "setFilter('all')", nil, "(event) => this.events.setFilter('all')", true, false},
 		{"call with event arg", "addTodo(event)", nil, "(event) => this.events.addTodo(event)", true, false},
 		{"call with no args", "reset()", nil, "(event) => this.events.reset()", true, false},
+		// The D176 pre-check rejects `this` in a handler argument; below it the
+		// argument is still never read as the data field `__d.this`.
+		{"call with this arg", "save(this.x)", nil, "(event) => this.events.save(this.x)", true, false},
 		{"call with global arg", "clamp(Math.PI)", nil, "(event) => this.events.clamp(Math.PI)", true, false},
 		// Loop/scope variables and data references capture render state → NOT
 		// cacheable, and must emit the plain arrow byte-identical to v1.28.

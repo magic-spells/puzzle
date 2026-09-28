@@ -95,7 +95,10 @@ func TestDataLanguageRejections(t *testing.T) {
 // shows comes through data(), and a handler reaches the view through its own
 // name. The error is positioned at the `this` token itself; at names the
 // source text that starts there, so the expected line and column are derived
-// from the body rather than hand-counted.
+// from the body rather than hand-counted. A body that starts with
+// `<puzzle-view` is the whole template section (its root attributes sit before
+// the template content); every other body is wrapped by coreSrc, so it starts
+// on line 2.
 func TestDataLanguageRejectsThis(t *testing.T) {
 	for _, tc := range []struct {
 		name, body, at string
@@ -138,9 +141,26 @@ func TestDataLanguageRejectsThis(t *testing.T) {
 		// merely starts with `this`.
 		{"second line", "  <p>\n    { a } { this.x }\n  </p>", "this.x"},
 		{"after a longer name", "  <p>{ thisx | truncate(this) }</p>", "this)"},
+		// The search stays inside the node's own brace group and skips strings,
+		// comments and members named `this`.
+		{"after a member named this", "  <p>{ x.this | pad(this) }</p>", "this)"},
+		{"after static text in a quoted attribute", `  <p title="this { this }">y</p>`, "this }"},
+		{"after a string in a quoted attribute", `  <p title="{ 'this' } { this }">y</p>`, "this }"},
+		{"unless before an identical folded condition",
+			"  {#unless this.r}<b>a</b>{/unless}\n  {#if !(this.r)}<b>b</b>{/if}", "this.r}<b>a"},
+		{"view root attribute", "<puzzle-view class={ this.x }>\n  <p>a</p>\n</puzzle-view>", "this.x"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := compileCore(t, tc.body)
+			src, first := coreSrc(tc.body), 2
+			if strings.HasPrefix(tc.body, "<puzzle-view") {
+				src, first = tc.body+"\n\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\n"+
+					"export default class T extends PuzzleView {}\n</script>\n", 1
+			}
+			sec, err := parser.SplitSections(src, "T.pzl")
+			if err != nil {
+				t.Fatalf("split: %v", err)
+			}
+			_, err = Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
 			if err == nil {
 				t.Fatalf("expected a compile error")
 			}
@@ -148,7 +168,7 @@ func TestDataLanguageRejectsThis(t *testing.T) {
 			if m < 0 {
 				t.Fatalf("bad case: %q not in body", tc.at)
 			}
-			line := 2 + strings.Count(tc.body[:m], "\n")
+			line := first + strings.Count(tc.body[:m], "\n")
 			col := m - strings.LastIndex(tc.body[:m], "\n")
 			want := fmt.Sprintf("T.pzl:%d:%d: %s", line, col, dataThisMsg)
 			if err.Error() != want {
@@ -173,6 +193,26 @@ func TestDataLanguageRejectsThisInSkeleton(t *testing.T) {
 	_, err = Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
 	if want := "T.pzl:4:8: " + dataThisMsg; err == nil || err.Error() != want {
 		t.Fatalf("want %q, got %v", want, err)
+	}
+}
+
+// Defense in depth: whatever reaches the resolver without the D176 pre-check,
+// `this` is never compiled as the data field `__d.this`.
+func TestResolverNeverReadsThisAsData(t *testing.T) {
+	outs := map[string]string{
+		"resolveExpr":      resolveExpr("this.x", nil),
+		"resolveValueScan": resolveValueScan("this.x", scopeMap{}, nil),
+		"ResolveCheckExpr": ResolveCheckExpr("this.x", nil),
+	}
+	ev, err := compileEventValue("save(this.x)", nil, nil)
+	if err != nil {
+		t.Fatalf("compileEventValue: %v", err)
+	}
+	outs["compileEventValue"] = ev.js
+	for name, out := range outs {
+		if strings.Contains(out, "__d.this") {
+			t.Errorf("%s emitted a data read of this: %q", name, out)
+		}
 	}
 }
 

@@ -229,6 +229,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 
 	c := &compiler{
+		src:                   sec.Source,
 		file:                  opts.Filename,
 		svgDedup:              opts.SVGDedup,
 		svgCache:              opts.SVGCache,
@@ -246,7 +247,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	// `.length`, no JavaScript-only syntax outside handler bodies, and no
 	// `this` anywhere. Checked up front, so every value the emitters resolve
 	// passes.
-	if err := c.checkDataLanguage([]parser.Node{root}, sec.TemplateContent, sec.TemplatePos); err != nil {
+	if err := c.checkDataLanguage([]parser.Node{root}); err != nil {
 		return "", err
 	}
 
@@ -300,7 +301,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		if err := c.checkMarkupFormatters(skel.Children, ""); err != nil {
 			return "", err
 		}
-		if err := c.checkDataLanguage(skel.Children, sec.Skeleton, sec.SkeletonPos); err != nil {
+		if err := c.checkDataLanguage(skel.Children); err != nil {
 			return "", err
 		}
 		collectA11yWarnings(skel.Children, opts.Filename, warnings)
@@ -512,11 +513,10 @@ type compiler struct {
 	// Set by the D176 pre-check when a template value reads `.size`, which the
 	// resolver lowers to the package-root helper imported as `__z`.
 	usesSize bool
-	// exprSrc/exprSrcPos are the section the D176 pre-check is walking (the
-	// template or the skeleton) and where it starts in the file, so a `this`
-	// error lands on its own token rather than on its node.
-	exprSrc    string
-	exprSrcPos parser.Position
+	// src is the whole .pzl file (parser.Sections.Source), which every node
+	// Position.Offset indexes, so a `this` error lands on its own token rather
+	// than on its node. Empty when the Sections did not come from SplitSections.
+	src string
 
 	// Set when a `.map` item loop (usesLoopItems) or a range loop
 	// (usesLoopRange) is emitted, so the runtime loop guards (D173 V12) are

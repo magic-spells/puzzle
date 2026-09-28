@@ -17,6 +17,12 @@ import (
 
 // Sections is the result of splitting a .pzl file.
 type Sections struct {
+	// Source is the whole .pzl file SplitSections was given, byte for byte.
+	// Every Position.Offset indexes it, so a caller can map a node back to its
+	// source text (codegen positions an error at a token inside an expression
+	// this way).
+	Source string
+
 	// TemplateContent is the inner content of <puzzle-view> (between '>' and
 	// '</puzzle-view>').
 	TemplateContent string
@@ -74,7 +80,7 @@ var sectionNames = []string{"puzzle-view", "puzzle-skeleton", "script", "style"}
 // <script> is OPTIONAL (DOC-SPEC.md §4): a template-only .pzl leaves Scripts == "" and codegen
 // synthesizes a PuzzleView subclass named from the filename.
 func SplitSections(src, filename string) (*Sections, error) {
-	sec := &Sections{}
+	sec := &Sections{Source: src}
 	var nView, nSkeleton, nScripts, nStyles int
 
 	i := 0
