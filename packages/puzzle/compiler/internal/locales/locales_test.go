@@ -288,6 +288,9 @@ func TestLoadWarnsOnEmptyObjects(t *testing.T) {
 // configured tag on disk, the rename hint names the same one on every run.
 func TestLoadCaseMismatchHintIsDeterministic(t *testing.T) {
 	root := writeLocales(t, map[string]string{"en.json": `{}`, "PT-br.json": `{}`, "pt-br.json": `{}`, "Pt-bR.json": `{}`})
+	if entries, _ := os.ReadDir(filepath.Join(root, "app", "locales")); len(entries) < 4 {
+		t.Skip("case-insensitive filesystem: the case variants collapse into one file")
+	}
 	for i := 0; i < 50; i++ {
 		_, err := Load(root, cfg("en", "en", "pt-BR"))
 		if err == nil || !strings.Contains(err.Error(), "(found app/locales/PT-br.json — rename it to pt-BR.json)") {
