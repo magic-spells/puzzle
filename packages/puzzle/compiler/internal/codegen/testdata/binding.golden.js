@@ -126,7 +126,7 @@ Binding.prototype.render = function () {
       multiple: true,
     }, []),
     new ViewNode(Foo, { value: __d.x }, []),
-    new ViewNode('input', { value: __d.x?.trim() }, []),
+    new ViewNode('input', { value: __d.x?.a?.b }, []),
   ]);
 };
 Binding.__pzlModule = 'binding.pzl';

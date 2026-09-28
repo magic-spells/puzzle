@@ -242,6 +242,12 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if err := c.checkMarkupFormatters([]parser.Node{root}, ""); err != nil {
 		return "", err
 	}
+	// Template values are a data language (D176): no calls on data, no
+	// `.length`, no JavaScript-only syntax outside `this.` chains and handler
+	// bodies. Checked up front, so every value the emitters resolve passes.
+	if err := c.checkDataLanguage([]parser.Node{root}); err != nil {
+		return "", err
+	}
 
 	// Resolve {#svg} nodes (v1.14, D46): read each referenced file and splice an
 	// <svg> element carrying its attrs + raw inner markup, BEFORE emit. Run on the
@@ -293,6 +299,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		if err := c.checkMarkupFormatters(skel.Children, ""); err != nil {
 			return "", err
 		}
+		if err := c.checkDataLanguage(skel.Children); err != nil {
+			return "", err
+		}
 		collectA11yWarnings(skel.Children, opts.Filename, warnings)
 		if err := c.resolveInlineSVG(skel.Children, opts.AssetsDir, inlined); err != nil {
 			return "", err
@@ -338,6 +347,11 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 	if c.usesDisplayValue {
 		imports = append(imports, "displayValue as __s")
+	}
+	// The `.size` helper (D176) follows the same rule: only a module whose
+	// template reads a count imports it.
+	if c.usesSize {
+		imports = append(imports, "sizeOf as __z")
 	}
 	// The list block is imported ONLY by a module that lowered at least one
 	// item-form {#for} (D170), exactly as displayValue is imported only by a
@@ -493,6 +507,10 @@ type compiler struct {
 	// package-root display helper. Static-only modules and modules whose dynamic
 	// values remain raw vnode attrs do not pay for an unused import.
 	usesDisplayValue bool
+
+	// Set by the D176 pre-check when a template value reads `.size`, which the
+	// resolver lowers to the package-root helper imported as `__z`.
+	usesSize bool
 
 	// Set when a `.map` item loop (usesLoopItems) or a range loop
 	// (usesLoopRange) is emitted, so the runtime loop guards (D173 V12) are

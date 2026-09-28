@@ -24,7 +24,7 @@
   <input type="checkbox" value={ checkboxValue } />
   <select value={ multiValue } multiple></select>
   <Foo value={ x } />
-  <input value={ x.trim() } />
+  <input value={ x.a.b } />
 </puzzle-view>
 
 <script>

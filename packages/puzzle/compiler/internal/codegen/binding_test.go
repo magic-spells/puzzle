@@ -28,6 +28,7 @@ func TestClassifyBindExpr(t *testing.T) {
 		{name: "deep member", raw: "a.b.c"},
 		{name: "call", raw: "fmt(x)"},
 		{name: "member call", raw: "x.trim()"},
+		{name: "size field (D176)", raw: "profile.size", target: "profile", field: "size", ok: true},
 		{name: "addition", raw: "a + b"},
 		{name: "nullish", raw: "a ?? ''"},
 		{name: "ternary", raw: "a ? b : c"},

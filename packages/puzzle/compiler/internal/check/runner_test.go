@@ -12,7 +12,7 @@ import (
 
 func TestFabricatedTSCOutputRemapsExactly(t *testing.T) {
 	source := []byte(`<puzzle-view>
-  <p>{ person.name.toUpperCase() }</p>
+  <p>{ person.name.upper }</p>
 </puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -28,18 +28,18 @@ export default class Home extends PuzzleView {
 		t.Fatal(err)
 	}
 	virtual := virtualFileWithExtension(t, files, ".ts")
-	offset := strings.LastIndex(string(virtual.Contents), "toUpperCase")
+	offset := strings.LastIndex(string(virtual.Contents), "upper")
 	if offset < 0 {
-		t.Fatal("generated output missing toUpperCase")
+		t.Fatal("generated output missing upper")
 	}
 	line, column := utf16LineColumn(virtual.Contents, offset)
 	tables := map[string]*SegmentTable{
 		filepath.Join(root, filepath.FromSlash(generatedPath)): virtual.Table,
 	}
-	input := filepath.ToSlash(generatedPath) + "(" + strconv.Itoa(line) + "," + strconv.Itoa(column) + "): error TS2339: Property 'toUpperCase' does not exist on type 'number'.\n" +
+	input := filepath.ToSlash(generatedPath) + "(" + strconv.Itoa(line) + "," + strconv.Itoa(column) + "): error TS2339: Property 'upper' does not exist on type 'number'.\n" +
 		"app/models/user.ts(4,2): error TS2322: Type 'number' is not assignable to type 'string'.\n"
 	got := remapTSCOutput(root, input, tables)
-	want := "app/views/Home.pzl:2:20: Property 'toUpperCase' does not exist on type 'number'.\n" +
+	want := "app/views/Home.pzl:2:20: Property 'upper' does not exist on type 'number'.\n" +
 		"app/models/user.ts(4,2): error TS2322: Type 'number' is not assignable to type 'string'.\n"
 	if got != want {
 		t.Fatalf("remapped output mismatch\nwant:\n%s\ngot:\n%s", want, got)
@@ -106,7 +106,7 @@ func TestRunWithLiveTSC(t *testing.T) {
 	if err := os.MkdirAll(viewDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	source := `<puzzle-view><p>{ value.toUpperCase() }</p></puzzle-view>
+	source := `<puzzle-view><p>{ value.upper }</p></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -120,7 +120,7 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected template type error")
 	}
-	want := "app/views/Home.pzl:1:25: Property 'toUpperCase' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:25: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("live tsc output mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -128,7 +128,7 @@ export default class Home extends PuzzleView { value = 123; }
 
 func TestPlainJSScriptUncheckedByDefault(t *testing.T) {
 	root := liveTSCApp(t)
-	writeLiveView(t, root, plainJSComponent("value.toFixed(0)"))
+	writeLiveView(t, root, plainJSComponent("value + 1"))
 
 	if _, err := Run(root); err != nil {
 		t.Fatalf("type-suspicious legal JavaScript must remain unchecked by default: %v", err)
@@ -137,13 +137,13 @@ func TestPlainJSScriptUncheckedByDefault(t *testing.T) {
 
 func TestPlainJSTemplateErrorsAreReported(t *testing.T) {
 	root := liveTSCApp(t)
-	writeLiveView(t, root, plainJSComponent("value.toUpperCase()"))
+	writeLiveView(t, root, plainJSComponent("value.upper"))
 
 	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected checked template expression to fail")
 	}
-	want := "app/views/Home.pzl:1:25: Property 'toUpperCase' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:25: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("plain-JS template diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -376,7 +376,7 @@ func generateCheckApp(t *testing.T) (string, *Result) {
 		t.Fatal(err)
 	}
 	source := `<puzzle-view>
-  <p>{ person.name.toUpperCase() }</p>
+  <p>{ person.name.upper }</p>
 </puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -396,7 +396,7 @@ export default class Home extends PuzzleView {
 }
 
 // tsTableFor returns the .ts virtual file's table for app/views/Home.pzl out of
-// the run's index, plus the generated line/column of the toUpperCase call.
+// the run's index, plus the generated line/column of the `upper` read.
 func tsTableFor(t *testing.T, root string, result *Result) (*SegmentTable, int, int) {
 	t.Helper()
 	generated := filepath.Join(root, ".puzzle", "check", "src", "views", "Home.pzl.ts")
@@ -404,9 +404,9 @@ func tsTableFor(t *testing.T, root string, result *Result) (*SegmentTable, int, 
 	if table == nil {
 		t.Fatalf("tableIndex has no entry for %s", generated)
 	}
-	offset := strings.LastIndex(string(table.generatedBytes), "toUpperCase")
+	offset := strings.LastIndex(string(table.generatedBytes), "upper")
 	if offset < 0 {
-		t.Fatal("generated output missing toUpperCase")
+		t.Fatal("generated output missing upper")
 	}
 	line, column := utf16LineColumn(table.generatedBytes, offset)
 	return table, line, column
@@ -442,7 +442,7 @@ func TestTableIndexSurvivesSourceEditAfterGenerate(t *testing.T) {
 			if !ok {
 				t.Fatal("Remap failed after the authored file changed on disk")
 			}
-			// toUpperCase in the original source sits on line 2, byte column 20.
+			// `upper` in the original source sits on line 2, byte column 20.
 			if pos.Line != 2 || pos.Column != 20 {
 				t.Fatalf("remapped position = %d:%d, want 2:20 (the authored source, not what is on disk)", pos.Line, pos.Column)
 			}
@@ -470,7 +470,7 @@ func TestTableIndexKeysMatchRemapLookup(t *testing.T) {
 // expression. The negative half runs first so a silently-skipped emission
 // cannot pass this test.
 func TestDottedComponentTagChecksProps(t *testing.T) {
-	bad := `<puzzle-view><Frame.Wrapper label={ value.toUpperCase() }><Frame.Content/></Frame.Wrapper></puzzle-view>
+	bad := `<puzzle-view><Frame.Wrapper label={ value.upper }><Frame.Content/></Frame.Wrapper></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -482,15 +482,15 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected the prop expression on a dotted component tag to be checked")
 	}
-	want := "app/views/Home.pzl:1:43: Property 'toUpperCase' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:43: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("dotted-tag diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
 
-	good := `<puzzle-view><Frame.Wrapper label={ value.toUpperCase() }><Frame.Content/></Frame.Wrapper></puzzle-view>
+	good := `<puzzle-view><Frame.Wrapper label={ value.upper }><Frame.Content/></Frame.Wrapper></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
-export default class Home extends PuzzleView { value = 'ok'; }
+export default class Home extends PuzzleView { value = { upper: 'OK' }; }
 </script>
 `
 	clean := liveTSCApp(t)

@@ -39,7 +39,7 @@ export default class T extends PuzzleView {}
 // so nothing is padded — the else stays `: []`.
 func TestNoElseIfEmptyBranchStaysEmpty(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view>
-  {#if items.length}{#for x in items}<li>{ x }</li>{/for}{/if}
+  {#if items.size}{#for x in items}<li>{ x }</li>{/for}{/if}
 </puzzle-view>
 
 <script>

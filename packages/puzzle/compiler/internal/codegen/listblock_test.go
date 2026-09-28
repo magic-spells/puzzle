@@ -203,9 +203,10 @@ func TestListBlockFieldsAndDeep(t *testing.T) {
 		{"depth one", "<li>{ todo.text } { todo.author }</li>", "fields: ['author', 'text']", false},
 		{"sorted distinct", "<li>{ todo.b } { todo.a } { todo.b }</li>", "fields: ['a', 'b']", false},
 		{"deep path", "<li>{ todo.author.name }</li>", "", true},
-		{"call on item", "<li>{ todo.fullName() }</li>", "", true},
+		{"count of the item", "<li>{ todo.size }</li>", "fields: ['size']", false},
+		{"count of a member", "<li>{ todo.tags.size }</li>", "", true},
 		{"dynamic member", "<li>{ todo[key] }</li>", "", true},
-		{"item into a displayed call", "<li>{ fmt(todo) }</li>", "", true},
+		{"item into a formatter", "<li>{ todo | byline }</li>", "", true},
 		{"whole item as a prop", "<Row todo={ todo } />", "", false},
 		{"whole item as a handler arg", "<li @click={ del(todo) }>x</li>", "", false},
 	}
@@ -613,8 +614,7 @@ func TestListMetaOpaqueRecordReads(t *testing.T) {
 		{"formatter pipe", "<li>{ post | authorName }</li>", true},
 		{"parenthesised member access", "<li>{ (post).author.name }</li>", true},
 		{"comment-separated member access", "<li>{ post /* c */ .author.name }</li>", true},
-		{"template-literal interpolation", "<li>{ `by ${post}` }</li>", true},
-		{"call argument", "<li>{ fmt(post) }</li>", true},
+		{"formatter argument", "<li>{ 'by' | byline(post) }</li>", true},
 		{"operand of a larger expression", "<li>{ 'by ' + post }</li>", true},
 		{"deep path", "<li>{ post.author.name }</li>", true},
 		{"display of the record", "<li>{ post }</li>", false},
@@ -644,13 +644,8 @@ func TestListMetaVolatileGlobals(t *testing.T) {
 	}{
 		{"window", "<li>{ window.location.hash }{ todo.text }</li>", true},
 		{"document", "<li>{ document.title }{ todo.text }</li>", true},
-		{"Date.now", "<li>{ Date.now() }{ todo.text }</li>", true},
-		{"new Date", "<li>{ new Date().getFullYear() }{ todo.text }</li>", true},
-		{"Math.random", "<li>{ Math.random() }{ todo.text }</li>", true},
 		{"globalThis", "<li>{ globalThis.x }{ todo.text }</li>", true},
-		{"Math.max stays pure", "<li>{ Math.max(todo.a, 1) }</li>", false},
-		{"JSON stays pure", "<li>{ JSON.stringify(todo.a) }</li>", false},
-		{"Number stays pure", "<li>{ Number(todo.a) }</li>", false},
+		{"Math.PI stays pure", "<li>{ Math.PI * todo.a }</li>", false},
 		{"Intl stays pure", "<li>{ Intl.NumberFormat }{ todo.text }</li>", false},
 	}
 	for _, tc := range cases {

@@ -111,6 +111,14 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 			script:    "import { x as __L0 } from './x.js';",
 			wantIdent: "__L0",
 		},
+		// The D176 `.size` helper is reserved only by a file that reads a count.
+		{
+			name:      "declared __z with a .size read",
+			template:  "<puzzle-view>\n  <p>{ items.size }</p>\n</puzzle-view>",
+			script:    "const __z = 1;",
+			wantIdent: "__z",
+		},
+		{name: "declared __z without a .size read", template: coercing, script: "const __z = 1;"},
 		// Only the site indices this file actually emits are reserved: one loop
 		// emits __L0, never __L1.
 		{name: "declared __L1 with a single loop", template: looping, script: "const __L1 = 1;"},
@@ -182,6 +190,8 @@ func TestReservedLoopHelperExplanations(t *testing.T) {
 		{"__e", "<puzzle-view>\n  <ul>{#for 1...2, n}<li>{#for row in rows}<b>{ row.n }</b>{/for}</li>{/for}</ul>\n</puzzle-view>", "const __e = 1;", "loopItems as __e"},
 		// A literal range folds to an array; a data bound goes through __r.
 		{"__r", "<puzzle-view>\n  {#for 1...count, n}<li>{ n }</li>{/for}\n</puzzle-view>", "const __r = 1;", "loopRange as __r"},
+		// Not a loop helper, but imported the same way: the D176 `.size` count.
+		{"__z", "<puzzle-view>\n  <p>{ items.size }</p>\n</puzzle-view>", "const __z = 1;", "the `.size` helper as __z"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			src := tc.template + "\n\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\n" +

@@ -92,8 +92,9 @@ func (b *mappedBuilder) WriteMapped(s string, sourceOffset int) {
 }
 
 // WriteResolved writes a codegen-resolved expression while mapping every byte
-// copied from the authored expression. ResolveCheckExpr only inserts __d.
-// prefixes; it never deletes or rewrites source bytes.
+// copied from the authored expression. ResolveCheckExpr inserts __d. prefixes
+// and makes one rewrite: a `.size` step becomes `__z(` … `)` around the chain
+// before it (D176), so the authored step is skipped where the `)` is written.
 func (b *mappedBuilder) WriteResolved(resolved, authored string, sourceOffset int) {
 	si, gi := 0, 0
 	for si < len(authored) && gi < len(resolved) {
@@ -111,6 +112,19 @@ func (b *mappedBuilder) WriteResolved(resolved, authored string, sourceOffset in
 			gi += len("__d.")
 			continue
 		}
+		if strings.HasPrefix(resolved[gi:], "__z(") {
+			b.WriteString("__z(")
+			gi += len("__z(")
+			continue
+		}
+		if resolved[gi] == ')' {
+			if n := sizeStepLen(authored[si:]); n > 0 {
+				b.WriteString(")")
+				gi++
+				si += n
+				continue
+			}
+		}
 		// ResolveCheckExpr's contract is insertion-only. Keep an unexpected byte
 		// unmapped rather than manufacturing a false source position.
 		b.WriteString(resolved[gi : gi+1])
@@ -119,6 +133,34 @@ func (b *mappedBuilder) WriteResolved(resolved, authored string, sourceOffset in
 	if gi < len(resolved) {
 		b.WriteString(resolved[gi:])
 	}
+}
+
+// sizeStepLen returns the length of the `.size` / `?.size` member step (with
+// any whitespace around the operator) that s starts with, or 0.
+func sizeStepLen(s string) int {
+	i := 0
+	skip := func() {
+		for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+			i++
+		}
+	}
+	skip()
+	if strings.HasPrefix(s[i:], "?.") {
+		i += 2
+	} else if strings.HasPrefix(s[i:], ".") {
+		i++
+	} else {
+		return 0
+	}
+	skip()
+	if !strings.HasPrefix(s[i:], "size") {
+		return 0
+	}
+	i += len("size")
+	if i < len(s) && isIdentByte(s[i]) {
+		return 0
+	}
+	return i
 }
 
 // WriteSubsequence is used for codegen's event expression, whose wrapper adds

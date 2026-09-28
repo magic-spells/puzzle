@@ -215,10 +215,11 @@ var jsKeywords = map[string]bool{
 
 // jsGlobals are standard JS global values/constructors that may be referenced
 // directly in a template expression and must NOT be rewritten to __d.<name>
-// (e.g. { Math.max(count, 1) } → Math.max(__d.count, 1), not __d.Math.max(…),
-// which would throw at runtime). A data variable that happens to share one of
-// these names is not distinguishable here and stays un-prefixed; that is an
-// accepted trade-off for making the standard globals usable in templates.
+// (e.g. { Math.PI * r } → Math.PI * __d.r, not __d.Math.PI; a call such as
+// Math.max(…) survives the D176 pre-check only in a handler or a `this.`
+// chain). A data variable that happens to share one of these names is not
+// distinguishable here and stays un-prefixed; that is an accepted trade-off for
+// making the standard globals usable in templates.
 var jsGlobals = map[string]bool{
 	"Math": true, "JSON": true, "Date": true, "Number": true, "String": true,
 	"Boolean": true, "Array": true, "Object": true, "RegExp": true, "Error": true,
@@ -283,7 +284,7 @@ func isJSIdentifier(s string) bool {
 // their values and leaves their keys alone), but not at the start of an
 // expression, where `{ {` reads as a brace inside the interpolation brace.
 // Callers detect it up front for an actionable, positioned error (SPEC §6).
-const objectLiteralMsg = "a template expression can't start with an object literal — pass it as an argument (a formatter's or a call's) or build it in data() (SPEC §6)"
+const objectLiteralMsg = "a template expression can't start with an object literal — pass it as a formatter argument or build it in data() (SPEC §6)"
 
 // startsWithObjectLiteral reports whether a template expression begins (after
 // leading whitespace) with '{'. Only a LEADING brace is detected (SPEC §6): a
@@ -328,8 +329,12 @@ func resolveExpr(expr string, scope scopeMap) string {
 // second JavaScript scanner drifting from the one that drives runtime codegen.
 // The check emitter only ever binds plain names, so it keeps the plain name-set
 // signature; the scopeMap rewrite values are a render-emission concern.
+//
+// A template value's `.size` compiles to the `__z` helper here too (D176), so
+// the check shim declares `__z` and a count type-checks as the runtime reads it.
 func ResolveCheckExpr(expr string, scope map[string]bool) string {
-	return resolveExpr(expr, boolScope(scope))
+	out, _ := resolveExprScanIn(expr, boolScope(scope), nil, nil, false, false, true)
+	return out
 }
 
 // ResolveCheckEvent exposes the event-value compiler to puzzle check for the
@@ -362,7 +367,7 @@ func ResolveCheckEvent(expr string, scope map[string]bool) (string, error) {
 // puzzle-check emitter. Template VALUE positions go through
 // resolveValueScan instead.
 func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts) (string, bool) {
-	return resolveExprScanIn(expr, scope, trackedScope, facts, false, false)
+	return resolveExprScanIn(expr, scope, trackedScope, facts, false, false, false)
 }
 
 // resolveValueScan is resolveExprScan for a template VALUE position — text
@@ -379,14 +384,15 @@ func resolveExprScan(expr string, scope, trackedScope scopeMap, facts *exprFacts
 // `new` callee (`new Intl.NumberFormat(…)` — `new a?.B()` does not parse). An
 // expression the optional form cannot express at all — a tagged template, an
 // update operator, an assignment — is emitted unguarded, byte-for-byte as
-// resolveExprScan would.
+// resolveExprScan would (after the D176 pre-check, only a `this.` chain can
+// still hold one).
 func resolveValueScan(expr string, scope scopeMap, facts *exprFacts) string {
 	if facts == nil {
 		out, _, ok := resolveGuardedIn(expr, scope, nil, false)
 		if ok {
 			return out
 		}
-		plain, _ := resolveExprScanIn(expr, scope, nil, nil, false, false)
+		plain, _ := resolveExprScanIn(expr, scope, nil, nil, false, false, true)
 		return plain
 	}
 	// The guarded pass reads into a scratch set so a fallback to the plain pass
@@ -397,7 +403,7 @@ func resolveValueScan(expr string, scope scopeMap, facts *exprFacts) string {
 		facts.merge(sub)
 		return out
 	}
-	plain, _ := resolveExprScanIn(expr, scope, nil, facts, false, false)
+	plain, _ := resolveExprScanIn(expr, scope, nil, facts, false, false, true)
 	return plain
 }
 
@@ -405,30 +411,45 @@ func resolveValueScan(expr string, scope scopeMap, facts *exprFacts) string {
 // could be guarded (ok false means: emit the plain form instead).
 func resolveGuardedIn(expr string, scope scopeMap, facts *exprFacts, nested bool) (string, bool, bool) {
 	var unguardable bool
-	out, refs := resolveExprScanFull(expr, scope, nil, facts, nested, true, &unguardable)
+	out, refs := resolveExprScanFull(expr, scope, nil, facts, nested, true, true, &unguardable)
 	return out, refs, !unguardable
 }
 
 // resolveExprScanIn is resolveExprScan with the nesting flag the template-literal
 // recursion sets. A read inside `${…}` is never "the entire expression", however
-// it is spelled, so it can never be the identity-only whole-value read.
-func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFacts, nested, guard bool) (string, bool) {
+// it is spelled, so it can never be the identity-only whole-value read. value
+// marks a template VALUE (the data language, D176), where `.size` compiles to
+// the `__z` helper; handler arguments are JavaScript and leave it as written.
+func resolveExprScanIn(expr string, scope, trackedScope scopeMap, facts *exprFacts, nested, guard, value bool) (string, bool) {
 	var unguardable bool
-	return resolveExprScanFull(expr, scope, trackedScope, facts, nested, guard, &unguardable)
+	return resolveExprScanFull(expr, scope, trackedScope, facts, nested, guard, value, &unguardable)
 }
 
 // chainFrame is the member-chain state saved when a bracket opens, so a root
 // read INSIDE `f(…)`, `a[…]` or `{…}` cannot change how the chain around it is
-// guarded.
+// guarded — or where it starts (chainAt, the output offset a `.size` wraps
+// from). step marks a call argument list or a computed member step, which
+// continue the chain around them; any other bracket (a grouping paren, an array
+// or object literal) STARTS a chain at openAt when it closes.
 type chainFrame struct {
 	open      byte // '(', '[' or '{'
 	safeSteps int
+	chainAt   int
+	openAt    int
+	step      bool
 }
 
 // resolveExprScanFull is the scanner body. guard turns on the D173 V4 member
 // guard; *unguardable is set when the expression contains a construct the
 // optional form cannot express (see resolveValueScan), and the caller then
 // re-emits it plain.
+//
+// value turns on the D176 `.size` lowering: a member step named `size`
+// wraps the chain before it in the `__z` helper — `a.b.size` →
+// `__z(__d.a?.b)`, and a step after it continues the chain
+// (`__z(__d.x)?.y`). sizeSteps decides which steps those are: a `this.` chain
+// is JavaScript and is left as written, as is a call `x.size(…)` (rejected
+// by the D176 pre-check in any case).
 //
 // Object literals (D173 V8) are recognized by their braces: inside `{…}` an
 // identifier in KEY position — right after the `{` or a `,` at that level — is
@@ -438,7 +459,7 @@ type chainFrame struct {
 // undeclared binding at runtime. Quoted, computed and spread members need no
 // special case: strings are copied, and a computed key or a spread operand is
 // an ordinary expression.
-func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprFacts, nested, guard bool, unguardable *bool) (string, bool) {
+func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprFacts, nested, guard, value bool, unguardable *bool) (string, bool) {
 	var b strings.Builder
 	referencesTrackedScope := false
 	n := len(expr)
@@ -467,6 +488,13 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 	afterNew := false
 	topIs := func(open byte) bool {
 		return len(brackets) > 0 && brackets[len(brackets)-1].open == open
+	}
+	// chainAt is the output offset where the current member chain began (its
+	// root, literal or bracketed primary), which a `.size` step wraps from.
+	chainAt := 0
+	var sizeAt map[int]bool
+	if value {
+		sizeAt = sizeSteps(expr)
 	}
 	for i < n {
 		c := expr[i]
@@ -503,6 +531,7 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 				}
 				j++
 			}
+			chainAt = b.Len()
 			b.WriteString(expr[i:j])
 			lastNonSpace = c
 			prevEndsExpr = true
@@ -515,6 +544,9 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 				*unguardable = true
 			}
 			j := i + 1
+			if !prevEndsExpr {
+				chainAt = b.Len()
+			}
 			b.WriteByte('`')
 			for j < n {
 				if expr[j] == '\\' {
@@ -539,7 +571,9 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 						break
 					}
 					inner := expr[j+2 : end]
-					resolved, referencesScope := resolveExprScanFull(inner, scope, trackedScope, facts, true, guard, unguardable)
+					// value is off inside `${…}`: a template literal survives the
+					// D176 pre-check only inside a `this.` chain, which is JavaScript.
+					resolved, referencesScope := resolveExprScanFull(inner, scope, trackedScope, facts, true, guard, false, unguardable)
 					b.WriteString("${")
 					b.WriteString(resolved)
 					b.WriteByte('}')
@@ -580,6 +614,7 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 			case !prevEndsExpr:
 				// Regex literal — copy body + flags verbatim.
 				j := scanRegexLiteral(expr, i)
+				chainAt = b.Len()
 				b.WriteString(expr[i:j])
 				lastNonSpace = expr[j-1]
 				prevEndsExpr = true
@@ -629,6 +664,28 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 			}
 			newCallee := afterNew && !isProp
 			afterNew = false
+			if isProp && sizeAt[i] {
+				// The D176 count: wrap the chain so far, minus its trailing
+				// member operator, in the helper.
+				out := b.String()
+				end := strings.TrimRight(out, " \t\n\r")
+				end = strings.TrimSuffix(end, ".")
+				end = strings.TrimSuffix(end, "?")
+				end = strings.TrimRight(end, " \t\n\r")
+				b.Reset()
+				b.WriteString(out[:chainAt])
+				b.WriteString("__z(")
+				b.WriteString(end[chainAt:])
+				b.WriteByte(')')
+				lastNonSpace = ')'
+				prevEndsExpr = true
+				safeSteps = 0
+				i = j
+				continue
+			}
+			if !isProp {
+				chainAt = b.Len()
+			}
 			local, inScope := scopeRef(scope, name)
 			switch {
 			case isProp:
@@ -693,6 +750,7 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 			// (e/E exponent, x/X hex, trailing n) and '_' separators are not
 			// tokenized as a following identifier — e.g. 1e3, 0xFF, 1_000, 100n.
 			j := scanNumber(expr, i)
+			chainAt = b.Len()
 			b.WriteString(expr[i:j])
 			lastNonSpace = expr[j-1]
 			prevEndsExpr = true
@@ -747,7 +805,7 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 			} else {
 				b.WriteString("?.[")
 			}
-			brackets = append(brackets, chainFrame{open: '[', safeSteps: safeSteps})
+			brackets = append(brackets, chainFrame{open: '[', safeSteps: safeSteps, chainAt: chainAt, step: true})
 			safeSteps = 0
 			lastNonSpace = '['
 			prevEndsExpr = false
@@ -763,7 +821,7 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 				if prevEndsExpr {
 					callDepth++
 				}
-				brackets = append(brackets, chainFrame{open: '(', safeSteps: safeSteps})
+				brackets = append(brackets, chainFrame{open: '(', safeSteps: safeSteps, chainAt: chainAt, openAt: b.Len() - 1, step: prevEndsExpr})
 				safeSteps = 0
 			case ')':
 				if len(parens) > 0 {
@@ -773,14 +831,16 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 					parens = parens[:len(parens)-1]
 				}
 				if topIs('(') {
+					chainAt = closeChain(brackets[len(brackets)-1])
 					brackets = brackets[:len(brackets)-1]
 				}
 				// A call's result (or a parenthesized value) may be nullish, and a
 				// `new` callee ends at its argument list: the next step is guarded.
 				safeSteps = 0
 			case '[':
-				// An array literal (a computed member step took the case above).
-				brackets = append(brackets, chainFrame{open: '[', safeSteps: safeSteps})
+				// An array literal — or, unguarded, a computed member step, which a
+				// value-ending token before it marks.
+				brackets = append(brackets, chainFrame{open: '[', safeSteps: safeSteps, chainAt: chainAt, openAt: b.Len() - 1, step: prevEndsExpr})
 				safeSteps = 0
 			case ']':
 				// Closing a computed member step restores the chain it interrupted
@@ -788,6 +848,7 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 				// root overwrites anyway).
 				if topIs('[') {
 					safeSteps = brackets[len(brackets)-1].safeSteps
+					chainAt = closeChain(brackets[len(brackets)-1])
 					brackets = brackets[:len(brackets)-1]
 				} else {
 					safeSteps = 0
@@ -796,11 +857,12 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 				// Inside an expression a brace opens an object literal (a template
 				// literal's `${` is consumed by the backtick case), so the next
 				// identifier is in key position.
-				brackets = append(brackets, chainFrame{open: '{', safeSteps: safeSteps})
+				brackets = append(brackets, chainFrame{open: '{', safeSteps: safeSteps, openAt: b.Len() - 1})
 				safeSteps = 0
 				keyPos = true
 			case '}':
 				if topIs('{') {
+					chainAt = closeChain(brackets[len(brackets)-1])
 					brackets = brackets[:len(brackets)-1]
 				}
 				safeSteps = 0
@@ -835,6 +897,16 @@ func resolveExprScanFull(expr string, scope, trackedScope scopeMap, facts *exprF
 		}
 	}
 	return b.String(), referencesTrackedScope
+}
+
+// closeChain is where the member chain stands once a bracket closes: a call
+// argument list or computed member step continues the chain it interrupted; a
+// grouping paren or a literal is itself the chain's primary.
+func closeChain(f chainFrame) int {
+	if f.step {
+		return f.chainAt
+	}
+	return f.openAt
 }
 
 // noteLocalRead classifies ONE read of an in-scope binding for exprFacts. src
