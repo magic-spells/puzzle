@@ -159,9 +159,11 @@ A template expression is data plus operators: fields (`a.b`, `a?.b`,
 comparisons, `&& || !`, the ternary and `??` for a fallback. It never calls
 JavaScript on a value — `.length`, `name.trim()`, `String(x)`, `Math.round(x)`,
 arrow functions and template literals are compile errors that name the
-replacement (a formatter, or a field computed in `data()`). `this.` (a view
-getter or method) and `@event` handler bodies are the two doors into
-JavaScript.
+replacement (a formatter, or a field computed in `data()`). A template never
+reaches the view instance: `this` is a compile error in every template
+expression, `@event` handler arguments included. Every value a template shows
+comes through `data()`, and a handler reaches the view through its own name
+(`@click={ save(x) }` calls the view's `save`).
 
 A literal brace is escaped with a backslash — `\{` and `\}` — anywhere an
 expression could appear, attribute values included:

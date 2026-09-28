@@ -237,8 +237,15 @@ Rules that bite:
   Never call JavaScript on a value — `x.trim()`, `String(x)`, `set.has(x)`,
   `items.at(-1)`, `Math.round(x)`, arrow functions and template literals are
   compile errors; compute the value in `data()` (or use a formatter) and read
-  the field. The two doors into JavaScript are `this.` (a view getter or
-  method: `disabled={ !this.canSend }`) and `@event` handler bodies.
+  the field (`disabled={ !canSend }`). **`this` is not a template
+  identifier**: a template never reaches the view instance, so `this` in a
+  value, a block header, a formatter argument, or an `@event` handler's
+  arguments or ternary condition is a compile error. Every value a template
+  shows comes through `data()` — move a getter's body into a `data()` field,
+  and call `this.refresh()` after a `setData()` that field depends on
+  (`setData()` alone does not re-run `data()`). A handler reaches the view
+  through its own name (`@click={ save(x) }` calls the view's `save`); its
+  arguments are otherwise JavaScript.
   A `|` is a formatter pipe at the top level of a value — text, brace-only
   attributes (`title={ price | currency }`), component props and marker
   arguments; `||` stays logical OR, a `|` nested inside parentheses, brackets
