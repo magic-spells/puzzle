@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 // lexer.go is the HTML-aware template lexer
@@ -67,6 +68,10 @@ type Token struct {
 	Line   int
 	Col    int
 	Offset int
+	// ValPos is where Value's first byte sits in the file, for the tokens
+	// whose Value is an expression-bearing header trimmed out of a brace group
+	// (TokBlockOpen, TokElseIf, TokWhen); zero for every other token.
+	ValPos Position
 }
 
 type lexMode int
@@ -312,11 +317,23 @@ func (l *lexer) lexBrace() (Token, error) {
 		return Token{}, l.errf(line, col, "unclosed '{' (interpolation or block directive)")
 	}
 	var tok Token
+	open := Position{Line: line, Col: col, Offset: off}
+	// valPos is the file position of input byte i (inside this group).
+	valPos := func(i int) Position { return open.advance(l.input[l.pos:i]) }
+	// afterMark is the index just past the group's `{#` / `{:` marker, and
+	// markSpace the white space TrimSpace drops after it.
+	afterMark := l.pos + 2
+	markSpace := 0
+	if len(inner) > 0 {
+		markSpace = leadingSpace(inner[1:])
+	}
 	switch {
 	case len(inner) > 0 && inner[0] == '#':
-		tok = Token{Type: TokBlockOpen, Value: strings.TrimSpace(inner[1:]), Line: line, Col: col, Offset: off}
+		tok = Token{Type: TokBlockOpen, Value: strings.TrimSpace(inner[1:]), Line: line, Col: col, Offset: off,
+			ValPos: valPos(afterMark + markSpace)}
 	case len(inner) > 0 && inner[0] == ':':
 		branch := strings.TrimSpace(inner[1:])
+		branchStart := afterMark + markSpace
 		switch {
 		case branch == "else":
 			tok = Token{Type: TokElse, Value: "else", Line: line, Col: col, Offset: off}
@@ -325,12 +342,14 @@ func (l *lexer) lexBrace() (Token, error) {
 			// it inside {#if} (desugaring to nested If nodes) and rejects it inside
 			// {#unless}/{#case}. Value carries the condition only (after "else if");
 			// a bare "{:else if}" yields "", a positioned parser error.
-			tok = Token{Type: TokElseIf, Value: elseIfCondition(branch), Line: line, Col: col, Offset: off}
+			tok = Token{Type: TokElseIf, Value: elseIfCondition(branch), Line: line, Col: col, Offset: off,
+				ValPos: valPos(branchStart + elseIfConditionStart(branch))}
 		case isWhenBranch(branch):
 			// {:when v1, v2, ...} clause of a {#case} block; Value carries the raw
 			// values header (after "when"), which the parser splits at top-level
 			// commas. An empty header (bare "{:when}") is a positioned parser error.
-			tok = Token{Type: TokWhen, Value: strings.TrimSpace(branch[4:]), Line: line, Col: col, Offset: off}
+			tok = Token{Type: TokWhen, Value: strings.TrimSpace(branch[4:]), Line: line, Col: col, Offset: off,
+				ValPos: valPos(branchStart + 4 + leadingSpace(branch[4:]))}
 		default:
 			if fw := firstWord(branch); fw == "elsif" || fw == "elseif" {
 				return Token{}, l.errf(line, col, "unknown branch {:%s} — did you mean {:else if}?", branch)
@@ -513,6 +532,18 @@ func isElseIfBranch(branch string) bool {
 func elseIfCondition(branch string) string {
 	rest := strings.TrimLeft(branch[4:], " \t\r\n") // after "else"
 	return strings.TrimSpace(rest[2:])              // after "if"
+}
+
+// elseIfConditionStart is the byte index in branch where elseIfCondition's
+// result begins.
+func elseIfConditionStart(branch string) int {
+	rest := strings.TrimLeft(branch[4:], " \t\r\n")
+	return len(branch) - len(rest) + 2 + leadingSpace(rest[2:])
+}
+
+// leadingSpace is how many bytes strings.TrimSpace removes from the front of s.
+func leadingSpace(s string) int {
+	return len(s) - len(strings.TrimLeftFunc(s, unicode.IsSpace))
 }
 
 // isWhenBranch reports whether a {:...} branch is a {#case} when-clause: the bare

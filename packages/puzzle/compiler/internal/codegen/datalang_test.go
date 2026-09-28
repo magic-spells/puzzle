@@ -24,6 +24,11 @@ func compileCore(t *testing.T, body string) (string, error) {
 }
 
 func TestDataLanguageRejections(t *testing.T) {
+	// A construct outside the expression grammar (puzzle-lang's expr package)
+	// is now rejected by the parser, before this pre-check runs, at the
+	// offending token with the grammar's message; the rows that want a
+	// grammar message name it with its position. A construct inside the
+	// grammar that D176 still rejects keeps this pre-check's message.
 	for _, tc := range []struct {
 		name, body, want string
 	}{
@@ -33,48 +38,49 @@ func TestDataLanguageRejections(t *testing.T) {
 		{"global call", "  <p>{ Math.round(x) }</p>", dataCallMsg},
 		{"String()", "  <p>{ String(x) }</p>", dataCallMsg},
 		{"items.at(-1)", "  <p>{ items.at(-1) }</p>", dataCallMsg},
-		{"optional call", "  <p>{ a.b?.(x) }</p>", dataCallMsg},
-		{"call on .size", "  <p>{ items.size() }</p>", dataCallMsg},
+		{"optional call", "  <p>{ a.b?.(x) }</p>", "T.pzl:2:11: optional calls (`?.(`) are not available"},
+		{"call on .size", "  <p>{ items.size() }</p>", "T.pzl:2:14: `.size()` is not available"},
 		{"brace attribute", "  <button disabled={ !draft.trim() }>x</button>", "T.pzl:2:11: " + dataCallMsg},
 		{"quoted attribute", `  <p title="{ a.trim() } x">y</p>`, dataCallMsg},
-		{"inline-if condition", `  <p class="x {#if a.has(b)}on{/if}">y</p>`, dataCallMsg},
+		{"inline-if condition", `  <p class="x {#if a.has(b)}on{/if}">y</p>`, "T.pzl:2:22: `.has()` is not available"},
 		{"inline-if branch", `  <p class="x {#if on}{ a.trim() }{/if}">y</p>`, dataCallMsg},
 		{"component prop", "  <Card items={ list.filter(f) } />", dataCallMsg},
-		{"marker argument", "  <Slot name=\"row\" item={ a.b() } />", dataCallMsg},
+		{"marker argument", "  <Slot name=\"row\" item={ a.b() } />", "T.pzl:2:29: `.b()` is not available"},
 		{"key", "  {#for t in todos}<li key={ t.id.toString() }>x</li>{/for}", dataCallMsg},
 		{"if subject", "  {#if items.includes(x)}<b>a</b>{/if}", "T.pzl:2:3: " + dataCallMsg},
-		{"else-if subject", "  {#if a}<b>a</b>{:else if b.c()}<b>b</b>{/if}", dataCallMsg},
+		{"else-if subject", "  {#if a}<b>a</b>{:else if b.c()}<b>b</b>{/if}", "T.pzl:2:30: `.c()` is not available"},
 		{"case subject", "  {#case kind.trim()}{:when 'a'}<b>d</b>{/case}", dataCallMsg},
-		{"when value", "  {#case kind}{:when a.b()}<b>d</b>{/case}", dataCallMsg},
+		{"when value", "  {#case kind}{:when a.b()}<b>d</b>{/case}", "T.pzl:2:24: `.b()` is not available"},
 		{"for collection", "  {#for t in todos.slice(1)}<li>x</li>{/for}", dataCallMsg},
 		{"range bound", "  {#for 1...Math.max(n, 1)}<li>x</li>{/for}", dataCallMsg},
-		{"formatter argument", "  <p>{ title | truncate(n.max()) }</p>", dataCallMsg},
-		{"handler condition", "  <button @click={ a.ok() ? save : null }>x</button>", dataCallMsg},
+		{"formatter argument", "  <p>{ title | truncate(n.max()) }</p>", "T.pzl:2:27: `.max()` is not available"},
+		{"handler condition", "  <button @click={ a.ok() ? save : null }>x</button>", "T.pzl:2:22: `.ok()` is not available"},
 		// (b)–(d) the rest of JavaScript.
 		{"arrow", "  <p>{ items | join(x => x) }</p>", dataArrowMsg},
 		{"template literal", "  <p>{ `${a} ${b}` }</p>", dataTemplateMsg},
-		{"new", "  <p>{ new Date() }</p>", dataKeywordMsg("new")},
-		{"typeof", "  <p>{ typeof x }</p>", dataKeywordMsg("typeof")},
-		{"instanceof", "  {#if x instanceof y}<b>a</b>{/if}", dataKeywordMsg("instanceof")},
-		{"in", "  {#if 'a' in obj}<b>a</b>{/if}", dataKeywordMsg("in")},
-		{"regex", "  <p>{ /a+/ }</p>", dataRegexMsg},
-		{"postfix update", "  <p>{ n++ }</p>", dataUpdateMsg},
-		{"prefix update", "  <p>{ --n }</p>", dataUpdateMsg},
-		{"assignment", "  {#if a = b}<b>a</b>{/if}", dataAssignMsg},
-		{"compound assignment", "  <p>{ a += 1 }</p>", dataAssignMsg},
-		{"nullish assignment", "  <p>{ a ??= 1 }</p>", dataAssignMsg},
-		{"top-level comma", "  <Card items={ a, b } />", dataCommaMsg},
-		{"bitwise and", "  <p>{ a & 1 }</p>", dataBitwiseMsg},
-		{"bitwise xor", "  <p>{ a ^ 1 }</p>", dataBitwiseMsg},
-		{"bitwise not", "  <p>{ ~a }</p>", dataBitwiseMsg},
-		{"shift", "  <p>{ a << 1 }</p>", dataBitwiseMsg},
-		{"unsigned shift", "  <p>{ a >>> 1 }</p>", dataBitwiseMsg},
+		{"new", "  <p>{ new Date() }</p>", "T.pzl:2:8: `new` is not available"},
+		{"typeof", "  <p>{ typeof x }</p>", "T.pzl:2:8: `typeof` is not available"},
+		{"instanceof", "  {#if x instanceof y}<b>a</b>{/if}", "T.pzl:2:10: `instanceof` is not available"},
+		{"in", "  {#if 'a' in obj}<b>a</b>{/if}", "T.pzl:2:12: the `in` operator is not available"},
+		{"regex", "  <p>{ /a+/ }</p>", "T.pzl:2:8: regular expression literals are not available"},
+		{"postfix update", "  <p>{ n++ }</p>", "T.pzl:2:9: `++` and `--` are not available"},
+		{"prefix update", "  <p>{ --n }</p>", "T.pzl:2:8: `++` and `--` are not available"},
+		{"assignment", "  {#if a = b}<b>a</b>{/if}", "T.pzl:2:10: assignment is not available"},
+		{"compound assignment", "  <p>{ a += 1 }</p>", "T.pzl:2:10: assignment is not available"},
+		{"nullish assignment", "  <p>{ a ??= 1 }</p>", "T.pzl:2:10: assignment is not available"},
+		{"top-level comma", "  <Card items={ a, b } />", "T.pzl:2:18: the comma operator is not available"},
+		{"bitwise and", "  <p>{ a & 1 }</p>", "T.pzl:2:10: bitwise operators are not available"},
+		{"bitwise xor", "  <p>{ a ^ 1 }</p>", "T.pzl:2:10: bitwise operators are not available"},
+		{"bitwise not", "  <p>{ ~a }</p>", "T.pzl:2:8: bitwise operators are not available"},
+		{"shift", "  <p>{ a << 1 }</p>", "T.pzl:2:10: bitwise operators are not available"},
+		{"unsigned shift", "  <p>{ a >>> 1 }</p>", "T.pzl:2:10: bitwise operators are not available"},
+		{"spread", "  <Card items={ [...a, b] } />", "T.pzl:2:18: spread (`...`) is not available"},
 		// .length (rule 1).
 		{"length", "  <p>{ items.length }</p>", "T.pzl:2:6: " + dataLengthMsg},
 		{"optional length", "  {#if user?.name.length > 3}<b>a</b>{/if}", dataLengthMsg},
 		{"length in a formatter argument", "  <p>{ s | truncate(max.length) }</p>", dataLengthMsg},
 		// A `|` in a handler is neither a formatter nor a bitwise OR (rule 4).
-		{"pipe in a handler argument", "  <button @click={ save(x | trim) }>x</button>", "T.pzl:2:11: " + dataHandlerPipeMsg},
+		{"pipe in a handler argument", "  <button @click={ save(x | trim) }>x</button>", "T.pzl:2:27: the `|` operator is not available"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := compileCore(t, tc.body)
@@ -156,11 +162,12 @@ func TestDataLanguageRejectsThis(t *testing.T) {
 				src, first = tc.body+"\n\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\n"+
 					"export default class T extends PuzzleView {}\n</script>\n", 1
 			}
+			// The expression grammar rejects `this` while parsing, so a view
+			// root attribute (parsed with the sections) fails at the split.
 			sec, err := parser.SplitSections(src, "T.pzl")
-			if err != nil {
-				t.Fatalf("split: %v", err)
+			if err == nil {
+				_, err = Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
 			}
-			_, err = Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
 			if err == nil {
 				t.Fatalf("expected a compile error")
 			}
@@ -241,7 +248,6 @@ func TestDataLanguageAllows(t *testing.T) {
 		{"comparisons", "  {#if a == b && c !== d && e <= f && g >= h}<b>a</b>{/if}", "__d.a == __d.b && __d.c !== __d.d"},
 		{"logic and math", "  <p>{ (a ?? b) % 2 + -c * !d }</p>", "(__d.a ?? __d.b) % 2 + -__d.c * !__d.d"},
 		{"ternary", "  <p>{ a ? b : c }</p>", "__d.a ? __d.b : __d.c"},
-		{"spread", "  <Card items={ [...a, b] } />", "items: [...__d.a, __d.b]"},
 		{"string contents", "  <p>{ 'a.b() => `x` = 1, new' }</p>", "'a.b() => `x` = 1, new'"},
 		{"division", "  <p>{ a / b / c }</p>", "__d.a / __d.b / __d.c"},
 		{"a size field root", "  <p>{ size }</p>", "__s(__d.size,"},

@@ -18,15 +18,17 @@ type attrCursor struct {
 	i    int
 	base Position
 	file string
+	sc   exprScope
 }
 
 func (c *attrCursor) posAt(i int) Position {
 	return c.base.advance(c.s[:i])
 }
 
-// parseAttrParts parses a quoted/bareword attribute value into its parts.
-func parseAttrParts(raw string, base Position, file string) ([]Part, *ParseError) {
-	c := &attrCursor{s: raw, base: base, file: file}
+// parseAttrParts parses a quoted/bareword attribute value into its parts,
+// parsing each expression in scope sc.
+func parseAttrParts(raw string, base Position, file string, sc exprScope) ([]Part, *ParseError) {
+	c := &attrCursor{s: raw, base: base, file: file, sc: sc}
 	parts, _, perr := c.parseSequence(true)
 	return parts, perr
 }
@@ -92,6 +94,14 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 			if perr := headerPipeError(cond, pos, c.file, "an {#if} condition in an attribute value", "{#if isActive}"); perr != nil {
 				return nil, "", perr
 			}
+			// inner starts at c.i+1 and hdr past its '#' and white space; the
+			// condition starts past the keyword and the white space after it.
+			hdrAt := c.i + 2 + leadingSpace(inner[1:])
+			condAt := hdrAt + len(kw) + leadingSpace(hdr[len(kw):])
+			condAST, perr := parseExprAt(cond, c.posAt(condAt), c.file, c.sc.valueOpts())
+			if perr != nil {
+				return nil, "", perr
+			}
 			flush()
 			c.i = end
 			thenParts, t, e := c.parseSequence(false)
@@ -108,7 +118,7 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 			if t != "endif" {
 				return nil, "", errAt(c.file, pos, "unclosed {#if} in attribute value")
 			}
-			parts = append(parts, &InlineIfPart{Cond: cond, Then: thenParts, Else: elseParts, Pos: pos})
+			parts = append(parts, &InlineIfPart{Cond: cond, CondAST: condAST, Then: thenParts, Else: elseParts, Pos: pos})
 
 		case ':':
 			inner, end, err := scanBraceGroup(c.s, c.i)
@@ -152,7 +162,7 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 			if err != nil {
 				return nil, "", errAt(c.file, pos, "unclosed '{' in attribute value")
 			}
-			interp, e := parseInterpolationExpr(inner, pos, c.file)
+			interp, e := parseInterpolationExpr(inner, pos, c.file, c.sc)
 			if e != nil {
 				return nil, "", e
 			}

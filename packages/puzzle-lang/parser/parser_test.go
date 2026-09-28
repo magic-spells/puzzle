@@ -111,16 +111,10 @@ func TestParseInterpolationFormatters(t *testing.T) {
 			wantFmts: []FormatterCall{{Name: "pad", Args: []string{"max(1, 2)", "'0'"}}},
 		},
 		{
-			// A '}' inside a regex must not close the interpolation early.
-			name:     "regex with close brace",
-			content:  "{ /}/.test(name) }",
-			wantExpr: "/}/.test(name)",
-		},
-		{
-			// A '|' inside a regex is not a formatter pipe.
-			name:     "regex with pipe is not a formatter",
-			content:  "{ /a|b/.test(name) }",
-			wantExpr: "/a|b/.test(name)",
+			// A '}' inside a string must not close the interpolation early.
+			name:     "string with close brace",
+			content:  "{ name === '}' }",
+			wantExpr: "name === '}'",
 		},
 		{
 			// Genuine division still splits at the trailing formatter pipe.
@@ -156,6 +150,25 @@ func TestParseInterpolationFormatters(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestParseInterpolationRegexIsOneError: regular expression literals are
+// outside the expression grammar, but the brace scan still treats one as
+// opaque, so a '}' or '|' inside it neither closes the interpolation early nor
+// splits a formatter chain: the only error is the grammar's regex error, at
+// the regex.
+func TestParseInterpolationRegexIsOneError(t *testing.T) {
+	for _, src := range []string{"{ /}/.test(name) }", "{ /a|b/.test(name) }"} {
+		_, err := Parse([]byte("<puzzle-view>"+src+"</puzzle-view>"), "t.pzl")
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Errorf("%s: want a ParseError, got %v", src, err)
+			continue
+		}
+		if !strings.Contains(pe.Message, "regular expression literals are not available") || pe.Line != 1 || pe.Col != 16 {
+			t.Errorf("%s: got %d:%d %s", src, pe.Line, pe.Col, pe.Message)
+		}
 	}
 }
 
@@ -259,14 +272,6 @@ func TestParseForCounter(t *testing.T) {
 			wantColl: "[1, 2, 3]",
 		},
 		{
-			// A spread's "..." is not top-level, so this stays an item-form loop
-			// and never reaches the range branch's steering error.
-			name:     "spread inside a collection literal is not a range",
-			content:  "{#for x in [...items]}<div>x</div>{/for}",
-			wantItem: "x",
-			wantColl: "[...items]",
-		},
-		{
 			name:     "slice call is not a range",
 			content:  "{#for x in items.slice(0, 3)}<div>x</div>{/for}",
 			wantItem: "x",
@@ -293,6 +298,21 @@ func TestParseForCounter(t *testing.T) {
 				t.Errorf("counter: got %q, want %q", f.Counter, tc.wantCounter)
 			}
 		})
+	}
+}
+
+// TestParseForSpreadIsNotARange: a spread's "..." is not top-level, so the
+// header stays an item-form loop and never reaches the range branch's steering
+// error. Spread is outside the expression grammar, so the collection is then
+// the grammar's spread error, at the spread.
+func TestParseForSpreadIsNotARange(t *testing.T) {
+	_, err := Parse([]byte("<puzzle-view>{#for x in [...items]}<div>x</div>{/for}</puzzle-view>"), "t.pzl")
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("want a ParseError, got %v", err)
+	}
+	if !strings.Contains(pe.Message, "spread (`...`) is not available") || pe.Line != 1 || pe.Col != 26 {
+		t.Errorf("got %d:%d %s", pe.Line, pe.Col, pe.Message)
 	}
 }
 

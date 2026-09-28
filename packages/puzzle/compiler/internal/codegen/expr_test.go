@@ -111,10 +111,12 @@ func TestResolveExpr(t *testing.T) {
 	}
 }
 
-// An update operator is not in the template data language (D176), but a
-// handler argument is JavaScript, so it still reaches the scanner.
+// A postfix update before a division is script JavaScript, which reaches the
+// output untouched. In a handler argument it is outside the expression
+// grammar, so the parser rejects it at the operator — the brace scan still
+// ends the value at the right `}`, never an unclosed-brace error.
 func TestPostfixUpdateBeforeDivisionPzlCompile(t *testing.T) {
-	src := `<puzzle-view><button @click={ ratio(a++ / b / c) }>x</button></puzzle-view>
+	src := `<puzzle-view><button @click={ ratio(a / b / c) }>x</button></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {
@@ -129,13 +131,17 @@ export default class T extends PuzzleView {
 	}
 	res, err := Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
 	if err != nil {
-		t.Fatalf("compile .pzl with postfix update interpolation: %v", err)
+		t.Fatalf("compile .pzl with postfix update in script: %v", err)
 	}
 	if want := "return index++ / total;"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled output lost script expression %q:\n%s", want, res.JS)
 	}
-	if want := "(event) => this.events.ratio(__d.a++ / __d.b / __d.c)"; !strings.Contains(res.JS, want) {
+	if want := "(event) => this.events.ratio(__d.a / __d.b / __d.c)"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled output missing %q:\n%s", want, res.JS)
+	}
+	_, err = compileTemplate(t, "<puzzle-view><button @click={ ratio(a++ / b / c) }>x</button></puzzle-view>", "")
+	if err == nil || !strings.Contains(err.Error(), "T.pzl:1:38: `++` and `--` are not available") {
+		t.Fatalf("want the positioned `++` error, got %v", err)
 	}
 }
 
@@ -284,11 +290,12 @@ func TestNestedTemplateLiteralExpressionCompile(t *testing.T) {
 }
 
 // A regex right after the opening brace is lexed as one literal — the brace
-// scan must not read its `/` as division — and so reaches the D176 check,
-// which rejects it with its own message rather than a garbled parse error.
+// scan must not read its `/` as division — and so reaches the expression
+// grammar, which rejects it with its own message rather than a garbled parse
+// error.
 func TestRegexLiteralImmediatelyAfterBraceIsRejected(t *testing.T) {
 	_, err := compileTemplate(t, "<puzzle-view>{/\\d+/.test(x)}</puzzle-view>", "")
-	if err == nil || !strings.Contains(err.Error(), "T.pzl:1:14: "+dataRegexMsg) {
+	if err == nil || !strings.Contains(err.Error(), "T.pzl:1:15: regular expression literals are not available") {
 		t.Fatalf("want the positioned regex-literal error, got %v", err)
 	}
 }

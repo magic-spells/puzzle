@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
 )
 
@@ -28,6 +29,10 @@ type parser struct {
 	// literal, so the composition markers, component resolution, and the
 	// attribute-namespace reservation are all switched off.
 	raw bool
+	// bound holds the names the enclosing {#for} blocks and <Snippet> bodies
+	// bind, innermost last. The expression parser needs one fact from it:
+	// whether `event` is bound (see exprScope).
+	bound []string
 }
 
 func newParser(lex *lexer, file string) (*parser, error) {
@@ -203,7 +208,7 @@ func (p *parser) parseChildren(ctx openCtx) ([]Node, *ParseError) {
 				return nil, toPE(err)
 			}
 		case TokInterp:
-			interp, perr := parseInterpolationExpr(t.Value, tokPos(t), p.file)
+			interp, perr := parseInterpolationExpr(t.Value, tokPos(t), p.file, p.scope())
 			if perr != nil {
 				return nil, perr
 			}
@@ -543,7 +548,10 @@ func (p *parser) parseElement() (Node, *ParseError) {
 
 	var children []Node
 	if !selfClose {
+		// A snippet's parameters are bindings in its body, like a loop item.
+		mark := p.bind(snippetParams...)
 		ch, cerr := p.parseChildren(openCtx{kind: ctxElement, name: name, pos: pos})
+		p.unbind(mark)
 		if cerr != nil {
 			return nil, cerr
 		}
@@ -612,7 +620,7 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 				if err := p.advance(); err != nil {
 					return nil, false, toPE(err)
 				}
-				a, e := buildAttr(name, npos, p.cur, p.file)
+				a, e := buildAttr(name, npos, p.cur, p.file, p.scope())
 				if e != nil {
 					return nil, false, e
 				}
@@ -683,8 +691,9 @@ func isDirectiveWord(s string) bool {
 	return false
 }
 
-// buildAttr classifies an attribute given its name and value token.
-func buildAttr(name string, npos Position, v Token, file string) (Attr, *ParseError) {
+// buildAttr classifies an attribute given its name and value token, parsing
+// every expression it carries in scope sc.
+func buildAttr(name string, npos Position, v Token, file string, sc exprScope) (Attr, *ParseError) {
 	vpos := tokPos(v)
 	if v.Raw {
 		// Inside {#raw} the value bytes are literal AND so is the name (D150) — see
@@ -704,28 +713,33 @@ func buildAttr(name string, npos Position, v Token, file string) (Attr, *ParseEr
 		if v.Type != TokAttrBrace {
 			return nil, errAt(file, npos, "event handler %s must use ={ ... }", name)
 		}
-		expr := strings.TrimSpace(v.Value)
-		if expr == "" {
+		text := strings.TrimSpace(v.Value)
+		if text == "" {
 			return nil, errAt(file, vpos, "event handler %s has an empty expression", name)
 		}
 		event, mods, perr := parseEventModifiers(name[1:], npos, file)
 		if perr != nil {
 			return nil, perr
 		}
-		return &EventAttr{Name: event, Modifiers: mods, Expr: expr, Pos: npos}, nil
+		// A handler always sees `event`, the DOM event it runs for.
+		ast, perr := parseExprAt(v.Value, vpos.advance("{"), file, expr.Options{AllowEvent: true})
+		if perr != nil {
+			return nil, perr
+		}
+		return &EventAttr{Name: event, Modifiers: mods, Expr: text, ExprAST: ast, Pos: npos}, nil
 	}
 	switch v.Type {
 	case TokAttrBrace:
 		if strings.TrimSpace(v.Value) == "" {
 			return nil, errAt(file, vpos, "empty attribute expression for %q", name)
 		}
-		expr, fmts, perr := parseChain(v.Value, vpos, file, fmt.Sprintf("attribute expression for %q", name))
+		c, perr := parseChain(v.Value, vpos, file, fmt.Sprintf("attribute expression for %q", name), sc)
 		if perr != nil {
 			return nil, perr
 		}
-		return &DynamicAttr{Name: name, Expr: expr, Formatters: fmts, Pos: npos}, nil
+		return &DynamicAttr{Name: name, Expr: c.text, ExprAST: c.ast, Formatters: c.fmts, Pos: npos}, nil
 	case TokAttrQuoted, TokAttrBare:
-		parts, perr := parseAttrParts(v.Value, vpos, file)
+		parts, perr := parseAttrParts(v.Value, vpos, file, sc)
 		if perr != nil {
 			return nil, perr
 		}
@@ -841,6 +855,9 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 	header := open.Value
 	kw := firstWord(header)
 	rest := strings.TrimSpace(header[len(kw):])
+	// restPos is where rest — the header's expression — starts in the file.
+	restPos := open.ValPos.advance(header[:len(kw)+leadingSpace(header[len(kw):])])
+	sc := p.scope()
 	if err := p.advance(); err != nil {
 		return nil, toPE(err)
 	}
@@ -858,12 +875,17 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if perr := headerPipeError(rest, pos, p.file, "an {#if} condition", "{#if hasTags}"); perr != nil {
 			return nil, perr
 		}
+		condAST, perr := parseExprAt(rest, restPos, p.file, sc.valueOpts())
+		if perr != nil {
+			return nil, perr
+		}
 		thenNodes, perr := p.parseChildren(openCtx{kind: ctxBlockIf, pos: pos})
 		if perr != nil {
 			return nil, perr
 		}
 		type elseIfClause struct {
 			cond string
+			ast  expr.Node
 			body []Node
 			pos  Position
 		}
@@ -877,6 +899,10 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			if perr := headerPipeError(cond, cpos, p.file, "an {:else if} condition", "{:else if hasTags}"); perr != nil {
 				return nil, perr
 			}
+			ast, perr := parseExprAt(cond, p.cur.ValPos, p.file, sc.valueOpts())
+			if perr != nil {
+				return nil, perr
+			}
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
 			}
@@ -884,7 +910,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			if e != nil {
 				return nil, e
 			}
-			clauses = append(clauses, elseIfClause{cond: cond, body: body, pos: cpos})
+			clauses = append(clauses, elseIfClause{cond: cond, ast: ast, body: body, pos: cpos})
 		}
 		var elseNodes []Node
 		if p.cur.Type == TokElse {
@@ -914,9 +940,9 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		tail := elseNodes
 		for i := len(clauses) - 1; i >= 0; i-- {
 			c := clauses[i]
-			tail = []Node{&If{Cond: c.cond, Then: c.body, Else: tail, Pos: c.pos}}
+			tail = []Node{&If{Cond: c.cond, CondAST: c.ast, Then: c.body, Else: tail, Pos: c.pos}}
 		}
-		return &If{Cond: rest, Then: thenNodes, Else: tail, Pos: pos}, nil
+		return &If{Cond: rest, CondAST: condAST, Then: thenNodes, Else: tail, Pos: pos}, nil
 
 	case "unless":
 		// {#unless expr} desugars to the If node with a negated condition, so
@@ -930,6 +956,13 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if perr := headerPipeError(rest, pos, p.file, "an {#unless} condition", "{#unless hasTags}"); perr != nil {
 			return nil, perr
 		}
+		// The tree negates the parsed condition with a Unary node; the Cond
+		// string keeps its `!(…)` fold for codegen.
+		inner, perr := parseExprAt(rest, restPos, p.file, sc.valueOpts())
+		if perr != nil {
+			return nil, perr
+		}
+		condAST := &expr.Unary{Start: toExprPos(restPos), Op: "!", Operand: inner}
 		thenNodes, perr := p.parseChildren(openCtx{kind: ctxBlockUnless, pos: pos})
 		if perr != nil {
 			return nil, perr
@@ -951,7 +984,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if err := p.advance(); err != nil {
 			return nil, toPE(err)
 		}
-		return &If{Cond: "!(" + rest + ")", Then: thenNodes, Else: elseNodes, Pos: pos}, nil
+		return &If{Cond: "!(" + rest + ")", CondAST: condAST, Then: thenNodes, Else: elseNodes, Pos: pos}, nil
 
 	case "case":
 		// {#case expr} … {:when v1, v2} … {:else} … {/case}. Unlike {#unless},
@@ -961,6 +994,10 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			return nil, errAt(p.file, pos, "{#case} requires an expression")
 		}
 		if perr := headerPipeError(rest, pos, p.file, "a {#case} expression", "{#case statusLabel}"); perr != nil {
+			return nil, perr
+		}
+		subjectAST, perr := parseExprAt(rest, restPos, p.file, sc.valueOpts())
+		if perr != nil {
 			return nil, perr
 		}
 		// Only whitespace may sit between {#case expr} and the first {:when}; a
@@ -975,7 +1012,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		var clauses []WhenClause
 		for p.cur.Type == TokWhen {
 			wpos := tokPos(p.cur)
-			values, verr := parseWhenValues(p.cur.Value, wpos, p.file)
+			values, valuesAST, verr := parseWhenValues(p.cur.Value, wpos, p.cur.ValPos, p.file, sc)
 			if verr != nil {
 				return nil, verr
 			}
@@ -986,7 +1023,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			if e != nil {
 				return nil, e
 			}
-			clauses = append(clauses, WhenClause{Values: values, Body: body, Pos: wpos})
+			clauses = append(clauses, WhenClause{Values: values, ValuesAST: valuesAST, Body: body, Pos: wpos})
 		}
 		var elseNodes []Node
 		if p.cur.Type == TokElse {
@@ -1014,7 +1051,7 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if len(clauses) == 0 {
 			return nil, errAt(p.file, pos, "{#case} has no {:when} clauses")
 		}
-		return &Case{Expr: rest, Clauses: clauses, Else: elseNodes, Pos: pos}, nil
+		return &Case{Expr: rest, ExprAST: subjectAST, Clauses: clauses, Else: elseNodes, Pos: pos}, nil
 
 	case "svg":
 		// {#svg 'path'} is a VOID block (v1.14, D46): it inlines a file at compile
@@ -1027,11 +1064,13 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		return svg, nil
 
 	case "for":
-		f, perr := parseForHeader(rest, pos, p.file)
+		f, perr := parseForHeader(rest, pos, restPos, p.file, sc)
 		if perr != nil {
 			return nil, perr
 		}
+		mark := p.bind(f.Item, f.Counter)
 		body, e := p.parseChildren(openCtx{kind: ctxBlockFor, pos: pos})
+		p.unbind(mark)
 		if e != nil {
 			return nil, e
 		}
@@ -1066,29 +1105,53 @@ func (p *parser) requireBlankLead(nodes []Node) *ParseError {
 // parseWhenValues splits a {:when} header into its OR-matched value expressions
 // at top-level commas (respecting quotes/nesting so a literal or call with an
 // interior comma stays intact). An empty header or a stray comma is an error.
-func parseWhenValues(raw string, pos Position, file string) ([]string, *ParseError) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, errAt(file, pos, "{:when} requires at least one value")
+// raw is the header the lexer trimmed, starting at valPos in the file; each
+// value is parsed in scope sc.
+func parseWhenValues(raw string, pos, valPos Position, file string, sc exprScope) ([]string, []expr.Node, *ParseError) {
+	vals, spans, perr := splitWhenValues(raw, pos, file)
+	if perr != nil {
+		return nil, nil, perr
+	}
+	cur := newPosCursor(raw, valPos)
+	asts := make([]expr.Node, len(spans))
+	for i, sp := range spans {
+		ast, perr := parseExprAt(raw[sp[0]:sp[1]], cur.at(sp[0]), file, sc.valueOpts())
+		if perr != nil {
+			return nil, nil, perr
+		}
+		asts[i] = ast
+	}
+	return vals, asts, nil
+}
+
+// splitWhenValues is parseWhenValues' template half: the trimmed values and
+// the untrimmed span of each in raw.
+func splitWhenValues(raw string, pos Position, file string) ([]string, [][2]int, *ParseError) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil, errAt(file, pos, "{:when} requires at least one value")
 	}
 	var vals []string
+	var spans [][2]int
+	off := 0
 	for _, part := range splitTopLevel(raw, ',', false) {
+		spans = append(spans, [2]int{off, off + len(part)})
+		off += len(part) + 1
 		v := strings.TrimSpace(part)
 		if v == "" {
-			return nil, errAt(file, pos, "{:when} has an empty value (check for a stray comma)")
+			return nil, nil, errAt(file, pos, "{:when} has an empty value (check for a stray comma)")
 		}
 		// A `|` is a formatter pipe in value positions (D173 V1), and a {:when}
 		// value, like every branching header, takes no chain; a nested `|` is
 		// the D176 error, since there is no bitwise OR to fall back to.
 		if hasTopLevelPipe(v) {
-			return nil, errAt(file, pos, "formatter pipes are not allowed in a {:when} value — list alternatives with commas ({:when 'a', 'b'}) or compute the value in data()")
+			return nil, nil, errAt(file, pos, "formatter pipes are not allowed in a {:when} value — list alternatives with commas ({:when 'a', 'b'}) or compute the value in data()")
 		}
 		if nestedPipeIndex(v) >= 0 {
-			return nil, nestedPipeError(pos, file)
+			return nil, nil, nestedPipeError(pos, file)
 		}
 		vals = append(vals, v)
 	}
-	return vals, nil
+	return vals, spans, nil
 }
 
 // nodePos returns the source position of any AST node, for error reporting.
@@ -1123,7 +1186,41 @@ func nodePos(n Node) Position {
 // parseForHeader parses the header of a {#for}: either "item in collection" or
 // the range form "from...to", each with an optional trailing ", counter". The
 // counter is peeled first so both forms share it.
-func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) {
+func parseForHeader(rest string, pos, restPos Position, file string, sc exprScope) (*For, *ParseError) {
+	f, perr := splitForHeader(rest, pos, file)
+	if perr != nil {
+		return nil, perr
+	}
+	// The expressions are parsed in the scope around the loop: the loop's own
+	// bindings do not reach its header. peelForCounter keeps the head starting
+	// where rest does, so offsets into head are offsets into rest.
+	head := f.headText
+	if f.IsRange {
+		if f.RangeFromAST, perr = parseExprAt(head[:f.headSplit], restPos, file, sc.valueOpts()); perr != nil {
+			return nil, perr
+		}
+		f.RangeToAST, perr = parseExprAt(head[f.headSplit+3:], restPos.advance(head[:f.headSplit+3]), file, sc.valueOpts())
+	} else {
+		f.CollectionAST, perr = parseExprAt(head[f.headSplit:], restPos.advance(head[:f.headSplit]), file, sc.valueOpts())
+	}
+	if perr != nil {
+		return nil, perr
+	}
+	return f.For, nil
+}
+
+// forHeader is a {#for} header taken apart: the For node plus where its
+// expressions sit in headText, the header minus any loop counter — the `...`
+// of a range, or the start of an item loop's collection.
+type forHeader struct {
+	*For
+	headText  string
+	headSplit int
+}
+
+// splitForHeader is parseForHeader's template half: the header's forms,
+// bindings, and pipe rules, before any expression is parsed.
+func splitForHeader(rest string, pos Position, file string) (*forHeader, *ParseError) {
 	if rest == "" {
 		return nil, errAt(file, pos, "{#for} requires 'item in items' or a range 'from...to'")
 	}
@@ -1155,9 +1252,9 @@ func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) 
 		if item, low, ok := splitForIn(from); ok && isBareIdent(item) {
 			return nil, errAt(file, pos, "{#for} range loops bind the counter after the range — write {#for %s...%s, %s}", low, to, item)
 		}
-		return &For{IsRange: true, RangeFrom: from, RangeTo: to, Counter: counter, Pos: pos}, nil
+		return &forHeader{For: &For{IsRange: true, RangeFrom: from, RangeTo: to, Counter: counter, Pos: pos}, headText: rest, headSplit: idx}, nil
 	}
-	item, coll, ok := splitForIn(rest)
+	item, coll, collAt, ok := splitForInAt(rest)
 	if !ok {
 		return nil, errAt(file, pos, "{#for} expects 'item in items' (got %q)", rest)
 	}
@@ -1174,7 +1271,7 @@ func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) 
 	if counter != "" && counter == item {
 		return nil, errAt(file, pos, "{#for} loop counter %q duplicates the item name", counter)
 	}
-	return &For{Item: item, Collection: coll, Counter: counter, Pos: pos}, nil
+	return &forHeader{For: &For{Item: item, Collection: coll, Counter: counter, Pos: pos}, headText: rest, headSplit: collAt}, nil
 }
 
 // peelForCounter conservatively removes a trailing ", name" loop-counter binding
@@ -1246,6 +1343,14 @@ func generatedBindingIdentError(name string, pos Position, file, kind string) *P
 // any first token — including a valid `$foo` or an invalid `todo-item` — reaches
 // the caller intact for a single isBareIdent check.
 func splitForIn(rest string) (item, coll string, ok bool) {
+	item, coll, _, ok = splitForInAt(rest)
+	return item, coll, ok
+}
+
+// splitForInAt is splitForIn that also reports where the collection text
+// starts in rest: rest[collAt:] is the collection with its surrounding white
+// space.
+func splitForInAt(rest string) (item, coll string, collAt int, ok bool) {
 	i := 0
 	for i < len(rest) && isSpaceByte(rest[i]) {
 		i++
@@ -1256,32 +1361,40 @@ func splitForIn(rest string) (item, coll string, ok bool) {
 	}
 	item = rest[start:i]
 	if item == "" {
-		return "", "", false
+		return "", "", 0, false
 	}
 	j := i
 	for j < len(rest) && isSpaceByte(rest[j]) {
 		j++
 	}
 	if !(j+2 <= len(rest) && rest[j:j+2] == "in" && (j+2 == len(rest) || isSpaceByte(rest[j+2]))) {
-		return "", "", false
+		return "", "", 0, false
 	}
 	j += 2
 	coll = strings.TrimSpace(rest[j:])
 	if coll == "" {
-		return "", "", false
+		return "", "", 0, false
 	}
-	return item, coll, true
+	return item, coll, j, true
 }
 
 // parseInterpolationExpr splits an interpolation's inner text into a base
 // expression and a formatter chain, splitting pipes at top level only (|| is
 // not a pipe) — packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c.
-func parseInterpolationExpr(raw string, pos Position, file string) (*Interpolation, *ParseError) {
-	expr, fmts, perr := parseChain(raw, pos, file, "interpolation")
+func parseInterpolationExpr(raw string, pos Position, file string, sc exprScope) (*Interpolation, *ParseError) {
+	c, perr := parseChain(raw, pos, file, "interpolation", sc)
 	if perr != nil {
 		return nil, perr
 	}
-	return &Interpolation{Expr: expr, Formatters: fmts, Pos: pos}, nil
+	return &Interpolation{Expr: c.text, ExprAST: c.ast, Formatters: c.fmts, Pos: pos}, nil
+}
+
+// chain is a parsed value position: the base expression's trimmed text and
+// tree, and the formatter chain.
+type chain struct {
+	text string
+	ast  expr.Node
+	fmts []FormatterCall
 }
 
 // parseChain splits any template value position into its base expression and
@@ -1295,28 +1408,56 @@ func parseInterpolationExpr(raw string, pos Position, file string) (*Interpolati
 // error pointing at it: the language has no bitwise OR. raw is the text just
 // after the value's opening `{` at pos; what names the position in the
 // empty-expression errors ("interpolation", "attribute expression for …").
-func parseChain(raw string, pos Position, file, what string) (string, []FormatterCall, *ParseError) {
+//
+// Once the chain's shape is valid, the base expression and every formatter
+// argument are parsed in scope sc (the arguments as call arguments, so an
+// arrow function is legal there), each at its own position in the file.
+func parseChain(raw string, pos Position, file, what string, sc exprScope) (chain, *ParseError) {
 	if i := nestedPipeIndex(raw); i >= 0 {
-		return "", nil, nestedPipeError(pos.advance("{"+raw[:i]), file)
+		return chain{}, nestedPipeError(pos.advance("{"+raw[:i]), file)
 	}
 	segs := splitTopLevel(raw, '|', true)
-	expr := strings.TrimSpace(segs[0])
-	if expr == "" {
-		return "", nil, errAt(file, pos, "empty %s", what)
+	text := strings.TrimSpace(segs[0])
+	if text == "" {
+		return chain{}, errAt(file, pos, "empty %s", what)
 	}
 	var fmts []FormatterCall
+	// argSpans[i] are formatter i's argument spans, as offsets into raw.
+	var argSpans [][][2]int
+	off := len(segs[0]) + 1 // each split consumed one '|'
 	for _, seg := range segs[1:] {
 		s := strings.TrimSpace(seg)
 		if s == "" {
-			return "", nil, errAt(file, pos, "empty formatter in %s", what)
+			return chain{}, errAt(file, pos, "empty formatter in %s", what)
 		}
-		fc, perr := parseFormatter(s, pos, file)
+		fc, spans, perr := parseFormatter(s, pos, file)
 		if perr != nil {
-			return "", nil, perr
+			return chain{}, perr
+		}
+		sAt := off + leadingSpace(seg)
+		for k := range spans {
+			spans[k][0] += sAt
+			spans[k][1] += sAt
 		}
 		fmts = append(fmts, fc)
+		argSpans = append(argSpans, spans)
+		off += len(seg) + 1
 	}
-	return expr, fmts, nil
+	cur := newPosCursor(raw, pos.advance("{"))
+	ast, perr := parseExprAt(segs[0], cur.at(0), file, sc.valueOpts())
+	if perr != nil {
+		return chain{}, perr
+	}
+	for i, spans := range argSpans {
+		for _, sp := range spans {
+			arg, perr := parseExprAt(raw[sp[0]:sp[1]], cur.at(sp[0]), file, sc.argOpts())
+			if perr != nil {
+				return chain{}, perr
+			}
+			fmts[i].ArgsAST = append(fmts[i].ArgsAST, arg)
+		}
+	}
+	return chain{text: text, ast: ast, fmts: fmts}, nil
 }
 
 // hasTopLevelPipe reports whether s contains a formatter pipe by parseChain's
@@ -1362,36 +1503,42 @@ func headerPipeError(cond string, pos Position, file, header, example string) *P
 // depth-zero commas outside quotes and are kept as raw JS expression strings.
 // The ')' matching the name's '(' must end the segment: `f(1) + g(2)` or
 // `f(b)(c)` is an error, never f called with the argument text `1) + g(2`.
-func parseFormatter(s string, pos Position, file string) (FormatterCall, *ParseError) {
+// spans are the arguments' untrimmed extents in s, so each can be parsed at
+// its own position.
+func parseFormatter(s string, pos Position, file string) (FormatterCall, [][2]int, *ParseError) {
 	open := strings.IndexByte(s, '(')
 	if open < 0 {
 		if !isFormatterName(s) {
-			return FormatterCall{}, notFormatterError(s, pos, file)
+			return FormatterCall{}, nil, notFormatterError(s, pos, file)
 		}
-		return FormatterCall{Name: s}, nil
+		return FormatterCall{Name: s}, nil, nil
 	}
 	name := strings.TrimSpace(s[:open])
 	if name == "" {
-		return FormatterCall{}, errAt(file, pos, "formatter is missing a name")
+		return FormatterCall{}, nil, errAt(file, pos, "formatter is missing a name")
 	}
 	if !isFormatterName(name) {
-		return FormatterCall{}, notFormatterError(name, pos, file)
+		return FormatterCall{}, nil, notFormatterError(name, pos, file)
 	}
 	end := matchingClose(s, open)
 	if end < 0 || s[end] != ')' {
-		return FormatterCall{}, errAt(file, pos, "formatter %q: missing closing ')'", name)
+		return FormatterCall{}, nil, errAt(file, pos, "formatter %q: missing closing ')'", name)
 	}
 	if rest := strings.TrimSpace(s[end+1:]); rest != "" {
-		return FormatterCall{}, errAt(file, pos, "formatter %q: unexpected %q after its closing ')' — a segment after a pipe is only a formatter name or call; compute anything else in the expression before the pipe", name, rest)
+		return FormatterCall{}, nil, errAt(file, pos, "formatter %q: unexpected %q after its closing ')' — a segment after a pipe is only a formatter name or call; compute anything else in the expression before the pipe", name, rest)
 	}
 	argsRaw := s[open+1 : end]
 	var args []string
+	var spans [][2]int
 	if strings.TrimSpace(argsRaw) != "" {
+		at := open + 1 // each split consumed one ','
 		for _, a := range splitTopLevel(argsRaw, ',', false) {
 			args = append(args, strings.TrimSpace(a))
+			spans = append(spans, [2]int{at, at + len(a)})
+			at += len(a) + 1
 		}
 	}
-	return FormatterCall{Name: name, Args: args}, nil
+	return FormatterCall{Name: name, Args: args}, spans, nil
 }
 
 // isFormatterName reports whether s can name a formatter:

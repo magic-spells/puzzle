@@ -597,7 +597,6 @@ func TestListMetaOpaqueRecordReads(t *testing.T) {
 	}{
 		{"formatter pipe", "<li>{ post | authorName }</li>", true},
 		{"parenthesised member access", "<li>{ (post).author.name }</li>", true},
-		{"comment-separated member access", "<li>{ post /* c */ .author.name }</li>", true},
 		{"formatter argument", "<li>{ 'by' | byline(post) }</li>", true},
 		{"operand of a larger expression", "<li>{ 'by ' + post }</li>", true},
 		{"deep path", "<li>{ post.author.name }</li>", true},
