@@ -8,6 +8,10 @@ Sites; decision D172). This module is where the shared language lives:
 
 - `parser` — the `.pzl` section splitter, the HTML-aware lexer, the
   recursive-descent template parser, the AST, and positioned `ParseError`s.
+- `expr` — the expression language: everything between a template's braces
+  parsed into a tree both hosts consume (see below).
+- `conformance` — the shared conformance tables, embedded so a host pins them
+  at the module version it imports.
 - `jsident` — the JavaScript reserved-binding-word table the parser and the
   compiler's code generator share.
 - `textutil` — small text helpers (plural suffixes, the edit distance behind
@@ -15,6 +19,63 @@ Sites; decision D172). This module is where the shared language lives:
 
 It holds no code generation, bundling, or CLI. Those stay in the PuzzleKit
 compiler (`packages/puzzle/compiler`).
+
+## The expression language (`expr`)
+
+A template expression looks and behaves like JavaScript, but it is a closed
+grammar, not JavaScript: PuzzleKit lowers the tree to JavaScript and Sites
+evaluates it in Go, so both accept exactly the same source. The package holds
+syntax, positions, and names only — no lowering and no evaluation.
+
+```go
+n, err := expr.Parse(src, expr.Pos{Line: 12, Col: 9, Offset: 340}, expr.Options{})
+```
+
+`Parse` takes the expression text and where its first byte sits in the file,
+so every node and every error is in file coordinates (columns count bytes,
+as `parser.Position` does). The error is an `*expr.Error` with the same
+fields as `parser.ParseError` minus the file name.
+
+**The grammar.** Literals: `'…'` and `"…"` strings with JavaScript's
+strict-mode escapes; template literals with nested `${ }`; decimal numbers
+(`1`, `1.5`, `.5`, `1e3`); `true`, `false`, `null`, `undefined`; arrays;
+objects with name, quoted, and shorthand keys. Names are Unicode identifiers.
+Member access `a.b`, `a?.b`, `a[i]`, `a?.[i]`. Calls: a library function
+`name(args)`, a method `a.m(args)` / `a?.m(args)` whose name must be in the
+method table (`methods.go`), and the allowed JavaScript globals (`Math.round`,
+`Object.keys`, `Array.isArray`, `Number`, `String`, `Boolean`, `parseInt`,
+`parseFloat`, `isNaN`, `isFinite`). Arrow functions `x => expr` and
+`(x, i) => expr` only as call arguments. Operators with JavaScript precedence:
+unary `! - +`; `* / %`; `+ -`; `< <= > >=`; `== != === !==`; `&&`; `||`;
+`??` (not mixed with `||`/`&&` without parentheses); `?:`. Everything else —
+bitwise operators, `**`, assignment, `++`/`--`, the comma operator, `new`,
+`typeof`, `in`, `instanceof`, regex literals, spread, comments, statements,
+`this` — is a positioned error that names the construct and, where there is
+one, what to write instead.
+
+**The tree.** `Literal`, `TemplateLiteral`, `Identifier`, `Member`, `Call`,
+`Arrow`, `Unary`, `Binary`, `Logical`, `Conditional`, `Array`, `Object`,
+`Global`, and `Chain` (the extent of an optional chain, as ESTree's
+`ChainExpression`). Every node has `Pos()`; `Walk` visits a tree in source
+order; `Print` renders the compact S-expression the fixtures use.
+
+**Options.** `AllowEvent` makes `event` legal — the template parser sets it
+for an `@event` handler and inside a `{#for}` or `<Snippet>` that binds a name
+`event`; elsewhere `event` is an error. `CallArgument` parses the source as one
+call argument (the template parser's formatter arguments), where an arrow is
+legal at the top level.
+
+**In the template parser.** Every AST field that holds an expression string
+has a parsed sibling filled while parsing — `Interpolation.ExprAST`,
+`FormatterCall.ArgsAST`, `DynamicAttr.ExprAST`, `EventAttr.ExprAST`,
+`If.CondAST`, `InlineIfPart.CondAST`, `Case.ExprAST`, `WhenClause.ValuesAST`,
+and `For.CollectionAST` / `RangeFromAST` / `RangeToAST` — and an expression
+error is a `ParseError` at the offending token. `{#unless}` keeps its folded
+`!(…)` string, and its tree is a `Unary` `!` over the parsed condition.
+
+**The contract** is `conformance/expressions-parse.json`: every grammar rule
+and every error, with exact line and column. `go test ./expr` runs it; a host
+runs the same rows through `conformance.ExpressionsParse` and `expr.Print`.
 
 ## Who imports it
 
@@ -57,3 +118,7 @@ go vet ./... && go test ./...
 The parser's integration tests parse copies of the todos example's `.pzl`
 files, vendored under `parser/testdata/todos`, so the module's tests are
 self-contained and run the same from a monorepo checkout or the module cache.
+From a monorepo checkout, `TestCorpusExpressionsParse` also parses every
+`.pzl` file under the framework's examples, the scaffold templates, the pieces
+registry, and the codegen goldens, and requires every expression in them to
+parse; outside the monorepo it skips.
