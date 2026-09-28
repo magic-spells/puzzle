@@ -226,13 +226,19 @@ func scanScriptUsage(src string, usage *fileUsage) {
 }
 
 // skipScanDir reports whether a directory should be pruned from the usage scan:
-// build output, VCS/vendor trees, and dot-directories hold no first-party source
-// worth scanning (installed .pzl component packages are out of scope for v1 —
-// see ScanUsage).
-func skipScanDir(name string) bool {
+// installed packages, build output, vendor trees, and dot-directories hold no
+// first-party source worth scanning (installed .pzl component packages are out
+// of scope for v1 — see ScanUsage). node_modules and dot-directories are pruned
+// at any depth; `dist`, `build` and `vendor` only directly under the scan root
+// (atRoot), because deeper down a folder of that name is the app's own source —
+// pruning app/components/vendor/ compiled `raw` and its formatters out of a
+// component the app renders.
+func skipScanDir(name string, atRoot bool) bool {
 	switch name {
-	case "node_modules", "dist", "build", "vendor":
+	case "node_modules":
 		return true
+	case "dist", "build", "vendor":
+		return atRoot
 	}
 	return strings.HasPrefix(name, ".")
 }

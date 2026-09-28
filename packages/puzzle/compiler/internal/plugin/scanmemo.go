@@ -100,7 +100,7 @@ func (s *UsageScanner) Scan(scanRoot string) (Usage, error) {
 			return walkErr
 		}
 		if d.IsDir() {
-			if path != root && skipScanDir(d.Name()) {
+			if path != root && skipScanDir(d.Name(), filepath.Dir(path) == root) {
 				return fs.SkipDir
 			}
 			return nil
