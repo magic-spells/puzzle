@@ -20,6 +20,9 @@ export default class CoreHost extends PuzzleView {
       missing: null,
       count: 2.7,
       profile: null,
+      mode: 'view',
+      canEdit: true,
+      canView: false,
     };
   }
 }
@@ -86,6 +89,22 @@ CoreHost.prototype.render = function () {
           ])(__d.status || 'none')),
     new ViewNode('p', { class: 'eq' }, [
       new ViewNode('text', { value: __s(__d.one == '1' ? 'loose' : 'strict', typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'one == \'1\' ? \'loose\' : \'strict\'' : 0) }),
+    ]),
+    ...((__d.mode === 'edit' ? __d.canEdit : __d.canView)
+      ? [
+          new ViewNode('p', { class: 'tern' }, [
+            new ViewNode('text', { value: 'yes' }),
+          ]),
+        ]
+      : [
+          new ViewNode('p', { class: 'tern' }, [
+            new ViewNode('text', { value: 'no' }),
+          ]),
+        ]),
+    new ViewNode('p', {
+      class: `tern-attr ${(__d.mode === 'edit' ? __d.canEdit : __d.canView) ? 'on' : ''}`,
+    }, [
+      new ViewNode('text', { value: 't' }),
     ]),
     new ViewNode('ul', { class: 'string-loop' },
       __l(this, this, 0, __d.word, (s) =>

@@ -79,6 +79,19 @@ describe('D173 core semantics — compiled output', () => {
 		expect(text(el, '.chip')).toBe('warm');
 	});
 
+	// A condition that is itself a ternary picks the branch by its own value; the
+	// compiler's `? then : else` must not re-associate into its false branch.
+	it('a ternary condition selects both outer branches', async () => {
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const el = await mountHost();
+		expect(text(el, '.tern')).toBe('no');
+		expect(el.querySelector('.tern-attr').className).toBe('tern-attr ');
+		mounted.setData({ mode: 'edit' });
+		mounted.flushUpdates();
+		expect(text(el, '.tern')).toBe('yes');
+		expect(el.querySelector('.tern-attr').className).toBe('tern-attr on');
+	});
+
 	it('a two-way bind through a missing record is inert, not a stray local write', async () => {
 		vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const el = await mountHost();
