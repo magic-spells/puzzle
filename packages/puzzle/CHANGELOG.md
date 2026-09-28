@@ -707,7 +707,7 @@ and keep formatters pure functions of their input.
 - **Static entry slugs never collide.** Routes such as `/`, `/index` and
   `/index-2` shared an entry file, so a page mounted the wrong view.
 - **A plural category defined twice in a locale file fails the build**, like
-  any other duplicate key, instead of silently keeping the second value.
+  any other duplicate key, instead of silently dropping the later value.
 - **puzzle-pieces:** phone-width overflow in Toolbar, Pagination, the
   DataTable footer and the Code buttons; `split-panel`'s `snap` no longer
   collapses every release to 0.
