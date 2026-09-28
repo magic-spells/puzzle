@@ -84,8 +84,8 @@ func TestListBlockExplicitKeyReadsCounter(t *testing.T) {
 	}
 }
 
-// The site meta const sits at MODULE scope, where `__d`, `__f` and `this` do
-// not exist, so a key expression reading render state cannot be hoisted. Such a
+// The site meta const sits at MODULE scope, where `__d` and `__f` do not
+// exist, so a key expression reading render state cannot be hoisted. Such a
 // site keeps today's `.map(…)` emission rather than emitting an arrow that
 // throws on its first call.
 func TestListBlockKeyReadingDataKeepsMap(t *testing.T) {
@@ -224,22 +224,6 @@ func TestListBlockFieldsAndDeep(t *testing.T) {
 				t.Errorf("deep: true = %v, want %v:\n%s", !tc.wantDeep, tc.wantDeep, got)
 			}
 		})
-	}
-}
-
-// `volatile` is the escape hatch for a body the compiler's dependency model
-// cannot see through: any `this` read makes every row dirty on every pass.
-func TestListBlockVolatile(t *testing.T) {
-	got := compileSrc(t, listSrc("  {#for todo in todos}<li>{ this.ctx.router.current.path } { todo.text }</li>{/for}"))
-	if !strings.Contains(got, "volatile: true") {
-		t.Errorf("a body reading `this` must be volatile:\n%s", got)
-	}
-	// `this` in a HANDLER argument is read at fire time against a stable
-	// instance — D62 already calls it data-independent, so it must not make the
-	// row volatile.
-	handler := compileSrc(t, listSrc("  {#for todo in todos}<li @click={ h(this.x) }>{ todo.text }</li>{/for}"))
-	if strings.Contains(handler, "volatile: true") {
-		t.Errorf("`this` inside a handler argument must not mark the site volatile:\n%s", handler)
 	}
 }
 
@@ -589,7 +573,7 @@ func TestListMetaEnclosingLocalPropagatesThroughMiddleSite(t *testing.T) {
 
 // A nested site reading only its OWN locals stays non-volatile, and a handler
 // ARGUMENT reading an enclosing local is a fire-time read that does not count —
-// the same carve-out `this` in a handler argument already has.
+// the same carve-out a mutable global in a handler argument has.
 func TestListMetaOwnLocalsStayNonVolatile(t *testing.T) {
 	got := compileSrc(t, listSrc(
 		"  {#for group in groups}\n"+
@@ -635,7 +619,12 @@ func TestListMetaOpaqueRecordReads(t *testing.T) {
 
 // --- C5: mutable globals and clock-reading built-ins make a site volatile ---
 
-// A cached row holding `{ window.location.hash }` would show `#old` forever.
+// `volatile` is the escape hatch for a body the compiler's dependency model
+// cannot see through: a value that can change with no data mutation makes
+// every row dirty on every pass. A template cannot reach the view through
+// `this` (D176 rule 5), so a mutable global and a clock-reading formatter are
+// the two ways a body reads one. A cached row holding
+// `{ window.location.hash }` would show `#old` forever.
 func TestListMetaVolatileGlobals(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -656,8 +645,8 @@ func TestListMetaVolatileGlobals(t *testing.T) {
 			}
 		})
 	}
-	// A mutable global in a HANDLER ARGUMENT is read at fire time, so it does
-	// not make the row volatile — the same rule `this` already follows.
+	// A mutable global in a HANDLER ARGUMENT is read at fire time against the
+	// live page, not during render, so it does not make the row volatile.
 	handler := compileSrc(t, listSrc("  {#for todo in todos}<li @click={ go(window.scrollY) }>{ todo.text }</li>{/for}"))
 	if strings.Contains(handler, "volatile: true") {
 		t.Errorf("a global inside a handler argument must not mark the site volatile:\n%s", handler)

@@ -137,7 +137,7 @@ func TestEventHandlerRejectedFormsRemainPositionedErrors(t *testing.T) {
 	}{
 		{"binary expression", "a + b", "event handler must be a bare method name or a single call expression"},
 		{"arrow function", "(e) => close(e)", "event handler callee must be a plain method name"},
-		{"this member", "this.close", "event handler must be a bare method name or a single call expression"},
+		{"this member", "this.close", dataThisMsg},
 		{"member expression", "handlers.close", "event handler must be a bare method name or a single call expression"},
 	}
 	for _, tc := range cases {

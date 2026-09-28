@@ -262,14 +262,25 @@ work through this list. Every item but 13, a new warning, is marked
     a regex literal, `++`/`--`, an assignment or a bitwise operator is a
     positioned compile error. Format the value with a formatter
     (`| trim`, `| round`), or compute it in `data()` and read the field
-    (`disabled={ !canAdd }`). `this.x` and `this.method(…)` still reach the
-    view's JavaScript, and `@event` handler bodies are unchanged.
+    (`disabled={ !canAdd }`). `@event` handler arguments are still
+    JavaScript, apart from `this` (item 18).
 17. **Removed formatters: `size`, `plus`, `minus`, `times`, `divided_by`,
     `modulo`, `default` and `split`.** Write the operator before the pipe
     (`{ price * qty | currency }`, `{ ratio * 100 | percentage }`), `??` for
     a fallback (`{ subtitle ?? 'Untitled' }`), `.size` for a count, and split
     a string in `data()`. A template that still names one passes the value
     through unchanged, and development logs the replacement.
+18. **`this` is not available in a template (D176).** A template expression
+    never reaches the view instance: `this` in a value, a block header, a
+    formatter argument, or an `@event` handler's arguments or ternary
+    condition (`{ this.ago(x) }`, `disabled={ !this.canAdd }`,
+    `@click={ save(this.x) }`) is a positioned compile error at the `this`
+    token. Return the value from `data()` — move a getter's body into a field
+    — or use a formatter for a display transform (`| timeago` for a relative
+    time). A field derived from `setData()` state needs a `refresh()` after
+    the write, because `setData()` alone does not re-run `data()`. A handler
+    still reaches the view through its own name: `@click={ save(x) }` calls
+    the view's `save`.
 
 Two contracts that row caching makes visible, though neither is new: assign a
 record's fields through `update()` or a store path, never `todo.title = 'x'`,
@@ -314,9 +325,8 @@ and keep formatters pure functions of their input.
   in English. (A fallback for a missing value is the `??` operator:
   `{ subtitle ?? 'Untitled' }`.)
 - **Object literals as formatter and call arguments (D173 V8).**
-  `{ 'cart.count' | t({ count: n, unit }) }` (an app `t` formatter) and
-  `{ this.fmt(x, { digits: 2 }) }`
-  compile. Values resolve as template expressions and keys stay keys; before
+  `{ 'cart.count' | t({ count: n, unit }) }`, `{ x | fmt({ digits: 2 }) }`
+  (an app `fmt` formatter) and `@click={ save({ id: todo.id }) }` compile. Values resolve as template expressions and keys stay keys; before
   this, the compiler scoped the keys too and emitted `{__d.width: 480}`, which
   only the bundler caught. Shorthand, quoted, computed and spread keys all work.
   An expression still cannot *start* with an object literal (`{ {a: 1} }` is
@@ -536,9 +546,26 @@ and keep formatters pure functions of their input.
     `typeof`, `instanceof`, `in`, regex literals, `++`/`--`, assignment, a
     top-level comma and the bitwise operators, are positioned compile errors
     naming the replacement: a formatter, or a `data()` field. Formatter calls
-    (`| truncate(20)`) are not calls on data. `this.` chains (`{ this.ago(x) }`,
-    `disabled={ !this.canAdd }`) and `@event` handler bodies are PuzzleKit's
-    two explicit doors into JavaScript and are exempt.
+    (`| truncate(20)`) are not calls on data. An `@event` handler's arguments
+    are PuzzleKit's one door into JavaScript and are exempt, apart from
+    `this`.
+  - **`this` is not a template identifier.** A template expression never
+    reaches the view instance. `this` in any template expression —
+    interpolation, attribute value, `{#if}`/`{#unless}`/`{#case}`/`{:when}`
+    condition, `{#for}` header, `key=`, formatter argument, prop or marker
+    argument, inline `{#if}`, skeleton, and an `@event` handler's arguments
+    and ternary condition — is a positioned compile error at the `this`
+    token: "`this` is not available in template expressions — return the
+    value from data() (a getter or a computed field), or use a formatter for
+    a display transform". The same holds for `this?.`, `(this)` and
+    `this[…]`; a field or object key named `this` (`x.this`) is still a
+    name. A handler reaches the view through its own name
+    (`@click={ save(x) }` calls the view's `save`); nothing else in a
+    template does. Every value a template shows comes through `data()`, and
+    a display transform is a formatter, so a template that compiles in
+    PuzzleKit never depends on a view instance — which is what lets it be
+    core Puzzle for Sites. typed-todos, chat and blog, whose templates read
+    a getter as `disabled={ !this.x }`, compute the flag in `data()`.
   - The scaffold's `disabled={ !newTodoText.trim() }` becomes a `canAdd`
     field in `data()`; the examples' ~160 `.length` reads become `.size`.
 - **Member access in a template never throws (D173 V4).** Every `.` and `[`
@@ -673,10 +700,10 @@ and keep formatters pure functions of their input.
   it: a cached row does not re-run its formatters, so a formatter that reads the
   clock or any other ambient value would freeze its output. The built-ins that do
   (`timeago` today) are known to the compiler and make the site re-evaluate every
-  render; a user-defined formatter is pure by contract. A row that must
-  re-evaluate every render should read through `this` — `{ this.ago(createdAt) }`
-  — which is already treated as volatile. Reading a mutable global in a row body
-  (`Date`, `Math.random`, `window`, `document`, `globalThis`, …) does the same.
+  render; a user-defined formatter is pure by contract. A row body that reads
+  a mutable global (`window`, `document`, `globalThis`, …) re-evaluates every
+  render too. A template cannot reach the view through `this`, so a relative
+  time is `| timeago` and any other ambient value is computed in `data()`.
 - **BREAKING (edge case): new reserved names.** A compiled view uses
   `__lists`, `__c`, `__dirty`, `__rgen` and `__propRevs` on the instance and
   `__roots` on the class; a template with an item-form `{#for}` also declares `__L0`, `__L1`, … at module scope and imports

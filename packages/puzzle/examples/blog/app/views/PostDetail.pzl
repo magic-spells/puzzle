@@ -46,7 +46,7 @@
           placeholder="Write a comment…"
           value={ commentText }
           @input={ updateCommentText(event) }></textarea>
-        <button class="inline-block self-start px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark" type="submit" disabled={ !this.canComment }>
+        <button class="inline-block self-start px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark" type="submit" disabled={ !canComment }>
           Add comment
         </button>
       </form>
@@ -105,15 +105,12 @@ export default class PostDetailView extends PuzzleView {
       author,
       comments,
       commentText: local.commentText,
+      // Templates read data, they don't call JavaScript on it, so the
+      // "is there a comment to add?" check is computed here, not in the
+      // template's disabled=.
+      canComment: (local.commentText ?? '').trim() !== '',
       authorName: local.authorName
     };
-  }
-
-  // Read by the template as `this.canComment`. A template reads data and never
-  // calls JavaScript on it (no `.trim()` there), and a getter re-reads local
-  // state on every render — setData() re-renders without re-running data().
-  get canComment() {
-    return (this.getData().commentText ?? '').trim() !== '';
   }
 
   events = {
@@ -123,6 +120,9 @@ export default class PostDetailView extends PuzzleView {
 
     updateCommentText: (event) => {
       this.setData('commentText', event.target.value);
+      // canComment is derived in data(); setData() alone does not re-run
+      // data(), so refresh() recomputes it from the just-updated text.
+      this.refresh();
     },
 
     addComment: (event) => {

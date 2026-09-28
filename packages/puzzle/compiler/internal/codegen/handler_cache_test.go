@@ -30,7 +30,6 @@ func TestHandlerCacheCacheableForms(t *testing.T) {
 		{"event arg", `  <button @click={ h(event) }>x</button>`, "??= (event) => this.events.h(event))"},
 		{"string literal arg", `  <button @click={ h('all') }>x</button>`, "??= (event) => this.events.h('all'))"},
 		{"no args", `  <button @click={ h() }>x</button>`, "??= (event) => this.events.h())"},
-		{"this member arg", `  <button @click={ h(this.x) }>x</button>`, "??= (event) => this.events.h(this.x))"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

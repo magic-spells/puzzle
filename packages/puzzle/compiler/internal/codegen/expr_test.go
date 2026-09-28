@@ -32,7 +32,10 @@ func TestResolveExpr(t *testing.T) {
 		{"string contents untouched", "'a.b + c'", nil, "'a.b + c'"},
 		{"double-quoted string", "\"x + y\"", nil, "\"x + y\""},
 		{"keyword true", "true", nil, "true"},
+		// The D176 pre-check rejects `this` in a template; below it the resolver
+		// still never reads `this` as a data root.
 		{"keyword this", "this", nil, "this"},
+		{"this is never a data root", "this.x", nil, "this.x"},
 		{"null/undefined", "a || null || undefined", nil, "__d.a || null || undefined"},
 		{"optional chaining property", "user.profile?.name", nil, "__d.user.profile?.name"},
 		{"event in scope", "handler(event)", scope("event"), "__d.handler(event)"},
@@ -109,9 +112,9 @@ func TestResolveExpr(t *testing.T) {
 }
 
 // An update operator is not in the template data language (D176), but a
-// `this.` chain is JavaScript, so its arguments still reach the scanner.
+// handler argument is JavaScript, so it still reaches the scanner.
 func TestPostfixUpdateBeforeDivisionPzlCompile(t *testing.T) {
-	src := `<puzzle-view>{ this.ratio(a++ / b / c) }</puzzle-view>
+	src := `<puzzle-view><button @click={ ratio(a++ / b / c) }>x</button></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {
@@ -131,7 +134,7 @@ export default class T extends PuzzleView {
 	if want := "return index++ / total;"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled output lost script expression %q:\n%s", want, res.JS)
 	}
-	if want := "__s(this.ratio(__d.a++ / __d.b / __d.c), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'this.ratio(a++ / b / c)' : 0)"; !strings.Contains(res.JS, want) {
+	if want := "(event) => this.events.ratio(__d.a++ / __d.b / __d.c)"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled output missing %q:\n%s", want, res.JS)
 	}
 }
@@ -267,15 +270,15 @@ func TestScanRegexLiteralUnterminated(t *testing.T) {
 	}
 }
 
-// A template literal is JavaScript, so it is legal only inside a `this.` chain
+// A template literal is JavaScript, so it is legal only in a handler argument
 // (D176) — where a `}` in a nested literal still must not close the braces.
 func TestNestedTemplateLiteralExpressionCompile(t *testing.T) {
 	const expr = "`outer ${`inner }`}`"
-	res, err := compileTemplate(t, "<puzzle-view>{ this.fmt("+expr+") }</puzzle-view>", "")
+	res, err := compileTemplate(t, "<puzzle-view><button @click={ fmt("+expr+") }>x</button></puzzle-view>", "")
 	if err != nil {
 		t.Fatalf("compile nested template literal: %v", err)
 	}
-	if want := "__s(this.fmt(" + expr + "),"; !strings.Contains(res.JS, want) {
+	if want := "this.events.fmt(" + expr + ")"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled expression did not preserve the source bytes %q:\n%s", want, res.JS)
 	}
 }
@@ -374,6 +377,8 @@ func TestCompileEventValue(t *testing.T) {
 		{"call with string arg", "setFilter('all')", nil, "(event) => this.events.setFilter('all')", true, false},
 		{"call with event arg", "addTodo(event)", nil, "(event) => this.events.addTodo(event)", true, false},
 		{"call with no args", "reset()", nil, "(event) => this.events.reset()", true, false},
+		// The D176 pre-check rejects `this` in a handler argument; below it the
+		// argument is still never read as the data field `__d.this`.
 		{"call with this arg", "save(this.x)", nil, "(event) => this.events.save(this.x)", true, false},
 		{"call with global arg", "clamp(Math.PI)", nil, "(event) => this.events.clamp(Math.PI)", true, false},
 		// Loop/scope variables and data references capture render state → NOT
