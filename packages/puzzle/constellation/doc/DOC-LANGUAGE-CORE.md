@@ -109,7 +109,7 @@ A **formatter** presents a value for display. Write it after a pipe:
 - Only a **top-level single `|`** is a pipe. `||` is logical OR; a `|` inside
   a string, a regex or a template literal is text; and a single `|` nested
   inside parentheses, brackets, braces or a formatter's arguments is a compile
-  error ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]): there is no bitwise OR in
+  error ([[DECISION-D176-EXPRESSION-LANGUAGE]]): there is no bitwise OR in
   templates, so `{ (a | b) }` and `@click={ save(x | trim) }` never compile
   to one.
 - **What follows a pipe must be a formatter name**
@@ -372,7 +372,7 @@ rejects them until it does.
 
 
 **A template expression is data plus operators, not JavaScript**
-([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]). The **core expression language**
+([[DECISION-D176-EXPRESSION-LANGUAGE]]). The **core expression language**
 is the part of JavaScript expression syntax that both hosts evaluate the same
 way; it is based on Sites' `DECISION-EXPRESSION-SUBSET`
 (`sites/constellation/decision/`). Both hosts accept exactly the core and
@@ -477,7 +477,7 @@ operands of mixed or non-number types is not portable either (V5).
 | | PuzzleKit | Sites |
 |---|---|---|
 | File structure | `<puzzle-view>` root (§3); optional `<puzzle-skeleton>` (§16), `<script>` class (§4, `lang="ts"` §25), `<style>` / `<style scoped>` (§29) | No wrapper; the directory decides the file kind; optional `<schema>`, `<script>` (browser JavaScript), `<style>` / `<style scoped>` — `sites/constellation/decision/DECISION-TEMPLATE-GRAMMAR.md`, `DECISION-NO-VIEW-WRAPPERS-IN-THEMES.md` |
-| Expressions | The core, plus one door into the view's JavaScript: an `@event` handler, which reaches the view through its own name ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]); `this` and everything else JavaScript-only is a compile error | The core subset, with `==` still spelled as `===` until V2 lands — `DECISION-EXPRESSION-SUBSET.md` |
+| Expressions | The core, plus one door into the view's JavaScript: an `@event` handler, which reaches the view through its own name ([[DECISION-D176-EXPRESSION-LANGUAGE]]); `this` and everything else JavaScript-only is a compile error | The core subset, with `==` still spelled as `===` until V2 lands — `DECISION-EXPRESSION-SUBSET.md` |
 | Naming a computed value | a `data()` field (no `{#let}`: logic belongs in the script) | `{#let}` |
 | Adds | `@event` + modifiers (§5, §47); callback props (§6); implicit two-way binding (§6, [[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); `<Portal>` ([[DECISION-D144-PORTAL]]); `island` (§17); `key` (§28); `ref` (§38); `flip` (§46); formatters `link`, `timeago`, `in_timezone`; a script-less component reads its props (V15) | `{#let}` template variables (its value is a formatter-chain position); implicit props (bare names); `<Form>`; reserved layout slots and section groups; Sites formatters (`split`, `url`, `image_url`, `t`, the list formatters, …) — `sites/engine/constellation/doc/DOC-TEMPLATE-LANGUAGE.md` |
 | Restricts | — | `@event` and `<Portal>` are compile errors; `ref`/`key`/`flip`/`island` are dropped with a warning; an unknown formatter or a wrong argument count is a compile error; interpolation is not allowed in `<script>`/`<style>` bodies or event-handler attributes — `DECISION-AUTO-ESCAPE.md` |
@@ -555,7 +555,7 @@ by the shared conformance table (`tests/conformance/formatters.json` in
 contract; this table records where each host stands against it. `t` joined
 the set with [[DECISION-D175-TRANSLATIONS]]; `size`, the arithmetic
 formatters, `default` and `split` left it with
-[[DECISION-D176-TEMPLATE-DATA-LANGUAGE]] (a count is `.size`, arithmetic is
+[[DECISION-D176-EXPRESSION-LANGUAGE]] (a count is `.size`, arithmetic is
 the operators, a fallback is `??`, and `split` is Sites-only).
 
 **PuzzleKit implements D174 groups (a), (g), (e) and (h)**: `client-runtime/formatters/builtins.js`
@@ -621,7 +621,7 @@ strict comparison against `null`/`undefined` is host-defined), V4 (reading
 through a missing value prints nothing), V7 (`.size` counts code points in
 both hosts; `.length` is an error), V8 (object literals in argument and nested
 positions), V15 (a script-less PuzzleKit component reads its props), and the
-[[DECISION-D176-TEMPLATE-DATA-LANGUAGE]] rule that a template expression is
+[[DECISION-D176-EXPRESSION-LANGUAGE]] rule that a template expression is
 data plus operators (no calls on a value; `size`, the arithmetic formatters and
 `default` removed). PuzzleKit implements all of them. Sites still has to adopt
 V1's `{#for}`-header and nested-pipe errors (it already rejects a chain in a

@@ -112,6 +112,19 @@ notes:
       `<!--` with no `-->` means no later one has one. `'<a'.repeat(40000)` went from ~6 s to ~5 ms.
       Tests: tests/formatters-hardening.test.js. Sites' implementation should get the same `replace`
       edges if it differs (not checked from here).
+  - kind: state
+    text: >-
+      2026-09-28 — superseded in part by [[DECISION-D176-EXPRESSION-LANGUAGE]], rewritten in place
+      as the JavaScript-shaped expression language (building for 0.8.0). There are no pipes: the
+      27-name standard set becomes D176's function library, called like functions
+      (`currency(price)`, `truncate(s, 120)`, `t('key', vars)`), and apps still register theirs
+      through `app.formatter()`. `upcase`, `downcase`, `trim`, `strip`, `replace`, `join`, `abs`,
+      `ceil`, `floor` and `round` leave the set, because a JavaScript method or `Math.*` covers
+      each. `time(v)` now defaults to the short preset and `datetime(v)` to the medium date with the
+      short time. The markup-position rule for `raw` and `newline_to_br` (group e) and the sanitizer
+      allowlist carry over; whether `tel:` stays in the allowlist and whether `currency`'s delimiter
+      follows the locale remain open on D176. This card is rewritten in place when the code lands
+      (D176 build list P4); until then it describes what `release/0.8.0` ships.
 ---
 
 # D174 — The standard formatter set
@@ -150,7 +163,7 @@ Three principles decide the set:
   `items[items.size - 1]`), never in a formatter. Sites has no script, so it
   keeps list formatters as a Sites addition.
 - **A formatter presents a value; it never duplicates an operator or a
-  property** ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]). The core expression
+  property** ([[DECISION-D176-EXPRESSION-LANGUAGE]]). The core expression
   language has `+ - * / %`, `??` and `.size`, so the Liquid-heritage
   `plus`/`minus`/`times`/`divided_by`/`modulo`, `default` and `size` are not
   in the set: `{ price * qty | currency }`, `{ name ?? 'Anonymous' }`,
@@ -170,7 +183,7 @@ called `size`, `default`, `split` or an arithmetic formatter (2026-09-28 scan).
 
 
 Every standard name exists in both hosts with the same arguments and the same
-meaning. The set is 27 names since [[DECISION-D176-TEMPLATE-DATA-LANGUAGE]].
+meaning. The set is 27 names since [[DECISION-D176-EXPRESSION-LANGUAGE]].
 
 **Identical output (20)**, pinned by a shared conformance table (name, input,
 arguments, expected output) that both hosts run:
@@ -477,7 +490,7 @@ we're the only ones using puzzle."
   The development guard for an unknown name ([[DECISION-D43-FORMATTER-MISSING-GUARD]])
   names the replacement for each removed name.
 - **Both hosts remove `size`, `plus`, `minus`, `times`, `divided_by`,
-  `modulo` and `default`** ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]): the
+  `modulo` and `default`** ([[DECISION-D176-EXPRESSION-LANGUAGE]]): the
   count is the `.size` property, arithmetic is `+ - * / %` before the pipe,
   and a fallback is `??`. **PuzzleKit removes `split`**, which becomes
   Sites-only (`{#let parts = tags | split(',')}`); in PuzzleKit the split
@@ -508,7 +521,7 @@ standard, so chirp's own `timeago` draws no warning.
   Rejected: Magic Spells is the only user, and no template calls them.
 - **Keep the Liquid arithmetic formatters, `default` and `size`** (they were
   in the set as first decided). Rejected by
-  [[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]: each duplicated an operator or a
+  [[DECISION-D176-EXPRESSION-LANGUAGE]]: each duplicated an operator or a
   property the expression language already has, so `a + b` and `a | plus(b)`
   were two spellings of one thing; zero templates used any of them.
 - **`pluralize` returns the noun alone**, with the count written separately.
@@ -651,7 +664,7 @@ ports or the editor grammars: formatter names are not grammar.
 `builtins.json`, `builtins-all.js`, `STANDARD_FORMATTERS` and the manifest
 scan list; the `__missing` guard names each replacement (`.size`, the
 operator, `??`, `data()`); their rows leave the conformance table. See
-[[DECISION-D176-TEMPLATE-DATA-LANGUAGE]] for the expression side.
+[[DECISION-D176-EXPRESSION-LANGUAGE]] for the expression side.
 
 **PuzzleKit docs, with each group:** [[DOC-SPEC-TEMPLATE]] §6,
 [[COMPONENT-FORMATTERS]], the embedded agent skill

@@ -219,7 +219,7 @@ imports are not template scope. **`this` never reaches the resolver from a
 template:** the D176 pre-pass (`datalang.go`) rejects it with a positioned error
 at the `this` token in every template expression, handler arguments and the
 handler ternary condition included, while a member named `this` (`x.this`) stays
-an ordinary field read ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]] rule 5). The
+an ordinary field read ([[DECISION-D176-EXPRESSION-LANGUAGE]] rule 5). The
 `this` in emitted code (`this.events.h`, `this.__h`, `this.__bind`) is the
 compiler's own, never an author's.
 

@@ -287,7 +287,7 @@ syntax is unchanged.
    expressions read a mutable global, pipe through a clock-reading built-in
    formatter, or read a loop local belonging to an ENCLOSING site. A template
    expression never reaches the view instance (`this` is not a template
-   identifier, [[DECISION-D176-TEMPLATE-DATA-LANGUAGE]] rule 5), so the view
+   identifier, [[DECISION-D176-EXPRESSION-LANGUAGE]] rule 5), so the view
    itself is never a row input. Sites reading a relation, a computed getter or
    a deep path are **conservative** (checked once per model class against the
    schema, cached on the block) and never cache their record rows.

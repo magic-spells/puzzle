@@ -94,12 +94,21 @@ notes:
       parser's code cards with `repo=puzzle-lang`.
   - kind: state
     text: >-
-      2026-09-28 — D176 is taken and built ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]], 0.8.0:
-      template expressions are a data language — `.size` for every count, `.length` and calls on
-      data values compile errors in both dialects, `??` the fallback, the
-      arithmetic/`default`/`size` formatters removed and `split` Sites-only, pipes only where a
-      value is displayed and never nested; D174's standard set is 27 names). **The next free
-      decision number is D177.**
+      2026-09-28 — D176 is taken and built ([[DECISION-D176-EXPRESSION-LANGUAGE]], 0.8.0: template
+      expressions are a data language — `.size` for every count, `.length` and calls on data values
+      compile errors in both dialects, `??` the fallback, the arithmetic/`default`/`size` formatters
+      removed and `split` Sites-only, pipes only where a value is displayed and never nested; D174's
+      standard set is 27 names). **The next free decision number is D177.**
+  - kind: state
+    text: >-
+      2026-09-28 — D176 rewritten in place and renamed ([[DECISION-D176-EXPRESSION-LANGUAGE]],
+      status building): template expressions are JavaScript-shaped — one closed grammar parsed in
+      puzzle-lang, a method table as the boundary, functions instead of pipes (the library replaces
+      the 27-name formatter set; `app.formatter()` keeps its name), evaluated natively in Go by
+      Sites; `this` stays rejected. Phases P1–P6 are on the card, and the 0.8.0 tag waits for P1–P5.
+      Until P2–P4 land, the Current state's "D176 template expressions as a data language" bullet
+      and D173/D174/D175 describe the pipe-and-`.size` language `release/0.8.0` compiles today (each
+      carries a note). The next free decision number is still D177.
 connected_repos:
   - name: puzzle-lang
     path: ../puzzle-lang

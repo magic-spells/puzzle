@@ -103,6 +103,16 @@ notes:
       there; 6 platform-bound), PuzzleKit 30. The "35 standard, 24 Sites-only, 38 PuzzleKit" figures
       in the body's Decision section and the earlier note are pre-D176; D174 is the authoritative
       list.
+  - kind: state
+    text: >-
+      2026-09-28 — superseded in its template spelling by [[DECISION-D176-EXPRESSION-LANGUAGE]],
+      rewritten in place as the JavaScript-shaped expression language (building for 0.8.0). There
+      are no pipes, so `{ 'key' | t }` and `{ 'key' | t({ count: n }) }` become `{ t('key') }` and
+      `{ t('key', { count: n }) }`: `t(key, vars)` is a function in D176's library, and a count
+      inside `vars` is JavaScript's `.length` (`t('cart.items', { count: cart.items.length })`). The
+      locale files, `ctx.i18n`, plural selection, loading, locale selection and the build are
+      unaffected. This card is rewritten in place when the code lands (D176 build list P4); until
+      then it describes what `release/0.8.0` ships.
 ---
 
 # D175 — Translations: `'key' | t`, one locale file per language

@@ -133,6 +133,18 @@ notes:
       sanitizer), a non-text sibling under the V10/D168 whitespace rule like an element; either name
       anywhere else is a positioned compile error. D174's body holds the allowlist, the canonical
       output the conformance rows pin, and what Sites must do.
+  - kind: state
+    text: >-
+      2026-09-28 — superseded in part by [[DECISION-D176-EXPRESSION-LANGUAGE]], rewritten in place
+      as the JavaScript-shaped expression language (building for 0.8.0). There are no pipes, so V1
+      (a pipe as a formatter in every display position, the condition-header and `{#for}`-header
+      pipe errors, the nested-pipe error) goes, along with the pipe forms in V8's examples
+      (object-literal arguments stay: `t('key', { count: n })`). V7's `.size` count and `.length`
+      error go: the count is JavaScript's `.length`, which counts UTF-16 units in both hosts. V2
+      (loose `==`), V4 (guarded member reads, now also guarded method calls) and V6 (value printing)
+      carry over as D176's semantics; V9–V16 and V18 are unaffected. This card is rewritten in place
+      when the code lands (D176 build list P4); until then it describes what `release/0.8.0`
+      compiles.
 ---
 
 # D173 — Core semantics: one meaning for each shared construct
@@ -227,7 +239,7 @@ answer depends on runtime values, the item says so.
   handler bodies are PuzzleKit JavaScript, not value positions, and are
   untouched. Sites' `{#let}` value is also a pipe position (a Sites addition).
 - **A single `|` below the top level of a value is a positioned compile error
-  in both dialects** ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]): inside
+  in both dialects** ([[DECISION-D176-EXPRESSION-LANGUAGE]]): inside
   parentheses, brackets, braces or a formatter's arguments —
   `@click={ save(x | trim) }`, `disabled={ !(draft | trim) }`,
   `{ x | t({ n: a | b }) }`. There is no bitwise OR in templates, so it never
@@ -460,7 +472,7 @@ dotted tag before. PuzzleKit's barrel resolution
 
 
 **V7 — text units and Unicode.** The count of a string is `.size`, and it is
-code points in both hosts ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]): Sites
+code points in both hosts ([[DECISION-D176-EXPRESSION-LANGUAGE]]): Sites
 counts runes, and PuzzleKit compiles `x.size` to a helper that counts code
 points on a string and items on a list, so a JavaScript string's UTF-16
 `.length` never reaches a template (`.length` is a compile error in both

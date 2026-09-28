@@ -106,7 +106,7 @@ core that Shopify extends with its own tags and objects.
   wrapper's `<Children/>`. PuzzleKit implements it today; Sites has not built
   it yet (planned), and until then rejects it with an error saying so.
 - **The core expression language is a data language, not JavaScript**
-  ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]): paths (`a.b`, `a?.b`,
+  ([[DECISION-D176-EXPRESSION-LANGUAGE]]): paths (`a.b`, `a?.b`,
   `a[expr]`), the `.size` count of a list or string, literals, arithmetic,
   comparison, `&&`/`||`/`??`, ternary. No calls on a value, no arrow
   functions, template literals, `new`, `typeof`, regex or bitwise operators:

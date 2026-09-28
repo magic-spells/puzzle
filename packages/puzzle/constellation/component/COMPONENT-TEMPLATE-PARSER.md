@@ -87,6 +87,17 @@ notes:
       (the negation folded into `Cond`, no `Negate` field) landed with PR #157 and stand.
       `chain_test.go`'s `TestNestedPipeIsError` pins the nested cases. The token lexer and section
       splitter did not change, so the eslint/prettier ports and the editor grammars need no sweep.
+  - kind: decision
+    text: >-
+      2026-09-28, Cory (decided with the D176 sub-decisions, though not part of the expression
+      rewrite): the HTML void elements — `area base br col embed hr img input link meta source track
+      wbr` — are accepted without a slash (`<br>`, `<input type="text">`), `<br/>` stays legal, and
+      a closing tag for a void element (`</input>`) is the positioned error. Not built yet: today
+      `parseElement` has no void list, so `<br>` opens a context that only `</br>` closes, and the
+      mismatch error blames the parent's close tag (review finding R-LANG-BUGS-7). It is a
+      puzzle-lang parser change for 0.8.0, scheduled with the [[DECISION-D176-EXPRESSION-LANGUAGE]]
+      build phases (the 0.8.0 tag waits for P1–P5); DOC-TEMPLATE-SYNTAX's `<input value={ x }
+      readonly>` example compiles once it lands.
 ---
 
 # Template parser
