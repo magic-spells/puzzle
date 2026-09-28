@@ -2,7 +2,7 @@
   <Card>
     <Slot name="header"><h2>{ title | capitalize }</h2></Slot>
     <Children>
-      {#if items.length}
+      {#if items.size > 0}
         <ItemCard item={ items[0] } />
       {:else}
         <p>Nothing here yet</p>
@@ -10,7 +10,7 @@
     </Children>
   </Card>
 
-  <Slot>{ count | number } remaining{#svg 'icons/empty.svg'}</Slot>
+  <Slot>{ count | number_with_delimiter } remaining{#svg 'icons/empty.svg'}</Slot>
 
   <Children/>
   <Slot name="footer"/>

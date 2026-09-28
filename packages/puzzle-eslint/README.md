@@ -97,11 +97,21 @@ export default [
   [stylelint](https://stylelint.io/) for CSS.
 - **Template linting (`<puzzle-view>` / `<puzzle-skeleton>` markup) is future
   work.** This plugin lints the `<script>` body and validates section
-  structure only; it does not yet lint the Puzzle template grammar. The 0.7.0
-  additions — D167 dotted family tags (`<Frame.Header>`), the `\{` / `\}` brace
-  escape, and the `{#for}` range spellings — split correctly and pass through
-  unjudged; a name the compiler rejects (`<Frame-x>`, `<Slot.Foo>`) is the
-  compiler's error to report, not this plugin's.
+  structure only; it does not lint the Puzzle template grammar. Every template
+  construct splits correctly and passes through unjudged: dotted family tags
+  (`<Frame.Header>`), the `\{` / `\}` brace escape, the `{#for}` range
+  spellings, formatter chains in any value position
+  (`title={ name | trim | truncate(20) }`), and object-literal formatter
+  arguments (`{ 'cart.count' | t({ count: items.size }) }`).
+- **Template-language errors are the compiler's to report.** A template value
+  is data plus operators (D176): a method or function call on a value, an
+  arrow function, a template literal, `.length` (write `.size`), a nested
+  pipe, or a pipe in an `{#if}` / `{#for}` / `{#case}` header is a positioned
+  `puzzle build` error, as is a component name like `<Frame-x>` or
+  `<Slot.Foo>`. None of them produce an ESLint message here, and none of them
+  stop the `<script>` body from being linted.
+- `@event` handler bodies in the template are JavaScript, but they live in
+  template bytes, so ESLint does not see them.
 - A `.pzl` file with no `<script>` section produces no JS blocks (but section
   errors are still reported).
 
