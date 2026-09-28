@@ -12,6 +12,7 @@ import { memoryRouter } from '../router/modes.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { createI18n, installTranslate } from '../i18n.js';
+import { formatLocale, setFormatLocale } from '../formatters/locale.js';
 import {
 	ensureTracking,
 	registerRouter,
@@ -41,6 +42,7 @@ export async function mountView(ViewClass, options = {}) {
 	installAdapterCapability(options.adapter, 'options.adapter');
 
 	const container = document.createElement('div');
+	const restoreLocale = options.i18n ? saveLocaleSlots() : null;
 	const context = makeContext(options);
 	await context.i18n?.__ready?.();
 	const instance = new ViewClass(context);
@@ -67,12 +69,14 @@ export async function mountView(ViewClass, options = {}) {
 		instance.destroy();
 		unregisterRouter();
 		unregisterStore();
+		restoreLocale?.();
 		throw error;
 	}
 
 	return makeViewHandle(instance, container, context, {
 		unregisterRouter,
 		unregisterStore,
+		restoreLocale,
 	});
 }
 
@@ -102,6 +106,7 @@ export async function createTestApp(config = {}) {
 
 	const { routerInitialPath, i18n, ...appConfig } = config;
 	const container = document.createElement('div');
+	const restoreLocale = i18n ? saveLocaleSlots() : null;
 	const app = new PuzzleApp({
 		...appConfig,
 		target: container,
@@ -131,12 +136,14 @@ export async function createTestApp(config = {}) {
 		app.unmount();
 		unregisterRouter();
 		unregisterStore();
+		restoreLocale?.();
 		throw error;
 	}
 
 	return makeAppHandle(app, container, store, router, {
 		unregisterRouter,
 		unregisterStore,
+		restoreLocale,
 	});
 }
 
@@ -177,6 +184,24 @@ function testI18nOptions({ locale = 'en', strings = {} } = {}) {
 
 function createTestI18n(options) {
 	return createI18n(testI18nOptions(options));
+}
+
+/**
+ * The formatter locale and `<html lang>` are page-wide slots the i18n service
+ * writes on every load and switch (D175), and nothing resets them when an app or
+ * view goes away. A handle that installed translations snapshots both at mount
+ * and puts them back on destroy, so a later test in the same file keeps
+ * browser-locale behavior. Returns the restore function.
+ */
+function saveLocaleSlots() {
+	const root = document.documentElement;
+	const locale = formatLocale;
+	const lang = root.getAttribute('lang');
+	return () => {
+		setFormatLocale(locale);
+		if (lang === null) root.removeAttribute('lang');
+		else root.setAttribute('lang', lang);
+	};
 }
 
 function makeInertRouter(current) {
@@ -230,6 +255,7 @@ function makeViewHandle(instance, container, ctx, cleanup) {
 			instance.destroy();
 			cleanup.unregisterRouter();
 			cleanup.unregisterStore();
+			cleanup.restoreLocale?.();
 		},
 	};
 	return handle;
@@ -273,6 +299,7 @@ function makeAppHandle(app, container, store, router, cleanup) {
 			app.unmount();
 			cleanup.unregisterRouter();
 			cleanup.unregisterStore();
+			cleanup.restoreLocale?.();
 		},
 	};
 	return handle;
