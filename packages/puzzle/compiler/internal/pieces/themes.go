@@ -385,11 +385,11 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 		if isDefaultTheme(reg, t) {
 			// The default palette's "is it needed at all?" question belongs to
 			// planTheme — the same code `add piece` runs — so the two commands agree
-			// on when pieces.css is wanted. Only its state (c) (pieces.css present
-			// but unwired) continues below, where it gets the SAME already-installed
-			// rules every other palette gets: `add theme default` must behave like
-			// `add theme dim`. `add piece` itself is unchanged and still never
-			// rewrites pieces.css.
+			// on when pieces.css is wanted. Its state (c) (pieces.css present but
+			// unwired) and an `@import './pieces.css'` continue below, where they get
+			// the SAME already-installed rules every other palette gets: `add theme
+			// default` must behave like `add theme dim`. `add piece` itself is
+			// unchanged and still never rewrites pieces.css.
 			plan, defaultAdvisory, perr := planTheme(&Options{AppRoot: opts.AppRoot, Fetcher: opts.Fetcher}, reg)
 			if perr != nil {
 				return nil, perr
@@ -402,16 +402,24 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 				result.Themes = append(result.Themes, outcome)
 				continue
 			}
-			if defaultAdvisory == "" { // (a) styles.css already carries the tokens
-				if themeImportedFromPackage(styles, t.Name) {
-					outcome.State = ThemeWiredViaPackage
-				} else {
-					outcome.State = ThemeWired
-				}
+			switch {
+			case defaultAdvisory != "": // (c) present but unwired
+				advisory, adviseWhenUpToDate = defaultAdvisory, true
+			case themeImportedFromPackage(styles, t.Name):
+				outcome.State = ThemeWiredViaPackage
 				result.Themes = append(result.Themes, outcome)
 				continue
+			case strings.Contains(styles, themeMarker): // the tokens live in styles.css
+				outcome.State = ThemeWired
+				result.Themes = append(result.Themes, outcome)
+				continue
+			default:
+				// planTheme's (a) through a reference to pieces.css: the app USES the
+				// file, so it is hashed, refreshed, refused or --overwritten like any
+				// other palette, and a deleted one is copied back behind its import.
+				// The import is already there, so no import line is printed.
+				advisory = ""
 			}
-			advisory, adviseWhenUpToDate = defaultAdvisory, true
 		} else if themeImportedFromPackage(styles, t.Name) {
 			// Provided by the package already — a copy could only drift from it.
 			outcome.State = ThemeWiredViaPackage
