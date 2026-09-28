@@ -346,6 +346,41 @@ describe('list block — row lifetime', () => {
 		expect(built).toEqual(['a', 'b', 'b']);
 	});
 
+	// A factory that throws must not leave a row that looks clean. The block records
+	// the row (and its new item) before building it, so the next pass over the same
+	// items used to hand back `null` for a new key, or the PREVIOUS item's vnode for
+	// an existing one. The hybrid/static takeover is the path that renders the same
+	// instance twice, and it reported `TypeError … 'isSlot'` instead of the real error.
+	it('rebuilds a row whose factory threw, on the next pass', () => {
+		const view = host();
+		const byFirstChar = { key: (item) => item[0] };
+		const built = [];
+		let throwFor = 'b1';
+		const factory = (s) => {
+			built.push(s.item);
+			if (s.item === throwFor) throw new Error('row failed');
+			return new ViewNode('li', { key: s.k }, [new ViewNode('text', { value: s.item })]);
+		};
+		const label = (vnode) => vnode?.children[0].attrs.value;
+
+		// A NEW key whose first build throws.
+		listRows(view, view, 0, ['a1'], factory, byFirstChar);
+		expect(() => listRows(view, view, 0, ['a1', 'b1'], factory, byFirstChar)).toThrow('row failed');
+		throwFor = null;
+		const second = listRows(view, view, 0, ['a1', 'b1'], factory, byFirstChar);
+		expect(label(second[1])).toBe('b1');
+
+		// An EXISTING key whose new item throws.
+		throwFor = 'a2';
+		expect(() => listRows(view, view, 0, ['a2', 'b1'], factory, byFirstChar)).toThrow('row failed');
+		throwFor = null;
+		const third = listRows(view, view, 0, ['a2', 'b1'], factory, byFirstChar);
+		expect(label(third[0])).toBe('a2');
+		expect(third[1]).toBe(second[1]);
+
+		expect(built).toEqual(['a1', 'b1', 'b1', 'a2', 'a2']);
+	});
+
 	it('keeps its rows while the site is NOT VISITED (an {#if} around the loop)', () => {
 		const store = new Store({ todo: Todo });
 		const a = store.createRecord('todo', { id: 'a' });
