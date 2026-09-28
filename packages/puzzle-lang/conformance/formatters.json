@@ -32,6 +32,7 @@
 		{ "name": "number_with_delimiter", "input": 1234.56, "args": [" "], "expect": "1 234.56" },
 		{ "name": "number_with_delimiter", "input": -1234567.5, "args": [","], "expect": "-1,234,567.5" },
 		{ "name": "number_with_delimiter", "input": 999, "args": [","], "expect": "999" },
+		{ "name": "number_with_delimiter", "input": -0, "args": [","], "expect": "0" },
 
 		{ "name": "downcase", "input": "HeLLo", "args": [], "expect": "hello" },
 		{ "name": "upcase", "input": "HeLLo", "args": [], "expect": "HELLO" },
@@ -183,6 +184,7 @@
 		{ "name": "pluralize", "input": 0, "args": ["comment"], "expect": "0 comments" },
 		{ "name": "pluralize", "input": 2, "args": ["man", "men"], "expect": "2 men" },
 		{ "name": "pluralize", "input": 1, "args": ["person", "people"], "expect": "1 person" },
+		{ "name": "pluralize", "input": -0, "args": ["day"], "expect": "0 days" },
 
 		{ "name": "date", "input": "2026-09-24", "args": ["iso"], "expect": "2026-09-24" },
 		{ "name": "date", "input": null, "args": ["iso"], "expect": "" },

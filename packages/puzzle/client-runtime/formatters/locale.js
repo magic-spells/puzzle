@@ -41,6 +41,9 @@ export function setFormatLocale(tag) {
 // `{count}`. The cache holds one locale's formats; setFormatLocale clears it.
 const NUMBER_FORMATTERS = new Map();
 export function localeNumber(n) {
+	// Intl prints -0 as "-0" (a negative fraction through ceil/round, a negative
+	// number times zero); every other number path prints it as 0 (D173 V6).
+	if (n === 0) n = 0;
 	const [m, e = 0] = String(Math.abs(n)).split('e');
 	const digits = Math.min(20, Math.max(0, (m.split('.')[1] || '').length - Number(e)));
 	let formatter = NUMBER_FORMATTERS.get(digits);

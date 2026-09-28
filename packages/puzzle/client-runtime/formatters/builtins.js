@@ -23,6 +23,12 @@ const str = (v) => (v == null ? '' : String(v));
 // nothing instead of "$0.00".
 const num = (v) => (v == null || v === '' || typeof v === 'boolean' ? NaN : Number(v));
 
+// What a text-producing number formatter prints for input that is not a finite
+// number: nothing for a NaN or ±Infinity NUMBER (`{ total / count | currency }`
+// on an empty list), exactly as the bare value prints (D173 V6); anything else —
+// a missing value, a non-numeric string — prints as text (D174 deviation 2).
+const notFinite = (v) => (typeof v === 'number' ? '' : str(v));
+
 // Normalize a `places` argument to a digit count toFixed accepts: coerce to an
 // integer and clamp to 0–100. A non-numeric, NaN, or infinite argument falls back
 // to `dflt` so a bad argument fails soft instead of throwing RangeError. Shared by
@@ -225,7 +231,7 @@ export function strip_newlines(v) {
 // like number_with_delimiter (D174 F15).
 export function pluralize(count, singular, plural) {
 	const n = num(count);
-	if (!Number.isFinite(n)) return str(count);
+	if (!Number.isFinite(n)) return notFinite(count);
 	const word = n === 1 ? str(singular) : plural == null ? str(singular) + 's' : str(plural);
 	return localeNumber(n) + ' ' + word;
 }
@@ -257,7 +263,7 @@ export function abs(v) {
 // rounds by round's rule (D174 F3). An amount that rounds to zero is unsigned.
 export function currency(v, symbol = '$', places = 2) {
 	const n = num(v);
-	if (!Number.isFinite(n)) return str(v);
+	if (!Number.isFinite(n)) return notFinite(v);
 	const p = normDecimals(places, 2);
 	const rounded = roundHalfAway(n, p);
 	const [whole, frac] = Math.abs(rounded).toFixed(p).split('.');
@@ -268,7 +274,7 @@ export function currency(v, symbol = '$', places = 2) {
 // `ratio * 100 | percentage` (D174 F14, D176).
 export function percentage(v, places = 0) {
 	const n = num(v);
-	if (!Number.isFinite(n)) return str(v);
+	if (!Number.isFinite(n)) return notFinite(v);
 	const p = normDecimals(places, 0);
 	return roundHalfAway(n, p).toFixed(p) + '%';
 }
@@ -278,7 +284,7 @@ export function percentage(v, places = 0) {
 // it, groups in threes and keeps `.` as the decimal point.
 export function number_with_delimiter(v, delimiter) {
 	const n = num(v);
-	if (!Number.isFinite(n)) return str(v);
+	if (!Number.isFinite(n)) return notFinite(v);
 	if (delimiter == null) return localeNumber(n);
 	const [whole, frac] = String(n).split('.');
 	return group(whole, str(delimiter)) + (frac === undefined ? '' : '.' + frac);
@@ -290,7 +296,7 @@ let compactFormatter;
 let compactLocale;
 export function compact_number(v) {
 	const n = num(v);
-	if (!Number.isFinite(n)) return str(v);
+	if (!Number.isFinite(n)) return notFinite(v);
 	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && compactLocale !== formatLocale) {
 		compactLocale = formatLocale;
 		compactFormatter = undefined;
@@ -299,7 +305,8 @@ export function compact_number(v) {
 		typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__ ? formatLocale : undefined,
 		{ notation: 'compact' },
 	);
-	return compactFormatter.format(n);
+	// Intl prints -0 as "-0"; V6 prints it as 0.
+	return compactFormatter.format(n === 0 ? 0 : n);
 }
 
 // ── Values ────────────────────────────────────────────────────────────────────
