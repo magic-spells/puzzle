@@ -400,8 +400,12 @@ export interface PuzzleContext {
 	i18n?: PuzzleI18n;
 }
 
-/** Variables for a translation: `{name}` placeholders, and `count` for plurals. */
-export type TranslationVars = Record<string, unknown>;
+/**
+ * Variables for a translation: `{name}` placeholders, and `count` for plurals.
+ * Any object value — a data field, a store record, an interface-typed value (a
+ * `Record` type would reject an interface, which carries no index signature).
+ */
+export type TranslationVars = object;
 
 /**
  * The translation service (D175) — `this.ctx.i18n` and `app.i18n` when
@@ -799,8 +803,11 @@ export declare class PuzzleApp {
 // Compiler-support exports (not part of the user-facing SPEC §1 surface)
 // ----------------------------------------------------------------------------
 
-/** Shared nullish-safe display coercion used by compiled render functions. */
-export declare function displayValue(value: unknown, expression?: string | 0): string;
+/**
+ * Shared nullish-safe display coercion used by compiled render functions. With
+ * `sep`, a list prints its items joined by it, dropping `false` and empty items.
+ */
+export declare function displayValue(value: unknown, expression?: string | 0, sep?: string): string;
 
 /**
  * The template `.size` property (D176): a list's item count, a string's count
