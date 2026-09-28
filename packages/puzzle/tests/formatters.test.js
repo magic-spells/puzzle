@@ -8,7 +8,7 @@ import {
 } from '../client-runtime/formatters.js';
 import fullBuiltins from '../client-runtime/formatters/builtins-all.js';
 import builtinNames from '../client-runtime/formatters/builtins.json';
-import conformance from './conformance/formatters.json';
+import conformance from '../../puzzle-lang/conformance/formatters.json';
 import { createI18n } from '../client-runtime/i18n.js';
 import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 

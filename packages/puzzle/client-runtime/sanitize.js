@@ -3,8 +3,8 @@
  * tokenizer plus an allowlist. It runs unchanged in the browser (views/html.js)
  * and in the static/hybrid prerender (ssg/serialize.js), so both emit the same
  * string for the same value. The shared conformance table
- * (tests/conformance/formatters.json) pins the output; Sites' Go `raw` runs the
- * same rows.
+ * (packages/puzzle-lang/conformance/formatters.json) pins the output; Sites' Go
+ * `raw` runs the same rows.
  *
  * Why this is safe without a DOM. The OUTPUT is written by this module, never
  * copied from the input: every kept tag is re-emitted from its lowercased name,
