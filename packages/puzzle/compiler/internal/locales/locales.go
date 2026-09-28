@@ -109,11 +109,15 @@ func Load(appRoot string, cfg *config.I18n) (*Result, error) {
 	var problems []string
 	var warnings []string
 
-	// Every *.json file on disk, by exact file stem.
+	// Every *.json file on disk, by exact file stem. Dotfiles are skipped: the
+	// ones that turn up here are made by tools, never by the user — an Emacs lock
+	// file (`.#en.json`) while a buffer has unsaved changes, a macOS AppleDouble
+	// file (`._en.json`) on exFAT/FAT/SMB volumes — and no locale tag starts with
+	// a dot.
 	onDisk := map[string]string{}
 	if entries, err := os.ReadDir(dir); err == nil {
 		for _, e := range entries {
-			if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+			if e.IsDir() || strings.HasPrefix(e.Name(), ".") || filepath.Ext(e.Name()) != ".json" {
 				continue
 			}
 			onDisk[strings.TrimSuffix(e.Name(), ".json")] = filepath.Join(dir, e.Name())
