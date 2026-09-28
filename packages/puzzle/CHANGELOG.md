@@ -694,7 +694,7 @@ and keep formatters pure functions of their input.
   `yarn install` or `bun install`; a monorepo's workspace-root lockfile
   counts), instead of an esbuild resolver error. This matters for a globally
   installed CLI run in a fresh checkout.
-- **An `{#if}` condition that is itself a ternary works** (broken since 0.7.0).
+- **An `{#if}` condition that is itself a ternary works** (broken since the first release).
   `{#if mode === 'edit' ? canEdit : canView}` crashed the render in block form
   and printed `class="x true"` inline.
 - **`\{` and `\}` work in a quoted attribute value** (broken since 0.7.0). A
