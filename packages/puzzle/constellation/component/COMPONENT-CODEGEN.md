@@ -166,6 +166,17 @@ notes:
       the resolver no `this` root. The `jsGlobals` volatile classification is reached by a
       mutable-global READ in a value (`window.innerWidth`); calls are rejected there and handler
       arguments record no facts, so no row fact comes from `this`.
+  - kind: gotcha
+    text: >-
+      After 418ac888 (PR #163): `this` is BACK in `jsKeywords` on purpose, as defense in depth — the
+      D176 pre-check rejects it first, but a path that ever bypassed the check must still not
+      compile `__d.this` or classify `this.x` as bindable (TestResolverNeverReadsThisAsData across
+      resolveExpr, resolveValueScan, ResolveCheckExpr and compileEventValue). Do not remove it as
+      dead. The pre-check places a `this` error on its own token with `exprTokenPos`, bounded to the
+      node's brace group, reading the whole file from `parser.Sections.Source` (`compiler.src`) —
+      the one extra input codegen takes from the parser for this, and what lets a `this` in a
+      `<puzzle-view>` root attribute (before `TemplatePos`) be placed too. An object-literal key
+      named `this` (`{ this: 1 }`) and a member step (`x.this`) are not references.
 ---
 
 # Render-function codegen

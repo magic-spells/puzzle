@@ -25,3 +25,5 @@ notes:
 ---
 
 Source binding for the template parser. Behavioral intent stays on the owning component card, COMPONENT-TEMPLATE-PARSER in the connected `puzzle` plan (`repo=puzzle`); this card anchors that contract to `packages/puzzle-lang/parser/sections.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle-lang`).
+
+`Sections.Source` is the whole `.pzl` file `SplitSections` was given, byte for byte; every `Position.Offset` indexes it, so a caller can map a node back to its text. Codegen uses it to place the D176 `this` error on its own token, including inside the `<puzzle-view>` root attributes, which sit before `TemplatePos` (418ac888, PR #163).

@@ -18,11 +18,11 @@ connections:
 
 # D176 — Template expressions are a data language, not JavaScript
 
-**Status: adopted and built for PuzzleKit (2026-09-28, one PR into
-`release/0.8.0`).** Decided with Cory; the in-place edits listed under
-*Changes to existing cards* are made. Rule 5's `this` rejection is building on
-`feat/remove-this-from-templates` (build list item 9). The Sites half of the
-build list is open in its own repo.
+**Status: adopted and built for PuzzleKit (2026-09-28).** Rules 1–4 landed in
+one PR into `release/0.8.0`; rule 5's `this` rejection landed in PR #163 (merge
+9ca0547e). Decided with Cory; the in-place edits listed under *Changes to
+existing cards* are made. The Sites half of the build list is open in its own
+repo.
 
 ## Context
 
@@ -361,10 +361,14 @@ every one of those positions and in handler arguments (rule 5).
 8. **Confirmed.** Editor grammars and the eslint/prettier ports: no lexer
    change (the ports vendor the section splitter and token lexer only; the
    rules live in the chain parser and codegen).
-9. **Building** (`feat/remove-this-from-templates` → `release/0.8.0`): reject
-   `this` in every template expression — handler arguments and the handler
-   ternary condition included — with the rule 5 message; drop the `this`
-   chain exemption in `datalang.go`, the `this`-root handling in the resolver
-   and the `this`-reads-volatile row fact; move the three corpus uses
-   (typed-todos `Home.pzl`, chat `Composer.pzl`, blog `PostDetail.pzl`) into
-   `data()`; the CHANGELOG checklist row, the agent skill and the README.
+9. **Built** (PR #163, merged into `release/0.8.0` as 9ca0547e): reject `this`
+   in every template expression — handler arguments and the handler ternary
+   condition included — with the rule 5 message, placed on the `this` token
+   itself (the whole file comes from `parser.Sections.Source`, so a `this` in a
+   `<puzzle-view>` root attribute is placed too); drop the `this` chain
+   exemption in `datalang.go`, the `this`-root handling in the resolver and the
+   `this`-reads-volatile row fact (`this` stays in the resolver's keyword table
+   as defense in depth, so a path that bypassed the check still never compiles
+   `__d.this`); move the three corpus uses (typed-todos `Home.pzl`, chat
+   `Composer.pzl`, blog `PostDetail.pzl`) into `data()`; the CHANGELOG
+   checklist row, the agent skill and the README.
