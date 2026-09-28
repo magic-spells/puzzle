@@ -4,8 +4,8 @@
   <p class="title" title={ price | money }>t</p>
   <p class="label">{ 'cart.count' | t({ count: n, unit }) }</p>
   <p class="nested">{ 'x' | echo({ outer: { inner: n }, 'quoted-key': unit }) }</p>
-  {#if tags.length || flagged}<p class="has-tags">tags</p>{:else}<p class="no-tags">none</p>{/if}
-  {#unless tags.length || flagged}<p class="unless">empty</p>{/unless}
+  {#if tags.size || flagged}<p class="has-tags">tags</p>{:else}<p class="no-tags">none</p>{/if}
+  {#unless tags.size || flagged}<p class="unless">empty</p>{/unless}
   {#case status || 'none'}{:when 'open'}<p class="case">open</p>{:else}<p class="case">other</p>{/case}
   <p class="eq">{ one == '1' ? 'loose' : 'strict' }</p>
   {#if mode === 'edit' ? canEdit : canView}<p class="tern">yes</p>{:else}<p class="tern">no</p>{/if}

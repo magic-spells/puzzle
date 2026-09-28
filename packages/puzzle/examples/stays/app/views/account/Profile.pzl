@@ -36,10 +36,10 @@
       <h2 class="font-display text-2xl font-bold text-fg">Where { name }'s been</h2>
       <p class="mt-1 text-muted">One stamp per city — collect them all.</p>
       <p class="mt-2 text-sm text-faint">
-        { stamps.length } cities · { distinctCountries } countries · { distinctYears } years of travel
+        { stamps.size } cities · { distinctCountries } countries · { distinctYears } years of travel
       </p>
 
-      {#if stamps.length > 0}
+      {#if stamps.size > 0}
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6 mt-6">
           {#for stamp in stamps, i}
             <TravelStamp stamp={ stamp } index={ i } />

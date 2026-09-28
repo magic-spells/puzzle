@@ -26,7 +26,7 @@
       {/if}
 
       <div class="flex-1 min-h-0 overflow-auto">
-        {#if types.length === 0}
+        {#if types.size === 0}
           <p class="m-0 px-2 py-2 text-[11px] text-faint">No record types.</p>
         {:else}
           <ul class="m-0 p-0 list-none">
@@ -62,7 +62,7 @@
         </header>
 
         <div class="flex-1 min-h-0 overflow-auto">
-          {#if rows.length === 0}
+          {#if rows.size === 0}
             <Empty description="No records of this type." class="py-6! px-4!" />
           {:else}
             <table class="w-full border-collapse text-left">
@@ -170,10 +170,10 @@
               <section data-history class="border-t border-line">
                 <h3 class="m-0 flex items-baseline gap-2 px-3 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-faint">
                   History
-                  <span class="tabular-nums">{ history.length }</span>
+                  <span class="tabular-nums">{ history.size }</span>
                   <span class="ml-auto font-normal normal-case tracking-normal text-[9px] text-faint">changes seen while this card was open</span>
                 </h3>
-                {#if history.length === 0}
+                {#if history.size === 0}
                   <p class="m-0 px-3 pb-1.5 text-[10px] italic text-faint">No changes yet.</p>
                 {:else}
                   <ul class="m-0 p-0 pb-1 list-none">

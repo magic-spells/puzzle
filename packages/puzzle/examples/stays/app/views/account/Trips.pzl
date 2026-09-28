@@ -3,7 +3,7 @@
        ids) land in the store and show up here reactively. -->
   {#if hasTrips}
     <div class="space-y-10">
-      {#if upcoming.length > 0}
+      {#if upcoming.size > 0}
         <section>
           <h2 class="font-display text-2xl font-bold text-fg mb-4">Upcoming trips</h2>
           <div class="space-y-4">
@@ -28,7 +28,7 @@
         </section>
       {/if}
 
-      {#if completed.length > 0}
+      {#if completed.size > 0}
         <section>
           <h2 class="font-display text-2xl font-bold text-fg mb-4">Where you've been</h2>
           <div class="divide-y divide-line rounded-2xl ring-1 ring-line overflow-hidden">

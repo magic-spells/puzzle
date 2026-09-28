@@ -27,7 +27,7 @@ export default class CoreHost extends PuzzleView {
   }
 }
 
-import { ViewNode, displayValue as __s, listRows as __l, loopItems as __e, loopRange as __r } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s, sizeOf as __z, listRows as __l, loopItems as __e, loopRange as __r } from '@magic-spells/puzzle';
 
 const __L0 = { key: (ch) => ViewNode.keyOf(ch) };
 const __L1 = { key: (m) => ViewNode.keyOf(m) };
@@ -55,7 +55,7 @@ CoreHost.prototype.render = function () {
     new ViewNode('p', { class: 'nested' }, [
       new ViewNode('text', { value: __s((__f["echo"] || __f.__missing("echo"))('x', { outer: { inner: __d.n }, 'quoted-key': __d.unit }), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? '\'x\'' : 0) }),
     ]),
-    ...(__d.tags?.length || __d.flagged
+    ...(__z(__d.tags) || __d.flagged
       ? [
           new ViewNode('p', { class: 'has-tags' }, [
             new ViewNode('text', { value: 'tags' }),
@@ -66,7 +66,7 @@ CoreHost.prototype.render = function () {
             new ViewNode('text', { value: 'none' }),
           ]),
         ]),
-    ...(!(__d.tags?.length || __d.flagged)
+    ...(!(__z(__d.tags) || __d.flagged)
       ? [
           new ViewNode('p', { class: 'unless' }, [
             new ViewNode('text', { value: 'empty' }),

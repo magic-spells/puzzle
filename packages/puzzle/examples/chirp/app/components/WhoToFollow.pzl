@@ -8,7 +8,7 @@
   <section class="rounded-2xl border border-line overflow-hidden">
     <h2 class="px-4 py-3 text-lg font-bold text-fg">Who to follow</h2>
 
-    {#if users.length}
+    {#if users.size}
       <div>
         {#for u in users, i}
           <a href="/u/{ u.handle }" class="flex items-center gap-3 px-4 py-3 hover:bg-surface-2 transition-colors hover:no-underline">

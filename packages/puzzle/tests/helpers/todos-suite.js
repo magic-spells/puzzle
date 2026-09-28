@@ -520,7 +520,7 @@ export function runTodosSuite({ TodoHome, DefaultLayout, Todo, label }) {
 		it('deleting a todo plays the leave animation; the row stays in the DOM until finish()', async () => {
 			const { app, el } = boot();
 			await app.mount();
-			// Two rows so the list (and its {#if todos.length > 0} branch) survives the
+			// Two rows so the list (and its {#if todos.size > 0} branch) survives the
 			// delete: the removed row is then a DIRECT keyed unmount of a component
 			// vnode, which animates its leave (destroyAnimated). A component nested in
 			// a removed ELEMENT subtree — e.g. deleting the last todo, collapsing the

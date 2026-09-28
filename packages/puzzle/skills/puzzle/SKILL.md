@@ -128,19 +128,19 @@ anywhere, attribute values included, is `\{` / `\}` — e.g. `pattern="[0-9]\{5\
 Built-in formatters are the standard set shared with Sites plus the
 browser-only `link`, `timeago`, `in_timezone`. Text: `trim`/`strip`,
 `upcase`, `downcase`, `capitalize` (first character only — `iPhone` stays
-`IPhone`), `truncate(n, '…')`, `replace(a, b)`, `split(sep)`, `strip_html`,
+`IPhone`), `truncate(n, '…')`, `replace(a, b)`, `strip_html`,
 `strip_newlines`, `pluralize('comment')` → `3 comments` (prints the count
-too; irregular `pluralize('person', 'people')`). Numbers: `plus`, `minus`,
-`times`, `divided_by`, `modulo` (a zero divisor prints nothing), `round(places)`,
+too; irregular `pluralize('person', 'people')`). Numbers: `round(places)`,
 `floor`, `ceil`, `abs`, `currency('$', 2)` → `-$1,234.50`, `percentage` (the
 number as written: `12.5` → `13%`), `number_with_delimiter` (viewer locale;
 an argument forces the delimiter), `compact_number` → `1.2K`. Values:
-`default('n/a')` (missing, `false`, `''`, `[]` — not `0`), `size`, `join`,
-`json`. Markup: `escape` (an identity on text), `raw` and `newline_to_br`
+`join`, `json`. Counting, math and fallbacks are not formatters — they are
+the expression's `.size`, operators and `??` (`{ total / count | round }`,
+`{ nickname ?? name }`); split a string in `data()`. Markup: `escape` (an identity on text), `raw` and `newline_to_br`
 (see Rendering HTML below). Dates: `date`/`time`/`datetime` with presets
 `short`, `medium` (default), `long`, `iso`. There are **no list formatters** —
 no `sort`, `where`, `map`, `first`, `last`: shape lists in `data()` and index
-with `items[0]` / `items.at(-1)`. Don't register an app formatter under a
+with `items[0]` / `items[items.size - 1]`. Don't register an app formatter under a
 standard name (it wins, with a dev warning, and changes what the name means).
 
 ### Rendering HTML: `raw` and `newline_to_br` (puzzle ≥ 0.8.0) — security
@@ -230,11 +230,20 @@ Rules that bite:
   (only the newline right after the start tag is dropped), so don't indent
   their contents with the template — bind them (`<pre>{ code }</pre>`,
   `value={ text }`) or dedent.
-- **Template expressions are forgiving** (puzzle ≥ 0.8.0). A `|` is a
-  formatter pipe in every value position — text, brace-only attributes
-  (`title={ price | currency }`), component props and marker arguments; `||`
-  stays logical OR, and a bitwise OR must be parenthesized (`{ (a | b) }`) — a
-  pipe followed by anything but a formatter name is a compile error.
+- **Template expressions are data plus operators, not JavaScript** (puzzle ≥
+  0.8.0). Read fields, count with `.size` (a list's items or a string's
+  characters — `.length` is a compile error), compute with `+ - * / %` and
+  comparisons, fall back with `??` (not `||`, which swallows `0` and `''`).
+  Never call JavaScript on a value — `x.trim()`, `String(x)`, `set.has(x)`,
+  `items.at(-1)`, `Math.round(x)`, arrow functions and template literals are
+  compile errors; compute the value in `data()` (or use a formatter) and read
+  the field. The two doors into JavaScript are `this.` (a view getter or
+  method: `disabled={ !this.canSend }`) and `@event` handler bodies.
+  A `|` is a formatter pipe at the top level of a value — text, brace-only
+  attributes (`title={ price | currency }`), component props and marker
+  arguments; `||` stays logical OR, a `|` nested inside parentheses, brackets
+  or braces is a compile error (there is no bitwise OR), and a pipe followed
+  by anything but a formatter name is a compile error.
   **Formatters never go in a condition or loop header:** a pipe in an `{#if}`,
   `{:else if}`, `{#unless}`, `{#case}` or `{#for}` header, a `{:when}` value, or
   an inline `{#if}` inside an attribute value is a compile error. Compute the
@@ -244,7 +253,7 @@ Rules that bite:
   but unnecessary). A missing collection or a non-list loops zero times (dev
   warns on a non-list; range bounds truncate to whole numbers). `==` keeps its
   JavaScript meaning; `x == null` is the absence test. Object literals work as
-  call and formatter arguments (`{ 'cart.count' | t({ count: n }) }`, with an
+  formatter arguments (`{ 'cart.count' | t({ count: n }) }`, with an
   app `t` formatter) but cannot START an expression. A component with no
   `<script>` reads its props by bare name (`{ tone }`).
 - **Three marker tags, four meanings.** `<Children/>` marks where a component's
@@ -388,9 +397,9 @@ Form controls bind themselves — write NO input handler:
   `validate()` — a bind can never clear a `required()` field.
 - Opting out needs no syntax: write your own `@input`/`@change` (the author
   handler owns the write — nothing is synthesized), use a non-path expression
-  (`value={ String(x) }`), or add static `readonly`. Migration gotcha: a
+  (`value={ x ?? '' }`), or add static `readonly`. Migration gotcha: a
   handler-less `value={ x }` that a `@keydown:enter` handler used to commit
-  is now live-bound — escape with `String(x)` when you need edit-buffer
+  is now live-bound — escape with `x ?? ''` when you need edit-buffer
   semantics (Enter-commit / Escape-cancel).
 - In tests, `await handle.type('input.search', 'hello')` (from
   `@magic-spells/puzzle/testing`) drives a bound control and settles.

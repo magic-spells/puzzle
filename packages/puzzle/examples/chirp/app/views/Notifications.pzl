@@ -11,7 +11,7 @@
     {/if}
   </div>
 
-  {#if notifications.length}
+  {#if notifications.size}
     {#for n in notifications, i}
       <NotificationRow notification={ n } index={ i } />
     {/for}

@@ -164,7 +164,7 @@ const codeSelection = `// selected is an array of rowKey values; @select fires t
 // the page is partially selected.
 <DataTable columns={ columns } rows={ rows } rowKey="invoice"
            selectable selected={ selected } @select={ setSelected } />
-<p>{ selected.length } selected</p>
+<p>{ selected.size } selected</p>
 
 events = {
   setSelected: (keys) => this.setData({ selected: keys }),

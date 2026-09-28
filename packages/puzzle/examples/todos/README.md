@@ -58,7 +58,7 @@ events = {
 
 ### 3. Template Features
 ```html
-{#if todos.length > 0}
+{#if todos.size > 0}
   {#for todo in filteredTodos}
     <div class="todo-item {#if todo.completed}completed{/if}">
       <input type="checkbox" checked={ todo.completed } />

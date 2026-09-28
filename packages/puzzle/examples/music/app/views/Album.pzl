@@ -24,7 +24,7 @@
                 { artist.name }
               </a> · 
             {/if}
-            { album.year } · { tracks.length } { tracks.length | plural('song', 'songs') } · { totalMin } min
+            { album.year } · { tracks.size } { tracks.size | plural('song', 'songs') } · { totalMin } min
           </p>
         </div>
       </div>

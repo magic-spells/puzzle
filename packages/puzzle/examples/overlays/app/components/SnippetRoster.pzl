@@ -1,7 +1,7 @@
 <puzzle-view>
   <div class="snippet-roster">
     <header class="snippet-roster-head">
-      <Slot name="heading" total={ members.length }>Team</Slot>
+      <Slot name="heading" total={ members.size }>Team</Slot>
     </header>
     <ol class="snippet-roster-list">
       {#for member in members, index}
