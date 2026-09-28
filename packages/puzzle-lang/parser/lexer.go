@@ -434,6 +434,10 @@ func (l *lexer) lexQuotedValue() (Token, error) {
 	limit := len(l.input)
 	for i < limit {
 		ch := l.input[i]
+		if ch == '\\' && i+1 < limit && (l.input[i+1] == '{' || l.input[i+1] == '}') {
+			i += 2 // a \{ or \} escape stays raw for parseAttrParts
+			continue
+		}
 		if ch == '{' && !inRaw {
 			_, end, err := scanBraceGroup(l.input, i)
 			if err != nil {

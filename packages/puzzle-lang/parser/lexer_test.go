@@ -279,6 +279,23 @@ func TestLexTagsAndAttributes(t *testing.T) {
 			},
 		},
 		{
+			// A \{ or \} escape stays raw in the token (parseAttrParts decodes
+			// it) and never opens a brace scan that swallows the next attribute.
+			name:  "escaped braces in quoted values",
+			input: `<b title="\{" data-x="}" a="a \{ b" c="\{it's\}" d="\{ {name}" e='\{'></b>`,
+			want: []tv{
+				{TokTagOpen, "b"},
+				{TokAttrName, "title"}, {TokEquals, ""}, {TokAttrQuoted, `\{`},
+				{TokAttrName, "data-x"}, {TokEquals, ""}, {TokAttrQuoted, "}"},
+				{TokAttrName, "a"}, {TokEquals, ""}, {TokAttrQuoted, `a \{ b`},
+				{TokAttrName, "c"}, {TokEquals, ""}, {TokAttrQuoted, `\{it's\}`},
+				{TokAttrName, "d"}, {TokEquals, ""}, {TokAttrQuoted, `\{ {name}`},
+				{TokAttrName, "e"}, {TokEquals, ""}, {TokAttrQuoted, `\{`},
+				{TokTagEnd, ""},
+				{TokTagClose, "b"},
+			},
+		},
+		{
 			name:  "html comment is a single dropped token",
 			input: `a<!-- x -->b`,
 			want: []tv{

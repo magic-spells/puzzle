@@ -1806,6 +1806,21 @@ func TestParseMixedAttributeInterpolation(t *testing.T) {
 	}
 }
 
+// A \{ escape in a quoted value is a literal brace, and the value ends at its
+// own quote: the next attribute is not swallowed.
+func TestParseEscapedBraceAttrs(t *testing.T) {
+	root := parseContent(t, `<b title="\{" data-x="}" c='\{it"s\}'></b>`)
+	b := elementChildren(root.Children)[0].(*Element)
+	if len(b.Attrs) != 3 {
+		t.Fatalf("attrs: got %d, want 3: %#v", len(b.Attrs), b.Attrs)
+	}
+	for i, want := range [][2]string{{"title", "{"}, {"data-x", "}"}, {"c", `{it"s}`}} {
+		if s, ok := b.Attrs[i].(*StaticAttr); !ok || s.Name != want[0] || s.Value != want[1] {
+			t.Errorf("attr%d: got %#v, want StaticAttr %s=%q", i, b.Attrs[i], want[0], want[1])
+		}
+	}
+}
+
 func TestParseBooleanAndDynamicAttrs(t *testing.T) {
 	root := parseContent(t, `<input autofocus disabled={ !x.trim() } value={ y } />`)
 	in := elementChildren(root.Children)[0].(*Element)
