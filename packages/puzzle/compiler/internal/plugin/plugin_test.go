@@ -429,13 +429,16 @@ export default class Home extends PuzzleView {}
 	}
 }
 
-// `default` (D174) is a reserved word, so builtins.js exports it as the module's
-// default export. The virtual manifest must bind it under a local name: a bare
-// `import { default }` is a syntax error that would fail every build using it.
-func TestFormatterManifestAliasesDefault(t *testing.T) {
+// The formatters D176 removed (`.size`, the operators and `??` replace them;
+// `split` is Sites-only) are no longer built-ins: a template that still pipes
+// through one must not pull it into the virtual manifest, where importing a
+// name builtins.js no longer exports would fail the build. The runtime's
+// unknown-name guard names the replacement instead.
+func TestFormatterManifestSkipsRemovedBuiltins(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view>
   <p>{ subtitle | default('Untitled') | upcase }</p>
+  <p>{ items | size }{ n | plus(1) }{ tags | split(',') | join }</p>
 </puzzle-view>
 
 <script>
@@ -449,8 +452,10 @@ export default class Home extends PuzzleView {}
 	if err != nil {
 		t.Fatalf("ScanFormatters: %v", err)
 	}
-	if !got["default"] {
-		t.Fatalf("ScanFormatters missing built-in formatter \"default\" in %#v", got)
+	for _, removed := range []string{"default", "size", "plus", "split"} {
+		if got[removed] {
+			t.Errorf("ScanFormatters kept removed formatter %q in %#v", removed, got)
+		}
 	}
 
 	pl := New(root)
@@ -461,8 +466,8 @@ export default class Home extends PuzzleView {}
 		t.Fatalf("formatterManifest: %v", err)
 	}
 	for _, want := range []string{
-		`import { escape, upcase, default as __puzzle_default } from "/runtime/formatters/builtins.js";`,
-		`export default { escape, upcase, default: __puzzle_default };`,
+		`import { escape, upcase, join } from "/runtime/formatters/builtins.js";`,
+		`export default { escape, upcase, join };`,
 	} {
 		if !strings.Contains(manifest, want) {
 			t.Errorf("manifest missing %q:\n%s", want, manifest)

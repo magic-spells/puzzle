@@ -248,13 +248,6 @@ describe('FormatterRegistry', () => {
 			expect(f.replace('a1b22', /\d+/g, '#')).toBe('a#b#');
 		});
 
-		it('split: code points for an empty separator, an empty list for a missing value (D174 F22)', () => {
-			expect(f.split('a,b')).toEqual(['a', 'b']);
-			expect(f.split('a😀', '')).toEqual(['a', '😀']);
-			expect(f.split(null)).toEqual([]);
-			expect(f.split(undefined, ' ')).toEqual([]);
-		});
-
 		it('strip_html is quote-aware and leaves a bare < alone (D174 F23)', () => {
 			expect(f.strip_html('<p>Hi <b>there</b></p>')).toBe('Hi there');
 			expect(f.strip_html('a < b and 1<2')).toBe('a < b and 1<2');
@@ -286,7 +279,7 @@ describe('FormatterRegistry', () => {
 		it('round returns a number, preserving numeric chaining', () => {
 			expect(f.round(3.7)).toBe(4);
 			expect(f.round(3.14159, 2)).toBe(3.14);
-			expect(f.times(f.round(2.6), 2)).toBe(6);
+			expect(f.round(2.6)).toBeTypeOf('number');
 		});
 
 		it('round goes half away from zero on the DECIMAL value (D174 F19)', () => {
@@ -319,16 +312,6 @@ describe('FormatterRegistry', () => {
 			expect(f.round(3.14159, 2.9)).toBe(3.14);
 		});
 
-		it('divided_by and modulo give a missing value for a zero divisor (D174 F7, F11)', () => {
-			expect(f.divided_by(7, 2)).toBe(3.5);
-			expect(f.divided_by(1, 0)).toBeUndefined();
-			expect(f.modulo(-7, 3)).toBe(-1);
-			expect(f.modulo(7, 0)).toBeUndefined();
-			// The missing value flows on: the next formatter sees it, not Infinity.
-			expect(f.plus(f.divided_by(1, 0), 1)).toBeNaN();
-			expect(f.escape(f.divided_by(1, 0))).toBe('');
-		});
-
 		it('currency groups thousands and puts the sign before the symbol (D174 F3)', () => {
 			expect(f.currency(9.5)).toBe('$9.50');
 			expect(f.currency(9.5, '€', 0)).toBe('€10');
@@ -348,8 +331,8 @@ describe('FormatterRegistry', () => {
 			expect(f.percentage(12.5, 1)).toBe('12.5%');
 			expect(f.percentage(12.5)).toBe('13%');
 			expect(f.percentage(0.256)).toBe('0%');
-			// A ratio is one times(100) away.
-			expect(f.percentage(f.times(0.256, 100), 1)).toBe('25.6%');
+			// A ratio is one `* 100` away (D176: `ratio * 100 | percentage`).
+			expect(f.percentage(0.256 * 100, 1)).toBe('25.6%');
 		});
 
 		it('places argument fails soft for currency and percentage', () => {
@@ -387,26 +370,20 @@ describe('FormatterRegistry', () => {
 	});
 
 	describe('value formatters', () => {
-		it('default replaces missing, false, empty text and an empty list — not 0', () => {
-			for (const empty of [null, undefined, false, '', []]) {
-				expect(f.default(empty, 'n/a')).toBe('n/a');
-			}
-			for (const kept of [0, 'x', true, [0], {}]) {
-				expect(f.default(kept, 'n/a')).toBe(kept);
-			}
-		});
-
-		it('join / size', () => {
+		it('join', () => {
 			expect(f.join(['a', 'b'])).toBe('a, b');
 			expect(f.join(['a', 'b'], ' | ')).toBe('a | b');
-			expect(f.size([1, 2, 3])).toBe(3);
-			expect(f.size('abcd')).toBe(4);
 		});
 
-		it('size counts code points, keys, and 0 for anything else (D174 F20)', () => {
-			expect(f.size('a😀')).toBe(2);
-			expect(f.size({ a: 1, b: 2 })).toBe(2);
-			for (const other of [null, undefined, 5, true]) expect(f.size(other)).toBe(0);
+		it('size, the arithmetic formatters, default and split are not built in (D176)', () => {
+			// `.size`, the operators and `??` replace them; `split` is Sites-only.
+			const removed = ['size', 'plus', 'minus', 'times', 'divided_by', 'modulo', 'default', 'split'];
+			for (const name of removed) {
+				expect(Object.hasOwn(fullBuiltins, name), name).toBe(false);
+				expect(Object.hasOwn(f, name), name).toBe(false);
+				expect(builtinNames, name).not.toContain(name);
+				expect(STANDARD_FORMATTERS, name).not.toContain(name);
+			}
 		});
 
 		it('json sorts keys by code point and prints null for missing and non-finite (D174 F9)', () => {
@@ -705,9 +682,9 @@ describe('the standard set (D174)', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('is the 35 standard names — all built in except the service-bound t; timeago and in_timezone are PuzzleKit-only', () => {
-		expect(STANDARD_FORMATTERS).toHaveLength(35);
-		expect(new Set(STANDARD_FORMATTERS).size).toBe(35);
+	it('is the 27 standard names — all built in except the service-bound t; timeago and in_timezone are PuzzleKit-only', () => {
+		expect(STANDARD_FORMATTERS).toHaveLength(27);
+		expect(new Set(STANDARD_FORMATTERS).size).toBe(27);
 		// `t` is standard (D175) but registered by the i18n service, not built in.
 		for (const name of STANDARD_FORMATTERS) if (name !== 't') expect(builtinNames).toContain(name);
 		expect(builtinNames).not.toContain('t');
@@ -750,8 +727,17 @@ describe('the standard set (D174)', () => {
 			reverse: 'data()',
 			compact: 'compact_number',
 			first: 'items[0]',
-			last: 'items.at(-1)',
+			last: 'items[items.size - 1]',
 			noescape: 'use raw',
+			// D176: the language's own `.size`, operators and `??` replace these.
+			size: 'use the `.size` property (`items.size`)',
+			plus: '`a + b`',
+			minus: '`a - b`',
+			times: '`a * b`',
+			divided_by: '`a / b`',
+			modulo: '`a % b`',
+			default: "use `??` (`{ name ?? 'fallback' }`)",
+			split: 'split the string in data()',
 		};
 		for (const [name, hint] of Object.entries(hints)) {
 			// Still a pass-through, like any unknown name (D43).
