@@ -717,7 +717,7 @@ async function writeStaticDir({
 	// the client stub validate it, so a malformed base fails the build here.
 	const base = normalizeBase(config.routerBase);
 
-	const slugCounts = new Map();
+	const usedSlugs = new Set();
 	// outPath → the route path that already claimed it. Two routes can declare the
 	// SAME path, or two paths that normalize to one file (`/caf%C3%A9` and `/café`
 	// decode identically). Slugs are collision-suffixed but the output file is
@@ -748,10 +748,10 @@ async function writeStaticDir({
 			claimedPaths.set(outPath, page.path);
 
 			// The slug is assigned BEFORE the reuse check on purpose: slugs are
-			// order-dependent (uniqueSlug's collision counter walks the page list), so a
+			// order-dependent (uniqueSlug's used set accumulates over the page list), so a
 			// subset render has to consume them for every page a full render would, or
 			// the surviving pages' `_puzzle/<slug>.js` URLs would renumber.
-			const slug = uniqueSlug(computeSlug(page.path), slugCounts);
+			const slug = uniqueSlug(computeSlug(page.path), usedSlugs);
 			if (page.reused) {
 				written.push({
 					path: page.path,
@@ -1199,13 +1199,16 @@ function computeSlug(routePath) {
 
 /**
  * Deduplicate a slug within one build: the first occurrence keeps the base, later
- * collisions get `-2`, `-3`, … in enumeration order (CONTRACT 3). `counts` tracks
- * how many times each base has been requested across the run.
+ * collisions get the first free `-2`, `-3`, … in enumeration order (CONTRACT 3).
+ * `used` holds every slug already assigned in the run, suffixed ones included, so
+ * a route whose own base is a taken suffix (`/index-2` after `/` and `/index`)
+ * is suffixed too rather than sharing an entry file.
  */
-function uniqueSlug(base, counts) {
-	const n = (counts.get(base) ?? 0) + 1;
-	counts.set(base, n);
-	return n === 1 ? base : `${base}-${n}`;
+function uniqueSlug(base, used) {
+	let slug = base;
+	for (let n = 2; used.has(slug); n++) slug = `${base}-${n}`;
+	used.add(slug);
+	return slug;
 }
 
 /**
