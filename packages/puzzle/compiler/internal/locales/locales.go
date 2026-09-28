@@ -422,7 +422,10 @@ func flatten(rel string, obj *node, prefix, spelled string, table map[string]any
 		case "object":
 			if isPluralEntry(child) {
 				entry := map[string]string{}
-				ok := true
+				ok := len(child.dup) == 0
+				for _, cat := range child.dup {
+					*problems = append(*problems, fmt.Sprintf("%s: the plural category %q is defined twice", where, cat))
+				}
 				for _, cat := range child.keys {
 					v := child.items[cat]
 					if v.kind != "string" {
