@@ -34,7 +34,7 @@ client runtime and the CLI:
 npm install -D @magic-spells/puzzle
 ```
 
-> **Status: 0.7.0** — the current release. The browser runtime, Go
+> **Status: 0.8.0** — the current release. The browser runtime, Go
 > compiler, static generator, and CLI are implemented and covered by Go,
 > Vitest/jsdom, type, package, example, and browser-focused checks.
 >

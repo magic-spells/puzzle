@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import {
 	piecesFallbackNotice,
 	packedBinaryProblem,
+	readmeStatusProblem,
 	tagReminderLines,
 } from '../scripts/release-checks.mjs';
 
@@ -175,5 +176,24 @@ describe('tagReminderLines', () => {
 		const src = readFileSync(join(repoRoot, 'scripts/release-prep.mjs'), 'utf8');
 		expect(src).toContain('tagReminderLines(version)');
 		expect(src).not.toMatch(/exec\w*\(\s*['"]git['"]/);
+	});
+});
+
+describe('readmeStatusProblem', () => {
+	it('accepts a status line naming the version and reports any other', () => {
+		expect(readmeStatusProblem('> **Status: 0.8.0** — the current release.', '0.8.0')).toBeNull();
+		expect(readmeStatusProblem('> **Status: 0.7.0** — the current release.', '0.8.0')).toBe(
+			'README.md says "Status: 0.7.0", expected "0.8.0"'
+		);
+		expect(readmeStatusProblem('# Puzzle\n', '0.8.0')).toMatch(/no "\*\*Status: <version>\*\*" line/);
+	});
+
+	// The README ships in the tarball; its status line sat at 0.7.0 in 0.8.0.
+	it('the package README names the package version, and release-prep asserts it', () => {
+		const { version } = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+		const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+		expect(readmeStatusProblem(readme, version)).toBeNull();
+		const src = readFileSync(join(repoRoot, 'scripts/release-prep.mjs'), 'utf8');
+		expect(src).toContain('readmeStatusProblem(');
 	});
 });
