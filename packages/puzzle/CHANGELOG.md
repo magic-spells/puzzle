@@ -315,7 +315,7 @@ and keep formatters pure functions of their input.
   `{ subtitle ?? 'Untitled' }`.)
 - **Object literals as formatter and call arguments (D173 V8).**
   `{ 'cart.count' | t({ count: n, unit }) }` (an app `t` formatter) and
-  `{ fmt(x, { digits: 2 }) }`
+  `{ this.fmt(x, { digits: 2 }) }`
   compile. Values resolve as template expressions and keys stay keys; before
   this, the compiler scoped the keys too and emitted `{__d.width: 480}`, which
   only the bundler caught. Shorthand, quoted, computed and spread keys all work.
