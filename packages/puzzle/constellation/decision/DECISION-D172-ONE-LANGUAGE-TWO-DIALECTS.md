@@ -67,6 +67,7 @@ parser (taken from `compiler/internal/parser`, which now lives in the
 ## Decision
 
 
+
 **Puzzle is one template language with two dialects**, the way Liquid has a
 core that Shopify extends with its own tags and objects.
 
@@ -104,8 +105,14 @@ core that Shopify extends with its own tags and objects.
   bare-attribute parameter declarations, the leaf rule, forwarding through a
   wrapper's `<Children/>`. PuzzleKit implements it today; Sites has not built
   it yet (planned), and until then rejects it with an error saying so.
-- **The core expression language** is the portable subset Sites defines:
-  paths, literals, arithmetic, comparison, `&&`/`||`/`??`, ternary.
+- **The core expression language is a data language, not JavaScript**
+  ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]): paths (`a.b`, `a?.b`,
+  `a[expr]`), the `.size` count of a list or string, literals, arithmetic,
+  comparison, `&&`/`||`/`??`, ternary. No calls on a value, no arrow
+  functions, template literals, `new`, `typeof`, regex or bitwise operators:
+  anything that computes from a value is a formatter, and a formatter appears
+  only where a value is displayed. Both hosts reject the rest with the same
+  positioned errors.
 
 **The dialects** add to the core, or restrict it:
 
@@ -113,7 +120,8 @@ core that Shopify extends with its own tags and objects.
 |---|---|---|
 | File structure | `<puzzle-view>`/`<puzzle-skeleton>` wrapper + `<script>` class (layouts are `<puzzle-view>` files too) | No wrapper; the directory decides the kind; top-level `<schema>` |
 | Adds | `@event` + modifiers, `<Portal>`, `ref`/`key`/`flip`/`island`, implicit binding | `{#let}`, implicit props |
-| Expressions | Full JavaScript (a superset of the core) | The core subset only |
+| Expressions | The core, plus two explicit doors into the view's JavaScript: a `this.` chain and an `@event` handler body (D176) | The core |
+| Naming a computed value | a `data()` field (no `{#let}`: logic belongs in the script) | `{#let}` |
 | Not yet built | — | `<Snippet>` (core; planned) |
 
 **Architecture: one parser that knows every construct, with per-dialect

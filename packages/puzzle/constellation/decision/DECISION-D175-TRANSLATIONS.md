@@ -97,6 +97,12 @@ notes:
       its URL is one directory too deep. The dist-root URL has to come from the entry module, which
       always stays at `dist/app.js` — e.g. the compiler passing `new URL('.', import.meta.url)` from
       the entry into the i18n options — a compiler + D175 change.
+  - kind: state
+    text: >-
+      Counts since D176: the standard set is 27 names (`t` included), Sites-only 25 (`split` moved
+      there; 6 platform-bound), PuzzleKit 30. The "35 standard, 24 Sites-only, 38 PuzzleKit" figures
+      in the body's Decision section and the earlier note are pre-D176; D174 is the authoritative
+      list.
 ---
 
 # D175 — Translations: `'key' | t`, one locale file per language

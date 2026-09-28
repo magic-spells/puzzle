@@ -1,6 +1,6 @@
 ---
 name: >-
-  D174 — The standard formatter set: 35 names in both hosts, PuzzleKit-only and Sites-only
+  D174 — The standard formatter set: 27 names in both hosts, PuzzleKit-only and Sites-only
   formatters, sanitized raw
 status: built
 connections:
@@ -126,6 +126,7 @@ against this card. Core expression and rendering semantics (V1–V18) are on
 
 ## Context
 
+
 [[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]] says **a standard formatter set
 behaves the same in both hosts**, and anything outside it is host-specific
 and named as such. The set is implemented twice: in JavaScript
@@ -141,13 +142,20 @@ Sites formatter runs in Go at render time, in the site's locale and time
 zone, and no JavaScript formats anything. Anything locale-shaped is therefore
 computed from two different sets of locale data.
 
-Two principles decide the set:
+Three principles decide the set:
 
 - **In PuzzleKit, list shaping is JavaScript.** Cory: "all of that logic
   should be in the js in puzzlekit." Filtering, sorting, mapping and picking
   items happen in `data()` or in a plain expression (`items[0]`,
-  `items.at(-1)`), never in a formatter. Sites has no script, so it keeps
-  list formatters as a Sites addition.
+  `items[items.size - 1]`), never in a formatter. Sites has no script, so it
+  keeps list formatters as a Sites addition.
+- **A formatter presents a value; it never duplicates an operator or a
+  property** ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]). The core expression
+  language has `+ - * / %`, `??` and `.size`, so the Liquid-heritage
+  `plus`/`minus`/`times`/`divided_by`/`modulo`, `default` and `size` are not
+  in the set: `{ price * qty | currency }`, `{ name ?? 'Anonymous' }`,
+  `{#if tags.size > 0}`. `round`/`floor`/`ceil`/`abs` stay, because no
+  operator spells them.
 - **The tie-breaks from D173** otherwise apply: safer for authors first, and
   when neither behavior is safer, Sites changes, because it is unpublished.
 
@@ -155,22 +163,27 @@ Usage today is small. PuzzleKit built-ins: `capitalize` 2 and `pluralize` 2
 (blog), `date` 4, `truncate` 2, `timeago` 1, `link` 21. PK apps: `link` 83.
 Sites: `currency` 9, `date` 3, `pluralize` 1, `truncate` 2, `raw` 3, `escape`
 1, `upcase` 1, plus the Sites-only `image_url` 24, `image_tag` 4, `t` 33 and
-`url` 5. No template in any corpus calls a built-in list formatter.
+`url` 5. No template in any corpus calls a built-in list formatter, and none
+called `size`, `default`, `split` or an arithmetic formatter (2026-09-28 scan).
 
-## The standard set (35 names)
+## The standard set (27 names)
+
 
 Every standard name exists in both hosts with the same arguments and the same
-meaning.
+meaning. The set is 27 names since [[DECISION-D176-TEMPLATE-DATA-LANGUAGE]].
 
-**Identical output (28)**, pinned by a shared conformance table (name, input,
+**Identical output (20)**, pinned by a shared conformance table (name, input,
 arguments, expected output) that both hosts run:
 
-- Numbers: `abs`, `ceil`, `floor`, `plus`, `minus`, `times`, `divided_by`,
-  `modulo`, `round`, `currency`, `percentage`.
+- Numbers: `abs`, `ceil`, `floor`, `round`, `currency`, `percentage`.
 - Text: `downcase`, `upcase`, `capitalize`, `trim`, `strip`, `truncate`,
-  `replace`, `split`, `strip_html`, `strip_newlines`.
+  `replace`, `strip_html`, `strip_newlines`.
 - Markup: `escape`, `raw`, `newline_to_br`.
-- Values: `default`, `size`, `join`, `json`.
+- Values: `join`, `json`.
+
+Not in the set, by D176: a count is the `.size` property, arithmetic is the
+operators, a fallback is `??`, and `split` is Sites-only (in PuzzleKit a list
+is shaped in `data()`; a pipe cannot feed a `{#for}`).
 
 **Locale-rendered (6)**: `date`, `time`, `datetime`, `number_with_delimiter`,
 `compact_number`, `pluralize`. The name, arguments and meaning are standard;
@@ -195,20 +208,21 @@ value printed after the chain follows D173 V6.
 
 ## Behavior of each standard formatter
 
+
 ### Numbers
 
-- **`divided_by(n)`, `modulo(n)`** (F7, F11): a zero divisor returns a
-  missing value, which prints nothing, and the next formatter in the chain
-  receives the missing value. The remainder takes the dividend's sign. No
-  integer division.
 - **`round(places = 0)`** (F19): rounds half away from zero on the decimal
   value; negative places round to tens and hundreds. Fixtures pin
   `1.005 | round(2)` and `2.5 | round`.
+- **`abs`, `floor`, `ceil`**: the mathematical functions, kept because no
+  operator spells them. Arithmetic itself is the operators (D176):
+  `{ total / count | round }`, `{ price * qty | currency }`. Division by zero
+  is the host's number semantics (D173 V5), not a formatter concern.
 - **`currency(symbol = '$', places = 2)`** (F3): groups thousands with `,`,
   puts the sign before the symbol (`-$1,234.50`), rounds by `round`'s rule.
 - **`percentage(places = 0)`** (F14): takes the number as written:
   `12.5 | percentage(1)` gives `12.5%`. A ratio is
-  `ratio | times(100) | percentage`.
+  `{ ratio * 100 | percentage }`.
 - **`number_with_delimiter(delimiter?)`**: groups the whole part and keeps the
   decimals as given. With no argument it follows the locale: PuzzleKit uses
   `Intl.NumberFormat` in the viewer's locale (`1.234,5` in de-DE); Sites uses
@@ -232,8 +246,6 @@ value printed after the chain follows D173 V6.
   result is never longer than `length` (an over-long ellipsis is clipped).
 - **`replace(search, replacement = '')`** (F17): literal search, every
   occurrence. A RegExp search is a PuzzleKit addition.
-- **`split(separator = ',')`** (F22): `''` splits into code points; a missing
-  input gives an empty list.
 - **`strip_html`** (F23): Sites' quote-aware scanner. Comments are removed, a
   `<` not followed by a tag name stays, entities are not decoded.
 - **`strip_newlines`** (F24): removes CR and LF.
@@ -404,16 +416,12 @@ value printed after the chain follows D173 V6.
 
 ### Values
 
-- **`default(fallback)`** (promoted from Sites): returns `fallback` when the
-  value is missing, `false`, `''` or an empty list. Every other value,
-  including `0` and an empty object, passes through. Sites changes: it
-  treated `0` as falsy.
-- **`size`** (F20): a list gives its item count, a string its code-point
-  count, an object its key count, and anything else, missing included, `0`.
 - **`join(separator = ', ')`**: unchanged, identical today.
 - **`json`** (F9): object keys sorted by code point; a missing value, `NaN`
   and ±Infinity give `null`; the output is not HTML-escaped, and each host
   escapes it for where it is placed.
+- A count is the `.size` property and a fallback is `??`, in the expression
+  language, not here (D176).
 
 ### Dates: `date`, `time`, `datetime` (F4–F6)
 
@@ -435,14 +443,18 @@ value printed after the chain follows D173 V6.
 
 ## Host-only formatters
 
+
 - **PuzzleKit-only (3):** `link` (router-aware,
   [[DECISION-D79-LINK-FORMATTER]]), `timeago` (needs a clock at render time),
   `in_timezone` (needs the viewer's zone). All three are inherent to a
   browser host.
-- **Sites-only (24):**
+- **Sites-only (25):**
   - Platform-bound (6): `url`, `asset_url`, `menu_link`, `image_url`,
     `image_srcset`, `image_tag`.
-  - Pure (1): `class_map`.
+  - Pure (2): `class_map`, and `split(separator = ',')` (F22: `''` splits
+    into code points; a missing input gives an empty list), which is
+    Sites-only since D176 because a list in Sites is named with `{#let}`
+    and in PuzzleKit is shaped in `data()`.
   - List formatters (17): `where`, `reject`, `find`, `sort`, `sort_natural`,
     `map`, `uniq`, `reverse`, `compact`, `first`, `last`, `slice`, `sum`,
     `concat`, `push`, `contains`, `group_by`. They are usable through
@@ -450,19 +462,26 @@ value printed after the chain follows D173 V6.
     Sites keeps their current behavior; as Sites-only names they need no
     cross-host agreement.
 
-Totals: PuzzleKit ships 38 names (35 standard + 3), Sites 59 (35 standard +
-24).
+Totals: PuzzleKit ships 30 names (27 standard + 3), Sites 52 (27 standard +
+25).
 
 ## Removed names
+
 
 Removed outright, with no deprecation period. Cory: "remove them immediately.
 we're the only ones using puzzle."
 
 - **PuzzleKit removes** `sort`, `where`, `map`, `uniq`, `reverse`, `compact`,
   `first` and `last` (list shaping moves to `data()` or plain expressions:
-  `items[0]`, `items.at(-1)`, a `data()` field). It keeps `join` and `size`.
+  `items[0]`, `items[items.size - 1]`, a `data()` field). It keeps `join`.
   The development guard for an unknown name ([[DECISION-D43-FORMATTER-MISSING-GUARD]])
   names the replacement for each removed name.
+- **Both hosts remove `size`, `plus`, `minus`, `times`, `divided_by`,
+  `modulo` and `default`** ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]): the
+  count is the `.size` property, arithmetic is `+ - * / %` before the pipe,
+  and a fallback is `??`. **PuzzleKit removes `split`**, which becomes
+  Sites-only (`{#let parts = tags | split(',')}`); in PuzzleKit the split
+  happens in `data()`. The guard names each replacement.
 - **Both hosts remove `noescape`**, a duplicate name for `raw`.
 - **Sites removes `upper` and `lower`**, duplicates of `upcase` and
   `downcase`. `strip` stays: it is identical in both hosts and is Liquid's
@@ -481,11 +500,17 @@ standard, so chirp's own `timeago` draws no warning.
 
 ## Alternatives rejected
 
+
 - **Promote Sites' list formatters into the standard set.** Rejected: in
   PuzzleKit, list shaping belongs in JavaScript, where it is typed, testable
   and visible to the data layer.
 - **Deprecate the removed PuzzleKit list formatters for a release first.**
   Rejected: Magic Spells is the only user, and no template calls them.
+- **Keep the Liquid arithmetic formatters, `default` and `size`** (they were
+  in the set as first decided). Rejected by
+  [[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]: each duplicated an operator or a
+  property the expression language already has, so `a + b` and `a | plus(b)`
+  were two spellings of one thing; zero templates used any of them.
 - **`pluralize` returns the noun alone**, with the count written separately.
   Rejected: the count and the word belong together, the formatter can then
   localize the count, and every call site stops repeating `{ n }`. A second,
@@ -546,12 +571,11 @@ standard, so chirp's own `timeago` draws no warning.
 - **Throw at construction when an app shadows a standard name.** Rejected as
   too strict; a development warning surfaces it. Allowing it silently was
   rejected too.
-- **`default` treats `0` as empty** (Sites' old behavior). Rejected: `0` is a
-  real value, as in Liquid.
 - **`percentage` as a ratio.** Rejected: content authors type `12.5`, Rails
-  reads the number as written, and the ratio form is one `times(100)` away.
+  reads the number as written, and the ratio form is one `* 100` away.
 
 ## Build list
+
 
 PuzzleKit first; Sites is lower priority because Cory is still designing it.
 Groups are separate feature branches off the release branch, lettered to
@@ -562,7 +586,7 @@ ports or the editor grammars: formatter names are not grammar.
 **(a) The formatter set — PuzzleKit. Built.**
 - `client-runtime/formatters/builtins.js`, `builtins.json`,
   `builtins-all.js`: remove `sort`, `where`, `map`, `uniq`, `reverse`,
-  `compact`, `first`, `last`, `noescape`; add `compact_number` and `default`;
+  `compact`, `first`, `last`, `noescape`; add `compact_number`;
   `pluralize` prints the count (via `Intl.NumberFormat`) and the word;
   `number_with_delimiter` defaults to the viewer's locale.
 - `client-runtime/formatters.js`: drop `noescape` from the required
@@ -608,9 +632,8 @@ ports or the editor grammars: formatter names are not grammar.
   inputs) found no script execution.
 
 **(g) Standard-set alignment — PuzzleKit. Built.**
-- `builtins.js`: F1 `capitalize`, F3 `currency`, F7 `divided_by`, F8
-  `escape`, F9 `json`, F11 `modulo`, F14 `percentage`, F19 `round`, F20
-  `size`, F22 `split`, F23 `strip_html`, F24 `strip_newlines`, F25
+- `builtins.js`: F1 `capitalize`, F3 `currency`, F8 `escape`, F9 `json`,
+  F14 `percentage`, F19 `round`, F23 `strip_html`, F24 `strip_newlines`, F25
   `truncate`; dates F4–F6 (the `medium` preset and default, date-only
   `short`, the old `date`/`time`/`datetime` preset names retired, an unknown
   preset a dev error).
@@ -622,6 +645,13 @@ ports or the editor grammars: formatter names are not grammar.
   expected output) run by `tests/formatters.test.js` now and by Sites' Go
   tests later. Tests: `tests/formatters.test.js`,
   `tests/formatters-timezone.test.js`.
+
+**(h) The D176 removals — PuzzleKit. Built.** `size`, `plus`, `minus`, `times`,
+`divided_by`, `modulo`, `default` and `split` leave `builtins.js`,
+`builtins.json`, `builtins-all.js`, `STANDARD_FORMATTERS` and the manifest
+scan list; the `__missing` guard names each replacement (`.size`, the
+operator, `??`, `data()`); their rows leave the conformance table. See
+[[DECISION-D176-TEMPLATE-DATA-LANGUAGE]] for the expression side.
 
 **PuzzleKit docs, with each group:** [[DOC-SPEC-TEMPLATE]] §6,
 [[COMPONENT-FORMATTERS]], the embedded agent skill
@@ -640,12 +670,13 @@ formatter table in [[DOC-LANGUAGE-CORE]].
   compile rules follow too: a markup formatter only ends a text
   interpolation, and never inside a raw-text element. Drop `noescape`,
   `upper`, `lower`.
-- `default` keeps `0`; `compact_number` with English suffix data;
-  `number_with_delimiter` and the `pluralize` count formatted by the site
-  locale; dates rendered in the site's time zone.
-- F9 `json` (non-finite numbers give `null`); F17 `replace`, F22 `split` and
-  F25 `truncate` take their optional arguments; F20 `size` gives `0` for a
-  missing value; F22 `split` gives an empty list for one.
+- Drop `size`, `plus`, `minus`, `times`, `divided_by`, `modulo` and
+  `default` from the registry (D176); keep `split` as Sites-only.
+- `compact_number` with English suffix data; `number_with_delimiter` and the
+  `pluralize` count formatted by the site locale; dates rendered in the
+  site's time zone.
+- F9 `json` (non-finite numbers give `null`); F17 `replace` and F25
+  `truncate` take their optional arguments.
 - Run the shared conformance table from the Go formatter tests.
 
 **Breaking changes:**
@@ -658,9 +689,10 @@ formatter table in [[DOC-LANGUAGE-CORE]].
   compiling. Existing templates change in 14 files: blog 2 (`pluralize`),
   chirp 4 and music 3 (`compact_number`), the 3 `date('short')` files, and
   stays 2 (`currency('$', 0)`). The app configs of chirp, music, stays,
-  typed-todos and the scaffold todos change too.
+  typed-todos and the scaffold todos change too. D176 adds the eight
+  removals above (zero template uses).
 - Sites: 11. F4–F6 (the site's zone), F9, F13, F15 (the count is grouped),
-  F16 (sanitized), F20, F22, `default` keeping `0`, and dropping `upper` and
-  `lower`. No starter output changes: the starter's `raw` bodies are rich
-  text already sanitized when saved, and its one `pluralize` counts minutes.
-  The `escaping-text` test fixture's `raw` expectation may change.
+  F16 (sanitized), the D176 removals, and dropping `upper` and `lower`. No
+  starter output changes: the starter's `raw` bodies are rich text already
+  sanitized when saved, and its one `pluralize` counts minutes. The
+  `escaping-text` test fixture's `raw` expectation may change.

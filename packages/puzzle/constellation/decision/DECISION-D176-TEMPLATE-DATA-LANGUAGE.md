@@ -2,7 +2,7 @@
 name: >-
   D176 — Template expressions are a data language, not JavaScript: `.size`, operators, `??`, pipes
   only where a value is displayed
-status: planned
+status: built
 connections:
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D173-CORE-SEMANTICS
@@ -16,12 +16,12 @@ connections:
   - RELEASE-V0-8-0
 ---
 
-
 # D176 — Template expressions are a data language, not JavaScript
 
-**Status: proposed (2026-09-28), for Cory's read-through before any code
-changes.** Once adopted, the in-place edits listed under *Changes to existing
-cards* are made and the build list runs as one PR into `release/0.8.0`.
+**Status: adopted and built for PuzzleKit (2026-09-28, one PR into
+`release/0.8.0`).** Decided with Cory; the in-place edits listed under
+*Changes to existing cards* are made. The Sites half of the build list is
+open in its own repo.
 
 ## Context
 
@@ -69,6 +69,7 @@ in the other. PuzzleKit keeps exactly two explicit doors into JavaScript:
 
 ### 1. Values are JSON-shaped, and `.size` is the one built-in property
 
+
 - A template value is an object, a list, a string, a number, a boolean or a
   missing value. An expression reads fields (`a.b`, `a?.b`, `a[expr]`) and
   combines them with operators. Record fields, computed fields and
@@ -76,23 +77,30 @@ in the other. PuzzleKit keeps exactly two explicit doors into JavaScript:
 - **`.size` is the count of a list (items) or a string (code points).** It
   replaces both `.length` and the `size` formatter. It counts the same in both
   hosts: Sites already counts code points; PuzzleKit compiles `x.size` to a
-  small helper (`__z`), imported only by a module that uses it, so a JavaScript
-  array's UTF-16 `.length` is never what a template sees. `.size` and
-  `truncate` therefore agree on what a character is (a code point, not a
-  grapheme cluster; a family emoji is still several).
+  small helper (`sizeOf`, exported from the package root and imported as
+  `__z` only by a module that uses it), so a JavaScript array's UTF-16
+  `.length` is never what a template sees. `.size` and `truncate` therefore
+  agree on what a character is (a code point, not a grapheme cluster; a
+  family emoji is still several).
 - **An object has no count.** `.size` on an object is an ordinary field read
-  (`file.size`, `image.size` keep working). A list or string cannot have
-  fields, so there is no precedence rule to learn: on a list or string `.size`
-  is its count, on anything else it is the field. The helper implements
-  exactly that.
+  (`file.size`, `image.size` keep working; a Map or Set answers its own
+  `size`). A list or string cannot have fields, so there is no precedence
+  rule to learn: on a list or string `.size` is its count, on anything else it
+  is the field. The helper implements exactly that, and `puzzle check` types
+  it the same way (a number for a list or string, the field's type for an
+  object).
 - **`.length` is a positioned compile error in both dialects** — "`.length`
-  is not part of the template language; use `.size`". Without the error,
+  is not part of the template language — use `.size`". Without the error,
   JavaScript arrays would keep answering `.length` in PuzzleKit and not in
   Sites, which is the split this card removes. A data field genuinely named
   `length` is reachable as `obj['length']`.
 - `.size` is a property, not `.size()`: a call form would be the one method
   call the language allows, contradicting rule 3 and inviting `.trim()` next
   to it, and it would need a special case in both parsers.
+- Because it is a field on an object, `value={ product.size }` auto-binds
+  like any `ident.ident` path (D147): the control displays the field through
+  the helper and writes it back. Binding the count of a list or string is
+  meaningless and gets no special case.
 
 ### 2. Operators compute; `??` is the default operator
 
@@ -133,7 +141,12 @@ as a plain-expression replacement) is a call and goes too; it is
 `items[items.size - 1]`.
 
 Formatter calls (`| truncate(20)`) and `@event` handler bodies are not
-expressions on data values and are unaffected.
+expressions on data values and are unaffected. The check is a separate
+codegen pre-pass (`compiler/internal/codegen/datalang.go`) over every value
+position — text, attributes, inline-if branches, props, marker arguments,
+`key=`, block subjects, `{:when}` values, `{#for}` collections and range
+bounds, formatter arguments, and the condition of a handler ternary — with
+strings, regex bodies and comments opaque.
 
 ### 4. A pipe appears only where a value is displayed
 
@@ -151,8 +164,9 @@ expressions on data values and are unaffected.
 - **A `|` that is not at the top level of the value is an error**, not a
   bitwise OR: `@click={ save(x | trim) }` and `disabled={ !(draft | trim) }`
   no longer compile to `save(__d.x | __d.trim)`. Trim it in `save()`, or
-  compute the flag first. This also retires the "parenthesize a bitwise OR"
-  fix-it: there is no bitwise OR in the language.
+  compute the flag first. In an `@event` value any `|` is the error. This
+  also retires the "parenthesize a bitwise OR" fix-it: there is no bitwise OR
+  in the language.
 - `{#unless}` therefore has one AST shape: the parser folds the negation into
   `Cond` as `!(…)` and the `Negate` field goes.
 
@@ -161,8 +175,13 @@ expressions on data values and are unaffected.
 - **`this.`** — a view getter or method, `{ this.ago(createdAt) }`,
   `disabled={ !this.canAdd }`. It is unambiguously the view instance, so it
   creates no "which way?" question, it is greppable, and it keeps the D170
-  volatile-row idiom. Calls are allowed only through `this.`.
-- **`@event={ handler(args) }`** — a fire-time JavaScript call, as today.
+  volatile-row idiom. Calls are allowed only through `this.`, and the whole
+  chain is JavaScript — its member steps, indexes, call arguments and
+  template literals included — so `this.items.length` is legal there.
+- **`@event={ handler(args) }`** — a fire-time JavaScript call, as today. The
+  arguments are JavaScript too: `@click={ pick(todo.tags.size) }` reads the
+  plain `size` property (undefined on an array), and the JavaScript count is
+  `.length` there. The handler ternary's condition is a data expression.
 - Both are dialect extensions in the D172 sense, like `<Portal>`: Sites
   rejects them with an error that says so.
 - **No `{#let}` in PuzzleKit.** Cory: it "would allow people to put logic in
@@ -211,12 +230,16 @@ expressions on data values and are unaffected.
 - **Warn in 0.8.0, error in 0.9.** Rejected: 0.8.0 is already the breaking
   template release with an upgrade checklist, and the whole-monorepo cost is
   ~17 expressions plus a mechanical `.length` → `.size` sweep.
+- **Type `__z` as `number | undefined` in `puzzle check`.** Rejected: under
+  strict mode every `items.size > 0` would report "possibly undefined"; the
+  overloads give a number for a list or string and the field's type for an
+  object.
 
 ## Consequences
 
 - **Breaking for PuzzleKit templates.** `.length`, calls on data, arrows,
   template literals, bitwise operators, nested pipes and pipes in conditions
-  stop compiling; the six formatters are gone (the unknown-name guard names
+  stop compiling; the eight formatters are gone (the unknown-name guard names
   each replacement). The CHANGELOG's "Upgrading from 0.7" checklist gains the
   rows. The scaffold's `disabled={ !newTodoText.trim() }` is `go:embed`ed, so
   the fix ships only with rebuilt binaries.
@@ -230,13 +253,18 @@ expressions on data values and are unaffected.
   (Sites' expression parser already rejects them), applied where codegen
   resolves a template value: text, attributes, props, subjects, `key=`.
   Handler bodies and `this.` chains are exempt.
-- **`.size` costs one helper call per count read** (~30 B gzip once, plus a
-  few bytes per site). Row-cache facts (D170) treat `x.size` as a field read
-  of `x`, exactly as `x.length` was.
+- **`.size` costs one helper call per count read** (the helper is ~30 B gzip
+  once, plus a few bytes per site). Row-cache facts (D170) treat `x.size` as
+  a field read of `x`, exactly as `x.length` was: `todo.size` is the field
+  `size`, `todo.tags.size` is a deep read. Calls on items and on globals are
+  no longer possible in values, so those fact paths are reachable only
+  through `this.` chains and handlers.
+- `puzzle check` maps `__z(` as inserted text and the authored `.size` to the
+  `)`, so a diagnostic after the step still lands on the author's bytes.
 - The "parenthesize a bitwise OR" fix-it, D173 V7's `.length` clause, D174's
   `size`/`plus`/…/`default` rows and its `items.at(-1)` advice are retired.
 
-### Changes to existing cards (in place, on adoption)
+### Changes to existing cards (in place, done)
 
 - **D172:** the core expression language sentence becomes "paths, literals,
   `.size`, arithmetic, comparison, `&&`/`||`/`??`, ternary; no calls". The
@@ -248,7 +276,7 @@ expressions on data values and are unaffected.
   adopted, with the reason above. **V7:** `.size` counts code points in both
   hosts; `.length` is an error; the UTF-16 clause goes. **V8's** `items.at(-1)`
   mention, if any, becomes `items[items.size - 1]`.
-- **D174:** the standard set drops to 28 names (`size`, `plus`, `minus`,
+- **D174:** the standard set drops to 27 names (`size`, `plus`, `minus`,
   `times`, `divided_by`, `modulo`, `default` out; `split` moves to Sites-only);
   the *Removed names* section lists them with the replacement each guard
   names; `items.at(-1)` becomes `items[items.size - 1]`.
@@ -262,23 +290,28 @@ expressions on data values and are unaffected.
 
 ## Build list
 
-1. puzzle-lang parser: reject a pipe in `{#if}`/`{:else if}`/`{#unless}`/
-   `{#case}` subjects; reject a `|` below the top level of any value; fold
+1. **Built.** puzzle-lang parser: reject a pipe in `{#if}`/`{:else if}`/
+   `{#unless}`/`{#case}` subjects; reject a `|` below the top level of any
+   value (`nestedPipeIndex` in `scan.go`, checked by `parseChain`); fold
    `{#unless}` to one shape; positioned messages with the fix-its above.
-2. Codegen: `.size` → `__z(base)` with the helper exported from the package
-   root (imported only when used); `.length` error; call/arrow/template-
-   literal/`new`/`typeof`/regex/bitwise rejection on data values, exempting
-   `this.` chains, formatter calls and handler bodies; row-fact treatment of
-   `.size`.
-3. Runtime: `__z` helper; remove the seven formatters from `builtins.js` and
-   the manifest; the D43 guard's replacement table.
-4. Conformance table: drop the removed rows; add `.size` rows if the table
-   carries expression cases.
-5. Sweep: every `.length` → `.size` and the ~17 JS expressions across
-   examples, scaffold templates, tests, fixtures, pieces, devtools; regenerate
-   goldens and compiled fixtures; the agent skill and README snippets.
-6. Docs: CHANGELOG checklist rows, the card edits above, DOC-RELEASE-SURFACE.
+2. **Built.** Codegen: `.size` → `__z(base)` with `sizeOf` exported from the
+   package root (imported only when used); `.length` error; call/arrow/
+   template-literal/`new`/`typeof`/regex/bitwise rejection on data values
+   (`datalang.go`), exempting `this.` chains, formatter calls and handler
+   bodies; row-fact treatment of `.size`; the `puzzle check` shim's `__z`
+   overloads and source mapping.
+3. **Built.** Runtime: `client-runtime/size.js`; the eight formatters leave
+   `builtins.js`, `builtins.json` and the manifest; the D43 guard's
+   replacement table.
+4. **Built.** Conformance table: the removed rows are gone.
+5. **Built.** Sweep: every `.length` → `.size` and the JS expressions across
+   examples, scaffold templates, tests, fixtures, pieces, devtools; goldens
+   and compiled fixtures regenerated; the agent skill and README snippets.
+6. **Built.** Docs: CHANGELOG checklist rows, the card edits above,
+   DOC-RELEASE-SURFACE.
 7. Sites (separate repo, after this lands): `.length` error, registry
    removals, pipe-in-subject rejection, `.length` → `.size` sweep in themes
    and its admin app.
-8. Editor grammars and the eslint/prettier ports: no lexer change; confirm.
+8. **Confirmed.** Editor grammars and the eslint/prettier ports: no lexer
+   change (the ports vendor the section splitter and token lexer only; the
+   rules live in the chain parser and codegen).

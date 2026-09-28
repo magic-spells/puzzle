@@ -523,6 +523,7 @@ export default class HomeView extends PuzzleView {
 
 ### views/PostDetail.pzl
 
+
 This is the view for the `/posts/:id` route. It reads `params.id`, joins the post
 to its author and comments, and hosts a comment form. Views receive **only route
 params and props** in `data(params, props)` — the router does not inject a
@@ -552,10 +553,10 @@ params and props** in `data(params, props)` — the router does not inject a
 
     <section class="comments">
       <h2 class="comments__title">
-        { comments.length | pluralize('comment') }
+        { comments.size | pluralize('comment') }
       </h2>
 
-      {#if comments.length > 0}
+      {#if comments.size > 0}
         <ul class="comment-list">
           {#for comment in comments}
             <CommentItem comment={ comment } @remove={ removeComment(comment) }></CommentItem>
@@ -577,7 +578,7 @@ params and props** in `data(params, props)` — the router does not inject a
           class="comment-form__text"
           placeholder="Write a comment…"
           value={ commentText }></textarea>
-        <button class="btn btn--primary" type="submit" disabled={ !commentText.trim() }>
+        <button class="btn btn--primary" type="submit" disabled={ !this.canComment }>
           Add comment
         </button>
       </form>
@@ -632,6 +633,14 @@ export default class PostDetailView extends PuzzleView {
       commentText: local.commentText,
       authorName: local.authorName
     };
+  }
+
+  // Read by the template as `this.canComment`. A template reads data and never
+  // calls JavaScript on it (no `.trim()` there, D176), and a getter re-reads
+  // local state on every render — setData() re-renders without re-running
+  // data().
+  get canComment() {
+    return (this.getData().commentText ?? '').trim() !== '';
   }
 
   events = {
@@ -726,10 +735,12 @@ Notes on this view:
 - **The data story is D161 end-to-end:** the tracked `findOne('post', …)` faults the post in (round 1), the follow-up `findOne('user', post.authorId)` faults the author (round 2), and the view commits once settled — so the `{:else}` branch means a genuine 404 (the model's custom `loadOne` returns a 404 Response for unknown ids), never "still loading". No seed, no loading flag.
 - **`post.comments` is a relationship traversal** — reactive, local-only, never a request; sorting happens in `data()` like any query.
 - The comment form carries **no field handlers at all**: `value={ authorName }` and `value={ commentText }` are two-way bindings on bare local keys (D147), so `events` only has to `createRecord('comment', …)` on submit and clear the draft.
+- **`comments.size`** is the template's count (D176) — `.length` is a compile error — and `disabled={ !this.canComment }` goes through the one door a template has into the view's JavaScript: a template never calls `.trim()` on a value, so the getter computes the flag and the template reads it.
 - `<CommentItem @remove={ removeComment(comment) }>` is a **callback prop** carrying the loop variable; the child reports intent and the **parent owns the mutation** (`comment.destroy()`).
 - The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see the D27 decision card), so this section no longer mirrors that file verbatim.
 
 ### Form idioms (v1.68, D147)
+
 
 `value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>`, or
 `<select>` bind **two ways** — the compiler writes the write-back handler, so
@@ -804,8 +815,9 @@ that rejection, the error reaches your `onError` hook with `phase: 'bind'`.
 
 **Opting a field out.** Three escapes, all ordinary syntax: write your own
 `@input` or `@change` (either one suppresses the synthesized write entirely),
-use a non-path expression (`value={ String(name) }`, `value={ draft || '' }`), or
-add a static `readonly`. Handlers on other events — `@blur`, `@keydown:enter` —
+use a non-path expression (`value={ name ?? '' }` — a template expression is
+data plus operators, so `String(name)` is a compile error, D176), or add a
+static `readonly`. Handlers on other events — `@blur`, `@keydown:enter` —
 coexist with the bind rather than replacing it, so a field wired as
 `value={ name }` with only a `@keydown:enter` commit handler is **not** an
 abandonable edit buffer: every keystroke has already landed in `name`. Use the

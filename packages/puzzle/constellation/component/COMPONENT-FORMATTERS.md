@@ -103,6 +103,19 @@ notes:
       packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
       corrected.
     sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+  - kind: state
+    text: >-
+      D176 (group h of D174): `size`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `default`
+      and `split` are gone from `formatters/builtins.js` (no module default export any more —
+      `default` was the one name that needed the `default as __puzzle_default` alias, so that alias
+      and the manifest special case are gone with it), from `builtins.json` (28 entries: 26 built-in
+      standard names plus `timeago` and `in_timezone`; `t` is registered by the i18n service), from
+      `STANDARD_FORMATTERS` in `formatters.js` (27 names) and from the conformance table
+      (`tests/conformance/formatters.json`, 28 rows removed). `REMOVED_FORMATTERS` gained a row per
+      name so the D43 unknown-name guard prints the replacement: `.size` (the property), the
+      operator (`a + b`, `a - b`, `a * b`, `a / b`, `a % b`), `??`, and `data()` for `split`.
+      `plugin_test.go`'s `TestFormatterManifestSkipsRemovedBuiltins` pins that the Go manifest scan
+      never lists a removed name.
 verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
 

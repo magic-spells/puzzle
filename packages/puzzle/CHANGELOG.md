@@ -179,8 +179,8 @@ work through this list. Every item but 13, a new warning, is marked
 
 1. **Removed list formatters.** `sort`, `where`, `map`, `uniq`, `reverse`,
    `compact`, `first` and `last` are gone. Shape the list in `data()` and loop
-   over that field. Write `items[0]` or `items.at(-1)` for the first or last
-   item. For a short count, use `compact_number`. A template that still names
+   over that field. Write `items[0]` or `items[items.size - 1]` for the first
+   or last item. For a short count, use `compact_number`. A template that still names
    one passes the value through unchanged, and development logs the
    replacement.
 2. **`noescape` is removed.** Print the value with a plain `{ value }`, or use
@@ -197,22 +197,23 @@ work through this list. Every item but 13, a new warning, is marked
    `capitalize` (leaves the rest of the string alone; the old behavior is
    `downcase | capitalize`), `currency` (groups thousands, sign first),
    `percentage` (takes the number as written; a ratio is
-   `ratio | times(100) | percentage`), `round` (half away from zero),
-   `number_with_delimiter` (follows the viewer's locale), `escape`, `json`,
-   `size`, `truncate`, and `divided_by`/`modulo` by zero. The number formatters
-   print nothing for a missing value instead of `$0.00` or `0`.
-6. **A pipe in an attribute, prop or marker argument is a formatter.**
-   `title={ price | currency }` calls `currency` where it used to compile to a
-   bitwise OR. To keep a bitwise OR, wrap it in parentheses: `{ (a | b) }`.
-   What follows a pipe must be a formatter name, so `{ w / 2 | 0 }` is now a
-   compile error. Parenthesize it.
+   `ratio * 100 | percentage`), `round` (half away from zero),
+   `number_with_delimiter` (follows the viewer's locale), `escape`, `json` and
+   `truncate`. The number formatters print nothing for a missing value instead
+   of `$0.00` or `0`.
+6. **A pipe in an attribute, prop or marker argument is a formatter, and a
+   nested `|` is an error.** `title={ price | currency }` calls `currency`
+   where it used to compile to a bitwise OR. There is no bitwise OR in
+   templates: a single `|` inside parentheses, brackets, braces or a
+   formatter's arguments (`@click={ save(x | trim) }`, `{ (a | b) }`) is a
+   positioned compile error, and what follows a pipe must be a formatter
+   name, so `{ w / 2 | 0 }` is one too. Compute the value in `data()`.
 7. **No pipe in a condition or loop header.** A top-level `|` in an `{#if}`,
    `{:else if}`, `{#unless}`, `{#case}` or `{#for}` header, in a `{:when}`
    value, or in an inline `{#if}` inside an attribute value is a positioned
    compile error; it no longer compiles to a bitwise OR. Compute the value in
    `data()` and test that field (`{#if hasTags}`), or shape the list there and
-   loop over it (`{#for item in sortedItems}`). `||` still works, and a
-   bitwise OR in parentheses (`{#if (flags | mask)}`) is still JavaScript.
+   loop over it (`{#for item in sortedItems}`). `||` still works.
 8. **Some values print nothing.** A bare `Date`, any other object (including one
    with its own `toString`, such as a `URL` or a Decimal), `NaN` and ±Infinity
    print nothing. Development logs a warning that names the expression. Format
@@ -248,6 +249,27 @@ work through this list. Every item but 13, a new warning, is marked
     `__dirty`, `__rgen` or `__propRevs`, nor a static `__roots`. A `<script>` must not bind `__l`,
     `__e`, `__r` or `__L0`, `__L1`, and so on. Binding one of the script names
     is a compile error.
+15. **`.length` is `.size`.** The count of a list or a string is the `.size`
+    property in every template (`{#if todos.size > 0}`,
+    `{ title.size }`, `i === items.size - 1`); it counts code points, so an
+    emoji is one character. `.length` is a positioned compile error. A data
+    field really named `size` still reads as the field (`file.size`), and one
+    named `length` is reachable as `obj['length']`.
+16. **No JavaScript on a value in a template (D176).** A template expression
+    is data plus operators. A method or function call on a value
+    (`draft.trim()`, `items.filter(…)`, `Math.round(x)`, `String(x)`,
+    `items.at(-1)`), an arrow function, a template literal, `new`, `typeof`,
+    a regex literal, `++`/`--`, an assignment or a bitwise operator is a
+    positioned compile error. Format the value with a formatter
+    (`| trim`, `| round`), or compute it in `data()` and read the field
+    (`disabled={ !canAdd }`). `this.x` and `this.method(…)` still reach the
+    view's JavaScript, and `@event` handler bodies are unchanged.
+17. **Removed formatters: `size`, `plus`, `minus`, `times`, `divided_by`,
+    `modulo`, `default` and `split`.** Write the operator before the pipe
+    (`{ price * qty | currency }`, `{ ratio * 100 | percentage }`), `??` for
+    a fallback (`{ subtitle ?? 'Untitled' }`), `.size` for a count, and split
+    a string in `data()`. A template that still names one passes the value
+    through unchanged, and development logs the replacement.
 
 Two contracts that row caching makes visible, though neither is new: assign a
 record's fields through `update()` or a store path, never `todo.title = 'x'`,
@@ -282,16 +304,15 @@ and keep formatters pure functions of their input.
   translations configured, `date`, `time`, `datetime`, `number_with_delimiter`,
   `compact_number`, the `pluralize` count and `timeago` render in the active
   locale instead of the viewer's (an explicit `locale` argument still wins;
-  `currency` is unchanged). `t` joins the standard formatter set (35 names).
+  `currency` is unchanged). `t` joins the standard formatter set (27 names since D176).
   `/testing`'s `mountView` and `createTestApp` take `i18n: { locale, strings }`.
   Without `i18n` configured nothing ships: hello-world and todos are
   byte-identical in raw size. See `examples/i18n` (en, es, pl).
-- **`compact_number` and `default` formatters (D174).** `{ followers |
-  compact_number }` shortens a large number with a localized suffix through
+- **`compact_number` formatter (D174).** `{ followers | compact_number }`
+  shortens a large number with a localized suffix through
   `Intl.NumberFormat(locale, { notation: 'compact' })` — `1.2K`, `45K`, `3.4M`
-  in English. `{ subtitle | default('Untitled') }` swaps in a fallback for a
-  missing value, `false`, `''` or an empty list; `0` is a real value and is
-  kept.
+  in English. (A fallback for a missing value is the `??` operator:
+  `{ subtitle ?? 'Untitled' }`.)
 - **Object literals as formatter and call arguments (D173 V8).**
   `{ 'cart.count' | t({ count: n, unit }) }` (an app `t` formatter) and
   `{ fmt(x, { digits: 2 }) }`
@@ -402,12 +423,10 @@ and keep formatters pure functions of their input.
     the old behavior is `downcase | capitalize`.
   - `currency` groups thousands and puts the sign first: `-$1,234.50`.
   - `percentage` takes the number as written (`12.5 | percentage(1)` →
-    `12.5%`); a ratio is `ratio | times(100) | percentage`.
+    `12.5%`); a ratio is `ratio * 100 | percentage`.
   - `round` rounds half away from zero on the decimal value (`1.005 |
     round(2)` → `1.01`) and takes negative places (`1250 | round(-2)` →
     `1300`); `currency` and `percentage` round the same way.
-  - `divided_by` and `modulo` by zero give a missing value, which prints
-    nothing, instead of `Infinity` / `NaN`.
   - `escape` is an identity on text — the page shows `<b>`, not `&lt;b&gt;`.
   - `json` sorts object keys and prints `null` for a missing value, `NaN` and
     ±Infinity.
@@ -469,10 +488,13 @@ and keep formatters pure functions of their input.
   a top-level `|` into a formatter chain, exactly as text interpolation always
   has:
   `title={ price | currency }` calls `currency` where it used to compile to a
-  bitwise OR. `||`, and a `|` inside a string, a regex, parentheses or
-  brackets, are not pipes; `@event` handlers are untouched. A chained
-  form-control `value={ x | f }` is one-way and does not auto-bind. To keep a
-  bitwise OR, wrap it in parentheses (`{ (a | b) }`).
+  bitwise OR. `||`, and a `|` inside a string, a regex or a template literal,
+  are not pipes; a single `|` nested inside parentheses, brackets, braces or a
+  formatter's arguments is a positioned compile error, because there is no
+  bitwise OR in templates (D176) — `@click={ save(x | trim) }` and
+  `{ (a | b) }` used to compile to one silently. `@event` handler bodies are
+  otherwise untouched. A chained form-control `value={ x | f }` is one-way
+  and does not auto-bind.
 - **BREAKING: what follows a pipe must be a formatter name.** Everywhere a pipe
   is a formatter — text interpolation included — the text after it must be a
   name (`[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*` — an identifier,
@@ -481,7 +503,7 @@ and keep formatters pure functions of their input.
   `{ a |= 2 }` and `{ mask | bit-1 }` used to compile to a lookup of a formatter
   named `4` or `bit-1` (a silent pass-through), and `{ a | f(1) + g(2) }`
   compiled to `f(a, 1) + g(2)`; they are now positioned errors that say to
-  parenthesize a bitwise OR or compute the value before the pipe. A dotted or
+  compute the value before the pipe. A dotted or
   non-ASCII formatter name (`{ price | fmt.eur }`), which 0.7 looked up in the
   registry, is now an error too: register the formatter under an identifier name.
 - **BREAKING: a pipe in a condition or loop header is a compile error (D173
@@ -489,14 +511,36 @@ and keep formatters pure functions of their input.
   top-level `|` in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` header,
   or in an inline `{#if}` inside an attribute value, no longer compiles to a
   bitwise OR: it is a positioned error, `formatter pipes are not allowed in an
-  {#if} condition — compute the value in data() and test that field (e.g.
-  {#if hasTags}), write || for a logical OR, or wrap a bitwise OR in
-  parentheses, e.g. (a | b)`. In a loop's collection or range
+  {#if} condition — compute the value first (a data() field in PuzzleKit,
+  {#let} in Sites) and test that field, e.g. {#if hasTags}; write || for a
+  logical OR`. In a loop's collection or range
   bound, shape the list in `data()` and loop over that field
   (`{#for item in sortedItems}`); a `{:when}` value takes no chain, so list
   alternatives with commas or compute the value in `data()`. `||` keeps
-  working in every header, and a parenthesized `(a | b)` is still a bitwise
-  OR.
+  working in every header.
+- **BREAKING: template expressions are a data language, not JavaScript
+  (D176).** A template value is JSON-shaped data read with paths and combined
+  with operators; anything that computes from a value is a formatter, and a
+  formatter appears only where a value is displayed. PuzzleKit now enforces
+  what Sites always did, with the same positioned errors, so a template that
+  compiles in one dialect is the same language in the other:
+  - **`.size` replaces `.length`.** `x.size` is the count of a list (items)
+    or a string (code points, so `'😀'.size` is 1 in both hosts), compiled to
+    a small helper that a module imports only when it uses it (`__z`, a new
+    reserved binding). On anything else it is an ordinary field read
+    (`file.size`). `.length` is a positioned compile error; a field named
+    `length` is `obj['length']`.
+  - **No calls on a value.** `draft.trim()`, `items.filter(i => i.done)`,
+    `Math.round(x)`, `String(x)`, `items.at(-1)` and every other method or
+    function call on data, plus arrow functions, template literals, `new`,
+    `typeof`, `instanceof`, `in`, regex literals, `++`/`--`, assignment, a
+    top-level comma and the bitwise operators, are positioned compile errors
+    naming the replacement: a formatter, or a `data()` field. Formatter calls
+    (`| truncate(20)`) are not calls on data. `this.` chains (`{ this.ago(x) }`,
+    `disabled={ !this.canAdd }`) and `@event` handler bodies are PuzzleKit's
+    two explicit doors into JavaScript and are exempt.
+  - The scaffold's `disabled={ !newTodoText.trim() }` becomes a `canAdd`
+    field in `data()`; the examples' ~160 `.length` reads become `.size`.
 - **Member access in a template never throws (D173 V4).** Every `.` and `[`
   step in a value expression — text, attributes and props, `{#if}`/`{#case}`
   headers, formatter arguments, loop collections and keys — compiles to `?.`,
@@ -662,13 +706,22 @@ and keep formatters pure functions of their input.
 - **BREAKING: the list formatters `sort`, `where`, `map`, `uniq`, `reverse`,
   `compact`, `first` and `last` (D174).** List shaping is JavaScript in
   PuzzleKit: shape the list in `data()` and loop over that field, or write
-  `items[0]` / `items.at(-1)`. For a short count, `compact_number` replaces
+  `items[0]` / `items[items.size - 1]`. For a short count, `compact_number` replaces
   `compact`. There is no deprecation period. A template that still names one
   passes the value through and, in development, logs what replaces it.
   (Sites keeps list formatters as a Sites-only addition.)
 - **BREAKING: `noescape` (D174).** Print the value with a plain interpolation,
   or use `raw` for HTML you mean to render. Development logs the
   replacement.
+- **BREAKING: the formatters `size`, `plus`, `minus`, `times`, `divided_by`,
+  `modulo`, `default` and `split` (D176).** Each duplicated something the
+  expression language already has: a count is the `.size` property,
+  arithmetic is `+ - * / %` before the pipe (`{ price * qty | currency }`),
+  and a fallback is `??` (`{ name ?? 'Anonymous' }`). `split` is Sites-only
+  now; in PuzzleKit split the string in `data()`. `round`, `floor`, `ceil`
+  and `abs` stay. A template that still names one passes the value through
+  and, in development, logs the replacement. No example, piece or scaffold
+  template used any of them.
 
 ### Fixed
 
