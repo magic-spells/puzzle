@@ -11,6 +11,8 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { prerender, injectStaticShell } from '../client-runtime/ssg/index.js';
 import { mountStatic } from '../client-runtime/static/index.js';
+import { assembleChain } from '../client-runtime/ssg/assemble.js';
+import { Store } from '../client-runtime/datastore/store.js';
 import { adapter, serializeReadState } from '../client-runtime/datastore/adapter.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
@@ -777,6 +779,56 @@ describe('static kernel — mountStatic (D81)', () => {
 				route: { path: '/', params: {}, chain: [{ path: '/', name: 'home' }] },
 			})
 		).rejects.toThrow(/static mount target not found/);
+	});
+});
+
+// ---- assembleChain failure cleanup -------------------------------------------
+//
+// A preload that rejects part-way destroys every instance already constructed,
+// so a failed assembly (a static locale switch retried on a flaky network) never
+// leaves live store subscriptions behind — the router's partial-chain posture.
+
+describe('assembleChain — a failed preload destroys the partial chain', () => {
+	const build = (failAt) => {
+		const log = [];
+		const make = (name) => {
+			class Level extends PuzzleView {
+				data() {
+					this.ctx.store.findMany('note');
+					if (name === failAt) throw new Error(`fail ${name}`);
+					return {};
+				}
+				destroyed() {
+					log.push(name);
+				}
+			}
+			return Level;
+		};
+		const chain = [{ path: '/', view: make('root') }, { path: 'leaf', view: make('leaf') }];
+		const entry = { fullPath: '/leaf', chain, layout: make('layout') };
+		const store = new Store({ note: Note });
+		return { entry, ctx: { store, formatters: {} }, store, log };
+	};
+
+	for (const [failAt, destroyed] of [
+		['root', ['root']],
+		['leaf', ['root', 'leaf']],
+		['layout', ['root', 'leaf', 'layout']],
+	]) {
+		it(`at the ${failAt}: destroys every constructed instance and rejects`, async () => {
+			const { entry, ctx, store, log } = build(failAt);
+			await expect(assembleChain(entry, ctx)).rejects.toThrow(`fail ${failAt}`);
+			expect(log).toEqual(destroyed);
+			expect(store.keysBySubscriber.size).toBe(0);
+		});
+	}
+
+	it('a successful assembly destroys nothing', async () => {
+		const { entry, ctx, store, log } = build(null);
+		const { instances } = await assembleChain(entry, ctx);
+		expect(instances).toHaveLength(3);
+		expect(log).toEqual([]);
+		expect(store.keysBySubscriber.size).toBe(3);
 	});
 });
 

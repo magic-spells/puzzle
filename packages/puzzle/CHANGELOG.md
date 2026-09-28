@@ -694,6 +694,20 @@ and keep formatters pure functions of their input.
   `yarn install` or `bun install`; a monorepo's workspace-root lockfile
   counts), instead of an esbuild resolver error. This matters for a globally
   installed CLI run in a fresh checkout.
+- **An `{#if}` condition that is itself a ternary works** (broken since the first release).
+  `{#if mode === 'edit' ? canEdit : canView}` crashed the render in block form
+  and printed `class="x true"` inline.
+- **`\{` and `\}` work in a quoted attribute value** (broken since 0.7.0). A
+  lone `title="\{"` failed to compile, and `title="\{" data-x="}"` swallowed
+  the next attribute.
+- **A static page keeps a locale switch made from `mounted()`.** The switch
+  was dropped, leaving the prerendered language on screen under the new locale.
+- **A static locale switch that fails no longer leaks views.** Every view
+  already built for the new page is destroyed, store subscriptions included.
+- **Static entry slugs never collide.** Routes such as `/`, `/index` and
+  `/index-2` shared an entry file, so a page mounted the wrong view.
+- **A plural category defined twice in a locale file fails the build**, like
+  any other duplicate key, instead of silently dropping the later value.
 - **puzzle-pieces:** phone-width overflow in Toolbar, Pagination, the
   DataTable footer and the Code buttons; `split-panel`'s `snap` no longer
   collapses every release to 0.

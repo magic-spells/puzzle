@@ -107,13 +107,16 @@ export async function mountStatic({
 	// the prerendered default-language page swaps to theirs exactly once. A switch
 	// re-assembles and re-mounts this page's chain (see remount below).
 	let remount = null;
+	// A switch that lands before the remount is armed (a mounted() hook calling
+	// setLocale) is replayed once armRemount runs, instead of being dropped.
+	let earlyRefresh = false;
 	if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
 		const i18n = createI18n({
 			// __i18n is an internal test seam ({ manifest, tables, locale }); a build
 			// reads the manifest module.
 			...__i18n,
 			url: (path) => normalizeBase(routerBase) + '/' + path,
-			refresh: () => remount?.(),
+			refresh: () => (remount ? remount() : void (earlyRefresh = true)),
 		});
 		if (i18n) {
 			ctx.i18n = i18n;
@@ -177,6 +180,10 @@ export async function mountStatic({
 			current.destroy();
 			current = root;
 		};
+		if (earlyRefresh) {
+			earlyRefresh = false;
+			remount().catch((err) => console.error('[puzzle] locale switch could not rebuild the page:', err));
+		}
 	};
 
 	// An unmarked prerender:false page has no fallback DOM to preserve and keeps the

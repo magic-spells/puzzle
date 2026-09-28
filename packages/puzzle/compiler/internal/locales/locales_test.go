@@ -168,6 +168,7 @@ func TestLoadRejections(t *testing.T) {
 		{"array value", map[string]string{"en.json": `{"a": ["x"]}`}, cfg("en", "en"), "got an array"},
 		{"plural without other", map[string]string{"en.json": `{"n": {"one": "1", "few": "f"}}`}, cfg("en", "en"), `"n": a plural entry must have an "other"`},
 		{"plural non-string", map[string]string{"en.json": `{"n": {"one": 1, "other": "x"}}`}, cfg("en", "en"), `plural category "one" must be a string`},
+		{"plural duplicate category", map[string]string{"en.json": `{"n": {"one": "a", "one": "b", "other": "x"}}`}, cfg("en", "en"), `"n": the plural category "one" is defined twice`},
 		{"flatten collision", map[string]string{"en.json": `{"a.b": "x", "a": {"b": "y"}}`}, cfg("en", "en"), `"a.b" is defined twice (as "a.b" and as "a → b")`},
 		{"duplicate key", map[string]string{"en.json": `{"a": "x", "a": "y"}`}, cfg("en", "en"), `"a" is defined twice in the same object`},
 		{"underscore file", map[string]string{"en.json": `{}`, "en_US.json": `{}`}, cfg("en", "en"), `use "en-US"`},
@@ -287,6 +288,9 @@ func TestLoadWarnsOnEmptyObjects(t *testing.T) {
 // configured tag on disk, the rename hint names the same one on every run.
 func TestLoadCaseMismatchHintIsDeterministic(t *testing.T) {
 	root := writeLocales(t, map[string]string{"en.json": `{}`, "PT-br.json": `{}`, "pt-br.json": `{}`, "Pt-bR.json": `{}`})
+	if entries, _ := os.ReadDir(filepath.Join(root, "app", "locales")); len(entries) < 4 {
+		t.Skip("case-insensitive filesystem: the case variants collapse into one file")
+	}
 	for i := 0; i < 50; i++ {
 		_, err := Load(root, cfg("en", "en", "pt-BR"))
 		if err == nil || !strings.Contains(err.Error(), "(found app/locales/PT-br.json — rename it to pt-BR.json)") {

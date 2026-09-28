@@ -105,6 +105,24 @@ func TestConditionHeaderPipeIsACompileError(t *testing.T) {
 	}
 }
 
+// A condition that is itself a ternary is grouped, so the compiler's own
+// `? then : else` cannot re-associate into the condition's false branch. Every
+// other operator binds tighter, so `??` stays ungrouped.
+func TestTernaryConditionIsGrouped(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  {#if mode === 'edit' ? canEdit : canView}<b>a</b>{:else if a ? b : c}<b>b</b>{/if}
+  <p class="x {#if m ? e : v}on{/if}">y</p>
+  <p class="y {#if on}a{#if p ? q : r}b{/if}{/if}">z</p>
+  {#if x ?? y}<b>c</b>{/if}`))
+	wantAll(t, got,
+		"...((__d.mode === 'edit' ? __d.canEdit : __d.canView)\n",
+		"...((__d.a ? __d.b : __d.c)\n",
+		"${(__d.m ? __d.e : __d.v) ? 'on' : ''}",
+		"((__d.p ? __d.q : __d.r) ? 'b' : '')",
+		"...(__d.x ?? __d.y\n",
+	)
+	nodeCheck(t, got)
+}
+
 // A formatted form value displays a transformed value; there is no field to
 // write an edit back to, so no two-way binding is synthesized (D147).
 func TestPipedFormValueIsOneWay(t *testing.T) {

@@ -918,7 +918,7 @@ func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (stri
 func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, error) {
 	// A condition takes no formatter chain (D173 V1: the parser rejects a pipe
 	// in a condition header), but it is a value position for guarded access.
-	cond := c.resolveValue(n.Cond, nil, scope)
+	cond := groupCond(c.resolveValue(n.Cond, nil, scope))
 	thenItems, err := c.processChildren(n.Then, scope)
 	if err != nil {
 		return "", err
@@ -1689,7 +1689,7 @@ func (c *compiler) emitMixedFacts(parts []parser.Part, scope scopeMap, facts *ex
 			b.WriteString(c.displayValue(expr, pp.Interp.Expr))
 			b.WriteString("}")
 		case *parser.InlineIfPart:
-			cond := c.resolveChain(pp.Cond, nil, scope, facts)
+			cond := groupCond(c.resolveChain(pp.Cond, nil, scope, facts))
 			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
@@ -1721,7 +1721,7 @@ func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprF
 			expr := c.applyFormatters(resolved, pp.Interp.Formatters, scope, facts)
 			segs = append(segs, c.displayValue(expr, pp.Interp.Expr))
 		case *parser.InlineIfPart:
-			cond := c.resolveChain(pp.Cond, nil, scope, facts)
+			cond := groupCond(c.resolveChain(pp.Cond, nil, scope, facts))
 			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
@@ -2329,4 +2329,14 @@ func sp(n int) string {
 		spaces += spaces
 	}
 	return spaces[:n]
+}
+
+// groupCond parenthesizes a condition that is itself a top-level ternary, so the
+// compiler's own `? then : else` cannot re-associate it into the condition's
+// false branch. Every other operator a condition can use binds tighter.
+func groupCond(js string) string {
+	if _, _, _, ok := splitEventConditional(js); ok {
+		return "(" + js + ")"
+	}
+	return js
 }

@@ -10,7 +10,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mountStatic } from '../client-runtime/static/index.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -102,5 +103,75 @@ describe('static kernel: setLocale remount', () => {
 		expect(document.querySelector('#app').firstChild).toBe(before);
 		expect(document.querySelector('h1').textContent).toBe('Welcome');
 		errors.mockRestore();
+	});
+
+	it('keeps a switch made before the remount is armed (mounted() on a prerendered page)', async () => {
+		document.body.innerHTML =
+			'<div id="app" data-puzzle-static><section class="home"><h1>Welcome</h1></section></div>' +
+			`<script type="application/json" data-puzzle-locale="en">${JSON.stringify(EN)}</script>`;
+		vi.stubGlobal('navigator', { languages: ['es'], language: 'es' });
+		vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ES }));
+		class Home extends PuzzleView {
+			mounted() {
+				if (this.ctx.i18n.locale !== 'en') this.ctx.i18n.setLocale('en');
+			}
+			render() {
+				return h('section', { class: 'home' }, [h('h1', {}, [text(this.ctx.i18n.t('title'))])]);
+			}
+		}
+
+		await mountStatic({
+			target: '#app',
+			views: [Home],
+			route: { path: '/', params: {}, chain: [{ path: '/' }] },
+			__i18n: { manifest: MANIFEST },
+		});
+		await new Promise((r) => setTimeout(r, 10));
+
+		expect(document.documentElement.lang).toBe('en');
+		expect(document.querySelectorAll('h1')).toHaveLength(1);
+		expect(document.querySelector('h1').textContent).toBe('Welcome');
+	});
+
+	it('repeated failed switches leave no store subscriptions behind', async () => {
+		class Note extends PuzzleModel {
+			static schema = { id: Puzzle.string().primary() };
+		}
+		let i18n, store;
+		class Home extends PuzzleView {
+			created() {
+				i18n = this.ctx.i18n;
+				store = this.ctx.store;
+			}
+			data() {
+				return { notes: this.ctx.store.findMany('note') };
+			}
+			render() {
+				return h('section', { class: 'home' }, [h('h1', {}, [text(this.ctx.i18n.t('title'))])]);
+			}
+		}
+		class Layout extends PuzzleView {
+			data() {
+				if (this.ctx.i18n.locale === 'es') throw new Error('layout failed');
+				return {};
+			}
+			render() {
+				return h('div', {}, [new ViewNode(SLOT_TAG)]);
+			}
+		}
+		await mountStatic({
+			target: '#app',
+			views: [Home],
+			layout: Layout,
+			models: { note: Note },
+			route: { path: '/', params: {}, chain: [{ path: '/' }] },
+			__i18n: { manifest: MANIFEST, tables: { en: EN, es: ES }, locale: 'en' },
+		});
+		const live = store.keysBySubscriber.size;
+
+		for (let i = 0; i < 3; i++) await expect(i18n.setLocale('es')).rejects.toThrow('layout failed');
+
+		expect(store.keysBySubscriber.size).toBe(live);
+		expect(document.querySelector('h1').textContent).toBe('Welcome');
 	});
 });

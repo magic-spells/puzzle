@@ -8,6 +8,8 @@
   {#unless tags.length || flagged}<p class="unless">empty</p>{/unless}
   {#case status || 'none'}{:when 'open'}<p class="case">open</p>{:else}<p class="case">other</p>{/case}
   <p class="eq">{ one == '1' ? 'loose' : 'strict' }</p>
+  {#if mode === 'edit' ? canEdit : canView}<p class="tern">yes</p>{:else}<p class="tern">no</p>{/if}
+  <p class="tern-attr {#if mode === 'edit' ? canEdit : canView}on{/if}">t</p>
   <ul class="string-loop">{#for ch in word}<li>{ ch }</li>{/for}</ul>
   <ul class="missing-loop">{#for m in missing}<li>{ m }</li>{/for}</ul>
   <ul class="range">{#for 1...count, k}<li>{ k }</li>{/for}</ul>
@@ -56,6 +58,9 @@ export default class CoreHost extends PuzzleView {
       missing: null,
       count: 2.7,
       profile: null,
+      mode: 'view',
+      canEdit: true,
+      canView: false,
     };
   }
 }
