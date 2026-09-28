@@ -15,24 +15,24 @@
         <button
           type="submit"
           class="h-12 px-5 rounded-xl bg-accent text-ink font-semibold tracking-tight hover:bg-accent-2 disabled:bg-elevated disabled:text-faint disabled:cursor-not-allowed transition-colors"
-          disabled={ !newTodoText.trim() } >
+          disabled={ !canAdd } >
           Add
         </button>
       </form>
     </div>
 
-    {#if todos.length > 0}
+    {#if todos.size > 0}
       <div class="grid grid-cols-3 divide-x divide-line border-b border-line">
         <div class="py-5 text-center">
-          <div class="font-mono text-2xl tabular-nums text-fg">{ activeTodos.length }</div>
+          <div class="font-mono text-2xl tabular-nums text-fg">{ activeTodos.size }</div>
           <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">active</div>
         </div>
         <div class="py-5 text-center">
-          <div class="font-mono text-2xl tabular-nums text-fg">{ completedTodos.length }</div>
+          <div class="font-mono text-2xl tabular-nums text-fg">{ completedTodos.size }</div>
           <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">done</div>
         </div>
         <div class="py-5 text-center">
-          <div class="font-mono text-2xl tabular-nums text-fg">{ todos.length }</div>
+          <div class="font-mono text-2xl tabular-nums text-fg">{ todos.size }</div>
           <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">total</div>
         </div>
       </div>
@@ -65,13 +65,13 @@
       </div>
 
       <div class="p-5 flex flex-col sm:flex-row gap-2.5 justify-center">
-        {#if completedTodos.length > 0}
+        {#if completedTodos.size > 0}
           <button class="px-4 py-2.5 rounded-xl border border-hairline text-muted hover:text-fg hover:border-white/20 text-sm font-medium transition-colors" @click={ clearCompleted }>
-            Clear completed ({ completedTodos.length })
+            Clear completed ({ completedTodos.size })
           </button>
         {/if}
 
-        {#if activeTodos.length > 0}
+        {#if activeTodos.size > 0}
           <button class="px-4 py-2.5 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 text-sm font-medium transition-colors" @click={ markAllComplete }>
             Complete all
           </button>
@@ -128,6 +128,10 @@ export default class TodoHome extends PuzzleView {
       completedTodos,
       filteredTodos,
       newTodoText: localData.newTodoText,
+      // Templates read data, they don't call JavaScript on it, so the
+      // "is there anything to add?" check is computed here, not in the
+      // template's disabled= (constellation/doc/DOC-SPEC.md §6).
+      canAdd: localData.newTodoText.trim() !== '',
       currentFilter: localData.currentFilter,
       hasData: todos.length > 0
     };

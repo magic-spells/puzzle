@@ -54,9 +54,9 @@ second specification. Decision cards hold rationale and git holds chronology.
   `PuzzleValidationError`, `lazy` (the D163 route-view loader marker), and
   compiler support exports (`ViewNode`, `SLOT_TAG`, `PORTAL_TAG`,
   `SNIPPET_TAG` — the D166 snippet marker tag, with `isSnippet` on the ViewNode
-  type surface — `displayValue`, and the D170/D173 list runtime `listRows`,
-  `loopItems` and `loopRange`, each imported by a compiled module only when it
-  emits it).
+  type surface — `displayValue`, the D176 `.size` helper `sizeOf` (imported as
+  `__z`), and the D170/D173 list runtime `listRows`, `loopItems` and
+  `loopRange`, each imported by a compiled module only when it emits it).
 - Subpaths: `@magic-spells/puzzle/adapter`, `/morph`, `/router-modes`, `/ssg`,
   `/static`, `/testing`, `/fixtures`, and `/puzzle-env`. (`/router-modes` exports
   `hashRouter()` and `memoryRouter({ initialPath })`, the opt-in router modes —
@@ -116,14 +116,13 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
-- **Built-in formatters are the D174 standard set** — 35 names with the same
+- **Built-in formatters are the D174 standard set** — 27 names with the same
   arguments and meaning as Sites — plus the browser-only `link`, `timeago` and
-  `in_timezone`. Numbers: `abs`, `ceil`, `floor`, `plus`, `minus`, `times`,
-  `divided_by`, `modulo`, `round`, `currency`, `percentage`,
-  `number_with_delimiter`, `compact_number`. Text: `downcase`, `upcase`,
-  `capitalize`, `trim`, `strip`, `truncate`, `replace`, `split`, `strip_html`,
-  `strip_newlines`, `pluralize` (prints the count and the word). Markup:
-  `escape`, `raw`, `newline_to_br`. Values: `default`, `size`, `join`, `json`.
+  `in_timezone`. Numbers: `abs`, `ceil`, `floor`, `round`, `currency`,
+  `percentage`, `number_with_delimiter`, `compact_number`. Text: `downcase`,
+  `upcase`, `capitalize`, `trim`, `strip`, `truncate`, `replace`,
+  `strip_html`, `strip_newlines`, `pluralize` (prints the count and the word).
+  Markup: `escape`, `raw`, `newline_to_br`. Values: `join`, `json`.
   Dates: `date`, `time`, `datetime` with presets `short`, `medium` (default),
   `long`, `iso`. Translation: `t` (D175). No list formatters (list shaping is `data()`); a removed name
   passes through with a development hint, and an app formatter shadowing a
@@ -139,6 +138,14 @@ second specification. Decision cards hold rationale and git holds chronology.
   positioned compile error); the compiler lowers them to a `#html` vnode and
   never calls them through the registry. Gated by `__PUZZLE_HAS_RAW_HTML__`
   and, for the sanitizer, `__PUZZLE_HAS_RAW_SANITIZE__`.
+- **Template expressions are a data language (D176):** fields, literals,
+  `.size` (the count of a list or string, via the `__z` helper),
+  `+ - * / %`, comparisons, `&&`/`||`/`!`, `??` and the ternary. `.length`,
+  calls on data values (`x.trim()`, `String(x)`, `set.has(x)`, `Math.*`),
+  arrow functions, template literals and a `|` nested inside brackets are
+  positioned compile errors; `this.` chains and `@event` handler bodies are
+  the two JavaScript doors. `size`, `plus`, `minus`, `times`, `divided_by`,
+  `modulo` and `default` are no longer formatters, and `split` is Sites-only.
 - **Core semantics (D173):** a `|` is a formatter pipe in every value position
   (text, attributes, props, marker arguments) and must be followed by a
   formatter name; a pipe in a condition header (`{#if}`, `{:else if}`,

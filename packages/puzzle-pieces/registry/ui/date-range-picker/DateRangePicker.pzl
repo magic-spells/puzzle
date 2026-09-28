@@ -112,12 +112,12 @@ import { parseISODate, toDate, compareDates } from '../../lib/date-math.js';
 //   <DateRangePicker value={ range } presets={ presets } @change={ setRange } />
 //   <DateRangePicker value={ range } open={ open } @change={ setRange }
 //                    @show={ onShow } @hide={ onHide } />       // controlled open
-//   const eventDates = new Set(['2026-08-12', '2026-08-19']);
+//   const eventDates = { '2026-08-12': true, '2026-08-19': true };
 //   <DateRangePicker value={ range } @change={ setRange }>
 //     <Snippet fits="day" date day selected today>
 //       <span class="flex size-full flex-col items-center justify-center leading-none">
 //         <span class={ today ? 'font-semibold' : '' }>{ day }</span>
-//         {#if eventDates.has(date)}
+//         {#if eventDates[date]}
 //           <span
 //             class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
 //             aria-hidden="true"></span>

@@ -9,7 +9,7 @@
     </div>
 
     <nav class="flex-1 overflow-y-auto px-2 pb-2">
-      {#if pages.length}
+      {#if pages.size}
         {#for page in pages}
           <div
             class="page-row group flex items-center gap-1.5 rounded-md px-2 py-1 cursor-pointer hover:bg-hover {#if page.id === activeId}bg-hover{/if}"

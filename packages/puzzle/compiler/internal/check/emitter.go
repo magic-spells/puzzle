@@ -57,6 +57,14 @@ declare global {
     visit: (value: number) => void,
   ): void;
 
+  // A template value's .size (D176) is emitted as __z(value), the runtime's
+  // sizeOf helper: a list's or string's count, otherwise the value's own size
+  // field. Most template data is untyped, which the first overload answers
+  // with a number, as .length used to be; a typed object reads its field.
+  function __z(value: readonly unknown[] | string | ReadonlyMap<unknown, unknown> | ReadonlySet<unknown>): number;
+  function __z<T extends { readonly size?: unknown }>(value: T): T['size'];
+  function __z(value: unknown): any;
+
   function __puzzle_check_formatter(
     name: string,
     value: any,

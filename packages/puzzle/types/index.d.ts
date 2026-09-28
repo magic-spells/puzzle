@@ -802,6 +802,13 @@ export declare class PuzzleApp {
 /** Shared nullish-safe display coercion used by compiled render functions. */
 export declare function displayValue(value: unknown, expression?: string | 0): string;
 
+/**
+ * The template `.size` property (D176): a list's item count, a string's count
+ * of code points, otherwise the value's own `size` field (undefined when the
+ * value is missing). A compiled module that reads `.size` imports this as `__z`.
+ */
+export declare function sizeOf(value: unknown): any;
+
 /** One node of the virtual tree — compiled render functions build these. */
 export declare class ViewNode {
 	constructor(tag: any, attrs?: object, children?: any);

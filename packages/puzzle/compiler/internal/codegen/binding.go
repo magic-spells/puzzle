@@ -41,6 +41,10 @@ func classifyBindExpr(raw string, scope scopeMap) (target, field string, bare, o
 		return "", root, true, true
 	}
 
+	// `x.size` classifies like any field (D176): on an object it IS the field
+	// (`product.size`), and the display side reads the same field through the
+	// `__z` helper. Binding the count of a list or string is meaningless and is
+	// not special-cased.
 	if !isJSIdentifier(parts[1]) {
 		return "", "", false, false
 	}

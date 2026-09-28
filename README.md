@@ -77,9 +77,9 @@ returns what the template reads. Handlers live in an `events` field.
 <puzzle-view>
   <section>
     <h2>{ title }</h2>
-    <p class="count">{ tracks.length | pluralize('track') }</p>
+    <p class="count">{ tracks.size | pluralize('track') }</p>
 
-    {#if tracks.length > 0}
+    {#if tracks.size > 0}
       <ol>
         {#for track in tracks}
           <li>
@@ -120,11 +120,14 @@ export default class TrackList extends PuzzleView {
 </style>
 ```
 
-`pluralize` prints `2 tracks` and `compact_number` prints `45K`. Formatters
-chain left to right and take arguments. They go in values only: an `{#if}` or
-`{#for}` header takes no pipe, so compute that value in `data()`. A path like
-`{ user.address.city }` prints nothing instead of throwing when `address` is
-missing.
+`pluralize` prints `2 tracks` and `compact_number` prints `45K`. A template
+expression is data plus operators: fields, `.size` for a count, `+ - * / %`,
+comparisons and `??` for a fallback. It never calls JavaScript on a value
+(`name.trim()` and `.length` are compile errors); that work goes in `data()`,
+or behind `this.` and `@event` handlers. Formatters chain left to right and
+take arguments. They go in values only: an `{#if}` or `{#for}` header takes no
+pipe, so compute that value in `data()`. A path like `{ user.address.city }`
+prints nothing instead of throwing when `address` is missing.
 
 ### Routes
 

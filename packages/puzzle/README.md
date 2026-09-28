@@ -150,7 +150,18 @@ my-puzzle-app/
 ```html
 <p>{ user.name }</p>
 <h1>{ title | capitalize }</h1>
+<p>{ items.size } items, { price * quantity | currency }</p>
+<p>{ nickname ?? name }</p>
 ```
+
+A template expression is data plus operators: fields (`a.b`, `a?.b`,
+`a[i]`), literals, `.size` for the count of a list or string, `+ - * / %`,
+comparisons, `&& || !`, the ternary and `??` for a fallback. It never calls
+JavaScript on a value — `.length`, `name.trim()`, `String(x)`, `Math.round(x)`,
+arrow functions and template literals are compile errors that name the
+replacement (a formatter, or a field computed in `data()`). `this.` (a view
+getter or method) and `@event` handler bodies are the two doors into
+JavaScript.
 
 A literal brace is escaped with a backslash — `\{` and `\}` — anywhere an
 expression could appear, attribute values included:
@@ -236,7 +247,7 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 <button @click:once={ claimReward }>Claim</button>
 ```
 
-**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ String(x) }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
+**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ x ?? '' }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
 
 **Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
 
@@ -287,9 +298,10 @@ through that step unchanged and a single `console.error` names the offender.
 The built-ins are the **standard set** — the same names, arguments and meaning
 in PuzzleKit and in Sites — plus the browser-only `link`, `timeago` and
 `in_timezone`. There are no list-shaping formatters: sort, filter and pick
-items in `data()` or a plain expression (`items[0]`, `items.at(-1)`). An app
-formatter may reuse a standard name (the app's function wins), with a
-development warning.
+items in `data()` or a plain expression (`items[0]`, `items[items.size - 1]`).
+Counting, arithmetic and fallbacks are not formatters either: use `.size`,
+the operators and `??`. An app formatter may reuse a standard name (the app's
+function wins), with a development warning.
 
 ### String Formatters
 
@@ -330,10 +342,6 @@ development warning.
 ```html
 { names | join(', ') }
 <!-- Join with commas -->
-{ tags | size }
-<!-- Items in a list, characters in text -->
-{ subtitle | default('Untitled') }
-<!-- Fallback for a missing, false, empty or [] value; 0 is kept -->
 { obj | json }
 <!-- JSON with sorted keys -->
 ```

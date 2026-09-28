@@ -21,6 +21,12 @@ notes:
       snippet markers and the D173 V13 per-path pass. The bodies now say so. The test count is 12
       files. `go vet` and `go test ./...` pass in packages/puzzle-lang.
     sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+  - kind: state
+    text: >-
+      D176: `chain_test.go` `TestNestedPipeIsError` pins the nested-pipe rejection (a `|` inside
+      call parentheses, a grouping paren, a bracket index and a formatter argument, in text,
+      attribute and prop positions) with its message and position, and that `||`, `|=` and a `|`
+      inside a string stay legal.
 connections:
   - FILE-PARSER
   - FILE-PARSER-SECTIONS

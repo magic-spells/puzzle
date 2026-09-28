@@ -25,6 +25,13 @@ notes:
       snippet markers and the D173 V13 per-path pass. The bodies now say so. The test count is 12
       files. `go vet` and `go test ./...` pass in packages/puzzle-lang.
     sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+  - kind: state
+    text: >-
+      D176: `parseChain` rejects a single `|` below the top level of the base expression or of any
+      formatter argument through `nestedPipeIndex` (scan.go), with the positioned message "a
+      formatter pipe must be at the top level of the value — there is no bitwise OR in templates;
+      compute the value first (a data() field in PuzzleKit, {#let} in Sites)". `headerPipeError` (a
+      pipe in an `{#if}`/`{:else if}`/`{#unless}`/`{#case}` subject) is unchanged from PR #157.
 ---
 
 Source binding for the template parser. Behavioral intent stays on the owning component card, COMPONENT-TEMPLATE-PARSER in the connected `puzzle` plan (`repo=puzzle`); this card anchors that contract to `packages/puzzle-lang/parser/parser.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle-lang`).

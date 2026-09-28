@@ -311,6 +311,43 @@ func splitTopLevel(s string, sep byte, skipDoubled bool) []string {
 	return out
 }
 
+// nestedPipeIndex returns the index of the first single `|` below the top
+// level of s — inside (), [] or {} — or -1 (D176 rule 4). Strings, template
+// literals, regexes and comments are skipped via LexSkip, and `||` is logical
+// OR, never a pipe. A template value has no bitwise OR, so the only `|` it may
+// hold is a top-level formatter pipe; a nested one is an error at every value
+// position and header.
+func nestedPipeIndex(s string) int {
+	depth := 0
+	prevEndsExpr := false
+	for i := 0; i < len(s); {
+		if next, pee, consumed := LexSkip(s, i, prevEndsExpr); consumed {
+			prevEndsExpr = pee
+			i = next
+			continue
+		}
+		c := s[i]
+		switch c {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case '|':
+			if i+1 < len(s) && s[i+1] == '|' {
+				prevEndsExpr = false
+				i += 2
+				continue
+			}
+			if depth > 0 {
+				return i
+			}
+		}
+		prevEndsExpr = LexPlainEndsExpr(c, prevEndsExpr)
+		i++
+	}
+	return -1
+}
+
 // lastTopLevelIndexByte returns the index of the LAST top-level occurrence of
 // the single-byte sep in s (respecting strings/regex/comments via LexSkip and
 // (), [], {} nesting), or -1. Used to peel a trailing {#for} loop-counter

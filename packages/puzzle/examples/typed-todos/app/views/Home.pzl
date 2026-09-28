@@ -12,20 +12,20 @@
         <button
           type="submit"
           class="h-11 px-5 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed"
-          disabled={ !newTodoText.trim() }>
+          disabled={ !this.canAdd }>
           Add
         </button>
       </form>
     </div>
 
-    {#if todos.length > 0}
+    {#if todos.size > 0}
       <div class="grid grid-cols-2 divide-x divide-white/10 border-b border-white/10 text-center">
         <div class="py-4">
           <div class="font-mono text-2xl text-white">{ activeCount }</div>
           <div class="mt-1 text-[10px] uppercase tracking-[0.2em] text-white/40">active</div>
         </div>
         <div class="py-4">
-          <div class="font-mono text-2xl text-white">{ todos.length }</div>
+          <div class="font-mono text-2xl text-white">{ todos.size }</div>
           <div class="mt-1 text-[10px] uppercase tracking-[0.2em] text-white/40">total</div>
         </div>
       </div>
@@ -74,6 +74,13 @@ export default class TypedHome extends PuzzleView {
       activeCount: todos.filter((t) => !t.completed).length,
       newTodoText: local.newTodoText,
     };
+  }
+
+  // Read by the template as `this.canAdd`. A template reads data and never
+  // calls JavaScript on it (no `.trim()` there), and a getter re-reads local
+  // state on every render — setData() re-renders without re-running data().
+  get canAdd(): boolean {
+    return this.getData<{ newTodoText: string }>().newTodoText.trim() !== '';
   }
 
   events = {

@@ -22,6 +22,12 @@ notes:
       snippet markers and the D173 V13 per-path pass. The bodies now say so. The test count is 12
       files. `go vet` and `go test ./...` pass in packages/puzzle-lang.
     sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+  - kind: state
+    text: >-
+      D176: `nestedPipeIndex(expr)` scans a value with LexSkip (strings, regex, comments opaque),
+      tracks paren/bracket/brace depth, and returns the byte index of the first single `|` (not
+      `||`, not `|=`) at depth > 0, or -1. The chain splitter still finds top-level pipes as before;
+      this is the second pass that turns a nested one into an error instead of a bitwise OR.
 ---
 
 Source binding for the template parser. Behavioral intent stays on the owning component card, COMPONENT-TEMPLATE-PARSER in the connected `puzzle` plan (`repo=puzzle`); this card anchors that contract to `packages/puzzle-lang/parser/scan.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle-lang`).

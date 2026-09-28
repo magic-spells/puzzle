@@ -118,6 +118,43 @@ notes:
       `<foreignObject>`) and passes the surrounding context through components and snippet bodies
       (only `<Portal>` resets it). Pinned by row_facts_test.go, event_handler_test.go
       (TestEventHandlerConditionalConditionIsGuarded), markup_test.go.
+  - kind: state
+    text: >-
+      D176 (template values are a data language): `datalang.go` is a pre-check pass run on the root
+      and the skeleton right after `checkMarkupFormatters`, before any emission. It lexes each value
+      with `parser.LexSkip` (strings, regex bodies, comments opaque) and rejects, with a positioned
+      error at the node or attribute, calls, arrows, template literals,
+      `new`/`typeof`/`instanceof`/`in`, regex literals, `++`/`--`, assignment, a top-level comma,
+      bitwise `& ^ ~ << >> >>>`, and `.length` (the message says use `.size`). It walks every value
+      position: text, brace and quoted attributes, inline-if conditions and branches, props, marker
+      arguments, `key=`, the if/else-if/unless/case subjects, `:when` values, `for` collections and
+      range bounds, every formatter argument, and the CONDITION of a handler ternary. Two
+      exemptions: a `this.` chain in full (`thisChainTokens` — member steps, indexes, call
+      arguments, tagged templates) and `@event` handler bodies; a single `|` anywhere in an `@event`
+      value is its own error. `.size` lowering: `sizeSteps` returns the byte offsets of the count
+      steps (a `.size`/`?.size` member step outside a `this.` chain and not called); the resolver
+      (`resolveExprScanFull`, `value` flag on for template values, off for handler arguments and
+      `${…}` interiors) wraps the chain before that step in `__z(` … `)` using the `chainAt` output
+      offset each bracket frame carries (`closeChain`: a call argument list or computed step
+      continues the chain, a grouping paren or literal is the primary), so `a.b.size` →
+      `__z(__d.a?.b)` and `x.size.y` → `__z(__d.x)?.y`. The same offsets set `usesSize`, which
+      imports `sizeOf as __z` from the package root; `__z` is a reserved module-scope name
+      (`scriptcollide.go`). `ResolveCheckExpr` lowers `.size` too, the check shim declares three
+      `__z` overloads (list/string/Map/Set → number; object with a `size` field → `T['size']`; else
+      any) and `segments.go` maps `__z(` as inserted text and the authored `.size` to the `)`.
+      `classifyBindExpr` never auto-binds a trailing `.size`. A handler argument is JavaScript, so
+      `todo.tags.size` there reads the plain property (`.length` is the JS count). The `jsGlobals`
+      volatile classification (`Math.random`, `Date`) is now reachable only through `this.` chains
+      and handlers. Tests: `datalang_test.go`, the `size_count` golden, `check/size_test.go`.
+  - kind: decision
+    text: >-
+      Correction to the D176 note above: `classifyBindExpr` does NOT exclude `.size`. The first
+      build excluded it (so `value={ x.size }` stayed one-way), which broke the real case D176 rule
+      1 protects — a plain object or record with a field named `size` (`profile.size`, a product's
+      size) bound through a form control (tests/binding.test.js "applies the numeric coercion on a
+      plain-object member too"). `ident.size` classifies like any two-segment path: the display
+      reads `__z(__d.profile)` (the field, on an object) and the bind writes `profile.size`. Binding
+      the count of a list or string is meaningless and is not special-cased.
 ---
 
 # Render-function codegen

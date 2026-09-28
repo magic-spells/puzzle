@@ -499,10 +499,10 @@ export default app;
 		featureMarkup += "  {#raw}<span @x=\"y\">literal</span>{/raw}\n"
 	}
 	if fx.rawHTML {
-		featureMarkup += "  <div>{ items | size | raw }</div>\n"
+		featureMarkup += "  <div>{ items | join | raw }</div>\n"
 	}
 	if fx.newlineToBr {
-		featureMarkup += "  <div>{ items | size | newline_to_br }</div>\n"
+		featureMarkup += "  <div>{ items | join | newline_to_br }</div>\n"
 	}
 	if fx.snippets {
 		featureMarkup += `  <ScopedList items={ items }>

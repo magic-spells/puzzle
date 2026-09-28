@@ -55,21 +55,18 @@ func TestPipeIsAFormatterInEveryValuePosition(t *testing.T) {
 }
 
 // Formatters stay out of branching logic (D173 V1): a condition header keeps
-// `||` as logical OR and a parenthesized `|` as a bitwise OR, and reads no
-// formatter registry. The header pipe itself is a parse error, pinned in
+// `||` as logical OR and reads no formatter registry. The header pipe itself is a parse error, pinned in
 // TestConditionHeaderPipeIsACompileError.
 func TestConditionHeadersKeepJavaScriptOr(t *testing.T) {
 	got := compileSrc(t, coreSrc(`  {#if tags || others}<b>a</b>{:else if a || b}<b>b</b>{/if}
   {#unless user || guest}<b>c</b>{/unless}
   {#case status || 'none'}{:when 'a'}<b>d</b>{/case}
-  {#if (flags | 4) === 4}<b>e</b>{/if}
   <p class="x {#if on || off}on{/if}">y</p>`))
 	wantAll(t, got,
 		"...(__d.tags || __d.others",
 		"...(__d.a || __d.b",
 		"...(!(__d.user || __d.guest)",
 		"])(__d.status || 'none')),",
-		"...((__d.flags | 4) === 4",
 		"class: `x ${__d.on || __d.off ? 'on' : ''}`",
 	)
 	if strings.Contains(got, "__f") {
@@ -99,7 +96,7 @@ func TestConditionHeaderPipeIsACompileError(t *testing.T) {
 		}
 		want := "T.pzl:2:"
 		if msg := err.Error(); !strings.Contains(msg, want) ||
-			!strings.Contains(msg, "formatter pipes are not allowed in "+tc.header+" — compute the value in data() and test that field") {
+			!strings.Contains(msg, "formatter pipes are not allowed in "+tc.header+" — compute the value first (a data() field in PuzzleKit, {#let} in Sites) and test that field") {
 			t.Errorf("%s: error %q", tc.body, msg)
 		}
 	}

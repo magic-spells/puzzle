@@ -27,21 +27,25 @@ const requiredBuiltins = { escape };
 // standard name means. PuzzleKit-only built-ins (`link`, `timeago`,
 // `in_timezone`) are deliberately absent — overriding those is ordinary. `t` is
 // standard (D175) but not a built-in: the i18n service registers it when the app
-// configures translations.
+// configures translations. `split` is standard in Sites only (D176): PuzzleKit
+// splits in data(), since a pipe cannot feed a `{#for}`.
 // Referenced only behind `__PUZZLE_DEV__`, so production tree-shakes it.
 export const STANDARD_FORMATTERS = [
-	'abs', 'ceil', 'floor', 'plus', 'minus', 'times', 'divided_by', 'modulo', 'round',
+	'abs', 'ceil', 'floor', 'round',
 	'currency', 'percentage',
-	'downcase', 'upcase', 'capitalize', 'trim', 'strip', 'truncate', 'replace', 'split',
+	'downcase', 'upcase', 'capitalize', 'trim', 'strip', 'truncate', 'replace',
 	'strip_html', 'strip_newlines',
 	'escape', 'raw', 'newline_to_br',
-	'default', 'size', 'join', 'json',
+	'join', 'json',
 	'date', 'time', 'datetime', 'number_with_delimiter', 'compact_number', 'pluralize',
 	't',
 ];
 
-// Removed built-ins (D174) and what replaces each, for the unknown-name guard.
-// List shaping is JavaScript in PuzzleKit. Dev-only, like STANDARD_FORMATTERS.
+// Removed built-ins (D174, D176) and what replaces each, for the unknown-name
+// guard. List shaping is JavaScript in PuzzleKit; counting, arithmetic and
+// fallbacks are the template language's `.size`, operators and `??` (D176).
+// Dev-only, like STANDARD_FORMATTERS.
+const OPERATOR_HINT = 'use the operator (`a + b`, `a - b`, `a * b`, `a / b`, `a % b`) before the pipe';
 const REMOVED_FORMATTERS = {
 	sort: 'sort the list in data() and loop over that field',
 	where: 'filter the list in data() and loop over that field',
@@ -50,8 +54,16 @@ const REMOVED_FORMATTERS = {
 	reverse: 'reverse the list in data() and loop over that field',
 	compact: 'filter the list in data() (for a short count, use compact_number)',
 	first: 'use items[0] in the expression',
-	last: 'use items.at(-1) in the expression',
+	last: 'use items[items.size - 1] in the expression',
 	noescape: 'use raw',
+	size: 'use the `.size` property (`items.size`)',
+	plus: OPERATOR_HINT,
+	minus: OPERATOR_HINT,
+	times: OPERATOR_HINT,
+	divided_by: OPERATOR_HINT,
+	modulo: OPERATOR_HINT,
+	default: "use `??` (`{ name ?? 'fallback' }`)",
+	split: 'split the string in data()',
 };
 
 // Levenshtein edit distance — tight two-row DP, no dependency. Powers the

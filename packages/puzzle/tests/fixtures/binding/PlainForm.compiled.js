@@ -20,7 +20,7 @@ export default class PlainForm extends PuzzleView {
 	}
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, sizeOf as __z } from '@magic-spells/puzzle';
 
 PlainForm.prototype.render = function () {
   const __d = this.getData();
@@ -34,7 +34,7 @@ PlainForm.prototype.render = function () {
     new ViewNode('input', {
       class: 'size',
       type: 'number',
-      value: __d.profile?.size,
+      value: __z(__d.profile),
       '@change:bind': this.__bind(__d.profile ?? 0, 'size', 'vn'),
     }, []),
     new ViewNode('input', {

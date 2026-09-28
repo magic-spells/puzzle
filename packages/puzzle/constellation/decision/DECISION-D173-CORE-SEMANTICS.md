@@ -214,17 +214,27 @@ answer depends on runtime values, the item says so.
 
 ## Expressions
 
+
 **V1 — the formatter pipe.**
-- **A top-level single `|` is a formatter pipe in every template value
+- **A top-level single `|` is a formatter pipe in every template display
   position, in both hosts:** text interpolation, quoted and brace-only
   attribute values, component props and marker arguments. So
   `title={ price | currency }` calls `currency` in PuzzleKit, where it used to
-  compile to a bitwise OR. The splitting rule is the one text interpolation
-  already uses: `||` stays logical OR, and a `|` inside a string, parentheses
-  or brackets is not a pipe. A chained position reads `expr | chain` as a
-  whole, as text does. `@event` handler bodies are PuzzleKit JavaScript, not
-  value positions, and are untouched. Sites' `{#let}` value is also a pipe
-  position (a Sites addition).
+  compile to a bitwise OR. `||` stays logical OR, and a `|` inside a string, a
+  regex, a template literal or a comment is text. A chained position reads
+  `expr | chain` as a whole, as text does: the base is any expression, and the
+  chain presents its result (`{ price * (1 - discount) | currency }`). `@event`
+  handler bodies are PuzzleKit JavaScript, not value positions, and are
+  untouched. Sites' `{#let}` value is also a pipe position (a Sites addition).
+- **A single `|` below the top level of a value is a positioned compile error
+  in both dialects** ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]): inside
+  parentheses, brackets, braces or a formatter's arguments —
+  `@click={ save(x | trim) }`, `disabled={ !(draft | trim) }`,
+  `{ x | t({ n: a | b }) }`. There is no bitwise OR in templates, so it never
+  falls back to one; the error says to compute the value first. The message:
+  `a formatter pipe must be at the top level of the value — there is no
+  bitwise OR in templates; compute the value first (a data() field in
+  PuzzleKit, {#let} in Sites)`.
 - **A pipe in a condition or loop header is a positioned compile error in both
   dialects:** the `{#if}`, `{:else if}`, `{#unless}` and `{#case}` headers, an
   inline `{#if}` inside an attribute value, a `{:when}` value, and a `{#for}`
@@ -232,26 +242,44 @@ answer depends on runtime values, the item says so.
   helpers; the value a branch tests, and the list a loop walks, are named
   first. Cory, on conditions: "I don't like the idea of formatters being mixed
   in with logic conditions." On loops: "No formatters in for loop headers in
-  both - it adds too much to one line." The error never falls back to a
-  bitwise OR: `||` keeps working in every header, and a parenthesized
-  `(a | b)` is still one. The fix-it names the value first:
+  both - it adds too much to one line." `||` keeps working in every header.
+  The fix-it names the value first:
   - PuzzleKit conditions: `formatter pipes are not allowed in an {#if}
-    condition — compute the value in data() and test that field (e.g. {#if
-    hasTags}), write || for a logical OR, or wrap a bitwise OR in
-    parentheses, e.g. (a | b)`. Each header names itself (`an
-    {:else if} condition`, `an {#unless} condition`, `a {#case} expression`,
-    `an {#if} condition in an attribute value`).
+    condition — compute the value first (a data() field in PuzzleKit, {#let}
+    in Sites) and test that field, e.g. {#if hasTags}; write || for a logical
+    OR`. Each header names itself (`an {:else if} condition`, `an {#unless}
+    condition`, `a {#case} expression`, `an {#if} condition in an attribute
+    value`).
   - PuzzleKit loops: shape the list in `data()` and loop over that field.
   - Sites: name the value with `{#let}`, e.g.
     `{#let filtered = products | where('inStock', true)}`, then
-    `{#for p in filtered}`, or `{#let tagCount = post.tags | size}`, then
-    `{#if tagCount}`.
+    `{#for p in filtered}`, or `{#let status = member.status | downcase}`,
+    then `{#case status}`. A count needs no formatter: `{#if post.tags.size > 0}`.
+- **Each segment after a pipe is a formatter name, bare or called, and
+  nothing else.** A name is
+  `[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*`: an identifier,
+  optionally kebab-cased, where every `-` starts a word with a letter. A
+  call's `(` must be closed by the segment's last `)`. Anything else —
+  `{ flags | 4 }`, `{ a |= 2 }`, `{ mask | bit-1 }`, `{ x | FLAGS.bold }`,
+  `{ a | f(1) + g(2) }`, `{ a | f(b)(c) }` — is a positioned compile error
+  (`%q is not a formatter name (an identifier, optionally kebab-case like
+  my-format) — a top-level | in a template expression is a formatter pipe`),
+  because a registry lookup of that text would pass the value through
+  silently. A dotted name (`fmt.eur`) is therefore not a formatter name,
+  although the runtime registry accepts any non-empty string as a key.
+- **`{#unless}` has one AST shape:** with no chain possible in its header,
+  the parser folds the negation into `Cond` as `!(…)`.
 - **Breaking:** PuzzleKit. A bitwise OR in an attribute or prop becomes a
-  formatter call, and a top-level one in a condition or loop header becomes an
-  error. Sites: no; it already rejected chains in `{#if}`/`{#case}` headers.
+  formatter call; one in a condition or loop header, or nested anywhere,
+  becomes an error. A segment after a pipe that is not a name or a single
+  call (a number, an operator, `bit-1`, a dotted or non-ASCII name, trailing
+  text after the call's `)`) was a registry lookup or a mis-split call in 0.7
+  and is now an error. Sites: no; it already rejected chains in
+  `{#if}`/`{#case}` headers and has no bitwise operators.
 - **Templates:** none found. PuzzleKit and PK apps have 0 pipes in
-  brace-only attributes, props or headers; Sites has 1 of each, both in the
-  `errors/sections/let-misuse.pzl` fixture.
+  brace-only attributes, props or headers and 0 nested pipes; Sites has 1
+  header pipe, in the `errors/sections/let-misuse.pzl` fixture. No `.pzl` in
+  the monorepo uses a formatter name the name rule rejects.
 
 **V2 — `==` and `!=` mean what they mean in JavaScript, in both hosts.**
 Cory: "it's valid js so we should allow valid js."
@@ -280,6 +308,10 @@ Cory: "it's valid js so we should allow valid js."
   one absent value in Go and does what it does. The docs tell authors to
   write `== null`. `??` and `?.` already treat both spellings as absent in
   both hosts.
+- **`??` is the one way to supply a fallback** (D176): `{ nickname ?? name }`
+  replaces only a missing value, so `{ count ?? 'none' }` still prints `0`.
+  The docs say a fallback is `??`, not `||` (which swallows `0` and `''`),
+  and the `default` formatter is gone (D174).
 - **Changes:** none (docs). **Breaking:** no.
 - **Templates:** none found (0 comparisons against a `null` or `undefined`
   literal in any corpus).
@@ -303,9 +335,11 @@ Cory: "it's valid js so we should allow valid js."
 defines `+ - * / %`, unary `-` and `< <= > >=` for number with number, `+` with
 a string operand as concatenation, and ordering for string with string. Any
 other mix is host-defined: PuzzleKit follows JavaScript coercion; Sites yields
-a missing value with a warning. Authors coerce in `data()` (PuzzleKit) or use
-a formatter (`plus`, `times`). No template changes (4 PuzzleKit, 2 PK-app and
-2 Sites arithmetic expressions, all number with number).
+a missing value with a warning. Authors coerce in `data()` (PuzzleKit) or in a
+`{#let}` (Sites). Arithmetic is always the operators: the `plus`/`minus`/
+`times`/`divided_by`/`modulo` formatters are gone (D176, D174). No template
+changes (4 PuzzleKit, 2 PK-app and 2 Sites arithmetic expressions, all number
+with number).
 
 **V8 — object literals join the core, and PuzzleKit's scoping bug is fixed.**
 Object literals are allowed in argument and nested positions, not at the
@@ -424,15 +458,17 @@ dotted tag before. PuzzleKit's barrel resolution
 
 ## Host-specific declarations
 
-**V7 — text units and Unicode.** `.length` on a string counts UTF-16 units in
-PuzzleKit and code points in Sites. Case mapping follows each host's Unicode
-tables (`ß` upcases to `SS` in PuzzleKit and stays `ß` in Sites), and the
-whitespace set `trim` removes differs on U+0085 and U+FEFF. The docs tell
-authors to use the `size` formatter for a text length: the standard
-formatters `size`, `truncate` and `split('')` count code points in both hosts
-(D174). Counting code points in PuzzleKit's `.length` would need a runtime
-helper on every `.length`, since codegen cannot tell a string from a list,
-for a difference that shows only outside the BMP.
+
+**V7 — text units and Unicode.** The count of a string is `.size`, and it is
+code points in both hosts ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]]): Sites
+counts runes, and PuzzleKit compiles `x.size` to a helper that counts code
+points on a string and items on a list, so a JavaScript string's UTF-16
+`.length` never reaches a template (`.length` is a compile error in both
+dialects). `.size` and `truncate` therefore agree on what a character is (a
+code point, not a grapheme cluster). What stays host-specific: case mapping
+follows each host's Unicode tables (`ß` upcases to `SS` in PuzzleKit and
+stays `ß` in Sites), and the whitespace set `trim` removes differs on U+0085
+and U+FEFF.
 
 **V17 — formatter failure policy.** Each host sets its own policy for an
 unknown formatter name, a wrong argument count and out-of-domain input. Sites
@@ -451,6 +487,7 @@ the prefix.
 
 ## Alternatives rejected
 
+
 - **V1: pipes in `{#for}` headers.** Rejected: it puts filtering, sorting and
   the loop on one line. Naming the list first (`data()` in PuzzleKit,
   `{#let}` in Sites) reads better and keeps list shaping out of the header.
@@ -461,6 +498,11 @@ the prefix.
   value a branch tests belongs in `data()` (or a Sites `{#let}`), where it has
   a name; and a chained `{#unless}` needs a negate-after-the-chain rule in
   every host and every AST consumer.
+- **V1: a nested `|` is a bitwise OR** (the 0.8.0 rule before D176: "a `|`
+  inside parentheses or brackets is not a pipe"). Rejected: it let
+  `@click={ save(x | trim) }` compile silently to `save(__d.x | __d.trim)`,
+  and it kept a "wrap a bitwise OR in parentheses" fix-it alive for an operator
+  the core does not have. A nested single `|` is now an error.
 - **V2: `==` means `===` in templates.** Rejected: a PuzzleKit template's
   `==` would mean something different from the same file's `<script>`, which
   redefines valid JavaScript.
@@ -476,8 +518,10 @@ the prefix.
 - **V5: unify on Sites through runtime helpers.** Rejected: work on every
   render in the hottest code, for inputs no correct template produces;
   development-only helpers would make production behave differently.
-- **V7: count code points in PuzzleKit's `.length`.** Rejected: a helper on
-  every `.length` for a difference outside the BMP.
+- **V7: keep `.length`, UTF-16 units in PuzzleKit and code points in Sites.**
+  That was the 0.8.0 rule until D176; rejected there because `.length` reads
+  as JavaScript (and invites `.trim()` beside it) and made the two hosts
+  count differently. `.size` costs one small helper and counts the same.
 - **V10: one host's whitespace rule wholesale.** PuzzleKit's keeps the glued
   prose (`tokens —a,band more`) and makes authors write `{ ' ' }`. Sites'
   brings back indentation gaps between inline-block siblings. See D168.
@@ -493,7 +537,7 @@ the prefix.
   probably be simpler. Lifting the restriction later is an addition.
 - **Leave everything host-defined.** Rejected: it contradicts D172. Host-
   defined is kept only where the difference is inherent to the host (V3's
-  strict comparison, V5, V7, V15, V17 and the V18 styles).
+  strict comparison, V5, V15, V17 and the V18 styles).
 
 ## Build list
 

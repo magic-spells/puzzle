@@ -53,7 +53,7 @@
                 removable
                 @remove={ removeFile }/>
             {/for}
-            {#if files.length === 0}
+            {#if files.size === 0}
               <p class="text-sm text-muted">All attachments removed.
                 <button type="button" class="text-brand underline cursor-pointer" @click={ resetFiles }>Reset</button>
               </p>

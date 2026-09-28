@@ -39,7 +39,7 @@
     <!-- Guest favorites lead the page, but only in the unfiltered view — once a
          category is picked the page is about that category, so this section hides. -->
     {#if activeTag === 'all'}
-      {#if favorites.length > 0}
+      {#if favorites.size > 0}
         <section class="mt-10">
           <div class="flex items-baseline gap-2 mb-5">
             <h2 class="font-display text-2xl font-bold text-fg">Guest favorites</h2>
@@ -58,7 +58,7 @@
          as "Explore stays" or e.g. "Cabins". -->
     <section class="mt-12">
       <h2 class="font-display text-2xl font-bold text-fg mb-5">{ heading }</h2>
-      {#if filtered.length > 0}
+      {#if filtered.size > 0}
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
           {#for listing in filtered, i}
             <ListingCard listing={ listing } index={ i } />

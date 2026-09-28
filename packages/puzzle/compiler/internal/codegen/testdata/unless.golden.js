@@ -7,7 +7,7 @@ export default class Unless extends PuzzleView {
   }
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, sizeOf as __z } from '@magic-spells/puzzle';
 
 Unless.prototype.render = function () {
   const __d = this.getData();
@@ -24,7 +24,7 @@ Unless.prototype.render = function () {
             new ViewNode('text', { value: 'You are verified.' }),
           ]),
         ]),
-    ...(!(__d.items?.length)
+    ...(!(__z(__d.items))
       ? [
           new ViewNode('div', { class: 'empty' }, [
             ...(!(__d.loading)

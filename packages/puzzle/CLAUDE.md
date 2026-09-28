@@ -218,19 +218,22 @@ enforced, not merely advised.
   each `vX.Y.Z`); D173 core semantics (a pipe is a formatter in every value
   position, none in a condition or `{#for}` header, `?.` member guarding, loop domain,
   slot-filled rule, value printing, object-literal args, script-less
-  components); D174 the 35-name standard formatter set, the list-formatter and
+  components); D174 the 27-name standard formatter set, the list-formatter and
   `noescape` removals, and sanitized `raw`; D175 translations (`t`,
-  `ctx.i18n`); D168 rewritten as the merged whitespace rule; plus D169 registry
+  `ctx.i18n`); D176 template expressions as a data language (`.size` for
+  every count, `.length` and calls on data values compile errors, `??` the
+  fallback, the arithmetic/`default`/`size` formatters removed, pipes only
+  where a value is displayed); D168 rewritten as the merged whitespace rule; plus D169 registry
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
   "Upgrading from 0.7" checklist. Production sizes: hello-world **21.6 KB
-  gzip**, todos **25.7 KB gzip**. Cards truthed through D175; the next free
-  decision number is **D176**.
+  gzip**, todos **25.7 KB gzip**. Cards truthed through D176; the next free
+  decision number is **D177**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
   D161 = v1.76, D163 = v1.77, D165 = v1.78, D166 = v1.79, D167 = v1.80,
-  D175 = v1.81; D146, D162, D164, D168 and D170–D174 have no product-line
+  D175 = v1.81; D146, D162, D164, D168, D170–D174 and D176 have no product-line
   entry),
   plus the July
   21 pre-release correctness/performance hardening pass and the July 24

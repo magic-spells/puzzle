@@ -95,7 +95,7 @@
     <!-- ===== Reviews ===== -->
     <section class="border-t border-line pt-8 mt-4">
       <h2 class="text-xl font-semibold text-fg mb-6">★ { listing.rating | rating } · { listing.reviewCount } reviews</h2>
-      {#if reviews.length > 0}
+      {#if reviews.size > 0}
         <div class="grid sm:grid-cols-2 gap-5">
           {#for review in reviews, i}
             <ReviewCard review={ review } index={ i } />

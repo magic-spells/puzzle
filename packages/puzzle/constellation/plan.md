@@ -92,6 +92,14 @@ notes:
       cards across repos. The cards that connected to the moved FILE cards lost those edges, and the
       `../puzzle-lang/...` code_refs on D12, D16, D54, D59, and D70 were dropped. Address the
       parser's code cards with `repo=puzzle-lang`.
+  - kind: state
+    text: >-
+      2026-09-28 — D176 is taken and built ([[DECISION-D176-TEMPLATE-DATA-LANGUAGE]], 0.8.0:
+      template expressions are a data language — `.size` for every count, `.length` and calls on
+      data values compile errors in both dialects, `??` the fallback, the
+      arithmetic/`default`/`size` formatters removed and `split` Sites-only, pipes only where a
+      value is displayed and never nested; D174's standard set is 27 names). **The next free
+      decision number is D177.**
 connected_repos:
   - name: puzzle-lang
     path: ../puzzle-lang
@@ -111,6 +119,7 @@ decision cards explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
+
 
 - **Published:** `0.1.0` (2026-07-21), `0.1.1` (interactive `puzzle init`
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
@@ -199,13 +208,17 @@ decision cards explain why the contract has its current shape.
 - **`0.8.0` is IN PROGRESS** on `release/0.8.0` ([[RELEASE-V0-8-0]]), NOT yet
   published: D170 incremental rendering, D171 `puzzle add theme` and the
   pieces theme system, D172 one language / two dialects with the parser in the
-  `packages/puzzle-lang` Go module, D173 core semantics, D174 the 35-name
+  `packages/puzzle-lang` Go module, D173 core semantics, D174 the 27-name
   standard formatter set with sanitized `raw`, D175 translations (`t`, v1.81),
-  and D168 rewritten as the merged whitespace rule. Heavily breaking for
-  templates; the CHANGELOG opens with an "Upgrading from 0.7" checklist. The
-  never-published `0.7.1` ([[RELEASE-V0-7-1]] — Quick Start via `puzzle init`,
-  D169 registry version floors, the D76 background update notice) is folded
-  in; there will be no `v0.7.1` tag.
+  D176 template expressions as a data language (`.size` for every count,
+  `.length` and calls on data values compile errors in both dialects, `??` the
+  fallback, the arithmetic/`default`/`size` formatters removed, pipes only
+  where a value is displayed), and D168 rewritten as the merged whitespace
+  rule. Heavily breaking for templates; the CHANGELOG opens with an
+  "Upgrading from 0.7" checklist. The never-published `0.7.1`
+  ([[RELEASE-V0-7-1]] — Quick Start via `puzzle init`, D169 registry version
+  floors, the D76 background update notice) is folded in; there will be no
+  `v0.7.1` tag.
 - **0.6 errorView amendment (v1.71, breaking):**
   [[DECISION-D145-ERROR-BOUNDARIES]] rewritten — error fallback UI is one
   app-level `errorView` compiled view with `{ error, info, retry }` props;
@@ -286,7 +299,7 @@ decision cards explain why the contract has its current shape.
   only and independently versioned (all three stamped `0.3.0`); absorbed repos
   are archived, never deleted.
 - **Playground compiler Phase 1:** [[FEATURE-PLAYGROUND-WASM-COMPILER]] / [[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]] adds the esbuild-free parser+codegen WASM module, its synchronous JS globals, the pinned worker envelope, filesystem-free asset diagnostics, and size/dependency/smoke gates. The worker and UI remain later phases.
-- The next free decision number is **D176**.
+- The next free decision number is **D177**.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode

@@ -108,8 +108,10 @@ func TestResolveExpr(t *testing.T) {
 	}
 }
 
+// An update operator is not in the template data language (D176), but a
+// `this.` chain is JavaScript, so its arguments still reach the scanner.
 func TestPostfixUpdateBeforeDivisionPzlCompile(t *testing.T) {
-	src := `<puzzle-view>{ a++ / b / c }</puzzle-view>
+	src := `<puzzle-view>{ this.ratio(a++ / b / c) }</puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {
@@ -129,7 +131,7 @@ export default class T extends PuzzleView {
 	if want := "return index++ / total;"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled output lost script expression %q:\n%s", want, res.JS)
 	}
-	if want := "__s(__d.a++ / __d.b / __d.c, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'a++ / b / c' : 0)"; !strings.Contains(res.JS, want) {
+	if want := "__s(this.ratio(__d.a++ / __d.b / __d.c), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'this.ratio(a++ / b / c)' : 0)"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled output missing %q:\n%s", want, res.JS)
 	}
 }
@@ -265,24 +267,26 @@ func TestScanRegexLiteralUnterminated(t *testing.T) {
 	}
 }
 
+// A template literal is JavaScript, so it is legal only inside a `this.` chain
+// (D176) — where a `}` in a nested literal still must not close the braces.
 func TestNestedTemplateLiteralExpressionCompile(t *testing.T) {
 	const expr = "`outer ${`inner }`}`"
-	res, err := compileTemplate(t, "<puzzle-view>{ "+expr+" }</puzzle-view>", "")
+	res, err := compileTemplate(t, "<puzzle-view>{ this.fmt("+expr+") }</puzzle-view>", "")
 	if err != nil {
 		t.Fatalf("compile nested template literal: %v", err)
 	}
-	if want := "__s(" + expr + ","; !strings.Contains(res.JS, want) {
+	if want := "__s(this.fmt(" + expr + "),"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled expression did not preserve the source bytes %q:\n%s", want, res.JS)
 	}
 }
 
-func TestRegexLiteralImmediatelyAfterBraceCompiles(t *testing.T) {
-	res, err := compileTemplate(t, "<puzzle-view>{/\\d+/.test(x)}</puzzle-view>", "")
-	if err != nil {
-		t.Fatalf("compile no-space regex interpolation: %v", err)
-	}
-	if want := "__s(/\\d+/.test(__d.x),"; !strings.Contains(res.JS, want) {
-		t.Fatalf("compiled output missing %q:\n%s", want, res.JS)
+// A regex right after the opening brace is lexed as one literal — the brace
+// scan must not read its `/` as division — and so reaches the D176 check,
+// which rejects it with its own message rather than a garbled parse error.
+func TestRegexLiteralImmediatelyAfterBraceIsRejected(t *testing.T) {
+	_, err := compileTemplate(t, "<puzzle-view>{/\\d+/.test(x)}</puzzle-view>", "")
+	if err == nil || !strings.Contains(err.Error(), "T.pzl:1:14: "+dataRegexMsg) {
+		t.Fatalf("want the positioned regex-literal error, got %v", err)
 	}
 }
 

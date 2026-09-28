@@ -228,7 +228,7 @@ export default class T extends PuzzleView {}
 // TestCollisionForDefaultAndRenamedImport proves the warning fires for a default
 // import and a renamed named import, but not for the pre-rename exported name.
 func TestCollisionForDefaultAndRenamedImport(t *testing.T) {
-	res := compileResult(t, `<puzzle-view><span>{ Helper.run() }{ bar }</span></puzzle-view>
+	res := compileResult(t, `<puzzle-view><span>{ Helper.label }{ bar }</span></puzzle-view>
 
 <script>
 import Helper from './helper.js';

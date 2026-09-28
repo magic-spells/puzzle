@@ -4,7 +4,7 @@
   {:else}
     <p class="ok">You are verified.</p>
   {/unless}
-  {#unless items.length}
+  {#unless items.size}
     <div class="empty">
       {#unless loading}
         <span>No items yet.</span>

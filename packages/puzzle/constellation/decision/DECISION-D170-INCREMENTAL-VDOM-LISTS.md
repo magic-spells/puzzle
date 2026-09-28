@@ -208,6 +208,13 @@ notes:
       nodes positionally), and its move pass places them. A reused-but-unmounted vnode (a branch
       toggled back on) is a false positive that just takes the re-pair and pairs positionally, as
       before. Tests: tests/static-cache-shift.test.js.
+  - kind: state
+    text: >-
+      Row facts after D176: `x.size` (the template count, lowered to `__z(x)`) records exactly the
+      facts `x.length` did — `todo.size` is the field `size` on the row item, `todo.tags.size` is a
+      deep read. Calls on items and on globals are no longer possible in a value position, so the
+      "call on the item → opaque/deep" and the volatile-global paths are reachable only through
+      `this.` chains and handler arguments, which were already exempt or volatile.
 ---
 
 # D170 — Persistent list blocks and an incremental virtual DOM

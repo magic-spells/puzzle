@@ -5,9 +5,10 @@
 // the same arguments and meaning, and three PuzzleKit-only names: `link` (built
 // by the registry, not here), `timeago` and `in_timezone`. The identical-output
 // part of the standard set is pinned by tests/conformance/formatters.json.
-// List shaping (sort, filter, map, pick) is JavaScript in PuzzleKit — `data()` or
-// a plain expression — so there are deliberately no list formatters here beyond
-// `join` and `size`.
+// List shaping (sort, filter, map, pick, split) is JavaScript in PuzzleKit —
+// `data()` — so there are deliberately no list formatters here beyond `join`.
+// Counting, arithmetic and fallbacks are the template language's own `.size`,
+// operators and `??` (D176), so there are no formatters for those either.
 
 import { calendarISO, isCalendarDate, noDate, parseDateInput } from '../dates.js';
 import { formatLocale, localeNumber } from './locale.js';
@@ -131,13 +132,6 @@ export function replace(v, search, replacement = '') {
 	return needle === '' ? s : s.split(needle).join(str(replacement));
 }
 
-// `''` splits into code points; a missing input is an empty list (D174 F22).
-export function split(v, separator = ',') {
-	if (v == null) return [];
-	const s = str(v);
-	return separator === '' ? [...s] : s.split(separator);
-}
-
 export function strip(v) {
 	return str(v).replace(/^\s+|\s+$/g, '');
 }
@@ -237,35 +231,9 @@ export function pluralize(count, singular, plural) {
 
 // ── Numbers ───────────────────────────────────────────────────────────────────
 
-export function plus(v, n) {
-	return Number(v) + Number(n);
-}
-
-export function minus(v, n) {
-	return Number(v) - Number(n);
-}
-
-export function times(v, n) {
-	return Number(v) * Number(n);
-}
-
-// A zero divisor gives a missing value, which prints nothing and is what the next
-// formatter in the chain receives (D174 F7). No integer division.
-export function divided_by(v, n) {
-	const d = Number(n);
-	return d === 0 ? undefined : Number(v) / d;
-}
-
-// The remainder takes the dividend's sign; a zero divisor gives a missing value
-// (D174 F11).
-export function modulo(v, n) {
-	const d = Number(n);
-	return d === 0 ? undefined : Number(v) % d;
-}
-
 // Rounds half away from zero on the decimal value — `1.005 | round(2)` is 1.01,
 // `2.5 | round` is 3 — and negative places round to tens and hundreds (D174 F19).
-// Returns a number, so a chain keeps doing arithmetic.
+// Returns a number, so a chain can keep formatting it as one.
 export function round(v, places = 0) {
 	let p = Math.trunc(Number(places));
 	if (!Number.isFinite(p)) p = 0;
@@ -296,7 +264,7 @@ export function currency(v, symbol = '$', places = 2) {
 }
 
 // Takes the number as written: `12.5 | percentage(1)` is `12.5%`. A ratio is
-// `ratio | times(100) | percentage` (D174 F14).
+// `ratio * 100 | percentage` (D174 F14, D176).
 export function percentage(v, places = 0) {
 	const n = num(v);
 	if (!Number.isFinite(n)) return str(v);
@@ -334,31 +302,6 @@ export function compact_number(v) {
 }
 
 // ── Values ────────────────────────────────────────────────────────────────────
-
-// `fallback` when the value is missing, `false`, `''` or an empty list. Every
-// other value — `0` and an empty object included — passes through. `default` is
-// a reserved word, so it is exported under an alias; that makes it this module's
-// default export, which the namespace import in builtins-all.js and the
-// compiler's virtual manifest both read by the name `default`.
-function defaultValue(v, fallback) {
-	return v == null || v === false || v === '' || (Array.isArray(v) && v.length === 0)
-		? fallback
-		: v;
-}
-export { defaultValue as default };
-
-// A list's item count, a string's CODE-POINT count, an object's key count, and
-// `0` for anything else, a missing value included (D174 F20).
-export function size(v) {
-	if (Array.isArray(v)) return v.length;
-	if (typeof v === 'string') {
-		let n = 0;
-		for (const _ of v) n++;
-		return n;
-	}
-	if (v && typeof v === 'object') return Object.keys(v).length;
-	return 0;
-}
 
 export function join(arr, sep = ', ') {
 	return Array.isArray(arr) ? arr.join(sep) : str(arr);

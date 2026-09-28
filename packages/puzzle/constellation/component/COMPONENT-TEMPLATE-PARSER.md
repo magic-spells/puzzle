@@ -74,6 +74,19 @@ notes:
       packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
       corrected.
     sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+  - kind: state
+    text: >-
+      D176 rule 4 in the parser (both dialects): a `|` that is not at the top level of a value is a
+      positioned error, never a bitwise OR. `nestedPipeIndex` (scan.go) scans a value with LexSkip
+      and reports the first single `|` (not `||`, not `|=`) found inside parentheses, brackets or
+      braces; `parseChain` (parser.go) calls it on the base and on every formatter argument, so
+      `save(x | trim)` and `!(draft | trim)` fail with "a formatter pipe must be at the top level of
+      the value — there is no bitwise OR in templates; compute the value first (a data() field in
+      PuzzleKit, {#let} in Sites)". The condition-header rule (no pipe in `{#if}`/`{:else
+      if}`/`{#unless}`/`{#case}` subjects, `headerPipeError`) and the single `{#unless}` AST shape
+      (the negation folded into `Cond`, no `Negate` field) landed with PR #157 and stand.
+      `chain_test.go`'s `TestNestedPipeIsError` pins the nested cases. The token lexer and section
+      splitter did not change, so the eslint/prettier ports and the editor grammars need no sweep.
 ---
 
 # Template parser

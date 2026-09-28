@@ -70,19 +70,9 @@ func (p *Plugin) formatterManifest() (string, error) {
 	}
 
 	builtinsPath := filepath.ToSlash(filepath.Join(runtimeDir, "formatters", "builtins.js"))
-	imports := make([]string, len(names))
-	props := make([]string, len(names))
-	for i, name := range names {
-		imports[i], props[i] = name, name
-		// `default` is a reserved word: builtins.js exports that formatter as its
-		// default export, so it needs a local binding name here (D174).
-		if name == "default" {
-			imports[i] = "default as __puzzle_default"
-			props[i] = "default: __puzzle_default"
-		}
-	}
-	return "import { " + strings.Join(imports, ", ") + " } from " + strconv.Quote(builtinsPath) + ";\n" +
-		"export default { " + strings.Join(props, ", ") + " };\n", nil
+	list := strings.Join(names, ", ")
+	return "import { " + list + " } from " + strconv.Quote(builtinsPath) + ";\n" +
+		"export default { " + list + " };\n", nil
 }
 
 // I18nManifestSpecifier is the virtual module the i18n runtime imports for the

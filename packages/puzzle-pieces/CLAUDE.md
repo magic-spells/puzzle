@@ -278,7 +278,7 @@ CLI — it is unrelated and must not be bumped along with the release.
   synthesized write lands in the piece's LOCAL state and the next `data()` commit reverts
   it (dev warns `a data() commit reverted the bound key`). Note `@keydown`/`@blur` do NOT
   suppress — so an edit BUFFER committed on Enter/blur is exactly the shape that silently
-  starts live-binding. Escape with a non-path expression: `value={ String(x) }` plus a
+  starts live-binding. Escape with a non-path expression: `value={ x ?? '' }` plus a
   one-line comment (see NumberField). Verify with the compiler, never by eye: compile the
   `.pzl` and grep the output for `__bind(`.
 - **Morph:** overlay pieces expose an opt-in `morph` prop. Morphable roots must not use

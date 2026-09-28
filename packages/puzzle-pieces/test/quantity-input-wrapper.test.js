@@ -83,11 +83,11 @@ test('the field value is the live clamped prop, wrapped in a non-path expression
 	const template = source.split('<script>')[0];
 	// Puzzle force-syncs `value` on an <input> against the LIVE DOM property on
 	// every patch, so a FROZEN seed would be re-asserted after every render and
-	// revert what the component just wrote. String() keeps the expression off the
+	// revert what the component just wrote. `?? ''` keeps the expression off the
 	// `ident` / `ident.ident` shape the compiler auto-binds; a synthesized bind
 	// would write into this piece's LOCAL state and be reverted by the next data()
 	// commit.
-	assert.match(template, /value=\{ String\(current\) \}/);
+	assert.match(template, /value=\{ current \?\? '' \}/);
 	assert.match(source, /current: value,/);
 	assert.equal(/#seed/.test(source), false, 'the frozen seed is gone — see the header');
 });

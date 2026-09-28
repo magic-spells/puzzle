@@ -42,7 +42,7 @@
       <button
         type="submit"
         class="grid place-items-center w-8 h-8 rounded-full bg-accent text-white hover:bg-accent-2 disabled:bg-surface disabled:text-faint disabled:cursor-not-allowed transition-colors"
-        disabled={ !draft.trim() || busy }
+        disabled={ !this.hasDraft || busy }
         aria-label="Send">
         <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M10 16V4" />
@@ -75,6 +75,13 @@ export default class Composer extends PuzzleView {
       model: this.getData().model ?? 'puzzle-core',
       busy: props.disabled || false,
     };
+  }
+
+  // Read by the template as `this.hasDraft`. A template reads data and never
+  // calls JavaScript on it (no `.trim()` there), and a getter re-reads local
+  // state on every render — setData() re-renders without re-running data().
+  get hasDraft() {
+    return (this.getData().draft ?? '').trim() !== '';
   }
 
   events = {

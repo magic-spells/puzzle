@@ -8,7 +8,7 @@
   {#if post}
     <div>
       <!-- Ancestor chain above the focused chirp (parents oldest → newest). -->
-      {#if ancestors.length}
+      {#if ancestors.size}
         {#for parent in ancestors, i}
           <ChirpCard post={ parent } index={ i } />
         {/for}
@@ -55,7 +55,7 @@
       <ComposeBox replyToId={ post.id } placeholder="Chirp your reply" />
 
       <!-- Replies (oldest first, conversation order). -->
-      {#if replies.length}
+      {#if replies.size}
         {#for reply in replies, i}
           <ChirpCard post={ reply } index={ i } />
         {/for}

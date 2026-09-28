@@ -21,10 +21,10 @@
 
     <section class="mt-10 border-t border-border pt-6">
       <h2 class="text-[1.2rem] text-ink mb-4">
-        { comments.length | pluralize('comment') }
+        { comments.size | pluralize('comment') }
       </h2>
 
-      {#if comments.length > 0}
+      {#if comments.size > 0}
         <ul class="list-none p-0 mb-6 flex flex-col gap-3">
           {#for comment in comments}
             <CommentItem comment={ comment } @remove={ removeComment(comment) }></CommentItem>
@@ -46,7 +46,7 @@
           placeholder="Write a comment…"
           value={ commentText }
           @input={ updateCommentText(event) }></textarea>
-        <button class="inline-block self-start px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark" type="submit" disabled={ !commentText.trim() }>
+        <button class="inline-block self-start px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark" type="submit" disabled={ !this.canComment }>
           Add comment
         </button>
       </form>
@@ -107,6 +107,13 @@ export default class PostDetailView extends PuzzleView {
       commentText: local.commentText,
       authorName: local.authorName
     };
+  }
+
+  // Read by the template as `this.canComment`. A template reads data and never
+  // calls JavaScript on it (no `.trim()` there), and a getter re-reads local
+  // state on every render — setData() re-renders without re-running data().
+  get canComment() {
+    return (this.getData().commentText ?? '').trim() !== '';
   }
 
   events = {

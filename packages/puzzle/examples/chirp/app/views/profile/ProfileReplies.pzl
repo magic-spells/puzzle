@@ -1,7 +1,7 @@
 <puzzle-view>
   <!-- /u/:handle/replies pane: the owner's replies (isReply), newest first. Each
        ChirpCard shows its own "Replying to @x" context line. -->
-  {#if replies.length}
+  {#if replies.size}
     {#for post in replies, i}
       <ChirpCard post={ post } index={ i } />
     {/for}

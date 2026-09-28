@@ -7,7 +7,7 @@ export default class BooleanAttr extends PuzzleView {
   }
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, sizeOf as __z } from '@magic-spells/puzzle';
 
 BooleanAttr.prototype.render = function () {
   const __d = this.getData();
@@ -19,7 +19,7 @@ BooleanAttr.prototype.render = function () {
       autofocus: true,
       '@input:bind': this.__bind(null, 'name', 'v'),
     }, []),
-    new ViewNode('button', { disabled: !__d.name?.trim() }, [
+    new ViewNode('button', { disabled: __z(__d.name) === 0 }, [
       new ViewNode('text', { value: 'Go' }),
     ]),
   ]);

@@ -20,8 +20,8 @@
                `event.key` checks. Enter saves, Escape cancels; focus is grabbed
                once in afterUpdate().
 
-               `value` is wrapped in String(...) to keep this field OUT of
-               implicit binding (D147). Key handlers do not suppress synthesis —
+               `value` carries a `?? ''` fallback to keep this field OUT of
+               implicit binding (D147): it is not a bare path. Key handlers do not suppress synthesis —
                only `@input`/`@change` do — so a bare `value={ playlist.name }`
                here would write the record on every keystroke, and this input is
                an edit buffer, not a live field: Escape could no longer cancel
@@ -32,7 +32,7 @@
             <input
               type="text"
               class="font-display text-3xl sm:text-5xl font-bold text-fg leading-tight bg-transparent border-b-2 border-accent/60 focus:outline-none w-full max-w-xl"
-              value={ String(playlist.name) }
+              value={ playlist.name ?? '' }
               @keydown:enter={ saveRename(event) }
               @keydown:escape={ cancelRename(event) }
               aria-label="Playlist name" />
@@ -44,7 +44,7 @@
           {/if}
 
           <p class="text-muted mt-3">
-            { tracks.length } { tracks.length | plural('song', 'songs') }{#if tracks.length > 0} · { totalMin } min{/if}
+            { tracks.size } { tracks.size | plural('song', 'songs') }{#if tracks.size > 0} · { totalMin } min{/if}
           </p>
 
           <div class="mt-2">
@@ -60,7 +60,7 @@
       </div>
     </header>
 
-    {#if tracks.length > 0}
+    {#if tracks.size > 0}
       <section class="flex flex-col">
         {#for track in tracks, i}
           <TrackRow
