@@ -191,6 +191,8 @@ export class ViewManager {
 				throw err;
 			}
 		}
+		// The one-shot walk (PuzzleView#__walk) is spent once a render lands.
+		if (this.owner) this.owner.__walk = false;
 		this.currentTree = newTree;
 		return newTree;
 	}
@@ -871,6 +873,10 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 				);
 				child.__showErrorView?.(err, info);
 				vnode.instance = null;
+				// The next patch that remounts this position may receive the element
+				// above it as the SAME object (a cached row, slot content), so make
+				// the owner's next render walk down to it (PuzzleView#__walk).
+				if (owner) owner.__walk = true;
 				// Gated: ungated this would ADD the property outside the constructor in a
 				// non-takeover build — exactly the hidden-class transition the gate above
 				// exists to avoid.
@@ -912,6 +918,14 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	// tag test — one property read on the hot path, with the getter reached only
 	// for components.
 	//
+	// A failed component can also sit BELOW a reused element — `<li><Avatar/></li>`
+	// as a cached row, `<Card><div><Widget/></div></Card>` as slot content the
+	// wrapper splices back in by reference — and returning at the element strands
+	// it just the same. The failure handler and an errorView retry set the owner's
+	// one-shot `__walk` flag, so for that one render an element falls through to
+	// the ordinary path, whose walk reaches the dead component and remounts it (a
+	// same-object patch changes nothing else: every compare sees equal values).
+	//
 	// (2) A live component's `el` still has to be refreshed. patchComponent
 	// re-reads `newVnode.el = child.element` on every parent render because a
 	// child can REPLACE its root between renders (a component-mode skeleton whose
@@ -929,7 +943,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	// re-assert and reads `undefined` here.
 	if (oldVnode === newVnode) {
 		const live = newVnode.component;
-		if (live !== null ? !live.isDestroyed : typeof newVnode.tag !== 'function') {
+		if (live !== null ? !live.isDestroyed : typeof newVnode.tag !== 'function' && !owner?.__walk) {
 			if (live !== null) newVnode.el = live.element;
 			// The `controls` list is what reaches controls under a cached ROW ROOT.
 			// It collects from the row vnode down, so a controlled row root is in its

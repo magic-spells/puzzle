@@ -240,7 +240,7 @@ export class PuzzleView {
 	 * PER-RENDER delta, so a block that was not invoked in the immediately
 	 * preceding render (its `{#if}` was false, or its enclosing row was cached)
 	 * never saw the bits that flipped meanwhile and must rebuild every row on its
-	 * next invocation. Retry recovery forces that same condition (see #makeRetry).
+	 * next invocation.
 	 *
 	 * INTERNAL, like `__c`. Declared as a field so every view keeps one hidden
 	 * class, and so a view that renders outside #renderNowInner (the prerender and
@@ -248,6 +248,20 @@ export class PuzzleView {
 	 * nothing for the blocks it runs.
 	 */
 	__rgen = 0;
+
+	/**
+	 * One-shot "walk, don't short-circuit" flag (D170). patch() returns at an
+	 * element vnode that is the SAME object on both sides — a cached list row, a
+	 * static subtree, or slot content a wrapper splices back in by reference — so
+	 * a child component whose mount failed somewhere below it is never revisited.
+	 * The failure handler (viewManager's mountComponent) and an errorView retry
+	 * (#makeRetry) set this on the view whose patch owns the failed position; that
+	 * view's next render walks every element vnode, reaching the destroyed child so
+	 * patch() mounts a fresh one, and the ViewManager clears it afterwards.
+	 *
+	 * INTERNAL, like `__rgen`; declared so every view keeps one hidden class.
+	 */
+	__walk = false;
 
 	// Previous values of `constructor.__roots` — the top-level data() keys some
 	// loop body in this template reads (D170, root dirty mask). Null until the
@@ -740,14 +754,16 @@ export class PuzzleView {
 			this.#errorView = null;
 			face.destroy();
 			const owner = this.__retryParent;
-			// A failed child under a CACHED list row is unreachable by an ordinary
-			// refresh (D170): the row's inputs did not change, the owner's patch takes
-			// the identity short-circuit at the row root, and the destroyed child
-			// underneath is never revisited — the face would vanish and data() would
-			// never re-run. Force the owner's blocks into the "missed a render" state
-			// so every row rebuilds for this one pass; the row state (and with it every
-			// handler and nested block) survives, exactly as a root-mask hit would.
-			if (owner) owner.__rgen++;
+			// A failed child under a REUSED element vnode is unreachable by an
+			// ordinary refresh (D170): a cached list row, or slot content the owner
+			// (a wrapper) splices back in by reference, is the same object on both
+			// sides, the owner's patch takes the identity short-circuit at it, and the
+			// destroyed child underneath is never revisited — the face would vanish
+			// and data() would never re-run. Make the owner's next patch walk those
+			// elements for this one render. (Bumping the owner's render counter would
+			// rebuild only rows of blocks the OWNER runs; slot content belongs to the
+			// caller's blocks, or to none.)
+			if (owner) owner.__walk = true;
 			try {
 				await owner?.refresh();
 			} catch (err) {
