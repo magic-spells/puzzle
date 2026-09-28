@@ -46,35 +46,42 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 	const viewClasses = resolved ? resolved.views : chain.map((node) => node.view);
 	const LayoutClass = resolved ? resolved.layout : entry.layout;
 
-	// Preload each chain level's view (root → leaf), then the layout.
+	// Preload each chain level's view (root → leaf), then the layout. Each instance
+	// is recorded before its preload, so a rejection destroys every one constructed
+	// so far (their store subscriptions included) — the router's partial-chain rule.
 	const instances = [];
-	for (let i = 0; i < chain.length; i++) {
-		const view = new viewClasses[i](ctx);
-		await view.preload({ params: {}, props: {}, route });
-		instances.push(view);
-	}
+	try {
+		for (let i = 0; i < chain.length; i++) {
+			const view = new viewClasses[i](ctx);
+			instances.push(view);
+			await view.preload({ params: {}, props: {}, route });
+		}
 
-	// Assemble the chain leaf-up into nested component vnodes, each adopting its
-	// preloaded instance (mirrors router.js #navigate ~945-958).
-	let childVnode = null;
-	for (let i = chain.length - 1; i >= 0; i--) {
-		const vnode = new ViewNode(viewClasses[i], {}, childVnode ? [childVnode] : []);
-		vnode.instance = instances[i];
-		childVnode = vnode;
-	}
-	let topVnode = childVnode;
+		// Assemble the chain leaf-up into nested component vnodes, each adopting its
+		// preloaded instance (mirrors router.js #navigate ~945-958).
+		let childVnode = null;
+		for (let i = chain.length - 1; i >= 0; i--) {
+			const vnode = new ViewNode(viewClasses[i], {}, childVnode ? [childVnode] : []);
+			vnode.instance = instances[i];
+			childVnode = vnode;
+		}
+		let topVnode = childVnode;
 
-	// A top-level layout wraps the whole chain, hosting it at its <Slot/>.
-	if (LayoutClass) {
-		const layout = new LayoutClass(ctx);
-		await layout.preload({ params: {}, props: {}, route });
-		const layoutVnode = new ViewNode(LayoutClass, {}, [topVnode]);
-		layoutVnode.instance = layout;
-		instances.push(layout);
-		topVnode = layoutVnode;
-	}
+		// A top-level layout wraps the whole chain, hosting it at its <Slot/>.
+		if (LayoutClass) {
+			const layout = new LayoutClass(ctx);
+			instances.push(layout);
+			await layout.preload({ params: {}, props: {}, route });
+			const layoutVnode = new ViewNode(LayoutClass, {}, [topVnode]);
+			layoutVnode.instance = layout;
+			topVnode = layoutVnode;
+		}
 
-	return { topVnode, route, instances };
+		return { topVnode, route, instances };
+	} catch (err) {
+		for (const instance of instances) instance.destroy();
+		throw err;
+	}
 }
 
 /**
