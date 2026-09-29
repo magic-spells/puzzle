@@ -169,7 +169,7 @@ export default class TodoHome extends PuzzleView {
 ## 11. Project layout & build
 
 
-- Source directory: **`app/`** (`app/app.js` is the entry). Output: **`dist/`**.
+- Source directory: **`app/`**. The entry is **`app/app.ts`** when it exists, otherwise **`app/app.js`**; an app with both is a build error naming both files (D54 — one resolver, `build.ResolveEntry`, serves every consumer; [[DOC-SPEC-BUILD]] §13). `puzzle.config.js` stays JavaScript. Output: **`dist/`** (`dist/app.js` either way).
 - Static files: **`app/public/`** is copied verbatim into `dist/` at build. **`app/assets/`** (v1.14, D46) is the inverse — compile-time-only inputs for `{#svg}` inlining (§18), never copied to `dist/`.
 - Translations (v1.81, §66): **`app/locales/<tag>.json`**, one per locale, read only when `puzzle.config.js` declares `i18n: { locales: [...], defaultLocale: '…' }`. `locales` is a non-empty list of distinct BCP 47 tags (`-`, never `_`; compared case-insensitively) and must include `defaultLocale` (the key is `defaultLocale`, not the reserved word `default`). Every listed locale needs a file; an unlisted file is skipped with a warning, and an `app/locales/` folder without `i18n` is a warning. The compiler emits them as `dist/locales/<tag>.<hash>.json` ([[DOC-SPEC-BUILD]]).
 - `.pzl` compilation is implemented as an **esbuild plugin** (esbuild is Go-native): the Go side parses templates and generates render functions; esbuild owns module resolution, bundling, sourcemaps, and minification.
@@ -201,7 +201,9 @@ export default class Home extends PuzzleView {
 - **Transpile-only (like Vite):** esbuild strips types during the build, and the build never type-checks. Checking is the separate `puzzle check` (D165, [[DOC-SPEC-BUILD]] §63), which runs the app's own `tsc` over `.pzl` scripts, template expressions and the app's `.ts` modules; a plain `tsc` or an editor covers the standalone `.ts`/`.js` files and declarations included by `tsconfig.json`, not a `.pzl` `<script>` body. The generated render tail + injected import are plain JS (valid TS), so one loader covers the mixed module: the plugin sets `Loader: LoaderTS`; standalone `pzlc` runs esbuild's Transform API to strip types.
 - **`.pzl` stays the only extension** — a `.pzt` alias was considered and deferred (D54).
 - **Typings:** the package ships `types/index.d.ts` (all four exports + config/store/router/formatters, wired via `exports.types`) and a `puzzle-env.d.ts` shim (`declare module '*.pzl'` → `typeof PuzzleView`) so `import X from './X.pzl'` resolves. `examples/typed-todos` is the worked example.
-- **Scaffold:** `puzzle init --typescript` (or answering yes to the TypeScript prompt, §42) writes the template's TypeScript variant — every component `<script lang="ts">` with a typed `data()` return, props, events and lifecycle hooks; `app/main.ts`, `app/routes.ts` and (todos) the models as `.ts`; a strict/noEmit `tsconfig.json`; and a `package.json` with `typescript` `^7` and `"check": "puzzle check"`. The build entry is always `app/app.js`, so in a TypeScript app it is a one-line `export { default } from './main'`. The default stays JavaScript.
+- **Entry:** a TypeScript app's build entry is **`app/app.ts`** — the build takes it when it exists, otherwise `app/app.js`, and refuses an app with both (§11).
+- **Scaffold:** `puzzle init --typescript` (or answering yes to the TypeScript prompt, §42) writes the template's TypeScript variant — every component `<script lang="ts">` with a typed `data()` return, props, events and lifecycle hooks; the `app/app.ts` entry (where the app is configured and mounted), `app/routes.ts` and (todos) the models as `.ts`; a strict/noEmit `tsconfig.json`; and a `package.json` with `typescript` `^7` and `"check": "puzzle check"`. The default stays JavaScript.
+- **Generate:** in an app with a `tsconfig.json` at the project root, `puzzle generate` writes TypeScript — `<script lang="ts">` component/view/layout stubs with typed props and `data()`, `app/models/<name>.ts`, and an `index.ts` family barrel ([[DOC-SPEC-BUILD]] §13).
 - **Authoring note:** under `strict`/`noImplicitAny`, annotate `data(params, props)` and event-handler params explicitly — TypeScript does not apply contextual typing from a base-class declaration to a subclass class-body override.
 
 ## 29. Scoped styles: `<style scoped>` (v1.27)
@@ -216,11 +218,12 @@ Opt-in per-component style scoping via native CSS `@scope`. Shipped in v1.27 (D5
 
 ## 40. Module resolution — the `@` app alias (v1.42)
 
+
 Every bundled import specifier beginning `@/` resolves to the app's `app/` directory (D75). `import Icon from '@/components/Icon.pzl'` means `<project root>/app/components/Icon.pzl` from any file at any depth — the fix for `../../components/…` climbing once views live in subfolders.
 
 **Contract:**
-- **Always on, not configurable.** No opt-in, no `puzzle.config.js` key. `app/` is already the framework-fixed source root (both build paths hardcode the entry as `app/app.js`), so the anchor needs no configuration. A general `resolve.alias` block stays deferred.
-- **Bundle-wide.** It applies wherever esbuild resolves a specifier: `.pzl` `<script>` blocks, `app.js`, `routes.js`, models, `.ts` files under `<script lang="ts">` (§25), JSON imports. All three build paths get it — `puzzle dev`, `puzzle build`, and the separate prerender bundle of `puzzle build --static` / `--hybrid` (§36).
+- **Always on, not configurable.** No opt-in, no `puzzle.config.js` key. `app/` is already the framework-fixed source root (every build path resolves the entry inside it — `app/app.ts` or `app/app.js`, §11), so the anchor needs no configuration. A general `resolve.alias` block stays deferred.
+- **Bundle-wide.** It applies wherever esbuild resolves a specifier: `.pzl` `<script>` blocks, the app entry, `routes.js`, models, `.ts` files under `<script lang="ts">` (§25), JSON imports. All three build paths get it — `puzzle dev`, `puzzle build`, and the separate prerender bundle of `puzzle build --static` / `--hybrid` (§36).
 - **Relative paths are untouched.** `./` and `../` imports keep working exactly as before; `@/` is additive.
 - **Scoped packages are untouched.** esbuild matches alias keys on segment boundaries, so a bare `@` key catches `@` and `@/…` only: `@magic-spells/puzzle`, `@magic-spells/morph-engine`, and every other scoped package resolve normally. npm cannot publish a package named exactly `@`, so no collision exists.
 - **Module resolution only.** It does NOT apply to `{#svg 'icons/x.svg'}` asset paths (already resolved against `app/assets`, §18), to `<style>` blocks, or to `@import`s inside `styles.css` — different resolvers.

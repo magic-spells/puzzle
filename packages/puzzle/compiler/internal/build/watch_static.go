@@ -70,6 +70,7 @@ type StaticWatchBuilder struct {
 	mu sync.Mutex
 
 	root    string
+	entry   string // ResolveEntry's answer at construction (app/app.ts or app/app.js)
 	outdir  string // <root>/dist
 	warm    string // <root>/.puzzle/tmp/dev-static
 	workTmp string // <root>/.puzzle/tmp
@@ -176,8 +177,9 @@ func NewStaticWatchBuilder(root string, opts StaticWatchOptions) (*StaticWatchBu
 	if err != nil {
 		return nil, fmt.Errorf("resolving app root: %w", err)
 	}
-	if _, err := os.Stat(appEntryPath(absRoot)); err != nil {
-		return nil, fmt.Errorf("entry point not found: %s (expected app/app.js under %s)", appEntryPath(absRoot), absRoot)
+	entry, err := ResolveEntry(absRoot)
+	if err != nil {
+		return nil, err
 	}
 
 	tmpDir, err := ensureWorkTmp(absRoot)
@@ -201,6 +203,7 @@ func NewStaticWatchBuilder(root string, opts StaticWatchOptions) (*StaticWatchBu
 
 	b := &StaticWatchBuilder{
 		root:     absRoot,
+		entry:    entry,
 		outdir:   filepath.Join(absRoot, "dist"),
 		warm:     warm,
 		workTmp:  tmpDir,
@@ -289,7 +292,7 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	// app.js (the one-shot build deletes staging/app.js before the swap), so this
 	// pass exists purely to compile every view once — surfacing errors and
 	// filling the CSS collector — and its bytes are dropped.
-	appOpts := newBundleOptions(b.root, appEntryPath(b.root), filepath.Join(b.warm, "app"), b.appPl, bundleFlags{Dev: true, Takeover: false})
+	appOpts := newBundleOptions(b.root, b.entry, filepath.Join(b.warm, "app"), b.appPl, bundleFlags{Dev: true, Takeover: false})
 	appOpts.Write = false
 	appOpts.Metafile = true
 	appCtx, ctxErr := api.Context(appOpts)
@@ -298,7 +301,7 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	}
 
 	adapterModule := findStaticModule(b.root, "app/adapter.js", "app/adapter.ts")
-	preStdin, err := staticPrerenderStdin(b.root, adapterModule)
+	preStdin, err := staticPrerenderStdin(b.root, b.entry, adapterModule)
 	if err != nil {
 		appCtx.Dispose()
 		return err
@@ -371,6 +374,10 @@ func (b *StaticWatchBuilder) RebuildProfile(changed []string, prof *PhaseProfile
 func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	if err := entryUnchanged(b.root, b.entry); err != nil {
+		return err
+	}
 
 	// Which routes this save can reach, decided BEFORE the compile memo is
 	// evicted: the {#svg} edge classification depends on lives in that memo's
@@ -879,7 +886,7 @@ func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, e
 		if err != nil {
 			return nil, err
 		}
-		src, err := staticEntrySource(b.root, page, summary, modelsModule, formattersModule, adapterModule)
+		src, err := staticEntrySource(b.root, b.entry, page, summary, modelsModule, formattersModule, adapterModule)
 		if err != nil {
 			return nil, err
 		}

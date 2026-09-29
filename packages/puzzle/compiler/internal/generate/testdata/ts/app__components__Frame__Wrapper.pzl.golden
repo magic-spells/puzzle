@@ -1,0 +1,35 @@
+<puzzle-view>
+  <div class={ classes }>
+    <Children/>
+  </div>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// `class` is the usual caller override prop.
+interface WrapperProps {
+  class?: string;
+}
+
+// What data() hands the template.
+interface WrapperModel {
+  classes: string;
+}
+
+export default class Wrapper extends PuzzleView {
+  // Family members compose: <Children/> above renders whatever the caller
+  // nests inside <Wrapper>.
+  data(_params: Record<string, string>, props: WrapperProps): WrapperModel {
+    return {
+      classes: ['Wrapper', props.class].filter(Boolean).join(' '),
+    };
+  }
+}
+</script>
+
+<style>
+.Wrapper {
+  display: block;
+}
+</style>

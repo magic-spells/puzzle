@@ -45,11 +45,12 @@ type Plugin struct {
 }
 
 // New creates a Plugin rooted at the app directory (the directory containing
-// app/app.js). appRoot should be absolute. The root is symlink-resolved up
-// front so relName() compares like with like: esbuild reports args.Path with
-// symlinks resolved, and an unresolved root (macOS /var → /private/var, a
-// symlinked project dir) would make filepath.Rel fall back to the absolute
-// path — hashing a machine-specific string into ScopeID (D59 byte-stability).
+// the app/app.ts or app/app.js entry). appRoot should be absolute. The root is
+// symlink-resolved up front so relName() compares like with like: esbuild
+// reports args.Path with symlinks resolved, and an unresolved root (macOS
+// /var → /private/var, a symlinked project dir) would make filepath.Rel fall
+// back to the absolute path — hashing a machine-specific string into ScopeID
+// (D59 byte-stability).
 func New(appRoot string) *Plugin {
 	appRoot = resolveSymlinks(appRoot)
 	return &Plugin{

@@ -27,8 +27,9 @@ var fixturesConfigCandidates = []string{"app/fixtures.js", "app/fixtures.ts"}
 // fixturesWrapper is the generated `--fixtures` entry (D98) and the bookkeeping
 // the build needs around it.
 type fixturesWrapper struct {
-	// Entry is the module esbuild bundles instead of app/app.js. Its BASE NAME is
-	// app.js so the output still lands at dist/app.js.
+	// Entry is the module esbuild bundles instead of the app entry (app/app.ts or
+	// app/app.js). Its BASE NAME is app.js so the output still lands at
+	// dist/app.js.
 	Entry string
 	// wiring is the sibling module that installs the fixtures runtime; appEntry is
 	// the app's real entry. Both are imported by Entry, and both are forced
@@ -73,10 +74,10 @@ func fixturesConflictError(mode string) error {
 }
 
 // prepareFixtures validates the `--fixtures` request for the app at absRoot and
-// generates its wrapper entry. mode is the resolved output mode (see
-// resolveOutputMode); a prerender mode is rejected here rather than after a
-// pointless bundle pass.
-func prepareFixtures(absRoot, mode string) (fixturesWrapper, error) {
+// generates its wrapper entry around appEntry (ResolveEntry's answer). mode is
+// the resolved output mode (see resolveOutputMode); a prerender mode is rejected
+// here rather than after a pointless bundle pass.
+func prepareFixtures(absRoot, appEntry, mode string) (fixturesWrapper, error) {
 	if mode != "" {
 		return fixturesWrapper{}, fixturesConflictError(mode)
 	}
@@ -84,7 +85,7 @@ func prepareFixtures(absRoot, mode string) (fixturesWrapper, error) {
 	if configPath == "" {
 		return fixturesWrapper{}, errMissingFixturesConfig()
 	}
-	return generateFixturesEntry(absRoot, configPath)
+	return generateFixturesEntry(absRoot, appEntry, configPath)
 }
 
 // generateFixturesEntry writes the two-file `--fixtures` wrapper under
@@ -100,8 +101,8 @@ func prepareFixtures(absRoot, mode string) (fixturesWrapper, error) {
 // installing the prototype patches too late to matter. Only a DEPENDENCY
 // module's body is guaranteed to run before the importing module's body, so the
 // wiring gets its own module and the entry imports it first.
-func generateFixturesEntry(absRoot, configPath string) (fixturesWrapper, error) {
-	w := fixturesWrapper{appEntry: filepath.Join(absRoot, "app", "app.js")}
+func generateFixturesEntry(absRoot, appEntry, configPath string) (fixturesWrapper, error) {
+	w := fixturesWrapper{appEntry: appEntry}
 
 	workDir := filepath.Join(absRoot, puzzleWorkDir)
 	if _, err := os.Stat(workDir); err != nil {
@@ -144,9 +145,9 @@ func generateFixturesEntry(absRoot, configPath string) (fixturesWrapper, error) 
 // modules are believed to have side effects, and the nearest package.json
 // decides that. `@magic-spells/puzzle` itself declares "sideEffects": false, so
 // any app built INSIDE the framework repo (the examples, the compiler's own
-// tests) resolves that field for both the generated wrapper and app/app.js and
-// drops both imports — an empty bundle, silently. Under a normal build app/app.js
-// is the ENTRY POINT, which esbuild never drops, so the hazard is unique to this
+// tests) resolves that field for both the generated wrapper and the app entry
+// and drops both imports — an empty bundle, silently. Under a normal build the
+// app entry is the ENTRY POINT, which esbuild never drops, so the hazard is unique to this
 // wrapper. Overriding SideEffects at resolve time removes the dependence on
 // whatever package.json happens to sit above the app.
 func (w fixturesWrapper) Plugin() api.Plugin {

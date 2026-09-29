@@ -1,0 +1,4 @@
+Register it in app/models/index.ts:
+    import User from './user';
+    // then add to the registry object:
+    user: User

@@ -1,0 +1,36 @@
+<puzzle-view class="Admin">
+  <header>
+    <h1>{ title }</h1>
+  </header>
+
+  <main>
+    <Slot/>
+  </main>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+interface AdminProps {
+  title?: string;
+}
+
+// What data() hands the template.
+interface AdminModel {
+  title: string;
+}
+
+export default class Admin extends PuzzleView {
+  data(_params: Record<string, string>, props: AdminProps): AdminModel {
+    return {
+      title: props.title || 'Admin',
+    };
+  }
+}
+</script>
+
+<style>
+.Admin {
+  display: block;
+}
+</style>

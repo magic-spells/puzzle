@@ -213,7 +213,9 @@ func TestGenerateFixturesEntryShape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w, err := generateFixturesEntry(root, configPath)
+	// A TypeScript app: the wrapper imports whatever entry ResolveEntry chose.
+	appEntry := filepath.Join(root, "app", "app.ts")
+	w, err := generateFixturesEntry(root, appEntry, configPath)
 	if err != nil {
 		t.Fatalf("generateFixturesEntry: %v", err)
 	}
@@ -246,7 +248,7 @@ func TestGenerateFixturesEntryShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	wiringIdx := strings.Index(string(wrapper), filepath.ToSlash(filepath.Join(root, ".puzzle", "fixtures", "wiring.js")))
-	appIdx := strings.Index(string(wrapper), filepath.ToSlash(filepath.Join(root, "app", "app.js")))
+	appIdx := strings.Index(string(wrapper), filepath.ToSlash(appEntry))
 	if wiringIdx < 0 || appIdx < 0 {
 		t.Fatalf("wrapper entry must import both the wiring module and the app entry:\n%s", wrapper)
 	}
@@ -255,7 +257,7 @@ func TestGenerateFixturesEntryShape(t *testing.T) {
 	}
 
 	// A second call is a no-op on the dir it did not create.
-	if again, err := generateFixturesEntry(root, configPath); err != nil || again.CreatedWorkDir {
+	if again, err := generateFixturesEntry(root, appEntry, configPath); err != nil || again.CreatedWorkDir {
 		t.Errorf("regenerating: CreatedWorkDir = %v, err = %v; want false, nil", again.CreatedWorkDir, err)
 	}
 }

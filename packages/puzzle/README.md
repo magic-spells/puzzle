@@ -127,12 +127,14 @@ npm run dev
 ```
 
 Every component is `<script lang="ts">` with typed `data()`, props, events and
-lifecycle hooks, the modules are `.ts` (`main.ts`, `routes.ts`, the todos
-template's models), and `package.json` adds `typescript` plus a `check` script.
-`app/app.js` stays as a one-line entry that re-exports `main.ts`, because the
-build always starts from that path. The build strips types without checking
-them; `npm run check` is the type check, under the strict `tsconfig.json` the
-scaffold writes.
+lifecycle hooks, the modules are `.ts` — the build entry `app/app.ts`,
+`routes.ts`, the todos template's models — and `package.json` adds
+`typescript` plus a `check` script. The build starts from `app/app.ts` when it
+exists, otherwise `app/app.js`, and refuses an app that has both. It strips
+types without checking them; `npm run check` is the type check, under the
+strict `tsconfig.json` the scaffold writes. In an app with that
+`tsconfig.json`, `puzzle generate` writes TypeScript too: `<script lang="ts">`
+stubs, `app/models/<name>.ts`, and an `index.ts` family barrel.
 
 ### Other platforms, or building from source
 
@@ -761,7 +763,8 @@ The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-
 puzzle init my-app --template todos
 puzzle init my-app --template todos --typescript
 
-# Generate a stub (component, view, layout, or model)
+# Generate a stub (component, view, layout, or model) — TypeScript stubs in an
+# app with a tsconfig.json
 puzzle generate component UserCard --path components/ui/
 
 # Wire up Tailwind, install a piece (see Puzzle Pieces above), or run diagnostics

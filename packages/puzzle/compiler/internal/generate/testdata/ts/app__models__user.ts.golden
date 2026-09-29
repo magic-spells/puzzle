@@ -1,0 +1,35 @@
+import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+
+// The fields a User record carries. Puzzle records are dynamic — the schema
+// below sets their fields at runtime — so this interface is the hand-written
+// view of that schema the rest of the app types against. Keep the two in step.
+export interface UserFields {
+  id: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export default class User extends PuzzleModel {
+  // Schema definition — see constellation/doc/DOC-SPEC.md §7
+  static schema = {
+    id:        Puzzle.string().primary(),
+    name:      Puzzle.string().required(),
+    createdAt: Puzzle.date().default(() => new Date()),
+    updatedAt: Puzzle.date().default(() => new Date())
+  };
+
+  // Computed properties — plain getters (constellation/doc/DOC-SPEC.md §7)
+  get displayName(): string {
+    return this.name;
+  }
+
+  // Server location (D21/D157). To enable loadMany/loadOne/save/delete, import
+  // the adapter capability in app.ts and pass it once to PuzzleApp.
+  static adapter = {
+    endpoint: '/api/users',
+  };
+}
+
+// A User record: the model's methods and getters plus the schema's fields.
+export type UserRecord = User & UserFields;

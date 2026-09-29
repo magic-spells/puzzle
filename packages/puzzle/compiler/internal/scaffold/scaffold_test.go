@@ -173,7 +173,7 @@ func TestTodosSeedsInsteadOfFetching(t *testing.T) {
 		t.Errorf("app/app.js seeds no todo records:\n%s", appJS)
 	}
 
-	// The TypeScript variant tells the same data story from app/main.ts.
+	// The TypeScript variant tells the same data story from its app/app.ts entry.
 	tsRes, err := Create(t.TempDir(), "tasks", "todos", true)
 	if err != nil {
 		t.Fatalf("Create (typescript): %v", err)
@@ -185,14 +185,14 @@ func TestTodosSeedsInsteadOfFetching(t *testing.T) {
 	if strings.Contains(string(tsModel), "endpoint:") || strings.Contains(string(tsModel), "static adapter") {
 		t.Errorf("app/models/todo.ts declares a server location; the todos starter has no server:\n%s", tsModel)
 	}
-	mainTS, err := os.ReadFile(filepath.Join(tsRes.Dir, "app", "main.ts"))
+	appTS, err := os.ReadFile(filepath.Join(tsRes.Dir, "app", "app.ts"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(mainTS), "apiURL:") ||
-		!strings.Contains(string(mainTS), "beforeMount") ||
-		!strings.Contains(string(mainTS), "createRecord('todo'") {
-		t.Errorf("app/main.ts must seed the store in beforeMount and declare no apiURL:\n%s", mainTS)
+	if strings.Contains(string(appTS), "apiURL:") ||
+		!strings.Contains(string(appTS), "beforeMount") ||
+		!strings.Contains(string(appTS), "createRecord('todo'") {
+		t.Errorf("app/app.ts must seed the store in beforeMount and declare no apiURL:\n%s", appTS)
 	}
 }
 
@@ -252,11 +252,10 @@ func TestCreateTypeScriptVariants(t *testing.T) {
 		"default": {
 			".gitignore",
 			"README.md",
-			"app/app.js",
+			"app/app.ts",
 			"app/assets/icons/heart.svg",
 			"app/components/Counter.pzl",
 			"app/layouts/Default.pzl",
-			"app/main.ts",
 			"app/public/index.html",
 			"app/routes.ts",
 			"app/styles/styles.css",
@@ -268,10 +267,9 @@ func TestCreateTypeScriptVariants(t *testing.T) {
 		"todos": {
 			".gitignore",
 			"README.md",
-			"app/app.js",
+			"app/app.ts",
 			"app/components/TodoItem.pzl",
 			"app/layouts/Default.pzl",
-			"app/main.ts",
 			"app/models/index.ts",
 			"app/models/todo.ts",
 			"app/public/index.html",

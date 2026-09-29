@@ -486,9 +486,12 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `puzzle init` (`default`/`todos`). `--typescript` (or yes at the TTY
   prompt, D54) writes the template's TypeScript variant: `<script lang="ts">`
   components with typed `data()`, props, events and lifecycle hooks, `.ts`
-  modules behind a one-line `app/app.js` entry, a strict `tsconfig.json`, and a
-  `package.json` adding `typescript` `^7` and `"check": "puzzle check"`.
-- `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
+  modules with the app set up in the `app/app.ts` entry, a strict
+  `tsconfig.json`, and a `package.json` adding `typescript` `^7` and
+  `"check": "puzzle check"`.
+- `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`. The
+  build entry is `app/app.ts` when it exists, otherwise `app/app.js`; an app
+  with both is an error naming both files (D54). The output is `dist/app.js`.
 - `puzzle check [dir]` (D165): type-checks the app's `.pzl` script bodies and
   template expressions by emitting virtual files under `.puzzle/check/` and
   running the app's own TypeScript over them — `node
@@ -523,7 +526,11 @@ second specification. Decision cards hold rationale and git holds chronology.
   rewrites only the family's own files. The printed import hint follows
   `--path` — a family directory under `app/` prints the `@` alias form, anything
   else the project-relative path. Without `--family`, output is byte-identical
-  to before.
+  to before. In a TypeScript app — a `tsconfig.json` at the project root (D54)
+  — every stub is TypeScript: `<script lang="ts">` with typed props and a typed
+  `data()` model, `app/models/<name>.ts` with a fields interface and record
+  type, an `index.ts` family barrel, and a model hint naming
+  `app/models/index.ts`. A JavaScript app's stubs are unchanged.
 - `puzzle add tailwind`, `puzzle add piece`, and `puzzle add theme <name…>`
   (D171: copies a registry palette — the default into `app/styles/pieces.css`,
   any other into `app/styles/themes/<name>.css` — recorded in `pieces.lock`;

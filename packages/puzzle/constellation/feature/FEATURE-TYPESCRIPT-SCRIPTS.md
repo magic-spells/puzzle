@@ -31,6 +31,7 @@ type annotations, `getData<T>()` — with the build stripping types transpile-on
 ## Scope
 
 
+
 **In (shipped):**
 - **Parser** ([[COMPONENT-TEMPLATE-PARSER]], `sections.go`): the section splitter
   reads the `lang` attribute on `<script>` into `Sections.ScriptsLang`
@@ -48,18 +49,26 @@ type annotations, `getData<T>()` — with the build stripping types transpile-on
   surface + store/router/formatters + `Route`/`ctx`), wired via package.json
   `exports.types`; `puzzle-env.d.ts` shim (`declare module '*.pzl'`). Both added
   to `files`.
+- **Build entry:** `app/app.ts` when it exists, else `app/app.js`; both is an
+  error naming both files. One helper (`build.ResolveEntry`) serves build, both
+  dev watchers, both prerender passes, `--fixtures` and `puzzle doctor`
+  (0.8.0 — see D54).
 - **CLI:** `puzzle init --typescript` (D32 surface) scaffolds the template's
   TypeScript variant — the `templates/<name>-ts/` overlay over the JavaScript
-  tree: `<script lang="ts">` components, `.ts` modules behind a one-line
-  `app/app.js` entry, and a `package.json` with `typescript` plus a
+  tree: `<script lang="ts">` components, `.ts` modules with the app set up in
+  the `app/app.ts` entry, and a `package.json` with `typescript` plus a
   `puzzle check` script — then writes a strict/noEmit `tsconfig.json` (via
   `scaffold.WriteTypeScriptConfig`, which refuses to clobber an existing one).
-  Default stays JS. (v1.22 shipped only the tsconfig; the typed scaffold landed
-  in 0.8.0 — see D54.)
+  Default stays JS. In an app with that `tsconfig.json`, `puzzle generate`
+  writes TypeScript stubs (`<script lang="ts">`, `app/models/<name>.ts`, an
+  `index.ts` family barrel). (v1.22 shipped only the tsconfig; the typed
+  scaffold, the `app/app.ts` entry and TypeScript `generate` landed in 0.8.0 —
+  see D54.)
 - **Editor:** the Sublime grammar embeds `source.ts` for `<script lang="ts">`
   (the `lang="ts"` rule precedes the plain-JS rule).
-- **Example:** `examples/typed-todos` — typed model (`todo.ts` + `TodoRecord`),
-  typed routes, and `lang="ts"` `.pzl` files (typed `data()`/props/events).
+- **Example:** `examples/typed-todos` — `app/app.ts` entry, typed model
+  (`todo.ts` + `TodoRecord`), typed routes, and `lang="ts"` `.pzl` files (typed
+  `data()`/props/events).
 
 **Out (deferred in D54):** the `.pzt` extension alias; type-checking in the
 build; `tsc` invocation by `puzzle build` (checking arrived as the separate

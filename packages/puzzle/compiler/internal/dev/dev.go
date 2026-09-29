@@ -153,8 +153,9 @@ type Options struct {
 }
 
 // Serve runs the dev loop for the app rooted at root (the directory holding
-// app/app.js). It performs an initial development build, serves root/dist,
-// watches root/app, and blocks until SIGINT/SIGTERM or a fatal server error.
+// the app/app.ts or app/app.js entry). It performs an initial development
+// build, serves root/dist, watches root/app, and blocks until SIGINT/SIGTERM or
+// a fatal server error.
 //
 // A failing build — at startup or on any change — is printed (with esbuild's
 // positioned diagnostics) but never terminates the process: whatever dist/

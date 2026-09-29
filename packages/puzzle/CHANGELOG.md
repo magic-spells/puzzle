@@ -600,13 +600,24 @@ checklist sent you.
   yes to the TypeScript prompt, or passing the flag, used to add only a
   `tsconfig.json` to the JavaScript starter. Both templates now have a
   TypeScript variant: every component is `<script lang="ts">` with typed
-  `data()`, props, events and lifecycle hooks; the modules are `.ts`
-  (`main.ts`, `routes.ts`, and the todos template's models), with
-  `app/app.js` kept as a one-line entry that re-exports `main.ts`, because
-  the build always starts from that path; and `package.json` adds
-  `typescript` `^7` plus a `check` script that runs `puzzle check`. Both
-  variants pass `puzzle check` clean under the strict tsconfig on
-  TypeScript 6 and 7. The JavaScript scaffold is unchanged byte for byte.
+  `data()`, props, events and lifecycle hooks; the modules are `.ts` — the
+  `app/app.ts` entry, `routes.ts`, and the todos template's models; and
+  `package.json` adds `typescript` `^7` plus a `check` script that runs
+  `puzzle check`. Both variants pass `puzzle check` clean under the strict
+  tsconfig on TypeScript 6 and 7. The JavaScript scaffold is unchanged byte
+  for byte.
+- **`app/app.ts` is a build entry.** `puzzle build`, `puzzle dev`, both
+  prerender modes, `--fixtures` and `puzzle doctor` start from `app/app.ts`
+  when it exists, otherwise `app/app.js`. An app with both fails with an error
+  naming both files rather than picking one, and a `puzzle dev` session asks
+  for a restart if its entry is renamed mid-session. `puzzle.config.js` stays
+  JavaScript. The output is still `dist/app.js`.
+- **`puzzle generate` writes TypeScript in a TypeScript app.** In a project
+  with a `tsconfig.json` at its root, component, view and layout stubs are
+  `<script lang="ts">` with typed props and a typed `data()` model, a model is
+  `app/models/<name>.ts` with a typed fields interface and record type, a
+  family's barrel is `index.ts`, and the model hint points at
+  `app/models/index.ts`. A JavaScript app's stubs are unchanged byte for byte.
 - **puzzle-pieces: 100 pieces.** New: `image-zoom` (a wrapper over
   `@magic-spells/image-zoom`), `split-text`, `hamburger` (a menu button with
   converge, twist and slide motion), and CSS-only loading motion — `spinner`
