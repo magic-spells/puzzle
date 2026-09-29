@@ -74,18 +74,36 @@ officially support dot-notation component tags backed by namespace imports —
 neither supports multi-component SFC files. Puzzle's codegen already emitted a
 component tag's text verbatim as a JS expression, so `<Frame.Wrapper>`
 *accidentally* compiled to `new ViewNode(Frame.Wrapper, …)` — but nothing
-validated component names at all: a capitalized `Frame-x` or `Frame.`
-compiled cleanly into syntactically broken JS. Meanwhile a Frame/Wrapper/
-Content family cost three import lines.
+validated component names at all: a component tag spelled `Frame-x` or
+`Frame.` compiled cleanly into syntactically broken JS. Meanwhile a Frame/
+Wrapper/Content family cost three import lines.
 
 ## Decision
 
-- **Dotted component tags are official grammar.** A capitalized tag name must
-  be a valid member path: `Ident('.'Ident)*`, each segment
-  `[A-Za-z_][A-Za-z0-9_]*`. Any other capitalized name (`-`, `:`, empty
-  segment, trailing dot) is a positioned compile error — closing the
-  broken-JS emission hole. Lowercase tags (HTML elements, custom elements
-  with dashes) are untouched.
+- **A component tag is any tag that cannot be an HTML element.** A tag is a
+  component when its first character is anything other than an ASCII
+  lowercase letter `a`–`z`, the only characters that can begin an HTML element
+  name. `<Card>`, `<Übersicht>`, `<概要>`, `<Frame.Übersicht>`, `<ärmel>` and
+  `<_foo>` are components; `<straße-karte>` is a custom element.
+- **Tag names follow JavaScript's identifier rules past ASCII.** A tag name
+  starts with `A`–`Z`, `a`–`z`, `_` or a non-ASCII `ID_Start` letter, and
+  continues with the ASCII name characters (letters, digits, `_`, `-`, `:`)
+  or `ID_Continue` runes, plus the `.` family separator — the
+  `jsident.IsIDStart`/`IsIDContinue` rule the expression language and the
+  compiler's `<script>` scan share (D176), so a component tag takes any name
+  its `<script>` can import. `$` is never part of a tag name, so `<$50` stays
+  text. In text, a `<` directly followed by a letter of any script opens a
+  tag, so `値<上限` is the same "unexpected character" error `a<b` always was;
+  a `<` followed by a space is text.
+- **Dotted component tags are official grammar.** A component tag's name
+  must be a valid member path: `Ident('.'Ident)*`, each segment a `$`-free
+  JavaScript identifier. Any other component name (`-`, `:`, an empty
+  segment, a trailing dot, a segment that starts with a digit such as
+  `<Frame.٣x>`) is a positioned compile error — closing the broken-JS emission
+  hole. Lowercase tags (HTML elements, custom elements with dashes,
+  namespaced SVG) are untouched.
+- **Attribute and prop names may be non-ASCII** on any tag:
+  `<Card größe={ 3 }>` passes the prop the child reads as `props.größe`.
 - **Reserved roots stay reserved.** A dotted name whose first segment is
   `Children`, `Slot`, `Snippet`, or `Portal` is a positioned error steering
   away from the marker names (extends D134's "capitalization means the
@@ -116,14 +134,28 @@ Content family cost three import lines.
   filename→property rules, collides with Node directory resolution the
   moment a real `index.js` appears, invisible to TS, and breaks the "imports
   are real JS that esbuild resolves with zero framework opinions" property.
+- **Capitalization as the component test, with ASCII segments** (a component
+  tag starts with `A`–`Z`, each segment `[A-Za-z_][A-Za-z0-9_]*`) — rejected:
+  a `<script>` class may carry any JavaScript identifier name (`Übersicht`,
+  `概要`, `Straßenkarte`), and an ASCII-only tag lexer read
+  `<Straßenkarte ort={ titel } />` as `<Stra>` with an attribute `ßenkarte`
+  (a ReferenceError at render) and `<Übersicht />` as text. Only `a`–`z` can
+  begin an HTML element name, so every other first character names a
+  component without ambiguity.
 
 ## Consequences
 
+
 - Parser gains component-name validation (component branch of parseElement);
   goldens pin the member-expression emission; error tests pin the rejects.
-- `puzzle-eslint` / `puzzle-prettier` need no change — their vendored lexers
-  already accept `.` and neither classifies tags. Editor grammar repos
-  (vscode/sublime/zed): verify component-tag highlighting accepts dots.
+- A leading `_` names a component (`<_foo>`), since `_` cannot begin an HTML
+  element name; no corpus file spells an element that way.
+- `puzzle-eslint` / `puzzle-prettier` need no change — neither lexes template
+  tags or classifies components (the section splitter treats a template body
+  as opaque, and prettier passes it through). The editor grammar repos
+  (vscode/sublime/zed) must accept dotted component tags and a component start
+  that is any identifier letter other than `a`–`z`; their ASCII `[A-Z]`
+  component class predates the Unicode rule.
 - `puzzle check` (D165) must type the member-expression tag like any emitted
   expression — verified as part of the build.
 - Docs sweep: SPEC template section, DOC-TEMPLATE-SYNTAX, PUZZLE_FILE, the

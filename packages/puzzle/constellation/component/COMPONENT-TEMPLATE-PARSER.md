@@ -200,7 +200,10 @@ the valued one. Event names are exempt: the colon is their modifier channel, and
 on any event; key filters stay keyboard-only), static islands, literal inline
 SVG roots/paths, list identifiers/keys, and unique static refs. `ScanSVGFile`
 skips a leading UTF-8 byte-order mark before its prolog scan, and its error
-positions stay in file coordinates.
+positions stay in file coordinates. An attribute name on any tag may carry
+non-ASCII letters (`attrStartRuneLen`/`attrRuneLen` in lexer.go: a letter
+first, then letters, marks and digits), so `<Card größe={ 3 }>` passes the
+prop `größe`.
 
 **HTML void elements close at their start tag.** The void set is `area base br
 col embed hr img input link meta source track wbr` (`voidElements` in
@@ -213,20 +216,37 @@ byte-identical to the self-closed spelling (codegen's
 with no children or end tag. A closing tag for a void element (`</input>`, a
 stray `</br>`) is a positioned error at the closer, from `checkCloser`:
 "`<input>` is a void element and has no closing tag — remove the `</input>`".
-The rule holds inside `{#raw}`, where HTML stays structural; a capitalized
-`<Input>` or `<BR>` is a component, never void (D167); a `{#svg}` file's body is
+The rule holds inside `{#raw}`, where HTML stays structural; `<Input>` or
+`<BR>` is a component, never void (D167); a `{#svg}` file's body is
 never parsed, so it is unaffected. `OverNestingDepth` (depth.go) skips void
 start tags and stray void closers, so a row of `<br>`s is not read as nesting.
 
-Component-name grammar ([[DECISION-D167-COMPONENT-FAMILIES]]): a capitalized
-tag that survives marker resolution must be a valid member path —
-`Ident('.'Ident)*`, each segment `[A-Za-z_][A-Za-z0-9_]*` — enforced by
-`checkComponentName` immediately ahead of the parser's single `*Component`
-construction site, so every classification path (template and skeleton bodies,
-conditional/loop/case bodies, marker fallback bodies, Snippet and Portal
-children) is covered. Any other capitalized name (a `-`, a `:`, an empty
-segment) is a positioned compile error. A dotted name whose first segment is a
-marker name (`<Slot.Foo>`) gets a steering error; the check does not run inside
+**Tag names and components** ([[DECISION-D167-COMPONENT-FAMILIES]]). The lexer
+reads a tag name with JavaScript's identifier rules past ASCII
+(`startsTagName`/`tagNameEnd`, lexer.go): it starts with an ASCII letter, `_`
+or a non-ASCII `jsident.IsIDStart` rune and continues with the ASCII name
+characters (letters, digits, `_`, `-`, `:`, `.`) or a non-ASCII
+`jsident.IsIDContinue` rune — the rule the expression lexer and the compiler's
+`<script>` scan share, so a component tag takes any name its script can
+import. `$` never belongs to a tag name, so `<$50` is text; a `<` that no name
+start follows is a lone text `<`, and in text a `<` directly before a letter
+of any script opens a tag (`値<上限` is an error, as `a<b` always was). A tag
+is a component when its first character is anything other than an ASCII
+lowercase letter (`isComponentName`, parser.go) — the only characters that
+can begin an HTML element name — so `<Card>`, `<Übersicht>`, `<概要>`,
+`<Frame.Übersicht>`, `<ärmel>` and `<_foo>` are components and
+`<straße-karte>` is a custom element.
+
+Component-name grammar: a component tag that survives marker resolution must
+be a valid member path — `Ident('.'Ident)*`, each segment a `$`-free
+JavaScript identifier (`isIdentSegment`, on the same `jsident` rules) —
+enforced by `checkComponentName` immediately ahead of the parser's single
+`*Component` construction site, so every classification path (template and
+skeleton bodies, conditional/loop/case bodies, marker fallback bodies, Snippet
+and Portal children) is covered. Any other component name (a `-`, a `:`, an
+empty segment, a segment that starts with a digit such as `<Frame.٣x>`) is a
+positioned compile error. A dotted name whose first segment is a marker name
+(`<Slot.Foo>`) gets a steering error; the check does not run inside
 `{#raw}`, and lowercase tags are untouched, so custom elements keep their
 dashes. Dotted names are the component-family idiom — codegen emits them
 verbatim as member expressions.
