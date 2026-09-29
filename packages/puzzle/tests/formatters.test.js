@@ -847,7 +847,7 @@ describe('the standard set (D174, D176 §4)', () => {
 			compact: 'compact_number',
 			first: '`items.at(0)`',
 			last: '`items.at(-1)`',
-			noescape: 'use raw',
+			noescape: 'print it with a plain `{ value }` — raw() is only for HTML you mean to render',
 			size: 'use the `.length` property (`items.length`)',
 			plus: '`a + b`',
 			minus: '`a - b`',
