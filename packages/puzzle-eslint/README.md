@@ -115,6 +115,11 @@ export default [
   expressions too; they live in template bytes, so ESLint does not see them.
 - A `.pzl` file with no `<script>` section produces no JS blocks (but section
   errors are still reported).
+- **Section-error columns count UTF-16 code units.** The compiler's splitter
+  counts UTF-8 bytes, so on a line holding non-ASCII text (`café`, `金額`, an
+  emoji) a section error from this plugin and the same error from
+  `puzzle build` name the same line but different columns. Both only occur on
+  a file that already fails to compile.
 
 ## License
 
