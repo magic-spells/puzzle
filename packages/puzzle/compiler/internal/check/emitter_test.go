@@ -72,7 +72,7 @@ func TestGenerateWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root, 7)
+	result, err := Generate(root, TypeScriptVersion{Major: 7})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestGenerateRejectsSymlinkedScratchRoot(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
-	if _, err := Generate(root, 7); err == nil {
+	if _, err := Generate(root, TypeScriptVersion{Major: 7}); err == nil {
 		t.Fatal("Generate accepted a symlinked .puzzle")
 	} else if !strings.Contains(err.Error(), "symbolic link") {
 		t.Fatalf("error = %v, want it to name the symbolic link", err)
@@ -299,7 +299,7 @@ export default class Home extends PuzzleView {}
 	if err := os.WriteFile(filepath.Join(views, "Broken.pzl"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root, 7)
+	result, err := Generate(root, TypeScriptVersion{Major: 7})
 	if err != nil {
 		t.Fatal(err)
 	}

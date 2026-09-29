@@ -41,7 +41,7 @@ import (
 // it reads (a bitmask over the class's `__roots`), the item members it reads at
 // depth one plus a `deep` flag for anything the record revision cannot cover,
 // and `volatile` for a body whose output can change with no data mutation (a
-// mutable global, a clock-reading formatter). Defaults are omitted, so the
+// clock-reading library function). Defaults are omitted, so the
 // common site is one short const.
 //
 // Two loops are deliberately NOT lowered:
@@ -57,10 +57,10 @@ const maxRootBits = 31
 
 // rowKeyIdent is the sentinel binding forBody uses to put `key: s.k` on a
 // lowered row root. The key attribute travels through the ordinary attribute
-// emitter, which runs resolveExpr on it, so the row scope has to be reachable
-// as an identifier — and binding the scope object's real name (`s`) would
-// capture a data field of that name inside every loop body. The sentinel cannot
-// collide with an authored identifier.
+// emitter, which lowers it as an Identifier, so the row scope has to be
+// reachable as a binding — and binding the scope object's real name (`s`)
+// would capture a data field of that name inside every loop body. The sentinel
+// cannot collide with an authored identifier.
 const rowKeyIdent = "__pzlRowKey"
 
 // loopSite is one lowered {#for}: its identity in the emitted module plus the
@@ -137,7 +137,7 @@ func (c *compiler) factSink() *exprFacts {
 }
 
 // absorb distributes one expression's facts to every enclosing lowered loop.
-// Roots and volatile reads (a mutable global, a clock-reading formatter) reach
+// Roots and volatile reads (a clock-reading library function) reach
 // all of them (the read happens inside every enclosing body). An item/counter
 // read is attributed by matching the name's CURRENT resolution against the
 // site's own rewrite, so a <Snippet> parameter or an inner range variable that
@@ -240,18 +240,6 @@ func (c *compiler) bareBinding(scope scopeMap, name string) (scopeMap, string) {
 	return scopeAdd(scope, name), name
 }
 
-// resolve is resolveExpr plus fact collection. Every template expression the
-// emitter resolves goes through it, so a loop body's roots/fields/volatile
-// reads are gathered by the SAME pass that rewrites them — handler arguments
-// and interpolations inside template literals included (D170, compiler
-// lowering).
-func (c *compiler) resolve(expr string, scope scopeMap) string {
-	f := c.factSink()
-	out := resolveValueScan(expr, scope, f)
-	c.absorb(f, scope)
-	return out
-}
-
 // rowScope is the innermost lowered loop's scope object name, or "" when the
 // emitter is not inside a row body (or is inside a <Snippet> body, which owns
 // no cache).
@@ -300,7 +288,7 @@ func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow
 
 	// The collection is resolved in the ENCLOSING scope, before the row locals
 	// exist — and its roots belong to the enclosing sites, not to this one.
-	coll := c.resolve(f.Collection, scope)
+	coll := c.value(f.CollectionAST, nil, scope)
 
 	bodyScope := scopeAddAs(scope, f.Item, name+".item")
 	if f.Counter != "" {
@@ -309,7 +297,7 @@ func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow
 	bodyScope = scopeAddAs(bodyScope, rowKeyIdent, name+".k")
 
 	c.loops = append(c.loops, site)
-	body, err := c.forBody(f, bodyScope, rowKeyIdent, ind+2, site)
+	body, err := c.forBody(f, bodyScope, identNode(rowKeyIdent), ind+2, site)
 	c.loops = c.loops[:len(c.loops)-1]
 	if err != nil {
 		return "", err
@@ -342,9 +330,10 @@ func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lo
 
 	// The arrow's scope is its OWN parameters plus the module's ViewNode import
 	// — deliberately NOT the enclosing render scope. A key reading anything else
-	// (an enclosing row's local, a snippet parameter, a range variable) resolves
+	// (an enclosing row's local, a snippet parameter, a range variable) lowers
 	// to `__d.<name>` here and bails out below, rather than emitting a
-	// module-scope arrow that closes over a binding only render() has.
+	// module-scope arrow that closes over a binding only render() has. Arrow
+	// parameters inside the key are its own and stay bare.
 	keyScope := scopeMap{f.Item: "", "ViewNode": ""}
 	if f.Counter != "" {
 		keyScope[f.Counter] = ""
@@ -361,15 +350,21 @@ func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lo
 		if startsWithObjectLiteral(attr.Expr) {
 			return "", false, c.cgErr(attr.Pos, objectLiteralMsg)
 		}
-		// A chained key (`key={ id | slug }`) reads `__f`, which the `__f[`
+		// A key calling a library function (`key={ slug(id) }`, or the
+		// TEMPORARY chained `key={ id | slug }`) reads `__f`, which the libRead
 		// check below turns into a `.map` site.
-		js = c.resolveChain(attr.Expr, attr.Formatters, keyScope, facts)
+		js = c.valueInto(attr.ExprAST, attr.Formatters, keyScope, facts) // P4: remove
+		if len(attr.Formatters) == 0 && startsWithObject(attr.ExprAST) {
+			// The key becomes an arrow's body, where a leading `{` would read as a
+			// block: `(item) => ({ a: item?.id }?.a)`, as arrow() writes one.
+			js = "(" + js + ")"
+		}
 	case *parser.MixedAttr:
 		js = c.emitMixedFacts(attr.Parts, keyScope, facts)
 	default:
 		return "", false, nil
 	}
-	if len(facts.roots) > 0 || strings.Contains(js, "__f[") {
+	if len(facts.roots) > 0 || facts.libRead {
 		return "", false, nil
 	}
 	params := f.Item

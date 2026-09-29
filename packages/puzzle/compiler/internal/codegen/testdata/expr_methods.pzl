@@ -1,0 +1,32 @@
+<puzzle-view class="methods">
+  <h1 title={ title.trim() }>{ title.trim().toUpperCase() }</h1>
+  <p class="slug">{ name.toLowerCase().replaceAll(' ', '-').padStart(12, '.') }</p>
+  <p class="initial">{ name.at(0) ?? '?' }</p>
+  <p class="tags">{ tags.toSorted().join(', ') }</p>
+  <p class="count">{ tags.length } of { Object.keys(filters).length }</p>
+  <p class="price">{ (price * 1.2).toFixed(2) } / { Math.round(price) } / { Math.max(0, stock - held) }</p>
+  <p class="city">{ user?.address?.city ?? 'unknown' }</p>
+  <p class="greeting">{ `Hello, ${ user.name ?? 'friend' }!` }</p>
+  <p class="edges">{ NaN } { Infinity } { -Infinity } { undefined }</p>
+  <p class="total">{ items.reduce((sum, item) => sum + item.price * item.qty, 0) }</p>
+  <p class="any">{ items.some(item => item.done) ? 'some done' : 'none done' }</p>
+  <p class="first">{ items.find(item => item.qty > 1)?.name }</p>
+  <p class="label">{ currency(price, '$') } { truncate(capitalize(title), 20) }</p>
+  {#if items.filter(item => !item.done).length > 0}
+    <ul>
+      {#for item in items.filter(item => !item.done), i}
+        <li class="row">{ i + 1 }. { item.name.trim() } — { item.tags.map(tag => tag.toUpperCase()).join('/') } { item.qty }</li>
+      {/for}
+    </ul>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ExprMethods extends PuzzleView {
+  data() {
+    return { title: '', name: '', tags: [], filters: {}, price: 0, stock: 0, held: 0, user: {}, items: [] };
+  }
+}
+</script>

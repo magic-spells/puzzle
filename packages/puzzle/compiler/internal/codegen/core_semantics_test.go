@@ -8,11 +8,23 @@ import (
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
-// core_semantics_test.go — D173 group (b), expressions and loops: V1 formatter
-// pipes in every value position, V2 `==` keeps its JavaScript meaning, V4 the
-// member guard, V8 object literals as arguments, V12 the loop guards. V15 (the
-// script-less component's data()) is pinned in classname_test.go, and the
-// runtime behavior of all of them in tests/core-semantics.test.js.
+// core_semantics_test.go — D173 group (b), expressions and loops, end to end:
+// V1 pipes in every value position (TEMPORARY — P4: remove), V2 `==` keeps its
+// JavaScript meaning, V4 the member guard, V8 object literals as arguments,
+// V12 the loop guards — and the expression language (DESIGN-expr-v2) compiling
+// in every position. The lowering rules one by one are in expr_test.go; V15
+// (the script-less component's data()) is pinned in classname_test.go, and the
+// runtime behavior in tests/core-semantics.test.js.
+
+func compileCore(t *testing.T, body string) (string, error) {
+	t.Helper()
+	sec, err := parser.SplitSections(coreSrc(body), "T.pzl")
+	if err != nil {
+		return "", err
+	}
+	res, err := Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
+	return res.JS, err
+}
 
 func coreSrc(body string) string {
 	return "<puzzle-view>\n" + body + "\n</puzzle-view>\n\n<script>\n" +
@@ -162,111 +174,19 @@ func TestLooseEqualityKeepsJavaScriptMeaning(t *testing.T) {
 
 // ---- V4 ---------------------------------------------------------------------
 
-func TestMemberGuard(t *testing.T) {
-	cases := []struct {
-		name  string
-		expr  string
-		scope scopeMap
-		want  string
-	}{
-		{"member chain", "user.profile.name", nil, "__d.user?.profile?.name"},
-		{"index step", "rows[0].label", nil, "__d.rows?.[0]?.label"},
-		{"computed index is its own chain", "rows[sel.id]", nil, "__d.rows?.[__d.sel?.id]"},
-		{"loop local through its rewrite", "todo.text", scopeMap{"todo": "s.item"}, "s.item?.text"},
-		{"bare loop local", "todo", scopeMap{"todo": "s.item"}, "s.item"},
-		{"existing optional step", "a?.b.c", nil, "__d.a?.b?.c"},
-		{"existing optional index", "a?.[0]", nil, "__d.a?.[0]"},
-		{"call result", "name.trim().length", nil, "__d.name?.trim()?.length"},
-		{"global: first step plain", "Math.max(a.b, 1)", nil, "Math.max(__d.a?.b, 1)"},
-		{"global call result guarded", "JSON.parse(s).k", nil, "JSON.parse(__d.s)?.k"},
-		{"new callee stays plain", "new Intl.NumberFormat('en').format(n)", nil, "new Intl.NumberFormat('en')?.format(__d.n)"},
-		{"new data callee", "new a.B(x).c", nil, "new __d.a.B(__d.x)?.c"},
-		{"string literal member", "'abc'.length", nil, "'abc'.length"},
-		{"number in a ternary", "c ? .5 : x.y", nil, "__d.c ? .5 : __d.x?.y"},
-		{"spread", "[...a.b]", nil, "[...__d.a?.b]"},
-		{"array literal is not a step", "[a.b, c][0]", nil, "[__d.a?.b, __d.c]?.[0]"},
-		{"template literal interpolation", "`${a.b}`", nil, "`${__d.a?.b}`"},
-		{"loose equality untouched", "a.b == null", nil, "__d.a?.b == null"},
-		// Constructs an optional chain cannot express: emitted plain.
-		{"tagged template", "tag.fn`x${a.b}`", nil, "__d.tag.fn`x${__d.a.b}`"},
-		{"update operator", "a.b++", nil, "__d.a.b++"},
-		{"assignment", "a.b = c.d", nil, "__d.a.b = __d.c.d"},
-		{"compound assignment", "a.b ??= 1", nil, "__d.a.b ??= 1"},
-		{"left shift assignment", "a.b <<= 1", nil, "__d.a.b <<= 1"},
-		{"right shift assignment", "a.b >>= 1", nil, "__d.a.b >>= 1"},
-		{"unsigned shift assignment", "a.b >>>= 1", nil, "__d.a.b >>>= 1"},
-		// Comparisons that share those bytes stay guarded.
-		{"greater-or-equal", "a.b >= c.d", nil, "__d.a?.b >= __d.c?.d"},
-		{"shift then compare", "a.b >> 1 <= c.d", nil, "__d.a?.b >> 1 <= __d.c?.d"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := resolveValueScan(tc.expr, tc.scope, nil); got != tc.want {
-				t.Errorf("resolveValueScan(%q)\n  got  %q\n  want %q", tc.expr, got, tc.want)
-			}
-		})
-	}
-}
-
-// The guard is a value-position rule: event handler arguments are PuzzleKit
-// JavaScript evaluated at fire time and stay exactly as written, and the plain
-// resolver (puzzle check, tests) never guards.
-func TestMemberGuardSkipsHandlersAndPlainResolve(t *testing.T) {
-	got := compileSrc(t, coreSrc(`  <button @click={ save(form.draft.title) }>{ form.draft.title }</button>`))
+// Every member step is guarded in every position — handler arguments included,
+// which are the same expression language — except a chain rooted at a
+// handler's DOM event, which is written as authored (§9 k).
+func TestMemberGuardEverywhere(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  <button @click={ save(form.draft.title, event.target.value) }>{ form.draft.title }</button>`))
 	wantAll(t, got,
-		"this.events.save(__d.form.draft.title)",
+		"this.events.save(__d.form?.draft?.title, event.target.value)",
 		"__s(__d.form?.draft?.title,",
 	)
-	if got := resolveExpr("a.b.c", nil); got != "__d.a.b.c" {
-		t.Errorf("resolveExpr must stay unguarded, got %q", got)
-	}
-}
-
-// The guarded pass records the same facts as the plain one, and a fallback to
-// the plain form does not record them twice.
-func TestMemberGuardFactsUnchanged(t *testing.T) {
-	for _, expr := range []string{"todo.text + todo.author.name", "todo.a.b++"} {
-		plain := &exprFacts{}
-		resolveExprScan(expr, scopeMap{"todo": "s.item"}, nil, plain)
-		guarded := &exprFacts{}
-		resolveValueScan(expr, scopeMap{"todo": "s.item"}, guarded)
-		p, g := plain.locals["todo"], guarded.locals["todo"]
-		if strings.Join(p.fields, ",") != strings.Join(g.fields, ",") || p.deep != g.deep || p.opaque != g.opaque {
-			t.Errorf("%q: facts differ — plain %+v, guarded %+v", expr, *p, *g)
-		}
-	}
+	nodeCheck(t, got)
 }
 
 // ---- V8 ---------------------------------------------------------------------
-
-func TestObjectLiteralArguments(t *testing.T) {
-	cases := []struct {
-		name  string
-		expr  string
-		scope scopeMap
-		want  string
-	}{
-		{"keys stay keys", "{ height: 480, width: w }", nil, "{ height: 480, width: __d.w }"},
-		{"shorthand expands", "{ count }", nil, "{ count: __d.count }"},
-		{"shorthand loop local", "{ todo, n }", scopeMap{"todo": "s.item"}, "{ todo: s.item, n: __d.n }"},
-		{"nested literal", "{ a: { b: c, d }, e }", nil, "{ a: { b: __d.c, d: __d.d }, e: __d.e }"},
-		{"quoted key", "{ 'cart.count': n }", nil, "{ 'cart.count': __d.n }"},
-		{"computed key", "{ [k]: v }", nil, "{ [__d.k]: __d.v }"},
-		{"spread", "{ ...base, x: 1 }", nil, "{ ...__d.base, x: 1 }"},
-		{"keyword-named keys", "{ default: a, new: b, class: c }", nil, "{ default: __d.a, new: __d.b, class: __d.c }"},
-		{"ternary value then shorthand", "{ a: x ? y : z, w }", nil, "{ a: __d.x ? __d.y : __d.z, w: __d.w }"},
-		{"call value with commas", "{ a: f(x, y), b }", nil, "{ a: __d.f(__d.x, __d.y), b: __d.b }"},
-		{"inside an array", "[{ id }, { id: 2 }]", nil, "[{ id: __d.id }, { id: 2 }]"},
-		{"member value is guarded", "{ n: user.count }", nil, "{ n: __d.user?.count }"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := resolveValueScan(tc.expr, tc.scope, nil); got != tc.want {
-				t.Errorf("resolveValueScan(%q)\n  got  %q\n  want %q", tc.expr, got, tc.want)
-			}
-		})
-	}
-}
 
 // The motivating templates (the translation formatter, the image formatter) in
 // every position that takes a chain, compiled and syntax-checked end to end: the
@@ -326,7 +246,9 @@ func TestLoopGuardImports(t *testing.T) {
 		`  {#for -1...1}<li>x</li>{/for}`:         "[-1, 0, 1].map((__i) =>",
 		`  {#for 3...1, n}<li>{ n }</li>{/for}`:   "[].map((n) =>",
 		`  {#for 1...100, n}<li>{ n }</li>{/for}`: "Array.from({ length: 100 }, (_, __k) => __k + 1).map((n) =>",
-		`  {#for 1...(2), n}<li>{ n }</li>{/for}`: "__r(1, (2)).map((n) =>",
+		// The bound's parentheses are not in the tree: it is the literal 2.
+		`  {#for 1...(2), n}<li>{ n }</li>{/for}`: "[1, 2].map((n) =>",
+		`  {#for 1...+2, n}<li>{ n }</li>{/for}`:  "__r(1, +2).map((n) =>",
 	} {
 		got := compileSrc(t, coreSrc(src))
 		wantAll(t, got, want)
@@ -352,5 +274,109 @@ func TestLoopGuardLocalsAreReserved(t *testing.T) {
 		"export default class T extends PuzzleView {}\n</script>\n"
 	if _, err := compileSrcOpts(t, loopFree, Options{Mode: ModeView}); err != nil {
 		t.Errorf("a loop-free file may bind __r: %v", err)
+	}
+}
+
+// ---- the expression language ---------------------------------------------
+
+// Methods, library functions, JavaScript globals, arrow functions, template
+// literals and `.length` compile in every value position (DESIGN-expr-v2 §1).
+func TestExpressionLanguageInEveryPosition(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, want string
+	}{
+		{"method in text", "  <p>{ name.toUpperCase() }</p>", "__s(__d.name?.toUpperCase(),"},
+		{"library function in text", "  <p>{ currency(price) }</p>", `__s((__f["currency"] || __f.__missing("currency"))(__d.price),`},
+		{"Math", "  <p>{ Math.round(x) }</p>", "__s(Math.round(__d.x),"},
+		{"at(-1)", "  <p>{ items.at(-1) }</p>", "__d.items?.at(-1)"},
+		{"brace attribute", "  <button disabled={ !draft.trim() }>x</button>", "disabled: !__d.draft?.trim()"},
+		{"quoted attribute", `  <p title="{ a.trim() } x">y</p>`, "title: `${__s(__d.a?.trim(), "},
+		{"inline-if condition", `  <p class="x {#if tags.includes(b)}on{/if}">y</p>`, "${__d.tags?.includes(__d.b) ? 'on' : ''}"},
+		{"component prop with an arrow", "  <Card items={ list.filter(x => x.on) } />", "items: __d.list?.filter((x) => x?.on)"},
+		{"marker argument", `  <Slot name="row" item={ rows.at(0) } />`, "item: __d.rows?.at(0)"},
+		{"key", "  {#for t in todos}<li key={ t.id.toString() }>x</li>{/for}", "key: (t) => t?.id?.toString()"},
+		{"if subject", "  {#if items.includes(x)}<b>a</b>{/if}", "...(__d.items?.includes(__d.x)"},
+		{"case subject", "  {#case kind.trim()}{:when 'a'}<b>d</b>{/case}", "])(__d.kind?.trim()))"},
+		{"when value", "  {#case kind}{:when modes.at(0)}<b>d</b>{/case}", "__c === (__d.modes?.at(0))"},
+		{"for collection", "  {#for t in todos.filter(t => !t.done)}<li>x</li>{/for}", "__l(this, this, 0, __d.todos?.filter((t) => !t?.done), (s) =>"},
+		{"range bound", "  {#for 1...Math.max(n, 1)}<li>x</li>{/for}", "__r(1, Math.max(__d.n, 1))"},
+		{"template literal", "  <p>{ `${a} ${b}` }</p>", "__s(`${__d.a} ${__d.b}`,"},
+		{"length", "  <p>{ items.length }</p>", "__s(__d.items?.length,"},
+		{"length condition", "  {#if items.length}<b>a</b>{/if}", "...(__d.items?.length\n"},
+		{"nullish fallback", "  <p>{ name ?? 'anon' }</p>", "__s(__d.name ?? 'anon',"},
+		{"handler condition", "  <button @click={ items.some(i => i.on) ? save : null }>x</button>", "(__d.items?.some((i) => i?.on)) ? (event) => this.events.save(event) : null"},
+		{"handler arguments", "  <button @click={ save(x.trim(), items.length) }>x</button>", "this.events.save(__d.x?.trim(), __d.items?.length)"},
+		{"member named this", "  <p>{ x.this }</p>", "__d.x?.this"},
+		{"computed length", "  <p>{ obj['length'] }</p>", "__d.obj?.['length']"},
+		{"root named length", "  <p>{ length }</p>", "__s(__d.length,"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := compileCore(t, tc.body)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("missing %q in:\n%s", tc.want, got)
+			}
+			nodeCheck(t, got)
+		})
+	}
+}
+
+// A form value written as a call displays a transformed value, as a piped one
+// does: there is no field to write an edit back to, so it stays one-way (D147).
+func TestCalledFormValueIsOneWay(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  <input value={ capitalize(name) } />`))
+	if strings.Contains(got, ":bind'") {
+		t.Errorf("a called value must not synthesize a bind:\n%s", got)
+	}
+}
+
+// A key calling a library function reads `__f`, which lives inside render(),
+// so the site keeps `.map` — as a piped key does.
+func TestCalledLoopKeyKeepsMap(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  {#for item in items}<li key={ slugify(item.id) }>x</li>{/for}`))
+	if strings.Contains(got, "__l(") {
+		t.Errorf("a key reading __f must not lower:\n%s", got)
+	}
+	wantAll(t, got,
+		"__e(__d.items).map((item) =>",
+		`key: (__f["slugify"] || __f.__missing("slugify"))(item?.id)`,
+	)
+}
+
+// TEMPORARY (P4: remove): the `.size` helper is imported only by a module whose
+// template reads a count — never for a handler argument — and a skeleton read
+// counts.
+func TestSizeHelperImport(t *testing.T) {
+	const imp = "sizeOf as __z"
+	for _, tc := range []struct {
+		name, body string
+		want       bool
+	}{
+		{"text", "  <p>{ items.size }</p>", true},
+		{"condition", "  {#if items.size > 0}<b>a</b>{/if}", true},
+		{"handler condition", "  <button @click={ items.size ? save : null }>x</button>", true},
+		{"none", "  <p>{ items }</p>", false},
+		{"length", "  <p>{ items.length }</p>", false},
+		{"handler argument", "  <button @click={ save(items.size) }>x</button>", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := compileCore(t, tc.body)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			if strings.Contains(got, imp) != tc.want {
+				t.Errorf("import %q present = %v, want %v:\n%s", imp, !tc.want, tc.want, got)
+			}
+			if !tc.want && strings.Contains(got, "__z(") {
+				t.Errorf("emitted __z without importing it:\n%s", got)
+			}
+		})
+	}
+	src := "<puzzle-view><p>{ a }</p></puzzle-view>\n\n<puzzle-skeleton><p>{ items.size }</p></puzzle-skeleton>\n\n" +
+		"<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class T extends PuzzleView {}\n</script>\n"
+	if got := compileSrc(t, src); !strings.Contains(got, imp) {
+		t.Errorf("a skeleton-only .size read must import the helper:\n%s", got)
 	}
 }

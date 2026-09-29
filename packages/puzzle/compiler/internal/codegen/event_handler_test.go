@@ -63,13 +63,13 @@ func TestEventHandlerGlobalNamedLoopVarNotCached(t *testing.T) {
 	if !strings.Contains(got, "__l(this, this, 0, __d.documents, (s) =>") {
 		t.Fatalf("document loop item was not lowered to a list block:\n%s", got)
 	}
-	// A loop binding SHADOWS the same-named JS global: the handler must read the
-	// row's item, never window.document.
+	// A loop binding owns its name: the handler must read the row's item, never
+	// window.document (and never the data field `document` either).
 	if !strings.Contains(got, "'@click': (s.h0 ??= (event) => this.events.open(s.item))") {
-		t.Errorf("a jsGlobals-named loop item must resolve to the row scope:\n%s", got)
+		t.Errorf("a loop item named like a browser global must resolve to the row scope:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing a jsGlobals-named loop item must not use the per-instance cache:\n%s", got)
+		t.Errorf("handler capturing a loop item named like a browser global must not use the per-instance cache:\n%s", got)
 	}
 }
 
@@ -79,7 +79,7 @@ func TestEventHandlerLoopEventMemberAccess(t *testing.T) {
 			"    <button @click={ pick(event.id) }>pick</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.pick(s.item.id))") {
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.pick(s.item?.id))") {
 		t.Errorf("member access must resolve against the loop item, not the DOM event:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
@@ -112,16 +112,16 @@ func TestOutsideNullToggleCompiles(t *testing.T) {
 
 // The condition of a handler-valued conditional is evaluated during render, so
 // it is a value position: member steps are guarded (D173 V4) and a missing
-// `user` binds no handler instead of throwing. The handler branches stay
-// fire-time code, unguarded.
+// `user` binds no handler instead of throwing. The branches' arguments are the
+// same expression language, guarded the same way.
 func TestEventHandlerConditionalConditionIsGuarded(t *testing.T) {
 	got := compileEventPZL(t,
 		"  <button @click={ user.profile.admin ? promote(user.profile.id) : null }>go</button>\n"+
 			"  {#for todo in todos}<li @click={ todo.done ? undo(todo.meta.id) : null }>x</li>{/for}",
 	)
 	for _, want := range []string{
-		"'@click': (__d.user?.profile?.admin) ? (event) => this.events.promote(__d.user.profile.id) : null",
-		"'@click': (s.item?.done) ? (event) => this.events.undo(s.item.meta.id) : null",
+		"'@click': (__d.user?.profile?.admin) ? (event) => this.events.promote(__d.user?.profile?.id) : null",
+		"'@click': (s.item?.done) ? (event) => this.events.undo(s.item?.meta?.id) : null",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q:\n%s", want, got)
@@ -138,7 +138,7 @@ func TestEventHandlerRejectedFormsRemainPositionedErrors(t *testing.T) {
 		{"binary expression", "a + b", "event handler must be a bare method name or a single call expression"},
 		// Rejected by the expression grammar while parsing, at the arrow.
 		{"arrow function", "(e) => close(e)", "arrow functions are only available as a call argument"},
-		{"this member", "this.close", dataThisMsg},
+		{"this member", "this.close", "`this` is not available in template expressions"},
 		{"member expression", "handlers.close", "event handler must be a bare method name or a single call expression"},
 	}
 	for _, tc := range cases {

@@ -15,11 +15,12 @@ import (
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 const shim = `/// <reference types="@magic-spells/puzzle/puzzle-env" />
-
+__LANGUAGE_LIBS__
 import type { PuzzleView } from '@magic-spells/puzzle';
 
 declare global {
@@ -57,25 +58,115 @@ declare global {
     visit: (value: number) => void,
   ): void;
 
-  // A template value's .size (D176) is emitted as __z(value), the runtime's
-  // sizeOf helper: a list's or string's count, otherwise the value's own size
-  // field. Most template data is untyped, which the first overload answers
-  // with a number, as .length used to be; a typed object reads its field.
+  // P4: remove. A template value's .size (D176, TEMPORARY) is emitted as
+  // __z(value), the runtime's sizeOf helper: a list's or string's count,
+  // otherwise the value's own size field. Most template data is untyped, which
+  // the first overload answers with a number; a typed object reads its field.
   function __z(value: readonly unknown[] | string | ReadonlyMap<unknown, unknown> | ReadonlySet<unknown>): number;
   function __z<T extends { readonly size?: unknown }>(value: T): T['size'];
   function __z(value: unknown): any;
 
+  // P4: remove. A TEMPORARY pipe chain is checked as nested calls.
   function __puzzle_check_formatter(
     name: string,
     value: any,
     ...args: any[]
   ): any;
 
+  // A bare call names the function library: the standard functions typed
+  // below, and any app-registered function, untyped — its arguments and its
+  // result are any, as an untyped data() value is.
+  interface __PuzzleFunctions {
+__LIBRARY_SIGNATURES__
+    [name: string]: (...args: any[]) => any;
+  }
+  const __puzzle_fn: __PuzzleFunctions;
+
+  // A method call whose arguments hold an arrow function takes its receiver
+  // through here. An untyped data value (any) becomes any[], so the arrow's
+  // parameters are typed any instead of an implicit-any error under strict; a
+  // typed receiver passes through unchanged and keeps its own checking.
+  function __puzzle_check_list<T>(value: T): 0 extends (1 & T) ? any[] : T;
+
   type __PuzzleCheckView = PuzzleView;
 }
 
 export {};
 `
+
+// libraryFunctionSignatures are the TypeScript signatures of the standard
+// function library (codegen.LibraryFunctionNames, DESIGN-expr-v2 §4), declared
+// on __PuzzleFunctions in the shim. P3 publishes the same signatures in
+// types/ — keep the two in sync; TestLibrarySignaturesMatchCodegen keeps this
+// table and the compiler's name list identical. Values are `unknown` because
+// every function accepts any template value and prints nothing for a missing
+// one.
+var libraryFunctionSignatures = []struct{ name, signature string }{
+	{"link", "(url: unknown): string"},
+	{"t", "(key: unknown, vars?: Record<string, unknown>): string"},
+	{"currency", "(value: unknown, symbol?: string, places?: number): string"},
+	{"percentage", "(value: unknown, places?: number): string"},
+	{"number_with_delimiter", "(value: unknown, delimiter?: string): string"},
+	{"compact_number", "(value: unknown): string"},
+	{"pluralize", "(count: unknown, singular: string, plural?: string): string"},
+	{"date", "(value: unknown, preset?: string, locale?: string): string"},
+	{"time", "(value: unknown, preset?: string, locale?: string): string"},
+	{"datetime", "(value: unknown, preset?: string, locale?: string): string"},
+	{"timeago", "(value: unknown): string"},
+	{"in_timezone", "(value: unknown, zone?: string): Date | ''"},
+	{"truncate", "(value: unknown, length?: number, ellipsis?: string): string"},
+	{"capitalize", "(value: unknown): string"},
+	{"strip_html", "(value: unknown): string"},
+	{"strip_newlines", "(value: unknown): string"},
+	{"escape", "(value: unknown): string"},
+	{"raw", "(value: unknown): string"},
+	{"newline_to_br", "(value: unknown): string"},
+	{"json", "(value: unknown): string"},
+}
+
+// languageLibs are the lib.d.ts files that type the expression language's
+// method table (puzzle-lang expr.StringMethods/ArrayMethods, DESIGN-expr-v2
+// §3) and its Object globals. A template method is checked as the same
+// JavaScript method, so its declaration must be in the program whatever the
+// app's own target: an app on `target: ES2020` would otherwise see `.at()`,
+// `.replaceAll()`, and `.toSorted()` reported as missing. A `/// <reference
+// lib>` adds a file without replacing the app's `lib` list. es2023.array
+// first ships with TypeScript 5.0, typing findLast, so it is referenced from
+// 5.0 on; toSorted and toReversed join that file only in 5.2, so on 5.0 and
+// 5.1 no lib reference can type them and they report as missing, as they
+// would in the app's own code. Every other file exists in 4.9, the oldest
+// compiler puzzle check supports.
+var languageLibs = []struct {
+	lib string
+	min TypeScriptVersion
+}{
+	{"es2016.array.include", TypeScriptVersion{}}, // includes
+	{"es2017.object", TypeScriptVersion{}},        // Object.values, Object.entries
+	{"es2017.string", TypeScriptVersion{}},        // padStart, padEnd
+	{"es2019.array", TypeScriptVersion{}},         // flat
+	{"es2019.string", TypeScriptVersion{}},        // trimStart, trimEnd
+	{"es2021.string", TypeScriptVersion{}},        // replaceAll
+	{"es2022.array", TypeScriptVersion{}},         // at
+	{"es2022.string", TypeScriptVersion{}},        // at
+	{"es2023.array", TypeScriptVersion{5, 0}},     // findLast; toSorted, toReversed from 5.2
+}
+
+// shimSource is the shim for the app's TypeScript version, with the method
+// table's lib files and the library signatures filled in.
+func shimSource(ts TypeScriptVersion) string {
+	var libs strings.Builder
+	for _, l := range languageLibs {
+		if ts.AtLeast(l.min) {
+			libs.WriteString("/// <reference lib=\"" + l.lib + "\" />\n")
+		}
+	}
+	var sigs strings.Builder
+	for _, fn := range libraryFunctionSignatures {
+		sigs.WriteString("    " + fn.name + fn.signature + ";\n")
+	}
+	out := strings.Replace(shim, "__LANGUAGE_LIBS__", libs.String(), 1)
+	return strings.Replace(out, "__LIBRARY_SIGNATURES__\n", sigs.String(), 1)
+}
 
 // Result describes the generated check workspace.
 type Result struct {
@@ -120,8 +211,9 @@ func sourceDir(root string) (string, error) {
 	return dir, nil
 }
 
-// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/.
-func Generate(appRoot string, typescriptMajor int) (*Result, error) {
+// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/
+// for the app's TypeScript compiler version.
+func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
 	root, err := filepath.Abs(appRoot)
 	if err != nil {
 		return nil, err
@@ -190,10 +282,10 @@ func Generate(appRoot string, typescriptMajor int) (*Result, error) {
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shim), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shimSource(ts)), 0o644); err != nil {
 		return nil, err
 	}
-	config, err := tsconfig(root, typescriptMajor)
+	config, err := tsconfig(root, ts.Major)
 	if err != nil {
 		return nil, err
 	}
@@ -285,13 +377,7 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 
 type emitter struct {
 	b         *mappedBuilder
-	source    string
 	eventSite int
-}
-
-type sourceExpr struct {
-	text   string
-	offset int
 }
 
 func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]virtualFile, error) {
@@ -385,7 +471,7 @@ func emitCheckedFile(
 	b.WriteString("void function (this: InstanceType<typeof " + className + "> & Record<string, any>): void {\n")
 	b.WriteString("  const __d = this;\n")
 
-	e := &emitter{b: b, source: string(source)}
+	e := &emitter{b: b}
 	// The <puzzle-view> tag's own attributes are real bindings (they become the
 	// root ViewNode's attributes), so they are checked like any other element's.
 	if err := e.emitAttrs(root.Attrs, map[string]bool{}, 2); err != nil {
@@ -463,9 +549,7 @@ func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent i
 				return err
 			}
 		case *parser.Interpolation:
-			if err := e.emitInterpolation(n, scope, indent); err != nil {
-				return err
-			}
+			e.emitVoid(n.ExprAST, n.Formatters, scope, indent) // P4: remove
 		case *parser.If:
 			if err := e.emitIf(n, scope, indent); err != nil {
 				return err
@@ -489,127 +573,56 @@ func (e *emitter) emitAttrs(attrs []parser.Attr, scope map[string]bool, indent i
 	for _, attr := range attrs {
 		switch a := attr.(type) {
 		case *parser.DynamicAttr:
-			if len(a.Formatters) > 0 {
-				// A brace-only value with a formatter chain (D173 V1) is checked
-				// the way the same chain in text is.
-				inner, start, err := e.attrInner(a.Pos.Offset)
-				if err != nil {
-					return err
-				}
-				spans, err := chainSpans(inner, start, a.Expr, a.Formatters)
-				if err != nil {
-					return err
-				}
-				e.b.WriteString(spaces(indent) + "void (")
-				e.writeChain(spans, a.Formatters, scope)
-				e.b.WriteString(");\n")
-				continue
-			}
-			span, err := e.attrExpr(a.Pos.Offset, a.Expr)
-			if err != nil {
-				return err
-			}
-			e.emitVoid(span, scope, indent)
+			e.emitVoid(a.ExprAST, a.Formatters, scope, indent) // P4: remove
 		case *parser.EventAttr:
-			span, err := e.attrExpr(a.Pos.Offset, a.Expr)
-			if err != nil {
-				return err
-			}
-			resolved, err := codegen.ResolveCheckEvent(a.Expr, scope)
-			if err != nil {
-				return err
-			}
 			name := fmt.Sprintf("__puzzle_check_event_%d", e.eventSite)
 			e.eventSite++
 			e.b.WriteString(spaces(indent) + "const " + name + ": ((event: any) => any) | null = ")
-			e.b.WriteSubsequence(resolved, span.text, span.offset)
-			e.b.WriteString(";\n" + spaces(indent) + "void " + name + ";\n")
-		case *parser.MixedAttr:
-			if err := e.emitParts(a.Parts, scope, indent); err != nil {
+			if err := codegen.WriteCheckEvent(e.b, a.ExprAST, a.Expr, scope); err != nil {
 				return err
 			}
+			e.b.WriteString(";\n" + spaces(indent) + "void " + name + ";\n")
+		case *parser.MixedAttr:
+			e.emitParts(a.Parts, scope, indent)
 		}
 	}
 	return nil
 }
 
-func (e *emitter) emitParts(parts []parser.Part, scope map[string]bool, indent int) error {
+func (e *emitter) emitParts(parts []parser.Part, scope map[string]bool, indent int) {
 	for _, part := range parts {
 		switch p := part.(type) {
 		case *parser.InterpPart:
-			if err := e.emitInterpolation(p.Interp, scope, indent); err != nil {
-				return err
-			}
+			e.emitVoid(p.Interp.ExprAST, p.Interp.Formatters, scope, indent) // P4: remove
 		case *parser.InlineIfPart:
-			span, _, err := e.conditionExpr(p.Pos.Offset, p.Cond)
-			if err != nil {
-				return err
-			}
 			e.b.WriteString(spaces(indent) + "if (")
-			e.writeResolved(span, scope)
+			codegen.WriteCheckValue(e.b, p.CondAST, nil, scope)
 			e.b.WriteString(") {\n")
-			if err := e.emitParts(p.Then, scope, indent+2); err != nil {
-				return err
-			}
+			e.emitParts(p.Then, scope, indent+2)
 			if len(p.Else) > 0 {
 				e.b.WriteString(spaces(indent) + "} else {\n")
-				if err := e.emitParts(p.Else, scope, indent+2); err != nil {
-					return err
-				}
+				e.emitParts(p.Else, scope, indent+2)
 			}
 			e.b.WriteString(spaces(indent) + "}\n")
 		}
 	}
-	return nil
 }
 
-func (e *emitter) emitInterpolation(n *parser.Interpolation, scope map[string]bool, indent int) error {
-	spans, err := e.interpolationExprs(n)
-	if err != nil {
-		return err
-	}
-	// The parentheses are load-bearing: `void` binds tighter than every binary
-	// operator, so an unparenthesized `void a + 1` type-checks `undefined + 1`
-	// and reports "Object is possibly 'undefined'" on a correct template under
-	// strictNullChecks — while checking nothing about `a + 1` itself.
+// emitVoid checks one value position as an expression statement. The
+// parentheses are load-bearing: `void` binds tighter than every binary
+// operator, so an unparenthesized `void a + 1` type-checks `undefined + 1` and
+// reports "Object is possibly 'undefined'" on a correct template under
+// strictNullChecks — while checking nothing about `a + 1` itself.
+func (e *emitter) emitVoid(n expr.Node, fmts []parser.FormatterCall, scope map[string]bool, indent int) {
 	e.b.WriteString(spaces(indent) + "void (")
-	e.writeChain(spans, n.Formatters, scope)
+	codegen.WriteCheckValue(e.b, n, fmts, scope)
 	e.b.WriteString(");\n")
-	return nil
-}
-
-// writeChain writes a base expression wrapped in its formatter chain as nested
-// `__puzzle_check_formatter(name, value, ...args)` calls. spans holds the base
-// first, then every formatter argument in source order (chainSpans' layout).
-func (e *emitter) writeChain(spans []sourceExpr, fmts []parser.FormatterCall, scope map[string]bool) {
-	for i := len(fmts) - 1; i >= 0; i-- {
-		e.b.WriteString("__puzzle_check_formatter(" + strconv.Quote(fmts[i].Name) + ", ")
-	}
-	e.writeResolved(spans[0], scope)
-	spanIndex := 1
-	for _, formatter := range fmts {
-		for range formatter.Args {
-			e.b.WriteString(", ")
-			e.writeResolved(spans[spanIndex], scope)
-			spanIndex++
-		}
-		e.b.WriteString(")")
-	}
 }
 
 func (e *emitter) emitIf(n *parser.If, scope map[string]bool, indent int) error {
-	span, negate, err := e.conditionExpr(n.Pos.Offset, n.Cond)
-	if err != nil {
-		return err
-	}
+	// An {#unless} condition is already `!(…)` in the tree.
 	e.b.WriteString(spaces(indent) + "if (")
-	if negate {
-		e.b.WriteString("!(")
-	}
-	e.writeResolved(span, scope)
-	if negate {
-		e.b.WriteString(")")
-	}
+	codegen.WriteCheckValue(e.b, n.CondAST, nil, scope)
 	e.b.WriteString(") {\n")
 	if err := e.emitNodes(n.Then, scope, indent+2); err != nil {
 		return err
@@ -625,15 +638,11 @@ func (e *emitter) emitIf(n *parser.If, scope map[string]bool, indent int) error 
 }
 
 func (e *emitter) emitFor(n *parser.For, scope map[string]bool, indent int) error {
-	spans, err := e.forExprs(n)
-	if err != nil {
-		return err
-	}
 	if n.IsRange {
 		e.b.WriteString(spaces(indent) + "__puzzle_check_range(")
-		e.writeResolved(spans[0], scope)
+		codegen.WriteCheckValue(e.b, n.RangeFromAST, nil, scope)
 		e.b.WriteString(", ")
-		e.writeResolved(spans[1], scope)
+		codegen.WriteCheckValue(e.b, n.RangeToAST, nil, scope)
 		param := "__puzzle_check_value"
 		if n.Counter != "" {
 			param = n.Counter
@@ -651,7 +660,7 @@ func (e *emitter) emitFor(n *parser.For, scope map[string]bool, indent int) erro
 	}
 
 	e.b.WriteString(spaces(indent) + "__puzzle_check_each(")
-	e.writeResolved(spans[0], scope)
+	codegen.WriteCheckValue(e.b, n.CollectionAST, nil, scope)
 	e.b.WriteString(", (" + n.Item)
 	if n.Counter != "" {
 		e.b.WriteString(", " + n.Counter)
@@ -694,21 +703,13 @@ func (e *emitter) emitSnippet(n *parser.Snippet, scope map[string]bool, indent i
 }
 
 func (e *emitter) emitCase(n *parser.Case, scope map[string]bool, indent int) error {
-	caseSpan, err := e.directiveExpr(n.Pos.Offset, "case", n.Expr)
-	if err != nil {
-		return err
-	}
 	e.b.WriteString(spaces(indent) + "switch (")
-	e.writeResolved(caseSpan, scope)
+	codegen.WriteCheckValue(e.b, n.ExprAST, nil, scope)
 	e.b.WriteString(") {\n")
 	for _, clause := range n.Clauses {
-		values, err := e.whenExprs(clause.Pos.Offset, clause.Values)
-		if err != nil {
-			return err
-		}
-		for _, value := range values {
+		for _, value := range clause.ValuesAST {
 			e.b.WriteString(spaces(indent+2) + "case ")
-			e.writeResolved(value, scope)
+			codegen.WriteCheckValue(e.b, value, nil, scope)
 			e.b.WriteString(":\n")
 		}
 		if err := e.emitNodes(clause.Body, scope, indent+4); err != nil {
@@ -726,17 +727,6 @@ func (e *emitter) emitCase(n *parser.Case, scope map[string]bool, indent int) er
 	return nil
 }
 
-func (e *emitter) emitVoid(span sourceExpr, scope map[string]bool, indent int) {
-	e.b.WriteString(spaces(indent) + "void (")
-	e.writeResolved(span, scope)
-	e.b.WriteString(");\n")
-}
-
-func (e *emitter) writeResolved(span sourceExpr, scope map[string]bool) {
-	resolved := codegen.ResolveCheckExpr(span.text, scope)
-	e.b.WriteResolved(resolved, span.text, span.offset)
-}
-
 func cloneScope(scope map[string]bool) map[string]bool {
 	out := make(map[string]bool, len(scope)+2)
 	for name := range scope {
@@ -746,211 +736,3 @@ func cloneScope(scope map[string]bool) map[string]bool {
 }
 
 func spaces(n int) string { return strings.Repeat(" ", n) }
-
-func (e *emitter) interpolationExprs(n *parser.Interpolation) ([]sourceExpr, error) {
-	inner, start, _, err := braceInner(e.source, n.Pos.Offset)
-	if err != nil {
-		return nil, err
-	}
-	return chainSpans(inner, start, n.Expr, n.Formatters)
-}
-
-// chainSpans locates a chained value's base expression and every formatter
-// argument inside inner, the source text that starts at byte start.
-func chainSpans(inner string, start int, base string, fmts []parser.FormatterCall) ([]sourceExpr, error) {
-	baseAt := strings.Index(inner, base)
-	if baseAt < 0 {
-		return nil, fmt.Errorf("cannot locate template expression %q", base)
-	}
-	spans := []sourceExpr{{text: base, offset: start + baseAt}}
-	cursor := baseAt + len(base)
-	for _, formatter := range fmts {
-		nameAt := strings.Index(inner[cursor:], formatter.Name)
-		if nameAt < 0 {
-			return nil, fmt.Errorf("cannot locate formatter %q", formatter.Name)
-		}
-		cursor += nameAt + len(formatter.Name)
-		if len(formatter.Args) == 0 {
-			continue
-		}
-		open := strings.IndexByte(inner[cursor:], '(')
-		if open < 0 {
-			return nil, fmt.Errorf("cannot locate arguments for formatter %q", formatter.Name)
-		}
-		cursor += open + 1
-		args, err := locateSequential(inner[cursor:], start+cursor, formatter.Args)
-		if err != nil {
-			return nil, err
-		}
-		spans = append(spans, args...)
-		last := args[len(args)-1]
-		cursor = last.offset - start + len(last.text)
-	}
-	return spans, nil
-}
-
-// attrInner returns the text inside an attribute's value braces and the byte
-// offset it starts at.
-func (e *emitter) attrInner(anchor int) (string, int, error) {
-	open := strings.IndexByte(e.source[anchor:], '{')
-	if open < 0 {
-		return "", 0, fmt.Errorf("cannot locate attribute expression at byte %d", anchor)
-	}
-	inner, start, _, err := braceInner(e.source, anchor+open)
-	return inner, start, err
-}
-
-func (e *emitter) attrExpr(anchor int, expr string) (sourceExpr, error) {
-	open := strings.IndexByte(e.source[anchor:], '{')
-	if open < 0 {
-		return sourceExpr{}, fmt.Errorf("cannot locate attribute expression %q", expr)
-	}
-	inner, start, _, err := braceInner(e.source, anchor+open)
-	if err != nil {
-		return sourceExpr{}, err
-	}
-	trimmed := strings.TrimSpace(inner)
-	if trimmed != expr {
-		return sourceExpr{}, fmt.Errorf("attribute expression mismatch: parsed %q, source %q", expr, trimmed)
-	}
-	leading := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
-	return sourceExpr{text: expr, offset: start + leading}, nil
-}
-
-func (e *emitter) conditionExpr(anchor int, parsed string) (sourceExpr, bool, error) {
-	inner, start, _, err := braceInner(e.source, anchor)
-	if err != nil {
-		return sourceExpr{}, false, err
-	}
-	trimmed := strings.TrimSpace(inner)
-	prefixes := []struct {
-		prefix string
-		negate bool
-	}{
-		{"#unless", true},
-		{"#if", false},
-		{":else if", false},
-	}
-	for _, item := range prefixes {
-		if strings.HasPrefix(trimmed, item.prefix) {
-			rest := trimmed[len(item.prefix):]
-			expr := strings.TrimSpace(rest)
-			leadingInner := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
-			leadingRest := len(rest) - len(strings.TrimLeft(rest, " \t\r\n"))
-			offset := start + leadingInner + len(item.prefix) + leadingRest
-			return sourceExpr{text: expr, offset: offset}, item.negate, nil
-		}
-	}
-	spans, err := locateSequential(inner, start, []string{parsed})
-	if err != nil {
-		return sourceExpr{}, false, err
-	}
-	return spans[0], false, nil
-}
-
-func (e *emitter) directiveExpr(anchor int, keyword, expr string) (sourceExpr, error) {
-	inner, start, _, err := braceInner(e.source, anchor)
-	if err != nil {
-		return sourceExpr{}, err
-	}
-	prefix := "#" + keyword
-	trimmed := strings.TrimSpace(inner)
-	if !strings.HasPrefix(trimmed, prefix) {
-		return sourceExpr{}, fmt.Errorf("expected {%s} at byte %d", prefix, anchor)
-	}
-	rest := trimmed[len(prefix):]
-	if strings.TrimSpace(rest) != expr {
-		return sourceExpr{}, fmt.Errorf("directive expression mismatch: parsed %q, source %q", expr, strings.TrimSpace(rest))
-	}
-	leadingInner := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
-	leadingRest := len(rest) - len(strings.TrimLeft(rest, " \t\r\n"))
-	return sourceExpr{text: expr, offset: start + leadingInner + len(prefix) + leadingRest}, nil
-}
-
-func (e *emitter) forExprs(n *parser.For) ([]sourceExpr, error) {
-	inner, start, _, err := braceInner(e.source, n.Pos.Offset)
-	if err != nil {
-		return nil, err
-	}
-	// Search past the `#for` keyword: a one-letter loop variable or range bound
-	// would otherwise match a letter of the keyword itself and map the expression
-	// to the wrong column.
-	if lead := strings.Index(inner, "#for"); lead >= 0 {
-		skip := lead + len("#for")
-		inner, start = inner[skip:], start+skip
-	}
-	if n.IsRange {
-		return locateSequential(inner, start, []string{n.RangeFrom, n.RangeTo})
-	}
-	itemAt := strings.Index(inner, n.Item)
-	if itemAt < 0 {
-		return nil, fmt.Errorf("cannot locate loop item %q", n.Item)
-	}
-	afterItem := itemAt + len(n.Item)
-	collectionAt := strings.Index(inner[afterItem:], n.Collection)
-	if collectionAt < 0 {
-		return nil, fmt.Errorf("cannot locate loop collection %q", n.Collection)
-	}
-	return []sourceExpr{{text: n.Collection, offset: start + afterItem + collectionAt}}, nil
-}
-
-func (e *emitter) whenExprs(anchor int, values []string) ([]sourceExpr, error) {
-	inner, start, _, err := braceInner(e.source, anchor)
-	if err != nil {
-		return nil, err
-	}
-	trimmed := strings.TrimSpace(inner)
-	const prefix = ":when"
-	if !strings.HasPrefix(trimmed, prefix) {
-		return nil, fmt.Errorf("expected {%s} at byte %d", prefix, anchor)
-	}
-	leadingInner := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
-	rest := trimmed[len(prefix):]
-	return locateSequential(rest, start+leadingInner+len(prefix), values)
-}
-
-func locateSequential(container string, base int, texts []string) ([]sourceExpr, error) {
-	spans := make([]sourceExpr, 0, len(texts))
-	cursor := 0
-	for _, text := range texts {
-		i := strings.Index(container[cursor:], text)
-		if i < 0 {
-			return nil, fmt.Errorf("cannot locate template expression %q", text)
-		}
-		i += cursor
-		spans = append(spans, sourceExpr{text: text, offset: base + i})
-		cursor = i + len(text)
-	}
-	return spans, nil
-}
-
-// braceInner returns the bytes inside the balanced template brace at open and
-// their absolute source offset. The public LexSkip seam keeps JS literals,
-// regexes, comments, and nested template literals opaque exactly as the parser
-// and codegen do.
-func braceInner(source string, open int) (string, int, int, error) {
-	if open < 0 || open >= len(source) || source[open] != '{' {
-		return "", 0, 0, fmt.Errorf("expected '{' at byte %d", open)
-	}
-	depth := 0
-	prevEndsExpr := false
-	for i := open; i < len(source); {
-		if next, pee, consumed := parser.LexSkip(source, i, prevEndsExpr); consumed {
-			prevEndsExpr = pee
-			i = next
-			continue
-		}
-		switch source[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return source[open+1 : i], open + 1, i, nil
-			}
-		}
-		prevEndsExpr = parser.LexPlainEndsExpr(source[i], prevEndsExpr)
-		i++
-	}
-	return "", 0, 0, fmt.Errorf("unclosed '{' at byte %d", open)
-}

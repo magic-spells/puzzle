@@ -68,10 +68,13 @@ func TestI18nManifestModule(t *testing.T) {
 }
 
 // TestScanUsageTranslateKeys: `t` use is recorded even though it is not a
-// manifest builtin, and every string-literal key piped straight into it is
-// collected per file — in text, quoted and brace-only attributes, inline ifs,
-// and skeletons.
-// Runtime-built keys and `t` later in a chain are not checkable and are skipped.
+// manifest builtin, and every string-literal key handed straight to it — a
+// `t('key')` call anywhere an expression is, or the TEMPORARY piped
+// `'key' | t` — is collected per file: in text, quoted and brace-only
+// attributes, conditions, handler arguments, inline ifs, and skeletons. The
+// key is the literal's cooked value, escapes included. Runtime-built keys and
+// `t` later in a chain are not checkable and are skipped, and a view handler
+// named `t` is not the function.
 func TestScanUsageTranslateKeys(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view>
@@ -82,6 +85,10 @@ func TestScanUsageTranslateKeys(t *testing.T) {
   <p>{ 'it\'s' | t }</p>
   {#if a}<b>{ 'in.if' | t }</b>{/if}
   <input placeholder={ 'search.hint' | t } />
+  <p>{ t('call.text', { n }) } { t('status.' + s) }</p>
+  {#if t('call.cond') == ''}<b>x</b>{/if}
+  <button @click={ save(t('call.handler')) }>a</button>
+  <button @click={ t('not.a.key') }>b</button>
 </puzzle-view>
 <puzzle-skeleton><p>{ 'loading' | t }</p></puzzle-skeleton>
 <script>
@@ -110,12 +117,16 @@ export default class Plain extends PuzzleView {}
 		t.Fatal("t usage not recorded")
 	}
 	want := map[string][]string{
-		"home.title":  {"app/views/Home.pzl", "app/views/Other.pzl"},
-		"home.hint":   {"app/views/Home.pzl"},
-		"items":       {"app/views/Home.pzl"},
-		"in.if":       {"app/views/Home.pzl"},
-		"loading":     {"app/views/Home.pzl"},
-		"search.hint": {"app/views/Home.pzl"},
+		"home.title":   {"app/views/Home.pzl", "app/views/Other.pzl"},
+		"home.hint":    {"app/views/Home.pzl"},
+		"items":        {"app/views/Home.pzl"},
+		"in.if":        {"app/views/Home.pzl"},
+		"loading":      {"app/views/Home.pzl"},
+		"search.hint":  {"app/views/Home.pzl"},
+		"it's":         {"app/views/Home.pzl"},
+		"call.text":    {"app/views/Home.pzl"},
+		"call.cond":    {"app/views/Home.pzl"},
+		"call.handler": {"app/views/Home.pzl"},
 	}
 	for key := range usage.TKeys {
 		files := usage.TKeys[key]
