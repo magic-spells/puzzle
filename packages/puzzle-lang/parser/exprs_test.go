@@ -200,6 +200,33 @@ func TestEventIsTheHandlersDOMEvent(t *testing.T) {
 	if pe := parseErr(t, "<p>{ row.target.closest('li') }</p>"); pe == nil || !strings.Contains(pe.Message, "`.closest()` is not available") {
 		t.Errorf("a data chain must keep the method table: %v", pe)
 	}
+	// A bound `event` — a loop item or counter, a snippet parameter, an arrow
+	// parameter — is a value that shadows the DOM event, as in JavaScript.
+	for _, body := range []string{
+		"{#for event in events}<p title={ event.name }>{ event.id }</p>{/for}",
+		"{#for x in xs, event}<p>{ event }</p>{/for}",
+		"{#for event in events}{#for x in event.items}<p>{ event.id }</p>{/for}{/for}",
+		`<Card><Snippet fits="row" event>{ event.id }</Snippet></Card>`,
+		"<p>{ items | fmt(event => event.id) }</p>",
+		"{#for event in rows}<li @click={ pick(event.id) }>x</li>{/for}",
+		"<li @click={ go(event.target.closest('li'), items.map(event => event.id)) }>x</li>",
+	} {
+		if pe := parseErr(t, body); pe != nil {
+			t.Errorf("%s: %v", body, pe)
+		}
+	}
+	// Its chain is data even inside a handler, and the binding ends with its
+	// loop.
+	for _, tc := range []struct{ body, want string }{
+		{"{#for event in rows}<li @click={ pick(event.target.closest('li')) }>x</li>{/for}", "`.closest()` is not available"},
+		{"<li @click={ save(items.map(event => event.closest('li'))) }>x</li>", "`.closest()` is not available"},
+		{"{#for event in events}<b>a</b>{/for}<p>{ event }</p>", "`event` is only available in an event handler"},
+		{"{#for event in event.items}<b>a</b>{/for}", "`event` is only available in an event handler"},
+	} {
+		if pe := parseErr(t, tc.body); pe == nil || !strings.Contains(pe.Message, tc.want) {
+			t.Errorf("%s: got %v, want %q", tc.body, pe, tc.want)
+		}
+	}
 }
 
 // A template binding is a value: it reads, and it is never called — so the
@@ -249,15 +276,12 @@ func TestBindingNamesFollowTheLanguageRule(t *testing.T) {
 		}
 	}
 	for _, tc := range []struct{ body, want string }{
-		{"{#for event in events}<b>a</b>{/for}", `loop variable "event" is the DOM event of an event handler and cannot name a binding`},
-		{"{#for x in xs, event}<b>a</b>{/for}", `loop variable "event" is the DOM event of an event handler and cannot name a binding`},
 		{"{#for NaN in xs}<b>a</b>{/for}", `loop variable "NaN" is a literal value and cannot name a binding`},
 		{"{#for undefined in xs}<b>a</b>{/for}", `loop variable "undefined" is a literal value and cannot name a binding`},
 		{"{#for Math in xs}<b>a</b>{/for}", `loop variable "Math" is a JavaScript global and cannot name a binding`},
 		{"{#for 1...3, Number}<b>a</b>{/for}", `loop variable "Number" is a JavaScript global and cannot name a binding`},
 		{"{#for eval in xs}<b>a</b>{/for}", `loop variable "eval" is not a legal binding identifier in strict-mode JavaScript`},
 		{`<Card><Snippet fits="row" Boolean>x</Snippet></Card>`, `snippet parameter "Boolean" is a JavaScript global and cannot name a binding`},
-		{`<Card><Snippet fits="row" event>x</Snippet></Card>`, `snippet parameter "event" is the DOM event of an event handler and cannot name a binding`},
 		{"{#for grö-ße in xs}<b>a</b>{/for}", `{#for} item must be a valid identifier (got "grö-ße")`},
 	} {
 		pe := parseErr(t, tc.body)

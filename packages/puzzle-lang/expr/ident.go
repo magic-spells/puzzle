@@ -113,17 +113,16 @@ func IsIdentifier(s string) bool {
 // parameter, a {#for} item or counter, a <Snippet> parameter (and a Sites
 // {#let} name). It returns "" when identifier-shaped name may be bound, or a
 // phrase that completes "<name> …" when it may not: a strict-mode reserved
-// word (eval and arguments included), a literal word, `event` (the DOM event
-// of a handler), or a JavaScript global the language gives a meaning to.
-// Check the shape with IsIdentifier first.
+// word (eval and arguments included), a literal word, or a JavaScript global
+// the language gives a meaning to. `event` may be bound: a bound `event`
+// shadows a handler's DOM event, as JavaScript scoping would. Check the shape
+// with IsIdentifier first.
 func BindingNameReason(name string) string {
 	switch {
 	case jsident.IsReservedBindingIdentifier(name):
 		return "is not a legal binding identifier in strict-mode JavaScript"
 	case name == "NaN" || name == "Infinity" || name == "undefined":
 		return "is a literal value and cannot name a binding"
-	case name == "event":
-		return "is the DOM event of an event handler and cannot name a binding"
 	case globalValueMessage(name) != "":
 		return "is a JavaScript global and cannot name a binding"
 	}

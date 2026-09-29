@@ -17,24 +17,40 @@ func compileEventPZL(t *testing.T, body string) string {
 	return got
 }
 
-// `event` is the DOM event of a handler and never a name a template binds
-// (the expression language's one binding-name rule), so a loop item or
-// counter named `event` is a positioned parse error before codegen runs:
-// there is no loop binding for the DOM event parameter to shadow.
-func TestEventHandlerLoopBindingNamedEventIsRejected(t *testing.T) {
-	for _, body := range []string{
-		"  {#for event in events}\n    <button @click={ select(event) }>select</button>\n  {/for}",
-		"  {#for item in items, event}\n    <button @click={ select(event) }>select</button>\n  {/for}",
-		"  {#for event in rows}\n    <button @click={ pick(event.id) }>pick</button>\n  {/for}",
-	} {
-		_, err := compileSrcOpts(t, viewSrc(body, plainScripts), Options{Mode: ModeView})
-		pe, ok := err.(*parser.ParseError)
-		if !ok {
-			t.Fatalf("%q: got %v, want a ParseError", body, err)
-		}
-		if pe.Line != 2 || pe.Message != `loop variable "event" is the DOM event of an event handler and cannot name a binding` {
-			t.Errorf("%q: got %d:%d %s", body, pe.Line, pe.Col, pe.Message)
-		}
+func TestEventHandlerLoopItemNamedEvent(t *testing.T) {
+	got := compileEventPZL(t,
+		"  {#for event in events}\n"+
+			"    <button @click={ select(event) }>select</button>\n"+
+			"  {/for}",
+	)
+	if !strings.Contains(got, "__l(this, this, 0, __d.events, (s) =>") {
+		t.Fatalf("loop item event was not lowered to a list block:\n%s", got)
+	}
+	// The loop item reads off the row scope; the DOM parameter still renames to
+	// __ev so it cannot shadow it (D170 moves WHERE the item is read, not which
+	// binding wins).
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.select(s.item))") {
+		t.Errorf("DOM event parameter must not shadow the loop item:\n%s", got)
+	}
+	if strings.Contains(got, "this.__h") {
+		t.Errorf("handler capturing the loop item must not use the per-instance cache:\n%s", got)
+	}
+}
+
+func TestEventHandlerLoopCounterNamedEvent(t *testing.T) {
+	got := compileEventPZL(t,
+		"  {#for item in items, event}\n"+
+			"    <button @click={ select(event) }>select</button>\n"+
+			"  {/for}",
+	)
+	if !strings.Contains(got, "__l(this, this, 0, __d.items, (s) =>") {
+		t.Fatalf("loop counter event was not lowered to a list block:\n%s", got)
+	}
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.select(s.i))") {
+		t.Errorf("DOM event parameter must not shadow the loop counter:\n%s", got)
+	}
+	if strings.Contains(got, "this.__h") {
+		t.Errorf("handler capturing the loop counter must not use the per-instance cache:\n%s", got)
 	}
 }
 
@@ -54,6 +70,20 @@ func TestEventHandlerGlobalNamedLoopVarNotCached(t *testing.T) {
 	}
 	if strings.Contains(got, "this.__h") {
 		t.Errorf("handler capturing a jsGlobals-named loop item must not use the per-instance cache:\n%s", got)
+	}
+}
+
+func TestEventHandlerLoopEventMemberAccess(t *testing.T) {
+	got := compileEventPZL(t,
+		"  {#for event in rows}\n"+
+			"    <button @click={ pick(event.id) }>pick</button>\n"+
+			"  {/for}",
+	)
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.pick(s.item.id))") {
+		t.Errorf("member access must resolve against the loop item, not the DOM event:\n%s", got)
+	}
+	if strings.Contains(got, "this.__h") {
+		t.Errorf("handler capturing the loop item must not use the per-instance cache:\n%s", got)
 	}
 }
 

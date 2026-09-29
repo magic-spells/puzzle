@@ -426,7 +426,7 @@ func (l *lexer) nextTag() (Token, error) {
 			l.expectValue = false
 			return Token{Type: TokAttrBare, Value: val, Raw: raw, Line: line, Col: col, Offset: off}, nil
 		}
-		if c == '@' || isNameStart(c) || attrRuneLen(l.input[l.pos:]) > 0 {
+		if c == '@' || isNameStart(c) || attrStartRuneLen(l.input[l.pos:]) > 0 {
 			j := l.pos
 			if c == '@' {
 				j++
@@ -449,16 +449,31 @@ func (l *lexer) nextTag() (Token, error) {
 	}
 }
 
-// attrRuneLen is the byte length of the non-ASCII letter, mark, or digit that
-// starts s, or 0. HTML allows Unicode attribute names, and a <Snippet>
-// parameter is an attribute name that must follow the expression language's
-// Unicode identifier rule (`<Snippet größe>`).
+// attrStartRuneLen and attrRuneLen extend attribute names past ASCII, so a
+// <Snippet> parameter can follow the expression language's Unicode identifier
+// rule (`<Snippet größe>`). An attribute name starts with `@`, an ASCII letter,
+// `_`, or a non-ASCII letter (attrStartRuneLen), and continues with the ASCII
+// name characters or a non-ASCII letter, mark, or digit (attrRuneLen). A name
+// may not START with a mark or a digit: a leading U+0301 (a combining mark) or
+// U+0663 (an Arabic-Indic digit) would parse here and then fail in the
+// browser's setAttribute. Each returns the byte length of the qualifying
+// non-ASCII rune that starts s, or 0.
+func attrStartRuneLen(s string) int {
+	return nonASCIIRuneLen(s, unicode.IsLetter)
+}
+
 func attrRuneLen(s string) int {
+	return nonASCIIRuneLen(s, func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsDigit(r)
+	})
+}
+
+func nonASCIIRuneLen(s string, ok func(rune) bool) int {
 	if s == "" || s[0] < utf8.RuneSelf {
 		return 0
 	}
 	r, n := utf8.DecodeRuneInString(s)
-	if r != utf8.RuneError && (unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsDigit(r)) {
+	if r != utf8.RuneError && ok(r) {
 		return n
 	}
 	return 0

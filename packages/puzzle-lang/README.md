@@ -71,20 +71,23 @@ template *binds* — an arrow parameter, a `{#for}` item or counter, a
 `<Snippet>` parameter (a `{#let}` name in Sites) — follows one rule,
 `IsIdentifier` plus `BindingNameReason`: a Unicode identifier that is not a
 strict-mode reserved word (`eval` and `arguments` included), a literal word
-(`NaN`, `Infinity`, `undefined`), `event`, or a JavaScript global the language
-gives a meaning to (`Math`, `Number`, `Boolean`, …). A bound name is a value:
-it reads, and calling it is an error, so `t('key')` inside `{#for t in …}`
-never reaches the library's `t`.
+(`NaN`, `Infinity`, `undefined`), or a JavaScript global the language gives
+a meaning to (`Math`, `Number`, `Boolean`, …). `event` may be bound. A bound
+name is a value: it reads, and calling it is an error, so `t('key')` inside
+`{#for t in …}` never reaches the library's `t`.
 
 **Options.**
 - `Handler` parses an `@event` handler value. It is a PuzzleKit-only
-  extension; Sites has no handlers. Only there is `event` legal: it is the
+  extension; Sites has no handlers. There the FREE name `event` is the
   browser's DOM event, so a member chain rooted at it reads any property and
   calls any method with no method-table check (`event.target.closest('li')`,
-  `event.preventDefault()`, `event.target.files.item(0)`). The handler's own
-  call — the whole value, or a branch of a top-level conditional — names a
-  view handler, so it may share a name with a binding. Everywhere else `event`
-  is an error, so a data field named `event` must be renamed to be shown.
+  `event.preventDefault()`, `event.target.files.item(0)`). A bound `event` —
+  `{#for event in …}`, a snippet parameter, `items.map(event => …)` — shadows
+  it, as in JavaScript, and its chain is ordinary data even in a handler. The
+  handler's own call — the whole value, or a branch of a top-level
+  conditional — names a view handler, so it may share a name with a binding.
+  Outside a handler a free `event` is an error, so a data field named `event`
+  must be renamed to be shown.
 - `Bindings` lists the names the enclosing template constructs bind; the
   template parser passes them, and each reads but cannot be called.
 - `CallArgument` parses the source as one call argument (the template
@@ -99,8 +102,9 @@ error is a `ParseError` at the offending token. `{#unless}` keeps its folded
 `!(…)` string, and its tree is a `Unary` `!` over the parsed condition.
 
 The template parser binds names with the same rule: `{#for größe in sizes}`
-and `<Snippet fits="row" größe>` work, and `{#for event in …}` or
-`<Snippet Math>` is a positioned error.
+and `<Snippet fits="row" größe>` work, and `{#for NaN in …}` or
+`<Snippet Math>` is a positioned error. An attribute name may be Unicode but
+starts with `@`, an ASCII letter, `_`, or a letter — never a mark or a digit.
 
 **The contract** is `conformance/expressions-parse.json`: every grammar rule
 and every error. An accepted case pins its tree and the position of every

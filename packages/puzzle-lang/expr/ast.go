@@ -12,11 +12,13 @@
 // tree in the compact form those fixtures use, and PrintPositions its node
 // positions.
 //
-// One PuzzleKit-only extension: an @event handler value (Options.Handler)
-// has `event` in scope, the browser's DOM event, and a member chain rooted at
-// it is unrestricted — any property, any method (`event.target.closest('li')`,
+// One PuzzleKit-only extension: in an @event handler value (Options.Handler)
+// the free name `event` is the browser's DOM event, and a member chain rooted
+// at it is unrestricted — any property, any method (`event.target.closest('li')`,
 // `event.preventDefault()`), no method-table check — because it is not
-// template data. Sites has no handlers, so the extension never applies there.
+// template data. A bound `event` shadows it, as in JavaScript, and its chain
+// is ordinary data. Sites has no handlers, so the extension never applies
+// there.
 //
 // Names a template binds — arrow parameters, {#for} items and counters,
 // <Snippet> parameters, Sites' {#let} — follow one rule (IsIdentifier and

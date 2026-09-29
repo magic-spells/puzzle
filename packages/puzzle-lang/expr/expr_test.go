@@ -170,7 +170,7 @@ func TestParseDefaultOptions(t *testing.T) {
 // A binding-name rule, shared by arrow parameters here and by the template
 // parser's {#for} and <Snippet> bindings.
 func TestBindingNames(t *testing.T) {
-	for _, name := range []string{"item", "größe", "値段", "$el", "_x", "eval2", "async", "of", "Date", "JSON"} {
+	for _, name := range []string{"item", "größe", "値段", "$el", "_x", "eval2", "async", "of", "Date", "JSON", "event"} {
 		if !IsIdentifier(name) || BindingNameReason(name) != "" {
 			t.Errorf("%q should be bindable (%q)", name, BindingNameReason(name))
 		}
@@ -183,7 +183,7 @@ func TestBindingNames(t *testing.T) {
 	for name, reason := range map[string]string{
 		"class": "strict-mode", "this": "strict-mode", "eval": "strict-mode", "arguments": "strict-mode",
 		"null": "strict-mode", "NaN": "literal", "Infinity": "literal", "undefined": "literal",
-		"event": "DOM event", "Math": "global", "Number": "global", "Boolean": "global",
+		"Math": "global", "Number": "global", "Boolean": "global",
 		"Object": "global", "parseInt": "global", "isFinite": "global", "Array": "global",
 	} {
 		if got := BindingNameReason(name); !strings.Contains(got, reason) {

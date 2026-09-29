@@ -15,13 +15,15 @@ import (
 // Options adjusts Parse for the position the expression sits in.
 type Options struct {
 	// Handler marks an @event handler value — a PuzzleKit extension; Sites has
-	// no handlers. Only there is `event` a legal name: it is the DOM event, so
-	// a member chain rooted at it reads any property and calls any method
+	// no handlers. There the FREE name `event` is the DOM event, so a member
+	// chain rooted at it reads any property and calls any method
 	// (`event.target.closest('li')`, `event.preventDefault()`) with no
-	// method-table check — the browser's Event object is not template data.
-	// And the handler's own call (the whole value, or a branch of a top-level
-	// conditional) names a view handler, so it may share a name with a
-	// binding.
+	// method-table check — the browser's Event object is not template data. A
+	// bound `event` (a binding or an arrow parameter) shadows it, as in
+	// JavaScript, and its chain is ordinary data. Outside a handler a free
+	// `event` is an error. The handler's own call (the whole value, or a
+	// branch of a top-level conditional) names a view handler, so it may share
+	// a name with a binding.
 	Handler bool
 	// Bindings are the names the enclosing template constructs bind: {#for}
 	// items and counters and <Snippet> parameters (in Sites, {#let} names).
@@ -114,6 +116,26 @@ func (p *parser) isBinding(name string) bool {
 		}
 	}
 	return false
+}
+
+// eventBound reports whether `event` is bound here — by the template or by
+// an enclosing arrow function — and so names a value, not the DOM event.
+func (p *parser) eventBound() bool {
+	if p.isBinding("event") {
+		return true
+	}
+	for _, name := range p.params {
+		if name == "event" {
+			return true
+		}
+	}
+	return false
+}
+
+// isDOMEvent reports whether the name `event` here is a handler's DOM event:
+// in a handler, and not shadowed by a binding.
+func (p *parser) isDOMEvent() bool {
+	return p.opts.Handler && !p.eventBound()
 }
 
 const maxPooledTokens = 4096
@@ -402,8 +424,9 @@ func (p *parser) parseUnary() Node {
 func (p *parser) parsePostfix() Node {
 	n := p.parsePrimary()
 	// A chain rooted at a handler's DOM `event` is the browser's Event, not
-	// template data: its members and methods are unrestricted.
-	domEvent := p.opts.Handler && rootIsEvent(n)
+	// template data: its members and methods are unrestricted. A bound
+	// `event` shadows it, and its chain is data.
+	domEvent := rootIsEvent(n) && p.isDOMEvent()
 	optional := false
 	for {
 		t := p.cur()
@@ -500,7 +523,7 @@ func (p *parser) callee(n Node, open *token, domEvent bool) Node {
 				p.fail(c.Start, "`"+c.Name+"` is a parameter here and cannot be called")
 			}
 		}
-		if c.Name == "event" {
+		if c.Name == "event" && p.isDOMEvent() {
 			p.fail(c.Start, "`event` is the DOM event here and cannot be called")
 		}
 		return c
@@ -721,7 +744,7 @@ func (p *parser) parseName() Node {
 	if IsGlobalFunction("", t.text) {
 		return p.parseGlobalFunction()
 	}
-	if t.text == "event" && !p.opts.Handler {
+	if t.text == "event" && !p.opts.Handler && !p.eventBound() {
 		p.fail(t.pos, msgEvent)
 	}
 	p.advance()
@@ -897,7 +920,7 @@ func (p *parser) parseObject() Node {
 				if msg := globalValueMessage(t.text); msg != "" {
 					p.fail(t.pos, msg)
 				}
-				if t.text == "event" && !p.opts.Handler {
+				if t.text == "event" && !p.opts.Handler && !p.eventBound() {
 					p.fail(t.pos, msgEvent)
 				}
 				obj.Entries = append(obj.Entries, Entry{Key: t.text, KeyPos: t.pos, Shorthand: true,
