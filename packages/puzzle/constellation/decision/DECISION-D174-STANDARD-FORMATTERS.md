@@ -357,19 +357,22 @@ value a call returns prints by D173 V6.
   - `time`: short `3:04 PM`, medium `3:04:05 PM`, long adds the zone name,
     iso is the RFC 3339 time with its offset.
   - `datetime`: the date and time presets combined; iso is RFC 3339.
-- **With no preset** (D176 §9 i): `date(v)` is the medium date
+- **With no preset** (D176 rule 4): `date(v)` is the medium date
   (`Sep 24, 2026`), `time(v)` the short time (`3:04 PM`), and `datetime(v)`
   the medium date with the short time (`Sep 24, 2026, 3:04 PM`) — a pairing
   no named preset spells; `datetime(v, 'medium')` keeps medium/medium. The
   Intl options objects are PuzzleKit's formatter cache keys, so a default and
   the preset it equals share one formatter.
-- **An unknown preset.** A string-literal preset the library does not know is
-  a positioned compile error in PuzzleKit (`codegen/presets.go`), and so is a
-  string-literal `in_timezone` zone that cannot be a zone id (a space, an
-  empty string, a leading digit); a retired preset name — `date(v, 'time')` —
-  says to call `time(v)` instead. A dynamic preset the library does not know
-  is a development error, reported once per name, and renders the function's
-  default.
+- **An unknown preset.** A string-literal preset the standard function does
+  not know is a positioned build warning in PuzzleKit (`codegen/presets.go`),
+  and so is a string-literal `in_timezone` zone that cannot be a zone id (a
+  space, an empty string, a leading digit); a retired preset name —
+  `date(v, 'time')` — says to call `time(v)` instead. It warns rather than
+  fails because an app function registered under a standard name wins
+  (*Registration and shadowing*), and the compiler cannot see which presets
+  that function takes. A dynamic preset the standard function does not know
+  renders the function's default; in development it also logs an error, once
+  per preset name.
 - **The host renders them.** PuzzleKit formats with `Intl` in the viewer's
   locale and time zone; the optional `locale` argument is a PuzzleKit
   addition. Sites formats in Go in the site's locale and time zone (en in
