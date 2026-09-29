@@ -44,7 +44,8 @@ const (
 
 // Literal is a string, number, true/false, null, or undefined. Str holds a
 // string's cooked value (escapes resolved), Num a number's value, Bool a
-// boolean's. Raw is the literal as written.
+// boolean's. Raw is the literal as written. `NaN` and `Infinity` are number
+// literals (Num NaN and +Inf), never names; `-Infinity` is a Unary over one.
 type Literal struct {
 	Start Pos
 	Kind  LiteralKind
@@ -172,9 +173,12 @@ type Object struct {
 	Entries []Entry
 }
 
-// Global is a JavaScript global function the language allows, as a Call
-// callee: `Math.round` (Namespace "Math", Name "round") or `Number`
-// (Namespace "", Name "Number"). See GlobalFunctions.
+// Global is a JavaScript global the language allows: a function, only ever as
+// a Call callee — `Math.round` (Namespace "Math", Name "round") or `Number`
+// (Namespace "", Name "Number") — or a readable constant, `Math.PI` or
+// `Math.E`. See GlobalFunctions and GlobalConstants. A global is never a
+// value on its own: `Math`, `items.filter(Boolean)`, and `Math.round`
+// uncalled are errors, so a data field named after a global is unreachable.
 type Global struct {
 	Start     Pos
 	Namespace string

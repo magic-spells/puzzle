@@ -101,6 +101,28 @@ func TestWalkVisitsInSourceOrder(t *testing.T) {
 	}
 }
 
+// NaN and Infinity print like names, so the node types are pinned here: they
+// are number literals, never data reads, and Math.PI is a Global.
+func TestLiteralWordsAndConstants(t *testing.T) {
+	for src, want := range map[string]float64{"NaN": math.NaN(), "Infinity": math.Inf(1)} {
+		lit, ok := mustParse(t, src, Pos{Line: 1, Col: 1}).(*Literal)
+		if !ok || lit.Kind != LitNumber || lit.Raw != src {
+			t.Fatalf("%s: got %#v, want a number literal", src, lit)
+		}
+		if !(math.IsNaN(want) && math.IsNaN(lit.Num)) && lit.Num != want {
+			t.Errorf("%s: value %v", src, lit.Num)
+		}
+	}
+	g, ok := mustParse(t, "Math.PI", Pos{Line: 1, Col: 1}).(*Global)
+	if !ok || g.Namespace != "Math" || g.Name != "PI" {
+		t.Errorf("Math.PI: got %#v", g)
+	}
+	call := mustParse(t, "Number(x)", Pos{Line: 1, Col: 1}).(*Call)
+	if g, ok := call.Callee.(*Global); !ok || g.Namespace != "" || g.Name != "Number" {
+		t.Errorf("Number(x) callee: got %#v", call.Callee)
+	}
+}
+
 func TestFormatNumber(t *testing.T) {
 	for f, want := range map[float64]string{
 		0: "0", math.Copysign(0, -1): "0", 1: "1", -1.5: "-1.5", 0.1: "0.1",

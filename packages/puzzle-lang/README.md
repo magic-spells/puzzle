@@ -38,13 +38,17 @@ fields as `parser.ParseError` minus the file name.
 
 **The grammar.** Literals: `'…'` and `"…"` strings with JavaScript's
 strict-mode escapes; template literals with nested `${ }`; decimal numbers
-(`1`, `1.5`, `.5`, `1e3`); `true`, `false`, `null`, `undefined`; arrays;
-objects with name, quoted, and shorthand keys. Names are Unicode identifiers.
-Member access `a.b`, `a?.b`, `a[i]`, `a?.[i]`. Calls: a library function
-`name(args)`, a method `a.m(args)` / `a?.m(args)` whose name must be in the
-method table (`methods.go`), and the allowed JavaScript globals (`Math.round`,
-`Object.keys`, `Array.isArray`, `Number`, `String`, `Boolean`, `parseInt`,
-`parseFloat`, `isNaN`, `isFinite`). Arrow functions `x => expr` and
+(`1`, `1.5`, `.5`, `1e3`); `true`, `false`, `null`, `undefined`, `NaN`,
+`Infinity`; arrays; objects with name, quoted, and shorthand keys. Names are
+Unicode identifiers. Member access `a.b`, `a?.b`, `a[i]`, `a?.[i]`;
+`__proto__`, `constructor`, and `prototype` are rejected as member names and
+object keys. Calls: a library function `name(args)`, a method `a.m(args)` /
+`a?.m(args)` whose name must be in the method table (`methods.go`), and the
+allowed JavaScript globals (`Math.round`, `Object.keys`, `Array.isArray`,
+`Number`, `String`, `Boolean`, `parseInt`, `parseFloat`, `isNaN`,
+`isFinite`). A global is only ever called — `items.filter(Boolean)` is an
+error; write `x => Boolean(x)` — except the two readable constants `Math.PI`
+and `Math.E`. Arrow functions `x => expr` and
 `(x, i) => expr` only as call arguments. Operators with JavaScript precedence:
 unary `! - +`; `* / %`; `+ -`; `< <= > >=`; `== != === !==`; `&&`; `||`;
 `??` (not mixed with `||`/`&&` without parentheses); `?:`. Everything else —
@@ -61,7 +65,8 @@ order; `Print` renders the compact S-expression the fixtures use.
 
 **Options.** `AllowEvent` makes `event` legal — the template parser sets it
 for an `@event` handler and inside a `{#for}` or `<Snippet>` that binds a name
-`event`; elsewhere `event` is an error. `CallArgument` parses the source as one
+`event`; elsewhere `event` is an error, so a data field named `event` must be
+renamed to be shown. `CallArgument` parses the source as one
 call argument (the template parser's formatter arguments), where an arrow is
 legal at the top level.
 

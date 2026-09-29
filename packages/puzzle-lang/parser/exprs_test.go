@@ -184,7 +184,7 @@ func TestEventIsHandlerOnlyUnlessBound(t *testing.T) {
 	for _, body := range bad {
 		_, err := Parse([]byte("<puzzle-view>"+body+"</puzzle-view>"), "t.pzl")
 		pe, isPE := err.(*ParseError)
-		if !isPE || pe.Message != "`event` is only available in an event handler" {
+		if !isPE || !strings.HasPrefix(pe.Message, "`event` is only available in an event handler — a data field named `event` cannot be read in a template; rename the field") {
 			t.Errorf("%s: got %v, want the event error", body, err)
 		}
 	}

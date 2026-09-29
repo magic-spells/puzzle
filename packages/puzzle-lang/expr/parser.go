@@ -2,6 +2,7 @@ package expr
 
 import (
 	"fmt"
+	"math"
 	"sync"
 )
 
@@ -402,8 +403,8 @@ func (p *parser) memberName(obj Node, optional bool) Node {
 		}
 		p.fail(t.pos, "expected a property name after `.`, found "+describe(t))
 	}
-	if t.text == "__proto__" {
-		p.fail(t.pos, msgProto)
+	if prototypeNames[t.text] {
+		p.fail(t.pos, prototypeMessage(t.text))
 	}
 	p.advance()
 	return &Member{Start: obj.Pos(), Object: obj, Property: t.text, Optional: optional, PropPos: t.pos}
@@ -416,19 +417,15 @@ func (p *parser) memberName(obj Node, optional bool) Node {
 func (p *parser) callee(n Node, open *token) Node {
 	switch c := n.(type) {
 	case *Identifier:
-		if IsGlobalFunction("", c.Name) {
-			return &Global{Start: c.Start, Name: c.Name}
+		return c
+	case *Global:
+		if IsGlobalConstant(c.Namespace, c.Name) {
+			p.fail(open.pos, constantCallMessage(c.Namespace, c.Name))
 		}
 		return c
 	case *Member:
 		if c.Computed {
 			p.fail(c.PropPos, msgComputedCall)
-		}
-		if obj, ok := c.Object.(*Identifier); ok && !c.Optional && isGlobalNamespace(obj.Name) {
-			if !IsGlobalFunction(obj.Name, c.Property) {
-				p.fail(c.PropPos, namespaceMessage(obj.Name, c.Property))
-			}
-			return &Global{Start: obj.Start, Namespace: obj.Name, Name: c.Property}
 		}
 		if c.Property == "length" {
 			p.fail(c.PropPos, msgLengthCall)
@@ -514,6 +511,9 @@ func (p *parser) parseArrow() Node {
 		}
 		if msg := reservedMessage(t.text); msg != "" {
 			p.fail(t.pos, msg)
+		}
+		if globalValueMessage(t.text) != "" {
+			p.fail(t.pos, "`"+t.text+"` is a JavaScript global and cannot name a parameter")
 		}
 		if seen[t.text] {
 			p.fail(t.pos, "duplicate arrow function parameter `"+t.text+"`")
@@ -618,6 +618,12 @@ func (p *parser) parseName() Node {
 	case "undefined":
 		p.advance()
 		return &Literal{Start: t.pos, Kind: LitUndefined, Raw: t.text}
+	case "NaN":
+		p.advance()
+		return &Literal{Start: t.pos, Kind: LitNumber, Num: math.NaN(), Raw: t.text}
+	case "Infinity":
+		p.advance()
+		return &Literal{Start: t.pos, Kind: LitNumber, Num: math.Inf(1), Raw: t.text}
 	}
 	if isPunct(p.peek(1), "=>") {
 		p.fail(t.pos, msgArrowPlace)
@@ -625,11 +631,58 @@ func (p *parser) parseName() Node {
 	if msg := reservedMessage(t.text); msg != "" {
 		p.fail(t.pos, msg)
 	}
+	if isGlobalNamespace(t.text) {
+		return p.parseNamespaceMember()
+	}
+	if IsGlobalFunction("", t.text) {
+		return p.parseGlobalFunction()
+	}
 	if t.text == "event" && !p.opts.AllowEvent && !p.eventBound() {
 		p.fail(t.pos, msgEvent)
 	}
 	p.advance()
 	return &Identifier{Start: t.pos, Name: t.text}
+}
+
+// parseNamespaceMember parses `Math.round`, `Object.keys`, `Array.isArray`, or
+// a readable constant (`Math.PI`, `Math.E`) into a Global. A namespace is
+// never a value on its own, and a function member must be called — the
+// postfix loop sees the `(` next. Anything else is a positioned error.
+func (p *parser) parseNamespaceMember() Node {
+	ns, dot, name := p.cur(), p.peek(1), p.peek(2)
+	if !isPunct(dot, ".") || name.kind != tIdent {
+		p.fail(ns.pos, namespaceValueMessage(ns.text))
+	}
+	called := isPunct(p.peek(3), "(")
+	switch {
+	case IsGlobalFunction(ns.text, name.text):
+		if !called {
+			p.fail(ns.pos, callOnlyMessage(ns.text+"."+name.text))
+		}
+	case IsGlobalConstant(ns.text, name.text):
+	default:
+		p.fail(name.pos, namespaceMessage(ns.text, name.text, called))
+	}
+	p.advance()
+	p.advance()
+	p.advance()
+	return &Global{Start: ns.pos, Namespace: ns.text, Name: name.text}
+}
+
+// parseGlobalFunction parses a bare global function (`Number`, `parseInt`, …),
+// which is only ever a callee: the postfix loop sees the `(` next.
+func (p *parser) parseGlobalFunction() Node {
+	g := p.cur()
+	next := p.peek(1)
+	if isPunct(next, ".") && p.peek(2).kind == tIdent {
+		name := p.peek(2)
+		p.fail(name.pos, globalMemberMessage(g.text, name.text, isPunct(p.peek(3), "(")))
+	}
+	if !isPunct(next, "(") {
+		p.fail(g.pos, callOnlyMessage(g.text))
+	}
+	p.advance()
+	return &Global{Start: g.pos, Name: g.text}
 }
 
 func (p *parser) parseGroup() Node {
@@ -730,8 +783,8 @@ func (p *parser) parseObject() Node {
 			p.fail(t.pos, msgNumericKey)
 		case t.kind == tString:
 			p.advance()
-			if t.str == "__proto__" {
-				p.fail(t.pos, msgProto)
+			if prototypeNames[t.str] {
+				p.fail(t.pos, prototypeMessage(t.str))
 			}
 			c := p.cur()
 			if !isPunct(c, ":") {
@@ -743,8 +796,8 @@ func (p *parser) parseObject() Node {
 			p.advance()
 			obj.Entries = append(obj.Entries, Entry{Key: t.str, KeyPos: t.pos, Value: p.parseExpr()})
 		case t.kind == tIdent:
-			if t.text == "__proto__" {
-				p.fail(t.pos, msgProto)
+			if prototypeNames[t.text] {
+				p.fail(t.pos, prototypeMessage(t.text))
 			}
 			p.advance()
 			c := p.cur()
@@ -753,7 +806,11 @@ func (p *parser) parseObject() Node {
 				p.advance()
 				obj.Entries = append(obj.Entries, Entry{Key: t.text, KeyPos: t.pos, Value: p.parseExpr()})
 			case isPunct(c, ",") || isPunct(c, "}"):
+				// A shorthand entry reads its name as a value.
 				if msg := reservedMessage(t.text); msg != "" {
+					p.fail(t.pos, msg)
+				}
+				if msg := globalValueMessage(t.text); msg != "" {
 					p.fail(t.pos, msg)
 				}
 				if t.text == "event" && !p.opts.AllowEvent && !p.eventBound() {

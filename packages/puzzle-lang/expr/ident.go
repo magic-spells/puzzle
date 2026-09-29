@@ -69,7 +69,8 @@ var keywordMessages = map[string]string{
 
 // reservedMessage returns the error for name used where a value or a binding
 // is expected, or "" when name is an ordinary identifier. true, false, null,
-// and undefined are literals, not identifiers, so they are reserved here too.
+// undefined, NaN, and Infinity are literals, not identifiers, so they are
+// reserved here too.
 func reservedMessage(name string) string {
 	if m, ok := keywordMessages[name]; ok {
 		return m
@@ -78,7 +79,7 @@ func reservedMessage(name string) string {
 		return "`" + name + "` begins a statement, and " + msgStatement
 	}
 	switch name {
-	case "true", "false", "null", "undefined":
+	case "true", "false", "null", "undefined", "NaN", "Infinity":
 		return "`" + name + "` is a literal value and cannot name a binding"
 	}
 	if jsident.IsReservedBindingIdentifier(name) {

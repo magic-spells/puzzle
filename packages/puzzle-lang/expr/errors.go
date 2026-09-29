@@ -26,7 +26,7 @@ const (
 
 	msgExpected        = "expected an expression"
 	msgThis            = "`this` is not available in template expressions — return the value from data() (a getter or a computed field), or use a formatter for a display transform"
-	msgEvent           = "`event` is only available in an event handler"
+	msgEvent           = "`event` is only available in an event handler — a data field named `event` cannot be read in a template; rename the field"
 	msgArrowPlace      = "arrow functions are only available as a call argument, e.g. `items.filter(item => item.done)`"
 	msgArrowParam      = "arrow function parameters are plain names — defaults, rest parameters, and destructuring are not available in template expressions"
 	msgArrowBlock      = "an arrow function body is one expression, not a `{ … }` block — to return an object, wrap it in parentheses: `x => ({ … })`"
@@ -63,7 +63,6 @@ const (
 	msgComputedKey     = "computed object keys (`[key]: value`) are not available in template expressions — " + computeFirst
 	msgNumericKey      = "an object key is a name or a quoted string — write `'1': value`"
 	msgObjectMethod    = "object methods, getters, and setters are not available in template expressions — an object holds values"
-	msgProto           = "`__proto__` is not available in template expressions"
 	msgOptionalCall    = "optional calls (`?.(`) are not available in template expressions — call a method on a value that may be missing with `a?.m()`"
 	msgTaggedTemplate  = "tagged templates are not available in template expressions"
 	msgComputedCall    = "a method is called by name in template expressions, e.g. `a.trim()` — a computed method call (`a[name]()`) is not available"
@@ -89,3 +88,18 @@ const (
 	msgNameEscape      = "escapes are not available in names — write the character itself"
 	msgTooDeep         = "expression nests too deeply"
 )
+
+// prototypeNames are the property names JavaScript gives prototype behaviour
+// — reading or setting one reaches the object's prototype machinery, not a
+// plain property — which a Go host's plain maps would not share. They are
+// rejected as member names and object keys.
+var prototypeNames = map[string]bool{"__proto__": true, "constructor": true, "prototype": true}
+
+func prototypeMessage(name string) string {
+	return "`" + name + "` is not available in template expressions — in JavaScript it reaches the prototype, not a plain property"
+}
+
+// constantCallMessage is the error for calling a readable constant, `Math.PI(2)`.
+func constantCallMessage(namespace, name string) string {
+	return "`" + namespace + "." + name + "` is a number, not a function"
+}

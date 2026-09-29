@@ -45,6 +45,22 @@ var GlobalFunctions = map[string][]string{
 	"Array":  {"isArray"},
 }
 
+// GlobalConstants are the namespace members a template may read without a
+// call. A read parses to a Global node.
+var GlobalConstants = map[string][]string{
+	"Math": {"PI", "E"},
+}
+
+// IsGlobalConstant reports whether namespace.name is a readable constant.
+func IsGlobalConstant(namespace, name string) bool {
+	for _, n := range GlobalConstants[namespace] {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
 var methodNames = func() map[string]bool {
 	m := map[string]bool{}
 	for _, list := range [][]string{StringMethods, ArrayMethods, NumberMethods} {
@@ -175,16 +191,74 @@ func methodMessage(name, receiverName string) string {
 	return msg
 }
 
-// namespaceMessage is the error for a call to a namespace member that is not
-// in GlobalFunctions, e.g. `Math.random()`.
-func namespaceMessage(namespace, name string) string {
-	fns := GlobalFunctions[namespace]
-	var list string
-	switch len(fns) {
-	case 1:
-		list = "the " + namespace + " function is " + fns[0]
-	default:
-		list = "the " + namespace + " functions are " + strings.Join(fns[:len(fns)-1], ", ") + ", and " + fns[len(fns)-1]
+// namespaceMessage is the error for a namespace member the language does not
+// have, e.g. `Math.random()` (called) or `Math.LN2` (read): it lists what the
+// namespace does have.
+func namespaceMessage(namespace, name string, called bool) string {
+	what := "`" + namespace + "." + name + "`"
+	if called {
+		what = "`" + namespace + "." + name + "()`"
 	}
-	return "`" + namespace + "." + name + "()` is not available in template expressions — " + list
+	list := "the " + namespace + " " + plural("function", GlobalFunctions[namespace])
+	if consts := GlobalConstants[namespace]; len(consts) > 0 {
+		list += ", and the " + namespace + " " + plural("constant", consts)
+	}
+	return what + " is not available in template expressions — " + list
+}
+
+// plural renders "function is abs" / "functions are abs, ceil, and floor".
+func plural(noun string, names []string) string {
+	switch len(names) {
+	case 1:
+		return noun + " is " + names[0]
+	case 2:
+		return noun + "s are " + names[0] + " and " + names[1]
+	}
+	return noun + "s are " + strings.Join(names[:len(names)-1], ", ") + ", and " + names[len(names)-1]
+}
+
+// namespaceValueMessage is the error for a namespace object used as a value:
+// `Math` alone, `(Math)`, `Math?.round(x)`. A data field named after a
+// namespace is unreachable by design.
+func namespaceValueMessage(namespace string) string {
+	use := map[string]string{
+		"Math":   "call a Math function, e.g. `Math.round(x)`, or read `Math.PI` or `Math.E`",
+		"Object": "call `Object.keys(x)`, `Object.values(x)`, or `Object.entries(x)`",
+		"Array":  "call `Array.isArray(x)`",
+	}[namespace]
+	return "`" + namespace + "` is not a value in template expressions — " + use
+}
+
+// callOnlyMessage is the error for a global function used as a value instead
+// of being called: `items.filter(Boolean)`, `items.map(Math.round)`. There
+// are no function values; an arrow wraps the call.
+func callOnlyMessage(global string) string {
+	return "`" + global + "` can only be called — write `x => " + global + "(x)`"
+}
+
+// globalMemberMessage is the error for a member of a bare global function,
+// e.g. `Number.isInteger(x)`.
+func globalMemberMessage(global, name string, called bool) string {
+	what := "`" + global + "." + name + "`"
+	if called {
+		what = "`" + global + "." + name + "()`"
+	}
+	msg := what + " is not available in template expressions"
+	if alt := globalAlternatives[global]; alt != "" {
+		msg += " — use " + alt
+	}
+	return msg
+}
+
+// globalValueMessage is the error for a global's name used where a value or a
+// binding is read — a namespace or a global function — or "" for any other
+// name.
+func globalValueMessage(name string) string {
+	switch {
+	case isGlobalNamespace(name):
+		return namespaceValueMessage(name)
+	case IsGlobalFunction("", name):
+		return callOnlyMessage(name)
+	}
+	return ""
 }
