@@ -81,8 +81,9 @@ export function escape(v) {
 }
 
 // The two markup functions (D174 group e, kept by D176 §4). A template never
-// calls these: codegen lowers a text interpolation that is entirely a call to
-// either name to the live-HTML node (views/html.js), which runs the same
+// calls these: codegen lowers a text interpolation that ends in either name —
+// as the last pipe link today; as the outermost call once codegen lowers from
+// the AST — to the live-HTML node (views/html.js), which runs the same
 // sanitizer, and anywhere else either name is a compile error. So an app
 // function registered under `raw` can never inject markup. The functions return
 // the markup strings the node renders — for script code, and for the shared
@@ -140,8 +141,12 @@ export function truncate(v, length = 100, ellipsis = '…') {
 	return chars.slice(0, n - ell.length).join('') + ell.join('');
 }
 
-// Deprecated (D176 §4): `.replaceAll()` — this replaces EVERY occurrence, which
-// `.replace()` with a string search does not.
+// Deprecated (D176 §4): for plain strings use `.replaceAll(search, replacement)`;
+// the old formatter was `.split(search).join(replacement)`, which is the exact
+// equivalent for a non-empty search and a replacement string. `.replaceAll()`
+// differs at the edges: a missing replacement inserts "undefined" where this
+// inserts nothing, `$&`-style patterns in the replacement expand, and an empty
+// search inserts everywhere where this leaves the input alone.
 export function replace(v, search, replacement = '') {
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('replace');
 	const s = str(v);

@@ -98,6 +98,21 @@ describe('handler/library name collision (D176 §4)', () => {
 		expect(shadowWarnings(warn)).toHaveLength(0);
 	});
 
+	it('warns for an app function registered under a deprecated name, which stays the app\'s', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		// The app's own join and replace replace the seeded deprecated built-ins;
+		// trim is still the built-in, so a trim handler is not a collision.
+		const formatters = makeFormatterRegistry({
+			join: (list) => list.join(' / '),
+			replace: (s) => s,
+		});
+		await new (viewWith('ChatRoom', ['join', 'replace', 'trim']))({ formatters }).mount(container());
+		const messages = shadowWarnings(warn);
+		expect(messages).toHaveLength(2);
+		expect(messages[0]).toContain('[puzzle] ChatRoom: handler `join` shadows the library function `join` inside @event');
+		expect(messages[1]).toContain('[puzzle] ChatRoom: handler `replace` shadows the library function `replace` inside @event');
+	});
+
 	it('says nothing in production', async () => {
 		globalThis.__PUZZLE_DEV__ = false;
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

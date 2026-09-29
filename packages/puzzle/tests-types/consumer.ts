@@ -750,6 +750,8 @@ function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: st
 		lib.t('cart.title'),
 		lib.t('cart.items', { count: tags.length }),
 		lib.t(404, null),
+		// A boolean key converts and looks up, like a number (D175).
+		lib.t(true),
 		lib.currency(price),
 		lib.currency(price, '€', 0),
 		lib.percentage(12.5, 1),

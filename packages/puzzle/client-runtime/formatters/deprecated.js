@@ -16,7 +16,7 @@ export const DEPRECATED_FORMATTERS = {
 	trim: '`.trim()`',
 	strip: '`.trim()` (it removes the same leading and trailing whitespace)',
 	replace:
-		'`.replaceAll(search, replacement)` (this replaced EVERY occurrence, as `.replaceAll()` does; `.replace()` replaces only the first)',
+		'`.replaceAll(search, replacement)` for plain strings; the old formatter was `.split(search).join(replacement)`, which is the exact equivalent',
 	join: "`.join(', ')` (this joined with ', ' by default; `.join()` with no argument joins with ',')",
 	abs: '`Math.abs(x)`',
 	ceil: '`Math.ceil(x)`',

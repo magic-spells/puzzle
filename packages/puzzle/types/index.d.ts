@@ -412,9 +412,10 @@ export interface LibraryFunctions {
 	/**
 	 * The translation for `key` in the active locale (D175), `{name}`
 	 * placeholders filled from `vars`, a `count` choosing the plural form; a
-	 * missing key prints itself. Present when the app configures `i18n`.
+	 * missing key prints itself, and a number or boolean key is converted to
+	 * text and looked up. Present when the app configures `i18n`.
 	 */
-	t(key: string | number | null | undefined, vars?: TranslationVars | null): string;
+	t(key: string | number | boolean | null | undefined, vars?: TranslationVars | null): string;
 	/** `$1,234.50`: thousands grouped, the sign before the symbol, half away from zero. */
 	currency(value: unknown, symbol?: string, places?: number): string;
 	/** `12.5%`: the number as written, not a ratio. */
@@ -459,7 +460,10 @@ export interface LibraryFunctions {
 	trim(value: unknown): string;
 	/** @deprecated D176 §4 — use `.trim()`. */
 	strip(value: unknown): string;
-	/** @deprecated D176 §4 — use `.replaceAll()`: this replaces every occurrence. */
+	/**
+	 * @deprecated D176 §4 — for plain strings use `.replaceAll(search, replacement)`;
+	 * this was `.split(search).join(replacement)`, which is the exact equivalent.
+	 */
 	replace(value: unknown, search: unknown, replacement?: unknown): string;
 	/** @deprecated D176 §4 — use `.join(', ')`. */
 	join(list: unknown, separator?: string): string;

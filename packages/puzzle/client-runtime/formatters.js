@@ -17,13 +17,28 @@
  */
 
 import manifestFormatters from '@magic-spells/puzzle/formatters/manifest';
-import { escape } from './formatters/builtins.js';
-import { DEPRECATED_FORMATTERS } from './formatters/deprecated.js';
+import {
+	escape,
+	upcase,
+	downcase,
+	trim,
+	strip,
+	replace,
+	join,
+	abs,
+	ceil,
+	floor,
+} from './formatters/builtins.js';
 
 // `raw` is no longer seeded here (D174): templates reach it only through the
 // live-HTML node, never through the registry, and seeding it would pull the
 // sanitizer into every bundle.
 const requiredBuiltins = { escape };
+
+// The deprecated built-ins themselves (formatters/deprecated.js), so
+// warnHandlerShadows can tell one seeded into a registry from an app function
+// registered under the same name. Dev-only, like STANDARD_FORMATTERS.
+const DEPRECATED_BUILTINS = { upcase, downcase, trim, strip, replace, join, abs, ceil, floor };
 
 // The standard library (D174, D176 §4): the names Sites implements with the
 // same arguments and meaning. An app function registered under one of these
@@ -217,11 +232,11 @@ export function makeFormatterRegistry(customFormatters = {}, url) {
 				// The markup pair is lowered by the compiler (D174): templates never call
 				// the registry for either name, so the app's function is unreachable there.
 				console.warn(
-					`[puzzle] app formatter "${name}" is never called from templates — "${name}" renders through the built-in sanitizer`,
+					`[puzzle] app function "${name}" is never called from templates — "${name}" renders through the built-in sanitizer`,
 				);
 			} else if (STANDARD_FORMATTERS.includes(name)) {
 				console.warn(
-					`[puzzle] app formatter "${name}" shadows the standard formatter of the same name; templates using "${name}" now get the app's function`,
+					`[puzzle] app function "${name}" shadows the standard function of the same name; templates calling ${name}() now get the app's`,
 				);
 			}
 		}
@@ -245,8 +260,10 @@ let warnedShadows;
  * bare `save(…)` calls the view's handler; everywhere else it calls the library,
  * so one name would mean two things in one template. The library here is the
  * standard and PuzzleKit-only names plus whatever this app registered (its own
- * functions, `t`, `link`); a deprecated built-in does not count, since it is
- * leaving the library. PuzzleView.mount() calls this from behind the inline
+ * functions, `t`, `link`). A deprecated built-in does not count, since it is
+ * leaving the library — but an app function registered under a deprecated name
+ * (`join`, `replace`) does, because that name stays the app's after the
+ * built-in goes. PuzzleView.mount() calls this from behind the inline
  * `__PUZZLE_DEV__` probe, so production drops it.
  *
  * @param {object} view a PuzzleView instance (reads `events` and `ctx.formatters`)
@@ -256,11 +273,14 @@ export function warnHandlerShadows(view) {
 	if (events === null || typeof events !== 'object') return;
 	const registered = view.ctx?.formatters?.getAll?.();
 	for (const name of Object.keys(events)) {
-		if (name === '__missing' || Object.hasOwn(DEPRECATED_FORMATTERS, name)) continue;
+		if (name === '__missing') continue;
+		// In the registry, and not merely the deprecated built-in seeded there.
+		const registeredHere =
+			registered != null &&
+			Object.hasOwn(registered, name) &&
+			!(Object.hasOwn(DEPRECATED_BUILTINS, name) && registered[name] === DEPRECATED_BUILTINS[name]);
 		const inLibrary =
-			STANDARD_FORMATTERS.includes(name) ||
-			PUZZLEKIT_FORMATTERS.includes(name) ||
-			(registered != null && Object.hasOwn(registered, name));
+			registeredHere || STANDARD_FORMATTERS.includes(name) || PUZZLEKIT_FORMATTERS.includes(name);
 		if (!inLibrary) continue;
 		const where = view.constructor?.__pzlModule || view.constructor?.name || 'a view';
 		const key = where + '\0' + name;

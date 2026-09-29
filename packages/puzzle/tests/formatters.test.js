@@ -808,19 +808,21 @@ describe('the standard set (D174, D176 §4)', () => {
 		expect(warn).not.toHaveBeenCalled();
 	});
 
-	it('warns in development when an app formatter shadows a standard name, and the app wins', () => {
+	it('warns in development when an app function shadows a standard name, and the app wins', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const registry = makeFormatterRegistry({ pluralize: () => 'mine', plural: () => 'other' });
 		expect(registry.getAll().pluralize(2, 'x')).toBe('mine');
 		expect(warn).toHaveBeenCalledTimes(1);
-		expect(warn.mock.calls[0][0]).toContain('app formatter "pluralize" shadows the standard formatter');
+		expect(warn.mock.calls[0][0]).toBe(
+			'[puzzle] app function "pluralize" shadows the standard function of the same name; templates calling pluralize() now get the app\'s'
+		);
 	});
 
 	it('warns that an app raw/newline_to_br is never called from templates (D174)', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		makeFormatterRegistry({ raw: (v) => v, newline_to_br: (v) => v });
 		expect(warn).toHaveBeenCalledTimes(2);
-		expect(warn.mock.calls[0][0]).toContain('app formatter "raw" is never called from templates');
+		expect(warn.mock.calls[0][0]).toContain('app function "raw" is never called from templates');
 		expect(warn.mock.calls[1][0]).toContain('"newline_to_br" renders through the built-in sanitizer');
 	});
 
@@ -834,7 +836,7 @@ describe('the standard set (D174, D176 §4)', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		makeFormatterRegistry({ in_timezone: (v) => v });
 		expect(warn).toHaveBeenCalledTimes(1);
-		expect(warn.mock.calls[0][0]).toContain('app formatter "in_timezone" shadows the standard formatter');
+		expect(warn.mock.calls[0][0]).toContain('app function "in_timezone" shadows the standard function');
 	});
 
 	it('names the replacement when a template uses a removed function', () => {
@@ -917,13 +919,16 @@ describe('deprecated built-ins (D176 §4)', () => {
 		expect(warn).toHaveBeenCalledTimes(calls.length);
 	});
 
-	it('replace names .replaceAll(), because the formatter replaced EVERY occurrence', async () => {
+	it('replace names .replaceAll() for plain strings and .split().join() as the exact equivalent', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const b = await fresh();
 		expect(b.replace('a-b-c', '-', '+')).toBe('a+b+c');
 		expect('a-b-c'.replaceAll('-', '+')).toBe('a+b+c');
+		// Where .replaceAll() differs, .split().join() still matches the formatter.
+		expect(b.replace('a$b', '$', '$&')).toBe('a$b'.split('$').join('$&'));
+		expect('a$b'.replaceAll('$', '$&')).not.toBe(b.replace('a$b', '$', '$&'));
 		expect(warn.mock.calls[0][0]).toBe(
-			'[puzzle] "replace" is deprecated — JavaScript already covers it: use `.replaceAll(search, replacement)` (this replaced EVERY occurrence, as `.replaceAll()` does; `.replace()` replaces only the first)'
+			'[puzzle] "replace" is deprecated — JavaScript already covers it: use `.replaceAll(search, replacement)` for plain strings; the old formatter was `.split(search).join(replacement)`, which is the exact equivalent'
 		);
 	});
 
