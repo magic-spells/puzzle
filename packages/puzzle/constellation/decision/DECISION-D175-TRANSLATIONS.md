@@ -664,7 +664,8 @@ key rule.
 10. **The same-location rebuild.** `client-runtime/router/router.js`: an
     internal entry beside `__failedView(view, true)` that re-runs the
     committed path with keep = 0, in replace mode, with no animations, no
-    skeleton, no scroll change and no focus move, after any pending push.
+    skeleton, no scroll change and no focus move, after any in-flight
+    navigation.
 11. **Prerender and static.** `client-runtime/ssg/index.js`: the build
     service over the default table, `setFormatLocale(defaultLocale)`, the
     shell's `<html lang>`, and the `data-puzzle-locale` island in both shell

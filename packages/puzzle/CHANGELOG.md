@@ -501,9 +501,10 @@ checklist sent you.
   replace or Back still loading when the switch lands finishes first, and a
   failed rebuild rejects `setLocale`. Memory routing leaves `<html lang>`
   alone, and hash and memory routing fetch the locale files from the folder
-  `app.js` was served from, so a script embed works on another site's page. The startup locale is the stored choice, then
-  `navigator.languages` (exact tag, base language, then a configured tag with
-  the same base), then the default; the first render always has its strings.
+  `app.js` was served from, so a script embed works on another site's page.
+  The startup locale is the stored choice, then `navigator.languages` (exact
+  tag, base language, then a configured tag with the same base), then the
+  default; the first render always has its strings.
   `--hybrid` and `--static` pages prerender in the default locale and carry its
   table inline and `<html lang>` set to it, so a default-locale visitor makes
   no extra request. With translations configured, `date`, `time`, `datetime`,
