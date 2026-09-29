@@ -105,6 +105,16 @@ notes:
       sweep; P6, the Go evaluator in Sites, follows the tag. The 0.8.0 tag waits for P1b and P5.
       D173–D176, DOC-LANGUAGE-CORE and the docs, FILE and TEST cards describe the merged P4 state.
       **The next free decision number is D177.**
+  - kind: state
+    text: >-
+      2026-09-29, later — D176 P1b (PR #172, merged as 2765ea1b: the `{#raw}` splitter skip, HTML
+      void elements, the second-`{:else}` position, the `{#svg}` BOM skip) and P5's eslint/prettier
+      ports of it (PR #173, merged as ed9245cb) are in `release/0.8.0`. The three editor grammars
+      are the one piece the 0.8.0 tag still waits for; P6 follows the tag.
+      COMPONENT-TEMPLATE-PARSER, D150, D176, DOC-LANGUAGE-CORE, DOC-TEMPLATE-SYNTAX,
+      DOC-SPEC-TEMPLATE §18/§57 and the puzzle-lang FILE/TEST cards describe the merged state. **The
+      next free decision number is still D177.**
+    sha: ed9245cb
 connected_repos:
   - name: puzzle-lang
     path: ../puzzle-lang
@@ -217,11 +227,11 @@ decision cards explain why the contract has its current shape.
   with sanitized `raw`, D175 translations (`t(key, vars)`, v1.81), D176 the
   expression language (JavaScript-shaped template expressions: one closed
   grammar parsed by `packages/puzzle-lang/expr`, a method table, functions
-  instead of pipes, `.length` the count; P1–P4 are merged, P1b — the parser's
-  `{#raw}` splitter skip, HTML void elements and two diagnostics — is PR #172
-  awaiting merge, and P5 — the eslint/prettier ports of P1b, PR #173, and the
-  editor-grammar sweep — is open; both land before the tag, and the Sites
-  evaluator, P6, follows it), and
+  instead of pipes, `.length` the count; P1–P4 are merged, and so is P1b —
+  the parser's `{#raw}` splitter skip, HTML void elements and two
+  diagnostics, PR #172 — with P5's eslint/prettier ports of it, PR #173; the
+  editor-grammar sweep, the rest of P5, is the one piece left before the tag,
+  and the Sites evaluator, P6, follows it), and
   D168 rewritten as the merged whitespace rule. Heavily breaking for
   templates; the CHANGELOG opens with an "Upgrading from 0.7" checklist. The
   never-published `0.7.1` ([[RELEASE-V0-7-1]] — Quick Start via
