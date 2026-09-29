@@ -114,12 +114,37 @@ describe('t — lookup', () => {
 		expect(warn).toHaveBeenCalledTimes(1);
 		expect(warn.mock.calls[0][0]).toContain('did you mean "cart.title"');
 	});
-	it('prints nothing for a missing input and stringifies anything else', async () => {
+	it('prints nothing for a missing input and stringifies a number or boolean key', async () => {
 		const i18n = await service({ en: { ...EN, 42: 'forty-two' } });
 		expect(i18n.t(null)).toBe('');
 		expect(i18n.t(undefined)).toBe('');
 		expect(i18n.t(42)).toBe('forty-two');
 		expect(i18n.t('status.' + 'shipped')).toBe('status.shipped');
+	});
+	it('prints a missing number key as itself, with the missing-key warning', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const i18n = await service();
+		expect(i18n.t(7)).toBe('7');
+		expect(i18n.t(true)).toBe('true');
+		expect(warn).toHaveBeenCalledTimes(2);
+		expect(warn.mock.calls[0][0]).toContain('translation "7" is missing');
+	});
+	it('prints nothing for an object, list or function key and warns once to pass the key first (D176)', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const i18n = await service();
+		// The usual slip in the function spelling: the variables first.
+		expect(i18n.t({ count: 2 }, 'item_count')).toBe('');
+		expect(i18n.t(['cart.title'])).toBe('');
+		expect(i18n.t(() => 'cart.title')).toBe('');
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toBe(
+			"[puzzle] t() takes the key first, as a string — got an object, so it prints nothing; call it as t('key', { name: value })"
+		);
+		// The registered library function behaves the same.
+		const registry = makeFormatterRegistry();
+		installTranslate(registry, i18n);
+		expect(registry.getAll().t({ count: 2 }, 'item_count')).toBe('');
+		expect(registry.getAll().t('item_count', { count: 2 })).toBe('2 items');
 	});
 	it('never reads an inherited property as a translation', async () => {
 		vi.spyOn(console, 'warn').mockImplementation(() => {});

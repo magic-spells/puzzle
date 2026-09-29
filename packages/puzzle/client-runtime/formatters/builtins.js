@@ -1,30 +1,35 @@
-// Built-in template formatters. Keep this module side-effect-free so bundlers
-// can tree-shake unused named exports from compiler-generated manifests.
+// The built-in half of the function library (D176 §4): the functions a template
+// calls as `name(value, …args)`, which compiled code reaches through the
+// registry's raw map (`__f`, formatters.js). Keep this module side-effect-free
+// so bundlers can tree-shake unused named exports from compiler-generated
+// manifests.
 //
-// The names split into the STANDARD set (D174), which Sites implements too with
-// the same arguments and meaning, and three PuzzleKit-only names: `link` (built
-// by the registry, not here), `timeago` and `in_timezone`. The identical-output
-// part of the standard set is pinned by the shared conformance table,
-// packages/puzzle-lang/conformance/formatters.json.
-// List shaping (sort, filter, map, pick, split) is JavaScript in PuzzleKit —
-// `data()` — so there are deliberately no list formatters here beyond `join`.
-// Counting, arithmetic and fallbacks are the template language's own `.size`,
-// operators and `??` (D176), so there are no formatters for those either.
+// The names split into the STANDARD set (D174, D176 §4), which Sites implements
+// too with the same arguments and meaning, and two PuzzleKit-only names: `link`
+// (built by the registry, not here) and `timeago`. The identical-output part of
+// the standard set is pinned by the shared conformance table,
+// packages/puzzle-lang/conformance/functions.json.
+// A JavaScript method or `Math` global covers the deprecated names — `upcase`,
+// `downcase`, `trim`, `strip`, `replace`, `join`, `abs`, `ceil`, `floor` — which
+// still work and warn once in development (./deprecated.js). Lists are shaped
+// and counted with array methods and `.length`, arithmetic is the operators and
+// a fallback is `??`, so there are no functions for those.
 
 import { calendarISO, isCalendarDate, noDate, parseDateInput } from '../dates.js';
 import { formatLocale, localeNumber } from './locale.js';
 import { sanitizeHtml, newlineToBr } from '../sanitize.js';
+import { warnDeprecated } from './deprecated.js';
 
 // null/undefined render as empty string, never the literal "null"/"undefined"
 const str = (v) => (v == null ? '' : String(v));
 
 // A number read from a display value, or NaN. A missing value (and '' and a
-// boolean) is NaN rather than Number()'s 0, so `{ unset | currency }` prints
+// boolean) is NaN rather than Number()'s 0, so `{ currency(unset) }` prints
 // nothing instead of "$0.00".
 const num = (v) => (v == null || v === '' || typeof v === 'boolean' ? NaN : Number(v));
 
 // What a text-producing number formatter prints for input that is not a finite
-// number: nothing for a NaN or ±Infinity NUMBER (`{ total / count | currency }`
+// number: nothing for a NaN or ±Infinity NUMBER (`{ currency(total / count) }`
 // on an empty list), exactly as the bare value prints (D173 V6); anything else —
 // a missing value, a non-numeric string — prints as text (D174 deviation 2).
 const notFinite = (v) => (typeof v === 'number' ? '' : str(v));
@@ -75,12 +80,13 @@ export function escape(v) {
 	return str(v);
 }
 
-// The two markup formatters (D174). A template never calls these functions:
-// codegen lowers a text interpolation whose chain ENDS in either name to the
-// live-HTML node (views/html.js), which runs the same sanitizer, and anywhere
-// else either name is a compile error. So an app formatter registered under
-// `raw` can never inject markup. The functions return the markup strings the
-// node renders — for script code, and for the shared conformance table.
+// The two markup functions (D174 group e, kept by D176 §4). A template never
+// calls these: codegen lowers a text interpolation that is entirely a call to
+// either name to the live-HTML node (views/html.js), which runs the same
+// sanitizer, and anywhere else either name is a compile error. So an app
+// function registered under `raw` can never inject markup. The functions return
+// the markup strings the node renders — for script code, and for the shared
+// conformance table.
 export function raw(v) {
 	return sanitizeHtml(str(v));
 }
@@ -91,20 +97,26 @@ export function newline_to_br(v) {
 
 // ── Text ──────────────────────────────────────────────────────────────────────
 
+// Deprecated (D176 §4): `.trim()`.
 export function trim(v) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('trim');
 	return str(v).trim();
 }
 
+// Deprecated (D176 §4): `.toLowerCase()`.
 export function downcase(v) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('downcase');
 	return str(v).toLowerCase();
 }
 
+// Deprecated (D176 §4): `.toUpperCase()`.
 export function upcase(v) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('upcase');
 	return str(v).toUpperCase();
 }
 
 // Upper-cases the first character and leaves the rest alone, so `iPhone` and
-// `NASA` survive (D174 F1). The old behavior is `downcase | capitalize`.
+// `NASA` survive (D174 F1). The old behavior is `capitalize(s.toLowerCase())`.
 export function capitalize(v) {
 	const s = str(v);
 	if (s === '') return s;
@@ -128,10 +140,13 @@ export function truncate(v, length = 100, ellipsis = '…') {
 	return chars.slice(0, n - ell.length).join('') + ell.join('');
 }
 
+// Deprecated (D176 §4): `.replaceAll()` — this replaces EVERY occurrence, which
+// `.replace()` with a string search does not.
 export function replace(v, search, replacement = '') {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('replace');
 	const s = str(v);
 	// A RegExp is applied as given — a PuzzleKit addition. Anything else is a
-	// literal search, coerced like the input (`{ n | replace(0, '-') }`), that
+	// literal search, coerced like the input (`replace(n, 0, '-')`), that
 	// replaces ALL occurrences (Liquid semantics); a missing or empty one leaves
 	// the input alone rather than matching "undefined" or every gap.
 	if (search instanceof RegExp) return s.replace(search, str(replacement));
@@ -139,7 +154,9 @@ export function replace(v, search, replacement = '') {
 	return needle === '' ? s : s.split(needle).join(str(replacement));
 }
 
+// Deprecated (D176 §4): `.trim()` removes the same whitespace.
 export function strip(v) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('strip');
 	return str(v).replace(/^\s+|\s+$/g, '');
 }
 
@@ -238,24 +255,32 @@ export function pluralize(count, singular, plural) {
 
 // ── Numbers ───────────────────────────────────────────────────────────────────
 
-// Rounds half away from zero on the decimal value — `1.005 | round(2)` is 1.01,
-// `2.5 | round` is 3 — and negative places round to tens and hundreds (D174 F19).
-// Returns a number, so a chain can keep formatting it as one.
+// Rounds half away from zero on the decimal value — `round(1.005, 2)` is 1.01,
+// `round(2.5)` is 3 — and negative places round to tens and hundreds (D174
+// F19). Returns a number, so another function can keep formatting it as one.
+// Stays in the library (D176 §4): `Math.round` takes no places, and
+// `.toFixed()` rounds the binary value and returns a padded string.
 export function round(v, places = 0) {
 	let p = Math.trunc(Number(places));
 	if (!Number.isFinite(p)) p = 0;
 	return roundHalfAway(Number(v), Math.min(100, Math.max(-100, p)));
 }
 
+// Deprecated (D176 §4): `Math.floor(x)`.
 export function floor(v) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('floor');
 	return Math.floor(Number(v));
 }
 
+// Deprecated (D176 §4): `Math.ceil(x)`.
 export function ceil(v) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('ceil');
 	return Math.ceil(Number(v));
 }
 
+// Deprecated (D176 §4): `Math.abs(x)`.
 export function abs(v) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('abs');
 	return Math.abs(Number(v));
 }
 
@@ -270,8 +295,8 @@ export function currency(v, symbol = '$', places = 2) {
 	return (rounded < 0 ? '-' : '') + str(symbol) + group(whole, ',') + (frac ? '.' + frac : '');
 }
 
-// Takes the number as written: `12.5 | percentage(1)` is `12.5%`. A ratio is
-// `ratio * 100 | percentage` (D174 F14, D176).
+// Takes the number as written: `percentage(12.5, 1)` is `12.5%`. A ratio is
+// `percentage(ratio * 100)` (D174 F14, D176).
 export function percentage(v, places = 0) {
 	const n = num(v);
 	if (!Number.isFinite(n)) return notFinite(v);
@@ -311,7 +336,10 @@ export function compact_number(v) {
 
 // ── Values ────────────────────────────────────────────────────────────────────
 
+// Deprecated (D176 §4): `.join(', ')` — note the default separator here is ', '
+// where `.join()` alone uses ','.
 export function join(arr, sep = ', ') {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('join');
 	return Array.isArray(arr) ? arr.join(sep) : str(arr);
 }
 
@@ -387,17 +415,28 @@ export function json(v) {
 // the store, which revives a `date()` field to a Date on the way in — a
 // string-shaped test sees an instant there and silently takes the wrong branch.
 //
-// `date`, `time` and `datetime` share the presets `short`, `medium` (the
-// default), `long` and `iso` (D174 F4–F6). The first three are Intl styles in the
-// viewer's locale and time zone; `iso` is locale-free and uses the viewer's zone.
+// `date`, `time` and `datetime` share the presets `short`, `medium`, `long` and
+// `iso` (D174 F4–F6). The first three are Intl styles in the viewer's locale and
+// time zone; `iso` is locale-free and uses the viewer's zone.
+//
+// What each function renders with no preset (D176 §4): `date` the medium date
+// (`Sep 24, 2026`), `time` the short time (`3:04 PM`), and `datetime` the medium
+// date with the short time (`Sep 24, 2026, 3:04 PM`) — a pairing no named preset
+// spells, so it has its own options. An unknown preset renders the default too.
+// The options objects double as the formatter cache keys, so a default and the
+// preset it equals share one formatter. The shared objects are bindings, never
+// `DATE_PRESETS.date.medium`: a property read at module level is a side effect
+// to the bundler, which would then keep both tables in apps with no dates.
+const MEDIUM_DATE = { dateStyle: 'medium' };
+const SHORT_TIME = { timeStyle: 'short' };
 const DATE_PRESETS = {
 	date: {
 		short: { dateStyle: 'short' },
-		medium: { dateStyle: 'medium' },
+		medium: MEDIUM_DATE,
 		long: { dateStyle: 'long' },
 	},
 	time: {
-		short: { timeStyle: 'short' },
+		short: SHORT_TIME,
 		medium: { timeStyle: 'medium' },
 		long: { timeStyle: 'long' },
 	},
@@ -406,6 +445,11 @@ const DATE_PRESETS = {
 		medium: { dateStyle: 'medium', timeStyle: 'medium' },
 		long: { dateStyle: 'long', timeStyle: 'long' },
 	},
+};
+const DATE_DEFAULTS = {
+	date: MEDIUM_DATE,
+	time: SHORT_TIME,
+	datetime: { dateStyle: 'medium', timeStyle: 'short' },
 };
 
 const DATE_FORMATTERS = new Map();
@@ -446,45 +490,45 @@ function formatDate(kind, v, preset, locale) {
 		return kind === 'time' ? isoTime(d) : calendarISO(d) + 'T' + isoTime(d);
 	}
 
-	const presets = DATE_PRESETS[kind];
-	let resolved = preset;
-	if (!Object.hasOwn(presets, preset)) {
-		// An unknown preset is a development error, reported once per name, and
-		// renders as `medium`. hasOwn first so a typo can never mint a cache entry.
-		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+	// The Intl options are the cache key: a module constant per preset, so a typo
+	// can never mint a cache entry.
+	let options = DATE_DEFAULTS[kind];
+	if (preset !== undefined) {
+		const presets = DATE_PRESETS[kind];
+		if (Object.hasOwn(presets, preset)) {
+			options = presets[preset];
+		} else if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			// An unknown preset is a development error, reported once per name, and
+			// renders the default.
 			warnedPresets ??= new Set();
 			const key = kind + ':' + preset;
 			if (!warnedPresets.has(key)) {
 				warnedPresets.add(key);
-				// The retired preset names `date`/`time`/`datetime` are formatters now.
+				// The retired preset names `date`/`time`/`datetime` are functions now.
 				const retired =
-					preset !== kind && Object.hasOwn(DATE_PRESETS, preset)
-						? ` — use the ${preset} formatter instead`
-						: '';
+					preset !== kind && Object.hasOwn(DATE_PRESETS, preset) ? ` — use ${preset}() instead` : '';
 				console.error(
-					`[puzzle] unknown ${kind} preset "${preset}"${retired}; the presets are short, medium, long and iso (rendered as medium)`,
+					`[puzzle] unknown ${kind} preset "${preset}"${retired}; the presets are short, medium, long and iso (rendered as the default)`,
 				);
 			}
 		}
-		resolved = 'medium';
 	}
 	// Only undefined and string locales are cache KEYS. Intl also accepts a locale
 	// LIST (and an Intl.Locale), and a call site that builds one inline hands over a
 	// fresh object every render — identity keying would miss the Map every time AND
 	// insert, growing it without bound. Those construct a formatter per call instead.
 	const cacheable = locale === undefined || typeof locale === 'string';
-	const cacheKey = kind + ':' + resolved;
 	// An invalid locale throws RangeError at DateTimeFormat construction — fail
 	// soft to the raw value like the invalid-date guard above.
 	try {
 		const localeFormatters = cacheable ? DATE_FORMATTERS.get(locale) : undefined;
-		let formatter = localeFormatters?.get(cacheKey);
+		let formatter = localeFormatters?.get(options);
 		if (!formatter) {
-			formatter = new Intl.DateTimeFormat(locale, presets[resolved]);
+			formatter = new Intl.DateTimeFormat(locale, options);
 			if (localeFormatters) {
-				localeFormatters.set(cacheKey, formatter);
+				localeFormatters.set(options, formatter);
 			} else if (cacheable) {
-				DATE_FORMATTERS.set(locale, new Map([[cacheKey, formatter]]));
+				DATE_FORMATTERS.set(locale, new Map([[options, formatter]]));
 			}
 		}
 		return formatter.format(d);
@@ -493,22 +537,23 @@ function formatDate(kind, v, preset, locale) {
 	}
 }
 
-export function date(v, preset = 'medium', locale = undefined) {
+// `preset` is optional in all three; leaving it out renders DATE_DEFAULTS.
+export function date(v, preset, locale) {
 	return formatDate('date', v, preset, locale);
 }
 
-export function time(v, preset = 'medium', locale = undefined) {
+export function time(v, preset, locale) {
 	return formatDate('time', v, preset, locale);
 }
 
-export function datetime(v, preset = 'medium', locale = undefined) {
+export function datetime(v, preset, locale) {
 	return formatDate('datetime', v, preset, locale);
 }
 
 export function in_timezone(v, tz = 'UTC') {
 	// An absent value has no instant to re-express, and the fail-soft below would
-	// hand the next formatter in the pipe an Invalid Date — `{ x | in_timezone:'UTC'
-	// | date }` then rendered the literal text "Invalid Date" for an unset field.
+	// hand the outer function an Invalid Date — `{ date(in_timezone(x, 'UTC')) }`
+	// then rendered the literal text "Invalid Date" for an unset field.
 	// Same empty answer as date()/timeago(), for the same reason.
 	if (noDate(v)) return '';
 	const d = parseDateInput(v);
@@ -543,7 +588,7 @@ export function in_timezone(v, tz = 'UTC') {
 }
 
 export function timeago(v) {
-	// `{ todo.completedAt | timeago }` on an incomplete todo: nothing to say.
+	// `{ timeago(todo.completedAt) }` on an incomplete todo: nothing to say.
 	if (noDate(v)) return '';
 	const then = parseDateInput(v).getTime();
 	if (isNaN(then)) return str(v);

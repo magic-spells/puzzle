@@ -1,11 +1,14 @@
 /**
- * FormatterRegistry — template formatters for display-only data transformation.
+ * FormatterRegistry — the function library (D176 §4): the built-in functions and
+ * the app's own, which a template calls as `name(value, …args)` for display-only
+ * transforms (constellation/doc/DOC-SPEC.md §6). Apps register theirs through
+ * the `formatters` config map, which keeps its name.
  *
- * Formatters are the `{ value | name(args) }` pipeline in templates (constellation/doc/DOC-SPEC.md §6).
  * Compiled render code receives the RAW function map (getAll()), never the registry
- * instance: it calls `__formatters.escape(...)` and, for every formatter call,
+ * instance: it calls `__formatters.escape(...)` and, for every library call,
  * `(__formatters.name || __formatters.__missing('name'))(...)` directly — the
- * __missing typo-guard (v1.12, D43).
+ * __missing typo-guard (v1.12, D43). The call shape is the same for a `name(…)`
+ * call and for the pipe spelling codegen still accepts until the corpus moves.
  *
  * Renamed from FilterRegistry (constellation/doc/DOC-DECISIONS.md D7) with fixes from
  * constellation/doc/DOC-CODE-REVIEW.md §2.6: null/undefined render as '', `round` returns a
@@ -15,55 +18,59 @@
 
 import manifestFormatters from '@magic-spells/puzzle/formatters/manifest';
 import { escape } from './formatters/builtins.js';
+import { DEPRECATED_FORMATTERS } from './formatters/deprecated.js';
 
 // `raw` is no longer seeded here (D174): templates reach it only through the
 // live-HTML node, never through the registry, and seeding it would pull the
 // sanitizer into every bundle.
 const requiredBuiltins = { escape };
 
-// The standard formatter set (D174): the names Sites implements with the same
-// arguments and meaning. An app formatter registered under one of these draws a
-// development warning, because the app's templates no longer mean what the
-// standard name means. PuzzleKit-only built-ins (`link`, `timeago`,
-// `in_timezone`) are deliberately absent — overriding those is ordinary. `t` is
-// standard (D175) but not a built-in: the i18n service registers it when the app
-// configures translations. `split` is standard in Sites only (D176): PuzzleKit
-// splits in data(), since a pipe cannot feed a `{#for}`.
+// The standard library (D174, D176 §4): the names Sites implements with the
+// same arguments and meaning. An app function registered under one of these
+// draws a development warning, because the app's templates no longer mean what
+// the standard name means. The PuzzleKit-only built-ins (`link`, `timeago`) are
+// deliberately absent — overriding those is ordinary. `t` is standard (D175) but
+// not a built-in: the i18n service registers it when the app configures
+// translations. `in_timezone` joined the standard set with D176: no JavaScript
+// in the expression language re-expresses an instant in another zone. The
+// deprecated names (formatters/deprecated.js) left it: a JavaScript method or
+// `Math` global covers each, and `round` stays because nothing in JavaScript
+// rounds to places in one call.
 // Referenced only behind `__PUZZLE_DEV__`, so production tree-shakes it.
 export const STANDARD_FORMATTERS = [
-	'abs', 'ceil', 'floor', 'round',
-	'currency', 'percentage',
-	'downcase', 'upcase', 'capitalize', 'trim', 'strip', 'truncate', 'replace',
-	'strip_html', 'strip_newlines',
-	'escape', 'raw', 'newline_to_br',
-	'join', 'json',
-	'date', 'time', 'datetime', 'number_with_delimiter', 'compact_number', 'pluralize',
+	'round', 'currency', 'percentage', 'number_with_delimiter', 'compact_number', 'pluralize',
+	'capitalize', 'truncate', 'strip_html', 'strip_newlines',
+	'escape', 'raw', 'newline_to_br', 'json',
+	'date', 'time', 'datetime', 'in_timezone',
 	't',
 ];
 
+// The PuzzleKit-only library names — built in, but not standard (D174). Dev-only.
+const PUZZLEKIT_FORMATTERS = ['link', 'timeago'];
+
 // Removed built-ins (D174, D176) and what replaces each, for the unknown-name
-// guard. List shaping is JavaScript in PuzzleKit; counting, arithmetic and
-// fallbacks are the template language's `.size`, operators and `??` (D176).
+// guard: a list is shaped and counted with array methods and `.length`,
+// arithmetic is the operators and a fallback is `??` (D176 §3–4).
 // Dev-only, like STANDARD_FORMATTERS.
-const OPERATOR_HINT = 'use the operator (`a + b`, `a - b`, `a * b`, `a / b`, `a % b`) before the pipe';
+const OPERATOR_HINT = 'use the operator (`a + b`, `a - b`, `a * b`, `a / b`, `a % b`)';
 const REMOVED_FORMATTERS = {
-	sort: 'sort the list in data() and loop over that field',
-	where: 'filter the list in data() and loop over that field',
-	map: 'map the list in data() and loop over that field',
+	sort: 'use `.toSorted()` (`items.toSorted((a, b) => a.rank - b.rank)`)',
+	where: 'use `.filter()` (`items.filter((item) => item.done)`)',
+	map: 'use `.map()` (`items.map((item) => item.name)`)',
 	uniq: 'dedupe the list in data() and loop over that field',
-	reverse: 'reverse the list in data() and loop over that field',
-	compact: 'filter the list in data() (for a short count, use compact_number)',
-	first: 'use items[0] in the expression',
-	last: 'use items[items.size - 1] in the expression',
+	reverse: 'use `.toReversed()`',
+	compact: 'use `.filter()` (`items.filter((item) => item != null)`); for a short count, compact_number',
+	first: 'use `items[0]` or `items.at(0)`',
+	last: 'use `items.at(-1)`',
 	noescape: 'use raw',
-	size: 'use the `.size` property (`items.size`)',
+	size: 'use the `.length` property (`items.length`)',
 	plus: OPERATOR_HINT,
 	minus: OPERATOR_HINT,
 	times: OPERATOR_HINT,
 	divided_by: OPERATOR_HINT,
 	modulo: OPERATOR_HINT,
 	default: "use `??` (`{ name ?? 'fallback' }`)",
-	split: 'split the string in data()',
+	split: "use `.split()` (`tags.split(',')`)",
 };
 
 // Levenshtein edit distance — tight two-row DP, no dependency. Powers the
@@ -128,11 +135,11 @@ export class FormatterRegistry {
 			if (!this.formatters[name]) this.register(name, fn);
 		}
 
-		// Unknown-formatter guard (v1.12, D43): __missing is a FACTORY. Codegen
+		// Unknown-function guard (v1.12, D43): __missing is a FACTORY. Codegen
 		// emits `(__f.name || __f.__missing('name'))(value, …)`, so an unregistered
 		// name lands here with its own spelling. We log ONE console.error per
 		// unknown name (with a did-you-mean when a registered name is within edit
-		// distance ≤ 2) and return a pass-through formatter, so a display-only typo
+		// distance ≤ 2) and return a pass-through function, so a display-only typo
 		// renders the raw value instead of taking down the render loop. See §6.
 		this.formatters.__missing = (name) => {
 			// Dev-only: report the typo ONCE (with a did-you-mean). Wrapped in the
@@ -147,20 +154,20 @@ export class FormatterRegistry {
 					// translations, so the useful hint is how to turn them on.
 					if (name === 't') {
 						console.error(
-							"[puzzle] the t formatter needs translations — add i18n: { locales: ['en'], defaultLocale: 'en' } to puzzle.config.js and app/locales/en.json; the key passes through unchanged",
+							"[puzzle] t() needs translations — add i18n: { locales: ['en'], defaultLocale: 'en' } to puzzle.config.js and app/locales/en.json; the key passes through unchanged",
 						);
 						return (v) => v;
 					}
 					if (Object.hasOwn(REMOVED_FORMATTERS, name)) {
 						console.error(
-							`[puzzle] formatter "${name}" was removed — ${REMOVED_FORMATTERS[name]}; value passed through unchanged`,
+							`[puzzle] "${name}" was removed from the function library — ${REMOVED_FORMATTERS[name]}; value passed through unchanged`,
 						);
 						return (v) => v;
 					}
 					const suggestion = nearestFormatter(this.formatters, name);
 					const hint = suggestion ? ` (did you mean "${suggestion}"?)` : '';
 					console.error(
-						`[puzzle] unknown formatter "${name}" — value passed through unchanged${hint}`,
+						`[puzzle] unknown function "${name}" — value passed through unchanged${hint}`,
 					);
 				}
 			}
@@ -227,6 +234,42 @@ export function makeFormatterRegistry(customFormatters = {}, url) {
 		});
 	}
 	return registry;
+}
+
+// Warn-once ledger for warnHandlerShadows, keyed by view and handler name.
+let warnedShadows;
+
+/**
+ * Development only (D176 §4): warn once per view and name when an `@event`
+ * handler shares its name with a library function. Inside an `@event` value a
+ * bare `save(…)` calls the view's handler; everywhere else it calls the library,
+ * so one name would mean two things in one template. The library here is the
+ * standard and PuzzleKit-only names plus whatever this app registered (its own
+ * functions, `t`, `link`); a deprecated built-in does not count, since it is
+ * leaving the library. PuzzleView.mount() calls this from behind the inline
+ * `__PUZZLE_DEV__` probe, so production drops it.
+ *
+ * @param {object} view a PuzzleView instance (reads `events` and `ctx.formatters`)
+ */
+export function warnHandlerShadows(view) {
+	const events = view.events;
+	if (events === null || typeof events !== 'object') return;
+	const registered = view.ctx?.formatters?.getAll?.();
+	for (const name of Object.keys(events)) {
+		if (name === '__missing' || Object.hasOwn(DEPRECATED_FORMATTERS, name)) continue;
+		const inLibrary =
+			STANDARD_FORMATTERS.includes(name) ||
+			PUZZLEKIT_FORMATTERS.includes(name) ||
+			(registered != null && Object.hasOwn(registered, name));
+		if (!inLibrary) continue;
+		const where = view.constructor?.__pzlModule || view.constructor?.name || 'a view';
+		const key = where + '\0' + name;
+		if ((warnedShadows ??= new Set()).has(key)) continue;
+		warnedShadows.add(key);
+		console.warn(
+			`[puzzle] ${where}: handler \`${name}\` shadows the library function \`${name}\` inside @event — ${name}(…) in an @event value calls the handler, and the library function everywhere else; rename the handler to keep one meaning per name`,
+		);
+	}
 }
 
 export default FormatterRegistry;

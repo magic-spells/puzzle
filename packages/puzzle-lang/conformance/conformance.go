@@ -8,8 +8,8 @@
 //     with github.com/magic-spells/puzzle/packages/puzzle-lang/expr and
 //     expects either the tree's S-expression (expr.Print) or an error message
 //     at an exact line and column.
-//   - formatters.json — the standard formatter set (D174): each case pipes
-//     `input` through `name` with `args` and expects `expect`.
+//   - functions.json — the function library (D176 §4, the standard set of
+//     D174): each case calls `name(input, ...args)` and expects `expect`.
 package conformance
 
 import _ "embed"
@@ -19,7 +19,7 @@ import _ "embed"
 //go:embed expressions-parse.json
 var ExpressionsParse []byte
 
-// Formatters is formatters.json.
+// Functions is functions.json.
 //
-//go:embed formatters.json
-var Formatters []byte
+//go:embed functions.json
+var Functions []byte

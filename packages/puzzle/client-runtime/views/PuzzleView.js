@@ -8,7 +8,8 @@
  * The compiler attaches the render() method via prototype assignment after
  * the user's class definition; render() reads this.getData() and this.events
  * at render time — the base class never touches this.events (class fields
- * initialize after super() returns).
+ * initialize after super() returns), except to read its names for the
+ * development-only handler/library collision warning at mount (D176 §4).
  *
  * Update triggers (constellation/doc/DOC-VIEW-LIFECYCLE.md §5):
  * - store change matching a data() query → onStoreChange → data() re-runs
@@ -23,6 +24,7 @@ import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } fro
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
 import { getErrorView, reportError } from '../errors.js';
+import { warnHandlerShadows } from '../formatters.js';
 import { RENDER_REV } from '../renderRev.js';
 import {
 	devperfCanRender,
@@ -919,6 +921,9 @@ export class PuzzleView {
 	 * timers, or grab focus from a mounted() hook (constellation/doc/DOC-VIEW-LIFECYCLE.md §3).
 	 */
 	async mount(container, { params = {}, props = {}, children = [], ref = null, preloaded = false } = {}) {
+		// D176 §4: an @event handler named like a library function means two things
+		// in one template — say so once per view and name. Development only.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnHandlerShadows(this);
 		this.#vm = new ViewManager(container, this.ctx, this);
 		this.#vm.slotChildren = children;
 		if (!preloaded) {

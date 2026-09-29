@@ -240,9 +240,23 @@ export function createI18n(options = {}) {
 		/**
 		 * Look `key` up in the active table. A missing key prints the key itself;
 		 * `vars` fill `{name}` placeholders, and a `count` picks a plural form.
+		 * A number or boolean key is converted to a string and looked up (D175); an
+		 * object, list or function is no key at all — usually the variables passed
+		 * first, `t({ count: n }, 'key')` — so it prints what the key rule prints
+		 * for it, which for an object is nothing (D173 V6), and warns.
 		 */
 		t(key, vars) {
 			if (key == null) return '';
+			if (typeof key === 'object' || typeof key === 'function') {
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					const got = Array.isArray(key) ? 'a list' : typeof key === 'function' ? 'a function' : 'an object';
+					warnOnce(
+						'\0nonstring',
+						`[puzzle] t() takes the key first, as a string — got ${got}, so it prints nothing; call it as t('key', { name: value })`
+					);
+				}
+				return '';
+			}
 			key = String(key);
 			if (!table) {
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -358,8 +372,8 @@ export function createI18n(options = {}) {
 }
 
 /**
- * Register the service-bound `t` formatter (D175) unless the app registered its
- * own — an app `t` wins, like an app `link` does.
+ * Register the service-bound `t(key, vars)` library function (D175, D176 §4)
+ * unless the app registered its own — an app `t` wins, like an app `link` does.
  */
 export function installTranslate(registry, i18n) {
 	if (!registry.getAll().t) registry.register('t', (key, vars) => i18n.t(key, vars));

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import {
 } from '../client-runtime/formatters.js';
 import fullBuiltins from '../client-runtime/formatters/builtins-all.js';
 import builtinNames from '../client-runtime/formatters/builtins.json';
+import { DEPRECATED_FORMATTERS } from '../client-runtime/formatters/deprecated.js';
 import { createI18n } from '../client-runtime/i18n.js';
 import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 
@@ -16,10 +17,19 @@ import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 // it). Read with JSON.parse rather than a JSON import: Vite's JSON module
 // transform writes `-0` back out as `0`, and the negative-zero rows need the sign.
 const conformance = JSON.parse(
-	readFileSync(new URL('../../puzzle-lang/conformance/formatters.json', import.meta.url), 'utf8')
+	readFileSync(new URL('../../puzzle-lang/conformance/functions.json', import.meta.url), 'utf8')
 );
 
 const f = new FormatterRegistry().getAll();
+
+// The deprecated built-ins (D176 §4) warn once per name in development. Spend
+// those warnings here, silenced, so the tests that still exercise the functions
+// run quietly; the warnings themselves are tested against a fresh module below.
+beforeAll(() => {
+	const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+	for (const name of Object.keys(DEPRECATED_FORMATTERS)) f[name]('');
+	warn.mockRestore();
+});
 
 function spyOnIntlConstructor(name) {
 	const Original = Intl[name];
@@ -56,7 +66,7 @@ describe('built-in Intl formatter caches', () => {
 		expect(constructor).toHaveBeenCalledTimes(2);
 	});
 
-	it('shares the medium cache entry across unknown presets', async () => {
+	it('shares the medium cache entry across unknown presets and the date default', async () => {
 		vi.resetModules();
 		const constructor = spyOnIntlConstructor('DateTimeFormat');
 		vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -65,7 +75,24 @@ describe('built-in Intl formatter caches', () => {
 		expect(date('2026-07-24', 'bogus-one', 'en-US')).toBe('Jul 24, 2026');
 		expect(date('2026-01-01', 'bogus-two', 'en-US')).toBe('Jan 1, 2026');
 		expect(date('2026-01-01', 'medium', 'en-US')).toBe('Jan 1, 2026');
+		expect(date('2026-01-01', undefined, 'en-US')).toBe('Jan 1, 2026');
 		expect(constructor).toHaveBeenCalledTimes(1);
+	});
+
+	it('caches the time and datetime defaults like any preset (D176)', async () => {
+		vi.resetModules();
+		const constructor = spyOnIntlConstructor('DateTimeFormat');
+		const { time, datetime } = await import('../client-runtime/formatters/builtins.js');
+		const at = new Date(2026, 8, 24, 15, 4, 5);
+
+		// time's default IS the short preset, so the two share one formatter.
+		expect(time(at, undefined, 'en-US')).toBe('3:04 PM');
+		expect(time(at, 'short', 'en-US')).toBe('3:04 PM');
+		// datetime's default is its own pairing, cached apart from medium.
+		expect(datetime(at, undefined, 'en-US')).toBe('Sep 24, 2026, 3:04 PM');
+		expect(datetime(at, undefined, 'en-US')).toBe('Sep 24, 2026, 3:04 PM');
+		expect(datetime(at, 'medium', 'en-US')).toBe('Sep 24, 2026, 3:04:05 PM');
+		expect(constructor).toHaveBeenCalledTimes(3);
 	});
 
 	it('keeps date, time and datetime presets in separate cache entries', async () => {
@@ -201,7 +228,7 @@ describe('FormatterRegistry', () => {
 
 			expect(reg.get('decorat')('plain')).toBe('plain');
 			expect(spy).toHaveBeenCalledWith(
-				'[puzzle] unknown formatter "decorat" — value passed through unchanged (did you mean "decorate"?)'
+				'[puzzle] unknown function "decorat" — value passed through unchanged (did you mean "decorate"?)'
 			);
 			spy.mockRestore();
 		});
@@ -217,7 +244,7 @@ describe('FormatterRegistry', () => {
 		expect(f.escape(null)).toBe('');
 		expect(f.escape(undefined)).toBe('');
 		expect(f.capitalize(null)).toBe('');
-		expect(f.trim(undefined)).toBe('');
+		expect(f.truncate(undefined)).toBe('');
 	});
 
 	it('raw returns the sanitized markup and newline_to_br the escaped text with <br>s (D174)', () => {
@@ -234,8 +261,8 @@ describe('FormatterRegistry', () => {
 			expect(f.capitalize('élan')).toBe('Élan');
 			// The first CODE POINT: an astral first character is not torn in half.
 			expect(f.capitalize('𐐨x')).toBe('𐐀x');
-			// The old behavior is one chain away.
-			expect(f.capitalize(f.downcase('hELLO'))).toBe('Hello');
+			// The old behavior is one method away: capitalize(s.toLowerCase()).
+			expect(f.capitalize('hELLO'.toLowerCase())).toBe('Hello');
 		});
 
 		it('truncate counts code points and never exceeds the length (D174 F25)', () => {
@@ -402,7 +429,7 @@ describe('FormatterRegistry', () => {
 			expect(f.number_with_delimiter(-0)).toBe('0');
 			expect(f.number_with_delimiter(-0, ',')).toBe('0');
 			expect(f.compact_number(-0)).toBe('0');
-			expect(f.pluralize(f.ceil(-0.2), 'day')).toBe('0 days');
+			expect(f.pluralize(Math.ceil(-0.2), 'day')).toBe('0 days');
 			const i18n = createI18n({
 				manifest: { defaultLocale: 'en', locales: { en: '' } },
 				tables: { en: { left: '{count} left' } },
@@ -467,7 +494,7 @@ describe('FormatterRegistry', () => {
 			expect(f.date('not a date')).toBe('not a date');
 		});
 
-		it('short / medium / long presets per formatter, medium by default (D174 F4–F6)', () => {
+		it('short / medium / long presets per function (D174 F4–F6)', () => {
 			const at = new Date(2026, 8, 24, 15, 4, 5);
 			expect(f.date(at, 'short', 'en-US')).toBe('9/24/26');
 			expect(f.date(at, 'medium', 'en-US')).toBe('Sep 24, 2026');
@@ -478,9 +505,18 @@ describe('FormatterRegistry', () => {
 			expect(f.time(at, 'long', 'en-US')).toMatch(/^3:04:05 PM \S+/);
 			expect(f.datetime(at, 'short', 'en-US')).toBe('9/24/26, 3:04 PM');
 			expect(f.datetime(at, 'medium', 'en-US')).toBe('Sep 24, 2026, 3:04:05 PM');
-			// No preset means medium, in the viewer's locale.
-			const medium = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
-			expect(f.date(at)).toBe(medium.format(at));
+		});
+
+		it('defaults: date medium, time short, datetime the medium date with the short time (D176 §4)', () => {
+			const at = new Date(2026, 8, 24, 15, 4, 5);
+			expect(f.date(at, undefined, 'en-US')).toBe('Sep 24, 2026');
+			expect(f.time(at, undefined, 'en-US')).toBe('3:04 PM');
+			expect(f.datetime(at, undefined, 'en-US')).toBe('Sep 24, 2026, 3:04 PM');
+			// With no arguments at all, in the viewer's locale.
+			const viewer = (options) => new Intl.DateTimeFormat(undefined, options).format(at);
+			expect(f.date(at)).toBe(viewer({ dateStyle: 'medium' }));
+			expect(f.time(at)).toBe(viewer({ timeStyle: 'short' }));
+			expect(f.datetime(at)).toBe(viewer({ dateStyle: 'medium', timeStyle: 'short' }));
 		});
 
 		it('iso presets are RFC 3339 in the viewer zone', () => {
@@ -496,16 +532,22 @@ describe('FormatterRegistry', () => {
 			expect(f.datetime(at, 'iso')).toBe(`2026-09-24T15:04:05${zone}`);
 		});
 
-		it('an unknown preset is a development error, reported once, and renders as medium', () => {
+		it('an unknown preset is a development error, reported once, and renders the default', () => {
 			const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
 			const at = new Date(2026, 8, 24, 15, 4, 5);
 			expect(f.date(at, 'fancy', 'en-US')).toBe('Sep 24, 2026');
 			expect(f.date(at, 'fancy', 'en-US')).toBe('Sep 24, 2026');
 			expect(spy).toHaveBeenCalledTimes(1);
 			expect(spy.mock.calls[0][0]).toContain('unknown date preset "fancy"');
-			// The retired preset names point at the formatter that replaced them.
+			expect(spy.mock.calls[0][0]).toContain('(rendered as the default)');
+			// The retired preset names point at the function that replaced them.
 			expect(f.date(at, 'datetime', 'en-US')).toBe('Sep 24, 2026');
-			expect(spy.mock.calls[1][0]).toContain('use the datetime formatter instead');
+			expect(spy.mock.calls[1][0]).toContain('use datetime() instead');
+			// time's and datetime's defaults are their own (D176 §4).
+			expect(f.time(at, 'fancy', 'en-US')).toBe('3:04 PM');
+			expect(f.datetime(at, 'fancy', 'en-US')).toBe('Sep 24, 2026, 3:04 PM');
+			expect(f.datetime(at, null, 'en-US')).toBe('Sep 24, 2026, 3:04 PM');
+			expect(spy).toHaveBeenCalledTimes(5);
 			spy.mockRestore();
 		});
 
@@ -692,7 +734,7 @@ describe('FormatterRegistry', () => {
 			reg.getAll().__missing('captialize');
 			expect(spy).toHaveBeenCalledTimes(1);
 			const msg = spy.mock.calls[0][0];
-			expect(msg).toContain('unknown formatter "captialize"');
+			expect(msg).toContain('unknown function "captialize"');
 			expect(msg).toContain('value passed through unchanged');
 			expect(msg).toContain('did you mean "capitalize"?');
 		});
@@ -703,7 +745,7 @@ describe('FormatterRegistry', () => {
 			reg.getAll().__missing('xqzwvblfar');
 			expect(spy).toHaveBeenCalledTimes(1);
 			const msg = spy.mock.calls[0][0];
-			expect(msg).toContain('unknown formatter "xqzwvblfar"');
+			expect(msg).toContain('unknown function "xqzwvblfar"');
 			expect(msg).not.toContain('did you mean');
 		});
 
@@ -725,21 +767,45 @@ describe('FormatterRegistry', () => {
 	});
 });
 
-describe('the standard set (D174)', () => {
+describe('the standard set (D174, D176 §4)', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
 
-	it('is the 27 standard names — all built in except the service-bound t; timeago and in_timezone are PuzzleKit-only', () => {
-		expect(STANDARD_FORMATTERS).toHaveLength(27);
-		expect(new Set(STANDARD_FORMATTERS).size).toBe(27);
+	it('is the 19 standard names — all built in except the service-bound t; timeago is PuzzleKit-only', () => {
+		expect([...STANDARD_FORMATTERS].sort()).toEqual([
+			'capitalize', 'compact_number', 'currency', 'date', 'datetime', 'escape', 'in_timezone', 'json',
+			'newline_to_br', 'number_with_delimiter', 'percentage', 'pluralize', 'raw', 'round', 'strip_html',
+			'strip_newlines', 't', 'time', 'truncate',
+		]);
 		// `t` is standard (D175) but registered by the i18n service, not built in.
 		for (const name of STANDARD_FORMATTERS) if (name !== 't') expect(builtinNames).toContain(name);
 		expect(builtinNames).not.toContain('t');
-		expect(builtinNames.filter((name) => !STANDARD_FORMATTERS.includes(name)).sort()).toEqual([
-			'in_timezone',
-			'timeago',
-		]);
+		// The rest of the manifest: the PuzzleKit-only timeago (link is built by the
+		// registry), and the deprecated names, still built in (and tree-shaken by
+		// name) until they are deleted.
+		const deprecated = Object.keys(DEPRECATED_FORMATTERS);
+		expect(builtinNames.filter((name) => !STANDARD_FORMATTERS.includes(name)).sort()).toEqual(
+			['timeago', ...deprecated].sort(),
+		);
+	});
+
+	it('deprecates exactly the names a JavaScript method or Math global covers, keeping round (D176 §4)', () => {
+		expect(Object.keys(DEPRECATED_FORMATTERS).sort()).toEqual(
+			['abs', 'ceil', 'downcase', 'floor', 'join', 'replace', 'strip', 'trim', 'upcase'],
+		);
+		for (const name of Object.keys(DEPRECATED_FORMATTERS)) {
+			expect(STANDARD_FORMATTERS, name).not.toContain(name);
+			expect(typeof f[name], name).toBe('function');
+		}
+		expect(STANDARD_FORMATTERS).toContain('round');
+	});
+
+	it('does not warn when an app registers a deprecated name — it is the app\'s own function now', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const registry = makeFormatterRegistry({ join: (list) => list.join(' / ') });
+		expect(registry.getAll().join(['a', 'b'])).toBe('a / b');
+		expect(warn).not.toHaveBeenCalled();
 	});
 
 	it('warns in development when an app formatter shadows a standard name, and the app wins', () => {
@@ -760,41 +826,113 @@ describe('the standard set (D174)', () => {
 
 	it('does not warn for PuzzleKit-only names or the app-supplied link', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		makeFormatterRegistry({ timeago: () => 'now', in_timezone: (v) => v, link: (v) => v, compact: (v) => v });
+		makeFormatterRegistry({ timeago: () => 'now', link: (v) => v, compact: (v) => v });
 		expect(warn).not.toHaveBeenCalled();
 	});
 
-	it('names the replacement when a template uses a removed formatter', () => {
+	it('warns for an app in_timezone, now a standard name (D176 §4)', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		makeFormatterRegistry({ in_timezone: (v) => v });
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('app formatter "in_timezone" shadows the standard formatter');
+	});
+
+	it('names the replacement when a template uses a removed function', () => {
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const missing = new FormatterRegistry().getAll().__missing;
+		// D176 §3: the array methods, `.length`, the operators and `??` replace these.
 		const hints = {
-			sort: 'data()',
-			where: 'data()',
-			map: 'data()',
+			sort: '`.toSorted()`',
+			where: '`.filter()`',
+			map: '`.map()`',
 			uniq: 'data()',
-			reverse: 'data()',
+			reverse: '`.toReversed()`',
 			compact: 'compact_number',
-			first: 'items[0]',
-			last: 'items[items.size - 1]',
+			first: '`items.at(0)`',
+			last: '`items.at(-1)`',
 			noescape: 'use raw',
-			// D176: the language's own `.size`, operators and `??` replace these.
-			size: 'use the `.size` property (`items.size`)',
+			size: 'use the `.length` property (`items.length`)',
 			plus: '`a + b`',
 			minus: '`a - b`',
 			times: '`a * b`',
 			divided_by: '`a / b`',
 			modulo: '`a % b`',
 			default: "use `??` (`{ name ?? 'fallback' }`)",
-			split: 'split the string in data()',
+			split: '`.split()`',
 		};
 		for (const [name, hint] of Object.entries(hints)) {
 			// Still a pass-through, like any unknown name (D43).
 			expect(missing(name)('value')).toBe('value');
 			const message = error.mock.calls.at(-1)[0];
-			expect(message).toContain(`formatter "${name}" was removed`);
+			expect(message).toContain(`"${name}" was removed from the function library`);
 			expect(message).toContain(hint);
 		}
 		expect(error).toHaveBeenCalledTimes(Object.keys(hints).length);
+	});
+
+	it('points t() without translations at the i18n config', () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const missing = new FormatterRegistry().getAll().__missing;
+		expect(missing('t')('cart.title')).toBe('cart.title');
+		expect(error.mock.calls[0][0]).toMatch(/^\[puzzle\] t\(\) needs translations — add i18n:/);
+	});
+});
+
+// D176 §4: the deprecated built-ins keep working and warn once each in
+// development, naming the JavaScript that replaces them. A fresh module per test
+// so the module-level warn-once ledger starts empty.
+describe('deprecated built-ins (D176 §4)', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.resetModules();
+	});
+
+	async function fresh() {
+		vi.resetModules();
+		return import('../client-runtime/formatters/builtins.js');
+	}
+
+	it('keep working and warn once per name with the JavaScript replacement', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const b = await fresh();
+		const calls = [
+			['upcase', () => b.upcase('ab'), 'AB', '.toUpperCase()'],
+			['downcase', () => b.downcase('AB'), 'ab', '.toLowerCase()'],
+			['trim', () => b.trim('  a  '), 'a', '.trim()'],
+			['strip', () => b.strip('\n a \t'), 'a', '.trim()'],
+			['replace', () => b.replace('a-b-c', '-', '+'), 'a+b+c', '.replaceAll(search, replacement)'],
+			['join', () => b.join(['a', 'b']), 'a, b', ".join(', ')"],
+			['abs', () => b.abs(-3), 3, 'Math.abs(x)'],
+			['ceil', () => b.ceil(1.2), 2, 'Math.ceil(x)'],
+			['floor', () => b.floor(1.8), 1, 'Math.floor(x)'],
+		];
+		for (const [name, call, expected, replacement] of calls) {
+			expect(call(), name).toBe(expected);
+			expect(call(), name).toBe(expected);
+			const message = warn.mock.calls.at(-1)[0];
+			expect(message).toContain(`"${name}" is deprecated`);
+			expect(message).toContain(replacement);
+		}
+		// Once per name, however often each ran.
+		expect(warn).toHaveBeenCalledTimes(calls.length);
+	});
+
+	it('replace names .replaceAll(), because the formatter replaced EVERY occurrence', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const b = await fresh();
+		expect(b.replace('a-b-c', '-', '+')).toBe('a+b+c');
+		expect('a-b-c'.replaceAll('-', '+')).toBe('a+b+c');
+		expect(warn.mock.calls[0][0]).toBe(
+			'[puzzle] "replace" is deprecated — JavaScript already covers it: use `.replaceAll(search, replacement)` (this replaced EVERY occurrence, as `.replaceAll()` does; `.replace()` replaces only the first)'
+		);
+	});
+
+	it('round, the kept numeric function, does not warn', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const b = await fresh();
+		expect(b.round(1.005, 2)).toBe(1.01);
+		expect(b.currency(9.5)).toBe('$9.50');
+		expect(warn).not.toHaveBeenCalled();
 	});
 });
 
@@ -802,29 +940,49 @@ describe('the standard set (D174)', () => {
 // the missing value in both directions. A case with a `zone` must render in that
 // zone, and Node only reads TZ at startup, so those run in one child process per
 // zone (the same mechanism as tests/formatters-timezone.test.js).
-describe('standard formatter conformance table (D174)', () => {
+describe('function library conformance table (D174, D176 §4)', () => {
 	const fromJSON = (v) => (v === null ? undefined : v);
-	const toJSONValue = (v) => (v === undefined ? null : v);
+	// A Date result (in_timezone) compares as the wall clock it reads as.
+	const toJSONValue = (v) => {
+		if (!(v instanceof Date)) return v === undefined ? null : v;
+		const p = (n) => String(n).padStart(2, '0');
+		return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}T${p(v.getHours())}:${p(v.getMinutes())}:${p(v.getSeconds())}`;
+	};
 	const local = conformance.cases.filter((c) => !c.zone && c.name !== 't');
 	const translated = conformance.cases.filter((c) => c.name === 't');
 	const zoned = conformance.cases.filter((c) => c.zone);
 
-	it('covers every identical-output standard name', () => {
+	it('covers every identical-output standard name, and nothing outside the library', () => {
 		const covered = new Set(conformance.cases.map((c) => c.name));
 		const localeRendered = ['date', 'time', 'datetime', 'number_with_delimiter', 'compact_number', 'pluralize'];
 		for (const name of STANDARD_FORMATTERS) {
 			if (localeRendered.includes(name)) continue;
 			expect(covered.has(name), name).toBe(true);
 		}
-		for (const name of covered) expect(STANDARD_FORMATTERS).toContain(name);
+		// The deprecated names keep their rows until they are deleted.
+		const known = [...STANDARD_FORMATTERS, ...Object.keys(DEPRECATED_FORMATTERS)];
+		for (const name of covered) expect(known).toContain(name);
+	});
+
+	it('pins the no-preset defaults of date, time and datetime (D176 §4)', () => {
+		const defaults = conformance.cases.filter((c) => ['date', 'time', 'datetime'].includes(c.name) && c.args.length === 0);
+		expect(new Set(defaults.map((c) => c.name))).toEqual(new Set(['date', 'time', 'datetime']));
+		for (const c of defaults) expect(c.locale, `${c.name}(${c.input})`).toBe('en');
 	});
 
 	const show = (v) => (Object.is(v, -0) ? '-0' : JSON.stringify(v));
-	it.each(local.map((c) => [`${c.name}(${show(c.input)}, ${JSON.stringify(c.args)})`, c]))(
+	it.each(local.map((c) => [`${c.name}(${show(c.input)}, ${JSON.stringify(c.args)})${c.locale ? ` in ${c.locale}` : ''}`, c]))(
 		'%s',
 		(_label, c) => {
-			const out = f[c.name](fromJSON(c.input), ...c.args.map(fromJSON));
-			expect(toJSONValue(out)).toEqual(c.expect);
+			// A row with a `locale` renders in it: the formatter locale (D175) is what
+			// a host sets for its active locale.
+			if (c.locale) setFormatLocale(c.locale);
+			try {
+				const out = f[c.name](fromJSON(c.input), ...c.args.map(fromJSON));
+				expect(toJSONValue(out)).toEqual(c.expect);
+			} finally {
+				setFormatLocale(undefined);
+			}
 		},
 	);
 
@@ -851,12 +1009,18 @@ describe('standard formatter conformance table (D174)', () => {
 	it.each(zones)('zone %s', (zone) => {
 		const cases = zoned.filter((c) => c.zone === zone);
 		const builtins = new URL('../client-runtime/formatters/builtins.js', import.meta.url).href;
+		const locale = new URL('../client-runtime/formatters/locale.js', import.meta.url).href;
 		const script = `
 import * as f from ${JSON.stringify(builtins)};
+import { setFormatLocale } from ${JSON.stringify(locale)};
 const cases = ${JSON.stringify(cases)};
 const fromJSON = ${fromJSON.toString()};
+const toJSONValue = ${toJSONValue.toString()};
 process.stdout.write(
-	JSON.stringify(cases.map((c) => f[c.name](fromJSON(c.input), ...c.args.map(fromJSON)) ?? null)),
+	JSON.stringify(cases.map((c) => {
+		setFormatLocale(c.locale);
+		return toJSONValue(f[c.name](fromJSON(c.input), ...c.args.map(fromJSON)));
+	})),
 );
 `;
 		const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {

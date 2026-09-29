@@ -26,7 +26,7 @@ function warnOnce(kind, expression, message) {
  * - Any other object prints nothing and warns once per expression in
  *   development (`[object Object]` and a Date's locale string are never display
  *   text — format the value or print one of its fields; a Date gets its own
- *   message naming the date formatters). setAttr and the SSG serializer omit an
+ *   message naming the date functions). setAttr and the SSG serializer omit an
  *   object-valued attribute before it gets here.
  *
  * The compiler passes expression names behind a bundle-time dev gate so
@@ -43,7 +43,7 @@ export function displayValue(value, expression = 0, sep) {
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			if (value === undefined) warnOnce('undefined', expression, 'rendering an empty string');
 			else if (value instanceof Date) {
-				warnOnce('Date', expression, 'rendering nothing — format it with | date (or | datetime, | time)');
+				warnOnce('Date', expression, 'rendering nothing — format it with date() (or datetime(), time())');
 			} else if (value !== null && typeof value == 'object') {
 				warnOnce('object', expression, 'rendering nothing — format it or print one of its fields');
 			}
