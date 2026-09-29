@@ -541,11 +541,13 @@ second specification. Decision cards hold rationale and git holds chronology.
   newly installed binary (D97). `puzzle upgrade skills` does the same refresh
   from the running binary with no registry check (D99).
 - `pzlc` is the internal/test-facing single-file compiler.
-- **`packages/puzzle-lang` (D172):** the template parser, `jsident` and
-  `textutil` live in their own Go module in the monorepo, imported by the
-  compiler and by Go consumers such as Magic Spells Sites. Tagged
-  `packages/puzzle-lang/vX.Y.Z` beside each framework `vX.Y.Z`; it ships in no
-  npm package.
+- **`packages/puzzle-lang` (D172):** the template parser (`parser`), the
+  expression parser (`expr`, D176), the shared conformance fixtures
+  (`conformance`: `expressions-parse.json` and `functions.json`, embedded with
+  `go:embed`), and the `jsident` and `textutil` helpers live in their own Go
+  module in the monorepo, imported by the compiler and by Go consumers such as
+  Magic Spells Sites. Tagged `packages/puzzle-lang/vX.Y.Z` beside each
+  framework `vX.Y.Z`; it ships in no npm package.
 
 ## Error handling (D145)
 
