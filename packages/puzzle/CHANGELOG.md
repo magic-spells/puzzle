@@ -186,14 +186,19 @@ pay nothing for either.
 
 Change the range to `^0.8.0` (caret ranges do not cross a 0.x minor). Then
 work through this list. No codemod ships; the syntax items are compile errors
-that name the fix, so a build lists every place to change. Every item is
-marked **BREAKING** under Changed or Removed below, where the full detail is,
-except 15, a new warning.
+that name the fix, so a build lists every place to change. The full detail
+for each item is below: the expression-language items (1, 2, 4, 7, 8 and 9)
+under Added, *Template expressions are JavaScript from a closed table*, and
+Removed, *formatter pipes*; the rest under Changed or Removed, where every
+breaking entry is marked **BREAKING**. Item 15 is a new warning, not a break.
+The *Traps* after this list are the rewrites that compile but mean something
+different.
 
 1. **Pipes are function calls.** There is no `|` in a template expression: a
    0.7 pipe is a positioned compile error at the `|` that reads "`| name`
-   pipes were removed — write `name(value)`; bitwise OR is not available". The
-   value becomes the first argument, a chain nests outward, and a transform
+   pipes were removed — write `name(value)`; bitwise OR is not available", or,
+   after a formatter that is gone (`| upcase`, `| sort`), names the JavaScript
+   that replaces it. The value becomes the first argument, a chain nests outward, and a transform
    JavaScript already has is its method or `Math` global:
 
    | 0.7 | 0.8 |
@@ -217,8 +222,8 @@ except 15, a new warning.
    A method on anything but a name, a path or a call takes parentheses:
    `{ (first + ' ' + last).trim() }`. `.replaceAll()` matches the old
    `replace` for a non-empty string search and a replacement with no `$`;
-   otherwise write `s.split(a).join(b)`, which is exactly what `replace` did
-   (a missing replacement was `''`). The old `join` joined with `', '`, while
+   otherwise write `s.split(a).join(b ?? '')`, which is what `replace` did (a
+   missing replacement was `''`, while `.join()` alone joins with `','`). The old `join` joined with `', '`, while
    `.join()` with no argument joins with `','`, so pass the separator. A pipe
    in a condition, a loop header or an attribute is the same error — an
    attribute pipe was a bitwise OR in 0.7 — and `||` is still logical OR.
@@ -257,15 +262,18 @@ except 15, a new warning.
    `{ items.length }` prints nothing for a missing list instead of throwing. A
    Map's or a Set's `size` and a field named `size` are ordinary reads.
 5. **Date presets and defaults.** `date`, `time` and `datetime` share the
-   presets `short`, `medium`, `long` and `iso`. With no preset, `date(v)` is
-   the medium date (`Sep 24, 2026`), `time(v)` is now the short time
-   (`3:04 PM`) and `datetime(v)` the medium date with the short time
-   (`Sep 24, 2026, 3:04 PM`). `date(v, 'short')` is date-only — use
-   `datetime(v, 'short')` for the old date-and-time stamp. The presets
-   `'date'`, `'time'` and `'datetime'` are retired, a literal preset the
-   library does not know (`time(at, 'shrot')`) is a compile error, and a
-   dynamic one renders the default with a development error. `iso` is RFC 3339
-   in the viewer's zone, not UTC `toISOString()`.
+   presets `short`, `medium`, `long` and `iso`, and all three defaults
+   changed (US English shown): `date(v)` printed `09/24/2026` and is now the
+   medium date, `Sep 24, 2026`; `time(v)` printed `03:04 PM` and is now the
+   short time, `3:04 PM`; `datetime(v)` printed `09/24/2026, 03:04 PM` and is
+   now the medium date with the short time, `Sep 24, 2026, 3:04 PM`.
+   `date(v, 'short')` is date-only — use `datetime(v, 'short')` for the old
+   date-and-time stamp. The presets `'date'`, `'time'` and `'datetime'` are
+   retired. A literal preset the standard functions do not know
+   (`time(at, 'shrot')`) is a compile-time warning — not an error, because an
+   app may register its own `time` — and at run time any unknown preset
+   renders the default with a development error. `iso` is RFC 3339 in the
+   viewer's zone, not UTC `toISOString()`.
 6. **Some values print nothing, and `-0` prints `0`.** `NaN`, ±Infinity, a
    bare `Date` and any other object (including one with its own `toString`,
    such as a `URL` or a Decimal) print nothing, and development logs a warning
@@ -273,19 +281,26 @@ except 15, a new warning.
    ±Infinity too. Negative zero prints `0` everywhere. Format a date with
    `date()`, `datetime()` or `time()`, and print a field of an object.
 7. **Handler arguments are the expression language, and more is a compile
-   error.** An `@event` value's arguments use the same grammar as every other
-   expression, evaluated when the event fires, with one extension: `event` is
-   the DOM event there, and a chain rooted at it is unrestricted
-   (`event.target.value`, `event.target.closest('li')`,
-   `event.preventDefault()`). New positioned compile errors an upgrader can
-   hit: a method outside the table; calling a template binding (a loop item,
-   a snippet parameter, an arrow parameter); a browser global read as a value
-   (`window`, `document`, `globalThis`, `navigator`, `location`, `console`,
-   `localStorage`, `sessionStorage` — read it in `data()`); `new` and `Date`;
-   `JSON`; regex literals; `**` (use `Math.pow`); bitwise operators; spread;
-   comments inside an expression; assignment and `++`/`--`; `typeof`, `in`
-   and `instanceof`; and `constructor`, `prototype` or `__proto__` as a member
-   name or object key. Each message names what to write instead.
+   error.** An `@event` value is a call to one of the view's handlers (or a
+   handler's bare name, or a ternary choosing one), and its arguments use the
+   same grammar as every other expression, evaluated when the event fires,
+   with one extension: `event` is the DOM event there, and a chain rooted at it
+   is unrestricted — `@input={ rename(event.target.value) }`,
+   `@click={ pick(event.target.closest('li')) }`. Anything that acts on the
+   event, such as `event.preventDefault()`, belongs inside the handler method
+   (or use the `:prevent` modifier), not as the handler value. New positioned
+   compile errors an upgrader can hit: a method outside the table; calling a
+   template binding (a loop item, a snippet parameter, an arrow parameter);
+   reading the browser's global objects `window`, `document` or `globalThis`
+   (read what you need in `data()`; other browser globals such as `location`
+   or `localStorage` are ordinary data names, as they were in 0.7); `new Date()`
+   and `Date.now()`; `JSON.stringify(x)`; regex literals; `**` (use
+   `Math.pow`); bitwise operators; spread; comments inside an expression;
+   assignment and `++`/`--`; `typeof`, `in` and `instanceof`; and
+   `constructor`, `prototype` or `__proto__` as a member name or object key.
+   Each message names what to write instead. `encodeURIComponent`,
+   `decodeURIComponent`, `encodeURI` and `decodeURI` stay callable, so an
+   `href="/search?q={ encodeURIComponent(q) }"` keeps working.
 8. **Identifiers are Unicode.** A data field, a loop variable or a snippet
    parameter may be any JavaScript identifier (`{#for größe in sizes}`,
    `{ größe }`); 0.7's resolver mis-prefixed them. A strict-mode reserved
@@ -339,6 +354,40 @@ Two contracts that row caching makes visible, though neither is new: assign a
 record's fields through `update()` or a store path, never `todo.title = 'x'`,
 and keep app functions pure functions of their input.
 
+### Traps when upgrading from 0.7
+
+These rewrites compile, and print something different. Check each place the
+checklist sent you.
+
+- **The string methods throw on a value that is not a string.** A formatter
+  coerced its input, so `{ zip | upcase }` on a number printed `12345`;
+  `{ zip.toUpperCase() }` throws on a number and sends the view to
+  `errorView`. Coerce first where the value may not be a string:
+  `{ String(zip).toUpperCase() }`.
+- **`.length` is not `| size`.** It counts UTF-16 units where `| size`
+  counted code points (`'👋'.length` is 2), and it prints nothing for `null`
+  or an object where `| size` gave `0` or the object's key count
+  (`Object.keys(obj).length`).
+- **`+` concatenates strings.** `| plus` coerced both sides to numbers;
+  `{ count + 1 }` with a string `count` of `'2'` prints `21`. Convert first:
+  `{ Number(count) + 1 }`.
+- **`.replace()` replaces only the first match.** `| replace` replaced every
+  occurrence: use `.replaceAll(a, b)`, or `.split(a).join(b ?? '')`.
+- **`.split()` has no default separator.** `| split` split on `,`;
+  `.split()` with no argument returns the whole string in a one-item list.
+  Write `.split(',')`.
+- **`.toSorted()` sorts as strings.** `| sort` compared numbers and dates by
+  value; `.toSorted()` without a comparator compares their text, so `10`
+  sorts before `9`. Pass one: `items.toSorted((a, b) => a - b)`.
+- **`atob`, `btoa` and `structuredClone` are not available.** Only
+  `encodeURIComponent`, `decodeURIComponent`, `encodeURI` and `decodeURI` of
+  the browser's functions are callable; decode or clone in `data()`.
+- **A removed formatter written as a call is not an error at compile time.**
+  `{ upcase(name) }` compiles to a library lookup that finds nothing: a
+  development error that names `.toUpperCase()`, and in production the value
+  passes through unchanged. The `|` form (`{ name | upcase }`) fails the build
+  with the replacement, so convert pipes rather than rename them.
+
 ### Added
 
 - **Template expressions are JavaScript from a closed table (D176).** Every
@@ -363,7 +412,8 @@ and keep app functions pure functions of their input.
   `toFixed`, `toString`. No method mutates its receiver. The **globals** are
   `Math.abs/ceil/floor/round/trunc/max/min/sign/pow/sqrt`, `Math.PI`,
   `Math.E`, `Number`, `String`, `Boolean`, `parseInt`, `parseFloat`, `isNaN`,
-  `isFinite`, `Array.isArray` and `Object.keys/values/entries`. Everything has
+  `isFinite`, `encodeURIComponent`, `decodeURIComponent`, `encodeURI`,
+  `decodeURI`, `Array.isArray` and `Object.keys/values/entries`. Everything has
   JavaScript semantics — loose `==`, `+` concatenation, number printing — with
   two deviations both hosts implement: a member read or a method call on a
   missing value never throws (it prints nothing; a method call also warns in
@@ -376,19 +426,22 @@ and keep app functions pure functions of their input.
     an error reports the same line and column in both hosts. The shared
     conformance lives in `packages/puzzle-lang/conformance` (embedded with
     `go:embed`, so Sites pins it at the language tag): `expressions-parse.json`
-    pins the grammar in 421 cases — every accepted tree with its node
+    pins the grammar in 434 cases — every accepted tree with its node
     positions, every error with its message and position — and
     `functions.json` pins the library in 204 rows.
   - **Errors that steer.** Everything outside the table is a positioned
     compile error that names the construct and what to write instead: a 0.7
-    pipe, a method outside the table (`items.sort()` → `toSorted()`,
-    `s.substr()` → `slice()`), `new Date()` (→ `date()`), a browser global as a
-    value (→ `data()`), `this` (→ `data()` or a function), a regex literal (→
-    `includes()`), and the rest.
-  - **Literal presets are checked.** A string-literal preset
+    pipe (after a removed formatter, its JavaScript replacement), a method
+    outside the table (`items.sort()` → `toSorted()`, `s.substr()` →
+    `slice()`), `new Date()` (→ `date()`), `window`, `document` or
+    `globalThis` read as a value (→ `data()`), `this` (→ `data()` or a
+    function), a regex literal (→ `includes()`), and the rest. Inside a
+    `{:when}` a `|` says to list alternatives with commas.
+  - **Literal presets are checked.** A string-literal preset the standard
     `date`/`time`/`datetime` does not know, or an `in_timezone` zone that
-    cannot be a zone id, is a compile error; at run time a typo silently
-    rendered the default.
+    cannot be a zone id, is a compile-time warning naming the valid presets;
+    at run time a typo silently rendered the default. It warns rather than
+    fails because an app function may shadow the standard name (D6).
   - **`puzzle check` emits TypeScript from the same tree.** A method is the
     same JavaScript method, typed by `lib.d.ts`; a library call is checked
     against its signature; a method whose arguments hold an arrow gives the
@@ -396,8 +449,9 @@ and keep app functions pure functions of their input.
   - **Handlers.** `@click={ save(items.length - 1) }` calls the view's handler
     with arguments in the same language. Inside an `@event` value a bare call
     names the view's handler first, `event` is the DOM event with an
-    unrestricted chain, and a handler that shares a library function's name
-    draws a development warning.
+    unrestricted chain (`@input={ rename(event.target.value) }`), and a
+    handler that shares a library function's name draws a development
+    warning.
 - **Translations: `{ t('cart.title') }` (D175).** Add
   `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` to `puzzle.config.js`
   and one `app/locales/<tag>.json` per locale. Files may nest (flattened to
@@ -536,8 +590,9 @@ and keep app functions pure functions of their input.
     time and `datetime` the medium date with the short time.
     `date(v, 'short')` is date-only (`9/24/26`) — use `datetime(v, 'short')`
     for the old date-and-time stamp. The preset names `date`, `time` and
-    `datetime` are retired; a literal unknown preset is a compile error and a
-    dynamic one a development error that renders the default. `iso` is RFC
+    `datetime` are retired; a literal unknown preset is a compile-time
+    warning, and any unknown preset renders the default with a development
+    error at run time. `iso` is RFC
     3339 in the viewer's zone (`2026-09-24`, `15:04:05-04:00`,
     `2026-09-24T15:04:05-04:00`), no longer a UTC `toISOString()`.
   - `capitalize` leaves the rest of the string alone (`iPhone` → `IPhone`);
@@ -802,8 +857,8 @@ and keep app functions pure functions of their input.
 - **BREAKING: `upcase`, `downcase`, `trim`, `strip`, `replace`, `join`, `abs`,
   `ceil` and `floor` (D176).** A JavaScript method or `Math` global says each:
   `.toUpperCase()`, `.toLowerCase()`, `.trim()` (for both `trim` and `strip`),
-  `.replaceAll(a, b)` (or `.split(a).join(b)`, which is exactly what `replace`
-  did), `.join(', ')` (the old default separator; `.join()` alone joins with
+  `.replaceAll(a, b)` (or `.split(a).join(b ?? '')`, which is what `replace`
+  did — `.join()` with no argument joins with `','`), `.join(', ')` (the old default separator; `.join()` alone joins with
   `','`), `Math.abs()`, `Math.ceil()`, `Math.floor()`. `round(v, places)`
   stays. A call to one reaches the unknown-name guard, which names the method
   in development, and the names are gone from `LibraryFunctions` in the types.

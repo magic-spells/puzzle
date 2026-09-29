@@ -139,7 +139,8 @@ a second argument forces the delimiter), `compact_number(v)` → `1.2K`. Values:
 `date(v, preset)`, `time(v, preset)`, `datetime(v, preset)` with presets
 `short`, `medium`, `long`, `iso` — no preset is `date` medium (`Sep 24, 2026`),
 `time` short (`3:04 PM`), `datetime` medium date + short time; a literal
-preset the library does not know (`time(at, 'shrot')`) is a compile error.
+preset the standard functions do not know (`time(at, 'shrot')`) is a build
+warning, and at run time an unknown preset renders the default.
 `in_timezone(v, 'America/New_York')` re-expresses an instant; `t(key, vars)`
 translates (below); `link(path)` builds an href (Routing). What a JavaScript
 method or `Math` global already says is not a function: write
@@ -252,19 +253,23 @@ Rules that bite:
   `toSorted`, `toReversed`, `flat`, …) or a number (`toFixed`, `toString`);
   and the **globals** `Math.*` (`round`, `floor`, `ceil`, `abs`, `min`, `max`,
   …), `Number(x)`, `String(x)`, `Boolean(x)`, `parseInt`, `parseFloat`,
-  `isNaN`, `isFinite`, `Array.isArray(x)`, `Object.keys/values/entries(x)`.
+  `isNaN`, `isFinite`, `encodeURIComponent`, `decodeURIComponent`,
+  `encodeURI`, `decodeURI`, `Array.isArray(x)`,
+  `Object.keys/values/entries(x)` — not `atob`, `btoa` or `structuredClone`.
   Arrow functions go only in call arguments:
   `{#for t in todos.filter(t => !t.done)}`, `{ items.map(i => i.name).join(', ') }`.
   No method mutates: there is no `push`, `sort`, `reverse` or `splice` — use
   `toSorted` / `toReversed`. Everything else is a compile error that names the
-  replacement: other methods, `new` and `Date` (dates reach a template from
-  `data()` and print through `date()`), `JSON`, `**`, bitwise operators,
-  spread, regex literals, comments, assignment, `typeof`/`in`/`instanceof`.
-  A browser global read as a value — `window`, `document`, `globalThis`,
-  `navigator`, `location`, `console`, `localStorage`, `sessionStorage` — is a
-  compile error: read it in `data()` and pass the value. A 0.7 pipe
+  replacement: other methods, `new Date()` and `Date.now()` (dates reach a
+  template from `data()` and print through `date()`), `JSON.stringify(x)`,
+  `**`, bitwise operators, spread, regex literals, comments, assignment,
+  `typeof`/`in`/`instanceof`. Reading `window`, `document` or `globalThis` as
+  a value is a compile error: read what you need in `data()` and return it.
+  Other browser names (`location`, `localStorage`, `console`, …) are ordinary
+  data fields, so `{ location }` prints a `data()` field named `location`. A 0.7 pipe
   (`{ price | currency }`) is a compile error at the `|` that says to write
-  `currency(price)`; there is no bitwise OR. **`this` is not a template
+  `currency(price)` — after a removed formatter (`| upcase`) it names the
+  replacement instead; there is no bitwise OR. **`this` is not a template
   identifier**: a template never reaches the view instance, so `this` in a
   value, a block header, a function argument, or an `@event` handler's
   arguments or ternary condition is a compile error. Every value a template
@@ -283,12 +288,16 @@ Rules that bite:
   (`{ tone }`).
 - **Handlers are the one door into the view.** `@click={ save(items.length - 1) }`
   calls the view's `save` with arguments in the same expression language,
-  evaluated when the event fires. Inside an `@event` value a bare call names
-  the view's handler first (a handler sharing a library function's name draws
-  a dev warning), and `event` is the DOM event: a chain rooted at it is
-  unrestricted — `event.target.value`, `event.target.closest('li')`,
-  `event.preventDefault()`. Calling a template binding (a loop item, a snippet
-  parameter, an arrow parameter) is a compile error.
+  evaluated when the event fires. An `@event` value is always a call to a
+  view handler, a handler's bare name (`@click={ save }`), or a ternary
+  choosing one; a bare call there names the view's handler first (a handler
+  sharing a library function's name draws a dev warning). Inside its
+  arguments `event` is the DOM event, and a chain rooted at it is
+  unrestricted — `@input={ rename(event.target.value) }`,
+  `@click={ pick(event.target.closest('li')) }`. Call `event.preventDefault()`
+  inside the handler method (or use `:prevent`), never as the handler value.
+  Calling a template binding (a loop item, a snippet parameter, an arrow
+  parameter) is a compile error.
 - **`puzzle check` types the language.** Methods are checked as the same
   JavaScript methods, so a wrong method or argument is a real TypeScript error
   at its line and column, and library calls check against the function
@@ -534,7 +543,8 @@ many other`) is a plural entry and must have `other`.
 - Template: `{ t('cart.title') }`; variables come as ONE object —
   `{ t('greeting', { name: user.name }) }` fills `{name}`, and a numeric
   `count` picks the plural form (`{ t('cart.items', { count: cart.count }) }`).
-  A data field or a store record works too (`t(user)`; a model's getters count).
+  A data field or a store record works too (`t('greeting', user)`; a model's
+  getters count).
   An exact `count` of 0 uses the entry's `zero` form when it has one, even in
   English — the way to say "Your cart is empty". Brace-only attributes work:
   `placeholder={ t('search.hint') }`. Runtime-built keys work:

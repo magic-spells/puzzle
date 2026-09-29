@@ -168,20 +168,25 @@ functions as call arguments (`items.map(i => i.name)`); and three kinds of
 call — a display function by name (`currency(price)`), a method from the
 table on a string, array or number (`name.trim()`, `items.filter(…)`,
 `n.toFixed(2)`), and the globals `Math.*`, `Number`, `String`, `Boolean`,
-`parseInt`, `parseFloat`, `isNaN`, `isFinite`, `Array.isArray` and
+`parseInt`, `parseFloat`, `isNaN`, `isFinite`, `encodeURIComponent`,
+`decodeURIComponent`, `encodeURI`, `decodeURI`, `Array.isArray` and
 `Object.keys/values/entries`. The count is `.length`. No method mutates
 (`toSorted` and `toReversed`, not `sort` and `reverse`), and anything outside
-the table — `new`, `Date`, `JSON`, `**`, bitwise operators, spread, regex
-literals, a browser global such as `window` read as a value — is a compile
-error at its own line and column that names the replacement. Member reads are
+the table — `new Date()`, `Date.now()`, `JSON.stringify(x)`, `**`, bitwise
+operators, spread, regex literals, and `window`, `document` or `globalThis`
+read as a value — is a compile error at its own line and column that names
+the replacement. Member reads are
 guarded: `{ user.address.city }` prints nothing when `address` is missing.
 
 A template never reaches the view instance: `this` is a compile error in every
 template expression, `@event` handler arguments included. Every value a
 template shows comes through `data()`, and a handler reaches the view through
-its own name (`@click={ save(items.length - 1) }` calls the view's `save`);
-inside a handler, `event` is the DOM event and a chain rooted at it is
-unrestricted (`event.target.value`, `event.preventDefault()`).
+its own name (`@click={ save(items.length - 1) }` calls the view's `save`).
+An `@event` value is always such a call (or the handler's bare name); inside
+its arguments `event` is the DOM event and a chain rooted at it is
+unrestricted — `@input={ rename(event.target.value) }`. Work on the event
+itself, such as `event.preventDefault()`, goes inside the handler method or
+through the `:prevent` modifier.
 
 A literal brace is escaped with a backslash — `\{` and `\}` — anywhere an
 expression could appear, attribute values included:
@@ -393,8 +398,9 @@ inject markup. Apps that never use either function ship none of this code.
 `date`, `time` and `datetime` take the presets `short`, `medium`, `long` and
 `iso`, in the viewer's locale and time zone. With no preset, `date` is medium,
 `time` is short, and `datetime` is the medium date with the short time. A
-literal preset the library does not know (`time(at, 'shrot')`) is a compile
-error.
+literal preset the standard functions do not know (`time(at, 'shrot')`) is a
+compile-time warning (an app may register its own `time`), and at run time
+an unknown preset renders the default.
 
 ```html
 { date(createdAt) }
