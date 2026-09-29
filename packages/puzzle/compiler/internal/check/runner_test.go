@@ -135,6 +135,25 @@ func TestPlainJSScriptUncheckedByDefault(t *testing.T) {
 	}
 }
 
+// With no app tsconfig the check is not strict. TypeScript 6 and 7 default
+// strict on, and a JavaScript field first assigned in a lifecycle method is
+// inferred as possibly undefined — examples/stress failed with
+// `'__d.stats' is possibly 'undefined'`.
+func TestNoAppTsconfigIsNotStrict(t *testing.T) {
+	root := liveTSCApp(t)
+	writeLiveView(t, root, `<puzzle-view><p>{ stats.count }</p></puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  mounted() { this.stats = { count: 0 }; }
+}
+</script>
+`)
+	if _, err := Run(root); err != nil {
+		t.Fatalf("a plain-JavaScript app with no tsconfig must not be checked strictly: %v", err)
+	}
+}
+
 func TestPlainJSTemplateErrorsAreReported(t *testing.T) {
 	root := liveTSCApp(t)
 	writeLiveView(t, root, plainJSComponent("value.upper"))
@@ -313,6 +332,11 @@ func TestAppTsconfigVariantsDoNotBreakTheCheck(t *testing.T) {
 		// TypeScript 7 rejects all three legacy settings. The generated config
 		// must replace inherited paths as well as clearing baseUrl and node10.
 		{"legacy-resolution", `{"compilerOptions":{"baseUrl":".","module":"CommonJS","moduleResolution":"node","paths":{"@/*":["app/*"],"legacy/*":["app/*"]},"strict":true}}`},
+		// The app's own alias, in a config with a comment and trailing commas:
+		// the generated config writes paths, so it used to drop this one and
+		// report "Cannot find module '~/models/value'".
+		{"app-paths", "{\n  // aliases\n  \"compilerOptions\": {\"paths\": {\"~/*\": [\"./app/*\"],}, \"strict\": true,},\n}"},
+		{"module-nodenext", `{"compilerOptions":{"module":"nodenext","strict":true}}`},
 	}
 	clean := `<puzzle-view><p>{ value }</p></puzzle-view>
 <script lang="ts">
@@ -340,8 +364,11 @@ export default class Home extends PuzzleView { value = value; }
 			view := clean
 			if tc.name == "noUnused" {
 				view = unusedLoopBinding
-			} else if tc.name == "legacy-resolution" {
+			} else if tc.name == "legacy-resolution" || tc.name == "app-paths" {
 				view = aliasImport
+				if tc.name == "app-paths" {
+					view = strings.Replace(view, "'@/models/value'", "'~/models/value'", 1)
+				}
 				models := filepath.Join(root, "app", "models")
 				if err := os.MkdirAll(models, 0o755); err != nil {
 					t.Fatal(err)

@@ -4,10 +4,12 @@
 package check
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -84,31 +86,33 @@ export {};
 
 // libraryFunctionSignatures are the TypeScript signatures of the standard
 // function library (codegen.LibraryFunctionNames, DESIGN-expr-v2 §4), declared
-// on __PuzzleFunctions in the shim. types/index.d.ts (LibraryFunctions)
-// publishes the same signatures — keep the two in sync; TestLibrarySignaturesMatchCodegen keeps this
+// on __PuzzleFunctions in the shim. They are types/index.d.ts's
+// LibraryFunctions with its aliases (TranslationVars, DatePreset,
+// LocaleArgument) spelled out: TestLibrarySignaturesMatchPublicTypes fails
+// when the two disagree, and TestLibrarySignaturesMatchCodegen keeps this
 // table and the compiler's name list identical. Values are `unknown` because
 // every function accepts any template value and prints nothing for a missing
-// one.
+// one — `t`'s key too, which the public type narrows to the primitives.
 var libraryFunctionSignatures = []struct{ name, signature string }{
-	{"link", "(url: unknown): string"},
-	{"t", "(key: unknown, vars?: Record<string, unknown>): string"},
+	{"link", "(path: unknown): string"},
+	{"t", "(key: unknown, vars?: object | null): string"},
 	{"currency", "(value: unknown, symbol?: string, places?: number): string"},
 	{"percentage", "(value: unknown, places?: number): string"},
 	{"number_with_delimiter", "(value: unknown, delimiter?: string): string"},
 	{"compact_number", "(value: unknown): string"},
 	{"pluralize", "(count: unknown, singular: string, plural?: string): string"},
 	{"round", "(value: unknown, places?: number): number"},
-	{"date", "(value: unknown, preset?: string, locale?: string): string"},
-	{"time", "(value: unknown, preset?: string, locale?: string): string"},
-	{"datetime", "(value: unknown, preset?: string, locale?: string): string"},
+	{"date", "(value: unknown, preset?: 'short' | 'medium' | 'long' | 'iso', locale?: string | readonly string[]): string"},
+	{"time", "(value: unknown, preset?: 'short' | 'medium' | 'long' | 'iso', locale?: string | readonly string[]): string"},
+	{"datetime", "(value: unknown, preset?: 'short' | 'medium' | 'long' | 'iso', locale?: string | readonly string[]): string"},
 	{"timeago", "(value: unknown): string"},
-	{"in_timezone", "(value: unknown, zone?: string): Date | ''"},
+	{"in_timezone", "(value: unknown, timeZone?: string): Date | ''"},
 	{"truncate", "(value: unknown, length?: number, ellipsis?: string): string"},
 	{"capitalize", "(value: unknown): string"},
 	{"strip_html", "(value: unknown): string"},
 	{"strip_newlines", "(value: unknown): string"},
 	{"escape", "(value: unknown): string"},
-	{"raw", "(value: unknown): string"},
+	{"raw", "(html: unknown): string"},
 	{"newline_to_br", "(value: unknown): string"},
 	{"json", "(value: unknown): string"},
 }
@@ -285,7 +289,7 @@ func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
 }
 
 func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
-	_, err := os.Stat(filepath.Join(appRoot, "tsconfig.json"))
+	appConfig, err := os.ReadFile(filepath.Join(appRoot, "tsconfig.json"))
 	hasAppConfig := err == nil
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -334,34 +338,135 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 		"exclude": []string{},
 	}
 	opts := config["compilerOptions"].(map[string]any)
-	if typescriptMajor >= 7 {
+	// Paths is always written here, never inherited: an inherited target is
+	// relative to the app's baseUrl or tsconfig, not to this config, and may be
+	// non-relative, which is illegal once baseUrl is cleared. The app's own
+	// entries are merged in with their targets rewritten from here — `prefix`
+	// is where the app root sits relative to the directory targets resolve from.
+	var aliasTarget, prefix string
+	if typescriptMajor >= 6 {
 		// JSON null deliberately clears either setting inherited from the app.
-		// TypeScript 7 removed baseUrl and node10/node module resolution. Paths is
-		// replaced too because targets inherited from a baseUrl config may be
-		// non-relative, which is illegal once baseUrl is cleared.
+		// TypeScript 7 removed baseUrl and node10/node module resolution, and
+		// TypeScript 6 deprecates both (an error unless the app silences it).
+		// With no baseUrl, a target resolves from this config's directory.
 		opts["baseUrl"] = nil
 		opts["moduleResolution"] = nil
-		opts["paths"] = map[string]any{"@/*": []string{"../../app/*"}}
+		aliasTarget, prefix = "../../app/*", "../.."
 	} else {
-		// Before TypeScript 7, module: ESNext defaults to classic resolution. Keep
+		// Before TypeScript 6, module: ESNext defaults to classic resolution. Keep
 		// the proven node/baseUrl pair so package imports and the @ alias resolve
-		// under the oldest supported compiler (4.9).
+		// under the oldest supported compiler (4.9). Module is pinned with it: an
+		// app's node16/nodenext module rejects node resolution (TS5109), and the
+		// check emits nothing, so the module format has nothing else to decide.
 		opts["baseUrl"] = "../.."
 		opts["moduleResolution"] = "node"
-		opts["paths"] = map[string]any{"@/*": []string{"app/*"}}
+		opts["module"] = "ESNext"
+		aliasTarget = "app/*"
 	}
+	paths := map[string]any{"@/*": []string{aliasTarget}}
 	if hasAppConfig {
 		config["extends"] = "../../tsconfig.json"
+		for key, targets := range appPaths(appConfig, prefix) {
+			paths[key] = targets
+		}
 	} else {
+		// TypeScript 6 and 7 turn strict on by default; a plain-JavaScript app
+		// with no tsconfig gets the lenient checking it had before, as it does
+		// for noImplicitAny.
 		opts["target"] = "ES2020"
 		opts["module"] = "ESNext"
+		opts["strict"] = false
 		opts["noImplicitAny"] = false
 	}
+	opts["paths"] = paths
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return nil, err
 	}
 	return append(data, '\n'), nil
+}
+
+// appPaths reads the app tsconfig's own compilerOptions.paths, each target
+// rewritten to resolve from the generated config: joined onto the app's
+// baseUrl (a target is relative to it when set, to the app root otherwise) and
+// then onto prefix. Only the app's tsconfig.json itself is read: `extends`
+// chains are not followed, so paths the app inherits from another config do
+// not reach the check, and neither does a baseUrl it inherits. A config this
+// cannot parse contributes nothing, leaving the @ alias.
+func appPaths(data []byte, prefix string) map[string][]string {
+	var config struct {
+		CompilerOptions struct {
+			BaseURL string              `json:"baseUrl"`
+			Paths   map[string][]string `json:"paths"`
+		} `json:"compilerOptions"`
+	}
+	if json.Unmarshal(stripJSONC(data), &config) != nil {
+		return nil
+	}
+	base := filepath.ToSlash(config.CompilerOptions.BaseURL)
+	if path.IsAbs(base) || filepath.IsAbs(base) {
+		prefix = ""
+	}
+	paths := make(map[string][]string, len(config.CompilerOptions.Paths))
+	for key, targets := range config.CompilerOptions.Paths {
+		rewritten := make([]string, len(targets))
+		for i, target := range targets {
+			if path.IsAbs(target) || filepath.IsAbs(target) {
+				rewritten[i] = target
+			} else {
+				rewritten[i] = path.Join(prefix, base, target)
+			}
+		}
+		paths[key] = rewritten
+	}
+	return paths
+}
+
+// stripJSONC removes what tsconfig.json allows beyond JSON — a byte-order
+// mark, // and /* */ comments, and trailing commas — leaving string contents
+// alone. The first pass drops comments, so the second sees a trailing comma
+// directly before its closing bracket, whitespace aside.
+func stripJSONC(data []byte) []byte {
+	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
+	for pass := 0; pass < 2; pass++ {
+		out := make([]byte, 0, len(data))
+		for i := 0; i < len(data); i++ {
+			c := data[i]
+			switch {
+			case c == '"':
+				j := i + 1
+				for j < len(data) && data[j] != '"' {
+					if data[j] == '\\' {
+						j++
+					}
+					j++
+				}
+				j = min(j+1, len(data))
+				out = append(out, data[i:j]...)
+				i = j - 1
+			case pass == 0 && c == '/' && i+1 < len(data) && data[i+1] == '/':
+				for i+1 < len(data) && data[i+1] != '\n' {
+					i++
+				}
+			case pass == 0 && c == '/' && i+1 < len(data) && data[i+1] == '*':
+				end := bytes.Index(data[i+2:], []byte("*/"))
+				if end < 0 {
+					i = len(data)
+				} else {
+					i += end + 3
+				}
+			case pass == 1 && c == ',':
+				if next := bytes.TrimLeft(data[i+1:], " \t\r\n"); len(next) > 0 && (next[0] == '}' || next[0] == ']') {
+					continue
+				}
+				out = append(out, c)
+			default:
+				out = append(out, c)
+			}
+		}
+		data = out
+	}
+	return data
 }
 
 type emitter struct {

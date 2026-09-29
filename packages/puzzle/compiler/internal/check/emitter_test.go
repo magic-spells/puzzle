@@ -161,6 +161,10 @@ func TestGenerateRejectsSymlinkedScratchRoot(t *testing.T) {
 	}
 }
 
+// TypeScript 6 takes the TypeScript 7 shape: it deprecates baseUrl and node10
+// resolution. With no app tsconfig, strict is off — TypeScript 6 and 7 turn
+// it on by default, which reported `'__d.stats' is possibly 'undefined'` in a
+// plain-JavaScript app (examples/stress).
 func TestTsconfigVersionedDefaults(t *testing.T) {
 	cases := []struct {
 		name             string
@@ -170,6 +174,8 @@ func TestTsconfigVersionedDefaults(t *testing.T) {
 		aliasTarget      string
 	}{
 		{"typescript-4", 4, "../..", "node", "app/*"},
+		{"typescript-5", 5, "../..", "node", "app/*"},
+		{"typescript-6", 6, nil, nil, "../../app/*"},
 		{"typescript-7", 7, nil, nil, "../../app/*"},
 	}
 	for _, tc := range cases {
@@ -189,6 +195,12 @@ func TestTsconfigVersionedDefaults(t *testing.T) {
 			if got := opts["noImplicitAny"]; got != false {
 				t.Errorf("noImplicitAny = %v, want false", got)
 			}
+			if got := opts["strict"]; got != false {
+				t.Errorf("strict = %v, want false", got)
+			}
+			if got := opts["module"]; got != "ESNext" {
+				t.Errorf("module = %v, want ESNext", got)
+			}
 			if got := opts["allowJs"]; got != true {
 				t.Errorf("allowJs = %v, want true", got)
 			}
@@ -205,6 +217,76 @@ func TestTsconfigVersionedDefaults(t *testing.T) {
 			alias := paths["@/*"].([]any)
 			if len(alias) != 1 || alias[0] != tc.aliasTarget {
 				t.Errorf("@/* paths = %v, want [%s]", alias, tc.aliasTarget)
+			}
+		})
+	}
+}
+
+// The generated config writes paths rather than inheriting them, so the app's
+// own aliases are merged in, their targets rewritten to resolve from
+// .puzzle/check (from the app root, through the app's baseUrl when it set
+// one). An app entry wins over the @ alias on a clash. tsconfig's comments and
+// trailing commas are tolerated; an unreadable config leaves the @ alias.
+// Before TypeScript 6 the module is pinned to ESNext beside node resolution,
+// so an app's nodenext module no longer fails with TS5109.
+func TestTsconfigMergesAppPaths(t *testing.T) {
+	jsonc := "\xef\xbb\xbf{\n  // an app alias\n  \"compilerOptions\": {\n    \"module\": \"nodenext\", /* the app's */\n" +
+		"    \"paths\": { \"~/*\": [\"./app/*\"], \"http://x/*\": [\"app/x/*\",], },\n  },\n}\n"
+	cases := []struct {
+		name   string
+		major  int
+		config string
+		module any
+		paths  map[string][]string
+	}{
+		{"jsonc-typescript-5", 5, jsonc, "ESNext", map[string][]string{
+			"@/*": {"app/*"}, "~/*": {"app/*"}, "http://x/*": {"app/x/*"},
+		}},
+		{"jsonc-typescript-7", 7, jsonc, nil, map[string][]string{
+			"@/*": {"../../app/*"}, "~/*": {"../../app/*"}, "http://x/*": {"../../app/x/*"},
+		}},
+		{"baseUrl-typescript-5", 5, `{"compilerOptions":{"baseUrl":"src","paths":{"@/*":["./*"],"lib":["../lib/index.ts"]}}}`, "ESNext", map[string][]string{
+			"@/*": {"src/*"}, "lib": {"lib/index.ts"},
+		}},
+		{"baseUrl-typescript-6", 6, `{"compilerOptions":{"baseUrl":"src","paths":{"@/*":["./*"],"lib":["../lib/index.ts"]}}}`, nil, map[string][]string{
+			"@/*": {"../../src/*"}, "lib": {"../../lib/index.ts"},
+		}},
+		{"unparsable", 7, `{"compilerOptions": {"paths": `, nil, map[string][]string{"@/*": {"../../app/*"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(tc.config), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			data, err := tsconfig(root, tc.major)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var config struct {
+				Extends         string
+				CompilerOptions struct {
+					Module any
+					Strict any
+					Paths  map[string][]string
+				}
+			}
+			if err := json.Unmarshal(data, &config); err != nil {
+				t.Fatal(err)
+			}
+			if config.Extends != "../../tsconfig.json" {
+				t.Errorf("extends = %q", config.Extends)
+			}
+			if config.CompilerOptions.Strict != nil {
+				t.Errorf("strict = %v, want the app's", config.CompilerOptions.Strict)
+			}
+			if config.CompilerOptions.Module != tc.module {
+				t.Errorf("module = %v, want %v", config.CompilerOptions.Module, tc.module)
+			}
+			got, _ := json.Marshal(config.CompilerOptions.Paths)
+			want, _ := json.Marshal(tc.paths)
+			if !bytes.Equal(got, want) {
+				t.Errorf("paths = %s, want %s", got, want)
 			}
 		})
 	}
