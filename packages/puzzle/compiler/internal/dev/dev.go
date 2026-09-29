@@ -1,9 +1,8 @@
 // Package dev implements `puzzle dev`: an initial development build, a
 // recursive fsnotify watch of the app's source tree, a debounced rebuild loop,
 // a static file server for dist/ with history-API fallback, and SSE-based live
-// reload. It reworks the Phase 1 prototype watcher (compiler/internal/watcher,
-// deleted) per constellation/doc/DOC-BUILD-PLAN.md Phase 3, fixing every sin cataloged
-// in constellation/doc/DOC-CODE-REVIEW.md §1.4:
+// reload. It replaces the Phase 1 prototype watcher (compiler/internal/watcher,
+// deleted), fixing each of its failures:
 //
 //   - notifyReload() was an empty placeholder and the SSE endpoint only pinged;
 //     here every successful rebuild broadcasts a real `reload` event.
@@ -703,8 +702,7 @@ type server struct {
 	buildErrorMu sync.Mutex
 	lastError    string
 	// ctx is cancelled on shutdown; SSE handlers watch it so http.Server.Shutdown
-	// does not hang on their long-lived streams (constellation/doc/DOC-BUILD-PLAN.md Phase 3
-	// risk: "SSE + http.Server.Shutdown").
+	// does not hang on their long-lived streams.
 	ctx context.Context
 }
 
@@ -1031,8 +1029,7 @@ func (h *hub) clientCount() int {
 // unrelated edit never triggers a rebuild. Directories created after startup are
 // added to the watch on their Create event, but only when they fall within a
 // recursive root — fsnotify does not recurse on its own, and the root's
-// non-recursive config watch must not pull the whole project tree in
-// (constellation/doc/DOC-BUILD-PLAN.md Phase 3 risk / CODE_REVIEW §1.4).
+// non-recursive config watch must not pull the whole project tree in.
 // configPath may be "" to disable the config watch entirely.
 func runWatcher(ctx context.Context, dirs []string, configPath string, debounce time.Duration, onChange func(changed []string)) error {
 	w, err := fsnotify.NewWatcher()

@@ -25,8 +25,8 @@ connections:
   - FILE-STATIC-MOUNT
   - DECISION-D31-FORMATTER-TREESHAKE
   - DECISION-D43-FORMATTER-MISSING-GUARD
-  - DECISION-D79-LINK-FORMATTER
-  - DECISION-D67-SSG-STATIC-BUILD
+  - DECISION-D79-LINK-FUNCTION
+  - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D84-HEAD-MANAGEMENT
   - DECISION-D89-FEATURE-USAGE-TREESHAKE
@@ -297,7 +297,7 @@ translations".
 - **Locale URL prefixes** — recorded design: `i18n: { routing: 'prefix' }`,
   default locale unprefixed, each page prerendered per locale into
   `dist/<locale>/…`, URL locale beats storage/navigator, `link` prefixes,
-  `setLocale` navigates, head gains `hreflang` alternates (build-time, D111).
+  `setLocale` navigates, head gains `hreflang` alternates (build-time, D84).
 - Translated route `meta.title` (needs a [[DECISION-D84-HEAD-MANAGEMENT]]
   amendment, e.g. `meta: { title: { t: 'products.title' } }`).
 - Rich-text translations (a link inside a sentence); key-union types for

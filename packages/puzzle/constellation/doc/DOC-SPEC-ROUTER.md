@@ -195,7 +195,7 @@ URL-backed transient state — filters, tabs, search, pagination (D83).
 
 ## 45. Route head management
 
-Route `meta` carries four **reserved head fields** — `title`, `description`, `canonical`, `socialImage` — resolved by one shared resolver and delivered by two disjoint paths (D84, D111).
+Route `meta` carries four **reserved head fields** — `title`, `description`, `canonical`, `socialImage` — resolved by one shared resolver and delivered by two disjoint paths (D84).
 
 - **Resolution:** each field independently, nearest-defined leaf → root; `undefined` inherits, `null` suppresses an inherited value. Values are static strings or `null` — no functions, view data, raw HTML or tag arrays. Custom `meta` keys are untouched. Canonical values are emitted as given (use absolute URLs).
 - **Generated tags:** `title` → `<title>` + `og:title` + `twitter:title`; `description` → description + `og:description` + `twitter:description`; `canonical` → `<link rel="canonical">` + `og:url`; `socialImage` → `og:image` + `twitter:image` + `twitter:card=summary_large_image`. Each carries `data-puzzle-head="<field>"`; unmarked shell head elements are never touched.
@@ -222,7 +222,7 @@ After every committed navigation the router moves focus to the incoming view and
 - Runs in `#commitState`, the post-mount/pre-paint window, **after** the scroll block.
 - **`focus({ preventScroll: true })` is mandatory** — a default `focus()` would fight §14's scroll.
 - **`tabindex="-1"` is transient** — stamped before focusing, removed on `blur`, so a `<puzzle-view>` root never becomes a permanent tab stop. While stamped, inline `outline: none !important` and `box-shadow: none !important` suppress both focus-ring channels, prior inline values restored on blur (D139). An author-set `tabindex` is never touched, visuals included.
-- **One live region**, created at `start()` and removed at `stop()`: `aria-live="polite"`, `aria-atomic="true"`, visually hidden by clip-rect (not `display:none`). It receives `document.title` (already committed by §45) only when non-empty and changed since the last announcement; otherwise the route's `name`, or its `path` when the name would repeat the region's content (D119).
+- **One live region**, created at `start()` and removed at `stop()`: `aria-live="polite"`, `aria-atomic="true"`, visually hidden by clip-rect (not `display:none`). It receives `document.title` (already committed by §45) only when non-empty and changed since the last announcement; otherwise the route's `name`, or its `path` when the name would repeat the region's content.
 - **Resolution is split:** the gate resolves pre-commit; the target resolves post-mount.
 - **Skips:** memory mode entirely; navigation #0 (the gate is nothing committed yet, `from == null` — so a guard redirect before any commit is still #0, while a push superseding a slow #0 focuses normally); failed or superseded navigations; a **params-only replace** (`keep === chain.length`), which is URL-backed state churn — focusing would steal an input's focus each keystroke (D135); the §9 locale rebuild.
 - `push`, `replace` and `pop` otherwise all move focus. A custom function that declines focus still announces. Focus is applied **before** the announcement (a polite update right before a focus change is often dropped). A throw is logged and treated as falsy.

@@ -504,7 +504,7 @@ func TestAddSkillsOverwriteRefusalAndSuccess(t *testing.T) {
 	if err := os.WriteFile(skillPath, custom, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Drop the stamp so the install reads as stale, the way a pre-D99 CLI wrote it.
+	// Drop the stamp so the install reads as stale, the way a pre-stamp CLI wrote it.
 	// A stamp matching this binary would be "up to date" and never reach the refusal.
 	if err := os.Remove(filepath.Join(home, ".claude", "skills", "puzzle", skillVersionFile)); err != nil {
 		t.Fatal(err)
@@ -833,7 +833,7 @@ func TestAddSkillsSkipsSymlinkedDestination(t *testing.T) {
 	}
 }
 
-// --overwrite still writes through a symlink: explicit intent, and D97's upgrade
+// --overwrite still writes through a symlink: explicit intent, and the D78 upgrade
 // re-exec depends on this shape. It must merge rather than prune, or the link
 // would be replaced by a real directory.
 func TestAddSkillsOverwriteWritesThroughSymlink(t *testing.T) {

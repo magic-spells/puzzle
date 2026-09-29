@@ -73,7 +73,7 @@ export interface Route {
 	 * inherits from a parent, `null` explicitly suppresses an inherited value.
 	 * Static strings only (no functions/HTML).
 	 *
-	 * Delivery is split (D111): the managed `data-puzzle-head` tags derived from
+	 * Delivery is split (D84): the managed `data-puzzle-head` tags derived from
 	 * `description`/`canonical`/`socialImage` (og:/twitter:/description/canonical)
 	 * are emitted at BUILD time only, by the SSG shell injector — so `hybrid` and
 	 * `static` output bake them into the served HTML crawlers read. The browser

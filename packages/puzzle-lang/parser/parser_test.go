@@ -2228,7 +2228,7 @@ func TestParseEventModifiers(t *testing.T) {
 	}
 }
 
-// TestParseEventKeyFiltersBackspaceDelete covers the v1.13 (D45) additions to
+// TestParseEventKeyFiltersBackspaceDelete covers the v1.13 (D38) additions to
 // the key-filter set: backspace/delete are accepted on keyboard events and
 // rejected on non-keyboard events like every other key filter.
 func TestParseEventKeyFiltersBackspaceDelete(t *testing.T) {

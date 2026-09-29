@@ -1,7 +1,7 @@
 /**
  * PuzzleView — base class for all .pzl components/views/layouts.
  *
- * A PLAIN class (constellation/doc/DOC-DECISIONS.md D15) — not a custom element, no shadow DOM.
+ * A PLAIN class (D15) — not a custom element, no shadow DOM.
  * The ViewManager owns all DOM; this class owns state, lifecycle, and update
  * scheduling (constellation/doc/DOC-SPEC.md §4, constellation/doc/DOC-VIEW-LIFECYCLE.md §3).
  *

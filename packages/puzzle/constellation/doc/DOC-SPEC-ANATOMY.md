@@ -135,7 +135,7 @@ export default class TodoHome extends PuzzleView {
 
 - **Override points:** `data`, `render` (compiler-attached), `events`, `animations`, `transitionMode` (§33), `renderSkeleton`/`skeletonMinDuration` (§16, compiler-attached), and the hooks `created`, `mounted`, `beforeUpdate`, `afterUpdate`, `destroyed`, `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` (§12).
 - **Read-only API:** `getData`, `setData`, `memo` (§32), `ctx`, and the getters `element`, `loaded`, `isDestroyed`, `params`, `props`, `route` (§19). `refs` is the framework-owned element-ref map (§38) — read it, never assign it.
-- **Framework internals:** `mount`, `preload`, `refresh`, `applyParentUpdate`, `onStoreChange`, `flushUpdates`, `destroy`, `playIn`, `playOut`, `skipEnter`, `destroyAnimated`, `_localState`, and the compiler-reserved `__h` (§31), `__ref` (§38), `__bind` (§6), `__lists` (the per-owner `{#for}` block registry, §28), `__c` (static-subtree cache), `__dirty` (per-render root mask) and `__propRevs` (record render-revision snapshot).
+- **Framework internals:** `mount`, `preload`, `refresh`, `applyParentUpdate`, `onStoreChange`, `flushUpdates`, `destroy`, `playIn`, `playOut`, `skipEnter`, `destroyAnimated`, `_localState`, and the compiler-reserved `__h` (§31), `__ref` (§38), `__bind` (§6), `__lists` (the per-owner `{#for}` block registry, §28), `__c` (static-subtree cache), `__dirty` (per-render root mask), `__rgen` (render-pass counter a list block compares to detect a render it missed), `__walk` (one-shot "walk every vnode" flag after a child mount failure) and `__propRevs` (record render-revision snapshot).
 - **On the class:** `__roots` — the top-level `data()` keys some loop body reads (§28).
 - **At module scope:** `__L0`, `__L1`, … (one list-block meta const per item-form `{#for}` site) and `__l` (the local bound to `listRows` when the file lowers such a site), reserved only in a file that emits them. These are the only names a `<script>` can actually collide with, so binding one at module scope is a **positioned compile error**, as binding `ViewNode` or `SLOT_TAG` is. The instance and class names above are reserved by convention only; shadowing one silently breaks rendering.
 
@@ -155,7 +155,7 @@ export default class TodoHome extends PuzzleView {
 - Translations (§66): **`app/locales/<tag>.json`**, one per locale, read only when `puzzle.config.js` declares `i18n: { locales: [...], defaultLocale: '…' }`. `locales` is a non-empty list of distinct BCP 47 tags (`-`, never `_`; compared case-insensitively) that must include `defaultLocale` (not the reserved word `default`). Every listed locale needs a file; an unlisted file is skipped with a warning, and `app/locales/` without `i18n` is a warning. Emitted as `dist/locales/<tag>.<hash>.json` ([[DOC-SPEC-BUILD]]).
 - `.pzl` compilation is an **esbuild plugin**: Go parses templates and generates render functions; esbuild owns module resolution, bundling, sourcemaps and minification.
 - CLI: `puzzle build` (production by default) and `puzzle dev` (watch + static server with history-API fallback + reload); the rest of the CLI is §13.
-- Styling: Tailwind-first via `puzzle.config.js` `styles: { use: ['tailwindcss'] }`. Sass is **not supported and will not be** (D35) — native CSS nesting plus Tailwind cover it.
+- Styling: Tailwind-first via `puzzle.config.js` `styles: { use: ['tailwindcss'] }`. Sass is **not supported and will not be** ([[DECISION-D12-TAILWIND-FIRST]]) — native CSS nesting plus Tailwind cover it.
 
 ## 25. TypeScript scripts: `<script lang="ts">`
 

@@ -13,7 +13,7 @@ connections:
   - DECISION-D43-FORMATTER-MISSING-GUARD
   - DECISION-D114-CALENDAR-DATE-FORMATTERS
   - DECISION-D150-RAW-TEMPLATE-BLOCK
-  - DECISION-D79-LINK-FORMATTER
+  - DECISION-D79-LINK-FUNCTION
 ---
 
 # D174 — The function library
@@ -63,7 +63,7 @@ app-registered functions.
   translations.
 
 **PuzzleKit-only (2)**: `link(url)` (router-aware,
-[[DECISION-D79-LINK-FORMATTER]]) and `timeago(v)` (reads the clock, so a row
+[[DECISION-D79-LINK-FUNCTION]]) and `timeago(v)` (reads the clock, so a row
 calling it is `volatile`, D170). An app may override either silently.
 
 **Sites-only**: `url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`,

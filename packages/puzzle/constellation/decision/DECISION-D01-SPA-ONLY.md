@@ -10,7 +10,7 @@ connections:
 # D1 — Client-rendered runtime: no SSR server, no hydration protocol
 
 ## Decision
-Puzzle's runtime renders on the client only: no request-time server rendering and no hydration protocol. Build-time prerendering is allowed — static output ([[DECISION-D67-SSG-STATIC-BUILD]]) renders pages in Node at build time, and the SPA runtime takes the page over on load with one code path.
+Puzzle's runtime renders on the client only: no request-time server rendering and no hydration protocol. Build-time prerendering is allowed — static output ([[DECISION-D67-HYBRID-PRERENDER]]) renders pages in Node at build time, and the SPA runtime takes the page over on load with one code path.
 
 ## Why
 It keeps the runtime small, the mental model simple, and compiler output free of server concerns.

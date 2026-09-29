@@ -9,9 +9,8 @@
  * `(__formatters.name || __formatters.__missing('name'))(...)` directly — the
  * __missing typo-guard (v1.12, D43).
  *
- * Renamed from FilterRegistry (constellation/doc/DOC-DECISIONS.md D7) with fixes from
- * constellation/doc/DOC-CODE-REVIEW.md §2.6: null/undefined render as '', `round` returns a
- * number, `number_with_delimiter` keeps decimals.
+ * Renamed from FilterRegistry (D7), with the prototype's bugs fixed: null/undefined
+ * render as '', `round` returns a number, `number_with_delimiter` keeps decimals.
  */
 
 import manifestFormatters from '@magic-spells/puzzle/formatters/manifest';

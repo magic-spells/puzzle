@@ -647,7 +647,7 @@ const staticOptions: MountStaticOptions = {
 	apiURL: '',
 	adapter,
 	// The three options the kernel destructures beyond the summary basics. (A static
-	// page carries no `routerMode` at all — D117/D159.)
+	// page carries no `routerMode` at all — D81/D159.)
 	storage: window.localStorage,
 	routerBase: '/app',
 };

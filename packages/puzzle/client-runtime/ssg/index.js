@@ -11,7 +11,7 @@
  * description/canonical/social metadata crawlers must see without running JS)
  * into the app shell. The router takes over on load (see router.js #swap SSG
  * branch) so subsequent navigation stays SPA. It does NOT touch the managed
- * tags after that (D111): the browser only syncs <title>, so the values baked
+ * tags after that (D84): the browser only syncs <title>, so the values baked
  * here are the ones every crawler reads — they are never re-derived at runtime.
  *
  * This module runs under Node only (it reads/writes files via node:fs). The Go
@@ -1413,7 +1413,7 @@ function headOperation(shell, plan, { head, title }) {
  * The `<title>` element is replaced for a NON-NULL head.title (null or
  * never-resolved keeps the shell's title — the same leave-alone posture the SPA
  * applies to document.title). Then per managed tag identity (headTags.js
- * MANAGED_TAGS — since D111 this is the table's ONLY consumer; the runtime
+ * MANAGED_TAGS — this is the table's ONLY consumer; the runtime
  * syncTags that once shared it is deleted):
  *  - same-identity `data-puzzle-head` tags already in the shell head are
  *    collapsed: the first is REPLACED in place and every stale duplicate removed;
@@ -1473,7 +1473,7 @@ function renderHeadRegion(shell, plan, head) {
 }
 
 /**
- * One managed tag as an HTML string. Since D111 this is the only place managed
+ * One managed tag as an HTML string. This is the only place managed
  * tags are ever built — there is no DOM twin at runtime to stay in step with.
  * `spec.id`/`spec.attr`/`spec.name` are framework constants (MANAGED_TAGS) and
  * need no escaping; the VALUE is author/route data and always escapes.

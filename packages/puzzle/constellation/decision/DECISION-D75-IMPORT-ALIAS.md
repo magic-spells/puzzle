@@ -8,7 +8,7 @@ connections:
   - DOC-SPEC-ANATOMY
   - DOC-USER-GUIDE
   - DECISION-D03-SCRIPTS-REAL-JS
-  - DECISION-D67-SSG-STATIC-BUILD
+  - DECISION-D67-HYBRID-PRERENDER
 verified_at: '2026-08-24T18:51:16.515Z'
 code_refs:
   - compiler/internal/build/options.go

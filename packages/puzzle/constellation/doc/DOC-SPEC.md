@@ -34,7 +34,7 @@ The contract is split across six domain cards; this card is the entry point. Sec
 | 12 | Animations | [[DOC-SPEC-VIEW]] |
 | 13 | CLI tooling | [[DOC-SPEC-BUILD]] |
 | 14 | Router scroll behavior | [[DOC-SPEC-ROUTER]] |
-| 15 | Hash routing | [[DOC-SPEC-ROUTER]] |
+| 15 | Router modes: hash and memory | [[DOC-SPEC-ROUTER]] |
 | 16 | Skeleton loading | [[DOC-SPEC-VIEW]] |
 | 17 | DOM islands | [[DOC-SPEC-TEMPLATE]] |
 | 18 | Inline SVG assets: `{#svg}` | [[DOC-SPEC-TEMPLATE]] |

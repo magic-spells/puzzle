@@ -71,7 +71,7 @@ none of the adapter (D98's exclusion-by-unreferenced-module).
   kernel, `/testing`'s `createTestApp` and `mountView` honor the same key.
 - **Dev warning.** At mount, a model with a truthy `static adapter` and no
   capability warns, naming the model and the fix. Without the capability,
-  `record.save()` is a plain `TypeError` — no stubs (D96).
+  `record.save()` is a plain `TypeError` — no stubs (D98).
 - **Core keeps**: `_synced`/`_deleted` and `MERGE_SKIP` (provenance shared with
   persistence and hydration); `safeMerge`, `safeAssignTracked`,
   `recordMutation`, `MUTATION_REVISIONS` (core `update()` needs them); the inert
@@ -126,7 +126,7 @@ warranted only for machinery beyond fetch functions.
 - Trusting `app/adapter.js` by name in static builds — pages could install a
   different adapter than they were rendered with.
 - Requiring `app/adapter.js` — makes legal app code a build error.
-- Throwing stubs in core — ships error text in every bundle (D96).
+- Throwing stubs in core — ships error text in every bundle (D98).
 
 ## Consequences
 

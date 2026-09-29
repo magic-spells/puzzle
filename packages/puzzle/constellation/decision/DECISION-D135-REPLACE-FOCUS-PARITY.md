@@ -39,10 +39,10 @@ unchanged.
 ## Alternatives
 
 - Gate-side fix in `#resolveFocus` — the gate runs before `keep` exists.
-- Announce but don't focus — per-keystroke live-region spam; D119 announces on
-  change only.
+- Announce but don't focus — per-keystroke live-region spam; the §51 announcer
+  speaks on change only.
 
 ## Consequences
 
 A leaf-identical replace is transient URL state, not a route change. Amends
-SPEC §51 (D93/D119).
+SPEC §51 (D93).

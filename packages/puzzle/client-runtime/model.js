@@ -103,7 +103,7 @@ class RelationshipBuilder {
 /**
  * Schema field builders — `Puzzle.string().required().min(1, 'msg')` — plus the
  * relationship builders `belongsTo`/`hasMany` (§21, D49). The only documented
- * way to declare fields (constellation/doc/DOC-DECISIONS.md D5).
+ * way to declare fields (D5).
  */
 export const Puzzle = {
 	string: () => new FieldBuilder('string'),

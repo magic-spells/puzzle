@@ -1,5 +1,5 @@
 // Package styles owns the CSS side of a build: running the Tailwind pipeline
-// (constellation/doc/DOC-DECISIONS.md D12/D26) and composing the final dist/styles.css.
+// (D12/D26) and composing the final dist/styles.css.
 //
 // Composition (SPEC §3): the final stylesheet is the Tailwind output (when the
 // pipeline is enabled) followed by the collected <style> blocks. index.html
@@ -50,8 +50,7 @@ import (
 // (NpxRunner) shells out to the Tailwind CLI; tests use a fake.
 type Runner interface {
 	// Run generates and returns the Tailwind CSS as a string. A non-nil error
-	// must fail the build — a declared pipeline is never silently skipped
-	// (constellation/doc/DOC-BUILD-PLAN.md Phase 3).
+	// must fail the build — a declared pipeline is never silently skipped.
 	Run(opts RunOptions) (string, error)
 }
 

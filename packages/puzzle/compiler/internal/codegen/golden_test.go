@@ -164,7 +164,7 @@ func normalizeFixture(s string) string {
 	return strings.Join(kept, "\n")
 }
 
-// TestGoldenHome is golden file #1 (D14): the real examples/todos Home.pzl must
+// TestGoldenHome is golden file #1 (FILE-TESTS-FIXTURES-TODOS-HOME-COMPILED): the real examples/todos Home.pzl must
 // compile to tests/fixtures/todos/Home.compiled.js (modulo the documented
 // normalizations). If this fails, the codegen is wrong — the fixture wins.
 func TestGoldenHome(t *testing.T) {

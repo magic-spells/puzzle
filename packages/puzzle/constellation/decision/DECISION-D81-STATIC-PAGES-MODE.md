@@ -5,9 +5,9 @@ name: >-
 status: verified
 verified_at: '2026-08-24T21:11:50.859Z'
 connections:
-  - DECISION-D67-SSG-STATIC-BUILD
+  - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D01-SPA-ONLY
-  - DECISION-D79-LINK-FORMATTER
+  - DECISION-D79-LINK-FUNCTION
   - COMPONENT-SSG
   - COMPONENT-CODEGEN
   - DOC-SPEC
@@ -26,7 +26,7 @@ verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 HTML with **no router, no SPA takeover and no history API**: navigation is plain
 `<a>` page loads. Each page ships a small ES module that mounts only its own
 components over the prerendered markup. The prerendered-SPA mode is
-`output: 'hybrid'` ([[DECISION-D67-SSG-STATIC-BUILD]]); the two share the
+`output: 'hybrid'` ([[DECISION-D67-HYBRID-PRERENDER]]); the two share the
 prerenderer, serializer and `assembleChain`, so a page and its client render
 cannot diverge. `--static`/`--hybrid` are mutually exclusive, and a flag that
 disagrees with the config value is an error.

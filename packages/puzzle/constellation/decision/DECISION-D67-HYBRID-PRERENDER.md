@@ -39,7 +39,7 @@ pure ViewNode code — so a build can render pages without a DOM.
    exactly as the Router's `#navigate` would, then serialized; the serializer
    mirrors ViewManager semantics (shared `expandSlots`; `@event`/`key`/`island`
    dropped; `{#svg}` verbatim; scoped-style stamps kept; RAWTEXT per D113). The
-   shell gets the markup, resolved `<title>` and managed head tags (D84/D111) by
+   shell gets the markup, resolved `<title>` and managed head tags (D84) by
    string surgery keyed on the target id, plus the `data-puzzle-ssg` marker.
 2. **Go build step** (`compiler/internal/build/prerender.go`): a node-platform
    esbuild bundle of a generated entry importing the app entry's default export,

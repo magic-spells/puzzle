@@ -9,8 +9,9 @@ package generate
 
 // componentTemplate renders inline (D20): `<puzzle-view>` carries no attributes
 // and wraps a SINGLE root element. It shows a prop plus an arrow-function event
-// handler in an `events = {}` class field (arrow functions are mandatory —
-// method shorthand is a compile error, constellation/doc/DOC-SPEC.md §4–5).
+// handler in an `events = {}` class field (arrow functions are mandatory: method
+// shorthand compiles, but the runtime calls it as `this.events.name(…)`, so `this`
+// is the events object and it fails at event time — constellation/doc/DOC-SPEC.md §4–5).
 const componentTemplate = `<puzzle-view>
   <button class="__NAME__" @click={ handleClick(event) }>
     { label }

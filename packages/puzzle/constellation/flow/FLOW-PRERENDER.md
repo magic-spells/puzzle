@@ -16,7 +16,7 @@ connections:
   - FILE-BUILD-PRERENDER-PAGES
   - FILE-HEAD-TAGS
   - DECISION-D01-SPA-ONLY
-  - DECISION-D67-SSG-STATIC-BUILD
+  - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D84-HEAD-MANAGEMENT
   - DECISION-D113-SSG-RAWTEXT-RULE
@@ -37,7 +37,7 @@ verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 
 The two prerender modes on top of the SPA build ([[FLOW-BUILD]]): `hybrid` (prerendered
 HTML + the SPA bundle, which takes over at navigation zero,
-[[DECISION-D67-SSG-STATIC-BUILD]]) and `static` (true static pages with a per-page mount
+[[DECISION-D67-HYBRID-PRERENDER]]) and `static` (true static pages with a per-page mount
 module, [[DECISION-D81-STATIC-PAGES-MODE]]). Neither is SSR or hydration
 ([[DECISION-D01-SPA-ONLY]]): the runtime clears the prerendered children and mounts a
 freshly rendered tree in one synchronous swap — it adopts the *screen*, not the nodes.
