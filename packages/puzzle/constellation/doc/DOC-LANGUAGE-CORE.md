@@ -362,6 +362,7 @@ rejects them until it does.
 ## Expressions
 
 
+
 A template expression is **JavaScript's expression syntax, closed by one
 grammar and a method table** ([[DECISION-D176-EXPRESSION-LANGUAGE]]). One
 parser in the language module (`packages/puzzle-lang/expr`) reads every
@@ -387,7 +388,8 @@ letters, digits and marks from any script, `_` and `$` all work
 (`{ größe }`). Reserved words are errors, except `eval` and `arguments`, which
 read like any field. `__proto__`, `constructor` and `prototype` are errors as
 member names and object keys. A bound name is a value: calling it (`t('key')`
-inside `{#for t in …}`) is an error.
+inside `{#for t in …}`) is an error. `event` is an ordinary name too, except
+inside a PuzzleKit `@event` handler (see Handlers below).
 
 - **`this` is not a name** in any template expression, handler arguments
   included. It is a positioned compile error at the `this` token that steers
@@ -425,6 +427,9 @@ missing value yields a missing value, and so does calling a method on one**
 or `{ note.trim() }` with `note` unset, renders an empty string in both hosts.
 `?.` is legal and unnecessary. PuzzleKit guards every member step, index step
 and method call in codegen; a path that exists evaluates exactly as before.
+The same holds for the `Object` globals: `Object.keys`, `values` and `entries`
+of a missing value are `[]`, so `{ Object.keys(settings).length }` prints `0`
+(PuzzleKit passes `x ?? {}`; Sites needs the same default).
 `.size` is not special: it reads a field named `size` like any other
 (`file.size`).
 
@@ -528,21 +533,28 @@ on operands of mixed or non-number types is host-defined (V5).
 warning in PuzzleKit that names the valid presets. It is a warning, not an
 error, because an app may register its own function under any of those names.
 A dynamic preset the library does not know is a development error at run time
-that renders the function's default (D174).
+that renders the function's default (D174). A zone `Intl` rejects renders the
+date un-shifted, with a development error once per zone; a `null` or `''` zone
+renders un-shifted with no error, and an omitted zone is `'UTC'`.
 
 **Handlers (PuzzleKit only).** An `@event` value is the one door into the
 view's JavaScript: a bare handler name, one call to a handler, a conditional
 whose branches are each one of those or `null`, or `null`
 (`@click={ save(items.length - 1) }`). The handler's own call names the view's
-handler, never a library function; its arguments and the conditional's test
-are ordinary expressions, evaluated when the event fires, with `event` in
-scope. A chain rooted at a free `event` is the DOM event, not template data,
-so the method table does not apply to it: `event.target.value`,
+handler, never a library function; its arguments are ordinary expressions,
+evaluated when the event fires, with `event` in scope, and the conditional's
+test is an ordinary expression evaluated at render time. A chain rooted at a
+free `event` in the arguments is the DOM event, not template data, so the
+method table does not apply to it: `event.target.value`,
 `event.target.closest('li')` and `event.preventDefault()` are legal and
 compile as written. A bound `event` (a loop item, a snippet or arrow
-parameter) shadows the DOM event, as in JavaScript, and a free `event` outside
-a handler is an error. Sites has no handlers and rejects `@event` (see
-Dialects).
+parameter) shadows the DOM event, as in JavaScript. Outside a handler `event`
+is an ordinary name that reads the data field or prop, so
+`<EventCard event={ item }>` and its `{ event.title }` work. Inside a handler
+the free `event` is always the DOM event, so a template that reads `event` as
+data and also uses it inside a handler is a positioned compile error at the
+handler's use, naming the data read: rename the field or prop. Sites has no
+handlers and rejects `@event` (see Dialects).
 
 ## Dialects
 
