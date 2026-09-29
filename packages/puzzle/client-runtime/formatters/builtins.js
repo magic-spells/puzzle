@@ -396,7 +396,8 @@ const TIMEZONE_FORMATTERS = new Map();
 // on first use so importing the module never constructs an Intl object.
 let relativeTimeFormatter;
 let relativeLocale;
-// Dev-only warn-once ledger for unknown presets; production never touches it.
+// Dev-only warn-once ledger for unknown presets and time zones; production never
+// touches it.
 let warnedPresets;
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -505,8 +506,8 @@ export function in_timezone(v, tz = 'UTC') {
 	// An unknown time-zone identifier throws RangeError at DateTimeFormat
 	// construction, and formatToParts throws on an invalid date — fail soft to the
 	// un-shifted date so a bad tz/date never crashes the render.
+	let formatter = TIMEZONE_FORMATTERS.get(tz);
 	try {
-		let formatter = TIMEZONE_FORMATTERS.get(tz);
 		if (!formatter) {
 			formatter = new Intl.DateTimeFormat('en-CA', {
 				timeZone: tz,
@@ -521,6 +522,19 @@ export function in_timezone(v, tz = 'UTC') {
 		const iso = `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
 		return new Date(iso);
 	} catch {
+		// No formatter means Intl rejected the zone itself (a typo such as
+		// 'America/New_Yrok' passes the compile-time shape check): a development
+		// error, reported once per zone, like an unknown date preset.
+		if (!formatter && (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)) {
+			warnedPresets ??= new Set();
+			const zone = String(tz);
+			if (!warnedPresets.has('in_timezone:' + zone)) {
+				warnedPresets.add('in_timezone:' + zone);
+				console.error(
+					`[puzzle] unknown in_timezone time zone "${zone}"; use an IANA zone id such as "America/New_York" (rendered un-shifted)`,
+				);
+			}
+		}
 		return d;
 	}
 }

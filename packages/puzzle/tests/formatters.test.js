@@ -548,12 +548,33 @@ describe('FormatterRegistry', () => {
 
 			// Invalid time-zone identifier throws RangeError — in_timezone must fail
 			// soft (to the un-shifted date) rather than throw.
+			const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
 			expect(() => f.in_timezone('2026-01-15T12:00:00Z', 'Not/AZone')).not.toThrow();
 			expect(f.in_timezone('2026-01-15T12:00:00Z', 'Not/AZone')).toBeInstanceOf(Date);
 			expect(() => f.in_timezone('total garbage', 'UTC')).not.toThrow();
 
 			// Valid inputs are byte-identical (a real tz still shifts the date).
 			expect(f.in_timezone('2026-01-15T12:00:00Z', 'America/New_York')).toBeInstanceOf(Date);
+			quiet.mockRestore();
+		});
+
+		it('an unknown in_timezone zone is a development error, reported once, and renders un-shifted', () => {
+			const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+			const at = '2026-01-15T12:00:00Z';
+			const shifted = f.in_timezone(at, 'America/New_Yrok');
+			expect(shifted.getTime()).toBe(new Date(at).getTime());
+			f.in_timezone(at, 'America/New_Yrok');
+			expect(spy).toHaveBeenCalledTimes(1);
+			expect(spy.mock.calls[0][0]).toContain('unknown in_timezone time zone "America/New_Yrok"');
+			expect(spy.mock.calls[0][0]).toContain('(rendered un-shifted)');
+			// Each zone is reported once; a valid zone and an invalid date are not
+			// zone errors.
+			f.in_timezone(at, 'Mars/Olympus');
+			f.in_timezone(at, 'Asia/Tokyo');
+			f.in_timezone('total garbage', 'Asia/Tokyo');
+			expect(spy).toHaveBeenCalledTimes(2);
+			expect(spy.mock.calls[1][0]).toContain('"Mars/Olympus"');
+			spy.mockRestore();
 		});
 
 		it('timeago produces relative phrasing', () => {
