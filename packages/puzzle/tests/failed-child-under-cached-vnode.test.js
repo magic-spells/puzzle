@@ -126,6 +126,26 @@ describe('errorView retry reaches a failed child under a reused element vnode', 
 		expect(app.find('.app-error')).toBeNull();
 		expect(state.attempts).toBe(2);
 	});
+
+	it('{#for}<li><Card><Widget/></Card></li>{/for}: a wrapper inside a cached row', async () => {
+		const { app, state } = await retryThrough((view, Widget) =>
+			h(
+				'puzzle-view',
+				{},
+				listRows(
+					view,
+					view,
+					0,
+					view.getData().ids,
+					(s) => h('li', { key: s.k }, [comp(Card, {}, [comp(Widget)])]),
+					KEY
+				)
+			)
+		);
+		expect(app.find('li .card .ready')?.textContent).toBe('ready');
+		expect(app.find('.app-error')).toBeNull();
+		expect(state.attempts).toBe(2);
+	});
 });
 
 describe('without an errorView, the next parent patch remounts a failed child (D115)', () => {
@@ -168,6 +188,19 @@ describe('without an errorView, the next parent patch remounts a failed child (D
 	it('<li><Widget/></li>: a component nested under a cached row', async () => {
 		const { view, state } = await mountHost((s, Widget) => h('li', { key: s.k }, [comp(Widget)]));
 		expect(view.find('li .ready')?.textContent).toBe('ready');
+		expect(state.attempts).toBe(2);
+	});
+
+	// The failed child's owner is the WRAPPER (Card mounts its slot content), and
+	// both the row above Card and the Card vnode itself are cached. The failure
+	// marks every view up the ownership chain, the host's walk goes through the
+	// row, and a live component that is itself marked is re-rendered through its
+	// ordinary parent-update path, so Card's own walk reaches Widget.
+	it('<li><Card><Widget/></Card></li>: a failed slot child of a wrapper in a cached row', async () => {
+		const { view, state } = await mountHost((s, Widget) =>
+			h('li', { key: s.k }, [comp(Card, {}, [comp(Widget)])])
+		);
+		expect(view.find('li .card .ready')?.textContent).toBe('ready');
 		expect(state.attempts).toBe(2);
 	});
 

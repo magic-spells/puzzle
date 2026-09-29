@@ -254,10 +254,12 @@ export class PuzzleView {
 	 * element vnode that is the SAME object on both sides — a cached list row, a
 	 * static subtree, or slot content a wrapper splices back in by reference — so
 	 * a child component whose mount failed somewhere below it is never revisited.
-	 * The failure handler (viewManager's mountComponent) and an errorView retry
-	 * (#makeRetry) set this on the view whose patch owns the failed position; that
-	 * view's next render walks every element vnode, reaching the destroyed child so
-	 * patch() mounts a fresh one, and the ViewManager clears it afterwards.
+	 * The failure handler (viewManager's mountComponent) sets this on the view whose
+	 * patch owns the failed position and on every view above it; an errorView retry
+	 * (#makeRetry) sets it on the owner it refreshes. The view's next render
+	 * consumes it as it starts and walks every element vnode, re-rendering a live
+	 * child that is marked too, until the walk reaches the destroyed child and
+	 * patch() mounts a fresh one.
 	 *
 	 * INTERNAL, like `__rgen`; declared so every view keeps one hidden class.
 	 */
@@ -760,7 +762,9 @@ export class PuzzleView {
 			// sides, the owner's patch takes the identity short-circuit at it, and the
 			// destroyed child underneath is never revisited — the face would vanish
 			// and data() would never re-run. Make the owner's next patch walk those
-			// elements for this one render. (Bumping the owner's render counter would
+			// elements for this one render. The owner alone: refresh() re-renders it
+			// directly, and the failed child is in the tree it patches, so no view
+			// above it needs to walk. (Bumping the owner's render counter would
 			// rebuild only rows of blocks the OWNER runs; slot content belongs to the
 			// caller's blocks, or to none.)
 			if (owner) owner.__walk = true;
