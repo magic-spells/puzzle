@@ -2165,17 +2165,29 @@ export class Router {
 			// A push, replace or pop still loading owns where the app is going:
 			// rebuilding the committed location now would supersede it and strand the
 			// app on the old page (and a pop's entry under the old URL). Let it land
-			// (or fail), then rebuild wherever the app ended up.
+			// (or fail), then rebuild wherever the app ended up. setLocale does NOT wait
+			// for that: the switch may come from inside the loading navigation (a
+			// layout data() or a guard awaiting setLocale), which would then wait on
+			// itself forever. Its new views render in the new strings; the rebuild
+			// re-renders the levels it kept. A failed rebuild is already reported
+			// through onError, so the scheduled one's rejection is swallowed here.
 			const pending = this.#pendingNavPromise;
 			if (pending) {
 				const again = () => this.__failedView(null, true);
-				return pending.then(again, again);
+				pending.then(again, again).catch(() => {});
+				return null;
 			}
 			// Resolves once the rebuilt chain commits (or a newer navigation takes over);
 			// rejects when the rebuild itself failed and the old chain is still on
 			// screen (a data() failure, already reported through onError), so
 			// setLocale's caller learns the page was not rebuilt.
-			const nav = this.#navigate(st.path, { push: false, replace: true, retryView: REBUILD });
+			// Tracked like a replace, so a switch made from inside this rebuild (its
+			// data() or guard asking for another locale) waits for it instead of
+			// starting a second rebuild that this one's data() would wait on.
+			const nav = this.#trackNav(
+				this.#token,
+				this.#navigate(st.path, { push: false, replace: true, retryView: REBUILD })
+			);
 			const token = this.#token;
 			return nav.then(() => {
 				if (this.#token === token && this.#state === st) {
@@ -2186,7 +2198,10 @@ export class Router {
 		const routed = st.layout === view || st.views.includes(view);
 		if (retry) {
 			return routed
-				? this.#navigate(st.path, { push: false, replace: true, retryView: view })
+				? this.#trackNav(
+						this.#token,
+						this.#navigate(st.path, { push: false, replace: true, retryView: view })
+					)
 				: null;
 		}
 		if (st.layout === view) {
