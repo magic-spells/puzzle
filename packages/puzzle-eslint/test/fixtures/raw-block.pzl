@@ -8,7 +8,7 @@
   </div>
 
   <!-- Template grammar inside a raw body is literal text, closers included. -->
-  <pre>{#raw json}{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}{/raw }</pre>
+  <pre>{#raw json}{#if ok}{ value.toUpperCase() }{:else}{#comment}x{/comment}{/if}{/raw }</pre>
 
   <!-- Raw blocks do not nest: the first tolerant closer wins, and ordinary
        template lexing resumes right after it. -->

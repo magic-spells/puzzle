@@ -30,9 +30,9 @@
       <section class="rounded border border-line bg-canvas overflow-hidden" data-chain>
         <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
           <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Matched chain</h2>
-          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ chain.size }</span>
+          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ chain.length }</span>
         </header>
-        {#if chain.size === 0}
+        {#if chain.length === 0}
           <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No chain reported.</p>
         {:else}
           <ol class="m-0 p-0 list-none">
@@ -58,9 +58,9 @@
       <section class="rounded border border-line bg-canvas overflow-hidden" data-history>
         <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
           <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Navigation history</h2>
-          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ history.size }</span>
+          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ history.length }</span>
         </header>
-        {#if history.size === 0}
+        {#if history.length === 0}
           <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No navigations captured yet.</p>
         {:else}
           <ul class="m-0 p-0 list-none">

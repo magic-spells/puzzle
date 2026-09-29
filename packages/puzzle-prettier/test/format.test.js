@@ -114,10 +114,10 @@ describe('paired composition markers (D141)', () => {
 		expect(b['puzzle-view'].openTag).toBe(a['puzzle-view'].openTag);
 		expect(Object.keys(b).sort()).toEqual(['puzzle-view', 'script', 'style']);
 		// every marker spelling still present verbatim
-		expect(out).toContain('<Slot name="header"><h2>{ title | capitalize }</h2></Slot>');
+		expect(out).toContain('<Slot name="header"><h2>{ capitalize(title) }</h2></Slot>');
 		expect(out).toContain('<Children>');
 		expect(out).toContain('</Children>');
-		expect(out).toContain("<Slot>{ count | number } remaining{#svg 'icons/empty.svg'}</Slot>");
+		expect(out).toContain("<Slot>{ number_with_delimiter(count) } remaining{#svg 'icons/empty.svg'}</Slot>");
 		expect(out).toContain('<Children/>');
 		expect(out).toContain('<Slot name="footer"/>');
 		// the surrounding script and style still got formatted
@@ -141,7 +141,7 @@ describe('{#raw} blocks (D150)', () => {
 		expect(Object.keys(b).sort()).toEqual(['puzzle-view', 'script', 'style']);
 		// the canonical lexer cases survive verbatim, indentation and all
 		expect(out).toContain('{#raw}{ "loop": true, "slides": [1, 2], "url": "/api/x" }{/raw}');
-		expect(out).toContain('{#raw}{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}{/raw}');
+		expect(out).toContain('{#raw}{#if ok}{ value.toUpperCase() }{:else}{#comment}x{/comment}{/if}{/raw}');
 		expect(out).toContain('{#raw json}{ x }{/raw }{ y }');
 		expect(out).toContain('{#raw}outer {#raw} inner{/raw} tail');
 		expect(out).toContain('{#raw}<b data-json={ {"x": 1} }>hi { name }</b>{/ raw }');
@@ -216,7 +216,7 @@ describe('0.7.0 template grammar (D167 dotted tags, \\{ \\} escapes, the {#for} 
 		expect(b['puzzle-view'].openTag).toBe(a['puzzle-view'].openTag);
 		expect(Object.keys(b).sort()).toEqual(['puzzle-view', 'script', 'style']);
 		// The grammar specimens survive verbatim.
-		expect(out).toContain('<Frame.Header>{ title | capitalize }</Frame.Header>');
+		expect(out).toContain('<Frame.Header>{ capitalize(title) }</Frame.Header>');
 		expect(out).toContain('<Frame.Footer/>');
 		expect(out).toContain('A literal \\{ stays a brace \\}, and \\{{ count }\\} wraps an interpolation in');
 		expect(out).toContain('{#for 1...5, i}');
@@ -276,6 +276,112 @@ describe('0.7.0 template grammar (D167 dotted tags, \\{ \\} escapes, the {#for} 
 	});
 });
 
+// 0.8.0 template expressions (D176): library functions, methods, arrow
+// functions as call arguments, object literals and template literals. The
+// plugin never parses a template value, so every case is the same contract: the
+// bytes come back as written — no respacing, no reflow of a long call in an
+// attribute — and the section boundaries land where sections.go puts them.
+describe('0.8.0 template expressions ride through verbatim', () => {
+	it('preserves the 0.8.0 fixture byte-for-byte and still formats script + style', async () => {
+		const input = read('grammar-0-8.pzl');
+		const out = await format(input);
+		const a = sectionMap(input);
+		const b = sectionMap(out);
+		expect(b['puzzle-view'].inner).toBe(a['puzzle-view'].inner);
+		expect(b['puzzle-view'].openTag).toBe(a['puzzle-view'].openTag);
+		expect(Object.keys(b).sort()).toEqual(['puzzle-view', 'script', 'style']);
+		for (const specimen of [
+			"<Frame.Wrapper title={ truncate(name.trim(), 20) } class=\"card { tone ?? 'plain' }\">",
+			'<Badge label={ compact_number(followers) } count={ items.length }/>',
+			"{ t('cart.count', { count: items.length, unit }) }",
+			"{ label(total, { digits: 2, close: '}' }) }",
+			'{ `${items.filter(n => n > 1).length} of ${items.length} }` }',
+			"{ tags.map((tag, i) => `${i + 1}:${tag.toUpperCase()}`).join(', ') }",
+			"{ Math.round(total * 100) / 100 } { `{${tone ?? '}'}}` }",
+			'{#for n in items.toSorted((a, b) => b - a), i}',
+			'@click={ pick(n, event.target.dataset.i) }',
+			'{ newline_to_br(bio) }',
+			'{ raw(html) }',
+			'<pre>\n    keep   these\n\tbytes exactly\n  </pre>',
+			'<textarea name="note">\n    indented body\n  </textarea>',
+		]) {
+			expect(out, specimen).toContain(specimen);
+		}
+		expect(out).toContain('import { PuzzleView } from "@magic-spells/puzzle";');
+		expect(out).toContain('.card {\n  color: red;\n}');
+	});
+
+	it('never respaces or rewraps a template value, at any print width', async () => {
+		// Deliberately unidiomatic spacing: a template formatter would be tempted
+		// to "fix" it. This plugin has no opinion on template values.
+		const src =
+			'<puzzle-view>\n' +
+			'  <p title={truncate(name.trim(),20)}>{ currency(price*qty) }</p>\n' +
+			"  <Frame.Wrapper label={ t('k',{count:items.length,unit}) } a={x ?? 'y'}/>\n" +
+			'  <span>{ items.filter(n=>n.done).map((n,i)=>`${i}:${n.name}`).join(",") }</span>\n' +
+			"  <span>{ t('cart.count', { count: items.length }) } { compact_number(followers) }</span>\n" +
+			'</puzzle-view>\n';
+		for (const printWidth of [20, 80, 200]) {
+			expect(await format(src, { printWidth }), `printWidth ${printWidth}`).toBe(src);
+		}
+	});
+
+	it('finds the section close past an object-literal argument holding a brace string', async () => {
+		// The object literal nests a '{' group inside the interpolation, and its
+		// '}' string must be skipped as a string. Misread either and the group
+		// closes early or runs away, and the regex in <script> lands the boundary
+		// somewhere else.
+		const tpl = "<p>{ t('k', { close: '}', open: '{' }) }</p>";
+		const src = `<puzzle-view>${tpl}</puzzle-view>\n<script>\nconst re = /}/;\n</script>\n`;
+		const b = sectionMap(await format(src));
+		expect(Object.keys(b).sort()).toEqual(['puzzle-view', 'script']);
+		expect(b['puzzle-view'].inner).toBe(tpl);
+		expect(b['script'].inner).toBe('\nconst re = /}/;\n');
+	});
+
+	it('finds the section close past template literals and arrow functions', async () => {
+		// A '}' in a template literal's static text or in a string inside ${…},
+		// a '</puzzle-view>' inside a template literal, and the '>' of '=>' must
+		// not end the interpolation or the section; a '/' after ')' is division.
+		for (const tpl of [
+			'<p>{ `${items.length} }` }</p>',
+			"<p>{ `{${tone ?? '}'}}` }</p>",
+			'<p title={ `</puzzle-view> ${name}` }>x</p>',
+			'{#for n in items.toSorted((a, b) => b - a)}<i>{ n }</i>{/for}',
+			'<p>{ Math.round(total * 100) / 100 }</p>',
+		]) {
+			const src = `<puzzle-view>${tpl}</puzzle-view>\n<script>\nconst re = /}/;\n</script>\n`;
+			const b = sectionMap(await format(src));
+			expect(Object.keys(b).sort(), tpl).toEqual(['puzzle-view', 'script']);
+			expect(b['puzzle-view'].inner, tpl).toBe(tpl);
+			expect(b['script'].inner, tpl).toBe('\nconst re = /}/;\n');
+		}
+	});
+
+	it('hands back template values the compiler rejects, untouched', async () => {
+		// A method outside the method table, `this`, `new`, a bitwise `|`, and an
+		// expression that starts with an object literal are positioned compile
+		// errors (D176). They are the compiler's to report; a formatter that threw
+		// here would refuse a file mid-edit.
+		for (const tpl of [
+			'{ items.sort() }',
+			'{ this.label }',
+			'{ new Date() }',
+			'{ a | b }',
+			'{#if flags & 1}x{/if}',
+			'{ {a: 1} }',
+			'{ n ** 2 }',
+		]) {
+			const src = `<puzzle-view><p>${tpl}</p></puzzle-view>\n`;
+			expect(await format(src), tpl).toBe(src);
+		}
+	});
+});
+
+// The template expressions below are NOT valid template values (D176 has no
+// regex literals and no `++`); they pin the splitter's lexer against
+// lexskip.go, which still lexes them the same way — so a file mid-edit keeps
+// its section boundaries while the compiler reports the value error.
 describe('lexer table parity with the compiler', () => {
 	it('treats ++ / -- as update operators so a following / is division', async () => {
 		// LexSkip consumes BOTH bytes of ++/--, preserving the incoming state, so
@@ -350,6 +456,14 @@ describe('template whitespace is layout (D168)', () => {
 		for (const printWidth of [20, 80, 200]) {
 			const out = await format(src, { printWidth });
 			expect(sectionMap(out)['puzzle-view'].inner).toBe(sectionMap(src)['puzzle-view'].inner);
+		}
+	});
+
+	it('keeps the 0.8.0 fixture template (inline runs, <pre>, <textarea>) byte-identical at any width and indent style', async () => {
+		const input = read('grammar-0-8.pzl');
+		for (const opts of [{ printWidth: 20 }, { printWidth: 200 }, { useTabs: true }, { tabWidth: 8 }]) {
+			const out = await format(input, opts);
+			expect(sectionMap(out)['puzzle-view'].inner, JSON.stringify(opts)).toBe(sectionMap(input)['puzzle-view'].inner);
 		}
 	});
 });
