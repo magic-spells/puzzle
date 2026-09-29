@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -33,6 +34,67 @@ func TestLibrarySignaturesMatchCodegen(t *testing.T) {
 		if !strings.Contains(shim, "    "+fn.name+fn.signature+";\n") {
 			t.Errorf("shim is missing %s", fn.name)
 		}
+	}
+}
+
+// The shim's signatures are the public LibraryFunctions interface with its
+// type aliases spelled out, so a template call type-checks exactly as the same
+// call in the app's own TypeScript. The one allowed difference is a shim
+// parameter widened to `unknown` (t's key). They drifted once: t took
+// `Record<string, unknown>` vars, which rejects an interface-typed value, and
+// date took one locale string where the runtime takes a list.
+func TestLibrarySignaturesMatchPublicTypes(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "types", "index.d.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(data)
+	start := strings.Index(src, "export interface LibraryFunctions {")
+	if start < 0 {
+		t.Fatal("types/index.d.ts has no LibraryFunctions interface")
+	}
+	end := strings.Index(src[start:], "\n}\n")
+	if end < 0 {
+		t.Fatal("types/index.d.ts: LibraryFunctions has no closing brace")
+	}
+	aliases := map[string]string{}
+	for _, m := range regexp.MustCompile(`(?m)^export type (\w+) = ([^;\n]+);$`).FindAllStringSubmatch(src, -1) {
+		aliases[m[1]] = m[2]
+	}
+	expand := func(ty string) string {
+		return regexp.MustCompile(`\b\w+\b`).ReplaceAllStringFunc(ty, func(word string) string {
+			if a, ok := aliases[word]; ok {
+				return a
+			}
+			return word
+		})
+	}
+	public := map[string]string{}
+	for _, m := range regexp.MustCompile(`(?m)^\t(\w+)(\(.*\): .+);$`).FindAllStringSubmatch(src[start:start+end], -1) {
+		public[m[1]] = m[2]
+	}
+	signature := regexp.MustCompile(`^\((.*)\): (.+)$`)
+	for _, fn := range libraryFunctionSignatures {
+		pub, ok := public[fn.name]
+		if !ok {
+			t.Errorf("LibraryFunctions has no %s", fn.name)
+			continue
+		}
+		s, p := signature.FindStringSubmatch(fn.signature), signature.FindStringSubmatch(pub)
+		sParams, pParams := strings.Split(s[1], ", "), strings.Split(p[1], ", ")
+		same := len(sParams) == len(pParams) && s[2] == expand(p[2])
+		for i := 0; same && i < len(sParams); i++ {
+			sName, sType, _ := strings.Cut(sParams[i], ": ")
+			pName, pType, _ := strings.Cut(pParams[i], ": ")
+			same = sName == pName && (sType == "unknown" || sType == expand(pType))
+		}
+		if !same {
+			t.Errorf("%s: shim %s, LibraryFunctions %s", fn.name, fn.signature, pub)
+		}
+		delete(public, fn.name)
+	}
+	for name := range public {
+		t.Errorf("LibraryFunctions.%s has no shim signature", name)
 	}
 }
 
@@ -237,6 +299,39 @@ export default class Home extends PuzzleView { n = 1; price = 3; tags: string[] 
 				t.Fatalf("diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 			}
 		})
+	}
+}
+
+// The library calls the public types accept check clean: translation vars are
+// any object — an interface or a class instance carries no index signature, so
+// a Record type rejected both — or null, and a date locale may be a list. A
+// preset outside the four is an error, as it is in the app's own code.
+func TestLibraryCallsAcceptThePublicArgumentsWithLiveTSC(t *testing.T) {
+	root := liveTSCApp(t)
+	if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	view := func(template string) string {
+		return `<puzzle-view><p>` + template + `</p></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+interface User { name: string }
+class Account { name = 'a'; }
+export default class Home extends PuzzleView {
+  user: User = { name: 'a' };
+  account = new Account();
+  when = new Date();
+}
+</script>
+`
+	}
+	writeLiveView(t, root, view(`{ t('greeting', user) } { t('greeting', account) } { t('x', null) } { date(when, 'long', ['de-DE', 'en']) } { datetime(when, 'iso', 'en') }`))
+	if _, err := Run(root); err != nil {
+		t.Fatalf("library calls the public types accept must check clean: %v", err)
+	}
+	writeLiveView(t, root, view(`{ date(when, 'longest') }`))
+	if _, err := Run(root); err == nil || !strings.Contains(err.Error(), `'"longest"'`) {
+		t.Fatalf("an unknown date preset must be a type error, got %v", err)
 	}
 }
 

@@ -491,8 +491,9 @@ second specification. Decision cards hold rationale and git holds chronology.
   remapping every diagnostic to its authored `.pzl` line and column. TypeScript
   scripts are checked as written; JavaScript components get an unchecked script
   mirror plus a checked template wrapper. The generated tsconfig extends the
-  app's, neutralizes the settings that would break the workspace, and switches
-  shape for TypeScript 7 after probing `tsc --version`. A missing TypeScript
+  app's (merging the app's own `paths` aliases), neutralizes the settings that
+  would break the workspace, and switches shape for TypeScript 6 and up after
+  probing `tsc --version`. A missing TypeScript
   install is an error naming `npm install -D typescript` — Puzzle never installs
   one — and a missing `node` on `PATH` its counterpart. `--js` is reserved and
   not yet implemented.

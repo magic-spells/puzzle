@@ -57,11 +57,18 @@ notes:
       Function-locale caches are not keyed by locale: `setFormatLocale` clears `localeNumber`'s
       per-digit cache and `compact_number`/`timeago` rebuild their single-slot formatter when the
       slot moves — same result, and an app without i18n keeps its exact code. (10) The rebuild waits
-      only for a pending PUSH (`#pendingNavPromise`); a replace or pop still loading when a switch
-      lands is superseded by the rebuild. (11) The build cannot detect an app-registered `t` (the
-      compiler never reads app.js), so the `t`-without-i18n warning says "unless the app registers
-      its own t formatter" instead of being skipped. (12) The i18n cost measured on examples/i18n is
-      about +1.3 KB gzip; hello-world and todos are unchanged.
+      for any navigation still loading — a push, a replace() or a pop (popstate, or memory-mode
+      go()/back()) — by waiting on the router's `#pendingNavPromise`: push() pairs it with
+      `#pendingNavPath`, and replace(), go() and the popstate handler fill it through `#trackNav`.
+      The push double-click guard stays keyed on `#pendingNavPath`, so a replace or pop never no-ops
+      a push. (11) The build cannot detect an app-registered `t` (the compiler never reads app.js),
+      so the `t`-without-i18n warning says "unless the app registers its own t formatter" instead of
+      being skipped. (12) The i18n cost measured on examples/i18n is about +1.3 KB gzip; hello-world
+      and todos are unchanged. (13) The entry folder rides on the manifest module as `base`, not on
+      a compiler-generated entry (the SPA entry is the app's own app/app.js; the compiler generates
+      none): `locales.Manifest.JS()` emits an expression that reads the module's own
+      `import.meta.url` and steps up one folder when the module was bundled into a `chunks/<name>-<8
+      base32>.js` file, the only other place it can land.
   - kind: state
     text: >-
       Static kernel remount on setLocale (`client-runtime/static/index.js` armRemount): it
@@ -76,15 +83,12 @@ notes:
       tests/static-locale-remount.test.js.
   - kind: gotcha
     text: >-
-      Known limitation of the URLs rule, NOT fixed (needs a decision): "hash and memory modes always
-      serve the shell from the dist root" is false for a memory-mode widget embedded in a foreign
-      page — `app.js` resolves locale paths against `document.baseURI`, so a widget loaded from
-      /widget/app.js on /blog/post/1 fetches /blog/post/locales/<tag>.<hash>.json. `import.meta.url`
-      inside the runtime is NOT a fix: with `build.splitting` on, esbuild moves the runtime
-      (PuzzleApp, i18n.js) into a shared `dist/chunks/chunk-*.js` (verified on examples/blog), so
-      its URL is one directory too deep. The dist-root URL has to come from the entry module, which
-      always stays at `dist/app.js` — e.g. the compiler passing `new URL('.', import.meta.url)` from
-      the entry into the i18n options — a compiler + D175 change.
+      The manifest `base` depends on the chunk naming every splitting pass uses,
+      `chunks/[name]-[hash]` directly under the entry's folder (build/options.go ChunkNames and the
+      static-pages pass). Change that pattern and `chunkFilePattern` in
+      compiler/internal/locales/locales.go must follow, or a split app's hash/memory locale fetches
+      go one folder too deep. TestManifestBaseIsTheEntryFolder evaluates the expression in node for
+      entry and chunk URLs.
 ---
 
 # D175 — Translations: `t(key, vars)`, one locale file per language
@@ -313,12 +317,18 @@ nested files and never merges locales.
   components a second way to reach a service that `ctx` already carries.
   Templates never reach the view instance anyway (D176 rule 7).
 - **`<html lang>`** is set to the active locale on load and on every switch.
-  Screen readers and hyphenation depend on it.
+  Screen readers and hyphenation depend on it. Memory routing is the
+  exception: it takes no document-level side effects
+  ([[DOC-SPEC-ROUTER]]), so an embedded memory-mode app — and `/testing`'s
+  `createTestApp`, which routes in memory mode — leaves the host page's
+  `lang` alone.
 - **Static-kernel ctx and `/testing` ctx carry the service too.** The testing
   utilities take `i18n: { locale, strings }` so a test renders translated
   views without fetching.
 - **`puzzle check`** types a template `t` call through the shim's library
-  signature, `t(key: unknown, vars?: Record<string, unknown>): string`, and
+  signature, `t(key: unknown, vars?: object | null): string` — any object is
+  valid vars, an interface-typed value or a class instance included (a
+  `Record` type rejects both, lacking an index signature) — and
   `types/index.d.ts` declares the service (`PuzzleI18n`, optional `ctx.i18n`
   and `app.i18n`).
 
@@ -358,6 +368,7 @@ The prerender (Node) has no `navigator` or storage and always uses
 
 ### Loading
 
+
 - **The first render has its strings.** `mount()` picks the locale and starts
   loading its strings in step 1, while services are wired, so the fetch
   overlaps `beforeMount`. It awaits the strings after `beforeMount` and before
@@ -384,19 +395,27 @@ The prerender (Node) has no `navigator` or storage and always uses
   reload, which is acceptable for a rare, user-started action; state that must
   survive a switch belongs in the store. In static output, the kernel
   re-assembles and re-mounts its page chain the same way.
-- **A push in flight wins.** If a push is still loading when the switch lands,
-  the rebuild waits for it and then rebuilds the page it committed, so neither
-  a mid-navigation switch nor a login flow (`setLocale(user.locale)` then
-  `push('/dashboard')`) strands the app on the previous page.
+- **A navigation in flight wins.** If a push, a `replace()` or a pop (Back,
+  Forward, memory-mode `go()`) is still loading when the switch lands, the
+  rebuild waits for it and then rebuilds the page it committed, so neither a
+  mid-navigation switch nor a login flow (`setLocale(user.locale)` then
+  `push('/dashboard')` or `replace('/dashboard')`) strands the app on the
+  previous page, and a pop's entry is never rewritten under the old URL.
 - **A failed rebuild rejects `setLocale`.** When the rebuild's `data()` throws
   (reported through `onError`), the old page stays on screen with the new
   locale already active, and `setLocale` rejects. The next navigation rebuilds
   every level in the new locale.
-- **URLs.** Manifest paths are relative to the dist root. Path-mode apps
-  resolve them against the normalized `routerBase`, the base that D81's static
-  entry script already uses. Hash and memory modes resolve them against the
-  shell document's URL, because those modes always serve the shell from the
-  dist root. The static kernel uses its stub's base.
+- **URLs.** Manifest paths are relative to the dist root — the folder the
+  entry `app.js` is served from. Path-mode apps resolve them against the
+  normalized `routerBase`, the base that D81's static entry script already
+  uses. Hash and memory modes resolve them next to the entry module: the
+  manifest module carries `base`, that folder's URL, computed from the
+  module's own `import.meta.url` (one folder up when `build.splitting` bundled
+  it into a `chunks/` file). So a script embed — a memory-mode widget whose
+  `app.js` is served from another folder or origin than the host page — finds
+  its locale files. There is no config option for it. A manifest without
+  `base` (tests, other bundlers) falls back to the document's URL. The static
+  kernel uses its stub's base.
 
 ### Function locale
 
@@ -647,7 +666,8 @@ key rule.
 10. **The same-location rebuild.** `client-runtime/router/router.js`: an
     internal entry beside `__failedView(view, true)` that re-runs the
     committed path with keep = 0, in replace mode, with no animations, no
-    skeleton, no scroll change and no focus move, after any pending push.
+    skeleton, no scroll change and no focus move, after any in-flight
+    navigation.
 11. **Prerender and static.** `client-runtime/ssg/index.js`: the build
     service over the default table, `setFormatLocale(defaultLocale)`, the
     shell's `<html lang>`, and the `data-puzzle-locale` island in both shell

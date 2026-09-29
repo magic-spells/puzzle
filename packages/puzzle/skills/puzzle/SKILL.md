@@ -554,11 +554,15 @@ many other`) is a plural entry and must have `other`.
   `{ t('status.' + order.status) }`.
 - Script: `this.ctx.i18n.t('key', vars)`, `.locale`, `.locales`,
   `.defaultLocale`, and `this.ctx.i18n.setLocale('es')` — it fetches the file
-  first, then switches, stores the choice, sets `<html lang>`, and rebuilds the
-  page at the same location (store records survive; `setData` state does
-  not — keep state that must survive a switch in the store). A push still
-  loading lands first. `setLocale` rejects if the file fails to load or the
-  rebuild fails, so `.catch()` it in a switcher. `ctx.i18n` exists ONLY when
+  first, then switches, stores the choice, sets `<html lang>` (except in
+  memory mode, which never touches the document), and rebuilds the page at the
+  same location (store records survive; `setData` state does not — keep state
+  that must survive a switch in the store). Any in-flight navigation (push,
+  replace or pop) lands first, so never `await` `setLocale()` inside `data()` or
+  a route guard — the rebuild waits for that navigation and the promise never
+  settles; call it from a handler or `mounted()`, or without `await`.
+  `setLocale` rejects if the file fails to load or the rebuild fails, so
+  `.catch()` it in a switcher. `ctx.i18n` exists ONLY when
   `i18n` is configured.
 - A missing key prints the key itself (dev warns with a did-you-mean). The
   build fills every locale's missing keys from the default and warns; a

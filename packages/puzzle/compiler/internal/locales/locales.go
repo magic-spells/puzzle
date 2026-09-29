@@ -51,6 +51,22 @@ type Manifest struct {
 	Paths map[string]string
 }
 
+// chunkFilePattern matches the path of a code-splitting chunk — the only place
+// besides the entry app.js the manifest module can be bundled into. Every pass
+// that splits names its chunks "chunks/[name]-[hash]" (build/options.go
+// ChunkNames, and the static-pages pass), directly under the folder app.js sits
+// in, and esbuild's hash is eight base32 characters; app.js never matches.
+const chunkFilePattern = `\/chunks\/[^/]+-[A-Z2-7]{8}\.js$`
+
+// manifestBase is the manifest's `base` (D175): the URL of the folder the entry
+// app.js was served from, where the hashed locale files sit. The runtime cannot
+// read it from its own module URL — with build.splitting the runtime can land in
+// a chunk one folder down — so the manifest module computes it from wherever it
+// was bundled: its own folder, or that folder's parent when it is a chunk. Hash
+// and memory routing resolve locale paths against it, so a script embed on
+// another site's page fetches them from the app's folder, not the page's.
+const manifestBase = `(u=>new URL(/` + chunkFilePattern + `/.test(u.pathname)?"../":"./",u).href)(new URL(import.meta.url))`
+
 // JS renders the manifest as the virtual module's source. Keys are emitted in
 // config order (the runtime's base-language fallback picks the FIRST configured
 // tag with a matching base).
@@ -70,7 +86,7 @@ func (m Manifest) JS() string {
 		b.WriteByte(':')
 		b.Write(v)
 	}
-	b.WriteString("}};\n")
+	b.WriteString(`},"base":` + manifestBase + "};\n")
 	return b.String()
 }
 
@@ -322,6 +338,8 @@ func parseFile(path, rel string) (map[string]any, []string, []string) {
 	if err != nil {
 		return nil, []string{fmt.Sprintf("%s: %v", rel, err)}, nil
 	}
+	// A UTF-8 byte order mark (Windows editors write one) is not JSON; drop it.
+	src = bytes.TrimPrefix(src, []byte("\xEF\xBB\xBF"))
 	dec := &lineDecoder{Decoder: json.NewDecoder(bytes.NewReader(src)), src: src}
 	root, err := readValue(dec)
 	if err == nil {
