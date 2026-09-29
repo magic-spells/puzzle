@@ -236,10 +236,11 @@ describe('splitSections — ++/-- keep a following slash a division', () => {
 	});
 });
 
-// D150 {#raw} blocks. The splitter never lexes a raw BODY — sections.go does not
-// either; the compiler's raw-body skip lives one stage later, in the lexer. What
-// the splitter must get right is that {/raw} is a STRUCTURAL block closer, so its
-// slash is never mistaken for a regex opener that runs past the close tag.
+// D150 {#raw} blocks. findTemplateClose steps over a whole raw span the way
+// sections.go and the compiler's lexer do (scanBlockRaw: the first tolerant
+// closer wins), so nothing in a raw body is read. {/raw} also stays a
+// STRUCTURAL block closer for the ordinary group scan, so a stray one's slash is
+// never mistaken for a regex opener that runs past the close tag.
 describe('splitSections — {#raw} blocks (D150)', () => {
 	const wrap = (tpl, tail = '<script>\nexport default 1;\n</script>\n') =>
 		`<puzzle-view>${tpl}</puzzle-view>\n${tail}`;
@@ -318,6 +319,160 @@ describe('splitSections — {#raw} blocks (D150)', () => {
 		expect(sections.styles.scoped).toBe(true);
 		// The script span round-trips byte for byte.
 		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe(sections.scripts.content);
+	});
+});
+
+// The {#raw} span skip (sections.go findTemplateClose, ported from
+// TestSplitSectionsRawBlockIsInert / TestSplitSectionsUnterminatedRawBlock).
+// Every expectation below was cross-checked against the Go SplitSections on the
+// same input. Before the skip, each "inert" case ran the brace scan past
+// </puzzle-view> into this script, whose quote parity then decided the result.
+describe('splitSections — {#raw} spans are skipped whole (D150)', () => {
+	const script = `
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Avatar from './Avatar.pzl';
+import PageCard from './PageCard.pzl';
+
+export default class Docs extends PuzzleView {
+  data(params, props) {
+    // Pages I'm linking to (and not this one), newest first, capped at
+    // three. Filtering/sorting live here, not in the template.
+    const pages = this.ctx.store
+      .findMany('page', { filter: (p) => p.id !== 'docs' && !p.draft })
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 3);
+    return { pages };
+  }
+}
+</script>
+`;
+	const inert = [
+		['docs page', "<p>{#raw}Write { to open an interpolation — don't forget the }.{/raw}</p>"],
+		['code sample with // it\'s', "<pre>{#raw}function greet(name) {\n  // it's a sample{/raw}</pre>"],
+		['odd quote between balanced braces', "<p>{#raw}Use { user's name } here{/raw}</p>"],
+		['unbalanced brace, no quote', '<p>{#raw}The brace { is special.{/raw}</p>'],
+		['tolerant closer {/ raw }', "<p>{#raw}{ it's{/ raw }</p>"],
+		['tolerant closer {/raw }', "<p>{#raw}{ it's{/raw }</p>"],
+		['spaced opener {# raw}', "<p>{# raw}{ it's{/raw}</p>"],
+		['spaced opener with a suffix {#  raw json}', "<p>{#  raw json}{ it's{/raw}</p>"],
+		// A literal close tag inside the span does not end the section.
+		['literal </puzzle-view> in the body', '<pre>{#raw}<puzzle-view>{ sample }</puzzle-view>{/raw}</pre>'],
+		['literal </template> in the body', '<pre>{#raw}<template>{ x </template>{/raw}</pre>'],
+		['literal </script> in the body', "<pre>{#raw}<script>const s = '{';</script>{/raw}</pre>"],
+	];
+	for (const [name, body] of inert) {
+		it(name, () => {
+			const template = '\n  ' + body + '\n';
+			const { sections, errors } = splitSections('<puzzle-view>' + template + '</puzzle-view>' + script, 'Docs.pzl');
+			expect(errors).toEqual([]);
+			expect(sections.view.content).toBe(template);
+			expect(sections.scripts.content).toContain('class Docs');
+		});
+	}
+
+	it('skeleton body', () => {
+		const skeleton = "<p>{#raw}Write { to open — don't forget.{/raw}</p>";
+		const src = '<puzzle-view><p>x</p></puzzle-view>\n<puzzle-skeleton>' + skeleton + '</puzzle-skeleton>' + script;
+		const { sections, errors } = splitSections(src, 'Docs.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.skeleton.content).toBe(skeleton);
+		expect(sections.scripts.content).toContain('class Docs');
+	});
+
+	it('a literal </puzzle-skeleton> inside a skeleton raw body', () => {
+		const skeleton = '<pre>{#raw}</puzzle-skeleton>{ x{/raw}</pre>';
+		const src = '<puzzle-view><p>x</p></puzzle-view>\n<puzzle-skeleton>' + skeleton + '</puzzle-skeleton>' + script;
+		const { sections, errors } = splitSections(src, 'Docs.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.skeleton.content).toBe(skeleton);
+	});
+
+	it('the keyword is exact: {#rawx} is an ordinary group', () => {
+		// As {#raw} the span would run to {/raw}; as {#rawx} the first
+		// </puzzle-view> closes the view and the rest is stray content.
+		expect(splitSections('<puzzle-view>{#raw}</puzzle-view>{/raw}</puzzle-view>\n', 'x.pzl').sections.view.content).toBe(
+			'{#raw}</puzzle-view>{/raw}',
+		);
+		const { errors } = splitSections('<puzzle-view>{#rawx}</puzzle-view>{/raw}</puzzle-view>\n', 'x.pzl');
+		expect(errors).toHaveLength(1);
+		expect(errors[0]).toMatchObject({ line: 1, column: 35 });
+		expect(errors[0].message).toMatch(/^unexpected content outside a section/);
+	});
+
+	it('a 40 KB raw block of { splits in linear time', () => {
+		const body = '<pre>{#raw}' + '{'.repeat(40000) + '{/raw}</pre>';
+		const start = performance.now();
+		const { sections, errors } = splitSections('<puzzle-view>' + body + '</puzzle-view>\n', 'x.pzl');
+		const ms = performance.now() - start;
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(body);
+		expect(ms).toBeLessThan(200);
+	});
+});
+
+// A {#raw} with no {/raw} of its own must not hide the section's real close tag.
+// The first close tag seen inside a skipped span is kept as a FALLBACK, returned
+// only when no close tag follows; the compiler's lexer then reports
+// "unterminated {#raw}" at the opener.
+describe('splitSections — unterminated {#raw} (D150)', () => {
+	it('no closer anywhere: splits at the real close', () => {
+		const src = "<puzzle-view>\n<p>{#raw}{ it's</p>\n</puzzle-view>\n<script>\n// the view's script\n</script>\n";
+		const { sections, errors } = splitSections(src, 'F.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe("\n<p>{#raw}{ it's</p>\n");
+		expect(sections.scripts.content).toBe("\n// the view's script\n");
+	});
+
+	it('next closer in the skeleton: splits at the real close', () => {
+		const src =
+			"<puzzle-view>\n<p>{#raw}{ it's</p>\n</puzzle-view>\n<puzzle-skeleton><pre>{#raw}{ x }{/raw}</pre></puzzle-skeleton>\n<script></script>\n";
+		const { sections, errors } = splitSections(src, 'F.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe("\n<p>{#raw}{ it's</p>\n");
+		expect(sections.skeleton.content).toBe('<pre>{#raw}{ x }{/raw}</pre>');
+	});
+
+	it('the only close tag is inside the span: the fallback is used', () => {
+		const { sections, errors } = splitSections('<puzzle-view><pre>{#raw}<b></puzzle-view>', 'F.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe('<pre>{#raw}<b>');
+	});
+
+	it('the FIRST close tag inside the span is the fallback', () => {
+		const { sections, errors } = splitSections('<puzzle-view>{#raw}a</puzzle-view>b</puzzle-view>', 'F.pzl');
+		expect(sections.view.content).toBe('{#raw}a');
+		expect(errors).toHaveLength(1);
+		expect(errors[0]).toMatchObject({ line: 1, column: 35 });
+	});
+
+	it('an opener with no } runs to end of input', () => {
+		const { sections, errors } = splitSections('<puzzle-view><p>{#raw</p></puzzle-view>\n', 'F.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe('<p>{#raw</p>');
+	});
+});
+
+// HTML void elements (area base br col embed hr img input link meta source track
+// wbr) are legal without a slash since #172. The splitter never parses elements,
+// so neither spelling may move a section boundary; the parser owns the rule and
+// the </input>-style closer error.
+describe('splitSections — void elements', () => {
+	it('void tags with and without a slash leave the sections intact', () => {
+		const tpl =
+			'\n<p>a<br>b<br/>c<br />d</p>\n<input type="text" value={ x } readonly>\n' +
+			'<img src="a.png"><hr><wbr><area><base><col><embed><link><meta charset="utf-8"><source><track>\n';
+		const { sections, errors } = splitSections(`<puzzle-view>${tpl}</puzzle-view>\n<script>\nexport default 1;\n</script>\n`, 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+	});
+
+	it('a void closer is not the splitter\'s error to report', () => {
+		const { sections, errors } = splitSections('<puzzle-view><input></input></puzzle-view>\n', 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe('<input></input>');
 	});
 });
 
