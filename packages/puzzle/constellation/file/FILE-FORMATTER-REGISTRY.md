@@ -1,9 +1,12 @@
 ---
-name: formatter registry runtime
+name: function library registry runtime
 status: verified
 path: client-runtime/formatters.js
 language: javascript
-summary: Formatter registration, lookup, overrides, and missing-name fallback.
+summary: >-
+  FormatterRegistry: function registration (the formatters config), lookup, overrides with the
+  shadowing warning, the missing-name guard naming removed names' replacements, and the
+  handler-shadow warning.
 connections:
   - COMPONENT-FORMATTERS
 verified_at: '2026-08-24T21:11:50.859Z'

@@ -1,5 +1,5 @@
 ---
-name: full formatter manifest fallback
+name: full function manifest fallback
 status: verified
 path: client-runtime/formatters/builtins-all.js
 language: javascript

@@ -94,21 +94,15 @@ notes:
       parser's code cards with `repo=puzzle-lang`.
   - kind: state
     text: >-
-      2026-09-28 — D176 is taken and built ([[DECISION-D176-EXPRESSION-LANGUAGE]], 0.8.0: template
-      expressions are a data language — `.size` for every count, `.length` and calls on data values
-      compile errors in both dialects, `??` the fallback, the arithmetic/`default`/`size` formatters
-      removed and `split` Sites-only, pipes only where a value is displayed and never nested; D174's
-      standard set is 27 names). **The next free decision number is D177.**
-  - kind: state
-    text: >-
-      2026-09-28 — D176 rewritten in place and renamed ([[DECISION-D176-EXPRESSION-LANGUAGE]],
-      status building): template expressions are JavaScript-shaped — one closed grammar parsed in
-      puzzle-lang, a method table as the boundary, functions instead of pipes (the library replaces
-      the 27-name formatter set; `app.formatter()` keeps its name), evaluated natively in Go by
-      Sites; `this` stays rejected. Phases P1–P6 are on the card, and the 0.8.0 tag waits for P1–P5.
-      Until P2–P4 land, the Current state's "D176 template expressions as a data language" bullet
-      and D173/D174/D175 describe the pipe-and-`.size` language `release/0.8.0` compiles today (each
-      carries a note). The next free decision number is still D177.
+      2026-09-29 — D176 is the expression language ([[DECISION-D176-EXPRESSION-LANGUAGE]], status
+      building, 0.8.0): template expressions are JavaScript-shaped — one closed grammar parsed by
+      `packages/puzzle-lang/expr`, a method table as the boundary, functions instead of pipes
+      (D174's library is 19 standard functions plus PuzzleKit-only `link` and `timeago`; the
+      `formatters` config key keeps its name), `.length` the count, evaluated natively in Go by
+      Sites; `this` stays rejected. P1–P3 are merged into `release/0.8.0`, P4 (the corpus migration
+      and the removal of pipes and `.size`) is PR #171, and P1b, P5 and P6 are planned; the 0.8.0
+      tag waits for P1–P5. D173–D176, DOC-LANGUAGE-CORE and the docs, FILE and TEST cards describe
+      the P4 state. **The next free decision number is D177.**
 connected_repos:
   - name: puzzle-lang
     path: ../puzzle-lang
@@ -128,7 +122,6 @@ decision cards explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
-
 
 - **Published:** `0.1.0` (2026-07-21), `0.1.1` (interactive `puzzle init`
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
@@ -217,17 +210,19 @@ decision cards explain why the contract has its current shape.
 - **`0.8.0` is IN PROGRESS** on `release/0.8.0` ([[RELEASE-V0-8-0]]), NOT yet
   published: D170 incremental rendering, D171 `puzzle add theme` and the
   pieces theme system, D172 one language / two dialects with the parser in the
-  `packages/puzzle-lang` Go module, D173 core semantics, D174 the 27-name
-  standard formatter set with sanitized `raw`, D175 translations (`t`, v1.81),
-  D176 template expressions as a data language (`.size` for every count,
-  `.length` and calls on data values compile errors in both dialects, `??` the
-  fallback, the arithmetic/`default`/`size` formatters removed, pipes only
-  where a value is displayed), and D168 rewritten as the merged whitespace
-  rule. Heavily breaking for templates; the CHANGELOG opens with an
-  "Upgrading from 0.7" checklist. The never-published `0.7.1`
-  ([[RELEASE-V0-7-1]] — Quick Start via `puzzle init`, D169 registry version
-  floors, the D76 background update notice) is folded in; there will be no
-  `v0.7.1` tag.
+  `packages/puzzle-lang` Go module, D173 core semantics, D174 the function
+  library (19 standard functions plus PuzzleKit-only `link` and `timeago`)
+  with sanitized `raw`, D175 translations (`t(key, vars)`, v1.81), D176 the
+  expression language (JavaScript-shaped template expressions: one closed
+  grammar parsed by `packages/puzzle-lang/expr`, a method table, functions
+  instead of pipes, `.length` the count; P1–P3 merged, P4 — the corpus
+  migration and the removal of pipes and `.size` — in PR #171, and P5, the
+  eslint/prettier ports and grammar sweeps, still to land before the tag), and
+  D168 rewritten as the merged whitespace rule. Heavily breaking for
+  templates; the CHANGELOG opens with an "Upgrading from 0.7" checklist. The
+  never-published `0.7.1` ([[RELEASE-V0-7-1]] — Quick Start via
+  `puzzle init`, D169 registry version floors, the D76 background update
+  notice) is folded in; there will be no `v0.7.1` tag.
 - **0.6 errorView amendment (v1.71, breaking):**
   [[DECISION-D145-ERROR-BOUNDARIES]] rewritten — error fallback UI is one
   app-level `errorView` compiled view with `{ error, info, retry }` props;

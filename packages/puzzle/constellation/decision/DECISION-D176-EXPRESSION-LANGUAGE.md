@@ -26,6 +26,17 @@ notes:
       to each other, so nothing is ambiguous at run time. The handler/library collision warning (§9
       c) IS built, twice over (compile-time in codegen `checkHandler`, runtime
       `warnHandlerShadows`).
+  - kind: decision
+    text: >-
+      The two development warnings the deviation note above lists as unbuilt are resolved as design,
+      not debt, and will not be built. (a) A method call on a missing receiver (`x.trim()` with `x`
+      missing) prints nothing with no warning: a runtime warning cannot be free in production — it
+      needs a helper or a second evaluation of the receiver on every guarded call — and the `?.`
+      semantics are documented (deviation 1, D173 V4). (b) No warning when a data field shares a
+      library function's name: a bare read resolves to data and a bare call resolves to the library
+      (rule 4), so the two can never mean each other and there is no ambiguity to warn about. The
+      handler/library collision warning (§9 c) is the one name-collision warning, because inside an
+      `@event` value the same spelling really can mean two things.
 ---
 
 # D176 — The expression language: JavaScript-shaped, parsed once, evaluated by both hosts

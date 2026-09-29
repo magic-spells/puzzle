@@ -38,7 +38,7 @@ Guarantees:
   fills the position, and disappears the moment something does.
 - lazy fallbacks (`tests/lazy-slot-fallback.test.js`, compiled fixtures in
   `tests/fixtures/lazy-fallback/` shaped like the VirtualList piece's row): a
-  snippet-filled marker never evaluates its fallback — no formatter call, no
+  snippet-filled marker never evaluates its fallback — no function call, no
   "object template value" warning — in the browser and in prerendered output;
   an unfilled fallback is built once per marker and a clean cached row keeps
   its fallback vnodes and DOM; a stamp that renders nothing builds only its own

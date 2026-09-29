@@ -62,7 +62,7 @@ Guarantees:
   interception (including inside shadow DOM), popstate, and memory mode
   performing no document-level work at all.
 - `Router.url()` argument guarding and per-mode output, plus the `link`
-  formatter built on it.
+  function built on it.
 - scroll behavior: defaults, configuration, anchor targets, sessionStorage
   persistence, and hash-mode anchors.
 - focus and announcement on commit, tabindex hygiene, skip cases, disabling, and

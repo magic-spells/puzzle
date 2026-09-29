@@ -1,9 +1,11 @@
 ---
-name: formatter built-ins
+name: function library built-ins
 status: verified
 path: client-runtime/formatters/builtins.js
 language: javascript
-summary: Side-effect-free named built-in formatter implementations.
+summary: >-
+  Side-effect-free implementations of the standard library functions plus timeago (the module keeps
+  its formatters name); t and link are added by the i18n service and the registry.
 connections:
   - COMPONENT-FORMATTERS
 verified_at: '2026-08-24T21:39:15.808Z'
