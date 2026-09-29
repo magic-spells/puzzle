@@ -936,6 +936,14 @@ checklist sent you.
   trailing commas in the config tolerated. `@/*` always points at `app/`, as
   it does in the build. Aliases inherited through `extends` are still not
   read.
+- **`puzzle check` no longer reports an arity error on a JavaScript
+  handler.** `@click={ play(event) }` against `play: () => {}` in a
+  plain-JavaScript component reported "Expected 0 arguments, but got 1" —
+  on DOM events and component callback props alike — though the call is
+  legal JavaScript and the documented form. A JavaScript component's
+  handlers now take any arguments; a misspelled handler name and the
+  argument expressions are still checked, and a `lang="ts"` component's
+  handler calls stay fully checked.
 - **A component class may have a non-ASCII name.** `export default class
   Übersicht`, `class 概要` and `class Straßenkarte` now compile, and a file
   named `Übersicht.pzl` derives that class name. The script scanner that finds

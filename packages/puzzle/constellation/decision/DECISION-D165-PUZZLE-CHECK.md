@@ -201,6 +201,20 @@ falls through the index signature and is not. One consequence under an app's
 (`__d.total`) is itself a diagnostic, because it resolves through that index
 signature — a known gap, not fixed.
 
+**A JavaScript component's handlers take any arguments.** Its handler
+parameters are whatever TypeScript infers from untyped JS — `play: () => {}`
+takes nothing — so the documented `@click={ play(event) }`, legal JavaScript,
+would be an arity error at every such site. For a JS component the wrapper's
+`this` is `__PuzzleCheckJSView<InstanceType<typeof Class>> & Record<string,
+any>`: the shim type replaces `events` with a mapped type that keeps every
+handler **name** and types each one `(...args: any[]) => any`. A misspelled
+handler is still `Property 'plya' does not exist`, and the argument
+expressions are still checked where they are written — only the handler's
+arity and parameter types are dropped. DOM events and component callback props
+both lower to `this.events.name(…)`, so both are covered. A `lang="ts"`
+component is never wrapped: its handlers are declared, and a call that does
+not match one is reported.
+
 **Library calls are typed by name, never through an index signature.** A
 standard function emits `__puzzle_fn.name(…)` and is checked against its real
 signature (`libraryFunctionSignatures`). Any other bare call — an app function
@@ -267,6 +281,13 @@ spelling.
 - **Promoting JS components into `checkJs`.** It turns every untyped app into a
   wall of inference noise on the first run. The unchecked mirror keeps the
   template win available to JS apps at zero cost.
+- **Checking a JS handler's inferred arity, and asking authors to write the
+  bare form instead.** `@click={ play }` compiles to the same code as
+  `@click={ play(event) }`, but the call form is the documented idiom and legal
+  JavaScript; flagging it is the inference noise the unchecked mirror exists to
+  avoid (examples/music alone reported 39 such sites). Typing a JS component's
+  `events` as plain `any` was rejected too: it would have silenced a misspelled
+  handler name, which the mapped type still reports.
 - **Inferring a snippet parameter's type from the marker that fills it.** It is
   the same cross-file guess `data()` inference was rejected for, one file
   further out: the marker lives in the component's `.pzl`, which the walk

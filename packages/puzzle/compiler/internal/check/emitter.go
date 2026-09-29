@@ -79,6 +79,18 @@ __LIBRARY_SIGNATURES__
   function __puzzle_check_list<T>(value: T): 0 extends (1 & T) ? any[] : T;
 
   type __PuzzleCheckView = PuzzleView;
+
+  // A plain-JavaScript component's handlers have no declared parameters, so
+  // their types are what TypeScript infers from untyped JS: play: () => {}
+  // takes nothing, and the documented @click={ play(event) } would be an
+  // arity error on legal code. The check wrapper sees such a component through
+  // this type, which keeps every handler NAME (a misspelled one is still
+  // reported) and lets it take any arguments; the argument expressions are
+  // still checked where they are written. A TypeScript component is never
+  // wrapped, so its handler calls stay fully checked.
+  type __PuzzleCheckJSView<V> = V extends { events: infer E }
+    ? Omit<V, 'events'> & { events: { [K in keyof E]: (...args: any[]) => any } }
+    : V;
 }
 
 export {};
@@ -569,7 +581,13 @@ func emitCheckedFile(
 	if includeScript && strings.TrimSpace(sec.Scripts) == "" {
 		b.WriteString("declare const " + className + ": typeof import('@magic-spells/puzzle').PuzzleView;\n")
 	}
-	b.WriteString("void function (this: InstanceType<typeof " + className + "> & Record<string, any>): void {\n")
+	view := "InstanceType<typeof " + className + ">"
+	if !includeScript {
+		// A plain-JavaScript component: its handlers take any arguments (the
+		// shim's __PuzzleCheckJSView says why).
+		view = "__PuzzleCheckJSView<" + view + ">"
+	}
+	b.WriteString("void function (this: " + view + " & Record<string, any>): void {\n")
 	b.WriteString("  const __d = this;\n")
 
 	e := &emitter{b: b}
