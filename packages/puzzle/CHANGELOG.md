@@ -497,9 +497,11 @@ checklist sent you.
   `t(key, vars)`, `locale`, `locales`, `defaultLocale` and `setLocale(tag)`,
   which fetches first, then switches, remembers the choice
   (`localStorage.__puzzleLocale`), sets `<html lang>` and rebuilds the page at
-  the same location — no history entry, no scroll jump, no animations. A push
-  still loading when the switch lands finishes first, and a failed rebuild
-  rejects `setLocale`. The startup locale is the stored choice, then
+  the same location — no history entry, no scroll jump, no animations. A push,
+  replace or Back still loading when the switch lands finishes first, and a
+  failed rebuild rejects `setLocale`. Memory routing leaves `<html lang>`
+  alone, and hash and memory routing fetch the locale files from the folder
+  `app.js` was served from, so a script embed works on another site's page. The startup locale is the stored choice, then
   `navigator.languages` (exact tag, base language, then a configured tag with
   the same base), then the default; the first render always has its strings.
   `--hybrid` and `--static` pages prerender in the default locale and carry its
@@ -989,6 +991,23 @@ checklist sent you.
   `/index-2` shared an entry file, so a page mounted the wrong view.
 - **A plural category defined twice in a locale file fails the build**, like
   any other duplicate key, instead of silently dropping the later value.
+- **A locale file saved with a UTF-8 byte order mark loads.** Windows editors
+  write one, and the build rejected the file as invalid JSON.
+- **`setLocale` no longer drops an in-flight `replace()` or Back.** A switch
+  landing while one loaded rebuilt the old page over it: `setLocale('es');
+  router.replace('/about')` ended on the old page. The rebuild now waits for
+  any navigation still loading, as it already did for a push.
+- **A script embed finds its locale files.** Hash and memory routing resolved
+  them against the host page (a 404, so `mount()` rejected); they now resolve
+  next to `app.js`, with or without `build.splitting`. Memory routing no
+  longer writes `<html lang>`, since it takes no document-level side effects.
+- **An inner `{#for}` key reading an outer loop variable named `event`
+  compiles.** `{#for event in events}…{#for a in event.attendees}<li key={
+  `${event.id}-${a.id}` }>` failed with the `event`-as-data error whenever a
+  handler in the template used the DOM `event`.
+- **The development hint for a removed `noescape` says to print a plain `{
+  value }`.** It said "use raw", which renders HTML; 0.7's `noescape` printed
+  text.
 - **puzzle-pieces:** phone-width overflow in Toolbar, Pagination, the
   DataTable footer and the Code buttons; `split-panel`'s `snap` no longer
   collapses every release to 0.
