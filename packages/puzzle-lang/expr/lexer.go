@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
 )
 
 // lexer.go turns an expression's source into tokens in one linear pass. It
@@ -178,13 +180,13 @@ func (lx *lexer) next() *Error {
 	case c == '\\' && lx.peekByte(1) == 'u':
 		return lx.errAt(lx.pos(), msgNameEscape)
 	case c < utf8.RuneSelf:
-		if isIDStart(rune(c)) {
+		if jsident.IsIDStart(rune(c)) {
 			return lx.lexIdent()
 		}
 		return lx.lexPunct()
 	}
 	r, _ := utf8.DecodeRuneInString(lx.src[lx.i:])
-	if r != utf8.RuneError && isIDStart(r) {
+	if r != utf8.RuneError && jsident.IsIDStart(r) {
 		return lx.lexIdent()
 	}
 	return lx.errAt(lx.pos(), unexpectedChar(lx.src[lx.i:]))
@@ -211,14 +213,14 @@ func (lx *lexer) lexIdent() *Error {
 			if c == '\\' && lx.peekByte(1) == 'u' {
 				return lx.errAt(lx.pos(), msgNameEscape)
 			}
-			if !isIDContinue(rune(c)) {
+			if !jsident.IsIDContinue(rune(c)) {
 				break
 			}
 			lx.adv(1)
 			continue
 		}
 		r, size := utf8.DecodeRuneInString(lx.src[lx.i:])
-		if r == utf8.RuneError || !isIDContinue(r) {
+		if r == utf8.RuneError || !jsident.IsIDContinue(r) {
 			break
 		}
 		lx.adv(size)
@@ -282,7 +284,7 @@ func (lx *lexer) lexNumber() *Error {
 	}
 	if lx.i < len(lx.src) {
 		r, _ := utf8.DecodeRuneInString(lx.src[lx.i:])
-		if r == '\\' || (r != utf8.RuneError && isIDStart(r)) || isDigit(lx.src[lx.i]) {
+		if r == '\\' || (r != utf8.RuneError && jsident.IsIDStart(r)) || isDigit(lx.src[lx.i]) {
 			return lx.errAt(lx.pos(), msgNumberThenName)
 		}
 	}

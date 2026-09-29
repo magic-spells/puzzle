@@ -29,8 +29,9 @@ import (
 //     matched (the Go compiler still never truly parses the opaque <script>).
 
 // jsTok is one lexical token of the opaque <script> body for the import scan:
-// an identifier run, a single punctuation byte, or an opaque unit (string,
-// template literal, comment, or regex literal — content irrelevant here).
+// an identifier run (Unicode, by jsident's ID_Start/ID_Continue rule), a single
+// punctuation byte, or an opaque unit (string, template literal, comment, or
+// regex literal — content irrelevant here).
 type jsTok struct {
 	ident  string // non-empty for an identifier token
 	ch     byte   // non-zero for a punctuation token
@@ -60,11 +61,24 @@ func tokenizeJS(s string) []jsTok {
 		c := s[i]
 		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
 			if isIdentStart(c) {
+				// LexSkip's run stops at the first non-ASCII byte, but the name goes
+				// on through it (`Straßenkarte`) — and a name holding one is no
+				// keyword, so a '/' after it is division.
+				if end := identRunEnd(s, next); end > next {
+					next, pee = end, true
+				}
 				toks = append(toks, jsTok{ident: s[i:next], off: i})
 			} else {
 				toks = append(toks, jsTok{opaque: true, comment: isCommentStart(s, i), off: i})
 			}
 			prevEndsExpr = pee
+			i = next
+			continue
+		}
+		if startsNonASCIIIdent(s, i) {
+			next := identRunEnd(s, i)
+			toks = append(toks, jsTok{ident: s[i:next], off: i})
+			prevEndsExpr = true
 			i = next
 			continue
 		}
@@ -452,23 +466,31 @@ func collectDataCollisions(emitted string, imports, seen map[string]bool, out *[
 	for i := 0; i < len(s); {
 		c := s[i]
 		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
-			// The `__d` identifier run followed immediately by ".<name>" is a data
-			// root read the lowering emitted (LexSkip stops the run at the '.').
-			if isIdentStart(c) && s[i:next] == "__d" && next < len(s) && s[next] == '.' {
-				k := next + 1
-				start := k
-				for k < len(s) && isIdentChar(s[k]) {
-					k++
+			if isIdentStart(c) {
+				if end := identRunEnd(s, next); end > next {
+					next, pee = end, true
 				}
-				if k > start {
-					if name := s[start:k]; imports[name] && !seen[name] {
-						seen[name] = true
-						*out = append(*out, name)
+				// The `__d` identifier run followed immediately by ".<name>" is a
+				// data root read the lowering emitted (the run stops at the '.').
+				// The name may be non-ASCII (`__d.金額`).
+				if s[i:next] == "__d" && next < len(s) && s[next] == '.' {
+					start := next + 1
+					if k := identRunEnd(s, start); k > start {
+						if name := s[start:k]; imports[name] && !seen[name] {
+							seen[name] = true
+							*out = append(*out, name)
+						}
 					}
 				}
 			}
 			prevEndsExpr = pee
 			i = next
+			continue
+		}
+		if startsNonASCIIIdent(s, i) {
+			// One run, so the tail of a name like `ö__d` is never read as `__d`.
+			i = identRunEnd(s, i)
+			prevEndsExpr = true
 			continue
 		}
 		prevEndsExpr = parser.LexPlainEndsExpr(s[i], prevEndsExpr)

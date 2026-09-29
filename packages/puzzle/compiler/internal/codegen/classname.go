@@ -1,8 +1,11 @@
 package codegen
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
@@ -26,7 +29,7 @@ import (
 // declaration or when the class is anonymous. toks is the shared token stream
 // for `scripts` (tokenizeJS, computed once per compile).
 func extractClassName(scripts string, toks []jsTok, file string, scriptsPos parser.Position) (string, error) {
-	name, hasExtends, found := findDefaultClass(toks)
+	name, nameOff, hasExtends, found := findDefaultClass(toks)
 	if !found {
 		return "", &parser.ParseError{
 			File: file, Line: scriptsPos.Line, Col: scriptsPos.Col,
@@ -39,6 +42,13 @@ func extractClassName(scripts string, toks []jsTok, file string, scriptsPos pars
 			Message: "anonymous default class export is not supported — name your component class (D24)",
 		}
 	}
+	if nameCut(scripts[nameOff+len(name):]) {
+		pos := scriptsPos.Advance(scripts[:nameOff])
+		return "", &parser.ParseError{
+			File: file, Line: pos.Line, Col: pos.Col,
+			Message: fmt.Sprintf("class name `%s` is followed by a character the compiler cannot read as part of an identifier (a `\\u` escape, or a letter newer than its Unicode tables) — rename the class (D24)", name),
+		}
+	}
 	if !hasExtends {
 		return "", &parser.ParseError{
 			File: file, Line: scriptsPos.Line, Col: scriptsPos.Col,
@@ -48,11 +58,30 @@ func extractClassName(scripts string, toks []jsTok, file string, scriptsPos pars
 	return name, nil
 }
 
+// nameCut reports whether rest — the bytes right after the class name token —
+// may continue the name in JavaScript although the scan stopped: a `\u`
+// escape, or a non-ASCII character that is not white space, such as a letter
+// newer than Go's Unicode tables (U+30FB `・` in `データ・一覧`). The render tail
+// would bind to the cut name (`データ`) and the module would crash on load.
+func nameCut(rest string) bool {
+	switch {
+	case rest == "":
+		return false
+	case rest[0] == '\\':
+		return true
+	case rest[0] < utf8.RuneSelf:
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(rest)
+	return !unicode.IsSpace(r) && r != 0xFEFF
+}
+
 // findDefaultClass scans the token stream for the first REAL `export default
 // class` keyword sequence — three consecutive identifier tokens, none of them
 // inside a string/comment/regex/template literal. It returns the class name that
 // follows (empty string for an anonymous class — `class {}` or `class extends
-// X`) and whether the sequence was found at all. hasExtends reports whether that
+// X`), the name's byte offset in the body, and whether the sequence was found
+// at all. hasExtends reports whether that
 // named declaration carries a real class-level extends clause (the base
 // identifier itself is intentionally unrestricted). First match wins, matching
 // the historical regex behavior, so an anonymous first declaration is an error
@@ -61,7 +90,7 @@ func extractClassName(scripts string, toks []jsTok, file string, scriptsPos pars
 // It consumes the SAME stream the binding scans use (scriptcollide.go) rather
 // than re-lexing the body — three independent walks over one <script> was the
 // whole cost this replaced.
-func findDefaultClass(toks []jsTok) (name string, hasExtends bool, found bool) {
+func findDefaultClass(toks []jsTok) (name string, nameOff int, hasExtends bool, found bool) {
 	// Keyword-sequence state: how many of export→default→class we've matched
 	// consecutively. A string/regex/template or any punctuation token breaks
 	// adjacency and resets to 0; a COMMENT does not (it is whitespace to the
@@ -93,7 +122,10 @@ func findDefaultClass(toks []jsTok) (name string, hasExtends bool, found bool) {
 				// modifier sits between `default` and `class`; keep waiting.
 			case state == wantClass && t.ident == "class":
 				name, hasExtends := classDeclarationAfter(toks, i+1)
-				return name, hasExtends, true
+				if name != "" {
+					nameOff = toks[i+1].off
+				}
+				return name, nameOff, hasExtends, true
 			case t.ident == "export" && !prevWasDot:
 				state = wantDefault // restart the sequence on a fresh `export`
 			default:
@@ -110,7 +142,7 @@ func findDefaultClass(toks []jsTok) (name string, hasExtends bool, found bool) {
 			prevWasDot = t.ch == '.'
 		}
 	}
-	return "", false, false
+	return "", 0, false, false
 }
 
 // classDeclarationAfter reads the class name at toks[j] (the token after the
@@ -171,19 +203,21 @@ func isASCIISpace(b byte) bool {
 
 // classNameFromFilename derives a valid JS class identifier from a .pzl filename
 // for scriptless components (DOC-SPEC.md §4, where <script> is optional). The
-// base name has its extension stripped, every character that is not a JS
-// identifier char replaced with '_', and a leading '_' prepended when the result
-// would otherwise start with a digit or be reserved in strict-mode JavaScript.
-// An empty/degenerate name falls back to a stable default.
+// base name has its extension stripped, every character that cannot continue a
+// JS identifier (jsident.IsIDContinue — so `Übersicht` stays whole) replaced
+// with '_', and a leading '_' prepended when the result would otherwise not
+// start an identifier (a digit, a combining mark) or be reserved in
+// strict-mode JavaScript. An empty/degenerate name falls back to a stable
+// default.
 func classNameFromFilename(filename string) string {
 	base := filepath.Base(filename)
 	if ext := filepath.Ext(base); ext != "" {
 		base = strings.TrimSuffix(base, ext)
 	}
 	var b strings.Builder
-	for i := 0; i < len(base); i++ {
-		if c := base[i]; isIdentChar(c) {
-			b.WriteByte(c)
+	for _, r := range base {
+		if jsident.IsIDContinue(r) {
+			b.WriteRune(r)
 		} else {
 			b.WriteByte('_')
 		}
@@ -192,7 +226,7 @@ func classNameFromFilename(filename string) string {
 	if name == "" {
 		return "PuzzleComponent"
 	}
-	if name[0] >= '0' && name[0] <= '9' || jsident.IsReservedBindingIdentifier(name) {
+	if first, _ := utf8.DecodeRuneInString(name); !jsident.IsIDStart(first) || jsident.IsReservedBindingIdentifier(name) {
 		name = "_" + name
 	}
 	return name

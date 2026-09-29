@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
 )
 
 // lexer.go is the HTML-aware template lexer
@@ -238,10 +240,7 @@ func (l *lexer) lexAngle() (Token, error) {
 	}
 
 	if l.at(l.pos+1) == '/' { // closing tag </name>
-		j := l.pos + 2
-		for j < len(l.input) && isNameChar(l.input[j]) {
-			j++
-		}
+		j := tagNameEnd(l.input, l.pos+2)
 		name := l.input[l.pos+2 : j]
 		for j < len(l.input) && isSpaceByte(l.input[j]) {
 			j++
@@ -253,11 +252,8 @@ func (l *lexer) lexAngle() (Token, error) {
 		return Token{Type: TokTagClose, Value: name, Line: line, Col: col, Offset: off}, nil
 	}
 
-	if isNameStart(l.at(l.pos + 1)) { // opening tag <name
-		j := l.pos + 1
-		for j < len(l.input) && isNameChar(l.input[j]) {
-			j++
-		}
+	if startsTagName(l.input[l.pos+1:]) { // opening tag <name
+		j := tagNameEnd(l.input, l.pos+1)
 		name := l.input[l.pos+1 : j]
 		l.jumpTo(j)
 		l.mode = modeTag
@@ -600,4 +596,36 @@ func isNameStart(b byte) bool {
 
 func isNameChar(b byte) bool {
 	return isNameStart(b) || (b >= '0' && b <= '9') || b == '-' || b == ':' || b == '.'
+}
+
+// startsTagName and tagNameEnd read a tag name with the JavaScript identifier
+// rules past ASCII, so a component may carry any name its <script> can import
+// (<Straßenkarte>, <Übersicht>, <概要>, <Frame.Übersicht>) and a custom element
+// may carry non-ASCII after its [a-z] start (<straße-karte>). A name starts with
+// an ASCII letter, '_', or a non-ASCII jsident.IsIDStart rune, and continues
+// with the ASCII name characters (including '-', ':', '.') or a non-ASCII
+// jsident.IsIDContinue rune. '$' stays out, as it always has: `<$50` is text.
+func startsTagName(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s[0] < utf8.RuneSelf {
+		return isNameStart(s[0])
+	}
+	return nonASCIIRuneLen(s, jsident.IsIDStart) > 0
+}
+
+func tagNameEnd(s string, j int) int {
+	for j < len(s) {
+		if isNameChar(s[j]) {
+			j++
+			continue
+		}
+		n := nonASCIIRuneLen(s[j:], jsident.IsIDContinue)
+		if n == 0 {
+			break
+		}
+		j += n
+	}
+	return j
 }

@@ -1,44 +1,15 @@
 package expr
 
 import (
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
 )
 
-// ident.go holds the identifier rules: JavaScript's Unicode ID_Start and
-// ID_Continue, and what a reserved word in a reference position means.
-
-// isIDStart reports whether r may begin a name: `$`, `_`, or a Unicode
-// ID_Start code point (letters, letter numbers, Other_ID_Start, minus
-// Pattern_Syntax and Pattern_White_Space).
-func isIDStart(r rune) bool {
-	if r < utf8.RuneSelf {
-		return r == '$' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
-	}
-	if unicode.Is(unicode.Pattern_Syntax, r) || unicode.Is(unicode.Pattern_White_Space, r) {
-		return false
-	}
-	return unicode.IsLetter(r) || unicode.Is(unicode.Nl, r) || unicode.Is(unicode.Other_ID_Start, r)
-}
-
-// isIDContinue reports whether r may continue a name: ID_Start plus digits,
-// combining marks, connector punctuation, Other_ID_Continue, and the ZWNJ and
-// ZWJ joiners JavaScript adds.
-func isIDContinue(r rune) bool {
-	if r < utf8.RuneSelf {
-		return r == '$' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
-	}
-	if r == 0x200C || r == 0x200D {
-		return true
-	}
-	if unicode.Is(unicode.Pattern_Syntax, r) || unicode.Is(unicode.Pattern_White_Space, r) {
-		return false
-	}
-	return isIDStart(r) || unicode.In(r, unicode.Mn, unicode.Mc, unicode.Nd, unicode.Pc) ||
-		unicode.Is(unicode.Other_ID_Continue, r)
-}
+// ident.go holds what a reserved word in a reference position means, and
+// IsIdentifier. The identifier rules themselves — JavaScript's Unicode
+// ID_Start and ID_Continue — live in jsident, shared with the compiler's
+// <script> scan.
 
 // statementWords are the reserved words that begin a statement or a
 // declaration. Written where a value is expected they get the statements
@@ -102,7 +73,7 @@ func IsIdentifier(s string) bool {
 		if r == utf8.RuneError {
 			return false
 		}
-		if i == 0 && !isIDStart(r) || i > 0 && !isIDContinue(r) {
+		if i == 0 && !jsident.IsIDStart(r) || i > 0 && !jsident.IsIDContinue(r) {
 			return false
 		}
 	}
