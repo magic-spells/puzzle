@@ -3,8 +3,10 @@ package parser
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
 )
 
 // parser.go is the recursive-descent parser over the lexer's token stream
@@ -552,11 +554,11 @@ func (p *parser) parseElement() (Node, *ParseError) {
 				}
 			}
 		}
-		// Every capitalized tag that is not an exact marker name resolves as a
+		// Every component tag that is not an exact marker name resolves as a
 		// component, so its text has to be a legal JS expression before codegen
 		// emits it verbatim (D167). The marker branches above have already run,
 		// so only component names reach here.
-		if isCapitalized(name) && !isCompositionMarker(name) {
+		if isComponentName(name) && !isCompositionMarker(name) {
 			if nameErr := checkComponentName(name, pos, p.file); nameErr != nil {
 				return nil, nameErr
 			}
@@ -591,7 +593,7 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		if name == "Portal" {
 			return &Portal{Children: children, Pos: pos}, nil
 		}
-		if isCapitalized(name) {
+		if isComponentName(name) {
 			return &Component{Name: name, Props: attrs, Children: children, Pos: pos}, nil
 		}
 	}
@@ -1431,8 +1433,12 @@ func firstWord(s string) string {
 	return s[:i]
 }
 
-func isCapitalized(s string) bool {
-	return len(s) > 0 && s[0] >= 'A' && s[0] <= 'Z'
+// isComponentName reports whether a tag names a component: its first
+// character cannot begin an HTML element name, i.e. it is anything but an
+// ASCII lowercase letter. <Card>, <Übersicht>, <概要> and <ärmel> are
+// components; <straße-karte> is an element (D167).
+func isComponentName(s string) bool {
+	return len(s) > 0 && !(s[0] >= 'a' && s[0] <= 'z')
 }
 
 // isCompositionMarker reports whether name is one of the reserved capitalized
@@ -1447,9 +1453,10 @@ func isCompositionMarker(name string) bool {
 	return false
 }
 
-// checkComponentName validates a capitalized tag as a component name (D167).
-// The grammar is Ident('.'Ident)* with each segment [A-Za-z_][A-Za-z0-9_]* — a
-// plain component (<Card>) or a family member (<Frame.Wrapper>). The lexer's
+// checkComponentName validates a component tag's name (D167). The grammar is
+// Ident('.'Ident)* with each segment a '$'-free JavaScript identifier — a
+// plain component (<Card>, <Übersicht>) or a family member (<Frame.Wrapper>,
+// <Frame.Übersicht>). The lexer's
 // tag-name scanner accepts '-', ':', and '.' so lowercase custom elements and
 // namespaced SVG tags keep working, which used to let a capitalized <Frame-x>
 // or <Frame.> through to codegen, where the tag text is emitted verbatim as a
@@ -1476,20 +1483,16 @@ func checkComponentName(name string, pos Position, file string) *ParseError {
 	return nil
 }
 
-// isIdentSegment reports whether seg is a bare JS identifier by shape:
-// [A-Za-z_][A-Za-z0-9_]*. Deliberately ASCII-only and '$'-free — a component
+// isIdentSegment reports whether seg is a bare JS identifier by shape: a
+// jsident.IsIDStart rune, then jsident.IsIDContinue runes — the rule template
+// expressions and the <script> scan follow. Deliberately '$'-free: a component
 // name is also a filename in the family convention.
 func isIdentSegment(seg string) bool {
-	for i := 0; i < len(seg); i++ {
-		c := seg[i]
-		switch {
-		case c == '_':
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
-		case c >= '0' && c <= '9':
-			if i == 0 {
-				return false
-			}
-		default:
+	for i, r := range seg {
+		if r == '$' || r == utf8.RuneError {
+			return false
+		}
+		if i == 0 && !jsident.IsIDStart(r) || i > 0 && !jsident.IsIDContinue(r) {
 			return false
 		}
 	}

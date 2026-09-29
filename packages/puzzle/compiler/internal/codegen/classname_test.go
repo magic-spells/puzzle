@@ -191,6 +191,26 @@ func TestExtractClassName(t *testing.T) {
 			scripts: "export default class Foo\u00a0extends PuzzleView {}",
 			want:    "Foo",
 		},
+		{
+			name:    "ideographic space before extends",
+			scripts: "export default class 概要\u3000extends PuzzleView {}",
+			want:    "概要",
+		},
+		{
+			// U+30FB became ID_Continue in Unicode 15.1, after Go's tables: the
+			// scan stops at it, and binding the render tail to `データ` would
+			// crash the module on load.
+			name:    "a letter newer than the Unicode tables",
+			scripts: "export default class データ・一覧 extends PuzzleView {}",
+			wantErr: true,
+			errText: "class name `データ` is followed by a character the compiler cannot read",
+		},
+		{
+			name:    "a \\u escape inside the name",
+			scripts: "export default class Stra\\u00DFe extends PuzzleView {}",
+			wantErr: true,
+			errText: "class name `Stra` is followed by a character the compiler cannot read",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -308,6 +328,44 @@ func TestCompileUnicodeClassName(t *testing.T) {
 		}
 		nodeCheck(t, res.JS)
 	})
+}
+
+// TestCompileUnicodeComponentTags compiles component tags with non-ASCII names:
+// each emits its full identifier as the ViewNode type, and a lowercase-led
+// custom element with a non-ASCII letter stays an element.
+func TestCompileUnicodeComponentTags(t *testing.T) {
+	res := compileResult(t, `<puzzle-view>
+  <Straßenkarte ort={ titel } />
+  <Übersicht />
+  <概要></概要>
+  <Frame.Übersicht />
+  <ärmel />
+  <straße-karte></straße-karte>
+</puzzle-view>
+<script>
+  import Straßenkarte from '../components/Straßenkarte.pzl';
+  import Übersicht from '../components/Übersicht.pzl';
+  import 概要 from '../components/概要.pzl';
+  import Frame from '../components/Frame.pzl';
+  import ärmel from '../components/ärmel.pzl';
+  export default class Karte extends PuzzleView {
+    data() { return { titel: 'x' }; }
+  }
+</script>
+`)
+	for _, want := range []string{
+		"new ViewNode(Straßenkarte, { ort: __d.titel }, [])",
+		"new ViewNode(Übersicht, {}, [])",
+		"new ViewNode(概要, {}, [])",
+		"new ViewNode(Frame.Übersicht, {}, [])",
+		"new ViewNode(ärmel, {}, [])",
+		"new ViewNode('straße-karte', {}, [])",
+	} {
+		if !strings.Contains(res.JS, want) {
+			t.Errorf("missing %s in:\n%s", want, res.JS)
+		}
+	}
+	nodeCheck(t, res.JS)
 }
 
 // TestCompileScriptless proves <script> is optional: a template-only .pzl

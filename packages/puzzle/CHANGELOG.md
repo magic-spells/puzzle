@@ -924,6 +924,11 @@ checklist sent you.
   compiled module crashed on load; `puzzle check` misread the same names. The
   `__d.` collision scan and the expression lexer now share one set of
   JavaScript identifier rules (`jsident.IsIDStart` / `IsIDContinue`).
+  Component tags take the same names (`<Straßenkarte/>`, `<概要/>`,
+  `<Frame.Übersicht/>` — any tag not starting with an ASCII lowercase letter
+  is a component), and a class name the compiler cannot read whole (a `\u`
+  escape, or a letter newer than its Unicode tables, like the `・` in
+  `データ・一覧`) is a compile error instead of a truncated name.
 - **An `errorView` retry remounts a failed child under a reused element.** A
   failed child inside an element the parent reused (`<Card><div><Widget/></div></Card>`,
   or `<li><Widget/></li>` in a cached row) stayed blank after a retry, because

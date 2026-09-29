@@ -2535,13 +2535,21 @@ func TestParseEventModifierErrors(t *testing.T) {
 	}
 }
 
-// TestParseComponentNamesD167 pins the component-name grammar: a capitalized tag
-// must be Ident('.'Ident)* so codegen's verbatim tag emission is always a legal
-// JS expression. Lowercase tags — custom elements with dashes, namespaced SVG —
-// stay untouched.
+// TestParseComponentNamesD167 pins the component-name grammar: a component tag
+// — one whose first character is not an ASCII lowercase letter — must be
+// Ident('.'Ident)* so codegen's verbatim tag emission is always a legal JS
+// expression. Identifiers follow the JavaScript rules, Unicode included.
+// Lowercase tags — custom elements with dashes, namespaced SVG — stay elements.
 func TestParseComponentNamesD167(t *testing.T) {
 	t.Run("dotted names parse as components", func(t *testing.T) {
-		cases := []string{"Frame", "Frame.Wrapper", "Frame.Wrapper.Header", "Frame._x0", "F1.W2"}
+		cases := []string{
+			"Frame", "Frame.Wrapper", "Frame.Wrapper.Header", "Frame._x0", "F1.W2",
+			// Non-ASCII names read whole: `<Straßenkarte>` once lexed as <Stra>
+			// with an attribute `ßenkarte`, and `<Übersicht>` as text.
+			"Straßenkarte", "Übersicht", "概要", "Frame.Übersicht", "Übersicht.Kopf",
+			// Anything but an ASCII lowercase start is a component.
+			"ärmel", "_x",
+		}
 		for _, name := range cases {
 			t.Run(name, func(t *testing.T) {
 				root := parseContent(t, "<"+name+">body</"+name+">")
@@ -2557,7 +2565,7 @@ func TestParseComponentNamesD167(t *testing.T) {
 	})
 
 	t.Run("lowercase tags keep dashes and colons", func(t *testing.T) {
-		for _, name := range []string{"my-element", "puzzle-view-thing"} {
+		for _, name := range []string{"my-element", "puzzle-view-thing", "straße-karte"} {
 			root := parseContent(t, "<"+name+"></"+name+">")
 			el, ok := elementChildren(root.Children)[0].(*Element)
 			if !ok {
@@ -2593,6 +2601,16 @@ func TestParseComponentNamesD167(t *testing.T) {
 			name:        "colon in a component name",
 			src:         `<puzzle-view><Frame:Wrapper/></puzzle-view>` + "\n<script></script>",
 			wantMessage: `component tag <Frame:Wrapper> is not a valid component name — "Frame:Wrapper" is not an identifier. A capitalized tag names a component (<Frame>) or a family member (<Frame.Wrapper>); lowercase the tag for a custom element (D167)`,
+		},
+		{
+			name:        "dash in a non-ASCII component name",
+			src:         `<puzzle-view><Über-sicht/></puzzle-view>` + "\n<script></script>",
+			wantMessage: `component tag <Über-sicht> is not a valid component name — "Über-sicht" is not an identifier. A capitalized tag names a component (<Frame>) or a family member (<Frame.Wrapper>); lowercase the tag for a custom element (D167)`,
+		},
+		{
+			name:        "family member starting with a digit",
+			src:         `<puzzle-view><Frame.٣x/></puzzle-view>` + "\n<script></script>",
+			wantMessage: `component tag <Frame.٣x> is not a valid component name — "٣x" is not an identifier. A capitalized tag names a component (<Frame>) or a family member (<Frame.Wrapper>); lowercase the tag for a custom element (D167)`,
 		},
 		{
 			name:        "marker root Slot",
@@ -2634,6 +2652,20 @@ func TestParseComponentNamesD167(t *testing.T) {
 			}
 		})
 	}
+
+	// '$' never starts a tag name, so a price after '<' stays text.
+	t.Run("a dollar after < is text", func(t *testing.T) {
+		root := parseContent(t, `<p>under <$50</p>`)
+		p, ok := elementChildren(root.Children)[0].(*Element)
+		if !ok {
+			t.Fatalf("expected <p>, got %T", elementChildren(root.Children)[0])
+		}
+		for _, n := range p.Children {
+			if _, text := n.(*Text); !text {
+				t.Fatalf("expected text only inside <p>, got %T", n)
+			}
+		}
+	})
 
 	// {#raw} documents markup, so a name the grammar rejects outside the block is
 	// a literal element inside it.
