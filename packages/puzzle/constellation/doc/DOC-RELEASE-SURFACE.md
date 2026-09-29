@@ -482,7 +482,12 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## CLI
 
-- `puzzle init` (`default`/`todos`, optional TypeScript project config).
+
+- `puzzle init` (`default`/`todos`). `--typescript` (or yes at the TTY
+  prompt, D54) writes the template's TypeScript variant: `<script lang="ts">`
+  components with typed `data()`, props, events and lifecycle hooks, `.ts`
+  modules behind a one-line `app/app.js` entry, a strict `tsconfig.json`, and a
+  `package.json` adding `typescript` `^7` and `"check": "puzzle check"`.
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
 - `puzzle check [dir]` (D165): type-checks the app's `.pzl` script bodies and
   template expressions by emitting virtual files under `.puzzle/check/` and

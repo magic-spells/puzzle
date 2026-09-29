@@ -116,6 +116,24 @@ npm run dev
 The generated app depends on `@magic-spells/puzzle` locally, so collaborators
 who clone it only need `npm install` — no global CLI required.
 
+For a TypeScript app, answer yes to the TypeScript prompt or pass the flag:
+
+```bash
+puzzle init my-app --typescript
+cd my-app
+npm install
+npm run check   # type-check with puzzle check
+npm run dev
+```
+
+Every component is `<script lang="ts">` with typed `data()`, props, events and
+lifecycle hooks, the modules are `.ts` (`main.ts`, `routes.ts`, the todos
+template's models), and `package.json` adds `typescript` plus a `check` script.
+`app/app.js` stays as a one-line entry that re-exports `main.ts`, because the
+build always starts from that path. The build strips types without checking
+them; `npm run check` is the type check, under the strict `tsconfig.json` the
+scaffold writes.
+
 ### Other platforms, or building from source
 
 The prebuilt binaries cover macOS, Linux, and Windows. On any other platform — or
@@ -741,6 +759,7 @@ The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-
 ```bash
 # Scaffold a project; omitting the name prompts only in an interactive terminal
 puzzle init my-app --template todos
+puzzle init my-app --template todos --typescript
 
 # Generate a stub (component, view, layout, or model)
 puzzle generate component UserCard --path components/ui/

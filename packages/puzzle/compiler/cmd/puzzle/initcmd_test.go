@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/magic-spells/puzzle/compiler/internal/build"
+	"github.com/magic-spells/puzzle/compiler/internal/check"
 	"github.com/magic-spells/puzzle/compiler/internal/scaffold"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
@@ -53,15 +54,20 @@ func installRuntime(t *testing.T, appDir, root string) {
 	if err := os.WriteFile(filepath.Join(pkgDir, "package.json"), pkg, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join(root, "client-runtime"), filepath.Join(pkgDir, "client-runtime")); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"client-runtime", "types", "puzzle-env.d.ts"} {
+		if err := os.Symlink(filepath.Join(root, name), filepath.Join(pkgDir, name)); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
-// buildScaffold scaffolds template into a temp dir and runs a real build.Build
-// over it, asserting the expected dist artifacts appear. It proves the emitted
-// template source actually compiles.
-func buildScaffold(t *testing.T, template string) {
+// buildScaffold scaffolds template (its TypeScript variant when typescript is
+// set, with the tsconfig.json init adds) into a temp dir and runs a real
+// build.Build over it, asserting the expected dist artifacts appear. It proves
+// the emitted template source actually compiles. A TypeScript scaffold is also
+// run through `puzzle check` with the repo's own TypeScript, so the generated
+// app type-checks clean under its strict tsconfig.
+func buildScaffold(t *testing.T, template string, typescript bool) {
 	t.Helper()
 	// Reading puzzle.config.js is done by executing node (the Go side never
 	// parses JS), so a build of a Tailwind-declaring app needs node on PATH.
@@ -72,9 +78,14 @@ func buildScaffold(t *testing.T, template string) {
 	root := repoRoot(t)
 	parent := t.TempDir()
 
-	res, err := scaffold.Create(parent, "sample-app", template)
+	res, err := scaffold.Create(parent, "sample-app", template, typescript)
 	if err != nil {
 		t.Fatalf("scaffold.Create(%q): %v", template, err)
+	}
+	if typescript {
+		if _, err := scaffold.WriteTypeScriptConfig(res.Dir); err != nil {
+			t.Fatal(err)
+		}
 	}
 	installRuntime(t, res.Dir, root)
 
@@ -91,19 +102,72 @@ func buildScaffold(t *testing.T, template string) {
 			t.Errorf("expected dist/%s for %q template: %v", f, template, err)
 		}
 	}
+
+	if !typescript {
+		return
+	}
+	// The repo's own TypeScript (packages/puzzle devDependencies) stands in for
+	// the one the scaffold's package.json installs.
+	tsDir := filepath.Join(root, "node_modules", "typescript")
+	if _, err := os.Stat(filepath.Join(tsDir, "bin", "tsc")); err != nil {
+		t.Skip("typescript not installed in the repo (npm ci) — required to puzzle check the TypeScript scaffold")
+	}
+	if err := os.Symlink(tsDir, filepath.Join(res.Dir, "node_modules", "typescript")); err != nil {
+		t.Fatal(err)
+	}
+	files, err := check.Run(res.Dir)
+	if err != nil {
+		t.Fatalf("puzzle check on the %q TypeScript scaffold:\n%v", template, err)
+	}
+	if files == 0 {
+		t.Errorf("puzzle check on the %q TypeScript scaffold checked no .pzl files", template)
+	}
 }
 
-func TestScaffoldDefaultBuilds(t *testing.T) { buildScaffold(t, "default") }
+func TestScaffoldDefaultBuilds(t *testing.T) { buildScaffold(t, "default", false) }
 
-func TestScaffoldTodosBuilds(t *testing.T) { buildScaffold(t, "todos") }
+func TestScaffoldTodosBuilds(t *testing.T) { buildScaffold(t, "todos", false) }
 
-// TestPrintInitSummaryNonTTY exercises the summary path on a non-TTY (the test's
-// stdout is not a terminal) to guard against a nil-deref / formatting panic.
+func TestScaffoldDefaultTypeScriptBuildsAndChecks(t *testing.T) {
+	buildScaffold(t, "default", true)
+}
+
+func TestScaffoldTodosTypeScriptBuildsAndChecks(t *testing.T) {
+	buildScaffold(t, "todos", true)
+}
+
+// captureInitSummary returns what printInitSummary writes to os.Stdout.
+func captureInitSummary(t *testing.T, res *scaffold.Result, typescript bool) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	printInitSummary(ui.New(w), "app", "default", res, typescript)
+	os.Stdout = orig
+	w.Close()
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}
+
+// TestPrintInitSummaryNonTTY exercises the summary path on a non-TTY (the
+// captured stdout is a pipe, not a terminal) and checks the next steps: a
+// TypeScript app is told about `npm run check`, a JavaScript app is not.
 func TestPrintInitSummaryNonTTY(t *testing.T) {
 	res := &scaffold.Result{Dir: filepath.Join(t.TempDir(), "app"), Files: []string{"package.json"}}
-	// Should not panic; output goes to the process stdout (captured by test).
-	printInitSummary(ui.New(os.Stdout), "app", "default", res, false)
-	printInitSummary(ui.New(os.Stdout), "app", "default", res, true)
+	js := captureInitSummary(t, res, false)
+	if !strings.Contains(js, "npm run dev") || strings.Contains(js, "npm run check") {
+		t.Errorf("JavaScript next steps should list npm run dev and not npm run check:\n%s", js)
+	}
+	ts := captureInitSummary(t, res, true)
+	if !strings.Contains(ts, "npm run check") || !strings.Contains(ts, "typescript") {
+		t.Errorf("TypeScript next steps should list npm run check:\n%s", ts)
+	}
 }
 
 // TestPromptAppNameValid confirms a valid first answer is returned as-is.
@@ -303,6 +367,19 @@ func TestInitFlagsSkipPrompts(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(appDir, "jsconfig.json")); err == nil {
 		t.Errorf("unexpected jsconfig.json when --typescript was passed")
 	}
+	// --typescript also selects the template's TypeScript variant.
+	if _, err := os.Stat(filepath.Join(appDir, "app", "models", "todo.ts")); err != nil {
+		t.Errorf("expected the TypeScript todos variant (app/models/todo.ts): %v", err)
+	}
+	pkg, err := os.ReadFile(filepath.Join(appDir, "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"check": "puzzle check"`, `"typescript": "^7.`} {
+		if !strings.Contains(string(pkg), want) {
+			t.Errorf("TypeScript package.json missing %s:\n%s", want, pkg)
+		}
+	}
 
 	// Stdin must be untouched: the sentinel is still there to read.
 	rest, err := io.ReadAll(r)
@@ -343,7 +420,7 @@ func TestInitZeroArgsNonTTY(t *testing.T) {
 // TestInitTypeScriptWritesTsconfig confirms --typescript adds a strict tsconfig.
 func TestInitTypeScriptWritesTsconfig(t *testing.T) {
 	parent := t.TempDir()
-	res, err := scaffold.Create(parent, "ts-app", "default")
+	res, err := scaffold.Create(parent, "ts-app", "default", false)
 	if err != nil {
 		t.Fatalf("scaffold.Create: %v", err)
 	}
@@ -375,7 +452,7 @@ func TestInitTypeScriptWritesTsconfig(t *testing.T) {
 // it does in the build.
 func TestInitWritesJSConfigWithAliasPaths(t *testing.T) {
 	parent := t.TempDir()
-	res, err := scaffold.Create(parent, "js-app", "default")
+	res, err := scaffold.Create(parent, "js-app", "default", false)
 	if err != nil {
 		t.Fatalf("scaffold.Create: %v", err)
 	}

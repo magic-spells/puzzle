@@ -82,19 +82,18 @@ scripts and CI the flag defaults are used silently and nothing is prompted.`,
 			return fmt.Errorf("invalid --template %q (available: %s)", template, strings.Join(scaffold.Templates, ", "))
 		}
 
-		res, err := scaffold.Create(dir, appName, template)
+		// --typescript (D54) scaffolds the template's TypeScript variant: .pzl
+		// scripts are <script lang="ts">, modules are .ts, and package.json adds
+		// typescript plus a `check` script running `puzzle check` (D165). The
+		// build stays transpile-only; the default is plain JS.
+		res, err := scaffold.Create(dir, appName, template, typescript)
 		if err != nil {
 			return err
 		}
 
-		// --typescript (v1.22, D54): add a strict/noEmit tsconfig.json alongside the
-		// scaffold so editors type-check the app's .ts/.js files, with typed .pzl
-		// imports (the puzzle-env.d.ts shim). The .pzl `<script>` bodies themselves
-		// are transpile-only — the tsconfig include can't reach them and D54 never
-		// type-checks them. The build stays transpile-only; the default is plain JS.
-		// Either a tsconfig.json (--typescript) or a jsconfig.json — never both,
-		// since editors ignore jsconfig.json next to a tsconfig.json. Both carry
-		// the `paths` entry for the build's '@' app alias (SPEC §40, D75).
+		// Either a strict tsconfig.json (--typescript) or a jsconfig.json — never
+		// both, since editors ignore jsconfig.json next to a tsconfig.json. Both
+		// carry the `paths` entry for the build's '@' app alias (SPEC §40, D75).
 		configWriter := scaffold.WriteJSConfig
 		if typescript {
 			configWriter = scaffold.WriteTypeScriptConfig
@@ -114,7 +113,7 @@ func init() {
 	initCmd.Flags().String("template", scaffold.DefaultTemplate,
 		fmt.Sprintf("Starter template (%s)", strings.Join(scaffold.Templates, "|")))
 	initCmd.Flags().String("dir", "", "Parent directory to create the app in (default: current directory)")
-	initCmd.Flags().Bool("typescript", false, "Add a strict tsconfig.json for editor type-checking of .ts/.js files (with typed .pzl imports; .pzl <script> bodies are transpile-only)")
+	initCmd.Flags().Bool("typescript", false, "Scaffold a TypeScript app: <script lang=\"ts\"> components, .ts modules, a strict tsconfig.json, and an npm run check script (puzzle check)")
 	rootCmd.AddCommand(initCmd)
 }
 
@@ -167,8 +166,8 @@ func promptTemplate(r io.Reader, w io.Writer) (string, error) {
 	}
 }
 
-// promptTypeScript reads a yes/no answer from r for whether to add a strict
-// tsconfig.json. It defaults to No: empty input (a bare Enter) means no, matching
+// promptTypeScript reads a yes/no answer from r for whether to scaffold the
+// template's TypeScript variant. It defaults to No: empty input (a bare Enter) means no, matching
 // the --typescript flag default. y/yes/n/no are accepted case-insensitively;
 // anything else re-prompts. EOF / a read error ends the loop with an error so a
 // closed stdin never hangs (mirroring promptAppName). Reader/Writer so tests can
@@ -176,7 +175,7 @@ func promptTemplate(r io.Reader, w io.Writer) (string, error) {
 func promptTypeScript(r io.Reader, w io.Writer) (bool, error) {
 	scanner := bufio.NewScanner(r)
 	for {
-		fmt.Fprint(w, "  Add TypeScript config? [y/N] › ")
+		fmt.Fprint(w, "  Use TypeScript? [y/N] › ")
 		if !scanner.Scan() {
 			return false, fmt.Errorf("typescript answer required (usage: puzzle init --typescript)")
 		}
@@ -221,6 +220,9 @@ func printInitSummary(out *ui.Printer, appName, template string, res *Result, ty
 	fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "cd "+rel)
 	fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm install")
 	fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run dev")
+	if typescript {
+		fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run check")
+	}
 	fmt.Fprintln(os.Stdout)
 }
 

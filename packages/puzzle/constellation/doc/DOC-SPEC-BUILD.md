@@ -180,12 +180,13 @@ Semver comparison is a minimal in-repo `x.y.z[-pre]` implementation (prerelease 
 
 ## 42. Interactive `puzzle init` prompts (v1.44)
 
+
 `puzzle init` prompts for the choices that were not given as flags, on a TTY only (D77). Amends §13's "non-interactive by design" clause; every other command is untouched.
 
 - **Gate:** the same TTY check the D32 app-name prompt already uses. On a non-TTY (pipes, CI, scripts) behavior is byte-identical to v1.4: no prompts, silent defaults, and a missing app-name argument is still an error — nothing can hang.
 - **Prompt order:** app name (existing, only when the argument is absent) → template → TypeScript.
 - **Template prompt** — asked only when `--template` was not explicitly passed: offers the embedded template names in menu order (`default`, `todos`); empty input selects `default`; invalid input re-prompts.
-- **TypeScript prompt** — asked only when `--typescript` was not explicitly passed: y/N, empty input means No; accepts y/yes/n/no case-insensitively; invalid input re-prompts.
+- **TypeScript prompt** (`Use TypeScript? [y/N]`) — asked only when `--typescript` was not explicitly passed: y/N, empty input means No; accepts y/yes/n/no case-insensitively; invalid input re-prompts. Yes is the same switch as `--typescript`: the template's TypeScript variant (`<script lang="ts">` components, `.ts` modules behind a one-line `app/app.js` entry, a strict `tsconfig.json`, and `typescript` plus a `"check": "puzzle check"` script in `package.json` — D54, [[DOC-SPEC-ANATOMY]] §25), and the next-steps summary adds `npm run check`.
 - **Flags win:** an explicitly-passed flag is never re-asked, so `puzzle init my-app --template todos --typescript` stays fully scripted even on a TTY.
 - The scaffolded output for a given (name, template, typescript) triple is unchanged — prompts only gather inputs; scaffolding semantics stay §13's.
 

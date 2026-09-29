@@ -1,6 +1,6 @@
 ---
 name: "D54 — TypeScript scripts: <script lang=\"ts\"> transpile-only via esbuild (v1.22)"
-status: verified
+status: built
 verified_at: '2026-08-24T18:51:07.507Z'
 connections:
   - DECISION-D03-SCRIPTS-REAL-JS
@@ -19,6 +19,8 @@ code_refs:
   - compiler/cmd/pzlc/main.go
   - compiler/internal/plugin/plugin.go
   - compiler/internal/scaffold/scaffold.go
+  - compiler/internal/scaffold/templates/default-ts
+  - compiler/internal/scaffold/templates/todos-ts
 verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 notes:
   - kind: verified
@@ -51,8 +53,10 @@ compilation.
 - **`.pzl` stays the only extension.** A `.pzt` alias was **considered and
   deferred** (see rejected alternatives).
 - **Transpile-only, like Vite.** esbuild strips types; there is **no
-  type-checking in the build**. Type safety is an editor/`tsc --noEmit` concern.
-  This keeps builds fast and the Go side ignorant of TS.
+  type-checking in the build**. Type safety is the editor's and `puzzle check`'s
+  concern ([[DECISION-D165-PUZZLE-CHECK]]: the app's own tsc over `.pzl` scripts,
+  template expressions and `.ts` modules). This keeps builds fast and the Go
+  side ignorant of TS.
 - **Loader threading.** The generated module is the user's `<script>` verbatim
   plus an injected runtime import and the appended
   `Name.prototype.render = function () {…}` (D10). Those generated parts are
@@ -65,8 +69,32 @@ compilation.
   exports (PuzzleApp config, PuzzleView, PuzzleModel + `Puzzle` builders, store/
   router/formatters), wired via package.json `exports.types`. A shipped
   `puzzle-env.d.ts` (`declare module '*.pzl'` → `typeof PuzzleView`) lets
-  `import X from './X.pzl'` resolve. `puzzle init --typescript` (D32 surface) adds
-  a strict/noEmit `tsconfig.json`; the default stays JS.
+  `import X from './X.pzl'` resolve in an editor; under `puzzle check` the
+  import resolves to the component's own virtual file instead, so it carries the
+  real class.
+- **`puzzle init --typescript` scaffolds a TypeScript app** (the D32 surface; the
+  interactive `Use TypeScript? [y/N]` prompt is the same switch). The default
+  stays JavaScript. Each template has a TypeScript variant, written as the
+  template's tree with an overlay, `templates/<name>-ts/`, laid over it: an
+  overlay file replaces the base file at the same path, and an overlay `x.ts`
+  drops the base `x.js` it ports. The overlay carries only what a TypeScript
+  app writes differently — every component as `<script lang="ts">` with typed
+  `data()` return, props, events and lifecycle hooks; `main.ts`, `routes.ts`
+  and the todos models as `.ts` (a `Route[]`, a model plus its record type);
+  the README; and a `package.json` adding `typescript` `^7` and a
+  `"check": "puzzle check"` script — so styles, `public/` and
+  `puzzle.config.js` stay single-sourced. Init then writes a strict/noEmit
+  `tsconfig.json` (the `@` alias `paths`, the `puzzle-env.d.ts` include) that
+  both the editor and `puzzle check` read. **The entry stays `app/app.js`**: the
+  build resolves that one path (and the dev server, prerender, fixtures wrapper
+  and `puzzle doctor` with it), so the TypeScript variant's `app/app.js` is a
+  one-line `export { default } from './main'` and the app is configured and
+  mounted in `main.ts`. `puzzle.config.js` stays JavaScript too — node reads it,
+  and nothing in the app imports it. Both variants pass `puzzle check` clean
+  under TypeScript 6 and 7; the scaffold tests build and check them, pin the
+  JavaScript output to `templates/<name>/` byte for byte, require each ported
+  `.pzl` to keep its JavaScript twin's markup, and require each TypeScript
+  `package.json` to equal its base plus exactly the two additions.
 
 ## Alternatives rejected
 - **A `.pzt` file extension (implying `lang="ts"`).** Deferred, not refused. An
@@ -76,18 +104,38 @@ compilation.
   TypeScript with **zero new file-type surface**, matching how Vue/Svelte SFCs do
   it. An alias that simply implies `lang="ts"` can be layered on later without
   breaking anything.
-- **Type-checking in the build.** Rejected for v1.22 — slow, and it drags the Go
-  toolchain toward owning a TS type system it has no business owning. `tsc
-  --noEmit` / the editor own correctness; the build owns speed. (A future
-  `puzzle doctor` tsc-presence note is fine; enforcement is not.)
+- **Type-checking in the build.** Rejected — slow, and it drags the Go
+  toolchain toward owning a TS type system it has no business owning. The
+  separate `puzzle check` (D165) and the editor own correctness; the build owns
+  speed.
 - **A per-project config flag instead of a per-file attribute.** A file-local
   attribute lets JS and TS `.pzl` files coexist in one app during migration and
   keeps the signal next to the code esbuild loads.
+- **`init --typescript` dropping only a `tsconfig.json` into the JavaScript
+  starter.** Answering yes to "TypeScript?" then produced an app with no
+  TypeScript in it — plain `<script>` bodies, `.js` modules, no `typescript`
+  dependency and nothing that ran a check — so the choice did nothing a user
+  could see. The scaffold is where a new app's conventions are set, so it writes
+  the typed app.
+- **Full duplicate template trees** (`default-ts/` as a complete app). Doubles
+  the stylesheets, `public/` and config that do not differ, and every visual
+  change would have to land twice. The overlay duplicates only the scripts,
+  which cannot be shared.
+- **Deriving the TypeScript variant by transforming the JavaScript files.** A
+  rewrite can flip `<script>` to `<script lang="ts">` but cannot author types;
+  the typed code has to be written, so it lives as files.
+- **Accepting `app/app.ts` as a second build entry.** Every entry consumer
+  (build, watch, static watch, prerender, fixtures wrapper, doctor) names
+  `app/app.js`; a one-line re-export gets a fully typed app without touching any
+  of them.
 
 ## Consequences
 Parser + plugin + CLI amendment; **codegen and the runtime kernel are
 untouched** (render bytes identical; JS `.pzl` files compile byte-for-byte as
 before). New surface: `Sections.ScriptsLang`, the plugin's loader switch, the
 `pzlc` Transform pass, `types/index.d.ts` + `puzzle-env.d.ts`, `init
---typescript`, the Sublime grammar's `source.ts` embed, and `examples/typed-todos`.
+--typescript` and the `templates/<name>-ts/` overlays (whose `package.json`
+framework ranges `release:prep` asserts beside the base templates'), the
+Sublime grammar's `source.ts` embed, and `examples/typed-todos`.
 Ships in the `pretest` example-build gate (asserts the bundle has no TS syntax).
+`puzzle generate` stubs are still JavaScript.
