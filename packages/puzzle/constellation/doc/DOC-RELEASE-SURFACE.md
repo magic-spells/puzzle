@@ -49,7 +49,9 @@ second specification. Decision cards hold rationale and git holds chronology.
 ## Package and application
 
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
-  `PuzzleValidationError`, `lazy` (the D163 route-view loader marker), and
+  `PuzzleValidationError`, `FormatterRegistry` (the function library's
+  registry class — the type of `app.formatters` and `this.ctx.formatters`),
+  `lazy` (the D163 route-view loader marker), and
   compiler support exports (`ViewNode`, `SLOT_TAG`, `PORTAL_TAG`,
   `SNIPPET_TAG` — the D166 snippet marker tag, with `isSnippet` on the ViewNode
   type surface — `displayValue`, and the D170/D173 list runtime `listRows`,
