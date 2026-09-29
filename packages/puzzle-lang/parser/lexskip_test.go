@@ -76,31 +76,22 @@ func TestScanBraceGroupKnownClosers(t *testing.T) {
 
 func TestSplitTopLevelLexical(t *testing.T) {
 	cases := []struct {
-		name        string
-		s           string
-		sep         byte
-		skipDoubled bool
-		want        []string
+		name string
+		s    string
+		sep  byte
+		want []string
 	}{
-		{"plain pipe", "a | b", '|', true, []string{"a ", " b"}},
-		{"logical or not split", "a || b", '|', true, []string{"a || b"}},
-		// A '|' inside a regex is part of the regex body, not a split point.
-		{"pipe in regex", "/a|b/.test(x) | up", '|', true, []string{"/a|b/.test(x) ", " up"}},
-		// Division on the left still splits at the trailing pipe.
-		{"division then pipe", "a / b | up", '|', true, []string{"a / b ", " up"}},
-		// A '|' inside a string is not a split point.
-		{"pipe in string", "'a|b' | up", '|', true, []string{"'a|b' ", " up"}},
-		// A '|' inside a comment is not a split point.
-		{"pipe in comment", "a /* | */ | up", '|', true, []string{"a /* | */ ", " up"}},
-		// Comma splitting for formatter args, respecting a regex comma-free body.
-		{"comma args with regex", "/a,b/, x", ',', false, []string{"/a,b/", " x"}},
-		{"nested commas not split", "f(a, b), c", ',', false, []string{"f(a, b)", " c"}},
+		// Comma splitting for {:when} values, respecting a regex comma-free body.
+		{"comma args with regex", "/a,b/, x", ',', []string{"/a,b/", " x"}},
+		{"nested commas not split", "f(a, b), c", ',', []string{"f(a, b)", " c"}},
+		{"comma in a string", "'a,b', c", ',', []string{"'a,b'", " c"}},
+		{"comma in a comment", "a /* , */, b", ',', []string{"a /* , */", " b"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := splitTopLevel(tc.s, tc.sep, tc.skipDoubled)
+			got := splitTopLevel(tc.s, tc.sep)
 			if strings.Join(got, "\x00") != strings.Join(tc.want, "\x00") {
-				t.Errorf("splitTopLevel(%q, %q, %v) = %#v, want %#v", tc.s, tc.sep, tc.skipDoubled, got, tc.want)
+				t.Errorf("splitTopLevel(%q, %q) = %#v, want %#v", tc.s, tc.sep, got, tc.want)
 			}
 		})
 	}

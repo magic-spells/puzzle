@@ -3,6 +3,8 @@ package parser
 import (
 	"strings"
 	"testing"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 )
 
 // parseContent wraps template content in a minimal .pzl file and returns the
@@ -69,60 +71,20 @@ func serializeNodes(nodes []Node) string {
 	return b.String()
 }
 
-func TestParseInterpolationFormatters(t *testing.T) {
+func TestParseInterpolationExpressions(t *testing.T) {
 	tests := []struct {
 		name     string
 		content  string
 		wantExpr string
-		wantFmts []FormatterCall
+		wantAST  string
 	}{
-		{
-			name:     "no formatter",
-			content:  "{ user.name }",
-			wantExpr: "user.name",
-		},
-		{
-			name:     "single formatter with quoted arg",
-			content:  "{ todo.createdAt | date('short') }",
-			wantExpr: "todo.createdAt",
-			wantFmts: []FormatterCall{{Name: "date", Args: []string{"'short'"}}},
-		},
-		{
-			name:     "join with comma inside quotes",
-			content:  "{ names | join(', ') }",
-			wantExpr: "names",
-			wantFmts: []FormatterCall{{Name: "join", Args: []string{"', '"}}},
-		},
-		{
-			name:     "chained formatters",
-			content:  "{ text | trim | capitalize }",
-			wantExpr: "text",
-			wantFmts: []FormatterCall{{Name: "trim"}, {Name: "capitalize"}},
-		},
-		{
-			name:     "logical-or is not a pipe",
-			content:  "{ a || b }",
-			wantExpr: "a || b",
-		},
-		{
-			name:     "nested parens in formatter args",
-			content:  "{ x | pad(max(1, 2), '0') }",
-			wantExpr: "x",
-			wantFmts: []FormatterCall{{Name: "pad", Args: []string{"max(1, 2)", "'0'"}}},
-		},
-		{
-			// A '}' inside a string must not close the interpolation early.
-			name:     "string with close brace",
-			content:  "{ name === '}' }",
-			wantExpr: "name === '}'",
-		},
-		{
-			// Genuine division still splits at the trailing formatter pipe.
-			name:     "division still splits at pipe",
-			content:  "{ a / b | upcase }",
-			wantExpr: "a / b",
-			wantFmts: []FormatterCall{{Name: "upcase"}},
-		},
+		{name: "a path", content: "{ user.name }", wantExpr: "user.name", wantAST: "(. user name)"},
+		{name: "a function call with a quoted argument", content: "{ date(todo.createdAt, 'short') }", wantExpr: "date(todo.createdAt, 'short')", wantAST: "(call date (. todo createdAt) 'short')"},
+		{name: "a method with a comma inside quotes", content: "{ names.join(', ') }", wantExpr: "names.join(', ')", wantAST: "(call (. names join) ', ')"},
+		{name: "nested calls", content: "{ capitalize(text.trim()) }", wantExpr: "capitalize(text.trim())", wantAST: "(call capitalize (call (. text trim)))"},
+		{name: "logical or", content: "{ a || b }", wantExpr: "a || b", wantAST: "(|| a b)"},
+		// A '}' inside a string must not close the interpolation early.
+		{name: "string with close brace", content: "{ name === '}' }", wantExpr: "name === '}'", wantAST: "(=== name '}')"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,26 +100,63 @@ func TestParseInterpolationFormatters(t *testing.T) {
 			if interp.Expr != tc.wantExpr {
 				t.Errorf("expr: got %q, want %q", interp.Expr, tc.wantExpr)
 			}
-			if len(interp.Formatters) != len(tc.wantFmts) {
-				t.Fatalf("formatter count: got %d, want %d", len(interp.Formatters), len(tc.wantFmts))
-			}
-			for i, f := range tc.wantFmts {
-				if interp.Formatters[i].Name != f.Name {
-					t.Errorf("fmt %d name: got %q, want %q", i, interp.Formatters[i].Name, f.Name)
-				}
-				if strings.Join(interp.Formatters[i].Args, "|") != strings.Join(f.Args, "|") {
-					t.Errorf("fmt %d args: got %v, want %v", i, interp.Formatters[i].Args, f.Args)
-				}
+			if got := expr.Print(interp.ExprAST); got != tc.wantAST {
+				t.Errorf("tree: got %s, want %s", got, tc.wantAST)
 			}
 		})
+	}
+}
+
+// TestPipeIsTheSteerError: there are no formatter pipes (D176). A 0.7
+// template's `| name` fails in every expression position with the one steer
+// toward a call, positioned at the `|` itself, and `||` stays logical OR.
+func TestPipeIsTheSteerError(t *testing.T) {
+	const want = "`| name` pipes were removed — write `name(value)`; bitwise OR is not available"
+	cases := []struct{ name, src string }{
+		{"text", "<p>{ price | currency }</p>"},
+		{"text with arguments", "<p>{ body | truncate(120) }</p>"},
+		{"brace attribute", "<p title={ price | currency }></p>"},
+		{"quoted attribute", `<p title="a { price | currency } b"></p>`},
+		{"component prop", "<Card n={ list | join(', ') }/>"},
+		{"key", "{#for t in todos}<li key={ t.id | slug }></li>{/for}"},
+		{"{#if}", "{#if tags | size}<p></p>{/if}"},
+		{"{:else if}", "{#if a}<p></p>{:else if tags | size}<p></p>{/if}"},
+		{"{#unless}", "{#unless tags | size}<p></p>{/unless}"},
+		{"{#case}", "{#case status | downcase}{:when 'a'}<p></p>{/case}"},
+		{"{:when}", "{#case s}{:when 'a' | upcase}<p></p>{/case}"},
+		{"{#for} collection", "{#for t in todos | sort}<p></p>{/for}"},
+		{"{#for} range", "{#for 1...n | round}<p></p>{/for}"},
+		{"inline {#if}", `<p class="{#if a | b}on{/if}"></p>`},
+		{"nested in an argument", "<p>{ f(a | b) }</p>"},
+		{"handler argument", "<p @click={ go(a | b) }></p>"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "<puzzle-view>" + tc.src + "</puzzle-view>"
+			_, err := Parse([]byte(src), "t.pzl")
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("want a ParseError, got %v", err)
+			}
+			if pe.Message != want {
+				t.Fatalf("got %q", pe.Message)
+			}
+			if off := strings.Index(src, " | ") + 1; pe.Col != off+1 {
+				t.Errorf("error at col %d, want the `|` at col %d", pe.Col, off+1)
+			}
+		})
+	}
+	// `||` is logical OR in every position.
+	root := parseContent(t, "{#if a || b}<p>{ c || d }</p>{/if}")
+	if cond := elementChildren(root.Children)[0].(*If).Cond; cond != "a || b" {
+		t.Errorf("|| in a header: %q", cond)
 	}
 }
 
 // TestParseInterpolationRegexIsOneError: regular expression literals are
 // outside the expression grammar, but the brace scan still treats one as
 // opaque, so a '}' or '|' inside it neither closes the interpolation early nor
-// splits a formatter chain: the only error is the grammar's regex error, at
-// the regex.
+// reads as a pipe: the only error is the grammar's regex error, at the regex.
 func TestParseInterpolationRegexIsOneError(t *testing.T) {
 	for _, src := range []string{"{ /}/.test(name) }", "{ /a|b/.test(name) }"} {
 		_, err := Parse([]byte("<puzzle-view>"+src+"</puzzle-view>"), "t.pzl")
@@ -751,7 +750,7 @@ func TestParseRaw(t *testing.T) {
 		}
 	})
 
-	t.Run("block-looking text and formatter pipes stay literal", func(t *testing.T) {
+	t.Run("block-looking text and 0.7 pipes stay literal", func(t *testing.T) {
 		root := parseContent(t, `<pre>{#raw}{#if ok}{#comment}x{/comment}{:else}{ value | upper }{/if}{/raw}</pre>`)
 		pre := elementChildren(root.Children)[0].(*Element)
 		text := elementChildren(pre.Children)[0].(*Text)

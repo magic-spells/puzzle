@@ -11,7 +11,8 @@ import (
 
 // corpus_test.go proves the expression grammar against every .pzl file the
 // monorepo ships or tests with: the framework's examples, the scaffold
-// templates, the pieces registry, and the codegen goldens. Each file is parsed
+// templates, the pieces registry and demo, the DevTools panel, the runtime
+// test fixtures, and the codegen and check goldens. Each file is parsed
 // in full — which parses every expression position with package expr — and
 // every expression position must carry a tree. From the Go module cache the
 // sibling packages are absent and the test skips, as
@@ -21,7 +22,11 @@ var corpusRoots = []string{
 	"../../puzzle/examples",
 	"../../puzzle/compiler/internal/scaffold",
 	"../../puzzle-pieces/registry",
+	"../../puzzle-pieces/demo",
+	"../../puzzle-devtools/panel",
+	"../../puzzle/tests/fixtures",
 	"../../puzzle/compiler/internal/codegen/testdata",
+	"../../puzzle/compiler/internal/check/testdata",
 }
 
 func TestCorpusExpressionsParse(t *testing.T) {
@@ -130,24 +135,12 @@ func expressionSites(root *Element) []exprSite {
 	add := func(what, text string, ast expr.Node) {
 		out = append(out, exprSite{what, text, ast})
 	}
-	chain := func(what, text string, ast expr.Node, fmts []FormatterCall) {
-		add(what, text, ast)
-		for _, f := range fmts {
-			for i, a := range f.Args {
-				var n expr.Node
-				if i < len(f.ArgsAST) {
-					n = f.ArgsAST[i]
-				}
-				add("formatter argument", a, n)
-			}
-		}
-	}
 	var parts func([]Part)
 	parts = func(ps []Part) {
 		for _, p := range ps {
 			switch p := p.(type) {
 			case *InterpPart:
-				chain("attribute interpolation", p.Interp.Expr, p.Interp.ExprAST, p.Interp.Formatters)
+				add("attribute interpolation", p.Interp.Expr, p.Interp.ExprAST)
 			case *InlineIfPart:
 				add("inline {#if}", p.Cond, p.CondAST)
 				parts(p.Then)
@@ -159,7 +152,7 @@ func expressionSites(root *Element) []exprSite {
 		for _, a := range as {
 			switch a := a.(type) {
 			case *DynamicAttr:
-				chain("attribute", a.Expr, a.ExprAST, a.Formatters)
+				add("attribute", a.Expr, a.ExprAST)
 			case *EventAttr:
 				add("handler", a.Expr, a.ExprAST)
 			case *MixedAttr:
@@ -171,7 +164,7 @@ func expressionSites(root *Element) []exprSite {
 	walkAll(root.Children, func(n Node) {
 		switch n := n.(type) {
 		case *Interpolation:
-			chain("interpolation", n.Expr, n.ExprAST, n.Formatters)
+			add("interpolation", n.Expr, n.ExprAST)
 		case *Element:
 			attrs(n.Attrs)
 		case *Component:

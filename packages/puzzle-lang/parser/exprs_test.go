@@ -40,7 +40,7 @@ func wantPos(t *testing.T, what string, n expr.Node, src, marker string) {
 
 func TestEveryExpressionPositionHasATree(t *testing.T) {
 	src := "<puzzle-view class={ rootClass }>\n" +
-		"  <p title={ t1 | fmt(a1, x => x.a2) } data-q=\"s {  q1 } {#if   c1 }on{/if}\" @click={ go(event, h1) }>{ i1 | pad( a3 ,  a4 ) }</p>\n" +
+		"  <p title={ fmt(t1, a1, x => x.a2) } data-q=\"s {  q1 } {#if   c1 }on{/if}\" @click={ go(event, h1) }>{ pad(i1, a3 ,  a4 ) }</p>\n" +
 		"  {#if  c2 }<b>a</b>{:else if\n    c3 }<b>b</b>{/if}\n" +
 		"  {#unless  (u1) }<b>c</b>{/unless}\n" +
 		"  {#case   s1 }{:when  w1 ,  w2 }<b>d</b>{/case}\n" +
@@ -62,22 +62,21 @@ func TestEveryExpressionPositionHasATree(t *testing.T) {
 	kids := elementChildren(root.Children)
 	p := kids[0].(*Element)
 	title := p.Attrs[0].(*DynamicAttr)
-	wantPos(t, "attribute", title.ExprAST, src, "t1")
-	wantPos(t, "attribute formatter argument", title.Formatters[0].ArgsAST[0], src, "a1")
-	if _, ok := title.Formatters[0].ArgsAST[1].(*expr.Arrow); !ok {
-		t.Errorf("a formatter argument is a call argument, so an arrow is legal: got %T", title.Formatters[0].ArgsAST[1])
+	wantPos(t, "attribute", title.ExprAST, src, "fmt(t1")
+	call := title.ExprAST.(*expr.Call)
+	wantPos(t, "attribute call argument", call.Args[1], src, "a1")
+	if _, ok := call.Args[2].(*expr.Arrow); !ok {
+		t.Errorf("a call argument may be an arrow: got %T", call.Args[2])
 	}
 	mixed := p.Attrs[1].(*MixedAttr)
 	wantPos(t, "quoted attribute interpolation", mixed.Parts[1].(*InterpPart).Interp.ExprAST, src, "q1")
 	wantPos(t, "inline {#if}", mixed.Parts[3].(*InlineIfPart).CondAST, src, "c1")
 	wantPos(t, "handler", p.Attrs[2].(*EventAttr).ExprAST, src, "go(event")
 	interp := p.Children[0].(*Interpolation)
-	wantPos(t, "interpolation", interp.ExprAST, src, "i1")
-	if len(interp.Formatters[0].ArgsAST) != len(interp.Formatters[0].Args) {
-		t.Errorf("ArgsAST must align with Args")
-	}
-	wantPos(t, "formatter argument 1", interp.Formatters[0].ArgsAST[0], src, "a3")
-	wantPos(t, "formatter argument 2", interp.Formatters[0].ArgsAST[1], src, "a4")
+	wantPos(t, "interpolation", interp.ExprAST, src, "pad(i1")
+	icall := interp.ExprAST.(*expr.Call)
+	wantPos(t, "call argument 1", icall.Args[1], src, "a3")
+	wantPos(t, "call argument 2", icall.Args[2], src, "a4")
 
 	ifn := kids[1].(*If)
 	wantPos(t, "{#if}", ifn.CondAST, src, "c2")
@@ -123,7 +122,7 @@ func TestEveryExpressionPositionHasATree(t *testing.T) {
 func TestExpressionErrorsLandOnTheToken(t *testing.T) {
 	for _, body := range []string{
 		"<p>{ a +  b & c }</p>",
-		"<p>{ a | fmt(1,  b & c) }</p>",
+		"<p>{ fmt(a, 1,  b & c) }</p>",
 		"<p title={  b & c }>x</p>",
 		`<p title="x {  b & c } y">x</p>`,
 		`<p class="x {#if   b & c}on{/if}">x</p>`,
@@ -207,7 +206,7 @@ func TestEventIsTheHandlersDOMEvent(t *testing.T) {
 		"{#for x in xs, event}<p>{ event }</p>{/for}",
 		"{#for event in events}{#for x in event.items}<p>{ event.id }</p>{/for}{/for}",
 		`<Card><Snippet fits="row" event>{ event.id }</Snippet></Card>`,
-		"<p>{ items | fmt(event => event.id) }</p>",
+		"<p>{ fmt(items, event => event.id) }</p>",
 		"{#for event in rows}<li @click={ pick(event.id) }>x</li>{/for}",
 		"<li @click={ go(event.target.closest('li'), items.map(event => event.id)) }>x</li>",
 	} {
@@ -237,7 +236,7 @@ func TestBindingsAreNeverCalled(t *testing.T) {
 		{"{#for t in items}<p>{ t('key') }</p>{/for}", "t"},
 		{"{#for x in xs, i}<p>{ i(1) }</p>{/for}", "i"},
 		{`<Card><Snippet fits="row" fmt>{ fmt(1) }</Snippet></Card>`, "fmt"},
-		{"{#for t in items}<p title={ label | pad(t(1)) }>x</p>{/for}", "t"},
+		{"{#for t in items}<p title={ pad(label, t(1)) }>x</p>{/for}", "t"},
 		{"{#for t in items}<button @click={ save(t(1)) }>x</button>{/for}", "t"},
 	} {
 		pe := parseErr(t, tc.body)

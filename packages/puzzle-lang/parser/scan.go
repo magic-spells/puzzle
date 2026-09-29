@@ -273,13 +273,9 @@ func isTemplateRawInner(inner string) bool {
 
 // splitTopLevel splits s at top-level occurrences of the single-byte separator
 // sep, respecting strings/regex/comments (via LexSkip) and (), [], {} nesting.
-// When skipDoubled is true a doubled separator (e.g. "||") is treated as an
-// operator and is NOT a split point — this is how the formatter pipe split
-// avoids breaking a logical-OR (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c).
-// Used for pipe splitting (sep '|', skipDoubled) and formatter-argument
-// splitting (sep ',', not doubled). Skipping regex is what keeps a '|' inside
-// `/a|b/` out of the formatter split.
-func splitTopLevel(s string, sep byte, skipDoubled bool) []string {
+// The {:when} header splits its values with it (sep ','); skipping a regex is
+// what keeps a ',' inside `/a,b/` out of the split.
+func splitTopLevel(s string, sep byte) []string {
 	var out []string
 	depth := 0
 	start := 0
@@ -298,54 +294,14 @@ func splitTopLevel(s string, sep byte, skipDoubled bool) []string {
 			depth--
 		}
 		if c == sep && depth == 0 {
-			doubled := skipDoubled && ((i+1 < len(s) && s[i+1] == sep) || (i > 0 && s[i-1] == sep))
-			if !doubled {
-				out = append(out, s[start:i])
-				start = i + 1
-			}
+			out = append(out, s[start:i])
+			start = i + 1
 		}
 		prevEndsExpr = LexPlainEndsExpr(c, prevEndsExpr)
 		i++
 	}
 	out = append(out, s[start:])
 	return out
-}
-
-// nestedPipeIndex returns the index of the first single `|` below the top
-// level of s — inside (), [] or {} — or -1 (D176 rule 4). Strings, template
-// literals, regexes and comments are skipped via LexSkip, and `||` is logical
-// OR, never a pipe. A template value has no bitwise OR, so the only `|` it may
-// hold is a top-level formatter pipe; a nested one is an error at every value
-// position and header.
-func nestedPipeIndex(s string) int {
-	depth := 0
-	prevEndsExpr := false
-	for i := 0; i < len(s); {
-		if next, pee, consumed := LexSkip(s, i, prevEndsExpr); consumed {
-			prevEndsExpr = pee
-			i = next
-			continue
-		}
-		c := s[i]
-		switch c {
-		case '(', '[', '{':
-			depth++
-		case ')', ']', '}':
-			depth--
-		case '|':
-			if i+1 < len(s) && s[i+1] == '|' {
-				prevEndsExpr = false
-				i += 2
-				continue
-			}
-			if depth > 0 {
-				return i
-			}
-		}
-		prevEndsExpr = LexPlainEndsExpr(c, prevEndsExpr)
-		i++
-	}
-	return -1
 }
 
 // lastTopLevelIndexByte returns the index of the LAST top-level occurrence of
@@ -377,35 +333,6 @@ func lastTopLevelIndexByte(s string, sep byte) int {
 		i++
 	}
 	return last
-}
-
-// matchingClose returns the index of the bracket that closes the '(', '[' or
-// '{' at s[open] (respecting strings/regex/comments via LexSkip and (), [], {}
-// nesting, like splitTopLevel), or -1 when it is never closed. Used to find
-// where a formatter call's argument list ends.
-func matchingClose(s string, open int) int {
-	depth := 0
-	prevEndsExpr := false
-	for i := open; i < len(s); {
-		if next, pee, consumed := LexSkip(s, i, prevEndsExpr); consumed {
-			prevEndsExpr = pee
-			i = next
-			continue
-		}
-		c := s[i]
-		switch c {
-		case '(', '[', '{':
-			depth++
-		case ')', ']', '}':
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-		prevEndsExpr = LexPlainEndsExpr(c, prevEndsExpr)
-		i++
-	}
-	return -1
 }
 
 // topLevelIndex returns the index of the first top-level occurrence of sub in s

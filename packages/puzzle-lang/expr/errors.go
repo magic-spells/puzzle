@@ -25,7 +25,7 @@ const (
 	computeFirst = "compute the value first (a data() field in PuzzleKit, {#let} in Sites)"
 
 	msgExpected        = "expected an expression"
-	msgThis            = "`this` is not available in template expressions — return the value from data() (a getter or a computed field), or use a formatter for a display transform"
+	msgThis            = "`this` is not available in template expressions — return the value from data() (a getter or a computed field), or use a function for a display transform"
 	msgEvent           = "`event` is only available in an event handler — a data field named `event` cannot be read in a template; rename the field"
 	msgArrowPlace      = "arrow functions are only available as a call argument, e.g. `items.filter(item => item.done)`"
 	msgArrowParam      = "arrow function parameters are plain names — defaults, rest parameters, and destructuring are not available in template expressions"
@@ -49,7 +49,7 @@ const (
 	msgAssign          = "assignment is not available in template expressions — a template reads values; it never changes them (to compare, write `===`)"
 	msgUpdate          = "`++` and `--` are not available in template expressions — a template reads values; it never changes them"
 	msgBitwise         = "bitwise operators are not available in template expressions — use `&&` / `||` for logic"
-	msgBitOr           = "the `|` operator is not available in template expressions — there is no bitwise OR; write `||` for a logical OR"
+	msgPipe            = "`| name` pipes were removed — write `name(value)`; bitwise OR is not available"
 	msgExponent        = "`**` is not available in template expressions — use `Math.pow(a, b)`"
 	msgRegex           = "regular expression literals are not available in template expressions — use `includes()`, `startsWith()`, or `endsWith()`"
 	msgComment         = "comments are not available in template expressions"
@@ -88,6 +88,21 @@ const (
 	msgNameEscape      = "escapes are not available in names — write the character itself"
 	msgTooDeep         = "expression nests too deeply"
 )
+
+// ambientGlobals are the browser globals a template author may reach for as
+// a value. None is template data, so a root read of one — `window.scrollY`,
+// `localStorage.theme` — is a positioned error rather than a silent read of a
+// data() field that happens to share the name. A bound name (a template
+// binding or an arrow parameter) and a call's callee are not reads of the
+// global, and neither is a handler value's own name.
+var ambientGlobals = map[string]bool{
+	"window": true, "document": true, "globalThis": true, "navigator": true,
+	"location": true, "console": true, "localStorage": true, "sessionStorage": true,
+}
+
+func ambientMessage(name string) string {
+	return "`" + name + "` is not available in template expressions — read it in data() and pass the value"
+}
 
 // prototypeNames are the property names JavaScript gives prototype behaviour
 // — reading or setting one reaches the object's prototype machinery, not a

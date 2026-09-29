@@ -30,9 +30,8 @@ type Options struct {
 	// A binding is a value: reading it is legal, calling it is an error, so
 	// `t('key')` inside `{#for t in …}` never reaches the library's `t`.
 	Bindings []string
-	// CallArgument marks the source as one argument of a call — the template
-	// parser's formatter arguments, `x | f(arg)` — so an arrow function is
-	// legal at its top level, as it is inside any argument list.
+	// CallArgument marks the source as one argument of a call, so an arrow
+	// function is legal at its top level, as it is inside any argument list.
 	CallArgument bool
 }
 
@@ -72,7 +71,33 @@ func Parse(src string, base Pos, opts ...Options) (n Node, err error) {
 	}()
 	n = p.parseTop()
 	p.checkBindingCalls(n)
+	p.checkAmbient(n)
 	return n, nil
+}
+
+// checkAmbient rejects a read of a browser global (ambientGlobals) as a data
+// root. parseName records each unbound, uncalled candidate; a handler value's
+// own name — the whole value, or a branch of its top-level conditional —
+// names a view handler, not the global, so it is exempt. It runs on the
+// finished tree because which name is the handler's own shows only in the
+// tree's shape.
+func (p *parser) checkAmbient(root Node) {
+	if len(p.ambient) == 0 {
+		return
+	}
+	own := map[Node]bool{}
+	if p.opts.Handler {
+		own[root] = true
+		if c, ok := root.(*Conditional); ok {
+			own[c.Consequent] = true
+			own[c.Alternate] = true
+		}
+	}
+	for _, id := range p.ambient {
+		if !own[id] {
+			p.fail(id.Start, ambientMessage(id.Name))
+		}
+	}
 }
 
 // checkBindingCalls rejects a call whose callee is a template binding. It runs
@@ -158,6 +183,9 @@ type parser struct {
 	match []int
 	// params are the arrow-function parameters in scope, innermost last.
 	params []string
+	// ambient are the reads of a browser global parseName saw, for
+	// checkAmbient.
+	ambient []*Identifier
 }
 
 func (p *parser) matchParens() {
@@ -329,7 +357,7 @@ var binaryPrecedence = map[string]int{
 // excludedOperators are JavaScript binary, assignment, and update operators
 // the grammar leaves out, each with its message.
 var excludedOperators = map[string]string{
-	"&": msgBitwise, "|": msgBitOr, "^": msgBitwise, "<<": msgBitwise, ">>": msgBitwise, ">>>": msgBitwise,
+	"&": msgBitwise, "|": msgPipe, "^": msgBitwise, "<<": msgBitwise, ">>": msgBitwise, ">>>": msgBitwise,
 	"**": msgExponent,
 	"=":  msgAssign, "+=": msgAssign, "-=": msgAssign, "*=": msgAssign, "/=": msgAssign, "%=": msgAssign,
 	"**=": msgAssign, "<<=": msgAssign, ">>=": msgAssign, ">>>=": msgAssign, "&=": msgAssign,
@@ -747,8 +775,22 @@ func (p *parser) parseName() Node {
 	if t.text == "event" && !p.opts.Handler && !p.eventBound() {
 		p.fail(t.pos, msgEvent)
 	}
+	id := &Identifier{Start: t.pos, Name: t.text}
+	if ambientGlobals[t.text] && !p.isBinding(t.text) && !p.isParam(t.text) && !isPunct(p.peek(1), "(") {
+		p.ambient = append(p.ambient, id)
+	}
 	p.advance()
-	return &Identifier{Start: t.pos, Name: t.text}
+	return id
+}
+
+// isParam reports whether name is an arrow-function parameter in scope.
+func (p *parser) isParam(name string) bool {
+	for _, n := range p.params {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
 
 // parseNamespaceMember parses `Math.round`, `Object.keys`, `Array.isArray`, or

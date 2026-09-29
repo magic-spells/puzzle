@@ -91,9 +91,6 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 			if cond == "" {
 				return nil, "", errAt(c.file, pos, "{#if} requires a condition")
 			}
-			if perr := headerPipeError(cond, pos, c.file, "an {#if} condition in an attribute value", "{#if isActive}"); perr != nil {
-				return nil, "", perr
-			}
 			// inner starts at c.i+1 and hdr past its '#' and white space; the
 			// condition starts past the keyword and the white space after it.
 			hdrAt := c.i + 2 + leadingSpace(inner[1:])

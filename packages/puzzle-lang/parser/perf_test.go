@@ -17,9 +17,9 @@ func TestLargeTemplateParsesWithinBudget(t *testing.T) {
 	}
 	lines := []string{
 		`  <li class="row {#if item.done}done{/if}" data-id={ item.id } @click={ toggle(item, event) }>`,
-		`    <span title="{ item.title | truncate(40, '…') }">{ item.title ?? 'Untitled' }</span>`,
-		`    {#if item.tags.length > 0 && !item.hidden}<em>{ item.tags | join(', ') }</em>{:else}<em>none</em>{/if}`,
-		`    <b>{ item.price * item.qty | currency('$', 2) } { item.count === 1 ? 'item' : 'items' }</b>`,
+		`    <span title="{ truncate(item.title, 40, '…') }">{ item.title ?? 'Untitled' }</span>`,
+		`    {#if item.tags.length > 0 && !item.hidden}<em>{ item.tags.join(', ') }</em>{:else}<em>none</em>{/if}`,
+		`    <b>{ currency(item.price * item.qty, '$', 2) } { item.count === 1 ? 'item' : 'items' }</b>`,
 		`  </li>`,
 	}
 	var b strings.Builder
