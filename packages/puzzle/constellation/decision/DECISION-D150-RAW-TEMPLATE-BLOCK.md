@@ -41,8 +41,25 @@ the first whitespace-tolerant closer without inspecting the body. While inside
 that span, braces are literal bytes: interpolation, block/branch tags,
 formatter pipes, and brace-valued event bindings do not activate Puzzle
 grammar. HTML tokenization remains active, so elements and their static
-attributes still become ordinary vnodes. Opener content after `raw` is ignored,
-matching `{#comment}`.
+attributes still become ordinary vnodes, and an HTML void element (`<br>`,
+`<input …>`) closes at its start tag there as it does everywhere. Opener
+content after `raw` is ignored, matching `{#comment}`.
+
+The section splitter reads the block the same way. `findTemplateClose`
+(`sections.go`) recognizes the opener with the lexer's own `isBlockRawOpen` and
+finds the span's end with the lexer's `scanBlockRaw`, so the splitter and the
+lexer always agree on where a raw block ends, and the splitter steps over the
+whole span without reading it: braces, quotes, backticks, `//`, `\{`, `{##`,
+`{#comment}` and `<!--` inside it are inert. So is a literal section close
+tag. A `</puzzle-view>` inside a raw body does not end the section, so
+`<pre>{#raw}<puzzle-view>…</puzzle-view>{/raw}</pre>` compiles as sample
+markup. One safeguard keeps an unterminated block diagnosable: the first close
+tag seen inside a skipped span is kept as a fallback and returned only when no
+close tag follows the span. A `{#raw}` missing its `{/raw}` (no closer at all,
+or the next `{/raw}` sitting in the skeleton) therefore still splits at the
+real close tag, and the lexer reports `unterminated {#raw}` at the opener
+instead of the splitter reporting `missing </puzzle-view>`. The eslint and
+prettier plugins' vendored splitters mirror this rule.
 
 The parser emits raw-body text as ordinary `Text` nodes, so codegen emits string
 literals and never sends it through expression resolution. Every attribute
@@ -101,6 +118,16 @@ positioned compile error. An unterminated block errors at its opener. A literal
 - **Treat `{#raw}` as dynamic raw HTML** — there is no expression inside the
   block and no runtime value can reach it; dynamic HTML injection remains
   deferred.
+- **Let the section splitter scan a raw body as brace groups** — that inspects
+  the body this decision says is never inspected. An unbalanced `{`, a quote or
+  a `//` in raw content carries the JS-aware brace scan past `</puzzle-view>`
+  into the script, where the quote parity of the script's imports and comments
+  decides whether it comes back, so a file that has its close tag fails with
+  "missing `</puzzle-view>`". Whether a literal close tag inside a raw body
+  ends the section becomes an accident of that scan (one inside a raw
+  `{ … }` never does), and every unbalanced `{` reruns a failed scan to the end
+  of the file: a 40 KB raw block of `{` took 3.79 s to parse, against about
+  0.3 ms when the span is skipped whole.
 
 ## Consequences
 
