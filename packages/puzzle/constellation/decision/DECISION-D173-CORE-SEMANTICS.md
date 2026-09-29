@@ -188,6 +188,13 @@ Cory: "it's valid js so we should allow valid js."
   development warning for an undefined interpolation still points at a typo;
   a method call on a missing receiver draws no warning, because telling it
   apart needs a runtime helper that production would pay for.
+- **The `Object` globals take a missing value too.** `Object.keys`,
+  `Object.values` and `Object.entries` of a missing value return `[]`, so
+  `{ Object.keys(settings).length }` prints `0` instead of failing the view
+  with JavaScript's `TypeError`. PuzzleKit's render target passes the
+  argument as `<arg> ?? {}`, so a string, a list or any other value reaches
+  the global unchanged; `puzzle check` keeps the author's spelling, as it
+  adds no `?.`. Sites' evaluator needs the same default for parity.
 - **Why:** one missing intermediate object used to throw and send the whole
   PuzzleKit view to error handling. Only codegen changes; scripts stay real
   JavaScript, and a path that exists evaluates exactly as before.

@@ -102,7 +102,12 @@ set, the host's own functions, and the functions an app registers.
   the site's locale. Each host pins its own outputs. Cross-host rows pin only
   what is locale-independent: the `iso` date presets, the no-preset defaults
   in `en`, `pluralize`'s word choice, and `number_with_delimiter` with an
-  explicit delimiter.
+  explicit delimiter. PuzzleKit's `hybrid` and `static` prerender prints these
+  six and `timeago` on the build machine — in its locale (`LANG`, or `LC_ALL`
+  when set) and time zone (`TZ`), or in `i18n.defaultLocale` when the app
+  configures translations, the zone still `TZ` — and the browser re-renders
+  them in the viewer's; deterministic HTML needs the locale and `TZ` pinned
+  on the build machine.
 - **Translation (1)**: `t(key, vars)`, defined by
   [[DECISION-D175-TRANSLATIONS]]. In PuzzleKit `t` is not a built-in: the
   i18n service registers it when the app configures translations.
@@ -116,7 +121,9 @@ The compiler knows the 21 names as `codegen.LibraryFunctionNames`; `puzzle
 check` types them from `libraryFunctionSignatures` in the check emitter, kept
 equal to that list by `TestLibrarySignaturesMatchCodegen`; `types/index.d.ts`
 publishes the same signatures as `LibraryFunctions` plus `DatePreset`. An
-app-registered function is typed `(...args: any[]) => any`.
+app-registered function is typed `(...args: any[]) => any`, through a call
+(`__puzzle_app_fn("name")(…)`) rather than an index signature, so it
+type-checks under `noUncheckedIndexedAccess`.
 
 Failure policy outside a function's domain is host-defined (D173 V17). The
 value a call returns prints by D173 V6.
@@ -345,8 +352,14 @@ value a call returns prints by D173 V6.
   `time()` or `datetime()` to present: `datetime(in_timezone(ts, 'Asia/Tokyo'))`.
   It is standard because nothing in the expression language re-expresses an
   instant in another zone; the conformance rows compare the wall clock the
-  result reads as (`YYYY-MM-DDTHH:MM:SS`). A zone the host cannot resolve
-  renders the date unshifted.
+  result reads as (`YYYY-MM-DDTHH:MM:SS`). An omitted zone keeps the `'UTC'`
+  default; a `null` or `''` zone (an unset `user.timezone`) renders the date
+  un-shifted with no error. A zone the host cannot resolve renders the date
+  un-shifted too, and in PuzzleKit it is a development error when `Intl`
+  rejects it (`'America/New_Yrok'`, which passes the compile-time shape
+  check): logged once per zone through the warn-once ledger the unknown-preset
+  errors share, and stripped from production. An invalid date with a valid
+  zone is not reported.
 
 ### Dates: `date`, `time`, `datetime` (F4–F6)
 
