@@ -65,4 +65,23 @@ describe('/testing restores the formatter locale and <html lang> on destroy', ()
 		handles.push(view);
 		expect(view.element.textContent).toBe(viewerText);
 	});
+
+	it('4. overlapping handles destroyed out of order restore the pre-handle state', async () => {
+		const de = await mountView(Prices, { i18n: { locale: 'de', strings: {} } });
+		const fr = await mountView(Prices, { i18n: { locale: 'fr', strings: {} } });
+		handles.push(de, fr); // cleanup if an assertion below fails (destroy is idempotent)
+		expect(document.documentElement.lang).toBe('fr');
+
+		// The first handle goes first: the second is still live and keeps its locale.
+		de.destroy();
+		expect(document.documentElement.lang).toBe('fr');
+		fr.destroy();
+		expect(document.documentElement.getAttribute('lang')).toBeNull();
+	});
+
+	it('5. …so the next test is back to the viewer locale', async () => {
+		const view = await mountView(Prices);
+		handles.push(view);
+		expect(view.element.textContent).toBe(viewerText);
+	});
 });

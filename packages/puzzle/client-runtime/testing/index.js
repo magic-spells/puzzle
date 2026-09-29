@@ -42,10 +42,17 @@ export async function mountView(ViewClass, options = {}) {
 	installAdapterCapability(options.adapter, 'options.adapter');
 
 	const container = document.createElement('div');
-	const restoreLocale = options.i18n ? saveLocaleSlots() : null;
-	const context = makeContext(options);
-	await context.i18n?.__ready?.();
-	const instance = new ViewClass(context);
+	const restoreLocale = options.i18n ? holdLocaleSlots() : null;
+	let context;
+	let instance;
+	try {
+		context = makeContext(options);
+		await context.i18n?.__ready?.();
+		instance = new ViewClass(context);
+	} catch (error) {
+		restoreLocale?.();
+		throw error;
+	}
 	const unregisterStore = registerStore(context.store);
 	const unregisterRouter = registerRouter(context.router);
 	const {
@@ -106,15 +113,23 @@ export async function createTestApp(config = {}) {
 
 	const { routerInitialPath, i18n, ...appConfig } = config;
 	const container = document.createElement('div');
-	const restoreLocale = i18n ? saveLocaleSlots() : null;
-	const app = new PuzzleApp({
-		...appConfig,
-		target: container,
-		routerMode: memoryRouter({ initialPath: routerInitialPath }),
-		// The app's i18n service over the in-memory table (D175) — PuzzleApp's
-		// internal seam, so the real wiring (ctx.i18n, app.i18n, `t`) is what runs.
-		...(i18n ? { __i18n: testI18nOptions(i18n) } : null),
-	});
+	const restoreLocale = i18n ? holdLocaleSlots() : null;
+	let app;
+	try {
+		app = new PuzzleApp({
+			...appConfig,
+			target: container,
+			routerMode: memoryRouter({ initialPath: routerInitialPath }),
+			// The app's i18n service over the in-memory table (D175) — PuzzleApp's
+			// internal seam, so the real wiring (ctx.i18n, app.i18n, `t`) is what runs.
+			...(i18n ? { __i18n: testI18nOptions(i18n) } : null),
+		});
+	} catch (error) {
+		// An invalid config throws here; a hold left behind would keep every later
+		// test in the file from getting the pre-handle locale back.
+		restoreLocale?.();
+		throw error;
+	}
 	const mount = trackWork(app.mount());
 	let store = null;
 	let router = null;
@@ -189,16 +204,31 @@ function createTestI18n(options) {
 /**
  * The formatter locale and `<html lang>` are page-wide slots the i18n service
  * writes on every load and switch (D175), and nothing resets them when an app or
- * view goes away. A handle that installed translations snapshots both at mount
- * and puts them back on destroy, so a later test in the same file keeps
- * browser-locale behavior. Returns the restore function.
+ * view goes away. Every handle that installed translations holds them while it
+ * is live; when the LAST live hold is released, both go back to what they were
+ * before the first — so a later test in the same file keeps browser-locale
+ * behavior. Handles overlap and are destroyed in any order, which is why one
+ * handle never restores its own snapshot: a second handle's snapshot is the
+ * first handle's locale. Returns the release function (safe to call twice).
  */
-function saveLocaleSlots() {
-	const root = document.documentElement;
-	const locale = formatLocale;
-	const lang = root.getAttribute('lang');
+const localeHolds = new Set();
+let slotsBeforeHolds = null;
+
+function holdLocaleSlots() {
+	if (localeHolds.size === 0) {
+		slotsBeforeHolds = {
+			locale: formatLocale,
+			lang: document.documentElement.getAttribute('lang'),
+		};
+	}
+	const hold = {};
+	localeHolds.add(hold);
 	return () => {
+		if (!localeHolds.delete(hold) || localeHolds.size > 0) return;
+		const { locale, lang } = slotsBeforeHolds;
+		slotsBeforeHolds = null;
 		setFormatLocale(locale);
+		const root = document.documentElement;
 		if (lang === null) root.removeAttribute('lang');
 		else root.setAttribute('lang', lang);
 	};
