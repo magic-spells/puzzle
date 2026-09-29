@@ -364,9 +364,8 @@ checklist sent you.
   `{ zip.toUpperCase() }` throws on a number and sends the view to
   `errorView`. Coerce first where the value may not be a string:
   `{ String(zip).toUpperCase() }`.
-- **`.length` is not `| size`.** It counts UTF-16 units where `| size`
-  counted code points (`'👋'.length` is 2), and it prints nothing for `null`
-  or an object where `| size` gave `0` or the object's key count
+- **`.length` is not `| size`.** It prints nothing for `null` or an object
+  where `| size` gave `0` or the object's key count
   (`Object.keys(obj).length`).
 - **`+` concatenates strings.** `| plus` coerced both sides to numbers;
   `{ count + 1 }` with a string `count` of `'2'` prints `21`. Convert first:
