@@ -3,14 +3,32 @@ package codegen
 import (
 	"strings"
 	"testing"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
-// A string-literal preset or zone the date functions do not know is a
-// positioned compile error in every position the language reaches, handler
-// arguments included; a known one and a dynamic one compile.
-func TestLiteralDatePresetsAreChecked(t *testing.T) {
+// compileWarnings compiles a core template and returns its warnings.
+func compileWarnings(t *testing.T, body string) []Warning {
+	t.Helper()
+	sec, err := parser.SplitSections(coreSrc(body), "T.pzl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	return res.Warnings
+}
+
+// A string-literal preset or zone the standard date functions do not know is
+// a positioned compile-time warning in every position the language reaches,
+// handler arguments included — never an error, because an app may register
+// its own date/time/datetime (shadowing wins, D6) with presets of its own.
+// A known preset, a dynamic one and a handler's own call draw nothing.
+func TestLiteralDatePresetsWarn(t *testing.T) {
 	for _, tc := range []struct{ name, body, want string }{
-		{"time typo", "<p>{ time(at, 'shrot') }</p>", "T.pzl:2:17: unknown time preset 'shrot' — the presets are 'short', 'medium', 'long' and 'iso'"},
+		{"time typo", "<p>{ time(at, 'shrot') }</p>", "T.pzl:2:17: unknown time preset 'shrot' — the standard presets are 'short', 'medium', 'long' and 'iso'; the standard time() renders its default for any other"},
 		{"date in an attribute", "<p title={ date(at, 'full') }>x</p>", "unknown date preset 'full'"},
 		{"datetime in a handler argument", "<button @click={ save(datetime(at, 'longg')) }>x</button>", "unknown datetime preset 'longg'"},
 		{"a retired preset name", "<p>{ datetime(at, 'date') }</p>", "'date' is not a datetime preset — call date(value) for that"},
@@ -19,9 +37,13 @@ func TestLiteralDatePresetsAreChecked(t *testing.T) {
 		{"in_timezone empty", "<p>{ in_timezone(at, '') }</p>", "'' is not a time zone id"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := compileCore(t, "  "+tc.body)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("error = %v, want it to contain %q", err, tc.want)
+			ws := compileWarnings(t, "  "+tc.body)
+			if len(ws) != 1 {
+				t.Fatalf("want one warning, got %v", ws)
+			}
+			got := ws[0].File + ":" + itoa(ws[0].Line) + ":" + itoa(ws[0].Col) + ": " + ws[0].Message
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("warning = %q, want it to contain %q", got, tc.want)
 			}
 		})
 	}
@@ -31,8 +53,12 @@ func TestLiteralDatePresetsAreChecked(t *testing.T) {
 		"<p>{ date(in_timezone(at, 'America/New_York')) } { in_timezone(at, 'UTC') } { in_timezone(at, 'Etc/GMT+5') } { in_timezone(at, '+05:30') } { in_timezone(at, zone) }</p>",
 		"<button @click={ time(at, 'shrot') }>x</button>",
 	} {
-		if _, err := compileCore(t, "  "+body); err != nil {
-			t.Errorf("%s: unexpected error %v", body, err)
+		// The handler named `time` draws its own shadow warning (§9 c), never a
+		// preset one: its call is the view's handler, not the function.
+		for _, w := range compileWarnings(t, "  "+body) {
+			if strings.Contains(w.Message, "preset") || strings.Contains(w.Message, "time zone") {
+				t.Errorf("%s: unexpected warning %v", body, w)
+			}
 		}
 	}
 }

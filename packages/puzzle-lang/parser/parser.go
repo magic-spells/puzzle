@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
@@ -1104,12 +1105,20 @@ func parseWhenValues(raw string, pos, valPos Position, file string, sc exprScope
 	for i, sp := range spans {
 		ast, perr := parseExprAt(raw[sp[0]:sp[1]], cur.at(sp[0]), file, sc.valueOpts())
 		if perr != nil {
+			if perr.code == expr.CodePipe {
+				// `{:when 'a' | 'b'}` is an attempt at alternatives, not a pipe.
+				perr.Message = whenPipeMessage
+			}
 			return nil, nil, perr
 		}
 		asts[i] = ast
 	}
 	return vals, asts, nil
 }
+
+// whenPipeMessage replaces the expression language's `|` steer inside a
+// {:when} value, where a `|` is an attempt to list alternatives.
+const whenPipeMessage = "a {:when} lists its alternatives with commas — write {:when 'a', 'b'}; there is no `|` in template expressions"
 
 // splitWhenValues is parseWhenValues' template half: the trimmed values and
 // the untrimmed span of each in raw.
@@ -1173,6 +1182,14 @@ func parseForHeader(rest string, pos, restPos Position, file string, sc exprScop
 	// bindings do not reach its header. peelForCounter keeps the head starting
 	// where rest does, so offsets into head are offsets into rest.
 	head := f.headText
+	if f.rangeSteer != "" {
+		// `{#for i in 1...n}`: the bound's own errors first, so the steer never
+		// quotes an invalid bound back (`{#for 1...v | round, i}`).
+		if _, perr := parseExprAt(head[f.headSplit+3:], restPos.advance(head[:f.headSplit+3]), file, sc.valueOpts()); perr != nil {
+			return nil, perr
+		}
+		return nil, errAt(file, pos, "%s", f.rangeSteer)
+	}
 	if f.IsRange {
 		if f.RangeFromAST, perr = parseExprAt(head[:f.headSplit], restPos, file, sc.valueOpts()); perr != nil {
 			return nil, perr
@@ -1194,6 +1211,9 @@ type forHeader struct {
 	*For
 	headText  string
 	headSplit int
+	// rangeSteer is the `{#for i in a...b}` steer, reported by parseForHeader
+	// once the range's upper bound has parsed.
+	rangeSteer string
 }
 
 // splitForHeader is parseForHeader's template half: the header's forms and
@@ -1219,7 +1239,8 @@ func splitForHeader(rest string, pos Position, file string) (*forHeader, *ParseE
 		// compiles to a green build that throws `Cannot use 'in' operator` on the
 		// first render. Steer to the documented form instead.
 		if item, low, ok := splitForIn(from); ok && expr.IsIdentifier(item) {
-			return nil, errAt(file, pos, "{#for} range loops bind the counter after the range — write {#for %s...%s, %s}", low, to, item)
+			steer := fmt.Sprintf("{#for} range loops bind the counter after the range — write {#for %s...%s, %s}", low, to, item)
+			return &forHeader{For: &For{IsRange: true, Pos: pos}, headText: rest, headSplit: idx, rangeSteer: steer}, nil
 		}
 		return &forHeader{For: &For{IsRange: true, RangeFrom: from, RangeTo: to, Counter: counter, Pos: pos}, headText: rest, headSplit: idx}, nil
 	}

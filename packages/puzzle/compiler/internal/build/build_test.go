@@ -433,7 +433,7 @@ type definesFixture struct {
 	portal   bool
 	raw      bool
 	snippets bool
-	// rawHTML pipes a value through the D174 `raw` formatter; newlineToBr
+	// rawHTML renders a value through the D174 `raw` function; newlineToBr
 	// through `newline_to_br` only.
 	rawHTML     bool
 	newlineToBr bool

@@ -21,7 +21,7 @@ func parseExprAt(src string, pos Position, file string, opts expr.Options) (expr
 	n, err := expr.Parse(src, toExprPos(pos), opts)
 	if err != nil {
 		e := err.(*expr.Error)
-		return nil, &ParseError{File: file, Line: e.Pos.Line, Col: e.Pos.Col, Message: e.Message, Note: e.Note}
+		return nil, &ParseError{File: file, Line: e.Pos.Line, Col: e.Pos.Col, Message: e.Message, Note: e.Note, code: e.Code}
 	}
 	return n, nil
 }

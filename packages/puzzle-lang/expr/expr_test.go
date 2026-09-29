@@ -163,7 +163,7 @@ func TestMethodTable(t *testing.T) {
 // Options is variadic: Parse(src, base) is the value-position default.
 func TestParseDefaultOptions(t *testing.T) {
 	if _, err := Parse("x => x", Pos{Line: 1, Col: 1}); err == nil {
-		t.Error("an arrow at the top level must fail without CallArgument")
+		t.Error("an arrow at the top level must fail: arrows are call arguments only")
 	}
 	if _, err := Parse("event", Pos{Line: 1, Col: 1}); err == nil {
 		t.Error("event must fail outside a handler")

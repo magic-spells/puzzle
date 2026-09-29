@@ -112,23 +112,36 @@ func TestParseInterpolationExpressions(t *testing.T) {
 // toward a call, positioned at the `|` itself, and `||` stays logical OR.
 func TestPipeIsTheSteerError(t *testing.T) {
 	const want = "`| name` pipes were removed — write `name(value)`; bitwise OR is not available"
-	cases := []struct{ name, src string }{
-		{"text", "<p>{ price | currency }</p>"},
-		{"text with arguments", "<p>{ body | truncate(120) }</p>"},
-		{"brace attribute", "<p title={ price | currency }></p>"},
-		{"quoted attribute", `<p title="a { price | currency } b"></p>`},
-		{"component prop", "<Card n={ list | join(', ') }/>"},
-		{"key", "{#for t in todos}<li key={ t.id | slug }></li>{/for}"},
-		{"{#if}", "{#if tags | size}<p></p>{/if}"},
-		{"{:else if}", "{#if a}<p></p>{:else if tags | size}<p></p>{/if}"},
-		{"{#unless}", "{#unless tags | size}<p></p>{/unless}"},
-		{"{#case}", "{#case status | downcase}{:when 'a'}<p></p>{/case}"},
-		{"{:when}", "{#case s}{:when 'a' | upcase}<p></p>{/case}"},
-		{"{#for} collection", "{#for t in todos | sort}<p></p>{/for}"},
-		{"{#for} range", "{#for 1...n | round}<p></p>{/for}"},
-		{"inline {#if}", `<p class="{#if a | b}on{/if}"></p>`},
-		{"nested in an argument", "<p>{ f(a | b) }</p>"},
-		{"handler argument", "<p @click={ go(a | b) }></p>"},
+	removed := func(name, alt string) string {
+		return "the `" + name + "` formatter was removed — write " + alt + "; there are no `|` pipes in template expressions"
+	}
+	cases := []struct{ name, src, want string }{
+		{"text", "<p>{ price | currency }</p>", want},
+		{"text with arguments", "<p>{ body | truncate(120) }</p>", want},
+		{"brace attribute", "<p title={ price | currency }></p>", want},
+		{"quoted attribute", `<p title="a { price | currency } b"></p>`, want},
+		{"component prop", "<Card n={ list | pretty(', ') }/>", want},
+		{"key", "{#for t in todos}<li key={ t.id | slug }></li>{/for}", want},
+		{"{#if}", "{#if tags | any}<p></p>{/if}", want},
+		{"{:else if}", "{#if a}<p></p>{:else if tags | any}<p></p>{/if}", want},
+		{"{#unless}", "{#unless tags | any}<p></p>{/unless}", want},
+		{"{#case}", "{#case status | label}{:when 'a'}<p></p>{/case}", want},
+		{"{#for} collection", "{#for t in todos | ordered}<p></p>{/for}", want},
+		{"{#for} range", "{#for 1...n | round}<p></p>{/for}", want},
+		{"inline {#if}", `<p class="{#if a | b}on{/if}"></p>`, want},
+		{"nested in an argument", "<p>{ f(a | b) }</p>", want},
+		{"handler argument", "<p @click={ go(a | b) }></p>", want},
+		// A removed formatter names its replacement: written as a call it
+		// would find nothing, a silent pass-through in production.
+		{"removed: upcase", "<p>{ name | upcase }</p>", removed("upcase", "`value.toUpperCase()`")},
+		{"removed: size in a header", "{#if tags | size}<p></p>{/if}", removed("size", "`value.length`")},
+		{"removed: sort in a loop", "{#for t in todos | sort}<p></p>{/for}", removed("sort", "`list.toSorted((a, b) => …)`")},
+		{"removed: join in a prop", "<Card n={ list | join(', ') }/>", removed("join", "`list.join(', ')`")},
+		// In a {:when} value a `|` is an attempt at alternatives.
+		{"{:when} alternatives", "{#case s}{:when 'a' | 'b'}<p></p>{/case}", whenPipeMessage},
+		{"{:when} formatter", "{#case s}{:when 'a' | upcase}<p></p>{/case}", whenPipeMessage},
+		// The counter steer never quotes a piped bound back.
+		{"{#for} range with a counter", "{#for i in 1...v | round}<p></p>{/for}", want},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,13 +151,17 @@ func TestPipeIsTheSteerError(t *testing.T) {
 			if !ok {
 				t.Fatalf("want a ParseError, got %v", err)
 			}
-			if pe.Message != want {
+			if pe.Message != tc.want {
 				t.Fatalf("got %q", pe.Message)
 			}
 			if off := strings.Index(src, " | ") + 1; pe.Col != off+1 {
 				t.Errorf("error at col %d, want the `|` at col %d", pe.Col, off+1)
 			}
 		})
+	}
+	// Without a pipe the counter steer still names the right form.
+	if pe := parseErr(t, "{#for i in 1...v}<p></p>{/for}"); pe == nil || pe.Message != "{#for} range loops bind the counter after the range — write {#for 1...v, i}" {
+		t.Errorf("range counter steer: %v", pe)
 	}
 	// `||` is logical OR in every position.
 	root := parseContent(t, "{#if a || b}<p>{ c || d }</p>{/if}")

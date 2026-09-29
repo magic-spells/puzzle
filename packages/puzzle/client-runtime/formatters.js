@@ -74,7 +74,7 @@ const REMOVED_FORMATTERS = {
 	trim: 'use `.trim()`',
 	strip: 'use `.trim()`',
 	replace:
-		"use `.replaceAll(search, replacement)` for plain strings, or `.split(search).join(replacement)`, which is exactly what this did",
+		"use `.replaceAll(search, replacement)` for plain strings, or `.split(search).join(replacement ?? '')`, which is what this did — `.join()` with no argument joins with ','",
 	join: "use `.join(', ')` — this joined with ', ' by default, and `.join()` with no argument joins with ','",
 	abs: 'use `Math.abs(x)`',
 	ceil: 'use `Math.ceil(x)`',

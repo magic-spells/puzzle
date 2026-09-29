@@ -109,6 +109,7 @@ func TestLowering(t *testing.T) {
 		{"library result member", "json(x).length", nil, `(__f["json"] || __f.__missing("json"))(__d.x)?.length`},
 		{"Math function", "Math.round(x * 100) / 100", nil, "Math.round(__d.x * 100) / 100"},
 		{"bare global", "Number(x) + parseInt(y)", nil, "Number(__d.x) + parseInt(__d.y)"},
+		{"URI global", "'/search?q=' + encodeURIComponent(q)", nil, "'/search?q=' + encodeURIComponent(__d.q)"},
 		{"Object.keys", "Object.keys(user).length", nil, "Object.keys(__d.user)?.length"},
 		{"Math constant", "Math.PI * r", nil, "Math.PI * __d.r"},
 		{"step off a Math constant", "Math.PI.toFixed(2)", nil, "Math.PI?.toFixed(2)"},

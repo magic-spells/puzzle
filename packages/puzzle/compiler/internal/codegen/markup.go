@@ -93,10 +93,10 @@ func exprPos(p expr.Pos) parser.Position {
 // checkTemplateExprs walks a template (or skeleton) before anything is
 // emitted and rejects, with a positioned error, what the lowering cannot
 // accept: a markup function anywhere but the outermost call of a text
-// interpolation, a literal date preset or time zone the library does not know
-// (checkLiteralArgs), and — as a safety net behind the parser — `this`. It
-// also warns once per handler whose name shadows a standard library function
-// (§9 c). The emitters can then trust every expression they lower.
+// interpolation, and — as a safety net behind the parser — `this`. It warns
+// once per handler whose name shadows a standard library function (§9 c) and
+// per literal date preset or time zone the standard function does not know
+// (checkLiteralArgs). The emitters can then trust every expression they lower.
 func (c *compiler) checkTemplateExprs(nodes []parser.Node, parentTag string) error {
 	for _, n := range nodes {
 		var err error
@@ -211,8 +211,8 @@ func (c *compiler) checkExpr(n expr.Node, where string) error {
 	})
 }
 
-// walkExpr walks n, failing on `this` and on a library call's unknown literal
-// preset or zone (checkLiteralArgs), and handing every markup call to
+// walkExpr walks n, failing on `this`, warning on a library call's unknown
+// literal preset or zone (checkLiteralArgs), and handing every markup call to
 // onMarkup. skip holds the calls that are not library calls: an event
 // handler's own call names a view handler.
 func (c *compiler) walkExpr(n expr.Node, skip map[*expr.Call]bool, onMarkup func(*expr.Call, string) error) error {
@@ -234,7 +234,7 @@ func (c *compiler) walkExpr(n expr.Node, skip map[*expr.Call]bool, onMarkup func
 				if IsMarkupFormatter(id.Name) {
 					err = onMarkup(n, id.Name)
 				} else {
-					err = c.checkLiteralArgs(id.Name, n)
+					c.checkLiteralArgs(id.Name, n)
 				}
 			}
 		}

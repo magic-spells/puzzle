@@ -81,8 +81,8 @@ export {};
 
 // libraryFunctionSignatures are the TypeScript signatures of the standard
 // function library (codegen.LibraryFunctionNames, DESIGN-expr-v2 §4), declared
-// on __PuzzleFunctions in the shim. P3 publishes the same signatures in
-// types/ — keep the two in sync; TestLibrarySignaturesMatchCodegen keeps this
+// on __PuzzleFunctions in the shim. types/index.d.ts (LibraryFunctions)
+// publishes the same signatures — keep the two in sync; TestLibrarySignaturesMatchCodegen keeps this
 // table and the compiler's name list identical. Values are `unknown` because
 // every function accepts any template value and prints nothing for a missing
 // one.

@@ -59,11 +59,14 @@ bitwise operators, `**`, assignment, `++`/`--`, the comma operator, `new`,
 `typeof`, `in`, `instanceof`, regex literals, spread, comments, statements,
 `this` — is a positioned error that names the construct and, where there is
 one, what to write instead. There are no formatter pipes: a `|` is the steer
-"`| name` pipes were removed — write `name(value)`", so a 0.7 template fails
-at the pipe itself. A browser global read as a value — `window`, `document`,
-`globalThis`, `navigator`, `location`, `console`, `localStorage`,
-`sessionStorage` — is an error too, unless a template binding or an arrow
-parameter owns the name: it is not template data, and `data()` reads it.
+"`| name` pipes were removed — write `name(value)`", or, after a formatter that
+is no longer a function (`| upcase`), the JavaScript that replaces it
+(`RemovedFormatters`), so a 0.7 template fails at the pipe itself. A read of
+the browser's global objects — `window`, `document`, `globalThis` — is an
+error too, unless a template binding or an arrow parameter owns the name:
+`data()` reads them. Other browser globals (`location`, `console`, …) are
+ordinary data names. `encodeURIComponent`, `decodeURIComponent`, `encodeURI`
+and `decodeURI` are callable globals beside `Number`, `String` and the rest.
 
 **The tree.** `Literal`, `TemplateLiteral`, `Identifier`, `Member`, `Call`,
 `Arrow`, `Unary`, `Binary`, `Logical`, `Conditional`, `Array`, `Object`,
@@ -95,8 +98,6 @@ name is a value: it reads, and calling it is an error, so `t('key')` inside
   must be renamed to be shown.
 - `Bindings` lists the names the enclosing template constructs bind; the
   template parser passes them, and each reads but cannot be called.
-- `CallArgument` parses the source as one call argument, where an arrow is
-  legal at the top level.
 
 **In the template parser.** Every AST field that holds an expression string
 has a parsed sibling filled while parsing — `Interpolation.ExprAST`,

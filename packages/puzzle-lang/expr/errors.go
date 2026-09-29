@@ -9,7 +9,14 @@ type Error struct {
 	Message string
 	// Note is optional supplementary guidance shown under the message.
 	Note string
+	// Code classifies an error a caller may want to re-word for its own
+	// context; "" for every other error. CodePipe marks the `|` steer, which
+	// the template parser words differently inside a {:when} list.
+	Code string
 }
+
+// CodePipe is the Code of the error for a `|` in an expression.
+const CodePipe = "pipe"
 
 func (e *Error) Error() string {
 	return fmt.Sprintf("%d:%d: %s", e.Pos.Line, e.Pos.Col, e.Message)
@@ -89,19 +96,66 @@ const (
 	msgTooDeep         = "expression nests too deeply"
 )
 
-// ambientGlobals are the browser globals a template author may reach for as
-// a value. None is template data, so a root read of one — `window.scrollY`,
-// `localStorage.theme` — is a positioned error rather than a silent read of a
-// data() field that happens to share the name. A bound name (a template
-// binding or an arrow parameter) and a call's callee are not reads of the
-// global, and neither is a handler value's own name.
-var ambientGlobals = map[string]bool{
-	"window": true, "document": true, "globalThis": true, "navigator": true,
-	"location": true, "console": true, "localStorage": true, "sessionStorage": true,
+// ambientGlobals are the browser's global objects, read as a data root:
+// `window.scrollY`, `document.title`, `globalThis.x`. They name nothing a
+// template can hold — a template reads data() — so a root read of one is a
+// positioned error rather than a silent read of a data() field that happens
+// to share the name. Other browser globals (`location`, `navigator`,
+// `console`, `localStorage`, …) are ordinary names, as they were in 0.7: a
+// data() field named `location` reads like any other. A bound name (a
+// template binding or an arrow parameter), a call's callee and a handler
+// value's own name are not reads of the global.
+var ambientGlobals = map[string]string{
+	"window":     "the browser window",
+	"document":   "the browser document",
+	"globalThis": "the global object",
 }
 
 func ambientMessage(name string) string {
-	return "`" + name + "` is not available in template expressions — read it in data() and pass the value"
+	return "`" + name + "` is " + ambientGlobals[name] + ", which template expressions cannot reach — read the value you need in data() and return it"
+}
+
+// RemovedFormatters maps each formatter a 0.7 template could pipe through,
+// and that is no longer a function, to what replaces it. The `|` steer names
+// the replacement for these, because writing one as a call (`upcase(x)`)
+// would compile to a library lookup that finds nothing: a development error,
+// and a silent pass-through in production.
+var RemovedFormatters = map[string]string{
+	"upcase":     "`value.toUpperCase()`",
+	"downcase":   "`value.toLowerCase()`",
+	"trim":       "`value.trim()`",
+	"strip":      "`value.trim()`",
+	"replace":    "`value.replaceAll(search, replacement)`",
+	"join":       "`list.join(', ')`",
+	"abs":        "`Math.abs(value)`",
+	"ceil":       "`Math.ceil(value)`",
+	"floor":      "`Math.floor(value)`",
+	"size":       "`value.length`",
+	"plus":       "the `+` operator",
+	"minus":      "the `-` operator",
+	"times":      "the `*` operator",
+	"divided_by": "the `/` operator",
+	"modulo":     "the `%` operator",
+	"default":    "`value ?? fallback`",
+	"split":      "`value.split(',')`",
+	"sort":       "`list.toSorted((a, b) => …)`",
+	"where":      "`list.filter(item => …)`",
+	"map":        "`list.map(item => …)`",
+	"uniq":       "a list deduplicated in data()",
+	"reverse":    "`list.toReversed()`",
+	"compact":    "`list.filter(item => item != null)`",
+	"first":      "`list.at(0)`",
+	"last":       "`list.at(-1)`",
+	"noescape":   "a plain `{ value }`",
+}
+
+// pipeMessage is the error for a `|` followed by name: the removed
+// formatter's replacement when name is one, else the general steer.
+func pipeMessage(name string) string {
+	if alt, ok := RemovedFormatters[name]; ok {
+		return "the `" + name + "` formatter was removed — write " + alt + "; there are no `|` pipes in template expressions"
+	}
+	return msgPipe
 }
 
 // prototypeNames are the property names JavaScript gives prototype behaviour

@@ -17,6 +17,10 @@ type ParseError struct {
 	// Note is optional supplementary guidance (e.g. a corrected-code example)
 	// surfaced by the esbuild plugin as an api.Note under the error message.
 	Note string
+
+	// code is the expression error's Code (expr.CodePipe), kept so a caller
+	// can re-word the error for the position it parsed.
+	code string
 }
 
 func (e *ParseError) Error() string {

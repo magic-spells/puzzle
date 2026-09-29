@@ -232,8 +232,9 @@ func IsLibraryFunction(name string) bool { return libraryFunctions[name] }
 // clockFunctions are the library functions whose output depends on the
 // current time rather than on their arguments alone, so a cached row using one
 // would display a frozen value ("1 second ago", forever); a site calling one
-// is `volatile` (D170). Hardcoded until the runtime manifest (P3) can name
-// them. App-registered functions are pure by contract.
+// is `volatile` (D170). The runtime manifest (builtins.json) lists names
+// only, so the one clock-reading built-in is named here. App-registered
+// functions are pure by contract.
 var clockFunctions = map[string]bool{"timeago": true}
 
 // ---- the lowerer ------------------------------------------------------------

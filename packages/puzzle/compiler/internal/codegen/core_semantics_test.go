@@ -92,10 +92,10 @@ func TestConditionHeadersKeepJavaScriptOr(t *testing.T) {
 // steer toward a call, and never falls back to a bitwise OR.
 func TestPipeIsACompileErrorInEveryHeader(t *testing.T) {
 	for _, tc := range []struct{ body, header string }{
-		{"{#if tags | size}<b>a</b>{/if}", "an {#if} condition"},
-		{"{#if ok}<b>a</b>{:else if others | size}<b>b</b>{/if}", "an {:else if} condition"},
+		{"{#if tags | any}<b>a</b>{/if}", "an {#if} condition"},
+		{"{#if ok}<b>a</b>{:else if others | any}<b>b</b>{/if}", "an {:else if} condition"},
 		{"{#unless user | blank}<b>c</b>{/unless}", "an {#unless} condition"},
-		{"{#case status | downcase}{:when 'a'}<b>d</b>{/case}", "a {#case} expression"},
+		{"{#case status | label}{:when 'a'}<b>d</b>{/case}", "a {#case} expression"},
 		{`<p class="x {#if on | truthy}on{/if}">y</p>`, "an {#if} condition in an attribute value"},
 	} {
 		sec, err := parser.SplitSections(coreSrc("  "+tc.body), "T.pzl")

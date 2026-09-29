@@ -30,9 +30,6 @@ type Options struct {
 	// A binding is a value: reading it is legal, calling it is an error, so
 	// `t('key')` inside `{#for t in …}` never reaches the library's `t`.
 	Bindings []string
-	// CallArgument marks the source as one argument of a call, so an arrow
-	// function is legal at its top level, as it is inside any argument list.
-	CallArgument bool
 }
 
 // maxDepth caps syntactic nesting (groups, unary operators, conditionals,
@@ -299,12 +296,7 @@ func (p *parser) parseTop() Node {
 	if t.kind == tEOF {
 		p.fail(t.pos, msgExpected)
 	}
-	var n Node
-	if p.opts.CallArgument {
-		n = p.parseArgument()
-	} else {
-		n = p.parseExpr()
-	}
+	n := p.parseExpr()
 	t = p.cur()
 	switch {
 	case t.kind == tEOF:
@@ -357,7 +349,7 @@ var binaryPrecedence = map[string]int{
 // excludedOperators are JavaScript binary, assignment, and update operators
 // the grammar leaves out, each with its message.
 var excludedOperators = map[string]string{
-	"&": msgBitwise, "|": msgPipe, "^": msgBitwise, "<<": msgBitwise, ">>": msgBitwise, ">>>": msgBitwise,
+	"&": msgBitwise, "^": msgBitwise, "<<": msgBitwise, ">>": msgBitwise, ">>>": msgBitwise,
 	"**": msgExponent,
 	"=":  msgAssign, "+=": msgAssign, "-=": msgAssign, "*=": msgAssign, "/=": msgAssign, "%=": msgAssign,
 	"**=": msgAssign, "<<=": msgAssign, ">>=": msgAssign, ">>>=": msgAssign, "&=": msgAssign,
@@ -373,6 +365,13 @@ func (p *parser) parseBinary(minBP int) Node {
 		if t.kind == tPunct {
 			bp = binaryPrecedence[t.text]
 			if bp == 0 {
+				if t.text == "|" {
+					name := ""
+					if next := p.peek(1); next.kind == tIdent {
+						name = next.text
+					}
+					panic(bailout{&Error{Pos: t.pos, Message: pipeMessage(name), Code: CodePipe}})
+				}
 				if msg, ok := excludedOperators[t.text]; ok {
 					p.fail(t.pos, msg)
 				}
@@ -776,11 +775,20 @@ func (p *parser) parseName() Node {
 		p.fail(t.pos, msgEvent)
 	}
 	id := &Identifier{Start: t.pos, Name: t.text}
-	if ambientGlobals[t.text] && !p.isBinding(t.text) && !p.isParam(t.text) && !isPunct(p.peek(1), "(") {
-		p.ambient = append(p.ambient, id)
+	if !isPunct(p.peek(1), "(") {
+		p.noteAmbient(id)
 	}
 	p.advance()
 	return id
+}
+
+// noteAmbient records a read of a browser global object (ambientGlobals) as a
+// data root, unless a template binding or an arrow parameter owns the name.
+// checkAmbient reports it once the tree is complete.
+func (p *parser) noteAmbient(id *Identifier) {
+	if _, ok := ambientGlobals[id.Name]; ok && !p.isBinding(id.Name) && !p.isParam(id.Name) {
+		p.ambient = append(p.ambient, id)
+	}
 }
 
 // isParam reports whether name is an arrow-function parameter in scope.
@@ -965,8 +973,9 @@ func (p *parser) parseObject() Node {
 				if t.text == "event" && !p.opts.Handler && !p.eventBound() {
 					p.fail(t.pos, msgEvent)
 				}
-				obj.Entries = append(obj.Entries, Entry{Key: t.text, KeyPos: t.pos, Shorthand: true,
-					Value: &Identifier{Start: t.pos, Name: t.text}})
+				id := &Identifier{Start: t.pos, Name: t.text}
+				p.noteAmbient(id)
+				obj.Entries = append(obj.Entries, Entry{Key: t.text, KeyPos: t.pos, Shorthand: true, Value: id})
 			case isPunct(c, "(") || (t.text == "get" || t.text == "set" || t.text == "async") &&
 				(c.kind == tIdent || c.kind == tString || isPunct(c, "[")):
 				p.fail(c.pos, msgObjectMethod)

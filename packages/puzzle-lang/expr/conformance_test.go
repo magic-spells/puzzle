@@ -18,7 +18,6 @@ type parseCase struct {
 	Name      string    `json:"name"`
 	Src       string    `json:"src"`
 	Base      *expr.Pos `json:"base"`
-	Argument  bool      `json:"argument"`
 	Handler   bool      `json:"handler"`
 	Bindings  []string  `json:"bindings"`
 	OK        bool      `json:"ok"`
@@ -52,7 +51,7 @@ func TestConformanceExpressionsParse(t *testing.T) {
 			if c.Base != nil {
 				base = *c.Base
 			}
-			n, err := expr.Parse(c.Src, base, expr.Options{CallArgument: c.Argument, Handler: c.Handler, Bindings: c.Bindings})
+			n, err := expr.Parse(c.Src, base, expr.Options{Handler: c.Handler, Bindings: c.Bindings})
 			if c.OK {
 				if err != nil {
 					t.Fatalf("%q: unexpected error %v", c.Src, err)

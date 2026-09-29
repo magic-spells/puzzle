@@ -43,7 +43,7 @@
         {#for seg in segments, si}<span>{#case seg.kind}{:when 'mention'}<a href="/u/{ seg.value }" class="text-accent hover:underline" @click={ nav('/u/' + seg.value, event) }>@{ seg.value }</a>{:when 'hashtag'}<a href="/explore" class="text-accent hover:underline" @click={ nav('/explore', event) }>#{ seg.value }</a>{:else}{ seg.value }{/case}</span>{/for}
       </div>
 
-      <!-- Action row. Counts run through | compact_number (847 → "847", 3.4M). Reply
+      <!-- Action row. Counts run through compact_number() (847 → "847", 3.4M). Reply
            icon routes to the detail thread; rechirp/like toggle the record's
            local flags and light up green/pink. record.update() (inside the model
            methods) notifies subscribers, so the feed's owning view re-runs data()
