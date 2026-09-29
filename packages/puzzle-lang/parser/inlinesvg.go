@@ -74,8 +74,12 @@ func ScanSVGFile(src []byte, filename string) (rootAttrs []Attr, inner string, e
 	s := string(src)
 
 	// Strip an optional XML prolog, DOCTYPE, and leading comments/whitespace in
-	// any order (real Illustrator/Figma exports carry them).
+	// any order (real Illustrator/Figma exports carry them). A leading UTF-8
+	// BOM is an encoding marker; positions stay in file coordinates.
 	i := 0
+	if strings.HasPrefix(s, "\xEF\xBB\xBF") {
+		i = 3
+	}
 	for {
 		for i < len(s) && isSpaceByte(s[i]) {
 			i++
