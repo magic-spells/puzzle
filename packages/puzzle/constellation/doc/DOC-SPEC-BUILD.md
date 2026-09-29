@@ -442,6 +442,13 @@ app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
   of the script body plus the checked `.pzl.ts` template wrapper that imports
   it. Plain JavaScript is never silently promoted into `checkJs`. (`--js`, which
   would check JS script bodies too, is reserved and errors as not implemented.)
+  Its handlers take any arguments: their parameters are only what TypeScript
+  infers from untyped JS, so `@click={ play(event) }` against `play: () => {}`
+  is not an arity error. Handler names are checked against the keys of the
+  `events` field, so a misspelled handler is reported — and so is one attached
+  at runtime rather than declared there (`this.events.play = …` in the
+  constructor or `created()`). The argument expressions are still checked; a
+  `lang="ts"` component's handler calls stay fully checked.
 - **Positions are byte-exact.** Each virtual file carries a `.segments.json`
   sidecar pairing emitted ranges with the source ranges they were copied from;
   generated scaffolding and inserted data prefixes carry no segment, so they

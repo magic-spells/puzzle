@@ -526,3 +526,79 @@ export default class Home extends PuzzleView { value = { upper: 'OK' }; }
 		t.Fatalf("a dotted component tag must not be a type error by itself: %v", err)
 	}
 }
+
+// handlerArityComponent is one component whose handlers declare no parameters
+// while the template passes them arguments — the documented
+// `@click={ play(event) }` form, a conditional handler, and a component
+// callback prop. lang is "" for plain JavaScript or ` lang="ts"`.
+func handlerArityComponent(lang, clickArgs string) string {
+	return `<puzzle-view>
+  <button @click={ play(` + clickArgs + `) }>Play</button>
+  <button @click={ open ? close(event) : null }>Close</button>
+  <Row @press={ play(event) } />
+</puzzle-view>
+<script` + lang + `>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  value = 123;
+  open = true;
+  events = {
+    play: () => {},
+    close: () => {},
+  };
+}
+</script>
+`
+}
+
+// A plain-JavaScript component's handler parameters are whatever TypeScript
+// infers from untyped JS (D165), so passing the DOM event to a handler that
+// ignores it — legal JavaScript and the documented form — is not an error.
+// A TypeScript component declares its handlers, so the same calls are.
+func TestJSHandlerArityIsNotChecked(t *testing.T) {
+	root := liveTSCApp(t)
+	writeLiveView(t, root, handlerArityComponent("", "event"))
+	if _, err := Run(root); err != nil {
+		t.Fatalf("a JavaScript handler called with the DOM event must not be an arity error: %v", err)
+	}
+
+	typed := liveTSCApp(t)
+	writeLiveView(t, typed, handlerArityComponent(` lang="ts"`, "event"))
+	_, err := Run(typed)
+	if err == nil {
+		t.Fatal("expected a TypeScript handler's arity to stay checked")
+	}
+	want := "app/views/Home.pzl:2:25: Expected 0 arguments, but got 1.\n" +
+		"app/views/Home.pzl:3:33: Expected 0 arguments, but got 1.\n" +
+		"app/views/Home.pzl:4:22: Expected 0 arguments, but got 1."
+	if got := err.Error(); got != want {
+		t.Fatalf("TypeScript handler diagnostics mismatch\nwant: %s\ngot:  %s", want, got)
+	}
+}
+
+// Relaxing a JavaScript handler's parameters leaves its argument expressions
+// checked as template expressions like any other, and the handler name is now
+// checked against the component's events field — TypeScript reads a JS object
+// literal as open, so a misspelled handler was not reported before.
+func TestJSHandlerArgumentsAndNameAreChecked(t *testing.T) {
+	root := liveTSCApp(t)
+	writeLiveView(t, root, handlerArityComponent("", "value.upper"))
+	_, err := Run(root)
+	if err == nil {
+		t.Fatal("expected a JavaScript handler's argument expression to be checked")
+	}
+	want := "app/views/Home.pzl:2:31: Property 'upper' does not exist on type 'number'."
+	if got := err.Error(); got != want {
+		t.Fatalf("handler argument diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
+	}
+
+	typo := liveTSCApp(t)
+	writeLiveView(t, typo, strings.Replace(handlerArityComponent("", "event"), "@click={ play(", "@click={ plya(", 1))
+	_, err = Run(typo)
+	if err == nil {
+		t.Fatal("expected a misspelled JavaScript handler to be reported")
+	}
+	if got := err.Error(); !strings.HasPrefix(got, "app/views/Home.pzl:2:20: Property 'plya' does not exist on type") {
+		t.Fatalf("handler name diagnostic mismatch: %s", got)
+	}
+}
