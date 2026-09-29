@@ -245,8 +245,8 @@ enforced, not merely advised.
   (see DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
-  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.7 KB
-  gzip**, todos **25.8 KB gzip** (measured after #171; the README banner
+  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.9 KB
+  gzip**, todos **25.9 KB gzip** (measured after #180; the README banner
   matches). Cards truthed through D176; the next free
   decision number is **D177**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
