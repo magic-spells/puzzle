@@ -156,7 +156,23 @@ Template expressions are checked against the component class's **declared
 fields** — `this` in the wrapper is `InstanceType<typeof Class> &
 Record<string, any>`, and `__d` is that same value. So a typo in a declared
 field or a misused method signature is caught; a read of a `data()`-derived key
-falls through the index signature and is not.
+falls through the index signature and is not. One consequence under an app's
+`noPropertyAccessFromIndexSignature`: a dotted read of a `data()`-only field
+(`__d.total`) is itself a diagnostic, because it resolves through that index
+signature — a known gap, not fixed.
+
+**Library calls are typed by name, never through an index signature.** A
+standard function emits `__puzzle_fn.name(…)` and is checked against its real
+signature (`libraryFunctionSignatures`). Any other bare call — an app function
+from the `formatters` config — emits `__puzzle_app_fn("name")(…)`, declared
+`(name: string) => (...args: any[]) => any`, so it is untyped but never
+"possibly undefined": `__PuzzleFunctions` has no index signature, and an app
+call type-checks under `noUncheckedIndexedAccess`. The emitter keeps the
+author's spelling where the render target adds safety — no `?.` guards and no
+`?? {}` default on `Object.keys`/`values`/`entries` (TypeScript 5.6+ reports a
+`??` whose left side can never be nullish) — and it runs the same codegen, so a
+compile error such as a template that reads `event` as data and also uses it
+in a handler (D176 rule 7) is reported here too.
 
 **Every expression the compiler emits is walked**, which includes the D166
 composition surface: a marker's arguments (`<Slot name="x" total={ … }>`,
