@@ -230,9 +230,15 @@ enforced, not merely advised.
   `|` steer naming each removed formatter's replacement. PR #172 (P1b) then
   made the section splitter skip `{#raw}` spans, made HTML void elements legal
   without a closer, and fixed the second-`{:else}` position and the `{#svg}`
-  BOM; PR #173 ported the splitter change to the eslint/prettier plugins. Still
-  ahead of the tag: the three editor grammars (in progress in the satellites
-  session) and the final review; the Go evaluator in Sites (P6) comes after
+  BOM; PR #173 ported the splitter change to the eslint/prettier plugins. The
+  final pre-tag review then landed #174 (the brace scanner no longer misreads
+  `/` after a non-ASCII name as a regex; `event` reads as data outside
+  handlers, with a compile error when one template also uses the DOM `event`)
+  and #175 (`Object.keys` on a missing value yields nothing, `puzzle check`
+  app calls type-check under `noUncheckedIndexedAccess`, a typo'd
+  `in_timezone` zone logs in development). Still ahead of the tag: the three
+  editor grammars (in progress in the satellites session); the Go evaluator in
+  Sites (P6) comes after
   (see DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
