@@ -236,9 +236,12 @@ enforced, not merely advised.
   handlers, with a compile error when one template also uses the DOM `event`)
   and #175 (`Object.keys` on a missing value yields nothing, `puzzle check`
   app calls type-check under `noUncheckedIndexedAccess`, a typo'd
-  `in_timezone` zone logs in development). Still ahead of the tag: the three
-  editor grammars (in progress in the satellites session); the Go evaluator in
-  Sites (P6) comes after
+  `in_timezone` zone logs in development), then #176 (the plugin ports of the
+  scanner rule) and #177 (a component class or tag may carry any JavaScript
+  identifier name — `Übersicht`, `概要`, `Straßenkarte` — with a compile error
+  where the scanner cannot read a class name to its end). Still ahead of the
+  tag: only the three editor grammars (in progress in the satellites session);
+  the Go evaluator in Sites (P6) comes after
   (see DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
@@ -470,9 +473,13 @@ GitHub, never deleted.
   the position (D141) — and any lowercase `<slot>`/`<children>` is a
   positioned compile error steering to the capitalized form (D134). A
   `<Snippet>` body is a composition **leaf** — no `<Children>`, `<Slot>`, nested
-  `<Snippet>`, or `ref=` inside one (D166). A capitalized tag name is validated
-  as `Ident('.'Ident)*`, so the dotted family form `<Frame.Wrapper>` is legal
-  and `<Frame-x>`, `<Frame:Wrapper>`, and `<Slot.Foo>` are not (D167).
+  `<Snippet>`, or `ref=` inside one (D166). A tag is a component when its
+  first character is anything but an ASCII lowercase letter — the only
+  characters that can begin an HTML element name — so `<Card>`, `<Übersicht>`
+  and `<概要>` are components and `<straße-karte>` is a custom element; a
+  component name is validated as `Ident('.'Ident)*` with JavaScript
+  identifier rules, so the dotted family form `<Frame.Wrapper>` is legal and
+  `<Frame-x>`, `<Frame:Wrapper>`, and `<Slot.Foo>` are not (D167).
 - DOM listeners are per-node and patch-managed. Component `@event` bindings
   are callback props, not custom DOM events; there is no `$emit`.
 - Template text is not HTML-entity decoded and interpolations become text
