@@ -54,8 +54,9 @@ import (
 //
 // The check target (puzzle check, WriteCheckValue/WriteCheckEvent) emits the
 // same tree as TypeScript with three differences: no member guard is added (an
-// authored `?.` stays), a library call is `__puzzle_fn.name(…)` so the shim's
-// signatures type it, and a method call whose arguments hold an arrow takes
+// authored `?.` stays), a standard library call is `__puzzle_fn.name(…)` so the
+// shim's signatures type it (an app function is `__puzzle_app_fn("name")(…)`,
+// untyped), and a method call whose arguments hold an arrow takes
 // its receiver through `__puzzle_check_list(…)`, which gives the arrow's
 // parameters a type when the receiver is an untyped data value.
 
@@ -682,10 +683,18 @@ func hasArrowArg(args []expr.Node) bool {
 // never is.
 func (l *lowerer) libraryCall(id *expr.Identifier, args []expr.Node) {
 	l.usesLib = true
-	if l.target == targetCheck {
+	switch {
+	case l.target == targetCheck && IsLibraryFunction(id.Name):
 		l.w.WriteString("__puzzle_fn.")
 		l.w.WriteMapped(id.Name, id.Start.Offset)
-	} else {
+	case l.target == targetCheck:
+		// An app function is typed through a call, not an index signature, so
+		// it stays callable under noUncheckedIndexedAccess and
+		// noPropertyAccessFromIndexSignature.
+		l.w.WriteString("__puzzle_app_fn(\"")
+		l.w.WriteMapped(id.Name, id.Start.Offset)
+		l.w.WriteString("\")")
+	default:
 		l.w.WriteString(registryRef(id.Name))
 	}
 	l.args(args)
