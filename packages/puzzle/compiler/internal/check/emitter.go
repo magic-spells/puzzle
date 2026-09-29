@@ -74,10 +74,11 @@ declare global {
   ): any;
 
   // A bare call names the function library: the standard functions typed
-  // below, and any app-registered function, untyped.
+  // below, and any app-registered function, untyped — its arguments and its
+  // result are any, as an untyped data() value is.
   interface __PuzzleFunctions {
 __LIBRARY_SIGNATURES__
-    [name: string]: (...args: any[]) => unknown;
+    [name: string]: (...args: any[]) => any;
   }
   const __puzzle_fn: __PuzzleFunctions;
 
@@ -112,6 +113,7 @@ var libraryFunctionSignatures = []struct{ name, signature string }{
 	{"time", "(value: unknown, preset?: string, locale?: string): string"},
 	{"datetime", "(value: unknown, preset?: string, locale?: string): string"},
 	{"timeago", "(value: unknown): string"},
+	{"in_timezone", "(value: unknown, zone?: string): Date | ''"},
 	{"truncate", "(value: unknown, length?: number, ellipsis?: string): string"},
 	{"capitalize", "(value: unknown): string"},
 	{"strip_html", "(value: unknown): string"},

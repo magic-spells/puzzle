@@ -115,7 +115,7 @@ func TestExpressionLanguageTypeChecksWithLiveTSC(t *testing.T) {
   <p>{ name.trim().toUpperCase() } { currency(price, '$', 2) } { truncate(title, 20) }</p>
   <p>{ list.filter(x => x.on).map((x, i) => i + x.n).join(', ') } { list.reduce((s, x) => s + x.n, 0) }</p>
   <p>{ tags.toSorted().at(-1) ?? '' } { Object.keys(counts).length } { Math.max(0, n - 1) }</p>
-  <p>{ myFormat(name) } { `+"`${ name } x`"+` }</p>
+  <p>{ myFormat(name).length + 1 } { myFormat(name, 2).nested.value } { `+"`${ name } x`"+` }</p>
   <button @click={ pick(tags.filter(t => t.length > 1)) } @input={ rename(event.target.value) }>x</button>
 </puzzle-view>
 <script lang="ts">

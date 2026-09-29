@@ -208,7 +208,9 @@ func (f *exprFacts) merge(other *exprFacts) {
 
 // LibraryFunctionNames is the standard function library a bare call `name(…)`
 // resolves to (DESIGN-expr-v2 §4, §9 b) — the names Sites implements in Go
-// with the same arguments. App-registered functions join it at run time. The
+// with the same arguments — plus `in_timezone`, a built-in treated as standard
+// until P3 settles membership against the conformance table. App-registered
+// functions join it at run time. The
 // compiler needs the set for two things: the warning when a view handler
 // shares a name with one (§9 c), and puzzle check's signatures, whose table
 // (check.libraryFunctionSignatures) must list exactly these names. P3 moves
@@ -216,7 +218,7 @@ func (f *exprFacts) merge(other *exprFacts) {
 var LibraryFunctionNames = []string{
 	"link", "t",
 	"currency", "percentage", "number_with_delimiter", "compact_number", "pluralize",
-	"date", "time", "datetime", "timeago",
+	"date", "time", "datetime", "timeago", "in_timezone",
 	"truncate", "capitalize", "strip_html", "strip_newlines",
 	"escape", "raw", "newline_to_br", "json",
 }

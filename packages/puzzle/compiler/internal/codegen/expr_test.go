@@ -355,7 +355,7 @@ func TestHandlerLibraryCallBindsRegistry(t *testing.T) {
 // §9 c: a view handler named like a standard function draws one positioned
 // warning; the generated code is unaffected.
 func TestHandlerLibraryNameCollisionWarns(t *testing.T) {
-	res, err := compileTemplate(t, "<puzzle-view>\n  <button @click={ date(x) }>a</button>\n  <button @click={ ok ? time : null }>b</button>\n  <button @click={ save(date(x)) }>c</button>\n</puzzle-view>", "")
+	res, err := compileTemplate(t, "<puzzle-view>\n  <button @click={ date(x) }>a</button>\n  <button @click={ ok ? time : null }>b</button>\n  <button @click={ save(date(x)) }>c</button>\n  <button @click={ in_timezone }>d</button>\n</puzzle-view>", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,6 +366,7 @@ func TestHandlerLibraryNameCollisionWarns(t *testing.T) {
 	wants := []string{
 		"T.pzl:2:20: the view handler `date` shares its name with the standard `date()` function",
 		"T.pzl:3:25: the view handler `time` shares its name with the standard `time()` function",
+		"T.pzl:5:20: the view handler `in_timezone` shares its name with the standard `in_timezone()` function",
 	}
 	if len(got) != len(wants) {
 		t.Fatalf("want %d warnings, got %d:\n%s", len(wants), len(got), strings.Join(got, "\n"))
