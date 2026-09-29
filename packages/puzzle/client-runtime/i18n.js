@@ -174,6 +174,9 @@ export function createI18n(options = {}) {
 	let locale = defaultLocale;
 	let token = 0;
 	let pending = null;
+	// The last re-render into the active locale failed, so the page may still show
+	// the old strings: a setLocale of that same locale re-renders instead of no-oping.
+	let stale = false;
 	let warned;
 
 	// Development-only, warn-once. Every CALL sits behind the inline
@@ -332,6 +335,15 @@ export function createI18n(options = {}) {
 				);
 			}
 			const my = ++token;
+			// Already the active locale: nothing to fetch or re-render (unless the last
+			// re-render into it failed). The token bump still overtakes a switch in
+			// flight (last-wins). This is also what ends a switch made from inside
+			// data() or a guard: the rebuild re-runs that code, and its setLocale of
+			// the now-active locale must not rebuild again.
+			if (match === locale && table && !stale) {
+				storeLocale(match);
+				return (pending = Promise.resolve());
+			}
 			const p = load(match).then(
 				(strings) => {
 					// Overtaken: this table is dropped, so follow whatever is now the latest
@@ -339,7 +351,14 @@ export function createI18n(options = {}) {
 					if (my !== token) return pending;
 					apply(match, strings);
 					storeLocale(match);
-					return refresh?.();
+					stale = false;
+					return Promise.resolve(refresh?.()).catch((err) => {
+						// Keyed on the locale, not the token: a same-locale no-op made during
+						// the rebuild (that data() re-asking, a double-click) bumps the token
+						// but leaves the page just as un-rebuilt.
+						if (locale === match) stale = true;
+						throw err;
+					});
 				},
 				(err) => {
 					// A switch that superseded the startup load and then failed would leave

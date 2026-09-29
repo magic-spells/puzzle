@@ -15,6 +15,15 @@ const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children)
 const text = (value) => new ViewNode('text', { value });
 const slot = () => new ViewNode(SLOT_TAG);
 const tick = () => new Promise((r) => setTimeout(r, 0));
+const settle = async () => {
+	for (let i = 0; i < 20; i++) await tick();
+};
+// Rejects instead of hanging, so a deadlock fails the test by name.
+const within = (p, what) =>
+	Promise.race([
+		p,
+		new Promise((_, reject) => setTimeout(() => reject(new Error(`${what} never settled`)), 500)),
+	]);
 
 const EN = { title: 'Home', greeting: 'Hello, {name}!', 'layout.brand': 'Shop', about: 'About' };
 const ES = { title: 'Inicio', greeting: '¡Hola, {name}!', 'layout.brand': 'Tienda', about: 'Acerca de' };
@@ -257,7 +266,7 @@ describe('PuzzleApp + i18n', () => {
 		expect(constructed).toEqual([]);
 	});
 
-	it('overlapping switches are last-wins and rebuild once', async () => {
+	it('overlapping switches are last-wins; landing back on the active locale rebuilds nothing', async () => {
 		let releaseEs;
 		const esGate = new Promise((r) => (releaseEs = r));
 		stubFetch(
@@ -274,7 +283,7 @@ describe('PuzzleApp + i18n', () => {
 		await first;
 		expect(app.i18n.locale).toBe('en');
 		expect(el.querySelector('h1').textContent).toBe('Home');
-		expect(constructed.filter((c) => c === 'home')).toHaveLength(1);
+		expect(constructed).toEqual([]);
 	});
 
 	it('the next navigation after a rebuild keeps working, in the new locale', async () => {
@@ -399,7 +408,7 @@ describe('PuzzleApp + i18n', () => {
 		};
 	}
 
-	it('a switch landing while a Back pop loads waits for it, then rebuilds that page', async () => {
+	it('a switch landing while a Back pop loads lets it land, then rebuilds that page', async () => {
 		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
 		const slow = gatedHome();
 		const { app, el } = make({ routes: slow.routes });
@@ -408,13 +417,41 @@ describe('PuzzleApp + i18n', () => {
 		const release = slow.hold();
 		history.back();
 		for (let i = 0; i < 5; i++) await tick();
-		const switched = app.i18n.setLocale('es');
-		for (let i = 0; i < 5; i++) await tick();
+		// Resolves once the strings are active — before the pop lands.
+		await app.i18n.setLocale('es');
+		expect(location.pathname).toBe('/');
+		expect(el.querySelector('h1').textContent).toBe('About');
 		release();
-		await switched;
+		await settle();
 		expect(location.pathname).toBe('/');
 		expect(el.querySelector('h1').textContent).toBe('Inicio');
 		expect(el.querySelector('header').textContent).toBe('Tienda');
+	});
+
+	it('setLocale then a Back pop ends on the popped page in the new locale', async () => {
+		let releaseEs;
+		const esGate = new Promise((r) => (releaseEs = r));
+		stubFetch(
+			{ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES },
+			{ gates: { 'locales/es.BBBB.json': esGate } }
+		);
+		const slow = gatedHome();
+		const { app, el } = make({ routes: slow.routes });
+		await app.mount();
+		await app.router.push('/about');
+		const release = slow.hold();
+		const switched = app.i18n.setLocale('es');
+		history.back();
+		for (let i = 0; i < 5; i++) await tick();
+		releaseEs();
+		await tick();
+		release();
+		await within(switched, 'setLocale');
+		await settle();
+		expect(location.pathname).toBe('/');
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+		expect(el.querySelectorAll('.home')).toHaveLength(1);
 	});
 
 	it('memory mode: a switch landing while back() loads waits for it, then rebuilds that page', async () => {
@@ -433,6 +470,145 @@ describe('PuzzleApp + i18n', () => {
 		expect(app.router.current.path).toBe('/');
 		expect(el.querySelector('h1').textContent).toBe('Inicio');
 		expect(el.querySelector('header').textContent).toBe('Tienda');
+	});
+
+	// `await ctx.i18n.setLocale(...)` from INSIDE a loading navigation — a root
+	// layout's data() applying the signed-in user's locale, a guard, a child view's
+	// data(). setLocale resolves once the new strings are active; it must not wait
+	// on the navigation that is awaiting it. That navigation lands, then the page
+	// is rebuilt once in the new locale (the rebuild's own data() re-asks for the
+	// active locale, which changes nothing and rebuilds nothing).
+	it('await setLocale inside a root layout data() lets the navigation land, in the new locale', async () => {
+		const fetch = stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		class UserLayout extends Layout {
+			async data() {
+				await this.ctx.i18n.setLocale('es'); // the signed-in user's locale
+				return {};
+			}
+		}
+		class Login extends PuzzleView {
+			render() {
+				return h('puzzle-view', { class: 'login' }, [text('login')]);
+			}
+		}
+		history.replaceState({}, '', '/login');
+		const { app, el } = make({
+			routes: [
+				{ path: '/login', view: Login },
+				{ path: '/', view: Home, layout: UserLayout },
+			],
+		});
+		await app.mount();
+		constructed = [];
+		await within(app.router.push('/'), 'push');
+		await settle();
+		expect(location.pathname).toBe('/');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+		expect(el.querySelectorAll('.home')).toHaveLength(1);
+		// The push, then one rebuild — no rebuild storm, and es fetched once.
+		expect(constructed.filter((c) => c === 'layout')).toHaveLength(2);
+		expect(fetch.mock.calls.filter(([url]) => url.endsWith('es.BBBB.json'))).toHaveLength(1);
+	});
+
+	it('await setLocale inside a route guard lets the navigation land, in the new locale', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const guard = vi.fn(async ({ ctx }) => {
+			await ctx.i18n.setLocale('es');
+			return true;
+		});
+		const { app, el } = make({
+			routes: [
+				{ path: '/', view: Home, layout: Layout },
+				{ path: '/about', view: About, layout: Layout, guard },
+			],
+		});
+		await app.mount();
+		constructed = [];
+		await within(app.router.push('/about'), 'push');
+		await settle();
+		expect(location.pathname).toBe('/about');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+		// The guard ran before the push chose what to keep, so the push rebuilt the
+		// layout already; then the one scheduled rebuild. The rebuild's guard re-asks
+		// for the active locale, which rebuilds nothing more.
+		expect(constructed.filter((c) => c === 'layout')).toHaveLength(2);
+		expect(guard).toHaveBeenCalledTimes(2);
+	});
+
+	// A child view whose data() switches the locale, reachable by push, replace or Back.
+	function switchingRoutes() {
+		const flag = { on: false };
+		class SwitchingHome extends Home {
+			async data() {
+				if (flag.on) await this.ctx.i18n.setLocale('es');
+				return super.data();
+			}
+		}
+		class SwitchingAbout extends PuzzleView {
+			async data() {
+				await this.ctx.i18n.setLocale('es');
+				return { heading: this.ctx.i18n.t('about') };
+			}
+			render() {
+				return h('puzzle-view', { class: 'about' }, [h('h1', {}, [text(this.getData().heading)])]);
+			}
+		}
+		return {
+			flag,
+			routes: [
+				{ path: '/', view: SwitchingHome, layout: Layout },
+				{ path: '/about', view: SwitchingAbout, layout: Layout },
+			],
+		};
+	}
+
+	it('await setLocale inside a child data() during a push lands on the page in the new locale', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const { app, el } = make({ routes: switchingRoutes().routes });
+		await app.mount();
+		const before = history.length;
+		await within(app.router.push('/about'), 'push');
+		await settle();
+		expect(location.pathname).toBe('/about');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+		expect(el.querySelectorAll('.about')).toHaveLength(1);
+		expect(history.length).toBe(before + 1);
+	});
+
+	it('await setLocale inside a child data() during a replace lands on the page in the new locale', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const { app, el } = make({ routes: switchingRoutes().routes });
+		await app.mount();
+		const before = history.length;
+		await within(app.router.replace('/about'), 'replace');
+		await settle();
+		expect(location.pathname).toBe('/about');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+		expect(history.length).toBe(before);
+	});
+
+	it('await setLocale inside a child data() during a Back pop lands on that page in the new locale', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const sw = switchingRoutes();
+		const { app, el } = make({ routes: [sw.routes[0], { path: '/about', view: About, layout: Layout }] });
+		await app.mount();
+		await app.router.push('/about');
+		sw.flag.on = true;
+		history.back();
+		await within(
+			(async () => {
+				while (location.pathname !== '/' || el.querySelector('.home') == null) await tick();
+			})(),
+			'pop'
+		);
+		await settle();
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+		expect(el.querySelectorAll('.home')).toHaveLength(1);
 	});
 
 	it('a switch plays no enter or out animation on the rebuilt chain', async () => {
@@ -520,6 +696,109 @@ describe('PuzzleApp + i18n', () => {
 		fail = false;
 		await app.router.push('/about');
 		expect(el.querySelector('header').textContent).toBe('Tienda');
+	});
+
+	// After a failed rebuild the new locale is active but the page is not in it,
+	// so asking for that locale again is a retry, never the same-locale no-op —
+	// even when a same-locale call landed during the failed rebuild (the layout's
+	// data() re-asking for the user's locale, or a second click) and so overtook it.
+	function fragileApp({ layoutReasks = false } = {}) {
+		const onError = vi.fn();
+		const state = { fail: false, gate: null };
+		class ReaskLayout extends Layout {
+			async data() {
+				if (layoutReasks) await this.ctx.i18n.setLocale(this.ctx.i18n.locale);
+				return {};
+			}
+		}
+		class Fragile extends Home {
+			async data() {
+				if (state.gate) await state.gate;
+				if (state.fail) throw new Error('boom');
+				return super.data();
+			}
+		}
+		return {
+			state,
+			onError,
+			...make({ onError, routes: [{ path: '/', view: Fragile, layout: ReaskLayout }] }),
+		};
+	}
+
+	it('setLocale retries after a failed rebuild', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const { app, el, state } = fragileApp();
+		await app.mount();
+		state.fail = true;
+		await expect(app.i18n.setLocale('es')).rejects.toThrow(/could not be rebuilt/);
+		expect(el.querySelector('h1').textContent).toBe('Home');
+		state.fail = false;
+		await within(app.i18n.setLocale('es'), 'retry');
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+	});
+
+	it('setLocale retries after a failed rebuild whose layout data() re-asked for the locale', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const { app, el, state } = fragileApp({ layoutReasks: true });
+		await app.mount();
+		state.fail = true;
+		await expect(within(app.i18n.setLocale('es'), 'switch')).rejects.toThrow(/could not be rebuilt/);
+		expect(el.querySelector('h1').textContent).toBe('Home');
+		state.fail = false;
+		await within(app.i18n.setLocale('es'), 'retry');
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+	});
+
+	it('setLocale retries after a failed rebuild that a second click landed in', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const { app, el, state } = fragileApp();
+		await app.mount();
+		let release;
+		state.gate = new Promise((r) => (release = r));
+		state.fail = true;
+		const first = app.i18n.setLocale('es');
+		while (app.i18n.locale !== 'es') await tick();
+		// The double-click: the strings are active, the rebuild is still loading.
+		await within(app.i18n.setLocale('es'), 'second click');
+		release();
+		await expect(first).rejects.toThrow(/could not be rebuilt/);
+		expect(el.querySelector('h1').textContent).toBe('Home');
+		state.gate = null;
+		state.fail = false;
+		await within(app.i18n.setLocale('es'), 'retry');
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+	});
+
+	it('a switch while the layout data() re-asks for the user locale settles without freezing the router', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		// The signed-in user's locale is en; the layout applies it on every build.
+		class UserLayout extends Layout {
+			async data() {
+				await this.ctx.i18n.setLocale('en');
+				return {};
+			}
+		}
+		const { app, el } = make({
+			routes: [
+				{ path: '/', view: Home, layout: UserLayout },
+				{ path: '/about', view: About, layout: UserLayout },
+			],
+		});
+		await app.mount();
+		// A switcher asks for es: its rebuild re-runs the layout, which switches
+		// back to the user's en while that rebuild is loading. The en rebuild waits
+		// for the es one instead of racing it, so neither waits on the other.
+		await within(app.i18n.setLocale('es'), 'switch');
+		await settle();
+		expect(app.i18n.locale).toBe('en');
+		expect(el.querySelector('h1').textContent).toBe('Home');
+		expect(el.querySelector('header').textContent).toBe('Shop');
+		await within(app.router.push('/about'), 'push');
+		expect(location.pathname).toBe('/about');
+		expect(el.querySelector('h1').textContent).toBe('About');
+		expect(el.querySelectorAll('.home')).toHaveLength(0);
 	});
 
 	it('an app without translations has no i18n on ctx or app', async () => {
