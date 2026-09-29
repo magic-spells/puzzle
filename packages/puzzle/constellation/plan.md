@@ -115,6 +115,35 @@ notes:
       DOC-SPEC-TEMPLATE §18/§57 and the puzzle-lang FILE/TEST cards describe the merged state. **The
       next free decision number is still D177.**
     sha: ed9245cb
+  - kind: state
+    text: >-
+      2026-09-29: the editor-grammar item above is done. PR #6 in puzzle-vscode, puzzle-sublime and
+      puzzle-zed was merged into release/0.4.0 at about 17:04 UTC. It marks a lone `|` as invalid,
+      keeps `||` as the operator, and treats non-ASCII tag names as components under the D167 rule;
+      the Zed pin was repointed in 1acb765. Round-4 review follow-ups merged into release/0.8.0 the
+      same day:
+
+      - #178: `puzzle check` tsconfig for TS 6/7, NodeNext, app `paths`, shim signatures.
+
+      - #179: i18n and router — a switch waits for any in-flight navigation; embed locale URLs
+      resolve through the manifest `base`; locale-file BOM; the `noescape` steer; the nested-key
+      `event` fix.
+
+      - #180: nested static-cache shift.
+
+      - #181: `await setLocale` inside data() or a guard.
+
+      - #182: JS handler arity is no longer checked, and handler names now are.
+
+      - #183: `puzzle init --typescript` scaffolds a real TS app.
+
+      - #184: CI installs TypeScript for the live-tsc tests.
+
+      - #185: `app/app.ts` entry, and `puzzle generate` writes TS in TS apps.
+
+
+      What remains before tagging: the satellites review (pieces, devtools, eslint, prettier; owned
+      by another session), a manual Windows CLI pass, and Cory's release:prep and publish.
 connected_repos:
   - name: puzzle-lang
     path: ../puzzle-lang
