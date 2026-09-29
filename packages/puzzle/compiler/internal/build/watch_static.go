@@ -375,10 +375,6 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if err := entryUnchanged(b.root, b.entry); err != nil {
-		return err
-	}
-
 	// Which routes this save can reach, decided BEFORE the compile memo is
 	// evicted: the {#svg} edge classification depends on lives in that memo's
 	// asset index, and eviction is exactly what drops it.
@@ -402,6 +398,14 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	endEvict := prof.phase("cache evict")
 	b.cache.Evict(changed)
 	endEvict()
+
+	// The entry check comes only now, after the batch is recorded in b.pending
+	// and evicted from the compile memo: a batch this refuses must still reach
+	// the rebuild that follows the fix, or an {#svg} asset edited alongside it
+	// would keep serving its stale memo entry.
+	if err := entryUnchanged(b.root, b.entry); err != nil {
+		return err
+	}
 
 	// Translations (D175): reload on the first rebuild and on any locale edit
 	// since the last landed swap — the accumulated batch, not just this burst, so

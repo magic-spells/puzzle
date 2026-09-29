@@ -42,7 +42,7 @@ func ResolveEntry(root string) (string, error) {
 	case hasJS:
 		return js, nil
 	}
-	return "", fmt.Errorf("entry point not found: %s (expected app/app.ts or app/app.js under %s)", js, absRoot)
+	return "", fmt.Errorf("entry point not found in %s (expected app.ts or app.js)", filepath.Dir(js)+string(filepath.Separator))
 }
 
 // entryUnchanged re-resolves the entry during a dev session and reports an

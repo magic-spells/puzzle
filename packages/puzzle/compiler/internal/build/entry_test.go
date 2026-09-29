@@ -70,10 +70,18 @@ func TestResolveEntry(t *testing.T) {
 		if err == nil {
 			t.Fatal("ResolveEntry must fail without an entry")
 		}
-		for _, want := range []string{"entry point not found", "app/app.ts or app/app.js"} {
+		// Names the directory and the pair, never one file as if it were the
+		// only candidate.
+		for _, want := range []string{
+			"entry point not found in " + filepath.Join(root, "app") + string(filepath.Separator) + " ",
+			"(expected app.ts or app.js)",
+		} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error missing %q:\n%s", want, err)
 			}
+		}
+		if strings.Contains(err.Error(), filepath.Join(root, "app", "app.js")) {
+			t.Errorf("error names app/app.js as the one missing file:\n%s", err)
 		}
 	})
 }
@@ -274,5 +282,82 @@ func TestBuildFixturesTypeScriptEntry(t *testing.T) {
 		if !strings.Contains(js, marker) {
 			t.Errorf("the --fixtures bundle is missing %q", marker)
 		}
+	}
+}
+
+// A batch the entry check refuses is not lost: the static builder records it in
+// pending (and evicts it from the compile memo) before refusing, so the rebuild
+// after the fix renders the edit made while the entry was ambiguous.
+func TestStaticWatchRefusedBatchReachesTheNextRebuild(t *testing.T) {
+	requireStaticRuntime(t)
+	root := writeSSGFixture(t, tsEntryFixture(baseSSGFixture()))
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{})
+	if err != nil {
+		t.Fatalf("NewStaticWatchBuilder: %v", err)
+	}
+	defer builder.Dispose()
+	if err := builder.Rebuild(nil); err != nil {
+		t.Fatalf("Rebuild: %v", err)
+	}
+
+	appJS := filepath.Join(root, "app", "app.js")
+	write(t, appJS, "export default 1;\n")
+	about := filepath.Join(root, "app", "views", "About.pzl")
+	write(t, about, "<puzzle-view>\n  <h1>ABOUT_EDITED_WHILE_REFUSED</h1>\n</puzzle-view>\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class About extends PuzzleView {}\n</script>\n")
+	if err := builder.Rebuild([]string{appJS, about}); err == nil || !strings.Contains(err.Error(), "conflicting build entries") {
+		t.Fatalf("Rebuild with both entries: err = %v", err)
+	}
+	if !builder.pending[about] {
+		t.Error("the refused batch was not recorded in pending")
+	}
+
+	if err := os.Remove(appJS); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.Rebuild([]string{appJS}); err != nil {
+		t.Fatalf("Rebuild after removing app.js: %v", err)
+	}
+	if page := readFile(t, filepath.Join(root, "dist", "about", "index.html")); !strings.Contains(page, "ABOUT_EDITED_WHILE_REFUSED") {
+		t.Errorf("the edit from the refused batch never rendered:\n%s", page)
+	}
+}
+
+// The SPA builder replays a refused batch into the next rebuild, so its
+// changed-path consumers (the usage scan among them) still see those paths.
+func TestWatchBuilderReplaysRefusedBatch(t *testing.T) {
+	root := scratchApp(t)
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME"))
+	write(t, filepath.Join(root, "app", "app.ts"), "import Home from './views/Home.pzl';\nconsole.log(Home);\n")
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("Rebuild: %v", err)
+	}
+
+	appJS := filepath.Join(root, "app", "app.js")
+	write(t, appJS, "export default 1;\n")
+	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME_EDITED"))
+	if _, err := b.Rebuild([]string{home}); err == nil {
+		t.Fatal("Rebuild with both entries should fail")
+	}
+	if len(b.refused) != 1 || b.refused[0] != home {
+		t.Errorf("refused batch = %v, want [%s] carried to the next rebuild", b.refused, home)
+	}
+	if err := os.Remove(appJS); err != nil {
+		t.Fatal(err)
+	}
+	out, err := b.Rebuild([]string{appJS})
+	if err != nil {
+		t.Fatalf("Rebuild after removing app.js: %v", err)
+	}
+	if !out.UsageScanned {
+		t.Error("the refused .pzl edit did not reach the next rebuild's usage scan")
+	}
+	if bundle := readDistBundle(t, root); !strings.Contains(bundle, "HOME_EDITED") {
+		t.Error("the bundle does not carry the edit made while the entry was refused")
 	}
 }

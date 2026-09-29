@@ -35,8 +35,11 @@ type WatchBuilder struct {
 	// or app/app.js). The esbuild context is frozen over it, so every rebuild
 	// re-resolves and refuses to go on once the answer changes.
 	appEntry string
-	pl       *plugin.Plugin
-	ctx      api.BuildContext
+	// refused holds the changed paths of rebuilds the entry check turned away,
+	// replayed into the next rebuild.
+	refused []string
+	pl      *plugin.Plugin
+	ctx     api.BuildContext
 
 	// fixtures is the generated --fixtures wrapper, zero when the flag is off. Its
 	// resolver plugin has to be re-registered every time a fresh esbuild context is
@@ -261,9 +264,15 @@ func (b *WatchBuilder) RebuildProfile(changed []string, prof *PhaseProfile) (Reb
 
 func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildResult, error) {
 	var out RebuildResult
+	// A batch the entry check refuses is carried into the next rebuild rather
+	// than dropped: the usage scan, locale reload and public sync below all key
+	// off `changed`, and the rebuild after the fix must still see those paths.
+	changed = append(b.refused, changed...)
 	if err := entryUnchanged(b.root, b.appEntry); err != nil {
+		b.refused = changed
 		return out, err
 	}
+	b.refused = nil
 	currentPublic := publicDir(b.root)
 	syncPublic := !b.landed || currentPublic != b.publicSource ||
 		pathsTouchDir(changed, currentPublic) || pathsTouchDir(changed, b.publicSource)

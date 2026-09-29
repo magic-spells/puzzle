@@ -106,6 +106,8 @@ describe('prerender build-time fetch', () => {
 		expect(chain).toContain('/api/notes.json');
 		expect(chain).toContain('no page origin');
 		expect(chain).toContain('apiURL');
+		// The entry may be either file (D54), so the advice names both.
+		expect(chain).toContain('in the app entry (app/app.ts or app/app.js)');
 		expect(chain).toContain('endpoint');
 		expect(chain).toContain('beforeMount');
 		// And never surfaces undici's bare message as the whole story.
