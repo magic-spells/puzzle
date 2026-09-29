@@ -1,13 +1,21 @@
 // Built-in formatter edges (D174, D175): `replace` with a missing or non-string
 // search, `strip_html` on hostile unterminated markup (must stay linear), and the
 // locale-rendered number formatters under a formatter locale Intl rejects.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { replace, strip_html, compact_number, number_with_delimiter, pluralize, timeago } from '../client-runtime/formatters/builtins.js';
 import { setFormatLocale, localeNumber } from '../client-runtime/formatters/locale.js';
 
 afterEach(() => setFormatLocale(undefined));
 
+// `replace` is deprecated (D176 §4) and warns once; spend that warning silently
+// (tests/formatters.test.js covers it) so these edges run quietly.
 describe('replace', () => {
+	beforeAll(() => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		replace('');
+		warn.mockRestore();
+	});
+
 	it('leaves the input alone when the search is missing or empty', () => {
 		expect(replace('say undefined', undefined)).toBe('say undefined');
 		expect(replace('say null', null, 'x')).toBe('say null');

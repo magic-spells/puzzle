@@ -34,7 +34,7 @@ SizeCount.prototype.render = function () {
             __l(this, this, 0, __d.todos, (s) =>
               new ViewNode('li', {
                 key: s.k,
-                '@click': (s.h0 ??= (event) => this.events.pick(s.item.tags.size)),
+                '@click': (s.h0 ??= (event) => this.events.pick(s.item?.tags?.size)),
               }, [
                 new ViewNode('text', { value: __s(__z(s.item?.tags), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todo.tags.size' : 0) + ' ' + __s(__z(s.item), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todo.size' : 0) }),
               ])

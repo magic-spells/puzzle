@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 )
 
 func TestSegmentRemapUTF8AndCRLF(t *testing.T) {
@@ -26,14 +29,23 @@ func TestSegmentRemapUTF8AndCRLF(t *testing.T) {
 	}
 }
 
+// The inserted __d. prefix is unmapped scaffolding; every authored byte after
+// it keeps its own column.
 func TestResolvedPrefixSegmentsPreserveExpressionColumn(t *testing.T) {
 	source := []byte(`<p>{ café.missing }</p>`)
 	authored := "café.missing"
 	sourceOffset := strings.Index(string(source), authored)
 	b := newMappedBuilder("app/views/Home.pzl", ".puzzle/check/src/views/Home.pzl.ts", source)
+	n, err := expr.Parse(authored, expr.Pos{Line: 1, Col: sourceOffset + 1, Offset: sourceOffset})
+	if err != nil {
+		t.Fatal(err)
+	}
 	b.WriteString("void (")
-	b.WriteResolved("__d.café.missing", authored, sourceOffset)
+	codegen.WriteCheckValue(b, n, nil, nil)
 	b.WriteString(");\n")
+	if !strings.Contains(b.String(), "__d.café.missing") {
+		t.Fatalf("lowered %q, want __d.café.missing", b.String())
+	}
 	b.table.generatedBytes = []byte(b.String())
 	b.table.sourceBytes = source
 

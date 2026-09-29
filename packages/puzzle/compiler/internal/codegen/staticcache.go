@@ -202,7 +202,7 @@ func (c *compiler) staticElementAttrs(el *parser.Element, scope scopeMap) bool {
 			// Includes `ref`, `key`, `island` and `flip`: framework-owned, but
 			// per-instance stable, so they survive caching (D170, static subtree caches).
 		case *parser.EventAttr:
-			ev, err := compileEventValue(at.Expr, scope, nil)
+			ev, err := c.compileEvent(at, scope, nil)
 			if err != nil || !ev.cacheable {
 				return false
 			}

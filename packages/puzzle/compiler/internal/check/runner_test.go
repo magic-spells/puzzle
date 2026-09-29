@@ -208,12 +208,12 @@ func TestTSCRunsUnderNodeFromAPathWithSpaces(t *testing.T) {
 	if tool.entry != entry {
 		t.Fatalf("entry = %q, want the typescript package entry %q", tool.entry, entry)
 	}
-	major, err := readTypeScriptMajor(tool)
+	version, err := readTypeScriptVersion(tool)
 	if err != nil {
-		t.Fatalf("readTypeScriptMajor: %v", err)
+		t.Fatalf("readTypeScriptVersion: %v", err)
 	}
-	if major != 5 {
-		t.Fatalf("major = %d, want 5", major)
+	if version != (TypeScriptVersion{5, 7}) {
+		t.Fatalf("version = %+v, want 5.7", version)
 	}
 }
 
@@ -388,7 +388,7 @@ export default class Home extends PuzzleView {
 	if err := os.WriteFile(filepath.Join(viewDir, "Home.pzl"), []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root, 7)
+	result, err := Generate(root, TypeScriptVersion{Major: 7})
 	if err != nil {
 		t.Fatal(err)
 	}

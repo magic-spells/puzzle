@@ -210,26 +210,44 @@ func TestGlobalResultTypes(t *testing.T) {
 // A large expression parses in linear time. Each shape (a flat operator
 // chain, a long array, a long string, a long argument list, a member path, and
 // a template literal with a substitution every five bytes) is timed at 16 KiB,
-// 64 KiB, 256 KiB, and 1 MiB. A linear parse costs about the same per byte at
-// every size; a quadratic one costs 16 times more per byte at 256 KiB than at
-// 16 KiB, and 64 times more at 1 MiB. The test fits the linear model t = c·n,
-// c being the cheapest per-byte cost the shape showed, and fails a size that
-// ran longer than linearHeadroom·c·n (linearHeadroomCI when CI is set) and
-// longer than linearFloor.
+// 64 KiB, 256 KiB, and 1 MiB, smallest first. A linear parse costs about the
+// same per byte at every size; a quadratic one costs 16 times more per byte at
+// 256 KiB than at 16 KiB, and 64 times more at 1 MiB.
+//
+// After each size the test fits the linear model t = c·n to the sizes timed so
+// far by least squares. A size's pull on c grows with the square of its
+// length, so c is in effect the per-byte cost of the largest sizes: the ones
+// where fixed costs and timer noise matter least, and where a quadratic term
+// shows. A linear parse costs a smaller size about c per byte, or more where
+// fixed costs weigh; a quadratic one costs it far less. So the test fails when
+// the fit comes to more than linearHeadroom (linearHeadroomCI when CI is set)
+// times what some size took, and it holds that verdict until the newest size
+// takes at least linearFloor. The fit is not the cheapest size's per-byte
+// cost: one reading that came out low would set it, and every other size
+// would then look slow.
 //
 // A timing test on a shared runner needs a fair measurement and a repeatable
 // verdict:
-//   - every timed parse starts from a collected heap with collection paused,
-//     so the time is the parser's own work. What collection costs depends on
-//     heap state the parse does not control: a small parse can finish below
-//     the runtime's minimum heap and never collect, and a heavy shape timed
-//     just before can leave a heap goal high enough that a mid-size parse
-//     skips collection while the 1 MiB one pays for it — the lopsided
-//     comparison that once put the linear template shape at 22 times the time
-//     for 4 times the input on a Windows runner. A memory limit restarts
-//     collection before a regression that allocates quadratically exhausts
-//     memory;
-//   - each size keeps the best of five runs;
+//   - a size is timed over repeated parses, at least linearMinParses of them
+//     and at least linearRun of wall time, and one parse costs the total over
+//     the count. A single parse is too short to time. Windows advances its
+//     monotonic clock once per timer interrupt, 0.5 to 15.6 ms apart, so a
+//     sub-millisecond parse reads as 0 or as a whole tick, and the fastest of
+//     several readings is 0. That is how a Windows runner once timed a 16 KiB
+//     parse at 0 ns/B, next to which every larger size looked infinitely
+//     slow. Timed over linearRun, a size is off by at most one tick per
+//     stretch of parses, and never reads as 0;
+//   - every stretch of timed parses starts from a collected heap with
+//     collection paused, so the time is the parser's own work. What collection
+//     costs depends on heap state the parse does not control: a small parse
+//     can finish below the runtime's minimum heap and never collect, and a
+//     heavy shape timed just before can leave a heap goal high enough that a
+//     mid-size parse skips collection while the 1 MiB one pays for it — the
+//     lopsided comparison that once put the linear template shape at 22 times
+//     the time for 4 times the input on a Windows runner. A stretch ends
+//     before it allocates linearStretchBytes, so collection stays paused
+//     through it, and a memory limit restarts collection before a regression
+//     that allocates quadratically exhausts memory;
 //   - a shape that fails is timed again, up to linearAttempts in all. A real
 //     regression fails every attempt; a busy runner does not.
 func TestLargeExpressionIsLinear(t *testing.T) {
@@ -269,19 +287,31 @@ func TestLargeExpressionIsLinear(t *testing.T) {
 }
 
 const (
-	// linearHeadroom is how far above the fitted linear model a size may run.
-	// Linear shapes measure within 1.2× of it; a quadratic one runs 16× over
-	// it at 256 KiB, and a quadratic term more than about twice the linear
-	// cost at 1 MiB crosses 3×.
+	// linearHeadroom is how far the fit may come over what a size took. Linear
+	// shapes measure within about 1.2× of it; a quadratic one comes to 15× its
+	// 16 KiB size at 256 KiB, and a quadratic term more than about twice the
+	// linear cost at 1 MiB crosses 3×.
 	linearHeadroom = 3.0
 	// linearHeadroomCI allows for a shared runner's noisier clock and memory.
-	// A quadratic shape still runs 16× over the model at 256 KiB, and a
-	// quadratic term more than about four times the linear cost at 1 MiB
-	// crosses 5×.
+	// A quadratic shape still comes to about 15× at 256 KiB, and a quadratic
+	// term more than about four times the linear cost at 1 MiB crosses 5×.
 	linearHeadroomCI = 5.0
-	// linearFloor exempts a size that parsed faster than this: too fast to
-	// judge. A real quadratic path crosses it by 256 KiB.
+	// linearFloor holds the verdict until the newest size parses in at least
+	// this long: until then every size is too fast to judge. A linear parse
+	// reaches it by 1 MiB; a real quadratic path crosses it by 256 KiB.
 	linearFloor = 20 * time.Millisecond
+	// linearRun and linearMinParses are the least wall time and the fewest
+	// parses a size is timed over.
+	linearRun       = 50 * time.Millisecond
+	linearMinParses = 3
+	// linearStretchBytes caps what a stretch of timed parses allocates between
+	// collections, so collection stays paused through the stretch and the heap
+	// stays near what one large parse needs. A parse that allocates more is a
+	// stretch alone.
+	linearStretchBytes = 64 << 20
+	// linearMemoryLimit restarts collection if a regression allocates
+	// quadratically. A 1 MiB shape allocates at most about 450 MiB a parse.
+	linearMemoryLimit = 1 << 30
 	// linearAttempts is how many times a failing shape is timed before the
 	// test fails.
 	linearAttempts = 3
@@ -290,49 +320,76 @@ const (
 var linearSizes = []int{16 << 10, 64 << 10, 256 << 10, 1 << 20}
 
 // measureLinear times gen's source at each of linearSizes, smallest first,
-// and reports whether every size stayed within headroom of the fitted linear
-// model. It stops at the first size that did not, so a quadratic regression
-// never runs its largest input.
+// and reports whether the least-squares fit t = c·n stayed within headroom of
+// what every size took. It stops at the first size where it did not, so a
+// quadratic regression never runs its largest input.
 func measureLinear(t *testing.T, gen func(n int) string, headroom float64) (string, bool) {
 	t.Helper()
-	var times []time.Duration
-	var perByte []float64 // ns per byte of source
+	var perByte []float64 // each size's ns per byte of source
 	var parts []string
-	cheapest, worst := math.Inf(1), 0.0
+	var sumNT, sumNN, fit, worst float64
+	judged := false
 	for _, n := range linearSizes {
 		src := gen(n)
-		d := bestParse(t, src)
-		c := float64(d.Nanoseconds()) / float64(len(src))
-		times, perByte = append(times, d), append(perByte, c)
-		cheapest = min(cheapest, c)
-		parts = append(parts, fmt.Sprintf("%d KiB %v (%.0f ns/B)", n>>10, d.Round(10*time.Microsecond), c))
-		worst = 0
-		for i, c := range perByte {
-			over := c / cheapest
-			if times[i] >= linearFloor && over > headroom {
-				return fmt.Sprintf("%s — %d KiB ran %.1f× the linear fit", strings.Join(parts, ", "), linearSizes[i]>>10, over), false
+		d := timeParse(t, src)
+		b, ns := float64(len(src)), float64(d.Nanoseconds())
+		perByte = append(perByte, ns/b)
+		parts = append(parts, fmt.Sprintf("%d KiB %v (%.0f ns/B)", n>>10, d.Round(time.Microsecond), ns/b))
+		// Least squares for t = c·n: c = Σ n·t / Σ n², each size weighing n².
+		sumNT, sumNN = sumNT+b*ns, sumNN+b*b
+		fit, worst = sumNT/sumNN, 0
+		judged = judged || d >= linearFloor
+		for i, cost := range perByte {
+			over := fit / cost
+			if judged && over > headroom {
+				return fmt.Sprintf("%s — the fit (%.0f ns/B) comes to %.1f× what %d KiB took",
+					strings.Join(parts, ", "), fit, over, linearSizes[i]>>10), false
 			}
 			worst = max(worst, over)
 		}
 	}
-	return fmt.Sprintf("%s — worst %.2f× the linear fit", strings.Join(parts, ", "), worst), true
+	verdict := ""
+	if !judged {
+		verdict = "; too fast to judge"
+	}
+	return fmt.Sprintf("%s — fit %.0f ns/B, at most %.2f× what a size took%s",
+		strings.Join(parts, ", "), fit, worst, verdict), true
 }
 
-// bestParse returns the fastest of five parses of src, each started from a
-// collected heap with collection paused until the heap reaches 1 GiB (a
-// 1 MiB shape allocates at most about 450 MiB).
-func bestParse(t *testing.T, src string) time.Duration {
+// timeParse returns what one parse of src costs, from at least
+// linearMinParses parses and at least linearRun of wall time. The parses run
+// back to back in stretches, each started from a collected heap with
+// collection paused and holding as many parses as fit in linearStretchBytes.
+func timeParse(t *testing.T, src string) time.Duration {
 	t.Helper()
 	defer debug.SetGCPercent(debug.SetGCPercent(-1))
-	defer debug.SetMemoryLimit(debug.SetMemoryLimit(1 << 30))
-	best := time.Duration(math.MaxInt64)
-	for i := 0; i < 5; i++ {
-		runtime.GC()
-		start := time.Now()
+	defer debug.SetMemoryLimit(debug.SetMemoryLimit(linearMemoryLimit))
+	parse := func() {
 		if _, err := Parse(src, Pos{Line: 1, Col: 1}); err != nil {
 			t.Fatalf("parse %d bytes: %v", len(src), err)
 		}
-		best = min(best, time.Since(start))
 	}
-	return best
+	// An untimed parse warms the code and a parse's worth of heap pages, and
+	// shows what one parse allocates.
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	parse()
+	runtime.ReadMemStats(&after)
+	perStretch := max(1, linearStretchBytes/max(1, int(after.TotalAlloc-before.TotalAlloc)))
+	var total time.Duration
+	parses := 0
+	for total < linearRun || parses < linearMinParses {
+		runtime.GC()
+		start := time.Now()
+		for range perStretch {
+			parse()
+			parses++
+			if total+time.Since(start) >= linearRun && parses >= linearMinParses {
+				break
+			}
+		}
+		total += time.Since(start)
+	}
+	return total / time.Duration(parses)
 }

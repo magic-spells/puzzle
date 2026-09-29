@@ -608,6 +608,9 @@ export default class Home extends PuzzleView {}
 		{name: "newline_to_br", template: `<puzzle-view><p>{ body | newline_to_br }</p></puzzle-view>`, want: true},
 		{name: "in a loop row", template: `<puzzle-view><ul>{#for c in cs}<li>{ c.html | raw }</li>{/for}</ul></puzzle-view>`, want: true},
 		{name: "in skeleton", template: `<puzzle-view><p>x</p></puzzle-view>`, skeleton: `<puzzle-skeleton><p>{ hint | raw }</p></puzzle-skeleton>`, want: true},
+		{name: "raw call", template: `<puzzle-view><p>{ raw(truncate(body, 9)) }</p></puzzle-view>`, want: true},
+		{name: "newline_to_br call", template: `<puzzle-view><p>{ newline_to_br(body) }</p></puzzle-view>`, want: true},
+		{name: "a view handler named raw is not the function", template: `<puzzle-view><button @click={ raw(body) }>x</button></puzzle-view>`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := writeApp(t, map[string]string{
@@ -624,7 +627,7 @@ export default class Home extends PuzzleView {}
 				t.Errorf("Features().RawHTML = %v, want %v", usage.Features().RawHTML, tt.want)
 			}
 			// Only `raw` keeps the sanitizer; `newline_to_br` alone does not.
-			wantSanitize := tt.want && strings.Contains(tt.template+tt.skeleton, "| raw")
+			wantSanitize := tt.want && (strings.Contains(tt.template+tt.skeleton, "| raw") || strings.Contains(tt.template, "{ raw("))
 			if usage.HasRawSanitize != wantSanitize {
 				t.Errorf("HasRawSanitize = %v, want %v", usage.HasRawSanitize, wantSanitize)
 			}
@@ -1030,9 +1033,10 @@ export default class Home extends PuzzleView {}
 	}
 }
 
-// Guard the implicit contract between scan.go (collectFormatters) and codegen
-// (applyFormatters): the scanner must see a formatter in EVERY position codegen
-// emits one, else the name is seeded nowhere and its guarded call falls through
+// Guard the implicit contract between scan.go (collectUsage) and codegen's
+// lowering (lower.go, which emits every library call and TEMPORARY pipe link):
+// the scanner must see a function in EVERY position codegen emits one, else
+// the name is seeded nowhere and its guarded call falls through
 // to the D43 __missing pass-through instead of the real builtin — a silent wrong
 // render the JS suite can't catch (it aliases to builtins-all). One distinct
 // formatter per emit site: text run, quoted-attr interpolation, and an
@@ -1057,7 +1061,7 @@ export default class Home extends PuzzleView {}
 	// downcase = text run, upcase = attr interpolation, trim = inline-if branch.
 	for site, want := range map[string]string{"text": "downcase", "attr": "upcase", "inline-if": "trim"} {
 		if !got[want] {
-			t.Errorf("scanner missed formatter %q at emit site %q; collectFormatters is out of sync with codegen.applyFormatters: %#v", want, site, got)
+			t.Errorf("scanner missed formatter %q at emit site %q; collectUsage is out of sync with codegen's lowering: %#v", want, site, got)
 		}
 	}
 }
@@ -1090,6 +1094,51 @@ export default class Home extends PuzzleView {}
 	} {
 		if !got[want] {
 			t.Errorf("scanner missed formatter %q in the %s position: %#v", want, site, got)
+		}
+	}
+}
+
+// A bare call names the function library, so the built-in tree-shaking sees a
+// function called in any expression position — and never a view handler's
+// own call, which shares no code with the library.
+func TestScanFunctionsCoverCallPositions(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/views/Home.pzl": `<puzzle-view>
+  <h1>{ capitalize(title) }</h1>
+  <a title={ truncate(name, 9) }>x</a>
+  <Card items={ list.map(x => currency(x)) }><Children item={ json(row) }/></Card>
+  <p class="{#if on}{ percentage(n) }{:else}{ compact_number(m) }{/if}">y</p>
+  {#if strip_html(body) == ''}<b>a</b>{/if}
+  {#case pluralize(n, 'a', 'b')}{:when 'a'}<b>b</b>{/case}
+  {#for d in dates.map(v => date(v))}<i>{ d }</i>{/for}
+  <button @click={ save(escape(draft)) }>s</button>
+  <button @click={ ok ? time(x) : null }>t</button>
+  <button @click={ strip_newlines }>u</button>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Card from './Card.pzl';
+export default class Home extends PuzzleView {}
+</script>
+`,
+	})
+	got, err := ScanFormatters(root)
+	if err != nil {
+		t.Fatalf("ScanFormatters: %v", err)
+	}
+	for site, want := range map[string]string{
+		"text": "capitalize", "attribute": "truncate", "arrow in a prop": "currency",
+		"marker arg": "json", "inline if then": "percentage", "inline if else": "compact_number",
+		"if condition": "strip_html", "case subject": "pluralize", "for collection": "date",
+		"handler argument": "escape",
+	} {
+		if !got[want] {
+			t.Errorf("scanner missed function %q in the %s position: %#v", want, site, got)
+		}
+	}
+	for _, handler := range []string{"time", "strip_newlines"} {
+		if got[handler] {
+			t.Errorf("a view handler named %q entered the function set: %#v", handler, got)
 		}
 	}
 }

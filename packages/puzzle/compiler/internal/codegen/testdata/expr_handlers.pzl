@@ -1,0 +1,26 @@
+<puzzle-view class="handlers">
+  <button @click={ clear }>Clear</button>
+  <button @click={ save(draft.trim(), tags.length) }>Save</button>
+  <input @input={ rename(event.target.value.trim()) } />
+  <form @submit:prevent={ submit(event, { id: form.id, tags: tags.toSorted() }) }></form>
+  <button @click={ open ? close : null }>Toggle</button>
+  <button @click={ user.admin && !locked ? promote(user.id) : null }>Promote</button>
+  <button @click={ date(when) }>Pick</button>
+  <button @click={ notify(t('saved', { name: user.name })) }>Notify</button>
+  <button @click={ remove(items.filter(item => item.done).map(item => item.id)) }>Purge</button>
+  <ul>
+    {#for item in items, i}
+      <li @click={ select(item.id, i) } @dblclick={ edit(item, event.detail) } @keydown:enter={ item.done ? undo(item) : null }>{ item.name }</li>
+    {/for}
+  </ul>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ExprHandlers extends PuzzleView {
+  data() {
+    return { draft: '', tags: [], form: {}, open: false, user: {}, locked: false, when: null, items: [] };
+  }
+}
+</script>

@@ -3,6 +3,7 @@ package codegen
 import (
 	"strings"
 
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
@@ -13,42 +14,36 @@ type autoBind struct {
 	spec   string // "v" | "vn" | "c"
 }
 
-// classifyBindExpr reports whether raw is exactly `ident` or `ident.ident`.
+// classifyBindExpr reports whether an expression is exactly `ident` or
+// `ident.ident` — a data field the edit can be written back to.
 // bare==true  => field is the local key ("draft"), target is "".
-// bare==false => target is the ROOT segment (unresolved), field the second.
-// Roots in jsKeywords/jsGlobals never classify. A bare root present in scope
-// (a {#for} variable) never classifies. A scoped root of a member path does.
-func classifyBindExpr(raw string, scope scopeMap) (target, field string, bare, ok bool) {
-	parts := strings.Split(strings.TrimSpace(raw), ".")
-	if len(parts) < 1 || len(parts) > 2 {
-		return "", "", false, false
-	}
-
-	root := parts[0]
-	if !isJSIdentifier(root) || jsKeywords[root] || jsGlobals[root] {
-		return "", "", false, false
-	}
-	// `event` is the reserved handler identifier (evScope); unless a scope
-	// explicitly names it, a path rooted on it is never a bindable data path.
-	if _, bound := scope[root]; root == "event" && !bound {
-		return "", "", false, false
-	}
-
-	if len(parts) == 1 {
-		if _, bound := scope[root]; bound {
+// bare==false => target is the ROOT name (unresolved), field the member.
+// A literal, a global, a call, an operator, a computed or optional step, or a
+// deeper path never classifies. A bare root that is a template binding (a
+// {#for} variable) never classifies; a binding's member does.
+func classifyBindExpr(n expr.Node, scope scopeMap) (target, field string, bare, ok bool) {
+	switch n := n.(type) {
+	case *expr.Identifier:
+		if _, bound := scope[n.Name]; bound || n.Name == "this" {
 			return "", "", false, false
 		}
-		return "", root, true, true
+		return "", n.Name, true, true
+	case *expr.Member:
+		root, isIdent := n.Object.(*expr.Identifier)
+		if !isIdent || n.Computed || n.Optional || root.Name == "this" {
+			return "", "", false, false
+		}
+		// `event` outside a handler is not a template name; unless a binding
+		// owns it, a path rooted on it is never a bindable data path.
+		if _, bound := scope[root.Name]; root.Name == "event" && !bound {
+			return "", "", false, false
+		}
+		// `x.size` classifies like any field (D176): on an object it IS the
+		// field (`product.size`). Binding the count of a list or string is
+		// meaningless and is not special-cased.
+		return root.Name, n.Property, false, true
 	}
-
-	// `x.size` classifies like any field (D176): on an object it IS the field
-	// (`product.size`), and the display side reads the same field through the
-	// `__z` helper. Binding the count of a list or string is meaningless and is
-	// not special-cased.
-	if !isJSIdentifier(parts[1]) {
-		return "", "", false, false
-	}
-	return root, parts[1], false, true
+	return "", "", false, false
 }
 
 // detectAutoBind inspects the whole element (conditions are sibling-aware) and
@@ -145,12 +140,13 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope scopeMap) *autoBind {
 		if !ok || at.Name != attrName {
 			continue
 		}
-		if len(at.Formatters) > 0 {
-			// `value={ name | upcase }` displays a formatted value (D173 V1);
-			// there is no field to write the edit back to, so it stays one-way.
+		if len(at.Formatters) > 0 { // P4: remove
+			// TEMPORARY (P4: remove): `value={ name | upcase }` displays a
+			// formatted value (D173 V1); there is no field to write the edit back
+			// to, so it stays one-way — as `value={ capitalize(name) }` does.
 			return nil
 		}
-		target, field, _, ok := classifyBindExpr(at.Expr, scope)
+		target, field, _, ok := classifyBindExpr(at.ExprAST, scope)
 		if !ok {
 			return nil
 		}

@@ -44,7 +44,7 @@ SnippetsHost.prototype.render = function () {
         fn: ({ user, group }) => ([
             new ViewNode('button', {
               class: 'person',
-              '@click': (event) => this.events.rename(user.id),
+              '@click': (event) => this.events.rename(user?.id),
             }, [
               new ViewNode('text', { value: __s(group?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ':' + __s(user?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) + ':' + __s(__d.suffix, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'suffix' : 0) }),
             ]),

@@ -412,8 +412,8 @@ props.
 
 - **`inline`** — the default, and what `baseline.json` was recorded from —
   passes data-capturing props: `@select={ selectRow(row) }`. `row` is a loop
-  variable, so codegen cannot cache the closure (D62,
-  `compileEventValue` in `compiler/internal/codegen/expr.go`) and mints a fresh
+  variable, so codegen cannot cache the closure (D62, the caching verdict of
+  `handler` in `compiler/internal/codegen/lower.go`) and mints a fresh
   arrow per row per parent render. Those arrows are component **props**, so they
   take part in `patchComponent`'s `shallowEqual(oldProps, newProps)` bailout
   (`client-runtime/views/viewManager.js`) — and a fresh function object never
