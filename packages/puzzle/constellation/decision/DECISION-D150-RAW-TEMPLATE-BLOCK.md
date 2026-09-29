@@ -116,8 +116,10 @@ positioned compile error. An unterminated block errors at its opener. A literal
 - **Emit every body byte-raw during prerender** — turns normal-element text into
   markup and bypasses D113's script breakout protections.
 - **Treat `{#raw}` as dynamic raw HTML** — there is no expression inside the
-  block and no runtime value can reach it; dynamic HTML injection remains
-  deferred.
+  block and no runtime value can reach it. Dynamic HTML is a value-level job:
+  the `raw()` function injects a value as markup through an allowlist
+  sanitizer ([[DECISION-D174-STANDARD-FORMATTERS]]), and this block stays
+  static.
 - **Let the section splitter scan a raw body as brace groups** — that inspects
   the body this decision says is never inspected. An unbalanced `{`, a quote or
   a `//` in raw content carries the JS-aware brace scan past `</puzzle-view>`
@@ -133,8 +135,9 @@ positioned compile error. An unterminated block errors at its opener. A literal
 
 Static JSON/options blocks and brace-heavy examples compile without escaping
 each brace. The parser, codegen, client DOM path, and prerender path are covered
-as one round-trip contract. Existing templates and the deferred dynamic raw-HTML
-boundary are unchanged.
+as one round-trip contract. Existing templates are unchanged, and so is the
+dynamic raw-HTML boundary, which is the sanitized `raw()` function (D174), not
+this block.
 
 **A raw block is formattable, so its outer whitespace is layout, not content.**
 The whitespace-only text nodes at each end of a raw span have the raw flag

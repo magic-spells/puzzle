@@ -70,13 +70,18 @@ give every template expression a typed home. `{#if}`/`{#case}` become real
 `if`/`switch`, `{#for}` becomes a call to a declared `__puzzle_check_each`
 whose item type is destructured out of the collection with a conditional type
 (a plain `readonly T[]` parameter would infer `unknown` from an untyped
-collection and turn every loop-variable read into a false positive), formatter
-pipes become `__puzzle_check_formatter(name, value, …args)` calls, and an
-`@event` binding is assigned to an
+collection and turn every loop-variable read into a false positive). Every
+template expression is written by codegen's own lowerer, from the tree the
+parser built — its check target ([[DECISION-D176-EXPRESSION-LANGUAGE]] rule
+8) — so a standard library call becomes `__puzzle_fn.name(…)` and any other
+bare call, an app function, `__puzzle_app_fn("name")(…)` (typed as described
+under *Scope* below). An `@event` binding is assigned to an
 `((event: any) => any) | null`-typed const so the handler-shape rules are
-checked too. The root `<puzzle-view>` tag's own attributes are real bindings and
-are checked like any other element's; `<puzzle-skeleton>` is walked in the same
-pass.
+checked too; inside it the free `event` is the DOM event, and a template that
+also reads `event` as data is codegen's rule 7 error, which this command
+reports like any compile error. The root `<puzzle-view>` tag's own attributes
+are real bindings and are checked like any other element's;
+`<puzzle-skeleton>` is walked in the same pass.
 
 **A JavaScript component emits a two-file pair.** `<name>.pzl.script.js` is an
 unchecked mirror of the script body (`checkJs: false`), and `<name>.pzl.ts` is
@@ -90,14 +95,15 @@ TypeScript's extension substitution resolves the wrapper's import of
 range copied out of the `.pzl` is recorded as a `Segment` pairing generated and
 source line/column/offset; generated scaffolding and inserted `__d.` prefixes
 carry no segment and therefore can never be mistaken for authored code. The
-expression writer walks the codegen-resolved string against the authored one and
-maps only the bytes they share — `ResolveCheckExpr` is insertion-only by
-contract, and an unexpected byte is left unmapped rather than given a
-manufactured position. The runner rewrites matching diagnostic lines from the
-run's own in-memory tables and the bytes it emitted, passing anything it cannot
-map through untouched — never a re-read, so a save while tsc is running cannot
-shift a reported position. Tables are also written as `.segments.json` sidecars
-beside each virtual file, for inspection.
+expression writer is the lowerer's `WriteCheckValue`/`WriteCheckEvent`: its
+`CheckWriter` writes every authored token of a template expression — a name, a
+property, a literal — mapped at that token's AST position, so nothing is
+matched by comparing strings and no byte gets a manufactured position. The
+runner rewrites matching diagnostic lines from the run's own in-memory tables
+and the bytes it emitted, passing anything it cannot map through untouched —
+never a re-read, so a save while tsc is running cannot shift a reported
+position. Tables are also written as `.segments.json` sidecars beside each
+virtual file, for inspection.
 
 **The tsconfig is generated, version-aware, and defensive.** The app's own
 `tsconfig.json` is `extends`-ed when present so the app's `strict`, `lib`, and
