@@ -640,6 +640,7 @@ Template-relevant sections in DOC-SPEC-VIEW are all PuzzleKit: §12 animations,
 
 ## Standard functions
 
+
 [[DECISION-D174-STANDARD-FORMATTERS]] fixes the **standard library: 19
 functions** with the same arguments and meaning in both hosts. The shared
 conformance table (`packages/puzzle-lang/conformance/functions.json`, embedded
@@ -692,7 +693,7 @@ Counts: 19 standard (12 identical-output, 6 locale-rendered, 1 translation),
 | `timeago` | relative time, read from the clock at render time | — (no clock at render time, by design) | PuzzleKit-only |
 | `upcase`, `downcase`, `trim`, `strip`, `replace`, `join`, `abs`, `ceil`, `floor` | removed: `.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll()`, `.join(', ')`, `Math.abs`/`ceil`/`floor` (development names the replacement) | in the registry | removed from both (D176); Sites pending |
 | `size`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `default` | removed: `.length`, the operators, `??` | in the registry | removed from both (D176); Sites pending |
-| `noescape` | removed: `raw` | alias of `raw` | removed from both; Sites pending |
+| `noescape` | removed: a plain `{ value }` (0.7's `noescape` printed text; `raw()` is only for HTML you mean to render) | alias of `raw` | removed from both; Sites maps it to `raw`; Sites pending |
 | `upper`, `lower` | — | aliases of `upcase`, `downcase` | removed from Sites; pending |
 | `split` | removed: `.split()` | separator required, nil stays nil | the method covers it; Sites decides at P6 |
 | `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last` | removed: `.toSorted()`, `.filter()`, `.map()`, `.toReversed()`, `.filter(x => x != null)`, `.at(0)`, `.at(-1)`; `uniq` is `data()` | list formatters | the methods cover most; Sites decides at P6 |

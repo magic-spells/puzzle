@@ -410,6 +410,7 @@ value a call returns prints by D173 V6.
 
 ## Removed names
 
+
 Removed outright, with no deprecation period in a published release. Cory:
 "remove them immediately. we're the only ones using puzzle." A call to a
 removed name reaches PuzzleKit's unknown-name guard
@@ -430,7 +431,7 @@ names the replacement in development (`REMOVED_FORMATTERS` in
 | `plus`, `minus`, `times`, `divided_by`, `modulo` | the operators |
 | `default` | `??` |
 | `split` | `.split()` |
-| `noescape` | `raw` |
+| `noescape` | a plain `{ value }` in PuzzleKit — 0.7's `noescape` printed text, and `raw()` is only for HTML you mean to render; Sites maps it to `raw` |
 
 Sites also removes `upper` and `lower`, its own duplicates of `upcase` and
 `downcase`, and with them the names above.
