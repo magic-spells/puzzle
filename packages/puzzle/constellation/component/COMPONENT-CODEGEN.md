@@ -95,6 +95,7 @@ a wrapper.
 
 ## Expressions: lowered from the AST (`lower.go`)
 
+
 The template parser attaches a parsed expression tree
 (`packages/puzzle-lang/expr`, [[DECISION-D176-EXPRESSION-LANGUAGE]]) to every
 expression position — `ExprAST`, `ArgsAST`, `CondAST`, `ValuesAST`,
@@ -105,13 +106,24 @@ header comment and is the contract:
 
 - **Names** resolve from the tree. Arrow parameters (kept on the lowerer's own
   stack) shadow template bindings, which shadow the handler's `event`; every
-  other name is a data root, `__d.<name>`. The **scopeMap** maps an in-scope
-  binding to the JavaScript it resolves to: the empty string emits the name bare
-  (a range variable, a snippet parameter, `ViewNode`), a non-empty value rewrites
-  it — a lowered row's `todo` → `s.item`, its counter → `s.i`, a mangled
-  `__pzl<name>`. An arrow parameter spelled like a row scope object is mangled
-  so the row's locals stay reachable in the arrow body. Unicode identifiers and
-  arrow parameters cannot be mis-prefixed.
+  other name is a data root, `__d.<name>` — `event` outside a handler
+  included, so `{ event.title }` is `__d.event?.title`. The **scopeMap** maps
+  an in-scope binding to the JavaScript it resolves to: the empty string emits
+  the name bare (a range variable, a snippet parameter, `ViewNode`), a
+  non-empty value rewrites it — a lowered row's `todo` → `s.item`, its counter
+  → `s.i`, a mangled `__pzl<name>`. An arrow parameter spelled like a row
+  scope object is mangled so the row's locals stay reachable in the arrow
+  body. Unicode identifiers and arrow parameters cannot be mis-prefixed.
+- **`event` used both ways is an error.** `lowerer.ident` notes, on the
+  `compiler`, the first place the template reads a free `event` as data (text,
+  an attribute, a block header, a handler's conditional test) and the first
+  place a handler uses it as the DOM event; `checkEventUses`, run after the
+  render and the skeleton are emitted, reports a template with both as a
+  positioned error at the handler's use that names the data read ("rename the
+  field or prop"). A loop item or counter, a snippet parameter or an arrow
+  parameter named `event` is its own binding and counts as neither, and a bare
+  handler has no authored `event`. `puzzle check` runs the same codegen, so it
+  reports the same error.
 - **Guards** (D173 V4): every member step, index step and method call is
   written optional — `a.b` → `<a>?.b`, `a[i]` → `<a>?.[<i>]`,
   `a.m(x)` → `<a>?.m(<x>)` — in every position, handler arguments included, so
@@ -124,8 +136,11 @@ header comment and is the contract:
   as `(__f["name"] || __f.__missing("name"))(…)` (the name JSON-quoted, since
   registry keys are arbitrary strings); a method stays the same JavaScript
   method, guarded; the allowed globals (`Math.round(x)`, `Number(x)`,
-  `Math.PI`) are verbatim. A file that calls a library function gets the
-  `const __f` registry line.
+  `Math.PI`) are verbatim, except that `Object.keys`, `values` and `entries`
+  take their first argument as `(<arg> ?? {})` (`objectGlobalArgs`), so a
+  missing value yields `[]` rather than JavaScript's `TypeError` and any other
+  value reaches the global unchanged — the render target only. A file that
+  calls a library function gets the `const __f` registry line.
 - **Operators and literals** keep JavaScript's meaning; parentheses come from
   operator precedence, never from source spacing (`??` is never emitted mixed
   unparenthesized with `&&`/`||`); an arrow body that is an object is
@@ -153,11 +168,15 @@ never cached — its condition is a guarded render-time read.
 
 **The check target.** The same lowerer writes TypeScript for `puzzle check`
 through `WriteCheckValue` / `WriteCheckEvent` (a `CheckWriter` maps every
-authored token back to its `.pzl` offset): no added guards (an authored `?.`
-stays), a library call as `__puzzle_fn.name(…)` so the shim's signatures type
-it (`check.libraryFunctionSignatures`, kept equal to `LibraryFunctionNames` by
-`TestLibrarySignaturesMatchCodegen`; app functions fall to the index signature
-`(...args: any[]) => any`), a method call with an arrow argument taking its
+authored token back to its `.pzl` offset): no added guards or `?? {}` defaults
+(an authored `?.` stays; TypeScript 5.6+ reports a `??` whose left side can
+never be nullish), a standard function call as `__puzzle_fn.name(…)` so the
+shim's signatures type it (`check.libraryFunctionSignatures`, kept equal to
+`LibraryFunctionNames` by `TestLibrarySignaturesMatchCodegen`), any other
+bare call as `__puzzle_app_fn("name")(…)`, declared
+`(name: string) => (...args: any[]) => any` — a call, not an index signature
+on `__PuzzleFunctions`, so an app function type-checks under
+`noUncheckedIndexedAccess` — a method call with an arrow argument taking its
 receiver through `__puzzle_check_list(…)` so an untyped receiver gives the
 arrow `any` parameters, and a bare handler written as the reference
 `this.events.name` rather than a synthesized call. The shim also references the
@@ -347,10 +366,12 @@ attribute names for ViewManager to apply.
 
 ## Two-way binding, conditional arity, inline SVG
 
+
 Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) lives in
 `binding.go`: `classifyBindExpr` reads the value's tree and accepts exactly an
-`Identifier` or a non-computed, non-optional `Member` on one (keyword, `this`
-and a free `event` never classify; a bare loop variable never classifies, a
+`Identifier` or a non-computed, non-optional `Member` on one (a keyword literal
+and `this` never classify; `event` classifies like any field name, so
+`value={ event.title }` two-way binds; a bare loop variable never classifies, a
 loop-var-rooted member path does; a call, an operator or a deeper path never
 does, so `value={ capitalize(name) }` stays one-way). `x.size` classifies like
 any field. `detectAutoBind` applies the element-level conditions (form-control
