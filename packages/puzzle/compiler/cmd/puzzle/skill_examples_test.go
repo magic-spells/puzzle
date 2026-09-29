@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/fs"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -56,5 +57,113 @@ func TestSkillNamesTheCopiedPiecesCssPath(t *testing.T) {
 	}
 	if !strings.Contains(skill, "copied `app/styles/pieces.css`") {
 		t.Error("SKILL.md should name the copied palette app/styles/pieces.css")
+	}
+}
+
+// compileSkillTemplate compiles one template the skill shows, as a view.
+func compileSkillTemplate(t *testing.T, template string) error {
+	t.Helper()
+	src := template
+	if !strings.Contains(src, "<puzzle-view") {
+		src = "<puzzle-view>" + src + "</puzzle-view>"
+	}
+	if !strings.Contains(src, "<script") {
+		src += "\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\n" +
+			"export default class Example extends PuzzleView {}\n</script>\n"
+	}
+	sec, err := parser.SplitSections(src, "Example.pzl")
+	if err != nil {
+		return err
+	}
+	_, err = codegen.Compile(sec, codegen.Options{Filename: "Example.pzl", Mode: codegen.ModeView})
+	return err
+}
+
+// Every template example the skill states as working compiles in the
+// expression language (D176): each ```html block, and each inline template
+// span — an interpolation `{ … }`, a {#for}/{#if} header, or an attribute or
+// handler binding. The spans the skill shows as compile errors must fail, so a
+// "this is an error" example can never quietly start compiling either.
+func TestSkillTemplateExamplesCompile(t *testing.T) {
+	skill := readSkill(t)
+
+	var blocks []string
+	var cur []string
+	in := false
+	for _, line := range strings.Split(skill, "\n") {
+		switch {
+		case !in && strings.HasPrefix(line, "```html"):
+			in, cur = true, nil
+		case in && strings.HasPrefix(line, "```"):
+			in = false
+			blocks = append(blocks, strings.Join(cur, "\n"))
+		case in:
+			cur = append(cur, line)
+		}
+	}
+	if len(blocks) < 3 {
+		t.Fatalf("expected the skill's html examples, found %d", len(blocks))
+	}
+	for _, block := range blocks {
+		// The skeleton outline stands in `…real template…` for a view's body.
+		block = strings.ReplaceAll(block, "…real template…", "<p>x</p>")
+		if err := compileSkillTemplate(t, block); err != nil {
+			t.Errorf("SKILL.md html example does not compile: %v\n%s", err, block)
+		}
+	}
+
+	// The examples written to show a compile error.
+	mustFail := map[string]bool{
+		"{ price | currency }": true,
+		"{ raw(x).trim() }":    true,
+		"{ escape(raw(x)) }":   true,
+		"{ raw(x) + 'a' }":     true,
+		"title={ raw(x) }":     true,
+		"{ raw(x) }":           false, // shown inside a raw-text element; alone it compiles
+	}
+	// Spans that are JavaScript object shapes in prose, not template expressions.
+	notTemplate := map[string]bool{
+		"{ error, info, retry }":                              true,
+		"{ path, name, view, layout, guard, meta, children }": true,
+		"{ q: 'x', tag: ['a','b'] }":                          true,
+		`{ "cart": { "title": "…" } }`:                        true,
+		"{ type, endpoint }":                                  true,
+		"{ valid, errors }":                                   true,
+		"{ endpoint: '/api/todos' }":                          true,
+		"type={ }":                                            true, // prose: "a dynamic type"
+	}
+	span := regexp.MustCompile("`([^`]*\\{[ #@][^`]*\\})`")
+	checked := 0
+	for _, m := range span.FindAllStringSubmatch(skill, -1) {
+		code := m[1]
+		var template string
+		switch {
+		case notTemplate[code]:
+			continue
+		case strings.HasPrefix(code, "{ "):
+			template = "<p>" + code + "</p>"
+		case strings.HasPrefix(code, "{#for ") && strings.HasSuffix(code, "}"):
+			template = "<ul>" + code + "<li>x</li>{/for}</ul>"
+		case strings.HasPrefix(code, "{#if ") && strings.HasSuffix(code, "}") && !strings.Contains(code, "{/if}"):
+			template = code + "<p>x</p>{/if}"
+		case regexp.MustCompile(`^[@a-z][\w:-]*=[{"]`).MatchString(code):
+			template = "<input " + code + " />"
+		default:
+			continue // a grammar outline such as `{#if}/{:else}` or `{#raw}…{/raw}`
+		}
+		checked++
+		err := compileSkillTemplate(t, template)
+		if mustFail[code] {
+			if err == nil {
+				t.Errorf("SKILL.md shows %s as a compile error, but it compiles", code)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("SKILL.md template example %s does not compile: %v", code, err)
+		}
+	}
+	if checked < 20 {
+		t.Fatalf("checked only %d inline template examples; the extraction is broken", checked)
 	}
 }

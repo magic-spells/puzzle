@@ -17,11 +17,11 @@
   },
   {
     "id": "p3",
-    "title": "Liquid-Style Formatters for Display Logic",
+    "title": "Display Functions Keep Templates Honest",
     "authorId": "u3",
     "tags": ["templates", "formatters"],
     "publishedAt": "2026-06-21T11:15:00.000Z",
-    "body": "Formatters are how Puzzle keeps display logic out of your components. Borrowed from Liquid, they chain left to right with a pipe: write { publishedAt | date('long') } or { title | truncate(60) } and the value is transformed only for display. The underlying record never changes. The framework ships with formatters for strings, numbers, arrays, and dates, and you register your own in the app config. The one rule worth repeating is that formatters are for formatting, not for filtering or sorting. Anything that changes which records you show belongs in data(), where it is easy to test and easy to read."
+    "body": "A Puzzle template expression is JavaScript, so a display transform is just a call: write { date(publishedAt, 'long') } or { truncate(title, 60) } and the value is transformed only for display. The underlying record never changes. The framework ships display functions for text, numbers, and dates, strings and lists bring their own methods, and you register your own functions in the app config. The one rule worth repeating is that display functions are for formatting, not for filtering or sorting. Anything that changes which records you show belongs in data(), where it is easy to test and easy to read."
   },
   {
     "id": "p4",

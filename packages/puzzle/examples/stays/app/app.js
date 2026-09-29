@@ -33,7 +33,7 @@ const app = new PuzzleApp({
 
   // Display-only formatters (logic belongs in data(), per SPEC §8). These only
   // shape values for presentation — ratings, word forms, and dates. Money uses
-  // the built-in currency formatter: `{ price | currency('$', 0) }` -> "$1,149".
+  // the built-in currency formatter: `{ currency(price, '$', 0) }` -> "$1,149".
   formatters: {
     // Two-decimal rating: 4.9 -> "4.90", 4.875 -> "4.88".
     rating: (n) => (Math.round((Number(n) || 0) * 100) / 100).toFixed(2),

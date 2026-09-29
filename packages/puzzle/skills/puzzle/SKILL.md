@@ -96,7 +96,7 @@ Template markup + `<script>` (+ optional `<style>`, `scoped` supported):
 
 ```html
 <puzzle-view>
-  <button class={ classes } @click={ increment }>{ count | number }</button>
+  <button class={ classes } @click={ increment }>{ number_with_delimiter(count) }</button>
 </puzzle-view>
 
 <script>
@@ -113,8 +113,8 @@ export default class Counter extends PuzzleView {
 </script>
 ```
 
-Template syntax: `{ expr | formatter }` (formatters are registered display
-helpers — the project term is *formatter*, never *filter*),
+Template syntax: `{ expr }` — a JavaScript-shaped expression (see *Template
+expressions* below; a display transform is a function call, `{ currency(price) }`),
 `{#if}/{:else if}/{:else}/{/if}`, `{#unless}`, `{#for item in items, i}`
 (trailing `, name` binds the index), `{#case}/{:when}`, `{#raw}…{/raw}` (brace
 grammar off inside — literal braces compile as-is, HTML still parses; no
@@ -125,33 +125,41 @@ anywhere, attribute values included, is `\{` / `\}` — e.g. `pattern="[0-9]\{5\
 `<script lang="ts">` for TypeScript (build remains transpile-only; run
 `puzzle check` separately for static checks).
 
-Built-in formatters are the standard set shared with Sites plus the
-browser-only `link`, `timeago`, `in_timezone`. Text: `trim`/`strip`,
-`upcase`, `downcase`, `capitalize` (first character only — `iPhone` stays
-`IPhone`), `truncate(n, '…')`, `replace(a, b)`, `strip_html`,
-`strip_newlines`, `pluralize('comment')` → `3 comments` (prints the count
-too; irregular `pluralize('person', 'people')`). Numbers: `round(places)`,
-`floor`, `ceil`, `abs`, `currency('$', 2)` → `-$1,234.50`, `percentage` (the
-number as written: `12.5` → `13%`), `number_with_delimiter` (viewer locale;
-an argument forces the delimiter), `compact_number` → `1.2K`. Values:
-`join`, `json`. Counting, math and fallbacks are not formatters — they are
-the expression's `.size`, operators and `??` (`{ total / count | round }`,
-`{ nickname ?? name }`); split a string in `data()`. Markup: `escape` (an identity on text), `raw` and `newline_to_br`
-(see Rendering HTML below). Dates: `date`/`time`/`datetime` with presets
-`short`, `medium` (default), `long`, `iso`. There are **no list formatters** —
-no `sort`, `where`, `map`, `first`, `last`: shape lists in `data()` and index
-with `items[0]` / `items[items.size - 1]`. Don't register an app formatter under a
+The function library is the standard set shared with Sites plus the
+browser-only `link` and `timeago`; a template calls one by name, and calls
+nest (`{ truncate(capitalize(title), 40) }`). Text: `capitalize` (first
+character only — `iPhone` stays `IPhone`), `truncate(s, n, '…')`,
+`strip_html`, `strip_newlines`, `pluralize(n, 'comment')` → `3 comments`
+(prints the count too; irregular `pluralize(n, 'person', 'people')`), `escape`
+(an identity on text). Numbers: `round(v, places)` (half away from zero, a
+number), `currency(v, '$', 2)` → `-$1,234.50`, `percentage(v, places)` (the
+number as written: `12.5` → `13%`), `number_with_delimiter(v)` (viewer locale;
+a second argument forces the delimiter), `compact_number(v)` → `1.2K`. Values:
+`json(v)`. Markup: `raw` and `newline_to_br` (see Rendering HTML below). Dates:
+`date(v, preset)`, `time(v, preset)`, `datetime(v, preset)` with presets
+`short`, `medium`, `long`, `iso` — no preset is `date` medium (`Sep 24, 2026`),
+`time` short (`3:04 PM`), `datetime` medium date + short time; a literal
+preset the library does not know (`time(at, 'shrot')`) is a compile error.
+`in_timezone(v, 'America/New_York')` re-expresses an instant; `t(key, vars)`
+translates (below); `link(path)` builds an href (Routing). What a JavaScript
+method or `Math` global already says is not a function: write
+`name.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll(a, b)`,
+`tags.join(', ')`, `Math.floor(x)` / `ceil` / `abs`. There are **no list
+functions** either — shape a list with array methods (`items.filter(…)`,
+`.toSorted(…)`, `.at(-1)`) or in `data()`. App functions register through the
+`formatters` config map (the key keeps its name) and are called like the
+built-ins: `{ specialFormat(product.title) }`. Don't register one under a
 standard name (it wins, with a dev warning, and changes what the name means).
 
 ### Rendering HTML: `raw` and `newline_to_br` (puzzle ≥ 0.8.0) — security
 
-`{ post.bodyHtml | raw }` renders a value as real HTML, and it is **always
+`{ raw(post.bodyHtml) }` renders a value as real HTML, and it is **always
 sanitized** — there is no unsanitized escape hatch, by design:
 
 ```html
-<article class="prose">{ post.bodyHtml | raw }</article>
-<p>{ comment.text | newline_to_br }</p>        <!-- escaped text, real <br>s -->
-<div>{ post.bodyHtml | truncate(300) | raw }</div>
+<article class="prose">{ raw(post.bodyHtml) }</article>
+<p>{ newline_to_br(comment.text) }</p>        <!-- escaped text, real <br>s -->
+<div>{ raw(truncate(post.bodyHtml, 300)) }</div>
 ```
 
 - **What survives:** paragraphs, headings, lists, tables, `b`/`i`/`em`/
@@ -187,16 +195,16 @@ sanitized** — there is no unsanitized escape hatch, by design:
     `aria-labelledby`. (GitHub-style `user-content-` id prefixing would avoid
     both; PuzzleKit keeps ids verbatim instead, so in-content anchors work.)
   - Prefer `newline_to_br` (or plain `{ text }`) for user-typed text.
-- **`raw` must be the LAST formatter of a TEXT interpolation.** Anything else
-  is a compile error: `{ x | raw | upcase }`, `title={ x | raw }`,
-  `<Card body={ x | raw } />`, `raw(…)` with arguments, or
-  `{ x | raw }` inside a raw-text element (`<script>`, `<style>`, `<textarea>`,
-  `<title>`, `<noscript>`, `<xmp>`, `<iframe>`, …). Pass
-  markup to a component as a string prop and pipe it through `raw` inside the
-  component's own template.
-- **App formatters can't inject markup.** Registering your own `raw` does
+- **`raw` must be the OUTERMOST call of a TEXT interpolation, with one
+  argument.** Anything else is a compile error: `{ raw(x).trim() }`,
+  `{ escape(raw(x)) }`, `{ raw(x) + 'a' }`, `title={ raw(x) }`,
+  `<Card body={ raw(x) } />`, `raw(a, b)`, or `{ raw(x) }` inside a raw-text
+  element (`<script>`, `<style>`, `<textarea>`, `<title>`, `<noscript>`,
+  `<xmp>`, `<iframe>`, …). Pass markup to a component as a string prop and
+  call `raw` on it inside the component's own template.
+- **App functions can't inject markup.** Registering your own `raw` does
   nothing for templates (a dev warning says so): the compiler lowers the name
-  itself. Don't try to build HTML strings in a custom formatter — they print
+  itself. Don't try to build HTML strings in a custom function — they print
   as text.
 - **Still treat it as untrusted-content rendering.** Sanitizing makes the
   markup inert, not trustworthy: a user can still post links and images.
@@ -212,11 +220,11 @@ Rules that bite:
 - **Text is text.** Template text is NOT HTML-entity decoded and interpolations
   become text nodes — you cannot inject markup through a plain `{ expr }`. The
   only ways markup gets in are compile-time `{#svg 'path.svg'}` inline SVG and
-  the sanitized `raw` formatter (see Rendering HTML above). `{#raw}` is
+  the sanitized `raw` function (see Rendering HTML above). `{#raw}` is
   neither — it only turns the brace lexer off; no runtime value can reach
   inside it.
 - **What prints.** `null`, `undefined`, `NaN`, ±Infinity and objects (a `Date`
-  included — format it with `| date`) print nothing; an object also warns in
+  included — format it with `date(v)`) print nothing; an object also warns in
   development. A list prints comma-joined in text, but in a brace-only
   attribute it is a space-joined token list that drops `false` and empty items,
   so the clsx idiom `class={ [active && 'on', 'btn'] }` writes `class="btn"`;
@@ -230,39 +238,65 @@ Rules that bite:
   (only the newline right after the start tag is dropped), so don't indent
   their contents with the template — bind them (`<pre>{ code }</pre>`,
   `value={ text }`) or dedent.
-- **Template expressions are data plus operators, not JavaScript** (puzzle ≥
-  0.8.0). Read fields, count with `.size` (a list's items or a string's
-  characters — `.length` is a compile error), compute with `+ - * / %` and
-  comparisons, fall back with `??` (not `||`, which swallows `0` and `''`).
-  Never call JavaScript on a value — `x.trim()`, `String(x)`, `set.has(x)`,
-  `items.at(-1)`, `Math.round(x)`, arrow functions and template literals are
-  compile errors; compute the value in `data()` (or use a formatter) and read
-  the field (`disabled={ !canSend }`). **`this` is not a template
+- **Template expressions are JavaScript, from a closed table** (puzzle ≥
+  0.8.0). One grammar, parsed once and shared with Sites: literals, template
+  literals, arrays and objects; `a.b`, `a?.b`, `a[i]`; the operators with
+  JavaScript precedence (`+ - * / %`, comparisons, `== != === !==`, `&& || !`,
+  `??`, `?:`). Count with `.length` (a string counts UTF-16 units, as in
+  JavaScript); fall back with `??` (not `||`, which swallows `0` and `''`).
+  Calls are three kinds: a **function** by name (`currency(price)`, the library
+  above plus the app's own); a **method** from the table on a string
+  (`trim`, `toUpperCase`, `toLowerCase`, `includes`, `startsWith`, `slice`,
+  `split`, `replace`, `replaceAll`, `padStart`, …), an array (`filter`, `map`,
+  `find`, `some`, `every`, `reduce`, `includes`, `join`, `slice`, `at`,
+  `toSorted`, `toReversed`, `flat`, …) or a number (`toFixed`, `toString`);
+  and the **globals** `Math.*` (`round`, `floor`, `ceil`, `abs`, `min`, `max`,
+  …), `Number(x)`, `String(x)`, `Boolean(x)`, `parseInt`, `parseFloat`,
+  `isNaN`, `isFinite`, `Array.isArray(x)`, `Object.keys/values/entries(x)`.
+  Arrow functions go only in call arguments:
+  `{#for t in todos.filter(t => !t.done)}`, `{ items.map(i => i.name).join(', ') }`.
+  No method mutates: there is no `push`, `sort`, `reverse` or `splice` — use
+  `toSorted` / `toReversed`. Everything else is a compile error that names the
+  replacement: other methods, `new` and `Date` (dates reach a template from
+  `data()` and print through `date()`), `JSON`, `**`, bitwise operators,
+  spread, regex literals, comments, assignment, `typeof`/`in`/`instanceof`.
+  A browser global read as a value — `window`, `document`, `globalThis`,
+  `navigator`, `location`, `console`, `localStorage`, `sessionStorage` — is a
+  compile error: read it in `data()` and pass the value. A 0.7 pipe
+  (`{ price | currency }`) is a compile error at the `|` that says to write
+  `currency(price)`; there is no bitwise OR. **`this` is not a template
   identifier**: a template never reaches the view instance, so `this` in a
-  value, a block header, a formatter argument, or an `@event` handler's
+  value, a block header, a function argument, or an `@event` handler's
   arguments or ternary condition is a compile error. Every value a template
   shows comes through `data()` — move a getter's body into a `data()` field,
   and call `this.refresh()` after a `setData()` that field depends on
-  (`setData()` alone does not re-run `data()`). A handler reaches the view
-  through its own name (`@click={ save(x) }` calls the view's `save`); its
-  arguments are otherwise JavaScript.
-  A `|` is a formatter pipe at the top level of a value — text, brace-only
-  attributes (`title={ price | currency }`), component props and marker
-  arguments; `||` stays logical OR, a `|` nested inside parentheses, brackets
-  or braces is a compile error (there is no bitwise OR), and a pipe followed
-  by anything but a formatter name is a compile error.
-  **Formatters never go in a condition or loop header:** a pipe in an `{#if}`,
-  `{:else if}`, `{#unless}`, `{#case}` or `{#for}` header, a `{:when}` value, or
-  an inline `{#if}` inside an attribute value is a compile error. Compute the
-  value in `data()` and test that field (`{#if hasTags}`), or shape the list
-  there and loop over it (`{#for item in sortedItems}`). Member access is guarded, so `{ user.address.city }`
-  prints nothing when `address` is missing instead of throwing (`?.` is legal
-  but unnecessary). A missing collection or a non-list loops zero times (dev
+  (`setData()` alone does not re-run `data()`).
+  Member access is guarded, so `{ user.address.city }` prints nothing when
+  `address` is missing instead of throwing (`?.` is legal but unnecessary),
+  and a method call on a missing value prints nothing too (dev warning). A
+  bare call names the library, so a data field is never callable; a bare read
+  names `data()`. A missing collection or a non-list loops zero times (dev
   warns on a non-list; range bounds truncate to whole numbers). `==` keeps its
   JavaScript meaning; `x == null` is the absence test. Object literals work as
-  formatter arguments (`{ 'cart.count' | t({ count: n }) }`, with an
-  app `t` formatter) but cannot START an expression. A component with no
-  `<script>` reads its props by bare name (`{ tone }`).
+  function arguments (`{ t('cart.count', { count: n }) }`) but cannot START an
+  expression. A component with no `<script>` reads its props by bare name
+  (`{ tone }`).
+- **Handlers are the one door into the view.** `@click={ save(items.length - 1) }`
+  calls the view's `save` with arguments in the same expression language,
+  evaluated when the event fires. Inside an `@event` value a bare call names
+  the view's handler first (a handler sharing a library function's name draws
+  a dev warning), and `event` is the DOM event: a chain rooted at it is
+  unrestricted — `event.target.value`, `event.target.closest('li')`,
+  `event.preventDefault()`. Calling a template binding (a loop item, a snippet
+  parameter, an arrow parameter) is a compile error.
+- **`puzzle check` types the language.** Methods are checked as the same
+  JavaScript methods, so a wrong method or argument is a real TypeScript error
+  at its line and column, and library calls check against the function
+  signatures (an app function is `any`). The check adds the ES2019–ES2023
+  string and array libs whatever the app's `target`, so `.at()`,
+  `.replaceAll()` and `.toSorted()` type in templates — and in that file's
+  `<script>` too, which can hide a method your `target` lacks from the check
+  (the build is unaffected). `toSorted`/`toReversed` need TypeScript ≥ 5.2.
 - **Three marker tags, four meanings.** `<Children/>` marks where a component's
   default children render; `<Slot name="x"/>` declares a named region (the
   caller routes a direct child in with a static `slot="x"` attribute);
@@ -337,7 +371,7 @@ Rules that bite:
   `retry()` uses a full same-location navigation for routed failures or the
   parent's normal refresh for component failures, never automatically. There
   is no per-view error member — write error UI as normal template markup, never
-  as hand-built ViewNodes. Event handlers and formatters stay uncaught.
+  as hand-built ViewNodes. Event handlers and template functions stay uncaught.
 - **`island` freezes children.** An element with the `island` attribute keeps
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view
@@ -481,12 +515,12 @@ Form controls bind themselves — write NO input handler:
 - Navigation loads before commit: URL, title/head, history, mounted tree, and
   scroll save land atomically together — a failed or superseded navigation
   commits nothing.
-- Write template hrefs **path-shaped through the built-in `link` formatter**:
-  `href="{ '/todos/' + t.id | link }"`. It emits the mode-appropriate href
+- Write template hrefs **path-shaped through the built-in `link` function**:
+  `href="{ link('/todos/' + t.id) }"`. It emits the mode-appropriate href
   (plain path in path mode, base-prefixed under `routerBase`, `#/...` in
   hash mode); strings not starting with `/` pass through (external URLs,
   `mailto:`, `#anchor`). Hand-written `#/...` hrefs still work in hash mode,
-  but piped links are the portable spelling.
+  but `link()` hrefs are the portable spelling.
 
 ## Translations (puzzle ≥ 0.8.0)
 
@@ -497,14 +531,14 @@ Configure `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` in
 `cart.title`. An object whose keys are ALL CLDR categories (`zero one two few
 many other`) is a plural entry and must have `other`.
 
-- Template: `{ 'cart.title' | t }`; variables come as ONE object —
-  `{ 'greeting' | t({ name: user.name }) }` fills `{name}`, and a numeric
-  `count` picks the plural form (`{ 'cart.items' | t({ count: cart.count }) }`).
+- Template: `{ t('cart.title') }`; variables come as ONE object —
+  `{ t('greeting', { name: user.name }) }` fills `{name}`, and a numeric
+  `count` picks the plural form (`{ t('cart.items', { count: cart.count }) }`).
   A data field or a store record works too (`t(user)`; a model's getters count).
   An exact `count` of 0 uses the entry's `zero` form when it has one, even in
   English — the way to say "Your cart is empty". Brace-only attributes work:
-  `placeholder={ 'search.hint' | t }`. Runtime-built keys work:
-  `{ ('status.' + order.status) | t }`.
+  `placeholder={ t('search.hint') }`. Runtime-built keys work:
+  `{ t('status.' + order.status) }`.
 - Script: `this.ctx.i18n.t('key', vars)`, `.locale`, `.locales`,
   `.defaultLocale`, and `this.ctx.i18n.setLocale('es')` — it fetches the file
   first, then switches, stores the choice, sets `<html lang>`, and rebuilds the
@@ -910,13 +944,13 @@ production-host semantics for any mode (SPA deep-link fallback, static real
 5. **Static mode has no router and emits only plain path hrefs.** Hash-style
    `#/...` links are an SPA/hybrid concern (`routerMode: hashRouter()`) with no
    meaning on a static site — never hand-write them in templates that build
-   statically; path-shaped `| link` hrefs render as plain paths in static
+   statically; path-shaped `link()` hrefs render as plain paths in static
    output and as `#/...` in a hash-mode SPA, from the same template.
    `ctx.router` methods throw; `push()` calls
-   are a bug — use plain links. Custom formatters must be exported from
-   `app/formatters.js` to exist client-side (formatters only in the app.js
-   config trigger a build warning); models are picked up from
-   `app/models/index.js`. The `link` formatter is absent client-side in static
+   are a bug — use plain links. App functions must be exported from
+   `app/formatters.js` to exist client-side (functions only in the app.js
+   `formatters` config trigger a build warning); models are picked up from
+   `app/models/index.js`. The `link` function is absent client-side in static
    output — its pass-through fallback still yields correct plain-path hrefs.
    A configured adapter (`adapter.defaults(...)`) is best exported from
    `app/adapter.js` and passed to the app from there: each static page then

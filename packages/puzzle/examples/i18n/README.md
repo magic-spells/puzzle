@@ -23,8 +23,8 @@ English table inline, so an English visitor makes no extra request.
 | --- | --- |
 | Locale list and default in one place | `i18n: { locales: ['en', 'es', 'pl'], defaultLocale: 'en' }` in `puzzle.config.js` |
 | Nested locale files (`home.cart.title`) | The compiler flattens nesting to dotted keys, fills missing keys from `en`, and emits one hashed `dist/locales/<tag>.<hash>.json` per locale; the browser fetches only the active one |
-| Plain strings in templates | `{ 'home.intro' \| t }` |
-| "Welcome back, Ada!" | Placeholders: `{ 'home.greeting' \| t({ name: user.name }) }` |
+| Plain strings in templates | `{ t('home.intro') }` |
+| "Welcome back, Ada!" | Placeholders: `{ t('home.greeting', { name: user.name }) }` |
 | "3 items" / "3 produkty" / "5 produktów" | Plural entries: a numeric `count` picks the form through `Intl.PluralRules` (Polish uses `one`/`few`/`many`/`other`), an exact 0 uses the entry's `zero` form, and `{count}` prints in the locale's number format |
 | The order total and the "prices as of" date | `number_with_delimiter` and `date('long')` follow the active locale |
 | English / Español / Polski buttons | `this.ctx.i18n.locale`, `.locales` and `.setLocale(tag)`, which rejects if the file fails to load or the page cannot rebuild (`LocaleSwitcher.pzl`) |

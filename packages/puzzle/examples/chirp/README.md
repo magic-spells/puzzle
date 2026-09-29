@@ -36,7 +36,7 @@ puzzle dev examples/chirp        # from the repo root: go run ./compiler/cmd/puz
   instantly, with no event plumbing between views.
 
 Plus the established Puzzle goodies: nested profile routes with `<Slot/>`,
-`{#for … , i}` staggered card entrances, formatter pipes, and localStorage
+`{#for … , i}` staggered card entrances, display functions, and localStorage
 persistence of your likes / rechirps / follows / composed chirps.
 
 ## Inventory
@@ -99,5 +99,5 @@ persistence of your likes / rechirps / follows / composed chirps.
 `:enter`), nested routes + `<Slot/>` chains, route params and the catch-all,
 `{#for}` loop counters (D29), per-instance `get animations()` staggered
 entrances, view in/out transitions, store filters as live cross-page
-subscriptions, formatter pipes with arguments, and schema defaults / getters /
+subscriptions, display functions with arguments, and schema defaults / getters /
 methods across three models.

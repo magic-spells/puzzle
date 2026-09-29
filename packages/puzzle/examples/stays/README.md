@@ -81,6 +81,6 @@ puzzle dev examples/stays        # from the repo root: go run ./compiler/cmd/puz
 
 Nested routes + `<Slot/>` chains, route params, the catch-all, callback props
 (`@select`, `@reserve`), per-node DOM events, `{#for}` loop counters (D29),
-formatter pipes with arguments, `get animations()` for per-instance staggered
+display functions with arguments, `get animations()` for per-instance staggered
 entrances, view in/out transitions, store filters as live subscriptions, and
 schema defaults/getters on five models.

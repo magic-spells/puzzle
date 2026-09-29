@@ -58,12 +58,12 @@ events = {
 
 ### 3. Template Features
 ```html
-{#if todos.size > 0}
+{#if todos.length > 0}
   {#for todo in filteredTodos}
     <div class="todo-item {#if todo.completed}completed{/if}">
       <input type="checkbox" checked={ todo.completed } />
       <span>{ todo.text }</span>
-      <span>{ todo.createdAt | todoDate }</span>
+      <span>{ todoDate(todo.createdAt) }</span>
     </div>
   {/for}
 {:else}
@@ -76,9 +76,9 @@ a click writes through `todo.update()` and every view reading that record
 re-renders. Writing your own `@input`/`@change` on the control suppresses the
 bind — the handler owns the write instead.
 
-### 4. Custom Formatters
+### 4. Custom Functions
 ```javascript
-// Global formatters in app.js
+// App functions in app.js, called in a template as { todoDate(date) }
 formatters: {
   todoDate: (date) => formatRelativeDate(date)
 }
@@ -119,7 +119,7 @@ This example shows how Puzzle enables rapid development with:
 1. **Zero boilerplate** - No Redux setup, no router configuration hell
 2. **Clear patterns** - data() for data, events for interactions
 3. **Reactive updates** - Change a model, UI updates automatically
-4. **Rich templating** - Formatters, conditionals, loops all built-in
+4. **Rich templating** - JavaScript expressions, display functions, conditionals, loops all built-in
 5. **Integrated data layer** - Models with schema and methods live alongside the store (server reads exist; write sync is post-v1)
 
 ## Key Takeaways

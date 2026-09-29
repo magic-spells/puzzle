@@ -55,10 +55,10 @@ npm install -D @magic-spells/puzzle
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
 - **Server data with no loading code** — `findOne`/`findMany` inside a view's `data()` fetch whatever the store is missing and settle before the view commits, so a committed `null` always means "does not exist", never "still loading"
-- **Chainable display formatters** — `{ title | downcase | truncate(40) }`
-- **Translations** — `{ 'cart.title' | t }` with one `app/locales/<tag>.json` per language: nested files, CLDR plurals through `Intl.PluralRules`, missing keys filled from the default at build time, and only the active locale's hashed file downloaded; `this.ctx.i18n.setLocale('es')` switches in place. Apps without `i18n` configured ship none of it
+- **Template expressions that are JavaScript** — `{ truncate(title.toLowerCase(), 40) }`, `{#for t in todos.filter(t => !t.done)}`: one closed grammar and method table, parsed once and shared with Magic Spells Sites, with display functions called like any function
+- **Translations** — `{ t('cart.title') }` with one `app/locales/<tag>.json` per language: nested files, CLDR plurals through `Intl.PluralRules`, missing keys filled from the default at build time, and only the active locale's hashed file downloaded; `this.ctx.i18n.setLocale('es')` switches in place. Apps without `i18n` configured ship none of it
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
-- **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
+- **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` function
 - **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout the first time a navigation needs it, guards first
 - **Virtual DOM** with efficient diffing and pk-aware list keying
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
@@ -153,21 +153,35 @@ my-puzzle-app/
 
 ```html
 <p>{ user.name }</p>
-<h1>{ title | capitalize }</h1>
-<p>{ items.size } items, { price * quantity | currency }</p>
-<p>{ nickname ?? name }</p>
+<h1>{ capitalize(title) }</h1>
+<p>{ items.length } items, { currency(price * quantity) }</p>
+<p>{ nickname ?? name } · { tags.join(', ') }</p>
+<ul>{#for t in todos.filter(t => !t.done)}<li>{ t.title }</li>{/for}</ul>
 ```
 
-A template expression is data plus operators: fields (`a.b`, `a?.b`,
-`a[i]`), literals, `.size` for the count of a list or string, `+ - * / %`,
-comparisons, `&& || !`, the ternary and `??` for a fallback. It never calls
-JavaScript on a value — `.length`, `name.trim()`, `String(x)`, `Math.round(x)`,
-arrow functions and template literals are compile errors that name the
-replacement (a formatter, or a field computed in `data()`). A template never
-reaches the view instance: `this` is a compile error in every template
-expression, `@event` handler arguments included. Every value a template shows
-comes through `data()`, and a handler reaches the view through its own name
-(`@click={ save(x) }` calls the view's `save`).
+A template expression is JavaScript from a closed table, so it means the same
+thing when PuzzleKit compiles it to JavaScript and when Magic Spells Sites
+evaluates it in Go. The grammar: literals, template literals, arrays and
+objects; `a.b`, `a?.b`, `a[i]`; the operators with JavaScript precedence
+(`+ - * / %`, comparisons, `== != === !==`, `&& || !`, `??`, `?:`); arrow
+functions as call arguments (`items.map(i => i.name)`); and three kinds of
+call — a display function by name (`currency(price)`), a method from the
+table on a string, array or number (`name.trim()`, `items.filter(…)`,
+`n.toFixed(2)`), and the globals `Math.*`, `Number`, `String`, `Boolean`,
+`parseInt`, `parseFloat`, `isNaN`, `isFinite`, `Array.isArray` and
+`Object.keys/values/entries`. The count is `.length`. No method mutates
+(`toSorted` and `toReversed`, not `sort` and `reverse`), and anything outside
+the table — `new`, `Date`, `JSON`, `**`, bitwise operators, spread, regex
+literals, a browser global such as `window` read as a value — is a compile
+error at its own line and column that names the replacement. Member reads are
+guarded: `{ user.address.city }` prints nothing when `address` is missing.
+
+A template never reaches the view instance: `this` is a compile error in every
+template expression, `@event` handler arguments included. Every value a
+template shows comes through `data()`, and a handler reaches the view through
+its own name (`@click={ save(items.length - 1) }` calls the view's `save`);
+inside a handler, `event` is the DOM event and a chain rooted at it is
+unrestricted (`event.target.value`, `event.preventDefault()`).
 
 A literal brace is escaped with a backslash — `\{` and `\}` — anywhere an
 expression could appear, attribute values included:
@@ -286,81 +300,77 @@ Reusable components declare default child content with `<Children/>`, and a pair
 </article>
 ```
 
-## Built-in Formatters
+## Display Functions
 
-Formatters transform data for display without modifying the underlying values.
-They chain left to right with `|`, so each one receives the previous result:
+A display function transforms a value for display without modifying the
+underlying data. It is called like any function, and calls nest:
 
 ```html
-{ title | downcase | replace('-', ' ') }
-<!-- "My-Blog-Post" → "my blog post" -->
-{ post.body | trim | truncate(140) | capitalize }
-<!-- Chains can be any length; arguments go in parentheses -->
+{ truncate(capitalize(post.body.trim()), 140) }
+<!-- trim, capitalize, then cut to 140 characters -->
+{ date(post.publishedAt, 'long') }
+<!-- September 24, 2026 -->
 ```
 
-An unregistered formatter name never crashes a render — the value passes
-through that step unchanged and a single `console.error` names the offender.
+What a JavaScript method or `Math` global already says is not a function: use
+`.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll(a, b)`,
+`.join(', ')`, `Math.floor()`, `Math.ceil()` and `Math.abs()`. Lists are
+shaped with array methods (`items.filter(…)`, `.toSorted(…)`, `.at(-1)`) or in
+`data()`; counting, arithmetic and fallbacks are `.length`, the operators and
+`??`.
 
-The built-ins are the **standard set** — the same names, arguments and meaning
-in PuzzleKit and in Sites — plus the browser-only `link`, `timeago` and
-`in_timezone`. There are no list-shaping formatters: sort, filter and pick
-items in `data()` or a plain expression (`items[0]`, `items[items.size - 1]`).
-Counting, arithmetic and fallbacks are not formatters either: use `.size`,
-the operators and `??`. An app formatter may reuse a standard name (the app's
-function wins), with a development warning.
+The library is the **standard set** — the same names, arguments and meaning
+in PuzzleKit and in Sites — plus the browser-only `link` and `timeago`. An
+app registers its own through the `formatters` config map and calls them the
+same way (`{ specialFormat(product.title) }`); one that reuses a standard name
+wins, with a development warning. An unregistered name never crashes a render —
+the value passes through unchanged and a single `console.error` names the
+offender (and, for a name JavaScript covers, the method to write instead).
 
-### String Formatters
+### Text
 
 ```html
-{ text | trim }
-<!-- Remove whitespace -->
-{ name | capitalize }
+{ capitalize(name) }
 <!-- First character uppercase, the rest untouched: iPhone → IPhone -->
-{ title | upcase }
-<!-- ALL UPPERCASE -->
-{ title | downcase }
-<!-- all lowercase -->
-{ content | truncate(100) }
+{ truncate(content, 100) }
 <!-- At most 100 characters, the … included -->
-{ slug | replace('-', ' ') }
-<!-- Replace every occurrence -->
-{ count | pluralize('comment') }
-<!-- 1 comment / 3 comments; irregular: pluralize('person', 'people') -->
+{ pluralize(count, 'comment') }
+<!-- 1 comment / 3 comments; irregular: pluralize(n, 'person', 'people') -->
+{ strip_html(post.excerpt) }
+<!-- Tags removed -->
 ```
 
-### Number Formatters
+### Numbers
 
 ```html
-{ price | currency('$', 2) }
+{ currency(price, '$', 2) }
 <!-- $1,219.99 -->
-{ progress | percentage }
+{ percentage(progress) }
 <!-- 75.4 → 75% (the number as written) -->
-{ count | number_with_delimiter }
-<!-- 1,234,567 in the viewer's locale; number_with_delimiter(',') forces one -->
-{ followers | compact_number }
+{ number_with_delimiter(count) }
+<!-- 1,234,567 in the viewer's locale; number_with_delimiter(n, ',') forces one -->
+{ compact_number(followers) }
 <!-- 1.2K, 45K, 3.4M -->
-{ rating | round(1) }
-<!-- 4.3 -->
+{ round(rating, 1) }
+<!-- 4.3 — half away from zero, a number -->
 ```
 
-### Value Formatters
+### Values
 
 ```html
-{ names | join(', ') }
-<!-- Join with commas -->
-{ obj | json }
+{ json(obj) }
 <!-- JSON with sorted keys -->
 ```
 
-### Markup Formatters
+### Markup Functions
 
-Every interpolation is text unless it ends in one of these two, and both are
-safe by construction:
+Every interpolation is text unless its outermost call is one of these two, and
+both are safe by construction:
 
 ```html
-{ post.bodyHtml | raw }
+{ raw(post.bodyHtml) }
 <!-- Real HTML, always through an allowlist sanitizer -->
-{ comment.text | newline_to_br }
+{ newline_to_br(comment.text) }
 <!-- Escaped text with a real <br> per line break -->
 ```
 
@@ -373,26 +383,31 @@ target is dropped). It removes `<script>` (with its contents), `<style>`,
 `mailto:` and `tel:`). Because `class` and `id` survive, sanitized content can
 use your app's CSS and name its elements — for untrusted user HTML that is a
 UI-overlay and naming risk (a `fixed inset-0` block over your page, an `id`
-that shadows an undefined global), not code execution. A markup formatter must be the last formatter of a text
-interpolation — in an attribute, a prop or mid-chain it is a
-compile error — so an app formatter can never inject markup. Apps that never
-use either formatter ship none of this code.
+that shadows an undefined global), not code execution. A markup function must
+be the outermost call of a text interpolation — inside another call, in an
+attribute or a prop it is a compile error — so an app function can never
+inject markup. Apps that never use either function ship none of this code.
 
-### Date Formatters
+### Dates
 
-`date`, `time` and `datetime` take the presets `short`, `medium` (the default),
-`long` and `iso`, in the viewer's locale and time zone:
+`date`, `time` and `datetime` take the presets `short`, `medium`, `long` and
+`iso`, in the viewer's locale and time zone. With no preset, `date` is medium,
+`time` is short, and `datetime` is the medium date with the short time. A
+literal preset the library does not know (`time(at, 'shrot')`) is a compile
+error.
 
 ```html
-{ createdAt | date }
+{ date(createdAt) }
 <!-- Sep 24, 2026 -->
-{ createdAt | date('long') }
+{ date(createdAt, 'long') }
 <!-- September 24, 2026 -->
-{ updatedAt | datetime('short') }
-<!-- 9/24/26, 3:04 PM -->
-{ updatedAt | datetime('iso') }
+{ time(createdAt) }
+<!-- 3:04 PM -->
+{ datetime(updatedAt) }
+<!-- Sep 24, 2026, 3:04 PM -->
+{ datetime(updatedAt, 'iso') }
 <!-- 2026-09-24T15:04:05-04:00 -->
-{ publishedAt | timeago }
+{ timeago(publishedAt) }
 <!-- 2 hours ago -->
 ```
 
@@ -412,11 +427,11 @@ With `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` in
 ```
 
 ```html
-{ 'cart.title' | t }
+{ t('cart.title') }
 <!-- Your cart -->
-{ 'greeting' | t({ name: user.name }) }
+{ t('greeting', { name: user.name }) }
 <!-- Hello, Ada! — fills {name} -->
-{ 'cart.items' | t({ count: cart.count }) }
+{ t('cart.items', { count: cart.count }) }
 <!-- 3 items — a numeric `count` picks the plural form -->
 ```
 
@@ -577,7 +592,7 @@ Preview every piece in the live catalog at
 
 ## Syntax Highlighting
 
-Editor extensions provide full `.pzl` highlighting — native HTML, JavaScript/TypeScript, and CSS per section, plus Puzzle's template expressions, directives, event bindings, and formatter chains:
+Editor extensions provide full `.pzl` highlighting — native HTML, JavaScript/TypeScript, and CSS per section, plus Puzzle's template expressions, directives, and event bindings:
 
 - **[puzzle-vscode](https://github.com/magic-spells/puzzle-vscode)** - Visual Studio Code extension with snippets and completions
 - **[puzzle-sublime](https://github.com/magic-spells/puzzle-sublime)** - Sublime Text 4 syntax package
