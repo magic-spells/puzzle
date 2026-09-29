@@ -326,6 +326,11 @@ func (p *parser) checkCloser(ctx openCtx, t Token) *ParseError {
 	if t.Type == TokBlockClose && t.Value == "svg" {
 		return errAt(p.file, pos, "{#svg} is self-contained — remove the {/svg}")
 	}
+	// A void element's start tag already closed it (parseElement), so its
+	// closing tag has nothing to close.
+	if t.Type == TokTagClose && voidElements[t.Value] {
+		return errAt(p.file, pos, "<%s> is a void element and has no closing tag — remove the </%s>", t.Value, t.Value)
+	}
 	// {:else if} is a valid boundary inside {#if} (parseBlock's if loop drives
 	// the chaining); it is rejected in {#unless}/{#case}. Report the rejections
 	// with a context-aware hint before the per-context closer matching.
@@ -451,6 +456,13 @@ func (p *parser) unclosedErr(ctx openCtx) *ParseError {
 	return errAt(p.file, ctx.pos, "unclosed block")
 }
 
+// voidElements are HTML's void elements. The names are lowercase and matched
+// exactly: a capitalized tag is a component, never void.
+var voidElements = map[string]bool{
+	"area": true, "base": true, "br": true, "col": true, "embed": true, "hr": true, "img": true,
+	"input": true, "link": true, "meta": true, "source": true, "track": true, "wbr": true,
+}
+
 // parseElement parses an element, component, or composition marker
 // (<Children>, <Slot>, <Slot name="x">, or <Snippet>) starting at the
 // current TokTagOpen.
@@ -464,6 +476,12 @@ func (p *parser) parseElement() (Node, *ParseError) {
 	attrs, selfClose, perr := p.parseAttrs()
 	if perr != nil {
 		return nil, perr
+	}
+	// An HTML void element has no content and no end tag, so its start tag is
+	// the whole element: <br>, <input …> and <br/> parse alike, and what follows
+	// a <br> belongs to the parent. A </br> is checkCloser's error.
+	if voidElements[name] {
+		selfClose = true
 	}
 
 	// Composition markers are reserved capitalized tags matched before component
@@ -917,11 +935,16 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			}
 			elseNodes = en
 		}
-		// {:else} must be the last clause — an {:else if} after it is misplaced.
+		// {:else} must be the last clause — an {:else if} or a second {:else}
+		// after it is misplaced.
 		if p.cur.Type == TokElseIf {
 			return nil, errAt(p.file, tokPos(p.cur),
 				"{:else if} after {:else} in {#if} opened at %d:%d — {:else} must be the last clause",
 				pos.Line, pos.Col)
+		}
+		if p.cur.Type == TokElse {
+			return nil, errAt(p.file, tokPos(p.cur),
+				"a second {:else} in {#if} opened at %d:%d — {:else} must be the last clause", pos.Line, pos.Col)
 		}
 		if p.cur.Type != TokBlockClose || p.cur.Value != "if" {
 			return nil, errAt(p.file, pos, "unclosed {#if} opened at %d:%d", pos.Line, pos.Col)
@@ -968,6 +991,10 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 				return nil, e
 			}
 			elseNodes = en
+		}
+		if p.cur.Type == TokElse {
+			return nil, errAt(p.file, tokPos(p.cur),
+				"a second {:else} in {#unless} opened at %d:%d — {:else} must be the last clause", pos.Line, pos.Col)
 		}
 		if p.cur.Type != TokBlockClose || p.cur.Value != "unless" {
 			return nil, errAt(p.file, pos, "unclosed {#unless} opened at %d:%d", pos.Line, pos.Col)
@@ -1024,11 +1051,16 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			}
 			elseNodes = en
 		}
-		// {:else} must be the last clause — a {:when} after it is misplaced.
+		// {:else} must be the last clause — a {:when} or a second {:else} after
+		// it is misplaced.
 		if p.cur.Type == TokWhen {
 			return nil, errAt(p.file, tokPos(p.cur),
 				"{:when} after {:else} in {#case} opened at %d:%d — {:else} must be the last clause",
 				pos.Line, pos.Col)
+		}
+		if p.cur.Type == TokElse {
+			return nil, errAt(p.file, tokPos(p.cur),
+				"a second {:else} in {#case} opened at %d:%d — {:else} must be the last clause", pos.Line, pos.Col)
 		}
 		if p.cur.Type != TokBlockClose || p.cur.Value != "case" {
 			return nil, errAt(p.file, pos, "unclosed {#case} opened at %d:%d", pos.Line, pos.Col)

@@ -360,3 +360,23 @@ func TestSizeIsAnOrdinaryField(t *testing.T) {
 		t.Errorf("no module imports a size helper:\n%s", got)
 	}
 }
+
+// An HTML void element needs no slash: the parser closes it at its start tag,
+// so the module is byte-identical to the self-closed spelling and codegen has
+// nothing void-specific to do. DOC-TEMPLATE-SYNTAX's one-way form value
+// example, `<input value={ x } readonly>`, compiles as written.
+func TestVoidElementsNeedNoSlash(t *testing.T) {
+	bare := compileSrc(t, coreSrc(`  <label>Name <input value={ x } readonly> <img src="a.png" alt="">
+  </label>
+  <div>a<br>b<hr></div>`))
+	slashed := compileSrc(t, coreSrc(`  <label>Name <input value={ x } readonly /> <img src="a.png" alt="" />
+  </label>
+  <div>a<br/>b<hr/></div>`))
+	if bare != slashed {
+		t.Errorf("void tags compile differently with and without the slash:\n--- bare ---\n%s\n--- slashed ---\n%s", bare, slashed)
+	}
+	if strings.Contains(bare, ":bind'") {
+		t.Errorf("a static readonly keeps the value one-way (D147):\n%s", bare)
+	}
+	nodeCheck(t, bare)
+}

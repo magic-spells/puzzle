@@ -20,8 +20,8 @@ package parser
 // message.
 //
 // For a well-formed template the count is exact: every AST container is one
-// non-self-closing tag, one block opener, or one {:else if} clause (which
-// desugars into a nested If). For a malformed one it is an upper
+// non-self-closing, non-void tag, one block opener, or one {:else if} clause
+// (which desugars into a nested If). For a malformed one it is an upper
 // bound, which is the safe direction — the source is already an error either
 // way.
 func OverNestingDepth(sec *Sections, filename string, limit int) (Position, bool) {
@@ -62,12 +62,21 @@ func scanNesting(lx *lexer, file string, limit, depth, budget int) (Position, bo
 		case TokTagOpen:
 			pendingOpen = t
 		case TokTagEnd:
+			// A void element's start tag is the whole element (parseElement).
+			if voidElements[pendingOpen.Value] {
+				continue
+			}
 			openTags = append(openTags, pendingOpen.Value)
 			depth++
 			if depth > limit {
 				return tokPos(pendingOpen), true
 			}
 		case TokTagClose:
+			// A </br> closes nothing (the parse rejects it); popping here would
+			// make the count an under-estimate.
+			if voidElements[t.Value] {
+				continue
+			}
 			if len(openTags) > 0 {
 				openTags = openTags[:len(openTags)-1]
 			}
