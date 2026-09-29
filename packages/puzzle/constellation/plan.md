@@ -513,8 +513,6 @@ makes an open-ended `is={}` real design work, not sugar.)
 
 ### Runtime components
 
-
-
 - [[COMPONENT-PUZZLE-APP]] — app wiring and lifecycle.
 - [[COMPONENT-ROUTER]] — routing, transitions, scrolling, and commit semantics.
 - [[COMPONENT-PUZZLE-VIEW]] — component state and lifecycle.
@@ -523,7 +521,7 @@ makes an open-ended `is={}` real design work, not sugar.)
 - [[COMPONENT-STORE]] / [[COMPONENT-PUZZLE-MODEL]] — data layer.
 - [[COMPONENT-ADAPTER]] — the opt-in `@magic-spells/puzzle/adapter` server
   read/write sync runtime (D157/D158/D161).
-- [[COMPONENT-FORMATTERS]] — formatter registry and built-ins.
+- [[COMPONENT-FORMATTERS]] — function library registry and built-ins.
 - [[COMPONENT-DEVSTATE]] — development reload state transfer; also owns the
   live-view registry the DevTools bridge ([[FILE-DEVTOOLS]], D100) observes.
 - [[COMPONENT-MORPH]] — optional shared-element morph integration.
@@ -536,7 +534,8 @@ makes an open-ended `is={}` real design work, not sugar.)
 ### Compiler and tooling
 
 - [[COMPONENT-TEMPLATE-PARSER]] — `.pzl` sections, grammar, and errors.
-- [[COMPONENT-CODEGEN]] — render emission and expression resolution.
+- [[COMPONENT-CODEGEN]] — render-function codegen: emission and expression
+  lowering from the parsed trees.
 - [[COMPONENT-PLAYGROUND-COMPILER]] — esbuild-free in-browser parser/codegen bridge and its build/smoke boundary.
 - [[COMPONENT-ESBUILD-PLUGIN]] — bundling, config, styles, aliases, outputs.
 - [[COMPONENT-COMPILER-CLI]] — CLI commands, scaffolds, generators, pieces.
