@@ -60,3 +60,33 @@ func TestLargeTemplateParsesWithinBudget(t *testing.T) {
 		t.Errorf("a 20,000-line template took %v; the budget is %v", best, budget)
 	}
 }
+
+// A {#raw} body's braces are literal (D150), so the section splitter steps
+// over the span in one pass. Scanning it as brace groups made every
+// unbalanced '{' run a failed scan to the end of the file and retry one byte
+// later: seconds for 40 KB. Best of three; skipped under -short.
+func TestLargeRawBlockParsesWithinBudget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing test")
+	}
+	src := "<puzzle-view><pre>{#raw}" + strings.Repeat("{", 40*1024) + "{/raw}</pre></puzzle-view>\n" +
+		"<script>\n// it's a view\nexport default class Big {}\n</script>\n"
+	best := time.Duration(1 << 62)
+	for i := 0; i < 3; i++ {
+		start := time.Now()
+		if _, err := Parse([]byte(src), "raw.pzl"); err != nil {
+			t.Fatal(err)
+		}
+		if d := time.Since(start); d < best {
+			best = d
+		}
+	}
+	budget := 20 * time.Millisecond
+	if os.Getenv("CI") != "" {
+		budget *= 3
+	}
+	t.Logf("40 KB {#raw} block: %v (budget %v)", best, budget)
+	if best > budget {
+		t.Errorf("a 40 KB {#raw} block took %v; the budget is %v", best, budget)
+	}
+}
