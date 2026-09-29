@@ -27,7 +27,6 @@ import (
 //	a.b   a?.b                       <a>?.b          every step optional: reads never throw (D173 V4)
 //	a[i]  a?.[i]                     <a>?.[<i>]
 //	(a?.b).c                         (<a?.b>)?.c     a Chain in object position keeps its parentheses
-//	x.size, not called               __z(<x>)        TEMPORARY (P4: remove)
 //	f(a, b), library function        (__f["f"] || __f.__missing("f"))(<a>, <b>)   the D43 guard
 //	a.m(x), method                   <a>?.m(<x>)     a call on a missing receiver is undefined (§9 d)
 //	Math.round(x)  Number(x)         verbatim        a JavaScript global the language allows
@@ -40,7 +39,6 @@ import (
 //	[a, b]                           [<a>, <b>]
 //	{ k: v, 'q-r': v, s }            { k: <v>, 'q-r': <v>, s: <s> }   shorthand expanded
 //	event.target.value (handler)     verbatim        a DOM event chain is not template data (§9 k)
-//	base | f(a) | g                  (__f["g"] || …)((__f["f"] || …)(<base>, <a>))   TEMPORARY (P4: remove)
 //
 // Handler values (@event={ … }):
 //
@@ -50,10 +48,8 @@ import (
 //	null                             null
 //
 // A handler's arguments are lowered like any expression (guarded, library
-// calls through __f) except that `.size` is not the count there — they were
-// JavaScript before this language, so the corpus has no count to migrate. A
-// handler-valued conditional's condition is a render-time value and gets the
-// `.size` lowering like one.
+// calls through __f), and a handler-valued conditional's condition is a
+// render-time value like any other.
 //
 // The check target (puzzle check, WriteCheckValue/WriteCheckEvent) emits the
 // same tree as TypeScript with three differences: no member guard is added (an
@@ -137,7 +133,7 @@ type localRead struct {
 	whole bool
 	// opaque marks a whole-value read that is NOT the entire expression: an
 	// operand, a template-literal part, an array element or object value, a
-	// call argument, a pipe base or formatter argument. The compiler cannot
+	// call argument. The compiler cannot
 	// see which members the value reaches, so the site is conservative (`deep`)
 	// exactly as a relation read is.
 	opaque bool
@@ -207,17 +203,16 @@ func (f *exprFacts) merge(other *exprFacts) {
 // ---- the function library ---------------------------------------------------
 
 // LibraryFunctionNames is the standard function library a bare call `name(…)`
-// resolves to (DESIGN-expr-v2 §4, §9 b) — the names Sites implements in Go
-// with the same arguments — plus `in_timezone`, a built-in treated as standard
-// until P3 settles membership against the conformance table. App-registered
-// functions join it at run time. The
-// compiler needs the set for two things: the warning when a view handler
-// shares a name with one (§9 c), and puzzle check's signatures, whose table
-// (check.libraryFunctionSignatures) must list exactly these names. P3 moves
-// the runtime to the same set and publishes the same signatures in types/.
+// resolves to (DESIGN-expr-v2 §4, §9 b): the 19 built-ins the runtime ships
+// (client-runtime/formatters/builtins.json) plus the two framework-bound
+// functions, `link` (the router) and `t` (translations). App-registered
+// functions join it at run time. The compiler needs the set for the warning
+// when a view handler shares a name with one (§9 c) and for puzzle check's
+// signatures, whose table (check.libraryFunctionSignatures) must list exactly
+// these names — types/ publishes the same signatures.
 var LibraryFunctionNames = []string{
 	"link", "t",
-	"currency", "percentage", "number_with_delimiter", "compact_number", "pluralize",
+	"currency", "percentage", "number_with_delimiter", "compact_number", "pluralize", "round",
 	"date", "time", "datetime", "timeago", "in_timezone",
 	"truncate", "capitalize", "strip_html", "strip_newlines",
 	"escape", "raw", "newline_to_br", "json",
@@ -237,8 +232,9 @@ func IsLibraryFunction(name string) bool { return libraryFunctions[name] }
 // clockFunctions are the library functions whose output depends on the
 // current time rather than on their arguments alone, so a cached row using one
 // would display a frozen value ("1 second ago", forever); a site calling one
-// is `volatile` (D170). Hardcoded until the runtime manifest (P3) can name
-// them. App-registered functions are pure by contract.
+// is `volatile` (D170). The runtime manifest (builtins.json) lists names
+// only, so the one clock-reading built-in is named here. App-registered
+// functions are pure by contract.
 var clockFunctions = map[string]bool{"timeago": true}
 
 // ---- the lowerer ------------------------------------------------------------
@@ -282,21 +278,17 @@ type lowerer struct {
 	// event is the DOM event parameter's name while a handler's arguments are
 	// lowered ("event" or "__ev"), and "" everywhere else.
 	event string
-	// sizeCompat turns on the TEMPORARY `.size` → __z lowering (P4: remove).
-	sizeCompat bool
 	// rowScopes are the lowered rows' scope object names (`s`, `s1`, …); an
 	// arrow parameter spelled like one is mangled so the rows' locals stay
 	// reachable inside the arrow body.
 	rowScopes []string
 
-	// usesLib and usesSize report what the emitted text needs: the `__f`
-	// registry line and the `__z` import.
-	usesLib  bool
-	usesSize bool
+	// usesLib reports that the emitted text needs the `__f` registry line.
+	usesLib bool
 }
 
 func newLowerer(w exprWriter, target lowerTarget, scope scopeMap, facts *exprFacts) *lowerer {
-	return &lowerer{w: w, target: target, scope: scope, facts: facts, sizeCompat: true} // P4: remove
+	return &lowerer{w: w, target: target, scope: scope, facts: facts}
 }
 
 // renderLowerer returns a render-target lowerer for the compiler's current position.
@@ -312,9 +304,6 @@ func (c *compiler) renderLowerer(w exprWriter, scope scopeMap, facts *exprFacts)
 func (c *compiler) absorbFlags(l *lowerer) {
 	if l.usesLib {
 		c.usesFormatters = true
-	}
-	if l.usesSize {
-		c.usesSize = true
 	}
 }
 
@@ -614,15 +603,6 @@ func (l *lowerer) object(obj expr.Node) {
 
 func (l *lowerer) member(m *expr.Member) {
 	verbatim := l.verbatimChain(m.Object)
-	if l.sizeCompat && !m.Computed && m.Property == "size" && !(verbatim && l.target == targetRender) {
-		// TEMPORARY (P4: remove): D176's count. `.size` on a value compiles to
-		// the runtime's sizeOf helper until the corpus migrates to `.length`.
-		l.usesSize = true
-		l.w.WriteString("__z(")
-		l.top(m.Object)
-		l.w.WriteString(")")
-		return
-	}
 	l.object(m.Object)
 	l.step(verbatim, m.Optional, m.Computed)
 	if m.Computed {
@@ -948,61 +928,26 @@ func (l *lowerer) noteCall(c *expr.Call) {
 
 // ---- value positions --------------------------------------------------------
 
-// value lowers a value position — an expression and its TEMPORARY pipe chain —
-// recording what it reads into l.facts.
-func (l *lowerer) value(n expr.Node, fmts []parser.FormatterCall) {
-	if len(fmts) == 0 { // P4: remove
-		l.note(n, readWhole)
-		l.top(n)
-		return
-	}
-	// TEMPORARY (P4: remove): `base | f(a) | g` lowers to nested library calls.
-	// The base and every argument are handed to a formatter, which may read
-	// anything off a record, so a binding read there is opaque.
-	l.note(n, readArg)
-	for _, fc := range fmts {
-		if l.facts != nil {
-			l.facts.libRead = true
-			if clockFunctions[fc.Name] {
-				l.facts.volatileRead = true
-			}
-		}
-		for _, a := range fc.ArgsAST {
-			l.note(a, readArg)
-		}
-	}
-	l.usesLib = true
-	for i := len(fmts) - 1; i >= 0; i-- {
-		if l.target == targetCheck {
-			l.w.WriteString("__puzzle_check_formatter(" + strconv.Quote(fmts[i].Name) + ", ")
-		} else {
-			l.w.WriteString(registryRef(fmts[i].Name) + "(")
-		}
-	}
+// value lowers a value position, recording what it reads into l.facts.
+func (l *lowerer) value(n expr.Node) {
+	l.note(n, readWhole)
 	l.top(n)
-	for _, fc := range fmts {
-		for _, a := range fc.ArgsAST {
-			l.w.WriteString(", ")
-			l.top(a)
-		}
-		l.w.WriteString(")")
-	}
 }
 
 // value lowers a value position with the emitter's fact sink, distributes
 // what it read to the enclosing list sites, and returns the JS.
-func (c *compiler) value(n expr.Node, fmts []parser.FormatterCall, scope scopeMap) string {
+func (c *compiler) value(n expr.Node, scope scopeMap) string {
 	f := c.factSink()
-	out := c.valueInto(n, fmts, scope, f)
+	out := c.valueInto(n, scope, f)
 	c.absorb(f, scope)
 	return out
 }
 
 // valueInto is value with an explicit fact collector.
-func (c *compiler) valueInto(n expr.Node, fmts []parser.FormatterCall, scope scopeMap, facts *exprFacts) string {
+func (c *compiler) valueInto(n expr.Node, scope scopeMap, facts *exprFacts) string {
 	w := &textWriter{}
 	l := c.renderLowerer(w, scope, facts)
-	l.value(n, fmts)
+	l.value(n)
 	c.absorbFlags(l)
 	return w.String()
 }
@@ -1011,7 +956,7 @@ func (c *compiler) valueInto(n expr.Node, fmts []parser.FormatterCall, scope sco
 // grouped, so the compiler's own `? then : else` cannot re-associate into the
 // condition's false branch; every other operator binds tighter.
 func (c *compiler) cond(n expr.Node, scope scopeMap, facts *exprFacts) string {
-	js := c.valueInto(n, nil, scope, facts)
+	js := c.valueInto(n, scope, facts)
 	if _, ternary := n.(*expr.Conditional); ternary {
 		return "(" + js + ")"
 	}
@@ -1129,8 +1074,7 @@ func (l *lowerer) handler(n expr.Node, src string, bareAsReference bool) (eventV
 	l.note(cond.Test, readWhole)
 	// The condition is evaluated during render and may toggle function ↔
 	// null, so the conditional value is never cached — by the instance cache
-	// or by a row scope. It is a value position: guarded, and `.size` is the
-	// count.
+	// or by a row scope. It is a value position, guarded like any other.
 	l.w.WriteString("(")
 	l.top(cond.Test)
 	l.w.WriteString(") ? ")
@@ -1182,10 +1126,10 @@ func (l *lowerer) writeHandler(name *expr.Identifier, args []expr.Node, call boo
 		l.w.WriteString("(" + eventParam + ")")
 		return
 	}
-	savedEvent, savedSize := l.event, l.sizeCompat
-	l.event, l.sizeCompat = eventParam, false // P4: remove
+	savedEvent := l.event
+	l.event = eventParam
 	l.args(args)
-	l.event, l.sizeCompat = savedEvent, savedSize // P4: remove
+	l.event = savedEvent
 }
 
 func sortedKeys(m map[string]*localRead) []string {
@@ -1237,12 +1181,12 @@ func checkScope(names map[string]bool) scopeMap {
 	return out
 }
 
-// WriteCheckValue writes a template value — an expression and its TEMPORARY
-// pipe chain — as TypeScript for puzzle check, resolving names exactly as the
-// render code does: scope holds the template bindings (loop items and
-// counters, snippet parameters), every other name reads `__d`.
-func WriteCheckValue(w CheckWriter, n expr.Node, fmts []parser.FormatterCall, scope map[string]bool) {
-	newLowerer(w, targetCheck, checkScope(scope), nil).value(n, fmts)
+// WriteCheckValue writes a template value as TypeScript for puzzle check,
+// resolving names exactly as the render code does: scope holds the template
+// bindings (loop items and counters, snippet parameters), every other name
+// reads `__d`.
+func WriteCheckValue(w CheckWriter, n expr.Node, scope map[string]bool) {
+	newLowerer(w, targetCheck, checkScope(scope), nil).value(n)
 }
 
 // WriteCheckEvent writes an @event value as TypeScript for puzzle check. src

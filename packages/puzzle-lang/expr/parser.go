@@ -30,10 +30,6 @@ type Options struct {
 	// A binding is a value: reading it is legal, calling it is an error, so
 	// `t('key')` inside `{#for t in …}` never reaches the library's `t`.
 	Bindings []string
-	// CallArgument marks the source as one argument of a call — the template
-	// parser's formatter arguments, `x | f(arg)` — so an arrow function is
-	// legal at its top level, as it is inside any argument list.
-	CallArgument bool
 }
 
 // maxDepth caps syntactic nesting (groups, unary operators, conditionals,
@@ -72,7 +68,33 @@ func Parse(src string, base Pos, opts ...Options) (n Node, err error) {
 	}()
 	n = p.parseTop()
 	p.checkBindingCalls(n)
+	p.checkAmbient(n)
 	return n, nil
+}
+
+// checkAmbient rejects a read of a browser global (ambientGlobals) as a data
+// root. parseName records each unbound, uncalled candidate; a handler value's
+// own name — the whole value, or a branch of its top-level conditional —
+// names a view handler, not the global, so it is exempt. It runs on the
+// finished tree because which name is the handler's own shows only in the
+// tree's shape.
+func (p *parser) checkAmbient(root Node) {
+	if len(p.ambient) == 0 {
+		return
+	}
+	own := map[Node]bool{}
+	if p.opts.Handler {
+		own[root] = true
+		if c, ok := root.(*Conditional); ok {
+			own[c.Consequent] = true
+			own[c.Alternate] = true
+		}
+	}
+	for _, id := range p.ambient {
+		if !own[id] {
+			p.fail(id.Start, ambientMessage(id.Name))
+		}
+	}
 }
 
 // checkBindingCalls rejects a call whose callee is a template binding. It runs
@@ -158,6 +180,9 @@ type parser struct {
 	match []int
 	// params are the arrow-function parameters in scope, innermost last.
 	params []string
+	// ambient are the reads of a browser global parseName saw, for
+	// checkAmbient.
+	ambient []*Identifier
 }
 
 func (p *parser) matchParens() {
@@ -271,12 +296,7 @@ func (p *parser) parseTop() Node {
 	if t.kind == tEOF {
 		p.fail(t.pos, msgExpected)
 	}
-	var n Node
-	if p.opts.CallArgument {
-		n = p.parseArgument()
-	} else {
-		n = p.parseExpr()
-	}
+	n := p.parseExpr()
 	t = p.cur()
 	switch {
 	case t.kind == tEOF:
@@ -329,7 +349,7 @@ var binaryPrecedence = map[string]int{
 // excludedOperators are JavaScript binary, assignment, and update operators
 // the grammar leaves out, each with its message.
 var excludedOperators = map[string]string{
-	"&": msgBitwise, "|": msgBitOr, "^": msgBitwise, "<<": msgBitwise, ">>": msgBitwise, ">>>": msgBitwise,
+	"&": msgBitwise, "^": msgBitwise, "<<": msgBitwise, ">>": msgBitwise, ">>>": msgBitwise,
 	"**": msgExponent,
 	"=":  msgAssign, "+=": msgAssign, "-=": msgAssign, "*=": msgAssign, "/=": msgAssign, "%=": msgAssign,
 	"**=": msgAssign, "<<=": msgAssign, ">>=": msgAssign, ">>>=": msgAssign, "&=": msgAssign,
@@ -345,6 +365,13 @@ func (p *parser) parseBinary(minBP int) Node {
 		if t.kind == tPunct {
 			bp = binaryPrecedence[t.text]
 			if bp == 0 {
+				if t.text == "|" {
+					name := ""
+					if next := p.peek(1); next.kind == tIdent {
+						name = next.text
+					}
+					panic(bailout{&Error{Pos: t.pos, Message: pipeMessage(name), Code: CodePipe}})
+				}
 				if msg, ok := excludedOperators[t.text]; ok {
 					p.fail(t.pos, msg)
 				}
@@ -747,8 +774,31 @@ func (p *parser) parseName() Node {
 	if t.text == "event" && !p.opts.Handler && !p.eventBound() {
 		p.fail(t.pos, msgEvent)
 	}
+	id := &Identifier{Start: t.pos, Name: t.text}
+	if !isPunct(p.peek(1), "(") {
+		p.noteAmbient(id)
+	}
 	p.advance()
-	return &Identifier{Start: t.pos, Name: t.text}
+	return id
+}
+
+// noteAmbient records a read of a browser global object (ambientGlobals) as a
+// data root, unless a template binding or an arrow parameter owns the name.
+// checkAmbient reports it once the tree is complete.
+func (p *parser) noteAmbient(id *Identifier) {
+	if _, ok := ambientGlobals[id.Name]; ok && !p.isBinding(id.Name) && !p.isParam(id.Name) {
+		p.ambient = append(p.ambient, id)
+	}
+}
+
+// isParam reports whether name is an arrow-function parameter in scope.
+func (p *parser) isParam(name string) bool {
+	for _, n := range p.params {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
 
 // parseNamespaceMember parses `Math.round`, `Object.keys`, `Array.isArray`, or
@@ -923,8 +973,9 @@ func (p *parser) parseObject() Node {
 				if t.text == "event" && !p.opts.Handler && !p.eventBound() {
 					p.fail(t.pos, msgEvent)
 				}
-				obj.Entries = append(obj.Entries, Entry{Key: t.text, KeyPos: t.pos, Shorthand: true,
-					Value: &Identifier{Start: t.pos, Name: t.text}})
+				id := &Identifier{Start: t.pos, Name: t.text}
+				p.noteAmbient(id)
+				obj.Entries = append(obj.Entries, Entry{Key: t.text, KeyPos: t.pos, Shorthand: true, Value: id})
 			case isPunct(c, "(") || (t.text == "get" || t.text == "set" || t.text == "async") &&
 				(c.kind == tIdent || c.kind == tString || isPunct(c, "[")):
 				p.fail(c.pos, msgObjectMethod)

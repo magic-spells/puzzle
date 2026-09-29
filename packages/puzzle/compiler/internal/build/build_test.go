@@ -433,7 +433,7 @@ type definesFixture struct {
 	portal   bool
 	raw      bool
 	snippets bool
-	// rawHTML pipes a value through the D174 `raw` formatter; newlineToBr
+	// rawHTML renders a value through the D174 `raw` function; newlineToBr
 	// through `newline_to_br` only.
 	rawHTML     bool
 	newlineToBr bool
@@ -499,10 +499,10 @@ export default app;
 		featureMarkup += "  {#raw}<span @x=\"y\">literal</span>{/raw}\n"
 	}
 	if fx.rawHTML {
-		featureMarkup += "  <div>{ items | join | raw }</div>\n"
+		featureMarkup += "  <div>{ raw(items.join(', ')) }</div>\n"
 	}
 	if fx.newlineToBr {
-		featureMarkup += "  <div>{ items | join | newline_to_br }</div>\n"
+		featureMarkup += "  <div>{ newline_to_br(items.join(', ')) }</div>\n"
 	}
 	if fx.snippets {
 		featureMarkup += `  <ScopedList items={ items }>
@@ -682,11 +682,11 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 
 	withRawHTML := writeDefinesFixture(t, definesFixture{rawHTML: true})
 	if err := Build(withRawHTML, Options{Development: false}); err != nil {
-		t.Fatalf("Build with raw formatter usage failed: %v", err)
+		t.Fatalf("Build with raw function usage failed: %v", err)
 	}
 	rawHTMLJS := readFile(t, filepath.Join(withRawHTML, "dist", "app.js"))
 	if !strings.Contains(rawHTMLJS, sanitizerMarker) {
-		t.Errorf("bundle with `| raw` should retain the sanitizer (%q)", sanitizerMarker)
+		t.Errorf("bundle with `raw()` should retain the sanitizer (%q)", sanitizerMarker)
 	}
 
 	// newline_to_br alone keeps the live-HTML node but not the sanitizer.
@@ -696,10 +696,10 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	}
 	brJS := readFile(t, filepath.Join(withBr, "dist", "app.js"))
 	if strings.Contains(brJS, sanitizerMarker) {
-		t.Errorf("bundle with only `| newline_to_br` retained the sanitizer (%q)", sanitizerMarker)
+		t.Errorf("bundle with only `newline_to_br()` retained the sanitizer (%q)", sanitizerMarker)
 	}
 	if !strings.Contains(brJS, "<br>") {
-		t.Errorf("bundle with `| newline_to_br` lost the <br> helper")
+		t.Errorf("bundle with `newline_to_br()` lost the <br> helper")
 	}
 
 	withSnippets := writeDefinesFixture(t, definesFixture{snippets: true})
@@ -718,7 +718,7 @@ func TestBuildUsageThroughSymlinkedRoot(t *testing.T) {
 	real := writeDefinesFixture(t, definesFixture{portal: true, snippets: true})
 	home := filepath.Join(real, "app", "views", "Home.pzl")
 	write(t, home, strings.ReplaceAll(readFile(t, home), "{ item.label }",
-		"{ item.label | upcase } { item.id | currency }")+"\n<style scoped>ul { color: red; }</style>\n")
+		"{ capitalize(item.label) } { currency(item.id) }")+"\n<style scoped>ul { color: red; }</style>\n")
 	link := filepath.Join(t.TempDir(), "app-root")
 	if err := os.Symlink(real, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
@@ -727,7 +727,7 @@ func TestBuildUsageThroughSymlinkedRoot(t *testing.T) {
 	t.Setenv("PUZZLE_RUNTIME", repoRoot(t))
 	want := plugin.Usage{
 		HasPortal: true, HasSnippets: true,
-		Formatters: map[string]bool{"currency": true, "upcase": true},
+		Formatters: map[string]bool{"currency": true, "capitalize": true},
 	}
 	var realDefines map[string]string
 	for _, root := range []string{real, link} {

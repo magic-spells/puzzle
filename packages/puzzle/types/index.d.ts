@@ -452,27 +452,6 @@ export interface LibraryFunctions {
 	newline_to_br(value: unknown): string;
 	/** JSON with object keys sorted by code point. */
 	json(value: unknown): string;
-	/** @deprecated D176 §4 — use `.toUpperCase()`. */
-	upcase(value: unknown): string;
-	/** @deprecated D176 §4 — use `.toLowerCase()`. */
-	downcase(value: unknown): string;
-	/** @deprecated D176 §4 — use `.trim()`. */
-	trim(value: unknown): string;
-	/** @deprecated D176 §4 — use `.trim()`. */
-	strip(value: unknown): string;
-	/**
-	 * @deprecated D176 §4 — for plain strings use `.replaceAll(search, replacement)`;
-	 * this was `.split(search).join(replacement)`, which is the exact equivalent.
-	 */
-	replace(value: unknown, search: unknown, replacement?: unknown): string;
-	/** @deprecated D176 §4 — use `.join(', ')`. */
-	join(list: unknown, separator?: string): string;
-	/** @deprecated D176 §4 — use `Math.abs()`. */
-	abs(value: unknown): number;
-	/** @deprecated D176 §4 — use `Math.ceil()`. */
-	ceil(value: unknown): number;
-	/** @deprecated D176 §4 — use `Math.floor()`. */
-	floor(value: unknown): number;
 }
 
 // ----------------------------------------------------------------------------
@@ -911,13 +890,6 @@ export declare class PuzzleApp {
  * `sep`, a list prints its items joined by it, dropping `false` and empty items.
  */
 export declare function displayValue(value: unknown, expression?: string | 0, sep?: string): string;
-
-/**
- * The template `.size` property (D176): a list's item count, a string's count
- * of code points, otherwise the value's own `size` field (undefined when the
- * value is missing). A compiled module that reads `.size` imports this as `__z`.
- */
-export declare function sizeOf(value: unknown): any;
 
 /** One node of the virtual tree — compiled render functions build these. */
 export declare class ViewNode {

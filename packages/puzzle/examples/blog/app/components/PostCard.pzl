@@ -6,11 +6,11 @@
       {/for}
     </div>
     <h3 class="mb-1.5 text-[1.2rem] text-ink">{ post.title }</h3>
-    <p class="mb-3 text-body">{ post.body | truncate(140) }</p>
+    <p class="mb-3 text-body">{ truncate(post.body, 140) }</p>
     <div class="flex items-center gap-2 text-[0.8rem] text-muted">
       <span>{ post.readingTime } min read</span>
       <span class="text-faint">·</span>
-      <span>{ post.publishedAt | timeago }</span>
+      <span>{ timeago(post.publishedAt) }</span>
     </div>
   </a>
 </puzzle-view>

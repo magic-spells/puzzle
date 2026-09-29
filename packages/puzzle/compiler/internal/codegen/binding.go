@@ -38,9 +38,9 @@ func classifyBindExpr(n expr.Node, scope scopeMap) (target, field string, bare, 
 		if _, bound := scope[root.Name]; root.Name == "event" && !bound {
 			return "", "", false, false
 		}
-		// `x.size` classifies like any field (D176): on an object it IS the
-		// field (`product.size`). Binding the count of a list or string is
-		// meaningless and is not special-cased.
+		// `x.size` classifies like any field: on an object it IS the field
+		// (`product.size`). A `.length` count is a field read too; binding one
+		// is meaningless and is not special-cased.
 		return root.Name, n.Property, false, true
 	}
 	return "", "", false, false
@@ -139,12 +139,6 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope scopeMap) *autoBind {
 		at, ok := a.(*parser.DynamicAttr)
 		if !ok || at.Name != attrName {
 			continue
-		}
-		if len(at.Formatters) > 0 { // P4: remove
-			// TEMPORARY (P4: remove): `value={ name | upcase }` displays a
-			// formatted value (D173 V1); there is no field to write the edit back
-			// to, so it stays one-way — as `value={ capitalize(name) }` does.
-			return nil
 		}
 		target, field, _, ok := classifyBindExpr(at.ExprAST, scope)
 		if !ok {

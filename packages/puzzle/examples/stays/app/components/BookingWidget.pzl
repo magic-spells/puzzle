@@ -7,21 +7,21 @@
     <!-- Header: nightly price + a compact rating on the right. -->
     <div class="flex items-baseline justify-between gap-3 mb-5">
       <div class="min-w-0">
-        <span class="text-2xl font-semibold text-fg">{ price | currency('$', 0) }</span>
+        <span class="text-2xl font-semibold text-fg">{ currency(price, '$', 0) }</span>
         <span class="text-muted"> night</span>
       </div>
-      <div class="text-sm text-fg shrink-0">★ { rating | rating } <span class="text-muted">· { reviewCount } reviews</span></div>
+      <div class="text-sm text-fg shrink-0">★ { rating(rating) } <span class="text-muted">· { reviewCount } reviews</span></div>
     </div>
 
     <!-- Date summary: two cells that show the chosen dates, or a prompt. -->
     <div class="grid grid-cols-2 rounded-lg ring-1 ring-hairline overflow-hidden mb-4">
       <div class="p-3 border-r border-hairline">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-fg">Check-in</div>
-        <div class="text-sm mt-0.5 {#if checkIn}text-fg{/if}{#if !checkIn}text-muted{/if}">{#if checkIn}{ checkIn | monthDay }{:else}Add date{/if}</div>
+        <div class="text-sm mt-0.5 {#if checkIn}text-fg{/if}{#if !checkIn}text-muted{/if}">{#if checkIn}{ monthDay(checkIn) }{:else}Add date{/if}</div>
       </div>
       <div class="p-3">
         <div class="text-[10px] font-semibold uppercase tracking-wide text-fg">Checkout</div>
-        <div class="text-sm mt-0.5 {#if checkOut}text-fg{/if}{#if !checkOut}text-muted{/if}">{#if checkOut}{ checkOut | monthDay }{:else}Add date{/if}</div>
+        <div class="text-sm mt-0.5 {#if checkOut}text-fg{/if}{#if !checkOut}text-muted{/if}">{#if checkOut}{ monthDay(checkOut) }{:else}Add date{/if}</div>
       </div>
     </div>
 
@@ -46,20 +46,20 @@
     {#if hasDates}
       <div class="mt-5 pt-5 border-t border-line space-y-3 text-sm">
         <div class="flex items-center justify-between text-fg">
-          <span class="underline decoration-muted/40">{ price | currency('$', 0) } × { nights } { nights | plural('night','nights') }</span>
-          <span>{ subtotal | currency('$', 0) }</span>
+          <span class="underline decoration-muted/40">{ currency(price, '$', 0) } × { nights } { plural(nights, 'night', 'nights') }</span>
+          <span>{ currency(subtotal, '$', 0) }</span>
         </div>
         <div class="flex items-center justify-between text-fg">
           <span class="underline decoration-muted/40">Cleaning fee</span>
-          <span>{ cleaning | currency('$', 0) }</span>
+          <span>{ currency(cleaning, '$', 0) }</span>
         </div>
         <div class="flex items-center justify-between text-fg">
           <span class="underline decoration-muted/40">Service fee</span>
-          <span>{ service | currency('$', 0) }</span>
+          <span>{ currency(service, '$', 0) }</span>
         </div>
         <div class="flex items-center justify-between font-semibold text-fg pt-3 border-t border-line">
           <span>Total</span>
-          <span>{ total | currency('$', 0) }</span>
+          <span>{ currency(total, '$', 0) }</span>
         </div>
       </div>
     {/if}

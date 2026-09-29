@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 //
-// D173 group (b), expressions and loops: the runtime half of V1 (formatter pipes
-// in attributes; plain JavaScript, `||` included, in block headers), V2 (`==` keeps its JavaScript meaning), V4
-// (reading through a missing value prints nothing), V8 (object literals as
-// formatter arguments), V12 (a non-list loops zero times; range bounds truncate)
+// D173 group (b), expressions and loops: the runtime half of V1 (library calls
+// in attributes; `||` stays logical OR in block headers), V2 (`==` keeps its
+// JavaScript meaning), V4 (reading through a missing value prints nothing), V8
+// (object literals as function arguments), V12 (a non-list loops zero times; range bounds truncate)
 // and V15 (a script-less component reads its props). The fixture graph is
 // compiled from the neighboring .pzl sources by the build:core-semantics pretest
 // script, so this proves the real compiler output, not a hand-written stand-in.
@@ -48,15 +48,15 @@ describe('D173 core semantics — compiled output', () => {
 		// ...and the undefined-value dev warning still names the path.
 		expect(warn.mock.calls.some(([m]) => m.includes('user.profile.name'))).toBe(true);
 
-		// V1: a pipe in a brace-only attribute is a formatter call, not bitwise OR.
+		// V1: a library call in a brace-only attribute.
 		expect(el.querySelector('.title').getAttribute('title')).toBe('$5');
-		// V1: condition headers take no chain; `||` stays logical OR there.
+		// V1: `||` stays logical OR in a condition header.
 		expect(el.querySelector('.has-tags')).toBeNull();
 		expect(text(el, '.no-tags')).toBe('none');
 		expect(text(el, '.unless')).toBe('empty');
 		expect(text(el, '.case')).toBe('open');
 
-		// V8: object literals as formatter arguments — keys stay keys, a shorthand
+		// V8: object literals as function arguments — keys stay keys, a shorthand
 		// property reads the data field, nested and quoted keys survive.
 		expect(text(el, '.label')).toBe('cart.count:3:items');
 		expect(JSON.parse(text(el, '.nested'))).toEqual({ outer: { inner: 3 }, 'quoted-key': 'items' });

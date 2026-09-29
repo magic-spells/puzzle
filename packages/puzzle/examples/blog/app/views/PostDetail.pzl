@@ -9,10 +9,10 @@
       <h1 class="mb-2.5 text-[2rem] text-ink">{ post.title }</h1>
       <div class="flex flex-wrap items-center gap-2 text-muted text-[0.85rem] mb-6">
         {#if author}
-          <span class="font-semibold text-body">{ author.name | byline }</span>
+          <span class="font-semibold text-body">{ byline(author.name) }</span>
           <span class="text-faint">·</span>
         {/if}
-        <span>{ post.publishedAt | date('long') }</span>
+        <span>{ date(post.publishedAt, 'long') }</span>
         <span class="text-faint">·</span>
         <span>{ post.readingTime } min read</span>
       </div>
@@ -21,10 +21,10 @@
 
     <section class="mt-10 border-t border-border pt-6">
       <h2 class="text-[1.2rem] text-ink mb-4">
-        { comments.size | pluralize('comment') }
+        { pluralize(comments.length, 'comment') }
       </h2>
 
-      {#if comments.size > 0}
+      {#if comments.length > 0}
         <ul class="list-none p-0 mb-6 flex flex-col gap-3">
           {#for comment in comments}
             <CommentItem comment={ comment } @remove={ removeComment(comment) }></CommentItem>
@@ -105,9 +105,8 @@ export default class PostDetailView extends PuzzleView {
       author,
       comments,
       commentText: local.commentText,
-      // Templates read data, they don't call JavaScript on it, so the
-      // "is there a comment to add?" check is computed here, not in the
-      // template's disabled=.
+      // Computed here so the template stays a plain read; the template
+      // could also write disabled={ !commentText.trim() } itself.
       canComment: (local.commentText ?? '').trim() !== '',
       authorName: local.authorName
     };

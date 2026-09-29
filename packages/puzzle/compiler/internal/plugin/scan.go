@@ -52,9 +52,9 @@ type Usage struct {
 	HasPortal   bool
 	HasRawAt    bool
 	HasSnippets bool
-	// HasRawHTML: a template calls `raw` or `newline_to_br` (D174) — as a text
-	// interpolation's outermost call, or at the end of its TEMPORARY pipe
-	// chain — which keeps the live-HTML node and the sanitizer in the bundle.
+	// HasRawHTML: a template calls `raw` or `newline_to_br` (D174) as a text
+	// interpolation's outermost call, which keeps the live-HTML node and the
+	// sanitizer in the bundle.
 	HasRawHTML bool
 	// HasRawSanitize: one of those is `raw` itself, which keeps the sanitizer;
 	// an app that only uses `newline_to_br` does not ship it.
@@ -64,8 +64,7 @@ type Usage struct {
 	// reads those files too (see scanScriptUsage).
 	HasLazy bool
 	// TKeys maps each string-literal key handed straight to `t` (D175) —
-	// `t('cart.title')`, or the TEMPORARY piped `'cart.title' | t` — to the
-	// app-relative files that use it, for the build's missing-key warning. It
+	// `t('cart.title')` — to the app-relative files that use it, for the build's missing-key warning. It
 	// is diagnostics only and never feeds a define.
 	TKeys map[string][]string
 }
@@ -107,9 +106,8 @@ func (u Usage) Features() Features {
 // ScanUsage walks scanRoot for first-party source usage that controls runtime
 // tree-shaking. Two kinds of file contribute:
 //
-//   - .pzl templates are fully parsed for library function calls (and the
-//     TEMPORARY formatter pipes), flip attributes, Portal nodes, and raw
-//     blocks — all TEMPLATE facts.
+//   - .pzl templates are fully parsed for library function calls, flip
+//     attributes, Portal nodes, and raw blocks — all TEMPLATE facts.
 //   - .js/.mjs/.cjs/.jsx/.ts/.mts/.cts/.tsx modules are read as TEXT and pattern-
 //     matched for lazy() route views (D163). That is a SCRIPT fact — `lazy()` is
 //     called from routes.js, never from a template — so it is the one bit a
@@ -300,7 +298,7 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Interpolation:
-		collectInterpCalls(node, usage, allow)
+		collectExprCalls(node.ExprAST, nil, usage, allow)
 	case *parser.If:
 		collectExprCalls(node.CondAST, nil, usage, allow)
 		for _, child := range node.Then {
@@ -362,9 +360,8 @@ func collectAttrCalls(attrs []parser.Attr, usage *Usage, allow map[string]bool) 
 		case *parser.MixedAttr:
 			collectPartCalls(a.Parts, usage, allow)
 		case *parser.DynamicAttr:
-			// A brace-only attribute, prop or marker argument (D173 V1).
+			// A brace-only attribute, prop or marker argument.
 			collectExprCalls(a.ExprAST, nil, usage, allow)
-			collectFormatterCalls(a.Formatters, usage, allow) // P4: remove
 		case *parser.EventAttr:
 			// The handler's own call names a view handler, never the library
 			// (§9 c); calls inside its arguments and its condition are library
@@ -391,7 +388,7 @@ func collectPartCalls(parts []parser.Part, usage *Usage, allow map[string]bool) 
 		switch p := part.(type) {
 		case *parser.InterpPart:
 			if p.Interp != nil {
-				collectInterpCalls(p.Interp, usage, allow)
+				collectExprCalls(p.Interp.ExprAST, nil, usage, allow)
 			}
 		case *parser.InlineIfPart:
 			collectExprCalls(p.CondAST, nil, usage, allow)
@@ -399,13 +396,6 @@ func collectPartCalls(parts []parser.Part, usage *Usage, allow map[string]bool) 
 			collectPartCalls(p.Else, usage, allow)
 		}
 	}
-}
-
-// collectInterpCalls records an interpolation's calls: its expression and its
-// TEMPORARY pipe chain (P4: remove).
-func collectInterpCalls(in *parser.Interpolation, usage *Usage, allow map[string]bool) {
-	collectExprCalls(in.ExprAST, nil, usage, allow)
-	collectFormatterCalls(in.Formatters, usage, allow) // P4: remove
 }
 
 // collectExprCalls records every library function a tree calls — a Call whose
@@ -427,17 +417,6 @@ func collectExprCalls(n expr.Node, skip map[*expr.Call]bool, usage *Usage, allow
 		}
 		return true
 	})
-}
-
-// collectFormatterCalls records a TEMPORARY pipe chain's formatter names
-// (P4: remove) and every call inside their arguments.
-func collectFormatterCalls(calls []parser.FormatterCall, usage *Usage, allow map[string]bool) {
-	for _, call := range calls {
-		noteFunction(call.Name, usage, allow)
-		for _, a := range call.ArgsAST {
-			collectExprCalls(a, nil, usage, allow)
-		}
-	}
 }
 
 // noteFunction records one library function name.
@@ -464,8 +443,8 @@ func noteFunction(name string, usage *Usage, allow map[string]bool) {
 const TranslateFormatter = "t"
 
 // collectTKeys records every STRING-LITERAL key handed straight to `t` —
-// `t('cart.title')`, or the TEMPORARY `{ 'cart.title' | t }` — for the build's
-// "key missing from the default locale" warning (D175). Runtime-built keys
+// `t('cart.title')` — for the build's "key missing from the default locale"
+// warning (D175). Runtime-built keys
 // (`t('status.' + s)`) are not checkable and are skipped. It is its own walk
 // rather than a thread through collectUsage so the function-union walk keeps
 // its narrow shape.
@@ -486,7 +465,7 @@ func collectTKeys(nodes []parser.Node, keys map[string]bool) {
 		case *parser.Portal:
 			collectTKeys(node.Children, keys)
 		case *parser.Interpolation:
-			noteTKeys(node, keys)
+			exprTKeys(node.ExprAST, keys)
 		case *parser.If:
 			exprTKeys(node.CondAST, keys)
 			collectTKeys(node.Then, keys)
@@ -515,7 +494,7 @@ func collectAttrTKeys(attrs []parser.Attr, keys map[string]bool) {
 		case *parser.MixedAttr:
 			collectPartTKeys(a.Parts, keys)
 		case *parser.DynamicAttr:
-			noteChainTKeys(a.ExprAST, a.Formatters, keys) // P4: remove
+			exprTKeys(a.ExprAST, keys)
 		case *parser.EventAttr:
 			exprTKeysSkipping(a.ExprAST, handlerOwnCalls(a.ExprAST), keys)
 		}
@@ -527,32 +506,12 @@ func collectPartTKeys(parts []parser.Part, keys map[string]bool) {
 		switch p := part.(type) {
 		case *parser.InterpPart:
 			if p.Interp != nil {
-				noteTKeys(p.Interp, keys)
+				exprTKeys(p.Interp.ExprAST, keys)
 			}
 		case *parser.InlineIfPart:
 			exprTKeys(p.CondAST, keys)
 			collectPartTKeys(p.Then, keys)
 			collectPartTKeys(p.Else, keys)
-		}
-	}
-}
-
-func noteTKeys(in *parser.Interpolation, keys map[string]bool) {
-	noteChainTKeys(in.ExprAST, in.Formatters, keys) // P4: remove
-}
-
-// noteChainTKeys records the keys of a value position: every `t('key')` call
-// in it, and — TEMPORARY (P4: remove) — a string literal piped first into `t`.
-func noteChainTKeys(n expr.Node, fmts []parser.FormatterCall, keys map[string]bool) {
-	exprTKeys(n, keys)
-	for _, fc := range fmts {
-		for _, a := range fc.ArgsAST {
-			exprTKeys(a, keys)
-		}
-	}
-	if len(fmts) > 0 && fmts[0].Name == TranslateFormatter { // P4: remove
-		if lit, ok := n.(*expr.Literal); ok && lit.Kind == expr.LitString {
-			keys[lit.Str] = true
 		}
 	}
 }

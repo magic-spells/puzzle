@@ -288,7 +288,7 @@ func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow
 
 	// The collection is resolved in the ENCLOSING scope, before the row locals
 	// exist — and its roots belong to the enclosing sites, not to this one.
-	coll := c.value(f.CollectionAST, nil, scope)
+	coll := c.value(f.CollectionAST, scope)
 
 	bodyScope := scopeAddAs(scope, f.Item, name+".item")
 	if f.Counter != "" {
@@ -350,11 +350,10 @@ func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lo
 		if startsWithObjectLiteral(attr.Expr) {
 			return "", false, c.cgErr(attr.Pos, objectLiteralMsg)
 		}
-		// A key calling a library function (`key={ slug(id) }`, or the
-		// TEMPORARY chained `key={ id | slug }`) reads `__f`, which the libRead
-		// check below turns into a `.map` site.
-		js = c.valueInto(attr.ExprAST, attr.Formatters, keyScope, facts) // P4: remove
-		if len(attr.Formatters) == 0 && startsWithObject(attr.ExprAST) {
+		// A key calling a library function (`key={ slug(id) }`) reads `__f`,
+		// which the libRead check below turns into a `.map` site.
+		js = c.valueInto(attr.ExprAST, keyScope, facts)
+		if startsWithObject(attr.ExprAST) {
 			// The key becomes an arrow's body, where a leading `{` would read as a
 			// block: `(item) => ({ a: item?.id }?.a)`, as arrow() writes one.
 			js = "(" + js + ")"

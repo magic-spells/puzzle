@@ -29,9 +29,9 @@ const MAX_SUFFIX =
 // the more specific topics before the general ones.
 const KNOWLEDGE = [
   {
-    keywords: ['formatter', 'format', 'pipe', 'timeago', 'currency'],
+    keywords: ['formatter', 'function', 'format', 'timeago', 'currency'],
     answer:
-      "Formatters are display-only transforms you pipe values through in a template: { price | currency('$', 2) } or { updatedAt | timeago }. They're Liquid-style and chainable — { text | trim | capitalize } — but strictly for presentation. Anything that filters or sorts data belongs in data(), not in a formatter. You register custom ones in the PuzzleApp config; this demo adds a `clock` formatter for message timestamps.",
+      "Template expressions are JavaScript: a display transform is a function call — { currency(price, '$', 2) } or { timeago(updatedAt) } — or a method, and calls nest: { capitalize(text.trim()) }. The functions are strictly for presentation; anything that decides which records you show belongs in data(). You register your own in the PuzzleApp config; this demo adds a `clock` function for message timestamps.",
   },
   {
     keywords: ['animation', 'animate', 'transition', 'motion'],
@@ -71,12 +71,12 @@ const KNOWLEDGE = [
   {
     keywords: ['what is puzzle', 'about puzzle', 'framework', 'overview', 'svelte', 'vue'],
     answer:
-      "Puzzle is a SPA-first JavaScript framework: single-file .pzl components like Svelte, reactive data like Vue, conventions like Ember, and Liquid-style formatters — compiled by a fast Go toolchain into a small virtual-DOM runtime. It's client-side only, no SSR. This chat app is a demo showcasing the v1.5–v1.8 features: skeleton loading, {#case}/{#unless}, event modifiers, nested routes, and store-driven streaming.",
+      "Puzzle is a SPA-first JavaScript framework: single-file .pzl components like Svelte, reactive data like Vue, conventions like Ember, and JavaScript template expressions — compiled by a fast Go toolchain into a small virtual-DOM runtime. It's client-side only, no SSR. This chat app is a demo showcasing the v1.5–v1.8 features: skeleton loading, {#case}/{#unless}, event modifiers, nested routes, and store-driven streaming.",
   },
 ];
 
 const FALLBACKS = [
-  "I'm a local demo assistant, so I only really know about the Puzzle framework itself. Try asking about formatters, animations, nested routes, the store, event modifiers, skeleton loading, or what a .pzl file looks like.",
+  "I'm a local demo assistant, so I only really know about the Puzzle framework itself. Try asking about template functions, animations, nested routes, the store, event modifiers, skeleton loading, or what a .pzl file looks like.",
   "Good question! This assistant is fully offline — its answers are canned and keyword-matched. Ask me how animations, routing, reactivity, or the template grammar work and I'll have a real answer for you.",
 ];
 

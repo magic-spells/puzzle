@@ -1,6 +1,6 @@
-<puzzle-view class={ classes } title="Hello { name | upper }">
+<puzzle-view class={ classes } title="Hello { upper(name) }">
   {#if user}
-    <h1>{ user.name | fallback('friend') }</h1>
+    <h1>{ fallback(user.name, 'friend') }</h1>
   {:else if loading}
     <p>{ status }</p>
   {:else}

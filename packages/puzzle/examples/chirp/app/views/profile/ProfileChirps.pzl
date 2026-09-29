@@ -2,7 +2,7 @@
   <!-- Default profile pane (path ''): the owner's top-level chirps, newest first.
        Rendered inside ProfileShell's <Slot/>; resolves the owner from the merged
        params.handle (D30). Replies live on the sibling /replies pane. -->
-  {#if chirps.size}
+  {#if chirps.length}
     {#for post in chirps, i}
       <ChirpCard post={ post } index={ i } />
     {/for}

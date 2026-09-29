@@ -12,7 +12,7 @@ export default class PrimitiveForm extends PuzzleView {
 	}
 }
 
-import { ViewNode, displayValue as __s, sizeOf as __z } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 PrimitiveForm.prototype.render = function () {
   const __d = this.getData();
@@ -21,8 +21,8 @@ PrimitiveForm.prototype.render = function () {
     new ViewNode('input', {
       class: 'len',
       type: 'number',
-      value: __z(__d.title),
-      '@change:bind': this.__bind(__d.title ?? 0, 'size', 'vn'),
+      value: __d.title?.length,
+      '@change:bind': this.__bind(__d.title ?? 0, 'length', 'vn'),
     }, []),
     new ViewNode('p', { class: 'title' }, [
       new ViewNode('text', { value: __s(__d.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'title' : 0) }),

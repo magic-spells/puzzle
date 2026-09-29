@@ -22,11 +22,10 @@ export { lazy } from './router/lazy.js';
 // ViewNode/SLOT_TAG/displayValue/listRows from the package root — the injected
 // render() builds trees, applies the shared display-coercion rule, and renders
 // its item-form {#for} sites with them. Each is imported only by a module that
-// actually emits it (`displayValue as __s`, `listRows as __l`, the D173
-// loop guards `loopItems as __e` / `loopRange as __r`, and the D176 `.size`
-// helper `sizeOf as __z`), so a loop-free app never pulls the list block in.
+// actually emits it (`displayValue as __s`, `listRows as __l`, and the D173
+// loop guards `loopItems as __e` / `loopRange as __r`), so a loop-free app
+// never pulls the list block in.
 // Not part of the SPEC §1 user-facing surface.
 export { ViewNode, SLOT_TAG, SNIPPET_TAG, PORTAL_TAG } from './views/ViewNode.js';
 export { displayValue } from './display.js';
-export { sizeOf } from './size.js';
 export { listRows, loopItems, loopRange } from './views/listBlock.js';

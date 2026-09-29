@@ -259,7 +259,7 @@ func virtualFileWithExtension(t *testing.T, files []virtualFile, ext string) vir
 // The <puzzle-view> tag's own attributes are bindings like any other element's;
 // they were silently skipped while only root.Children was walked.
 func TestRootAttributeExpressionsAreChecked(t *testing.T) {
-	source := []byte(`<puzzle-view class={ rootClass } title="Hi { rootName | upper }">
+	source := []byte(`<puzzle-view class={ rootClass } title="Hi { upper(rootName) }">
   <p>{ body }</p>
 </puzzle-view>
 <script lang="ts">

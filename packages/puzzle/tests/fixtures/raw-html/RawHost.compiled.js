@@ -20,20 +20,20 @@ RawHost.prototype.render = function () {
 
   return new ViewNode('puzzle-view', {}, [
     new ViewNode('div', { class: 'intro' }, [
-      new ViewNode('#html', { value: __s(__d.intro, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'intro' : 0) }),
+      new ViewNode('#html', { value: __s(__d.intro, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(intro)' : 0) }),
     ]),
     new ViewNode('p', { class: 'mix' }, [
       new ViewNode('text', { value: 'Before ' + __s(__d.lead, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'lead' : 0) + ' ' }),
-      new ViewNode('#html', { value: __s((__f["truncate"] || __f.__missing("truncate"))(__d.body, 40), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'body' : 0) }),
+      new ViewNode('#html', { value: __s((__f["truncate"] || __f.__missing("truncate"))(__d.body, 40), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(truncate(body, 40))' : 0) }),
       new ViewNode('text', { value: ' after' }),
     ]),
     new ViewNode('p', { class: 'note' }, [
-      new ViewNode('#html', { value: __s(__d.note, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'note' : 0), br: true }),
+      new ViewNode('#html', { value: __s(__d.note, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'newline_to_br(note)' : 0), br: true }),
     ]),
     new ViewNode('div', { class: 'cond' }, [
       ...(__d.flag
         ? [
-            new ViewNode('#html', { value: __s(__d.extra, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'extra' : 0) }),
+            new ViewNode('#html', { value: __s(__d.extra, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(extra)' : 0) }),
           ]
         : [
             new ViewNode('text', { value: 'plain' }),
@@ -44,12 +44,12 @@ RawHost.prototype.render = function () {
       __l(this, this, 0, __d.rows, (s) =>
         new ViewNode('li', { key: s.k }, [
           new ViewNode('text', { value: __s(s.item?.label, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'row.label' : 0) + ': ' }),
-          new ViewNode('#html', { value: __s(s.item?.html, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'row.html' : 0) }),
+          new ViewNode('#html', { value: __s(s.item?.html, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(row.html)' : 0) }),
         ])
       , __L0)
     ),
     new ViewNode('div', { class: 'keyed' }, [
-      new ViewNode('#html', { value: __s(__d.header, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'header' : 0) }),
+      new ViewNode('#html', { value: __s(__d.header, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(header)' : 0) }),
       ...__l(this, this, 1, __d.rows, (s) =>
         new ViewNode('span', { key: s.k }, [
           new ViewNode('text', { value: __s(s.item?.label, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'row.label' : 0) }),

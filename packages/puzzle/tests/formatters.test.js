@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,6 @@ import {
 } from '../client-runtime/formatters.js';
 import fullBuiltins from '../client-runtime/formatters/builtins-all.js';
 import builtinNames from '../client-runtime/formatters/builtins.json';
-import { DEPRECATED_FORMATTERS } from '../client-runtime/formatters/deprecated.js';
 import { createI18n } from '../client-runtime/i18n.js';
 import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 
@@ -21,15 +20,6 @@ const conformance = JSON.parse(
 );
 
 const f = new FormatterRegistry().getAll();
-
-// The deprecated built-ins (D176 §4) warn once per name in development. Spend
-// those warnings here, silenced, so the tests that still exercise the functions
-// run quietly; the warnings themselves are tested against a fresh module below.
-beforeAll(() => {
-	const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-	for (const name of Object.keys(DEPRECATED_FORMATTERS)) f[name]('');
-	warn.mockRestore();
-});
 
 function spyOnIntlConstructor(name) {
 	const Original = Intl[name];
@@ -275,13 +265,6 @@ describe('FormatterRegistry', () => {
 			expect(f.truncate('x'.repeat(120))).toBe('x'.repeat(99) + '…');
 		});
 
-		it('replace replaces ALL occurrences for string search (Liquid semantics)', () => {
-			expect(f.replace('a-b-c', '-', '+')).toBe('a+b+c');
-			expect(f.replace('a-b-c', '-')).toBe('abc');
-			// A RegExp search stays a PuzzleKit addition.
-			expect(f.replace('a1b22', /\d+/g, '#')).toBe('a#b#');
-		});
-
 		it('strip_html is quote-aware and leaves a bare < alone (D174 F23)', () => {
 			expect(f.strip_html('<p>Hi <b>there</b></p>')).toBe('Hi there');
 			expect(f.strip_html('a < b and 1<2')).toBe('a < b and 1<2');
@@ -403,7 +386,7 @@ describe('FormatterRegistry', () => {
 		});
 
 		// A non-finite NUMBER prints nothing, as a bare `{ 0 / 0 }` does (D173 V6):
-		// `{ cart.total / cart.items.size | currency }` on an empty cart, or a price
+		// `{ currency(cart.total / cart.items.length) }` on an empty cart, or a price
 		// times a quantity that has not loaded. A STRING still passes through as text
 		// (D174 deviation 2). Pinned here rather than in the conformance table,
 		// because JSON has no NaN or Infinity literal.
@@ -445,14 +428,14 @@ describe('FormatterRegistry', () => {
 	});
 
 	describe('value formatters', () => {
-		it('join', () => {
-			expect(f.join(['a', 'b'])).toBe('a, b');
-			expect(f.join(['a', 'b'], ' | ')).toBe('a | b');
-		});
-
-		it('size, the arithmetic formatters, default and split are not built in (D176)', () => {
-			// `.size`, the operators and `??` replace them; `split` is Sites-only.
-			const removed = ['size', 'plus', 'minus', 'times', 'divided_by', 'modulo', 'default', 'split'];
+		it('what JavaScript already says is not built in (D176 §4)', () => {
+			// `.length`, the operators and `??` replace size, the arithmetic and
+			// default; `split` is Sites-only; a string or number method or a `Math`
+			// global replaces the rest.
+			const removed = [
+				'size', 'plus', 'minus', 'times', 'divided_by', 'modulo', 'default', 'split',
+				'upcase', 'downcase', 'trim', 'strip', 'replace', 'join', 'abs', 'ceil', 'floor',
+			];
 			for (const name of removed) {
 				expect(Object.hasOwn(fullBuiltins, name), name).toBe(false);
 				expect(Object.hasOwn(f, name), name).toBe(false);
@@ -602,7 +585,7 @@ describe('FormatterRegistry', () => {
 		it('in_timezone renders an absent value empty, like every other date formatter', () => {
 			// It used to return the Invalid Date `undefined` produced. That reads as
 			// harmless until it is piped: in_timezone is a mid-pipeline stage, and
-			// `{ x | in_timezone:'UTC' | date }` handed `date` a Date object — which
+			// `{ date(in_timezone(x, 'UTC')) }` handed `date` a Date object — which
 			// noDate() does not consider absent — so an unset field rendered the
 			// literal text "Invalid Date" instead of nothing.
 			for (const empty of [null, undefined, '', false, true]) {
@@ -781,27 +764,14 @@ describe('the standard set (D174, D176 §4)', () => {
 		// `t` is standard (D175) but registered by the i18n service, not built in.
 		for (const name of STANDARD_FORMATTERS) if (name !== 't') expect(builtinNames).toContain(name);
 		expect(builtinNames).not.toContain('t');
-		// The rest of the manifest: the PuzzleKit-only timeago (link is built by the
-		// registry), and the deprecated names, still built in (and tree-shaken by
-		// name) until they are deleted.
-		const deprecated = Object.keys(DEPRECATED_FORMATTERS);
-		expect(builtinNames.filter((name) => !STANDARD_FORMATTERS.includes(name)).sort()).toEqual(
-			['timeago', ...deprecated].sort(),
-		);
-	});
-
-	it('deprecates exactly the names a JavaScript method or Math global covers, keeping round (D176 §4)', () => {
-		expect(Object.keys(DEPRECATED_FORMATTERS).sort()).toEqual(
-			['abs', 'ceil', 'downcase', 'floor', 'join', 'replace', 'strip', 'trim', 'upcase'],
-		);
-		for (const name of Object.keys(DEPRECATED_FORMATTERS)) {
-			expect(STANDARD_FORMATTERS, name).not.toContain(name);
-			expect(typeof f[name], name).toBe('function');
-		}
+		// The rest of the manifest: the PuzzleKit-only timeago (link is built by
+		// the registry).
+		expect(builtinNames.filter((name) => !STANDARD_FORMATTERS.includes(name))).toEqual(['timeago']);
+		expect(builtinNames).toHaveLength(19);
 		expect(STANDARD_FORMATTERS).toContain('round');
 	});
 
-	it('does not warn when an app registers a deprecated name — it is the app\'s own function now', () => {
+	it('does not warn when an app registers a name JavaScript covers — it is the app\'s own function', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const registry = makeFormatterRegistry({ join: (list) => list.join(' / ') });
 		expect(registry.getAll().join(['a', 'b'])).toBe('a / b');
@@ -880,64 +850,29 @@ describe('the standard set (D174, D176 §4)', () => {
 	});
 });
 
-// D176 §4: the deprecated built-ins keep working and warn once each in
-// development, naming the JavaScript that replaces them. A fresh module per test
-// so the module-level warn-once ledger starts empty.
-describe('deprecated built-ins (D176 §4)', () => {
+// D176 §4: a call to a name JavaScript already covers reaches the unknown-name
+// guard, which names the method or Math global to write instead.
+describe('removed built-ins name their replacement', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
-		vi.resetModules();
 	});
 
-	async function fresh() {
-		vi.resetModules();
-		return import('../client-runtime/formatters/builtins.js');
-	}
-
-	it('keep working and warn once per name with the JavaScript replacement', async () => {
-		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const b = await fresh();
-		const calls = [
-			['upcase', () => b.upcase('ab'), 'AB', '.toUpperCase()'],
-			['downcase', () => b.downcase('AB'), 'ab', '.toLowerCase()'],
-			['trim', () => b.trim('  a  '), 'a', '.trim()'],
-			['strip', () => b.strip('\n a \t'), 'a', '.trim()'],
-			['replace', () => b.replace('a-b-c', '-', '+'), 'a+b+c', '.replaceAll(search, replacement)'],
-			['join', () => b.join(['a', 'b']), 'a, b', ".join(', ')"],
-			['abs', () => b.abs(-3), 3, 'Math.abs(x)'],
-			['ceil', () => b.ceil(1.2), 2, 'Math.ceil(x)'],
-			['floor', () => b.floor(1.8), 1, 'Math.floor(x)'],
-		];
-		for (const [name, call, expected, replacement] of calls) {
-			expect(call(), name).toBe(expected);
-			expect(call(), name).toBe(expected);
-			const message = warn.mock.calls.at(-1)[0];
-			expect(message).toContain(`"${name}" is deprecated`);
-			expect(message).toContain(replacement);
-		}
-		// Once per name, however often each ran.
-		expect(warn).toHaveBeenCalledTimes(calls.length);
-	});
-
-	it('replace names .replaceAll() for plain strings and .split().join() as the exact equivalent', async () => {
-		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const b = await fresh();
-		expect(b.replace('a-b-c', '-', '+')).toBe('a+b+c');
-		expect('a-b-c'.replaceAll('-', '+')).toBe('a+b+c');
-		// Where .replaceAll() differs, .split().join() still matches the formatter.
-		expect(b.replace('a$b', '$', '$&')).toBe('a$b'.split('$').join('$&'));
-		expect('a$b'.replaceAll('$', '$&')).not.toBe(b.replace('a$b', '$', '$&'));
-		expect(warn.mock.calls[0][0]).toBe(
-			'[puzzle] "replace" is deprecated — JavaScript already covers it: use `.replaceAll(search, replacement)` for plain strings; the old formatter was `.split(search).join(replacement)`, which is the exact equivalent'
-		);
-	});
-
-	it('round, the kept numeric function, does not warn', async () => {
-		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const b = await fresh();
-		expect(b.round(1.005, 2)).toBe(1.01);
-		expect(b.currency(9.5)).toBe('$9.50');
-		expect(warn).not.toHaveBeenCalled();
+	it.each([
+		['upcase', '`.toUpperCase()`'],
+		['downcase', '`.toLowerCase()`'],
+		['trim', '`.trim()`'],
+		['strip', '`.trim()`'],
+		['replace', '`.replaceAll(search, replacement)`'],
+		['join', "`.join(', ')`"],
+		['abs', '`Math.abs(x)`'],
+		['ceil', '`Math.ceil(x)`'],
+		['floor', '`Math.floor(x)`'],
+	])('%s', (name, replacement) => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const missing = new FormatterRegistry().getAll().__missing;
+		expect(missing(name)('value')).toBe('value');
+		expect(error).toHaveBeenCalledTimes(1);
+		expect(error.mock.calls[0][0]).toContain(`[puzzle] "${name}" was removed from the function library — use ${replacement}`);
 	});
 });
 
@@ -964,9 +899,7 @@ describe('function library conformance table (D174, D176 §4)', () => {
 			if (localeRendered.includes(name)) continue;
 			expect(covered.has(name), name).toBe(true);
 		}
-		// The deprecated names keep their rows until they are deleted.
-		const known = [...STANDARD_FORMATTERS, ...Object.keys(DEPRECATED_FORMATTERS)];
-		for (const name of covered) expect(known).toContain(name);
+		for (const name of covered) expect(STANDARD_FORMATTERS).toContain(name);
 	});
 
 	it('pins the no-preset defaults of date, time and datetime (D176 §4)', () => {

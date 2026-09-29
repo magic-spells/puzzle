@@ -19,14 +19,14 @@ var i18nMarkers = []string{"data-puzzle-locale", "__puzzleLocale"}
 
 var enI18n = &config.I18n{Locales: []string{"en", "es"}, DefaultLocale: "en"}
 
-// i18nFixture is baseSSGFixture plus two locale files and a view that pipes a
-// literal key through `t`.
+// i18nFixture is baseSSGFixture plus two locale files and a view that passes a
+// literal key to `t`.
 func i18nFixture() ssgFixtureFiles {
 	files := baseSSGFixture()
 	files["app/locales/en.json"] = `{ "home": { "title": "Welcome" }, "items": { "one": "{count} item", "other": "{count} items" } }`
 	files["app/locales/es.json"] = `{ "home": { "title": "Bienvenido" } }`
 	files["app/views/Home.pzl"] = `<puzzle-view>
-  <h1>{ 'home.title' | t }</h1>
+  <h1>{ t('home.title') }</h1>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -227,8 +227,8 @@ func templateVarsFixture(arg, countArg string) ssgFixtureFiles {
 	files := i18nFixture()
 	files["app/locales/en.json"] = `{ "home": { "title": "Welcome" }, "greeting": "Hello, {name}!", "items": { "one": "{count} item", "other": "{count} items" } }`
 	files["app/views/Home.pzl"] = `<puzzle-view>
-  <p class="greet">{ 'greeting' | t(` + arg + `) }</p>
-  <p class="count">{ 'items' | t(` + countArg + `) }</p>
+  <p class="greet">{ t('greeting', ` + arg + `) }</p>
+  <p class="count">{ t('items', ` + countArg + `) }</p>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -258,8 +258,8 @@ func TestPrerenderTemplateTranslateVars(t *testing.T) {
 }
 
 // TestPrerenderTemplateTranslateObjectLiteral is the same through inline object
-// literals (D173 V8): `t({ name: 'Ada' })`, and a plural chosen by
-// `t({ count: n })` with `n` a data field.
+// literals (D173 V8): `t('greeting', { name: 'Ada' })`, and a plural chosen by
+// `t('items', { count: n })` with `n` a data field.
 func TestPrerenderTemplateTranslateObjectLiteral(t *testing.T) {
 	requireStaticRuntime(t)
 	root := writeSSGFixture(t, templateVarsFixture("{ name: 'Ada' }", "{ count: n }"))

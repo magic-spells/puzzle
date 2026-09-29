@@ -39,7 +39,7 @@ func TestClassifyBindExpr(t *testing.T) {
 		{name: "deep member", raw: "a.b.c"},
 		{name: "call", raw: "fmt(x)"},
 		{name: "member call", raw: "x.trim()"},
-		{name: "size field (D176)", raw: "profile.size", target: "profile", field: "size", ok: true},
+		{name: "a field named size", raw: "profile.size", target: "profile", field: "size", ok: true},
 		{name: "addition", raw: "a + b"},
 		{name: "nullish", raw: "a ?? ''"},
 		{name: "ternary", raw: "a ? b : c"},
@@ -48,8 +48,9 @@ func TestClassifyBindExpr(t *testing.T) {
 		{name: "library call", raw: "money(x)"},
 		{name: "global call", raw: "Number(x)"},
 		{name: "keyword", raw: "true"},
-		// There are no JavaScript globals as values: `window` is a data field.
-		{name: "window is data", raw: "window", field: "window", bare: true, ok: true},
+		// A browser global is not a value (`window` alone is a parse error), but
+		// a template binding may own the name.
+		{name: "a binding named window", raw: "window.open", scope: scopeMap{"window": ""}, target: "window", field: "open", ok: true},
 		{name: "scoped event member", raw: "event.detail", scope: scopeMap{"event": ""}, target: "event", field: "detail", ok: true},
 		{name: "quoted empty", raw: "''"},
 		{name: "object literal", raw: "{ a: 1 }"},

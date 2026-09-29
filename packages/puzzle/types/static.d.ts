@@ -59,7 +59,7 @@ export interface MountStaticOptions {
 /**
  * Mount a prerendered static page's interactive layer: wire the build-time ctx
  * (Store + FormatterRegistry, plus the D79 link-capable router stub — `url()` and
- * `current` work so `{ path | link }` and `router.current` resolve, while every
+ * `current` work so `{ link(path) }` and `router.current` resolve, while every
  * navigation method throws), rehydrate the inline data island, assemble + preload
  * the route chain, and mount it over the prerendered markup (flash-free,
  * replace-on-commit). `beforeMount` is not run (build-time only).

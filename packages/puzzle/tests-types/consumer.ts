@@ -776,15 +776,8 @@ function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: st
 		lib.raw('<b>x</b>'),
 		lib.newline_to_br('a\nb'),
 		lib.json({ b: 1, a: 2 }),
-		// Deprecated, still typed (D176 §4).
-		lib.upcase('a'),
-		lib.downcase('A'),
-		lib.trim(' a '),
-		lib.strip(' a '),
-		lib.replace('a-b', '-', '+'),
-		lib.join(tags, ' / '),
 	];
-	const numbers: number[] = [lib.round(1.005, 2), lib.round(2.5), lib.abs(-1), lib.ceil(1.2), lib.floor(1.8)];
+	const numbers: number[] = [lib.round(1.005, 2), lib.round(2.5)];
 	const shifted: Date | '' = lib.in_timezone(when, 'Asia/Tokyo');
 	const preset: DatePreset = 'medium';
 	lib.date(when, preset);
@@ -821,6 +814,12 @@ function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: st
 	lib.timeago(when, 'short');
 	// @ts-expect-error not a library function: sort left with the list formatters.
 	lib.sort(tags);
+	// @ts-expect-error not a library function: `.toUpperCase()` says it (D176 §4).
+	lib.upcase('a');
+	// @ts-expect-error not a library function: `.join(', ')` says it (D176 §4).
+	lib.join(tags);
+	// @ts-expect-error not a library function: `Math.floor()` says it (D176 §4).
+	lib.floor(1.8);
 	void texts;
 	void numbers;
 	void shifted;

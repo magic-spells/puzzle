@@ -244,9 +244,9 @@ func TestLexInterpolationAndText(t *testing.T) {
 			want:  []tv{{TokInterp, " {a: 1} "}},
 		},
 		{
-			name:  "interpolation with formatter and quoted comma arg",
-			input: "{ names | join(', ') }",
-			want:  []tv{{TokInterp, " names | join(', ') "}},
+			name:  "interpolation with a call and a quoted comma arg",
+			input: "{ names.join(', ') }",
+			want:  []tv{{TokInterp, " names.join(', ') "}},
 		},
 		{
 			name:  "text then interpolation then text",

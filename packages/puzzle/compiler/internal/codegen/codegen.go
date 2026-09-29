@@ -343,11 +343,6 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if c.usesDisplayValue {
 		imports = append(imports, "displayValue as __s")
 	}
-	// The `.size` helper (D176, TEMPORARY — P4: remove) follows the same rule: only
-	// a module whose template reads a count imports it.
-	if c.usesSize { // P4: remove
-		imports = append(imports, "sizeOf as __z")
-	}
 	// The list block is imported ONLY by a module that lowered at least one
 	// item-form {#for} (D170), exactly as displayValue is imported only by a
 	// module that emits a display coercion: a loop-free app must not pay for
@@ -411,8 +406,8 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	b.WriteString(className)
 	b.WriteString(".prototype.render = function () {\n")
 	b.WriteString("  const __d = this.getData();\n")
-	// The function registry is read only by a library call (or a TEMPORARY pipe
-	// chain), so the binding is emitted only when one was compiled
+	// The function registry is read only by a library call, so the binding is
+	// emitted only when one was compiled
 	// (usesFormatters, set by absorbFlags). rootExpr and skelExpr are both fully
 	// built above, so the flag is final here.
 	if c.usesFormatters {
@@ -504,9 +499,6 @@ type compiler struct {
 	// values remain raw vnode attrs do not pay for an unused import.
 	usesDisplayValue bool
 
-	// Set when a template value's `.size` is lowered to the package-root helper
-	// imported as `__z` (D176, TEMPORARY — P4: remove).
-	usesSize bool // P4: remove
 	// src is the whole .pzl file (parser.Sections.Source), which every node
 	// Position.Offset indexes. Empty when the Sections did not come from
 	// SplitSections.
@@ -521,8 +513,8 @@ type compiler struct {
 	usesLoopItems bool
 	usesLoopRange bool
 
-	// Set when an emitted expression calls a library function (or runs a
-	// TEMPORARY pipe chain), which is the only thing that reads __f. It gates
+	// Set when an emitted expression calls a library function, which is the
+	// only thing that reads __f. It gates
 	// the `const __f = this.ctx.formatters.getAll()` line in BOTH render() and
 	// renderSkeleton() — module-wide, so a call in either body emits the line in
 	// both. A third tracker of the same signal is internal/plugin/scan.go
@@ -937,8 +929,7 @@ func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (stri
 // an unstable conditional emits both branches unpadded, byte-identically to the
 // pre-padding form. Nested conditionals make this decision independently.
 func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, error) {
-	// A condition takes no pipe chain (D173 V1: the parser rejects a pipe in a
-	// condition header), but it is a value position for guarded access.
+	// A condition is a value position for guarded access.
 	f := c.factSink()
 	cond := c.cond(n.CondAST, scope, f)
 	c.absorb(f, scope)
@@ -1130,7 +1121,7 @@ func (c *compiler) caseStaticLen(n *parser.Case, scope scopeMap) (int, bool, err
 // cleanly in nested cases: user expressions never resolve to it, and each arm
 // only ever compares its own `__c`.
 func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, error) {
-	caseExpr := c.value(n.ExprAST, nil, scope)
+	caseExpr := c.value(n.ExprAST, scope)
 
 	// Pre-process every clause body + the else and compute the max static arity.
 	// Padding applies only when every branch has provably fixed occupancy; an
@@ -1178,7 +1169,7 @@ func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, er
 	for i, cl := range n.Clauses {
 		conds := make([]string, len(cl.ValuesAST))
 		for k, v := range cl.ValuesAST {
-			conds[k] = "__c === (" + c.value(v, nil, scope) + ")"
+			conds[k] = "__c === (" + c.value(v, scope) + ")"
 		}
 		condStr := strings.Join(conds, " || ")
 		items := clauseItems[i]
@@ -1282,7 +1273,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		gen, folded := literalRange(f.RangeFromAST, f.RangeToAST)
 		if !folded {
 			c.usesLoopRange = true
-			gen = "__r(" + c.value(f.RangeFromAST, nil, scope) + ", " + c.value(f.RangeToAST, nil, scope) + ")"
+			gen = "__r(" + c.value(f.RangeFromAST, scope) + ", " + c.value(f.RangeToAST, scope) + ")"
 		}
 		gen += ".map(("
 		if f.Counter != "" {
@@ -1323,7 +1314,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		}
 	}
 
-	coll := c.value(f.CollectionAST, nil, scope)
+	coll := c.value(f.CollectionAST, scope)
 	bodyScope, itemParam := c.bareBinding(scope, f.Item)
 	params := itemParam
 	if f.Counter != "" {
@@ -1635,7 +1626,7 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
-		return jsKey(at.Name) + ": " + c.value(at.ExprAST, at.Formatters, scope), nil // P4: remove
+		return jsKey(at.Name) + ": " + c.value(at.ExprAST, scope), nil
 	case *parser.MixedAttr:
 		return jsKey(at.Name) + ": " + c.emitMixed(at.Parts, scope), nil
 	case *parser.EventAttr:
@@ -1717,7 +1708,7 @@ func (c *compiler) emitMixedFacts(parts []parser.Part, scope scopeMap, facts *ex
 		case *parser.StaticPart:
 			b.WriteString(tplEscape(pp.Text))
 		case *parser.InterpPart:
-			js := c.valueInto(pp.Interp.ExprAST, pp.Interp.Formatters, scope, facts) // P4: remove
+			js := c.valueInto(pp.Interp.ExprAST, scope, facts)
 			b.WriteString("${")
 			b.WriteString(c.displayValue(js, pp.Interp.Expr))
 			b.WriteString("}")
@@ -1750,7 +1741,7 @@ func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprF
 		case *parser.StaticPart:
 			segs = append(segs, jsString(pp.Text))
 		case *parser.InterpPart:
-			js := c.valueInto(pp.Interp.ExprAST, pp.Interp.Formatters, scope, facts) // P4: remove
+			js := c.valueInto(pp.Interp.ExprAST, scope, facts)
 			segs = append(segs, c.displayValue(js, pp.Interp.Expr))
 		case *parser.InlineIfPart:
 			cond := c.cond(pp.CondAST, scope, facts)
@@ -1917,7 +1908,7 @@ func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftSibling, 
 			if startsWithObjectLiteral(t.Expr) {
 				return "", false, c.cgErr(t.Pos, objectLiteralMsg)
 			}
-			js := c.valueInto(t.ExprAST, t.Formatters, scope, facts) // P4: remove
+			js := c.valueInto(t.ExprAST, scope, facts)
 			segs = append(segs, seg{js: c.displayValue(js, t.Expr), static: false})
 		}
 	}

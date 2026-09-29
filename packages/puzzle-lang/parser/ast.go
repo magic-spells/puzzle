@@ -93,25 +93,21 @@ type Text struct {
 	Pos   Position
 }
 
-// Interpolation is `{ expr | fmt(args) | ... }`: a base expression plus an
-// optional formatter chain. Only a top-level `|` is a pipe; a nested single `|`
-// is a parse error (D176 — there is no bitwise OR).
+// Interpolation is `{ expr }`: one expression (D176). A display transform is a
+// call inside it — `{ currency(price) }` — never a pipe.
 //
 // Every expression string in this AST has a parsed sibling (…AST, an
-// expr.Node with file positions) filled during parsing. Codegen still reads
-// the strings; the trees are what the next compiler stage lowers.
+// expr.Node with file positions) filled during parsing; the string is the
+// trimmed source text, and the tree is what codegen lowers.
 type Interpolation struct {
-	Expr       string
-	ExprAST    expr.Node
-	Formatters []FormatterCall
-	Pos        Position
+	Expr    string
+	ExprAST expr.Node
+	Pos     Position
 }
 
 // If is `{#if cond} Then {:else} Else {/if}`. Else is nil when absent.
 // `{:else if}` desugars into an If nested in Else, and `{#unless}` into an If
-// whose condition is negated as `!(…)` — its one AST shape (D176). Cond is a
-// plain expression: a condition header takes no formatter chain (D173 V1,
-// D176), so any `|` in it other than `||` is a parse error.
+// whose condition is negated as `!(…)` — its one AST shape (D176).
 //
 // CondAST is the parsed condition. For {#unless} it is a Unary `!` wrapping
 // the parsed inner condition, while Cond keeps the folded `!(…)` string.
@@ -148,10 +144,6 @@ type For struct {
 // trailing default branch (nil when absent). Unlike {#unless}, this does NOT
 // desugar to If: codegen emits an IIFE that binds Expr to a temp ONCE, so a
 // getter-backed data value is evaluated a single time.
-//
-// Expr and the `{:when}` values are plain expressions: a branching header
-// takes no formatter chain (D173 V1, D176), so any `|` other than `||` in them
-// is a parse error.
 type Case struct {
 	Expr    string
 	ExprAST expr.Node
@@ -195,18 +187,6 @@ func (*For) isNode()           {}
 func (*Case) isNode()          {}
 func (*InlineSVG) isNode()     {}
 
-// FormatterCall is one link in an interpolation's formatter chain. Args are raw
-// JS expression strings (e.g. "'short'", "', '") emitted as-is by codegen; they
-// participate in scope resolution like any other expression. ArgsAST holds
-// the parsed arguments, one per Args entry; each is parsed as a call argument,
-// so an arrow function is legal there. The formatter Name is not validated
-// here: the function library owns names.
-type FormatterCall struct {
-	Name    string
-	Args    []string
-	ArgsAST []expr.Node
-}
-
 // Attr is an element attribute or component prop.
 type Attr interface{ isAttr() }
 
@@ -233,16 +213,13 @@ type StaticAttr struct {
 
 // DynamicAttr is `name={ expr }` — a single unquoted brace expression. Binding
 // classification and the property-vs-attribute distinction are downstream
-// compiler/runtime concerns. Formatters is the value's formatter chain (D173
-// V1): `title={ price | currency }` is Expr "price" with one call, exactly as
-// the same braces in text would be. Component props and marker arguments are
-// DynamicAttrs too, so they share the rule.
+// compiler/runtime concerns. Component props and marker arguments are
+// DynamicAttrs too.
 type DynamicAttr struct {
-	Name       string
-	Expr       string
-	ExprAST    expr.Node
-	Formatters []FormatterCall
-	Pos        Position
+	Name    string
+	Expr    string
+	ExprAST expr.Node
+	Pos     Position
 }
 
 // EventAttr is `@name={ expr }` with optional `:modifier` suffixes
@@ -289,8 +266,7 @@ type InterpPart struct {
 
 // InlineIfPart is `{#if cond} Then {:else} Else {/if}` inside an attribute
 // value. Then/Else may contain only static text and interpolations — no
-// elements and no {#for} (parse error otherwise). Cond is a plain expression,
-// as on If: a condition takes no formatter chain (D173 V1, D176).
+// elements and no {#for} (parse error otherwise).
 type InlineIfPart struct {
 	Cond    string
 	CondAST expr.Node

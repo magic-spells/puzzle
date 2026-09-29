@@ -24,7 +24,7 @@ LazyCard.prototype.render = function () {
     new ViewNode('h3', {}, [
       new ViewNode(SLOT_TAG, { name: 'label', fallback: () => [
         new ViewNode('em', { class: 'lazy-card-fallback' }, [
-          new ViewNode('text', { value: __s((__f["probe"] || __f.__missing("probe"))(__d.label), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'label' : 0) }),
+          new ViewNode('text', { value: __s((__f["probe"] || __f.__missing("probe"))(__d.label), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probe(label)' : 0) }),
         ]),
       ] }),
     ]),

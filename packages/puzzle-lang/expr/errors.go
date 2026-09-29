@@ -9,7 +9,14 @@ type Error struct {
 	Message string
 	// Note is optional supplementary guidance shown under the message.
 	Note string
+	// Code classifies an error a caller may want to re-word for its own
+	// context; "" for every other error. CodePipe marks the `|` steer, which
+	// the template parser words differently inside a {:when} list.
+	Code string
 }
+
+// CodePipe is the Code of the error for a `|` in an expression.
+const CodePipe = "pipe"
 
 func (e *Error) Error() string {
 	return fmt.Sprintf("%d:%d: %s", e.Pos.Line, e.Pos.Col, e.Message)
@@ -25,7 +32,7 @@ const (
 	computeFirst = "compute the value first (a data() field in PuzzleKit, {#let} in Sites)"
 
 	msgExpected        = "expected an expression"
-	msgThis            = "`this` is not available in template expressions — return the value from data() (a getter or a computed field), or use a formatter for a display transform"
+	msgThis            = "`this` is not available in template expressions — return the value from data() (a getter or a computed field), or use a function for a display transform"
 	msgEvent           = "`event` is only available in an event handler — a data field named `event` cannot be read in a template; rename the field"
 	msgArrowPlace      = "arrow functions are only available as a call argument, e.g. `items.filter(item => item.done)`"
 	msgArrowParam      = "arrow function parameters are plain names — defaults, rest parameters, and destructuring are not available in template expressions"
@@ -49,7 +56,7 @@ const (
 	msgAssign          = "assignment is not available in template expressions — a template reads values; it never changes them (to compare, write `===`)"
 	msgUpdate          = "`++` and `--` are not available in template expressions — a template reads values; it never changes them"
 	msgBitwise         = "bitwise operators are not available in template expressions — use `&&` / `||` for logic"
-	msgBitOr           = "the `|` operator is not available in template expressions — there is no bitwise OR; write `||` for a logical OR"
+	msgPipe            = "`| name` pipes were removed — write `name(value)`; bitwise OR is not available"
 	msgExponent        = "`**` is not available in template expressions — use `Math.pow(a, b)`"
 	msgRegex           = "regular expression literals are not available in template expressions — use `includes()`, `startsWith()`, or `endsWith()`"
 	msgComment         = "comments are not available in template expressions"
@@ -88,6 +95,68 @@ const (
 	msgNameEscape      = "escapes are not available in names — write the character itself"
 	msgTooDeep         = "expression nests too deeply"
 )
+
+// ambientGlobals are the browser's global objects, read as a data root:
+// `window.scrollY`, `document.title`, `globalThis.x`. They name nothing a
+// template can hold — a template reads data() — so a root read of one is a
+// positioned error rather than a silent read of a data() field that happens
+// to share the name. Other browser globals (`location`, `navigator`,
+// `console`, `localStorage`, …) are ordinary names, as they were in 0.7: a
+// data() field named `location` reads like any other. A bound name (a
+// template binding or an arrow parameter), a call's callee and a handler
+// value's own name are not reads of the global.
+var ambientGlobals = map[string]string{
+	"window":     "the browser window",
+	"document":   "the browser document",
+	"globalThis": "the global object",
+}
+
+func ambientMessage(name string) string {
+	return "`" + name + "` is " + ambientGlobals[name] + ", which template expressions cannot reach — read the value you need in data() and return it"
+}
+
+// RemovedFormatters maps each formatter a 0.7 template could pipe through,
+// and that is no longer a function, to what replaces it. The `|` steer names
+// the replacement for these, because writing one as a call (`upcase(x)`)
+// would compile to a library lookup that finds nothing: a development error,
+// and a silent pass-through in production.
+var RemovedFormatters = map[string]string{
+	"upcase":     "`value.toUpperCase()`",
+	"downcase":   "`value.toLowerCase()`",
+	"trim":       "`value.trim()`",
+	"strip":      "`value.trim()`",
+	"replace":    "`value.replaceAll(search, replacement)`",
+	"join":       "`list.join(', ')`",
+	"abs":        "`Math.abs(value)`",
+	"ceil":       "`Math.ceil(value)`",
+	"floor":      "`Math.floor(value)`",
+	"size":       "`value.length`",
+	"plus":       "the `+` operator",
+	"minus":      "the `-` operator",
+	"times":      "the `*` operator",
+	"divided_by": "the `/` operator",
+	"modulo":     "the `%` operator",
+	"default":    "`value ?? fallback`",
+	"split":      "`value.split(',')`",
+	"sort":       "`list.toSorted((a, b) => …)`",
+	"where":      "`list.filter(item => …)`",
+	"map":        "`list.map(item => …)`",
+	"uniq":       "a list deduplicated in data()",
+	"reverse":    "`list.toReversed()`",
+	"compact":    "`list.filter(item => item != null)`",
+	"first":      "`list.at(0)`",
+	"last":       "`list.at(-1)`",
+	"noescape":   "a plain `{ value }`",
+}
+
+// pipeMessage is the error for a `|` followed by name: the removed
+// formatter's replacement when name is one, else the general steer.
+func pipeMessage(name string) string {
+	if alt, ok := RemovedFormatters[name]; ok {
+		return "the `" + name + "` formatter was removed — write " + alt + "; there are no `|` pipes in template expressions"
+	}
+	return msgPipe
+}
 
 // prototypeNames are the property names JavaScript gives prototype behaviour
 // — reading or setting one reaches the object's prototype machinery, not a

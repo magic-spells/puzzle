@@ -9,8 +9,8 @@ import (
 )
 
 // core_semantics_test.go — D173 group (b), expressions and loops, end to end:
-// V1 pipes in every value position (TEMPORARY — P4: remove), V2 `==` keeps its
-// JavaScript meaning, V4 the member guard, V8 object literals as arguments,
+// V1 library calls in every value position, V2 `==` keeps its JavaScript
+// meaning, V4 the member guard, V8 object literals as arguments,
 // V12 the loop guards — and the expression language (DESIGN-expr-v2) compiling
 // in every position. The lowering rules one by one are in expr_test.go; V15
 // (the script-less component's data()) is pinned in classname_test.go, and the
@@ -44,20 +44,20 @@ func wantAll(t *testing.T, got string, wants ...string) {
 
 // ---- V1 ---------------------------------------------------------------------
 
-func TestPipeIsAFormatterInEveryValuePosition(t *testing.T) {
-	got := compileSrc(t, coreSrc(`  <a title={ price | currency } data-or={ a || b }>x</a>
-  <Card items={ list | join(', ') | truncate(20) } />
-  <p class="x {#if on}{ label | upcase }{/if}">y</p>`))
+func TestLibraryCallInEveryValuePosition(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  <a title={ currency(price) } data-or={ a || b }>x</a>
+  <Card items={ truncate(list.join(', '), 20) } />
+  <p class="x {#if on}{ capitalize(label) }{/if}">y</p>`))
 	wantAll(t, got,
-		// A brace-only attribute: a call, never `__d.price | __d.currency`.
+		// A brace-only attribute: a guarded library call.
 		`title: (__f["currency"] || __f.__missing("currency"))(__d.price),`,
 		// `||` stays logical OR.
 		`'data-or': __d.a || __d.b,`,
-		// A component prop, with a chain applied left to right.
-		`items: (__f["truncate"] || __f.__missing("truncate"))((__f["join"] || __f.__missing("join"))(__d.list, ', '), 20)`,
+		// A component prop: a library call over a method.
+		`items: (__f["truncate"] || __f.__missing("truncate"))(__d.list?.join(', '), 20)`,
 		// An interpolation inside an attribute value's inline {#if} branch.
-		`(__f["upcase"] || __f.__missing("upcase"))(__d.label)`,
-		// The registry read the chain needs.
+		`(__f["capitalize"] || __f.__missing("capitalize"))(__d.label)`,
+		// The registry read the calls need.
 		"const __f = this.ctx.formatters.getAll();",
 	)
 	if regexp.MustCompile(`[^|]\| __[df]\.`).MatchString(got) {
@@ -66,9 +66,9 @@ func TestPipeIsAFormatterInEveryValuePosition(t *testing.T) {
 	nodeCheck(t, got)
 }
 
-// Formatters stay out of branching logic (D173 V1): a condition header keeps
-// `||` as logical OR and reads no formatter registry. The header pipe itself is a parse error, pinned in
-// TestConditionHeaderPipeIsACompileError.
+// A condition header keeps `||` as logical OR and reads no function registry
+// unless it calls a function. A `|` in one is a parse error, pinned in
+// TestPipeIsACompileErrorInEveryHeader.
 func TestConditionHeadersKeepJavaScriptOr(t *testing.T) {
 	got := compileSrc(t, coreSrc(`  {#if tags || others}<b>a</b>{:else if a || b}<b>b</b>{/if}
   {#unless user || guest}<b>c</b>{/unless}
@@ -87,15 +87,15 @@ func TestConditionHeadersKeepJavaScriptOr(t *testing.T) {
 	nodeCheck(t, got)
 }
 
-// TestConditionHeaderPipeIsACompileError: a top-level `|` in any condition or
-// branching header fails the compile with the positioned fix-it, and never
-// falls back to a bitwise OR.
-func TestConditionHeaderPipeIsACompileError(t *testing.T) {
+// TestPipeIsACompileErrorInEveryHeader: there are no pipes (D176). A `|` in
+// any condition or branching header fails the compile with the positioned
+// steer toward a call, and never falls back to a bitwise OR.
+func TestPipeIsACompileErrorInEveryHeader(t *testing.T) {
 	for _, tc := range []struct{ body, header string }{
-		{"{#if tags | size}<b>a</b>{/if}", "an {#if} condition"},
-		{"{#if ok}<b>a</b>{:else if others | size}<b>b</b>{/if}", "an {:else if} condition"},
+		{"{#if tags | any}<b>a</b>{/if}", "an {#if} condition"},
+		{"{#if ok}<b>a</b>{:else if others | any}<b>b</b>{/if}", "an {:else if} condition"},
 		{"{#unless user | blank}<b>c</b>{/unless}", "an {#unless} condition"},
-		{"{#case status | downcase}{:when 'a'}<b>d</b>{/case}", "a {#case} expression"},
+		{"{#case status | label}{:when 'a'}<b>d</b>{/case}", "a {#case} expression"},
 		{`<p class="x {#if on | truthy}on{/if}">y</p>`, "an {#if} condition in an attribute value"},
 	} {
 		sec, err := parser.SplitSections(coreSrc("  "+tc.body), "T.pzl")
@@ -108,8 +108,8 @@ func TestConditionHeaderPipeIsACompileError(t *testing.T) {
 		}
 		want := "T.pzl:2:"
 		if msg := err.Error(); !strings.Contains(msg, want) ||
-			!strings.Contains(msg, "formatter pipes are not allowed in "+tc.header+" — compute the value first (a data() field in PuzzleKit, {#let} in Sites) and test that field") {
-			t.Errorf("%s: error %q", tc.body, msg)
+			!strings.Contains(msg, "`| name` pipes were removed — write `name(value)`; bitwise OR is not available") {
+			t.Errorf("%s (%s): error %q", tc.body, tc.header, msg)
 		}
 	}
 }
@@ -132,20 +132,25 @@ func TestTernaryConditionIsGrouped(t *testing.T) {
 	nodeCheck(t, got)
 }
 
-// A formatted form value displays a transformed value; there is no field to
+// A transformed form value displays a derived value; there is no field to
 // write an edit back to, so no two-way binding is synthesized (D147).
-func TestPipedFormValueIsOneWay(t *testing.T) {
-	got := compileSrc(t, coreSrc(`  <input value={ name | upcase } />`))
+func TestTransformedFormValueIsOneWay(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  <input value={ name.toUpperCase() } />
+  <input class="b" value={ capitalize(name) } />`))
 	if strings.Contains(got, ":bind'") {
-		t.Errorf("a formatted value must not synthesize a bind:\n%s", got)
+		t.Errorf("a transformed value must not synthesize a bind:\n%s", got)
 	}
-	wantAll(t, got, `value: (__f["upcase"] || __f.__missing("upcase"))(__d.name)`)
+	wantAll(t, got,
+		`value: __d.name?.toUpperCase()`,
+		`value: (__f["capitalize"] || __f.__missing("capitalize"))(__d.name)`,
+	)
 }
 
-// A chained explicit key reads `__f`, which lives inside render(), so the site
-// keeps `.map` instead of hoisting the key into a module-scope arrow.
-func TestPipedLoopKeyKeepsMap(t *testing.T) {
-	got := compileSrc(t, coreSrc(`  {#for item in items}<li key={ item.id | slugify }>x</li>{/for}`))
+// An explicit key calling a library function reads `__f`, which lives inside
+// render(), so the site keeps `.map` instead of hoisting the key into a
+// module-scope arrow.
+func TestLibraryLoopKeyKeepsMap(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  {#for item in items}<li key={ slugify(item.id) }>x</li>{/for}`))
 	if strings.Contains(got, "__l(") {
 		t.Errorf("a key reading __f must not lower:\n%s", got)
 	}
@@ -188,14 +193,14 @@ func TestMemberGuardEverywhere(t *testing.T) {
 
 // ---- V8 ---------------------------------------------------------------------
 
-// The motivating templates (the translation formatter, the image formatter) in
-// every position that takes a chain, compiled and syntax-checked end to end: the
-// keys were once scoped into `{__d.height: 480}`, which only the bundler caught.
-func TestObjectLiteralFormatterArgumentsCompile(t *testing.T) {
-	got := compileSrc(t, coreSrc(`  <p>{ 'cart.count' | t({ count: n }) }</p>
-  <img src={ photo | resize({ height: 480, fit }) } alt="{ 'alt' | t({ name: user.name }) }" />
-  <Card label={ key | t({ nested: { deep: n }, 'x-y': 1 }) } />
-  {#for item in items}<li>{ 'row' | t({ item, i: item.id }) }</li>{/for}`))
+// The motivating templates (the translation function, an image function) in
+// every value position, compiled and syntax-checked end to end: the keys were
+// once scoped into `{__d.height: 480}`, which only the bundler caught.
+func TestObjectLiteralFunctionArgumentsCompile(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  <p>{ t('cart.count', { count: n }) }</p>
+  <img src={ resize(photo, { height: 480, fit }) } alt="{ t('alt', { name: user.name }) }" />
+  <Card label={ t(key, { nested: { deep: n }, 'x-y': 1 }) } />
+  {#for item in items}<li>{ t('row', { item, i: item.id }) }</li>{/for}`))
 	wantAll(t, got,
 		`(__f["t"] || __f.__missing("t"))('cart.count', { count: __d.n })`,
 		`(__f["resize"] || __f.__missing("resize"))(__d.photo, { height: 480, fit: __d.fit })`,
@@ -206,7 +211,7 @@ func TestObjectLiteralFormatterArgumentsCompile(t *testing.T) {
 	if strings.Contains(got, "__d.count:") || strings.Contains(got, "__d.height") {
 		t.Errorf("an object literal key was scoped:\n%s", got)
 	}
-	// A whole row item handed to a formatter is opaque: the site is `deep`.
+	// A whole row item handed to a function is opaque: the site is `deep`.
 	wantAll(t, got, "deep: true")
 	nodeCheck(t, got)
 }
@@ -345,38 +350,13 @@ func TestCalledLoopKeyKeepsMap(t *testing.T) {
 	)
 }
 
-// TEMPORARY (P4: remove): the `.size` helper is imported only by a module whose
-// template reads a count — never for a handler argument — and a skeleton read
-// counts.
-func TestSizeHelperImport(t *testing.T) {
-	const imp = "sizeOf as __z"
-	for _, tc := range []struct {
-		name, body string
-		want       bool
-	}{
-		{"text", "  <p>{ items.size }</p>", true},
-		{"condition", "  {#if items.size > 0}<b>a</b>{/if}", true},
-		{"handler condition", "  <button @click={ items.size ? save : null }>x</button>", true},
-		{"none", "  <p>{ items }</p>", false},
-		{"length", "  <p>{ items.length }</p>", false},
-		{"handler argument", "  <button @click={ save(items.size) }>x</button>", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := compileCore(t, tc.body)
-			if err != nil {
-				t.Fatalf("compile: %v", err)
-			}
-			if strings.Contains(got, imp) != tc.want {
-				t.Errorf("import %q present = %v, want %v:\n%s", imp, !tc.want, tc.want, got)
-			}
-			if !tc.want && strings.Contains(got, "__z(") {
-				t.Errorf("emitted __z without importing it:\n%s", got)
-			}
-		})
-	}
-	src := "<puzzle-view><p>{ a }</p></puzzle-view>\n\n<puzzle-skeleton><p>{ items.size }</p></puzzle-skeleton>\n\n" +
-		"<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class T extends PuzzleView {}\n</script>\n"
-	if got := compileSrc(t, src); !strings.Contains(got, imp) {
-		t.Errorf("a skeleton-only .size read must import the helper:\n%s", got)
+// `.size` is an ordinary member read (a Map's or a file's own field), never
+// the count: no module imports a size helper, and the count is `.length`.
+func TestSizeIsAnOrdinaryField(t *testing.T) {
+	got := compileSrc(t, coreSrc(`  <p>{ file.size } { items.length }</p>
+  {#if items.length > 0}<b>a</b>{/if}`))
+	wantAll(t, got, "__d.file?.size", "__d.items?.length", "...(__d.items?.length > 0")
+	if strings.Contains(got, "sizeOf") || strings.Contains(got, "__z") {
+		t.Errorf("no module imports a size helper:\n%s", got)
 	}
 }

@@ -47,7 +47,7 @@ func lowerJS(t *testing.T, src string, s scopeMap, rowScopes ...string) string {
 	w := &textWriter{}
 	l := newLowerer(w, targetRender, s, nil)
 	l.rowScopes = rowScopes
-	l.value(parseExpr(t, src, s, false), nil)
+	l.value(parseExpr(t, src, s, false))
 	return w.String()
 }
 
@@ -55,7 +55,7 @@ func lowerJS(t *testing.T, src string, s scopeMap, rowScopes ...string) string {
 func lowerFacts(t *testing.T, src string, s scopeMap) *exprFacts {
 	t.Helper()
 	f := &exprFacts{}
-	newLowerer(&textWriter{}, targetRender, s, f).value(parseExpr(t, src, s, false), nil)
+	newLowerer(&textWriter{}, targetRender, s, f).value(parseExpr(t, src, s, false))
 	return f
 }
 
@@ -109,6 +109,7 @@ func TestLowering(t *testing.T) {
 		{"library result member", "json(x).length", nil, `(__f["json"] || __f.__missing("json"))(__d.x)?.length`},
 		{"Math function", "Math.round(x * 100) / 100", nil, "Math.round(__d.x * 100) / 100"},
 		{"bare global", "Number(x) + parseInt(y)", nil, "Number(__d.x) + parseInt(__d.y)"},
+		{"URI global", "'/search?q=' + encodeURIComponent(q)", nil, "'/search?q=' + encodeURIComponent(__d.q)"},
 		{"Object.keys", "Object.keys(user).length", nil, "Object.keys(__d.user)?.length"},
 		{"Math constant", "Math.PI * r", nil, "Math.PI * __d.r"},
 		{"step off a Math constant", "Math.PI.toFixed(2)", nil, "Math.PI?.toFixed(2)"},
@@ -156,14 +157,13 @@ func TestLowering(t *testing.T) {
 		{"template literal", "`hi ${name}!`", nil, "`hi ${__d.name}!`"},
 		{"template literal row local", "`${todo.id}`", row, "`${s.item?.id}`"},
 		{"template literal escapes", "`a\\`b \\${c} ${d}`", nil, "`a\\`b \\${c} ${__d.d}`"},
-		// TEMPORARY (P4: remove): `.size` is the count.
-		{"size", "items.size", nil, "__z(__d.items)"},
-		{"size of a path", "a.b.size", nil, "__z(__d.a?.b)"},
-		{"size of an optional path", "a?.b.size", nil, "__z(__d.a?.b)"},
-		{"step after size", "x.size.label", nil, "__z(__d.x)?.label"},
-		{"size of a group", "(a + b).size", nil, "__z(__d.a + __d.b)"},
-		{"size of a row local", "todo.tags.size", row, "__z(s.item?.tags)"},
-		{"size inside an arrow", "lists.filter(l => l.size > 0)", nil, "__d.lists?.filter((l) => __z(l) > 0)"},
+		// `.length` is the count, an ordinary guarded member read; `.size` is
+		// an ordinary field (a Map's or a file's), never special.
+		{"length", "items.length", nil, "__d.items?.length"},
+		{"length of a group", "(a + b).length", nil, "(__d.a + __d.b)?.length"},
+		{"length of a row local", "todo.tags.length", row, "s.item?.tags?.length"},
+		{"length inside an arrow", "lists.filter(l => l.length > 0)", nil, "__d.lists?.filter((l) => l?.length > 0)"},
+		{"a size field", "file.size", nil, "__d.file?.size"},
 		{"a root named size", "size", nil, "__d.size"},
 		{"a size key", "t('k', { size: 1 })", nil, `(__f["t"] || __f.__missing("t"))('k', { size: 1 })`},
 	}
@@ -200,7 +200,7 @@ func TestArrowParamMangling(t *testing.T) {
 func TestThisSafetyNet(t *testing.T) {
 	this := &expr.Identifier{Name: "this", Start: expr.Pos{Line: 3, Col: 9, Offset: 40}}
 	w := &textWriter{}
-	newLowerer(w, targetRender, nil, nil).value(&expr.Member{Object: this, Property: "x"}, nil)
+	newLowerer(w, targetRender, nil, nil).value(&expr.Member{Object: this, Property: "x"})
 	if strings.Contains(w.String(), "__d.this") {
 		t.Errorf("lowered `this` as a data read: %s", w.String())
 	}
@@ -243,7 +243,7 @@ func TestLoweringFacts(t *testing.T) {
 		{"items.filter(todo => todo.done)", want{roots: "items"}},
 		{"timeago(todo.at)", want{fields: "at", volatile: true}},
 		{"todo.size", want{fields: "size"}},
-		{"todo.tags.size", want{deep: true}},
+		{"todo.tags.length", want{deep: true}},
 		{"a.b + c[d]", want{roots: "a,c,d"}},
 	}
 	for _, tc := range cases {
@@ -301,14 +301,12 @@ func TestHandlerLowering(t *testing.T) {
 		{"object argument", "save({ id: 1 })", nil, "(event) => this.events.save({ id: 1 })", true, false},
 		{"object argument with reads", "save({ id: todo.id, todo, n: count })", scope("todo"),
 			"(event) => this.events.save({ id: todo?.id, todo: todo, n: __d.count })", false, false},
-		// `.size` in an argument is a property: arguments were JavaScript
-		// before this language, so the corpus has no count there to migrate.
-		{"size in an argument", "save(items.size)", nil, "(event) => this.events.save(__d.items?.size)", false, false},
+		{"a size field in an argument", "save(file.size)", nil, "(event) => this.events.save(__d.file?.size)", false, false},
 		// Conditionals: never cached; the condition is a render-time value.
 		{"conditional", "ok ? save : null", nil, "(__d.ok) ? (event) => this.events.save(event) : null", false, false},
 		{"conditional guarded", "user.admin ? promote(user.id) : null", nil,
 			"(__d.user?.admin) ? (event) => this.events.promote(__d.user?.id) : null", false, false},
-		{"conditional size", "items.size ? clear : null", nil, "(__z(__d.items)) ? (event) => this.events.clear(event) : null", false, false},
+		{"conditional length", "items.length ? clear : null", nil, "(__d.items?.length) ? (event) => this.events.clear(event) : null", false, false},
 		{"null", "null", nil, "null", false, false},
 	}
 	for _, tc := range cases {

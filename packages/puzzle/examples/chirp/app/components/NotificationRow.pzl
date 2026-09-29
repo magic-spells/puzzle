@@ -36,7 +36,7 @@
           {:when 'mention'}mentioned you in a chirp
           {:else}sent you a notification
         {/case}
-        <span class="text-muted">· { notification.createdAt | timeago }</span>
+        <span class="text-muted">· { timeago(notification.createdAt) }</span>
       </p>
 
       <!-- Referenced chirp preview (not shown for follows, which have no post). -->

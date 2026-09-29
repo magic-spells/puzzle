@@ -39,7 +39,10 @@ var (
 // the "" namespace holds the bare global functions. A call to one parses to a
 // Call whose callee is a Global.
 var GlobalFunctions = map[string][]string{
-	"":       {"Number", "String", "Boolean", "parseInt", "parseFloat", "isNaN", "isFinite"},
+	"": {
+		"Number", "String", "Boolean", "parseInt", "parseFloat", "isNaN", "isFinite",
+		"encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
+	},
 	"Math":   {"abs", "ceil", "floor", "round", "trunc", "max", "min", "sign", "pow", "sqrt"},
 	"Object": {"keys", "values", "entries"},
 	"Array":  {"isArray"},
@@ -125,6 +128,8 @@ var globalResultTypes = func() map[string]string {
 	m := map[string]string{
 		".String": "a string", ".Number": "a number", ".parseInt": "a number", ".parseFloat": "a number",
 		".Boolean": "a boolean", ".isNaN": "a boolean", ".isFinite": "a boolean",
+		".encodeURIComponent": "a string", ".decodeURIComponent": "a string",
+		".encodeURI": "a string", ".decodeURI": "a string",
 		"Object.keys": "an array", "Object.values": "an array", "Object.entries": "an array",
 		"Array.isArray": "a boolean",
 	}

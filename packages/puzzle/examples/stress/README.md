@@ -605,8 +605,8 @@ component, `<Children/>` or `<Slot/>` anywhere in an island subtree.
 **Probes:** what does the built-in formatter registry cost across a large
 re-render, and how much of it is `Intl` construction?
 
-10,000 rows through `{ row.createdAt | datetime('short') }` and
-`{ row.createdAt | timeago }`. Three ops, because one op cannot answer both
+10,000 rows through `{ datetime(row.createdAt, 'short') }` and
+`{ timeago(row.createdAt) }`. Three ops, because one op cannot answer both
 questions honestly:
 
 - `rerender` — the formatted arm, **no instrumentation of any kind**.

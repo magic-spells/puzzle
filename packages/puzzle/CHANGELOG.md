@@ -20,12 +20,15 @@ what your server returns, so it surfaces at runtime on the first save — and
 neither is the behavior change under auto-fetching finds (0.7.0), which turns
 some reads that used to be local into requests.
 
-**Templates print differently (0.8.0, D168, D173, D174).** Quiet: most
-templates keep compiling and render something different. Built-in formatters
-changed output and eight list formatters plus `noescape` are gone, `raw`
-renders sanitized HTML, a pipe in an attribute is a formatter, bare objects
-print nothing, and whitespace next to inline elements renders. The 0.8.0 entry
-opens with an **Upgrading from 0.7** checklist; work through it item by item.
+**Template expressions change syntax, and templates print differently (0.8.0,
+D176, D168, D173, D174).** The syntax half is loud: a formatter pipe is a
+compile error (`{ price | currency }` is `{ currency(price) }` now), and so is
+`this` or anything outside the expression table, each with a message that
+names the fix. The printing half is quiet: templates keep compiling and render
+something different — built-in functions changed output, `raw` renders
+sanitized HTML, bare objects print nothing, and whitespace next to inline
+elements renders. The 0.8.0 entry opens with an **Upgrading from 0.7**
+checklist; work through it item by item.
 
 **Tracked `findOne`/`findMany` fetch what is missing (0.7.0, D161).** The
 rename half is loud: `store.loadAll` and the `loadAll` adapter verb are
@@ -152,143 +155,303 @@ one is *not* a compile error; it silently builds a different product.
 
 ## 0.8.0 — Unreleased
 
-Puzzle becomes one template language with two dialects (D172): PuzzleKit, the
-app framework in this package, and Magic Spells Sites share one parser, one
-meaning for each construct they both have (D173), and one standard formatter
-set (D174). Making those meanings agree changes what some existing templates
-print, so this release has more breaking edges than usual. Most are quiet: the
-template keeps compiling and renders something different. **Read "Upgrading
-from 0.7" below before you bump the range.**
+Puzzle becomes one template language with two hosts (D172): PuzzleKit, the app
+framework in this package, compiles a template to JavaScript, and Magic Spells
+Sites renders the same template in Go. What sits between a template's braces is
+now a JavaScript expression from a closed table (D176): literals, paths,
+operators, arrow functions as call arguments, a method table for strings,
+arrays and numbers, a short list of JavaScript globals, and a library of
+display functions called by name — `{ currency(price) }`, `{ name.trim() }`,
+`{#for t in todos.filter(t => !t.done)}`. One parser in the new
+`packages/puzzle-lang` module reads it for both hosts, and one conformance
+table pins what every expression means. There are no formatter pipes. The
+constructs both hosts have mean the same thing in both (D173), and the
+function library is one standard set (D174). Moving from 0.7 is one change of
+expression syntax plus a set of printing changes, so this release has more
+breaking edges than usual: the syntax ones fail loudly at compile time, the
+printing ones are quiet. **Read "Upgrading from 0.7" below before you bump the
+range.**
 
 Also in this release: incremental rendering (D170): `{#for}` rows and static
 markup are cached between renders, and a record prop refreshes its child.
-Also translations (`t`, D175), sanitized `raw`, the `packages/puzzle-lang` Go
-module, the pieces theme system with `puzzle add theme`, and 100 pieces. The
-never-published 0.7.1 notes (registry version floors, the background update
-notice) are folded in here.
+Also translations (`t`, D175), sanitized `raw`, the pieces theme system with
+`puzzle add theme`, and 100 pieces. The never-published 0.7.1 notes (registry
+version floors, the background update notice) are folded in here.
 
-Production sizes: hello-world **21.6 KB gzip**, todos **25.7 KB gzip** (from
+Production sizes: hello-world **21.7 KB gzip**, todos **25.8 KB gzip** (from
 20.8 / 23.8 in 0.7.0). Apps that configure no translations and use no `raw`
 pay nothing for either.
 
 ### Upgrading from 0.7
 
 Change the range to `^0.8.0` (caret ranges do not cross a 0.x minor). Then
-work through this list. Every item but 13, a new warning, is marked
-**BREAKING** under Changed or Removed below, where the full detail is.
+work through this list. No codemod ships; the syntax items are compile errors
+that name the fix, so a build lists every place to change. The full detail
+for each item is below: the expression-language items (1, 2, 4, 7, 8 and 9)
+under Added, *Template expressions are JavaScript from a closed table*, and
+Removed, *formatter pipes*; the rest under Changed or Removed, where every
+breaking entry is marked **BREAKING**. Item 15 is a new warning, not a break.
+The *Traps* after this list are the rewrites that compile but mean something
+different.
 
-1. **Removed list formatters.** `sort`, `where`, `map`, `uniq`, `reverse`,
-   `compact`, `first` and `last` are gone. Shape the list in `data()` and loop
-   over that field. Write `items[0]` or `items[items.size - 1]` for the first
-   or last item. For a short count, use `compact_number`. A template that still names
-   one passes the value through unchanged, and development logs the
-   replacement.
-2. **`noescape` is removed.** Print the value with a plain `{ value }`, or use
-   `raw` if it is HTML you mean to render (see item 11).
-3. **`pluralize` prints the count.** `{ n } { n | pluralize('comment') }`
-   now prints `3 3 comments`. Delete the separate `{ n }`.
-4. **Date presets are `short`, `medium` (the default), `long` and `iso`, shared
-   by `date`, `time` and `datetime`.** `date('short')` is now date-only. Use
-   `datetime('short')` for the old date-and-time stamp. The presets `'date'`,
-   `'time'` and `'datetime'` are retired, and an unknown preset is a development
-   error that renders as `medium`. `iso` is RFC 3339 in the viewer's zone, not
-   UTC `toISOString()`.
-5. **Other built-in formatters changed their output.** Check each place you use
-   `capitalize` (leaves the rest of the string alone; the old behavior is
-   `downcase | capitalize`), `currency` (groups thousands, sign first),
-   `percentage` (takes the number as written; a ratio is
-   `ratio * 100 | percentage`), `round` (half away from zero),
-   `number_with_delimiter` (follows the viewer's locale), `escape`, `json` and
-   `truncate`. The number formatters print nothing for a missing value instead
-   of `$0.00` or `0`.
-6. **A pipe in an attribute, prop or marker argument is a formatter, and a
-   nested `|` is an error.** `title={ price | currency }` calls `currency`
-   where it used to compile to a bitwise OR. There is no bitwise OR in
-   templates: a single `|` inside parentheses, brackets, braces or a
-   formatter's arguments (`@click={ save(x | trim) }`, `{ (a | b) }`) is a
-   positioned compile error, and what follows a pipe must be a formatter
-   name, so `{ w / 2 | 0 }` is one too. Compute the value in `data()`.
-7. **No pipe in a condition or loop header.** A top-level `|` in an `{#if}`,
-   `{:else if}`, `{#unless}`, `{#case}` or `{#for}` header, in a `{:when}`
-   value, or in an inline `{#if}` inside an attribute value is a positioned
-   compile error; it no longer compiles to a bitwise OR. Compute the value in
-   `data()` and test that field (`{#if hasTags}`), or shape the list there and
-   loop over it (`{#for item in sortedItems}`). `||` still works.
-8. **Some values print nothing.** A bare `Date`, any other object (including one
-   with its own `toString`, such as a `URL` or a Decimal), `NaN` and ±Infinity
-   print nothing. Development logs a warning that names the expression. Format
-   a date with `| date`, `| datetime` or `| time`, and print a field of an
-   object. A list or object in a brace-only attribute changed too: a list is a
-   space-joined token list with `false` and empty items dropped, and an object
-   omits the attribute.
-9. **A loop over something that is not a list runs zero times.** A `{#for}`
-   over a string no longer iterates its characters. Split it in `data()`.
-10. **Whitespace next to inline elements renders, and `<pre>`/`<textarea>` are
+1. **Pipes are function calls.** There is no `|` in a template expression: a
+   0.7 pipe is a positioned compile error at the `|` that reads "`| name`
+   pipes were removed — write `name(value)`; bitwise OR is not available", or,
+   after a formatter that is gone (`| upcase`, `| sort`), names the JavaScript
+   that replaces it. The value becomes the first argument, a chain nests outward, and a transform
+   JavaScript already has is its method or `Math` global:
+
+   | 0.7 | 0.8 |
+   |---|---|
+   | `{ x \| f }` | `{ f(x) }` |
+   | `{ x \| f(a, b) }` | `{ f(x, a, b) }` |
+   | `{ x \| f(a) \| g }` | `{ g(f(x, a)) }` |
+   | `{ 'cart.title' \| t }` | `{ t('cart.title') }` |
+   | `{ 'greeting' \| t({ name }) }` | `{ t('greeting', { name }) }` |
+   | `{ post.body \| raw }` | `{ raw(post.body) }` |
+   | `{ '/todos/' + id \| link }` | `{ link('/todos/' + id) }` |
+   | `{ at \| date('long') }` | `{ date(at, 'long') }` |
+   | `{ n \| round(2) }` | `{ round(n, 2) }` |
+   | `{ s \| upcase }`, `{ s \| downcase }` | `{ s.toUpperCase() }`, `{ s.toLowerCase() }` |
+   | `{ s \| trim }`, `{ s \| strip }` | `{ s.trim() }` |
+   | `{ s \| replace('-', ' ') }` | `{ s.replaceAll('-', ' ') }` |
+   | `{ list \| join }` | `{ list.join(', ') }` |
+   | `{ list \| join(' / ') }` | `{ list.join(' / ') }` |
+   | `{ n \| abs }`, `ceil`, `floor` | `{ Math.abs(n) }`, `Math.ceil(n)`, `Math.floor(n)` |
+
+   A method on anything but a name, a path or a call takes parentheses:
+   `{ (first + ' ' + last).trim() }`. `.replaceAll()` matches the old
+   `replace` for a non-empty string search and a replacement with no `$`;
+   otherwise write `s.split(a).join(b ?? '')`, which is what `replace` did (a
+   missing replacement was `''`, while `.join()` alone joins with `','`). The old `join` joined with `', '`, while
+   `.join()` with no argument joins with `','`, so pass the separator. A pipe
+   in a condition, a loop header or an attribute is the same error — an
+   attribute pipe was a bitwise OR in 0.7 — and `||` is still logical OR.
+2. **`this` is not available in a template.** A template never reaches the
+   view instance: `this` in any template expression — a value, a block header,
+   a function argument, an `@event` handler's arguments or ternary condition —
+   is a positioned compile error at the `this` token (`{ this.ago(x) }`,
+   `disabled={ !this.canAdd }`, `@click={ save(this.x) }`). Return the value
+   from `data()` — move a getter's body into a field — or use a function for a
+   display transform (`timeago(at)`). A field derived from `setData()` state
+   needs a `refresh()` after the write, because `setData()` alone does not
+   re-run `data()`. A handler still reaches the view through its own name:
+   `@click={ save(x) }` calls the view's `save`.
+3. **The function library is 19 built-ins plus `link` and `t`.** The list
+   functions `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first` and
+   `last` are gone: shape a list with array methods (`items.filter(i =>
+   i.done)`, `items.toSorted((a, b) => a.rank - b.rank)`, `items.at(-1)`) or in
+   `data()`. `noescape`, `size`, `plus`, `minus`, `times`, `divided_by`,
+   `modulo`, `default` and `split` are gone: print a plain value, and use
+   `.length`, the operators, `??` and `.split()`. `upcase`, `downcase`,
+   `trim`, `strip`, `replace`, `join`, `abs`, `ceil` and `floor` are gone
+   because a JavaScript method or `Math` global says each one (item 1).
+   `round(v, places)` stays: `.toFixed()` returns a padded string, and nothing
+   in JavaScript rounds half away from zero to a number in one call. A call to
+   a removed name passes the value through unchanged, and development logs
+   what replaces it. Several built-ins also print differently — check each
+   use of `pluralize` (prints the count too: delete a separate `{ n }` in
+   front of `pluralize(n, 'comment')`), `capitalize` (leaves the rest of the
+   string alone), `currency` (groups thousands, sign first), `percentage`
+   (takes the number as written; a ratio is `percentage(ratio * 100)`),
+   `round` (half away from zero), `number_with_delimiter` (follows the
+   viewer's locale), `escape`, `json` and `truncate`. The number functions
+   print nothing for a missing value instead of `$0.00` or `0`.
+4. **The count is `.length`, as in JavaScript.** A list's `.length` is its
+   items and a string's is its UTF-16 units. Member reads are guarded, so
+   `{ items.length }` prints nothing for a missing list instead of throwing. A
+   Map's or a Set's `size` and a field named `size` are ordinary reads.
+5. **Date presets and defaults.** `date`, `time` and `datetime` share the
+   presets `short`, `medium`, `long` and `iso`, and all three defaults
+   changed (US English shown): `date(v)` printed `09/24/2026` and is now the
+   medium date, `Sep 24, 2026`; `time(v)` printed `03:04 PM` and is now the
+   short time, `3:04 PM`; `datetime(v)` printed `09/24/2026, 03:04 PM` and is
+   now the medium date with the short time, `Sep 24, 2026, 3:04 PM`.
+   `date(v, 'short')` is date-only — use `datetime(v, 'short')` for the old
+   date-and-time stamp. The presets `'date'`, `'time'` and `'datetime'` are
+   retired. A literal preset the standard functions do not know
+   (`time(at, 'shrot')`) is a compile-time warning — not an error, because an
+   app may register its own `time` — and at run time any unknown preset
+   renders the default with a development error. `iso` is RFC 3339 in the
+   viewer's zone, not UTC `toISOString()`.
+6. **Some values print nothing, and `-0` prints `0`.** `NaN`, ±Infinity, a
+   bare `Date` and any other object (including one with its own `toString`,
+   such as a `URL` or a Decimal) print nothing, and development logs a warning
+   that names the expression; the number functions print nothing for `NaN` and
+   ±Infinity too. Negative zero prints `0` everywhere. Format a date with
+   `date()`, `datetime()` or `time()`, and print a field of an object.
+7. **Handler arguments are the expression language, and more is a compile
+   error.** An `@event` value is a call to one of the view's handlers (or a
+   handler's bare name, or a ternary choosing one), and its arguments use the
+   same grammar as every other expression, evaluated when the event fires,
+   with one extension: `event` is the DOM event there, and a chain rooted at it
+   is unrestricted — `@input={ rename(event.target.value) }`,
+   `@click={ pick(event.target.closest('li')) }`. Anything that acts on the
+   event, such as `event.preventDefault()`, belongs inside the handler method
+   (or use the `:prevent` modifier), not as the handler value. New positioned
+   compile errors an upgrader can hit: a method outside the table; calling a
+   template binding (a loop item, a snippet parameter, an arrow parameter);
+   reading the browser's global objects `window`, `document` or `globalThis`
+   (read what you need in `data()`; other browser globals such as `location`
+   or `localStorage` are ordinary data names, as they were in 0.7); `new Date()`
+   and `Date.now()`; `JSON.stringify(x)`; regex literals; `**` (use
+   `Math.pow`); bitwise operators; spread; comments inside an expression;
+   assignment and `++`/`--`; `typeof`, `in` and `instanceof`; and
+   `constructor`, `prototype` or `__proto__` as a member name or object key.
+   Each message names what to write instead. `encodeURIComponent`,
+   `decodeURIComponent`, `encodeURI` and `decodeURI` stay callable, so an
+   `href="/search?q={ encodeURIComponent(q) }"` keeps working.
+8. **Identifiers are Unicode.** A data field, a loop variable or a snippet
+   parameter may be any JavaScript identifier (`{#for größe in sizes}`,
+   `{ größe }`); 0.7's resolver mis-prefixed them. A strict-mode reserved
+   word, `NaN`, `Infinity`, `undefined` and the global names the language uses
+   (`Math`, `Number`, …) cannot be bound.
+9. **`puzzle check` types methods and library calls.** A method is checked as
+   the same JavaScript method, so a wrong method or argument is a real
+   TypeScript error at its line and column, and a library call checks against
+   the function's signature (an app function is `any`). The check references
+   the ES2019–ES2023 string and array libs whatever the app's `target`, so
+   `.at()`, `.replaceAll()` and `.toSorted()` type in templates — and in that
+   file's `<script>` too, where a method your `target` lacks can pass the
+   check (the build is unaffected). `toSorted` and `toReversed` need
+   TypeScript ≥ 5.2 to type.
+10. **`raw` renders sanitized HTML, and only as the outermost call of a text
+    interpolation.** `{ raw(html) }` renders the HTML through an allowlist
+    sanitizer (0.7's `| raw` printed markup as text), and `newline_to_br`
+    renders real `<br>`s. Either one inside another call, as an operand, in an
+    attribute or prop, with other than one argument, or inside `<script>`,
+    `<style>`, `<textarea>` or `<title>` is a compile error. An app function
+    registered as `raw` is never called from a template.
+11. **Whitespace next to inline elements renders, and `<pre>`/`<textarea>` are
     preserved.** A line break between text and an element now renders one
     space, as in HTML. Where you added a margin to fake the missing space, drop
     it. Where two things must touch, put them on one line with no whitespace.
     A `<pre>` or `<textarea>` body indented with the template now shows that
     indentation, so dedent it or bind it (`{ code }`, `value={ text }`).
-11. **`raw` renders sanitized HTML, and only as the last formatter of a text
-    interpolation.** `{ html | raw }` used to print markup as text. It now
-    renders the HTML through an allowlist sanitizer. `newline_to_br` renders
-    real `<br>`s. Either one after another formatter, in an attribute or prop,
-    with arguments, or inside `<script>`, `<style>`,
-    `<textarea>` or `<title>` is a compile error. An app formatter registered
-    as `raw` is no longer called from a template.
-12. **A false `{#if}` passed to a marker shows the marker's fallback.** A
+12. **A loop over something that is not a list runs zero times.** A `{#for}`
+    over a string no longer iterates its characters: write
+    `{#for c in text.split('')}`.
+13. **A list or object in a brace-only attribute.** A list is a space-joined
+    token list with `false` and empty items dropped, and an object omits the
+    attribute.
+14. **A false `{#if}` passed to a marker shows the marker's fallback.** A
     `<Children>`, `<Slot name>` or snippet position counts as filled only when
     its content renders a node. A caller whose content can render nothing,
     passed to a marker with a fallback body, now shows the fallback. If you do
     not want it, remove the fallback body.
-13. **An app formatter that shadows a standard name logs a development
-    warning.** It still wins. Rename it, or delete it if the standard
-    formatter now does the job (the examples dropped their own `pluralize`,
-    `compact` and `currency`).
-14. **New reserved names.** A component must not define `__lists`, `__c`,
-    `__dirty`, `__rgen` or `__propRevs`, nor a static `__roots`. A `<script>` must not bind `__l`,
-    `__e`, `__r` or `__L0`, `__L1`, and so on. Binding one of the script names
-    is a compile error.
-15. **`.length` is `.size`.** The count of a list or a string is the `.size`
-    property in every template (`{#if todos.size > 0}`,
-    `{ title.size }`, `i === items.size - 1`); it counts code points, so an
-    emoji is one character. `.length` is a positioned compile error. A data
-    field really named `size` still reads as the field (`file.size`), and one
-    named `length` is reachable as `obj['length']`.
-16. **No JavaScript on a value in a template (D176).** A template expression
-    is data plus operators. A method or function call on a value
-    (`draft.trim()`, `items.filter(…)`, `Math.round(x)`, `String(x)`,
-    `items.at(-1)`), an arrow function, a template literal, `new`, `typeof`,
-    a regex literal, `++`/`--`, an assignment or a bitwise operator is a
-    positioned compile error. Format the value with a formatter
-    (`| trim`, `| round`), or compute it in `data()` and read the field
-    (`disabled={ !canAdd }`). `@event` handler arguments are still
-    JavaScript, apart from `this` (item 18).
-17. **Removed formatters: `size`, `plus`, `minus`, `times`, `divided_by`,
-    `modulo`, `default` and `split`.** Write the operator before the pipe
-    (`{ price * qty | currency }`, `{ ratio * 100 | percentage }`), `??` for
-    a fallback (`{ subtitle ?? 'Untitled' }`), `.size` for a count, and split
-    a string in `data()`. A template that still names one passes the value
-    through unchanged, and development logs the replacement.
-18. **`this` is not available in a template (D176).** A template expression
-    never reaches the view instance: `this` in a value, a block header, a
-    formatter argument, or an `@event` handler's arguments or ternary
-    condition (`{ this.ago(x) }`, `disabled={ !this.canAdd }`,
-    `@click={ save(this.x) }`) is a positioned compile error at the `this`
-    token. Return the value from `data()` — move a getter's body into a field
-    — or use a formatter for a display transform (`| timeago` for a relative
-    time). A field derived from `setData()` state needs a `refresh()` after
-    the write, because `setData()` alone does not re-run `data()`. A handler
-    still reaches the view through its own name: `@click={ save(x) }` calls
-    the view's `save`.
+15. **New development warnings for shadowed names.** An app function that
+    shadows a standard name still wins, with a warning: rename it, or delete it
+    if the standard function now does the job (the examples dropped their own
+    `pluralize`, `compact` and `currency`). A view handler named like a library
+    function warns too, because inside `@event` the name calls the handler and
+    everywhere else the function.
+16. **New reserved names.** A component must not define `__lists`, `__c`,
+    `__dirty`, `__rgen` or `__propRevs`, nor a static `__roots`. A `<script>`
+    must not bind `__l`, `__e`, `__r` or `__L0`, `__L1`, and so on. Binding one
+    of the script names is a compile error.
 
 Two contracts that row caching makes visible, though neither is new: assign a
 record's fields through `update()` or a store path, never `todo.title = 'x'`,
-and keep formatters pure functions of their input.
+and keep app functions pure functions of their input.
+
+### Traps when upgrading from 0.7
+
+These rewrites compile, and print something different. Check each place the
+checklist sent you.
+
+- **The string methods throw on a value that is not a string.** A formatter
+  coerced its input, so `{ zip | upcase }` on a number printed `12345`;
+  `{ zip.toUpperCase() }` throws on a number and sends the view to
+  `errorView`. Coerce first where the value may not be a string:
+  `{ String(zip).toUpperCase() }`.
+- **`.length` is not `| size`.** It prints nothing for `null` or an object
+  where `| size` gave `0` or the object's key count
+  (`Object.keys(obj).length`).
+- **`+` concatenates strings.** `| plus` coerced both sides to numbers;
+  `{ count + 1 }` with a string `count` of `'2'` prints `21`. Convert first:
+  `{ Number(count) + 1 }`.
+- **`.replace()` replaces only the first match.** `| replace` replaced every
+  occurrence: use `.replaceAll(a, b)`, or `.split(a).join(b ?? '')`.
+- **`.split()` has no default separator.** `| split` split on `,`;
+  `.split()` with no argument returns the whole string in a one-item list.
+  Write `.split(',')`.
+- **`.toSorted()` sorts as strings.** `| sort` compared numbers and dates by
+  value; `.toSorted()` without a comparator compares their text, so `10`
+  sorts before `9`. Pass one: `items.toSorted((a, b) => a - b)`.
+- **`atob`, `btoa` and `structuredClone` are not available.** Only
+  `encodeURIComponent`, `decodeURIComponent`, `encodeURI` and `decodeURI` of
+  the browser's functions are callable; decode or clone in `data()`.
+- **A removed formatter written as a call is not an error at compile time.**
+  `{ upcase(name) }` compiles to a library lookup that finds nothing: a
+  development error that names `.toUpperCase()`, and in production the value
+  passes through unchanged. The `|` form (`{ name | upcase }`) fails the build
+  with the replacement, so convert pipes rather than rename them.
 
 ### Added
 
-- **Translations: `{ 'cart.title' | t }` (D175).** Add
+- **Template expressions are JavaScript from a closed table (D176).** Every
+  expression position — text, attribute values, component props and marker
+  arguments, `key=`, block headers and `{:when}` values, and `@event` handler
+  arguments — is one expression in a JavaScript-shaped grammar that PuzzleKit
+  and Sites share: literals (strings with JavaScript escapes, decimal numbers,
+  template literals, arrays, objects with name, quoted and shorthand keys);
+  `a.b`, `a?.b`, `a[i]`, `a?.[i]`; the operators with JavaScript precedence
+  (`! - +`, `* / %`, `+ -`, comparisons, `== != === !==`, `&&`, `||`, `??`,
+  `?:`, with `??` never mixed with `&&`/`||` unparenthesized); arrow functions
+  (`x => e`, `(x, i) => e`) as call arguments only; and three kinds of call.
+  A **function** is called by name from the library or the app's own
+  registrations (a data field is never callable). A **method** comes from the
+  table for its receiver — strings: `at`, `charAt`, `includes`, `startsWith`,
+  `endsWith`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `split`,
+  `replace`, `replaceAll`, `trim`, `trimStart`, `trimEnd`, `toUpperCase`,
+  `toLowerCase`, `padStart`, `padEnd`, `repeat`, `concat`; arrays: `at`,
+  `includes`, `indexOf`, `lastIndexOf`, `slice`, `concat`, `join`, `flat`,
+  `find`, `findIndex`, `findLast`, `filter`, `map`, `some`, `every`, `reduce`,
+  `toSorted`, `toReversed` (a callback receives `(item, index)`); numbers:
+  `toFixed`, `toString`. No method mutates its receiver. The **globals** are
+  `Math.abs/ceil/floor/round/trunc/max/min/sign/pow/sqrt`, `Math.PI`,
+  `Math.E`, `Number`, `String`, `Boolean`, `parseInt`, `parseFloat`, `isNaN`,
+  `isFinite`, `encodeURIComponent`, `decodeURIComponent`, `encodeURI`,
+  `decodeURI`, `Array.isArray` and `Object.keys/values/entries`. Everything has
+  JavaScript semantics — loose `==`, `+` concatenation, number printing — with
+  two deviations both hosts implement: a member read or a method call on a
+  missing value never throws (it prints nothing; a method call also warns in
+  development), and printing follows one rule (D173 V6). Dates reach a
+  template from `data()` and print through `date()`, `time()`, `datetime()`
+  and `timeago()`; they compare with `<` and `>`.
+  - **One parser, one table.** The `expr` package in `packages/puzzle-lang`
+    parses every expression into a positioned tree; codegen lowers the tree,
+    so an arrow parameter or a Unicode identifier is never mis-prefixed, and
+    an error reports the same line and column in both hosts. The shared
+    conformance lives in `packages/puzzle-lang/conformance` (embedded with
+    `go:embed`, so Sites pins it at the language tag): `expressions-parse.json`
+    pins the grammar in 434 cases — every accepted tree with its node
+    positions, every error with its message and position — and
+    `functions.json` pins the library in 204 rows.
+  - **Errors that steer.** Everything outside the table is a positioned
+    compile error that names the construct and what to write instead: a 0.7
+    pipe (after a removed formatter, its JavaScript replacement), a method
+    outside the table (`items.sort()` → `toSorted()`, `s.substr()` →
+    `slice()`), `new Date()` (→ `date()`), `window`, `document` or
+    `globalThis` read as a value (→ `data()`), `this` (→ `data()` or a
+    function), a regex literal (→ `includes()`), and the rest. Inside a
+    `{:when}` a `|` says to list alternatives with commas.
+  - **Literal presets are checked.** A string-literal preset the standard
+    `date`/`time`/`datetime` does not know, or an `in_timezone` zone that
+    cannot be a zone id, is a compile-time warning naming the valid presets;
+    at run time a typo silently rendered the default. It warns rather than
+    fails because an app function may shadow the standard name (D6).
+  - **`puzzle check` emits TypeScript from the same tree.** A method is the
+    same JavaScript method, typed by `lib.d.ts`; a library call is checked
+    against its signature; a method whose arguments hold an arrow gives the
+    arrow's parameters a type when the receiver is untyped data.
+  - **Handlers.** `@click={ save(items.length - 1) }` calls the view's handler
+    with arguments in the same language. Inside an `@event` value a bare call
+    names the view's handler first, `event` is the DOM event with an
+    unrestricted chain (`@input={ rename(event.target.value) }`), and a
+    handler that shares a library function's name draws a development
+    warning.
+- **Translations: `{ t('cart.title') }` (D175).** Add
   `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` to `puzzle.config.js`
   and one `app/locales/<tag>.json` per locale. Files may nest (flattened to
   dotted keys); an object whose keys are all CLDR categories is a plural entry
@@ -300,38 +463,37 @@ and keep formatters pure functions of their input.
   placeholders in one pass, and with a numeric `count` picks the plural form
   through `Intl.PluralRules` and prints `{count}` in the locale's number
   format; an exact 0 uses the entry's `zero` form when it has one, even in
-  English. Variables are one object — `t({ name: user.name })`, a data field
-  or a store record. `this.ctx.i18n` / `app.i18n` carry `t(key, vars)`, `locale`,
-  `locales`, `defaultLocale` and `setLocale(tag)`, which fetches first, then
-  switches, remembers the choice (`localStorage.__puzzleLocale`), sets
-  `<html lang>` and rebuilds the page at the same location — no history entry,
-  no scroll jump, no animations. A push still loading when the switch lands
-  finishes first, and a failed rebuild rejects `setLocale`. The startup locale is the stored choice, then
+  English. Variables are one object — `t('greeting', { name: user.name })`, a
+  data field or a store record. `this.ctx.i18n` / `app.i18n` carry
+  `t(key, vars)`, `locale`, `locales`, `defaultLocale` and `setLocale(tag)`,
+  which fetches first, then switches, remembers the choice
+  (`localStorage.__puzzleLocale`), sets `<html lang>` and rebuilds the page at
+  the same location — no history entry, no scroll jump, no animations. A push
+  still loading when the switch lands finishes first, and a failed rebuild
+  rejects `setLocale`. The startup locale is the stored choice, then
   `navigator.languages` (exact tag, base language, then a configured tag with
   the same base), then the default; the first render always has its strings.
   `--hybrid` and `--static` pages prerender in the default locale and carry its
   table inline and `<html lang>` set to it, so a default-locale visitor makes
-  no extra request. With
-  translations configured, `date`, `time`, `datetime`, `number_with_delimiter`,
-  `compact_number`, the `pluralize` count and `timeago` render in the active
-  locale instead of the viewer's (an explicit `locale` argument still wins;
-  `currency` is unchanged). `t` joins the standard formatter set (27 names since D176).
-  `/testing`'s `mountView` and `createTestApp` take `i18n: { locale, strings }`.
-  Without `i18n` configured nothing ships: hello-world and todos are
-  byte-identical in raw size. See `examples/i18n` (en, es, pl).
-- **`compact_number` formatter (D174).** `{ followers | compact_number }`
-  shortens a large number with a localized suffix through
+  no extra request. With translations configured, `date`, `time`, `datetime`,
+  `number_with_delimiter`, `compact_number`, the `pluralize` count and
+  `timeago` render in the active locale instead of the viewer's (an explicit
+  `locale` argument still wins; `currency` is unchanged). `t` is a standard
+  function. `/testing`'s `mountView` and `createTestApp` take
+  `i18n: { locale, strings }`. Without `i18n` configured nothing ships:
+  hello-world and todos are byte-identical in raw size. See `examples/i18n`
+  (en, es, pl).
+- **`compact_number` (D174).** `{ compact_number(followers) }` shortens a large
+  number with a localized suffix through
   `Intl.NumberFormat(locale, { notation: 'compact' })` — `1.2K`, `45K`, `3.4M`
-  in English. (A fallback for a missing value is the `??` operator:
-  `{ subtitle ?? 'Untitled' }`.)
-- **Object literals as formatter and call arguments (D173 V8).**
-  `{ 'cart.count' | t({ count: n, unit }) }`, `{ x | fmt({ digits: 2 }) }`
-  (an app `fmt` formatter) and `@click={ save({ id: todo.id }) }` compile. Values resolve as template expressions and keys stay keys; before
-  this, the compiler scoped the keys too and emitted `{__d.width: 480}`, which
-  only the bundler caught. Shorthand, quoted, computed and spread keys all work.
-  An expression still cannot *start* with an object literal (`{ {a: 1} }` is
-  ambiguous with the interpolation braces), and the error now says to pass it
-  as an argument or build it in `data()`.
+  in English.
+- **Object literals as call arguments (D173 V8).**
+  `{ t('cart.count', { count: n, unit }) }`, `{ fmt(x, { digits: 2 }) }` (an app
+  function) and `@click={ save({ id: todo.id }) }` compile, with name, quoted
+  and shorthand keys: values resolve as template expressions and keys stay
+  keys. An expression still cannot *start* with an object literal
+  (`{ {a: 1} }` is ambiguous with the interpolation braces), and the error
+  says to pass it as an argument or build it in `data()`.
 - **A component without a `<script>` reads its props by name (D173 V15).** The
   compiler gives it a `data(params, props)` that returns its props, so
   `<Chip tone="warn"/>` with a template of `<span class={ tone }>…` works with
@@ -344,12 +506,12 @@ and keep formatters pure functions of their input.
   same holds for a `<Slot name="x">`. Two markers that can render together — one
   before or after the block, two in one branch, two in one loop body, or two
   separate `{#if}`s — are still an error.
-- **The `packages/puzzle-lang` Go module (D172).** The template parser, with
-  `jsident` and `textutil`, moved out of the compiler into its own module,
+- **The `packages/puzzle-lang` Go module (D172).** The template parser and the
+  expression parser, with `jsident` and `textutil`, live in their own module,
   `github.com/magic-spells/puzzle/packages/puzzle-lang`, so Magic Spells Sites
-  and other Go tools can import the same parser the compiler uses. It
-  versions with the framework and is tagged `packages/puzzle-lang/vX.Y.Z`
-  beside each `vX.Y.Z`. The compiler's behavior is unchanged by the move.
+  and other Go tools import the same parser the compiler uses. It versions
+  with the framework and is tagged `packages/puzzle-lang/vX.Y.Z` beside each
+  `vX.Y.Z`.
 - **`puzzle add theme <name…>`.** The CLI can now copy any of the registry's
   palettes, not just the default one — the gap that had apps hand-copying
   `dim.css` and drifting from it. The default palette is the `app/styles/
@@ -412,52 +574,65 @@ and keep formatters pure functions of their input.
 
 ### Changed
 
-- **BREAKING: the built-in formatters are the standard set (D174).** The
-  formatter names PuzzleKit and Sites share now mean the same thing in both,
-  which changes the output of several built-ins (the removals are under
-  Removed):
+- **BREAKING: the display functions are the standard set (D174).** The
+  functions PuzzleKit and Sites share mean the same thing in both — the same
+  names, arguments and output — which changes what several built-ins print
+  (the removals are under Removed):
   - `pluralize` prints the count **and** the word, the count in the viewer's
-    locale: `{ n | pluralize('comment') }` → `3 comments`; the two-argument
-    form stays for irregular plurals (`pluralize('person', 'people')`).
+    locale: `{ pluralize(n, 'comment') }` → `3 comments`; the three-argument
+    form stays for irregular plurals (`pluralize(n, 'person', 'people')`).
     Delete the separate `{ n }` in front of it.
   - `number_with_delimiter` follows the viewer's locale (`1.234,5` in de-DE);
     an explicit delimiter still forces one.
-  - `date`, `time` and `datetime` share the presets `short`, `medium` (the new
-    default), `long` and `iso`. `date('short')` is now date-only (`9/24/26`)
-    — use `datetime('short')` for the old date-and-time stamp. The preset
-    names `date`, `time` and `datetime` are retired, and an unknown preset is
-    a development error that renders as `medium`. `iso` is RFC 3339 in the
-    viewer's zone (`2026-09-24`, `15:04:05-04:00`,
+  - `date`, `time` and `datetime` share the presets `short`, `medium`, `long`
+    and `iso`. With no preset, `date` is the medium date, `time` the short
+    time and `datetime` the medium date with the short time.
+    `date(v, 'short')` is date-only (`9/24/26`) — use `datetime(v, 'short')`
+    for the old date-and-time stamp. The preset names `date`, `time` and
+    `datetime` are retired; a literal unknown preset is a compile-time
+    warning, and any unknown preset renders the default with a development
+    error at run time. `iso` is RFC
+    3339 in the viewer's zone (`2026-09-24`, `15:04:05-04:00`,
     `2026-09-24T15:04:05-04:00`), no longer a UTC `toISOString()`.
   - `capitalize` leaves the rest of the string alone (`iPhone` → `IPhone`);
-    the old behavior is `downcase | capitalize`.
+    the old behavior is `capitalize(s.toLowerCase())`.
   - `currency` groups thousands and puts the sign first: `-$1,234.50`.
-  - `percentage` takes the number as written (`12.5 | percentage(1)` →
-    `12.5%`); a ratio is `ratio * 100 | percentage`.
-  - `round` rounds half away from zero on the decimal value (`1.005 |
-    round(2)` → `1.01`) and takes negative places (`1250 | round(-2)` →
-    `1300`); `currency` and `percentage` round the same way.
+  - `percentage` takes the number as written (`percentage(12.5, 1)` →
+    `12.5%`); a ratio is `percentage(ratio * 100)`.
+  - `round` rounds half away from zero on the decimal value
+    (`round(1.005, 2)` → `1.01`) and takes negative places
+    (`round(1250, -2)` → `1300`); `currency` and `percentage` round the same
+    way.
   - `escape` is an identity on text — the page shows `<b>`, not `&lt;b&gt;`.
   - `json` sorts object keys and prints `null` for a missing value, `NaN` and
     ±Infinity.
-  - `size`, `truncate` and `split('')` count code points, so an emoji is one;
-    `truncate`'s result never exceeds its length, ellipsis included; `size` of
-    a missing value is `0` and `split` of one is `[]`.
+  - `truncate` counts code points, so an emoji is one, and its result never
+    exceeds its length, ellipsis included.
   - `strip_html` is a quote-aware scanner that keeps a bare `<` (`1 <2`);
     `strip_newlines` removes `\r` as well as `\n`.
   - `currency`, `percentage`, `number_with_delimiter`, `compact_number` and
-    `pluralize` print nothing for a missing value, not `$0.00` or `0`.
+    `pluralize` print nothing for a missing value, `NaN` or ±Infinity, not
+    `$0.00`, `0`, `NaN` or `Infinity`, and print negative zero as `0`.
+  - `in_timezone` is standard: nothing in the expression language re-expresses
+    an instant in another zone.
 
-  An app formatter registered under a standard name still wins, now with a
-  development warning. The examples moved with it: blog's `pluralize`, chirp's
-  and music's own `compact` → `compact_number`, stays' own `currency` →
-  `currency('$', 0)`, and todos, the scaffold todos template and stress →
-  `datetime('short')`; typed-todos and the scaffold todos app drop their
-  now-shadowing `pluralize`, and the DevTools panel its unused `json`.
-  Scaffolded todos apps get the change with the next binary.
+  The library is these 19 built-ins — `escape`, `raw`, `newline_to_br`,
+  `capitalize`, `truncate`, `strip_html`, `strip_newlines`, `pluralize`,
+  `round`, `currency`, `percentage`, `number_with_delimiter`,
+  `compact_number`, `json`, `date`, `time`, `datetime`, `in_timezone` and the
+  PuzzleKit-only `timeago` — plus `link` (the router) and `t` (translations).
+  Apps register their own through the `formatters` config map, which keeps
+  its name, and call them the same way. An app function registered under a
+  standard name still wins, now with a development warning. The examples moved
+  with it: blog's `pluralize`, chirp's and music's own `compact` →
+  `compact_number`, stays' own `currency` → `currency(v, '$', 0)`, and todos,
+  the scaffold todos template and stress → `datetime(v, 'short')`;
+  typed-todos and the scaffold todos app drop their now-shadowing
+  `pluralize`, and the DevTools panel its unused `json`. Scaffolded todos apps
+  get the change with the next binary.
 - **BREAKING: `raw` renders sanitized HTML, and `newline_to_br` renders real
-  `<br>`s (D174).** `{ post.bodyHtml | raw }` used to print its value as text;
-  it now injects the value as HTML, always through an allowlist sanitizer that
+  `<br>`s (D174).** `{ raw(post.bodyHtml) }` injects the value as HTML (0.7's
+  `| raw` printed it as text), always through an allowlist sanitizer that
   runs identically in the browser and in `--hybrid`/`--static` prerender.
   Document markup, links and images are kept. `<script>` (with its contents),
   `<style>`, `<iframe>`, `<object>`, `<embed>`, `<svg>`, `<math>`,
@@ -474,107 +649,33 @@ and keep formatters pure functions of their input.
   survive, content can use the app's CSS and can shadow an undefined global by
   id: for untrusted user HTML that is a UI-overlay and naming risk, not code
   execution (the agent skill describes the containment).
-  `{ note | newline_to_br }` escapes the value and emits a `<br>` for each CR
-  LF, CR and LF. Both must be the **last** formatter of a **text**
-  interpolation: after either one, in an attribute value, a component prop or
-  a marker argument, with arguments, or inside
-  a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`,
-  `<noscript>`, `<xmp>`, `<iframe>`, …), the template no longer compiles
-  (a positioned error). The compiler lowers the pair itself, so an app
-  formatter registered as `raw` is never called from a template (a development
-  warning says so) and no app formatter can inject markup. The markup renders
-  as sibling nodes with no wrapper element and splits a run of text the way an
-  element does. The node ships only in apps that use either formatter
+  `{ newline_to_br(note) }` escapes the value and emits a `<br>` for each CR
+  LF, CR and LF. Each must be the **outermost call** of a **text**
+  interpolation, with one argument: inside another call or a method chain, as
+  an operand, in an attribute value, a component prop or a marker argument, or
+  inside a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`,
+  `<noscript>`, `<xmp>`, `<iframe>`, …), the template does not compile (a
+  positioned error). The compiler lowers the pair itself, so an app function
+  registered as `raw` is never called from a template (a development warning
+  says so) and no app function can inject markup. The markup renders as
+  sibling nodes with no wrapper element and splits a run of text the way an
+  element does. The node ships only in apps that use either function
   (`__PUZZLE_HAS_RAW_HTML__`), and the sanitizer only in apps that use `raw`
-  (`__PUZZLE_HAS_RAW_SANITIZE__`): hello-world and todos did not grow (both
-  are a few bytes smaller, since `raw` is no longer seeded into every
-  formatter registry), a `raw`-using app pays 2,318 bytes gzip, and a
-  `newline_to_br`-only app 374. The shared conformance table carries the
-  allowlist as 99 `raw` rows — rich text that
-  must survive and an XSS corpus that must come out inert — plus 6
+  (`__PUZZLE_HAS_RAW_SANITIZE__`): hello-world and todos did not grow, a
+  `raw`-using app pays 2,318 bytes gzip, and a `newline_to_br`-only app 374.
+  The shared conformance table carries the allowlist as 99 `raw` rows — rich
+  text that must survive and an XSS corpus that must come out inert — plus 6
   `newline_to_br` rows, for Sites to run too.
-- **BREAKING: a `|` is a formatter pipe in every value position (D173 V1).**
-  Brace-only attribute values, component props and marker arguments now split
-  a top-level `|` into a formatter chain, exactly as text interpolation always
-  has:
-  `title={ price | currency }` calls `currency` where it used to compile to a
-  bitwise OR. `||`, and a `|` inside a string, a regex or a template literal,
-  are not pipes; a single `|` nested inside parentheses, brackets, braces or a
-  formatter's arguments is a positioned compile error, because there is no
-  bitwise OR in templates (D176) — `@click={ save(x | trim) }` and
-  `{ (a | b) }` used to compile to one silently. `@event` handler bodies are
-  otherwise untouched. A chained form-control `value={ x | f }` is one-way
-  and does not auto-bind.
-- **BREAKING: what follows a pipe must be a formatter name.** Everywhere a pipe
-  is a formatter — text interpolation included — the text after it must be a
-  name (`[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*` — an identifier,
-  optionally kebab-case, where every `-` starts a word with a letter), bare or
-  with one call whose `)` ends the segment. `{ flags | 4 }`, `{ w / 2 | 0 }`,
-  `{ a |= 2 }` and `{ mask | bit-1 }` used to compile to a lookup of a formatter
-  named `4` or `bit-1` (a silent pass-through), and `{ a | f(1) + g(2) }`
-  compiled to `f(a, 1) + g(2)`; they are now positioned errors that say to
-  compute the value before the pipe. A dotted or
-  non-ASCII formatter name (`{ price | fmt.eur }`), which 0.7 looked up in the
-  registry, is now an error too: register the formatter under an identifier name.
-- **BREAKING: a pipe in a condition or loop header is a compile error (D173
-  V1).** Formatters are display helpers and stay out of branching logic, so a
-  top-level `|` in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` header,
-  or in an inline `{#if}` inside an attribute value, no longer compiles to a
-  bitwise OR: it is a positioned error, `formatter pipes are not allowed in an
-  {#if} condition — compute the value first (a data() field in PuzzleKit,
-  {#let} in Sites) and test that field, e.g. {#if hasTags}; write || for a
-  logical OR`. In a loop's collection or range
-  bound, shape the list in `data()` and loop over that field
-  (`{#for item in sortedItems}`); a `{:when}` value takes no chain, so list
-  alternatives with commas or compute the value in `data()`. `||` keeps
-  working in every header.
-- **BREAKING: template expressions are a data language, not JavaScript
-  (D176).** A template value is JSON-shaped data read with paths and combined
-  with operators; anything that computes from a value is a formatter, and a
-  formatter appears only where a value is displayed. PuzzleKit now enforces
-  what Sites always did, with the same positioned errors, so a template that
-  compiles in one dialect is the same language in the other:
-  - **`.size` replaces `.length`.** `x.size` is the count of a list (items)
-    or a string (code points, so `'😀'.size` is 1 in both hosts), compiled to
-    a small helper that a module imports only when it uses it (`__z`, a new
-    reserved binding). On anything else it is an ordinary field read
-    (`file.size`). `.length` is a positioned compile error; a field named
-    `length` is `obj['length']`.
-  - **No calls on a value.** `draft.trim()`, `items.filter(i => i.done)`,
-    `Math.round(x)`, `String(x)`, `items.at(-1)` and every other method or
-    function call on data, plus arrow functions, template literals, `new`,
-    `typeof`, `instanceof`, `in`, regex literals, `++`/`--`, assignment, a
-    top-level comma and the bitwise operators, are positioned compile errors
-    naming the replacement: a formatter, or a `data()` field. Formatter calls
-    (`| truncate(20)`) are not calls on data. An `@event` handler's arguments
-    are PuzzleKit's one door into JavaScript and are exempt, apart from
-    `this`.
-  - **`this` is not a template identifier.** A template expression never
-    reaches the view instance. `this` in any template expression —
-    interpolation, attribute value, `{#if}`/`{#unless}`/`{#case}`/`{:when}`
-    condition, `{#for}` header, `key=`, formatter argument, prop or marker
-    argument, inline `{#if}`, skeleton, and an `@event` handler's arguments
-    and ternary condition — is a positioned compile error at the `this`
-    token: "`this` is not available in template expressions — return the
-    value from data() (a getter or a computed field), or use a formatter for
-    a display transform". The same holds for `this?.`, `(this)` and
-    `this[…]`; a field or object key named `this` (`x.this`) is still a
-    name. A handler reaches the view through its own name
-    (`@click={ save(x) }` calls the view's `save`); nothing else in a
-    template does. Every value a template shows comes through `data()`, and
-    a display transform is a formatter, so a template that compiles in
-    PuzzleKit never depends on a view instance — which is what lets it be
-    core Puzzle for Sites. typed-todos, chat and blog, whose templates read
-    a getter as `disabled={ !this.x }`, compute the flag in `data()`.
-  - The scaffold's `disabled={ !newTodoText.trim() }` becomes a `canAdd`
-    field in `data()`; the examples' ~160 `.length` reads become `.size`.
 - **Member access in a template never throws (D173 V4).** Every `.` and `[`
   step in a value expression — text, attributes and props, `{#if}`/`{#case}`
-  headers, formatter arguments, loop collections and keys — compiles to `?.`,
+  headers, function and handler arguments, loop collections and keys —
+  compiles to `?.`,
   so `{ user.address.city }` prints nothing when `address` is missing instead
   of sending the view to `errorView`. A path that exists evaluates exactly as
-  before; writing `?.` yourself stays legal. Event-handler arguments and
-  `puzzle check` keep the author's spelling. A two-way bound
+  before; writing `?.` yourself stays legal. A chain rooted at a handler's
+  DOM `event` and `puzzle check` keep the author's spelling. A method call
+  on a missing value is guarded the same way and prints nothing, with a
+  development warning. A two-way bound
   `value={ profile.name }` whose `profile` is missing is inert until the record
   exists (it used to be reachable only by throwing): it never writes a stray
   top-level `name`. Cost: +34 B gzip on the todos example, nothing on
@@ -583,7 +684,7 @@ and keep formatters pure functions of their input.
   V12).** A missing collection (`null`/`undefined`) loops zero times silently;
   any other non-array (a string, an object, a number) loops zero times with a
   development warning — so a `{#for}` over a string's characters stops
-  iterating. Range bounds truncate to whole numbers (with a development warning
+  iterating (loop over `text.split('')` instead). Range bounds truncate to whole numbers (with a development warning
   for a non-integer; a numeric string such as a route param's `'5'` is fine),
   and a missing or non-finite bound runs the range zero times. A range with two
   integer-literal bounds (`{#for 1...3}`) is folded at compile time. `loopItems`
@@ -592,11 +693,12 @@ and keep formatters pure functions of their input.
 - **BREAKING (edge case): one value-printing rule (D173 V6).** `NaN` and
   ±Infinity now print nothing instead of `NaN`/`Infinity`, and an object prints
   nothing instead of `[object Object]` — with a development warning naming the
-  expression. That includes a `Date` — its development warning names `| date`,
-  `| datetime` and `| time` — and any object with its own `toString` (a `URL`,
+  expression. That includes a `Date` — its development warning names `date()`,
+  `datetime()` and `time()` — and any object with its own `toString` (a `URL`,
   a Decimal, a Temporal or Luxon value): format it or print a field instead.
-  Numbers otherwise print as JavaScript prints them, and a list still prints its
-  items joined with `,`.
+  Negative zero prints `0`, in a plain interpolation and through every number
+  function. Numbers otherwise print as JavaScript prints them, and a list still
+  prints its items joined with `,`.
 - **BREAKING (edge case): a list or object in a brace-only attribute (D173
   V9).** A list in a brace-only attribute is now a space-joined token list (it
   joined with commas) that drops `false` and every item that prints nothing
@@ -696,14 +798,14 @@ and keep formatters pure functions of their input.
   never cached (they can be mutated in place, so their rows rebuild every render
   as before), and a loop body that reads a relation, a computed getter, or a path
   deeper than one level off the item never caches its record rows.
-- **A formatter must be a pure function of its input.** Row caching now relies on
-  it: a cached row does not re-run its formatters, so a formatter that reads the
-  clock or any other ambient value would freeze its output. The built-ins that do
-  (`timeago` today) are known to the compiler and make the site re-evaluate every
-  render; a user-defined formatter is pure by contract. A row body that reads
-  a mutable global (`window`, `document`, `globalThis`, …) re-evaluates every
-  render too. A template cannot reach the view through `this`, so a relative
-  time is `| timeago` and any other ambient value is computed in `data()`.
+- **An app function must be a pure function of its input.** Row caching
+  relies on it: a cached row does not re-run its calls, so a function that
+  reads the clock or any other ambient value would freeze its output. The
+  built-ins that do (`timeago` today) are known to the compiler and make the
+  site re-evaluate every render; an app function is pure by contract. A
+  template reaches no mutable global and cannot reach the view through `this`,
+  so a relative time is `timeago(at)` and any other ambient value is computed
+  in `data()`.
 - **BREAKING (edge case): new reserved names.** A compiled view uses
   `__lists`, `__c`, `__dirty`, `__rgen` and `__propRevs` on the instance and
   `__roots` on the class; a template with an item-form `{#for}` also declares `__L0`, `__L1`, … at module scope and imports
@@ -730,28 +832,54 @@ and keep formatters pure functions of their input.
 
 ### Removed
 
-- **BREAKING: the list formatters `sort`, `where`, `map`, `uniq`, `reverse`,
-  `compact`, `first` and `last` (D174).** List shaping is JavaScript in
-  PuzzleKit: shape the list in `data()` and loop over that field, or write
-  `items[0]` / `items[items.size - 1]`. For a short count, `compact_number` replaces
-  `compact`. There is no deprecation period. A template that still names one
-  passes the value through and, in development, logs what replaces it.
-  (Sites keeps list formatters as a Sites-only addition.)
+- **BREAKING: formatter pipes (D176).** A template expression has no `|`: the
+  value is a function's first argument (`{ currency(price) }`), a chain nests
+  (`{ truncate(capitalize(title), 40) }`), and a `|` anywhere is a positioned
+  compile error at the pipe that says to write `name(value)`. There is no
+  bitwise OR either; `||` is logical OR. The table in Upgrading from 0.7
+  (item 1) maps every 0.7 spelling.
+- **BREAKING: the list functions `sort`, `where`, `map`, `uniq`, `reverse`,
+  `compact`, `first` and `last` (D174).** Shape a list with array methods —
+  `items.toSorted((a, b) => a.rank - b.rank)`, `items.filter(i => i.done)`,
+  `items.map(i => i.name)`, `items.at(0)`, `items.at(-1)` — or in `data()`.
+  For a short count, `compact_number` replaces `compact`. A call that still
+  names one passes the value through and, in development, logs what replaces
+  it. (Sites keeps list functions as a Sites-only addition.)
 - **BREAKING: `noescape` (D174).** Print the value with a plain interpolation,
-  or use `raw` for HTML you mean to render. Development logs the
-  replacement.
-- **BREAKING: the formatters `size`, `plus`, `minus`, `times`, `divided_by`,
-  `modulo`, `default` and `split` (D176).** Each duplicated something the
-  expression language already has: a count is the `.size` property,
-  arithmetic is `+ - * / %` before the pipe (`{ price * qty | currency }`),
-  and a fallback is `??` (`{ name ?? 'Anonymous' }`). `split` is Sites-only
-  now; in PuzzleKit split the string in `data()`. `round`, `floor`, `ceil`
-  and `abs` stay. A template that still names one passes the value through
-  and, in development, logs the replacement. No example, piece or scaffold
-  template used any of them.
+  or use `raw` for HTML you mean to render. Development logs the replacement.
+- **BREAKING: `size`, `plus`, `minus`, `times`, `divided_by`, `modulo`,
+  `default` and `split` (D176).** Each duplicated something the expression
+  language has: a count is `.length`, arithmetic is `+ - * / %`
+  (`{ currency(price * qty) }`), a fallback is `??` (`{ name ?? 'Anonymous' }`),
+  and a string splits with `.split()`. A call that still names one passes the
+  value through and, in development, logs the replacement.
+- **BREAKING: `upcase`, `downcase`, `trim`, `strip`, `replace`, `join`, `abs`,
+  `ceil` and `floor` (D176).** A JavaScript method or `Math` global says each:
+  `.toUpperCase()`, `.toLowerCase()`, `.trim()` (for both `trim` and `strip`),
+  `.replaceAll(a, b)` (or `.split(a).join(b ?? '')`, which is what `replace`
+  did — `.join()` with no argument joins with `','`), `.join(', ')` (the old default separator; `.join()` alone joins with
+  `','`), `Math.abs()`, `Math.ceil()`, `Math.floor()`. `round(v, places)`
+  stays. A call to one reaches the unknown-name guard, which names the method
+  in development, and the names are gone from `LibraryFunctions` in the types.
 
 ### Fixed
 
+- **An `errorView` retry remounts a failed child under a reused element.** A
+  failed child inside an element the parent reused (`<Card><div><Widget/></div></Card>`,
+  or `<li><Widget/></li>` in a cached row) stayed blank after a retry, because
+  the patcher short-circuited the unchanged subtree; the retry now walks it.
+- **The number functions print nothing for `NaN` and ±Infinity.** `currency`,
+  `percentage`, `number_with_delimiter`, `compact_number` and `pluralize`
+  printed `NaN` or `Infinity` for `0 / 0` or `120 / 0`.
+- **Negative zero prints `0`.** `pluralize(-0, 'day')` printed `-0 days`, and
+  the locale number path printed `-0`.
+- **`/testing` i18n handles restore the formatter locale and `<html lang>`.** A
+  `mountView` or `createTestApp` with an `i18n` option leaked its locale into
+  the next test; `destroy()`/`unmount()` now restore both.
+- **The usage scan prunes `dist`, `build` and `vendor` only at the project
+  root.** A first-party `app/components/vendor/` folder was skipped, which
+  compiled `raw`, its sanitizer and its functions out of a component the app
+  renders.
 - **A slot's fallback body is built only when the slot is empty (D141).** A paired
   marker's fallback used to be evaluated on every render, even when a snippet
   or call-site content filled the position, so its expressions ran for nothing
@@ -761,7 +889,7 @@ and keep formatters pure functions of their input.
   body that runs only when the position is unfilled, in the browser and in
   prerendered output, and a filled slot now renders faster. What a slot shows
   is unchanged. The one visible difference is that a fallback's side effects
-  (a formatter call, a development warning) no longer happen while the slot is
+  (a function call, a development warning) no longer happen while the slot is
   filled. Fallback code now runs during slot expansion, not in `render()`, but a
   throwing fallback still fails only its own component.
 - **Prerendered pages anchor their injected scripts on the shell's last

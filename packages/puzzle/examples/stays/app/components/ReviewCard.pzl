@@ -21,7 +21,7 @@
 
     <!-- Meta line: month + year of the stay, then an inline star rating. -->
     <div class="flex items-center gap-2 text-sm text-muted mb-2">
-      <span>{ review.date | monthYear }</span>
+      <span>{ monthYear(review.date) }</span>
       <span class="text-faint">·</span>
       <span class="text-fg">★ { review.rating }</span>
     </div>

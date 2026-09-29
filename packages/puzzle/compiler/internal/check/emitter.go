@@ -58,21 +58,6 @@ declare global {
     visit: (value: number) => void,
   ): void;
 
-  // P4: remove. A template value's .size (D176, TEMPORARY) is emitted as
-  // __z(value), the runtime's sizeOf helper: a list's or string's count,
-  // otherwise the value's own size field. Most template data is untyped, which
-  // the first overload answers with a number; a typed object reads its field.
-  function __z(value: readonly unknown[] | string | ReadonlyMap<unknown, unknown> | ReadonlySet<unknown>): number;
-  function __z<T extends { readonly size?: unknown }>(value: T): T['size'];
-  function __z(value: unknown): any;
-
-  // P4: remove. A TEMPORARY pipe chain is checked as nested calls.
-  function __puzzle_check_formatter(
-    name: string,
-    value: any,
-    ...args: any[]
-  ): any;
-
   // A bare call names the function library: the standard functions typed
   // below, and any app-registered function, untyped — its arguments and its
   // result are any, as an untyped data() value is.
@@ -96,8 +81,8 @@ export {};
 
 // libraryFunctionSignatures are the TypeScript signatures of the standard
 // function library (codegen.LibraryFunctionNames, DESIGN-expr-v2 §4), declared
-// on __PuzzleFunctions in the shim. P3 publishes the same signatures in
-// types/ — keep the two in sync; TestLibrarySignaturesMatchCodegen keeps this
+// on __PuzzleFunctions in the shim. types/index.d.ts (LibraryFunctions)
+// publishes the same signatures — keep the two in sync; TestLibrarySignaturesMatchCodegen keeps this
 // table and the compiler's name list identical. Values are `unknown` because
 // every function accepts any template value and prints nothing for a missing
 // one.
@@ -109,6 +94,7 @@ var libraryFunctionSignatures = []struct{ name, signature string }{
 	{"number_with_delimiter", "(value: unknown, delimiter?: string): string"},
 	{"compact_number", "(value: unknown): string"},
 	{"pluralize", "(count: unknown, singular: string, plural?: string): string"},
+	{"round", "(value: unknown, places?: number): number"},
 	{"date", "(value: unknown, preset?: string, locale?: string): string"},
 	{"time", "(value: unknown, preset?: string, locale?: string): string"},
 	{"datetime", "(value: unknown, preset?: string, locale?: string): string"},
@@ -549,7 +535,7 @@ func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent i
 				return err
 			}
 		case *parser.Interpolation:
-			e.emitVoid(n.ExprAST, n.Formatters, scope, indent) // P4: remove
+			e.emitVoid(n.ExprAST, scope, indent)
 		case *parser.If:
 			if err := e.emitIf(n, scope, indent); err != nil {
 				return err
@@ -573,7 +559,7 @@ func (e *emitter) emitAttrs(attrs []parser.Attr, scope map[string]bool, indent i
 	for _, attr := range attrs {
 		switch a := attr.(type) {
 		case *parser.DynamicAttr:
-			e.emitVoid(a.ExprAST, a.Formatters, scope, indent) // P4: remove
+			e.emitVoid(a.ExprAST, scope, indent)
 		case *parser.EventAttr:
 			name := fmt.Sprintf("__puzzle_check_event_%d", e.eventSite)
 			e.eventSite++
@@ -593,10 +579,10 @@ func (e *emitter) emitParts(parts []parser.Part, scope map[string]bool, indent i
 	for _, part := range parts {
 		switch p := part.(type) {
 		case *parser.InterpPart:
-			e.emitVoid(p.Interp.ExprAST, p.Interp.Formatters, scope, indent) // P4: remove
+			e.emitVoid(p.Interp.ExprAST, scope, indent)
 		case *parser.InlineIfPart:
 			e.b.WriteString(spaces(indent) + "if (")
-			codegen.WriteCheckValue(e.b, p.CondAST, nil, scope)
+			codegen.WriteCheckValue(e.b, p.CondAST, scope)
 			e.b.WriteString(") {\n")
 			e.emitParts(p.Then, scope, indent+2)
 			if len(p.Else) > 0 {
@@ -613,16 +599,16 @@ func (e *emitter) emitParts(parts []parser.Part, scope map[string]bool, indent i
 // operator, so an unparenthesized `void a + 1` type-checks `undefined + 1` and
 // reports "Object is possibly 'undefined'" on a correct template under
 // strictNullChecks — while checking nothing about `a + 1` itself.
-func (e *emitter) emitVoid(n expr.Node, fmts []parser.FormatterCall, scope map[string]bool, indent int) {
+func (e *emitter) emitVoid(n expr.Node, scope map[string]bool, indent int) {
 	e.b.WriteString(spaces(indent) + "void (")
-	codegen.WriteCheckValue(e.b, n, fmts, scope)
+	codegen.WriteCheckValue(e.b, n, scope)
 	e.b.WriteString(");\n")
 }
 
 func (e *emitter) emitIf(n *parser.If, scope map[string]bool, indent int) error {
 	// An {#unless} condition is already `!(…)` in the tree.
 	e.b.WriteString(spaces(indent) + "if (")
-	codegen.WriteCheckValue(e.b, n.CondAST, nil, scope)
+	codegen.WriteCheckValue(e.b, n.CondAST, scope)
 	e.b.WriteString(") {\n")
 	if err := e.emitNodes(n.Then, scope, indent+2); err != nil {
 		return err
@@ -640,9 +626,9 @@ func (e *emitter) emitIf(n *parser.If, scope map[string]bool, indent int) error 
 func (e *emitter) emitFor(n *parser.For, scope map[string]bool, indent int) error {
 	if n.IsRange {
 		e.b.WriteString(spaces(indent) + "__puzzle_check_range(")
-		codegen.WriteCheckValue(e.b, n.RangeFromAST, nil, scope)
+		codegen.WriteCheckValue(e.b, n.RangeFromAST, scope)
 		e.b.WriteString(", ")
-		codegen.WriteCheckValue(e.b, n.RangeToAST, nil, scope)
+		codegen.WriteCheckValue(e.b, n.RangeToAST, scope)
 		param := "__puzzle_check_value"
 		if n.Counter != "" {
 			param = n.Counter
@@ -660,7 +646,7 @@ func (e *emitter) emitFor(n *parser.For, scope map[string]bool, indent int) erro
 	}
 
 	e.b.WriteString(spaces(indent) + "__puzzle_check_each(")
-	codegen.WriteCheckValue(e.b, n.CollectionAST, nil, scope)
+	codegen.WriteCheckValue(e.b, n.CollectionAST, scope)
 	e.b.WriteString(", (" + n.Item)
 	if n.Counter != "" {
 		e.b.WriteString(", " + n.Counter)
@@ -704,12 +690,12 @@ func (e *emitter) emitSnippet(n *parser.Snippet, scope map[string]bool, indent i
 
 func (e *emitter) emitCase(n *parser.Case, scope map[string]bool, indent int) error {
 	e.b.WriteString(spaces(indent) + "switch (")
-	codegen.WriteCheckValue(e.b, n.ExprAST, nil, scope)
+	codegen.WriteCheckValue(e.b, n.ExprAST, scope)
 	e.b.WriteString(") {\n")
 	for _, clause := range n.Clauses {
 		for _, value := range clause.ValuesAST {
 			e.b.WriteString(spaces(indent+2) + "case ")
-			codegen.WriteCheckValue(e.b, value, nil, scope)
+			codegen.WriteCheckValue(e.b, value, scope)
 			e.b.WriteString(":\n")
 		}
 		if err := e.emitNodes(clause.Body, scope, indent+4); err != nil {

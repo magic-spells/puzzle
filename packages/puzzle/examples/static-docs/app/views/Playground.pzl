@@ -23,7 +23,7 @@
 
     <div class="mt-5 flex items-center gap-6">
       <div>
-        <div class="font-mono text-3xl tabular-nums text-ink">{ text.size }</div>
+        <div class="font-mono text-3xl tabular-nums text-ink">{ text.length }</div>
         <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">characters</div>
       </div>
       <div>

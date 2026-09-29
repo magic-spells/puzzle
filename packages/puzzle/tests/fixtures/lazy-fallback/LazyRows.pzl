@@ -4,14 +4,14 @@
   {#for row in rows}
     <li key={ row.key }>
       <Slot name="row" item={ row.item } index={ row.index }>{ row.item }</Slot>
-      <Slot name="note" item={ row.item }><em class="lazy-note">{ row.item | probe }</em></Slot>
+      <Slot name="note" item={ row.item }><em class="lazy-note">{ probe(row.item) }</em></Slot>
     </li>
   {/for}
 </ul>
 <ol class="lazy-names">
   {#for name in names}
     <li key={ name }>
-      <Slot name="name" value={ name }><i class="lazy-name">{ name | probeName }</i></Slot>
+      <Slot name="name" value={ name }><i class="lazy-name">{ probeName(name) }</i></Slot>
     </li>
   {/for}
 </ol>

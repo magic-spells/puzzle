@@ -31,7 +31,7 @@
       </div>
 
       <!-- Tags -->
-      {#if item.tags && item.tags.size}
+      {#if item.tags && item.tags.length}
         <div class="flex flex-wrap gap-1.5">
           {#for t in item.tags}
             <span class="px-2.5 py-1 rounded-full text-[0.72rem] font-medium tracking-wide text-accent-hi bg-accent/10 border border-accent/25">{ t }</span>

@@ -21,18 +21,18 @@
       </form>
     </div>
 
-    {#if todos.size > 0}
+    {#if todos.length > 0}
       <div class="grid grid-cols-3 divide-x divide-line border-b border-line">
         <div class="py-5 text-center">
-          <div class="font-mono text-2xl tabular-nums text-fg">{ activeTodos.size }</div>
+          <div class="font-mono text-2xl tabular-nums text-fg">{ activeTodos.length }</div>
           <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">active</div>
         </div>
         <div class="py-5 text-center">
-          <div class="font-mono text-2xl tabular-nums text-fg">{ completedTodos.size }</div>
+          <div class="font-mono text-2xl tabular-nums text-fg">{ completedTodos.length }</div>
           <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">done</div>
         </div>
         <div class="py-5 text-center">
-          <div class="font-mono text-2xl tabular-nums text-fg">{ todos.size }</div>
+          <div class="font-mono text-2xl tabular-nums text-fg">{ todos.length }</div>
           <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">total</div>
         </div>
       </div>
@@ -65,13 +65,13 @@
       </div>
 
       <div class="p-5 flex flex-col sm:flex-row gap-2.5 justify-center">
-        {#if completedTodos.size > 0}
+        {#if completedTodos.length > 0}
           <button class="px-4 py-2.5 rounded-xl border border-hairline text-muted hover:text-fg hover:border-white/20 text-sm font-medium transition-colors" @click={ clearCompleted }>
-            Clear completed ({ completedTodos.size })
+            Clear completed ({ completedTodos.length })
           </button>
         {/if}
 
-        {#if activeTodos.size > 0}
+        {#if activeTodos.length > 0}
           <button class="px-4 py-2.5 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 text-sm font-medium transition-colors" @click={ markAllComplete }>
             Complete all
           </button>

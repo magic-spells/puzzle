@@ -1,6 +1,6 @@
 <puzzle-view class="fmt">
-  <p class="joined">{ tags | join(', ') | upcase }</p>
-  <p class="money">{ price | currency('$', 2) }</p>
+  <p class="nested">{ truncate(capitalize(title), 20) }</p>
+  <p class="money">{ currency(price, '$', 2) }</p>
 </puzzle-view>
 
 <script>
@@ -8,7 +8,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class FormatterChain extends PuzzleView {
   data() {
-    return { tags: [], price: 0 };
+    return { title: '', price: 0 };
   }
 }
 </script>

@@ -733,11 +733,11 @@ func buildAttr(name string, npos Position, v Token, file string, sc exprScope) (
 		if strings.TrimSpace(v.Value) == "" {
 			return nil, errAt(file, vpos, "empty attribute expression for %q", name)
 		}
-		c, perr := parseChain(v.Value, vpos, file, fmt.Sprintf("attribute expression for %q", name), sc)
+		ast, perr := parseExprAt(v.Value, vpos.advance("{"), file, sc.valueOpts())
 		if perr != nil {
 			return nil, perr
 		}
-		return &DynamicAttr{Name: name, Expr: c.text, ExprAST: c.ast, Formatters: c.fmts, Pos: npos}, nil
+		return &DynamicAttr{Name: name, Expr: strings.TrimSpace(v.Value), ExprAST: ast, Pos: npos}, nil
 	case TokAttrQuoted, TokAttrBare:
 		parts, perr := parseAttrParts(v.Value, vpos, file, sc)
 		if perr != nil {
@@ -872,9 +872,6 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#if} requires a condition")
 		}
-		if perr := headerPipeError(rest, pos, p.file, "an {#if} condition", "{#if hasTags}"); perr != nil {
-			return nil, perr
-		}
 		condAST, perr := parseExprAt(rest, restPos, p.file, sc.valueOpts())
 		if perr != nil {
 			return nil, perr
@@ -895,9 +892,6 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 			cond := p.cur.Value
 			if cond == "" {
 				return nil, errAt(p.file, cpos, "{:else if} requires a condition")
-			}
-			if perr := headerPipeError(cond, cpos, p.file, "an {:else if} condition", "{:else if hasTags}"); perr != nil {
-				return nil, perr
 			}
 			ast, perr := parseExprAt(cond, p.cur.ValPos, p.file, sc.valueOpts())
 			if perr != nil {
@@ -953,9 +947,6 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#unless} requires a condition")
 		}
-		if perr := headerPipeError(rest, pos, p.file, "an {#unless} condition", "{#unless hasTags}"); perr != nil {
-			return nil, perr
-		}
 		// The tree negates the parsed condition with a Unary node; the Cond
 		// string keeps its `!(…)` fold for codegen.
 		inner, perr := parseExprAt(rest, restPos, p.file, sc.valueOpts())
@@ -992,9 +983,6 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		// once (semantically safe for getters); it does NOT desugar to If.
 		if rest == "" {
 			return nil, errAt(p.file, pos, "{#case} requires an expression")
-		}
-		if perr := headerPipeError(rest, pos, p.file, "a {#case} expression", "{#case statusLabel}"); perr != nil {
-			return nil, perr
 		}
 		subjectAST, perr := parseExprAt(rest, restPos, p.file, sc.valueOpts())
 		if perr != nil {
@@ -1117,12 +1105,20 @@ func parseWhenValues(raw string, pos, valPos Position, file string, sc exprScope
 	for i, sp := range spans {
 		ast, perr := parseExprAt(raw[sp[0]:sp[1]], cur.at(sp[0]), file, sc.valueOpts())
 		if perr != nil {
+			if perr.code == expr.CodePipe {
+				// `{:when 'a' | 'b'}` is an attempt at alternatives, not a pipe.
+				perr.Message = whenPipeMessage
+			}
 			return nil, nil, perr
 		}
 		asts[i] = ast
 	}
 	return vals, asts, nil
 }
+
+// whenPipeMessage replaces the expression language's `|` steer inside a
+// {:when} value, where a `|` is an attempt to list alternatives.
+const whenPipeMessage = "a {:when} lists its alternatives with commas — write {:when 'a', 'b'}; there is no `|` in template expressions"
 
 // splitWhenValues is parseWhenValues' template half: the trimmed values and
 // the untrimmed span of each in raw.
@@ -1133,21 +1129,12 @@ func splitWhenValues(raw string, pos Position, file string) ([]string, [][2]int,
 	var vals []string
 	var spans [][2]int
 	off := 0
-	for _, part := range splitTopLevel(raw, ',', false) {
+	for _, part := range splitTopLevel(raw, ',') {
 		spans = append(spans, [2]int{off, off + len(part)})
 		off += len(part) + 1
 		v := strings.TrimSpace(part)
 		if v == "" {
 			return nil, nil, errAt(file, pos, "{:when} has an empty value (check for a stray comma)")
-		}
-		// A `|` is a formatter pipe in value positions (D173 V1), and a {:when}
-		// value, like every branching header, takes no chain; a nested `|` is
-		// the D176 error, since there is no bitwise OR to fall back to.
-		if hasTopLevelPipe(v) {
-			return nil, nil, errAt(file, pos, "formatter pipes are not allowed in a {:when} value — list alternatives with commas ({:when 'a', 'b'}) or compute the value in data()")
-		}
-		if nestedPipeIndex(v) >= 0 {
-			return nil, nil, nestedPipeError(pos, file)
 		}
 		vals = append(vals, v)
 	}
@@ -1195,6 +1182,14 @@ func parseForHeader(rest string, pos, restPos Position, file string, sc exprScop
 	// bindings do not reach its header. peelForCounter keeps the head starting
 	// where rest does, so offsets into head are offsets into rest.
 	head := f.headText
+	if f.rangeSteer != "" {
+		// `{#for i in 1...n}`: the bound's own errors first, so the steer never
+		// quotes an invalid bound back (`{#for 1...v | round, i}`).
+		if _, perr := parseExprAt(head[f.headSplit+3:], restPos.advance(head[:f.headSplit+3]), file, sc.valueOpts()); perr != nil {
+			return nil, perr
+		}
+		return nil, errAt(file, pos, "%s", f.rangeSteer)
+	}
 	if f.IsRange {
 		if f.RangeFromAST, perr = parseExprAt(head[:f.headSplit], restPos, file, sc.valueOpts()); perr != nil {
 			return nil, perr
@@ -1216,10 +1211,13 @@ type forHeader struct {
 	*For
 	headText  string
 	headSplit int
+	// rangeSteer is the `{#for i in a...b}` steer, reported by parseForHeader
+	// once the range's upper bound has parsed.
+	rangeSteer string
 }
 
-// splitForHeader is parseForHeader's template half: the header's forms,
-// bindings, and pipe rules, before any expression is parsed.
+// splitForHeader is parseForHeader's template half: the header's forms and
+// bindings, before any expression is parsed.
 func splitForHeader(rest string, pos Position, file string) (*forHeader, *ParseError) {
 	if rest == "" {
 		return nil, errAt(file, pos, "{#for} requires 'item in items' or a range 'from...to'")
@@ -1227,15 +1225,6 @@ func splitForHeader(rest string, pos Position, file string) (*forHeader, *ParseE
 	rest, counter, perr := peelForCounter(rest, pos, file)
 	if perr != nil {
 		return nil, perr
-	}
-	// A pipe anywhere in the header — the collection or either range bound — is
-	// the D173 V1 ban, reported before the header is taken apart so every
-	// spelling gets the same fix-it; a nested `|` is the D176 error.
-	if hasTopLevelPipe(rest) {
-		return nil, forPipeError(pos, file)
-	}
-	if nestedPipeIndex(rest) >= 0 {
-		return nil, nestedPipeError(pos, file)
 	}
 	if perr := loopBindingIdentError(counter, pos, file); perr != nil {
 		return nil, perr
@@ -1250,7 +1239,8 @@ func splitForHeader(rest string, pos Position, file string) (*forHeader, *ParseE
 		// compiles to a green build that throws `Cannot use 'in' operator` on the
 		// first render. Steer to the documented form instead.
 		if item, low, ok := splitForIn(from); ok && expr.IsIdentifier(item) {
-			return nil, errAt(file, pos, "{#for} range loops bind the counter after the range — write {#for %s...%s, %s}", low, to, item)
+			steer := fmt.Sprintf("{#for} range loops bind the counter after the range — write {#for %s...%s, %s}", low, to, item)
+			return &forHeader{For: &For{IsRange: true, Pos: pos}, headText: rest, headSplit: idx, rangeSteer: steer}, nil
 		}
 		return &forHeader{For: &For{IsRange: true, RangeFrom: from, RangeTo: to, Counter: counter, Pos: pos}, headText: rest, headSplit: idx}, nil
 	}
@@ -1385,196 +1375,18 @@ func splitForInAt(rest string) (item, coll string, collAt int, ok bool) {
 	return item, coll, j, true
 }
 
-// parseInterpolationExpr splits an interpolation's inner text into a base
-// expression and a formatter chain, splitting pipes at top level only (|| is
-// not a pipe) — packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c.
+// parseInterpolationExpr parses an interpolation's inner text — one
+// expression (D176) — in scope sc. raw is the text just after the `{` at pos.
 func parseInterpolationExpr(raw string, pos Position, file string, sc exprScope) (*Interpolation, *ParseError) {
-	c, perr := parseChain(raw, pos, file, "interpolation", sc)
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return nil, errAt(file, pos, "empty interpolation")
+	}
+	ast, perr := parseExprAt(raw, pos.advance("{"), file, sc.valueOpts())
 	if perr != nil {
 		return nil, perr
 	}
-	return &Interpolation{Expr: c.text, ExprAST: c.ast, Formatters: c.fmts, Pos: pos}, nil
-}
-
-// chain is a parsed value position: the base expression's trimmed text and
-// tree, and the formatter chain.
-type chain struct {
-	text string
-	ast  expr.Node
-	fmts []FormatterCall
-}
-
-// parseChain splits any template value position into its base expression and
-// formatter chain. It is the one pipe rule for every position that takes a
-// chain (D173 V1, D176 rule 4): text interpolation, quoted and brace-only
-// attribute values, component props, `key=` and marker arguments. Condition
-// and branching headers take none (see headerPipeError). Only a top-level
-// single `|` is a pipe and `||` stays logical OR; a `|` inside a string, a
-// regex, a template literal or a comment is text. A single `|` inside
-// parentheses, brackets or braces — a formatter argument included — is an
-// error pointing at it: the language has no bitwise OR. raw is the text just
-// after the value's opening `{` at pos; what names the position in the
-// empty-expression errors ("interpolation", "attribute expression for …").
-//
-// Once the chain's shape is valid, the base expression and every formatter
-// argument are parsed in scope sc (the arguments as call arguments, so an
-// arrow function is legal there), each at its own position in the file.
-func parseChain(raw string, pos Position, file, what string, sc exprScope) (chain, *ParseError) {
-	if i := nestedPipeIndex(raw); i >= 0 {
-		return chain{}, nestedPipeError(pos.advance("{"+raw[:i]), file)
-	}
-	segs := splitTopLevel(raw, '|', true)
-	text := strings.TrimSpace(segs[0])
-	if text == "" {
-		return chain{}, errAt(file, pos, "empty %s", what)
-	}
-	var fmts []FormatterCall
-	// argSpans[i] are formatter i's argument spans, as offsets into raw.
-	var argSpans [][][2]int
-	off := len(segs[0]) + 1 // each split consumed one '|'
-	for _, seg := range segs[1:] {
-		s := strings.TrimSpace(seg)
-		if s == "" {
-			return chain{}, errAt(file, pos, "empty formatter in %s", what)
-		}
-		fc, spans, perr := parseFormatter(s, pos, file)
-		if perr != nil {
-			return chain{}, perr
-		}
-		sAt := off + leadingSpace(seg)
-		for k := range spans {
-			spans[k][0] += sAt
-			spans[k][1] += sAt
-		}
-		fmts = append(fmts, fc)
-		argSpans = append(argSpans, spans)
-		off += len(seg) + 1
-	}
-	cur := newPosCursor(raw, pos.advance("{"))
-	ast, perr := parseExprAt(segs[0], cur.at(0), file, sc.valueOpts())
-	if perr != nil {
-		return chain{}, perr
-	}
-	for i, spans := range argSpans {
-		for _, sp := range spans {
-			arg, perr := parseExprAt(raw[sp[0]:sp[1]], cur.at(sp[0]), file, sc.argOpts())
-			if perr != nil {
-				return chain{}, perr
-			}
-			fmts[i].ArgsAST = append(fmts[i].ArgsAST, arg)
-		}
-	}
-	return chain{text: text, ast: ast, fmts: fmts}, nil
-}
-
-// hasTopLevelPipe reports whether s contains a formatter pipe by parseChain's
-// rule. The `{#for}`, `{#if}`, `{:else if}`, `{#unless}`, `{#case}` and
-// `{:when}` headers use it to reject a chain (D173 V1).
-func hasTopLevelPipe(s string) bool {
-	return len(splitTopLevel(s, '|', true)) > 1
-}
-
-// nestedPipeError is the positioned D176 rule-4 error for a single `|` below
-// the top level of a value (see nestedPipeIndex). A value position points at
-// the `|`; a block header, whose text arrives trimmed, points at its `{`.
-func nestedPipeError(pos Position, file string) *ParseError {
-	return errAt(file, pos, "a formatter pipe must be at the top level of the value — there is no bitwise OR in templates; compute the value first (a data() field in PuzzleKit, {#let} in Sites)")
-}
-
-// forPipeError is the positioned `{#for}`-header pipe ban (D173 V1). A chain in
-// a loop header puts list shaping, sorting and the loop on one line, so the
-// fix-it names the list first: in PuzzleKit, the script's data() shapes it and
-// the loop iterates that field.
-func forPipeError(pos Position, file string) *ParseError {
-	return errAt(file, pos, "formatter pipes are not allowed in a {#for} header — shape the list in data() and loop over that field (e.g. {#for item in sortedItems})")
-}
-
-// headerPipeError is the positioned condition-header pipe ban (D173 V1, D176
-// rule 4) for an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` subject, or an
-// inline `{#if}` inside an attribute value; nil when cond holds no `|`. A pipe
-// appears only where a value is displayed, so a top-level `|` gets the fix-it
-// that computes the value first — a data() field in PuzzleKit, {#let} in
-// Sites — and tests that field; `||` is not a pipe and keeps working. A nested
-// `|` is the nestedPipeError, as in every other position.
-func headerPipeError(cond string, pos Position, file, header, example string) *ParseError {
-	if hasTopLevelPipe(cond) {
-		return errAt(file, pos, "formatter pipes are not allowed in %s — compute the value first (a data() field in PuzzleKit, {#let} in Sites) and test that field, e.g. %s; write || for a logical OR", header, example)
-	}
-	if nestedPipeIndex(cond) >= 0 {
-		return nestedPipeError(pos, file)
-	}
-	return nil
-}
-
-// parseFormatter parses "name" or "name(arg, arg)". Arguments split at
-// depth-zero commas outside quotes and are kept as raw JS expression strings.
-// The ')' matching the name's '(' must end the segment: `f(1) + g(2)` or
-// `f(b)(c)` is an error, never f called with the argument text `1) + g(2`.
-// spans are the arguments' untrimmed extents in s, so each can be parsed at
-// its own position.
-func parseFormatter(s string, pos Position, file string) (FormatterCall, [][2]int, *ParseError) {
-	open := strings.IndexByte(s, '(')
-	if open < 0 {
-		if !isFormatterName(s) {
-			return FormatterCall{}, nil, notFormatterError(s, pos, file)
-		}
-		return FormatterCall{Name: s}, nil, nil
-	}
-	name := strings.TrimSpace(s[:open])
-	if name == "" {
-		return FormatterCall{}, nil, errAt(file, pos, "formatter is missing a name")
-	}
-	if !isFormatterName(name) {
-		return FormatterCall{}, nil, notFormatterError(name, pos, file)
-	}
-	end := matchingClose(s, open)
-	if end < 0 || s[end] != ')' {
-		return FormatterCall{}, nil, errAt(file, pos, "formatter %q: missing closing ')'", name)
-	}
-	if rest := strings.TrimSpace(s[end+1:]); rest != "" {
-		return FormatterCall{}, nil, errAt(file, pos, "formatter %q: unexpected %q after its closing ')' — a segment after a pipe is only a formatter name or call; compute anything else in the expression before the pipe", name, rest)
-	}
-	argsRaw := s[open+1 : end]
-	var args []string
-	var spans [][2]int
-	if strings.TrimSpace(argsRaw) != "" {
-		at := open + 1 // each split consumed one ','
-		for _, a := range splitTopLevel(argsRaw, ',', false) {
-			args = append(args, strings.TrimSpace(a))
-			spans = append(spans, [2]int{at, at + len(a)})
-			at += len(a) + 1
-		}
-	}
-	return FormatterCall{Name: name, Args: args}, spans, nil
-}
-
-// isFormatterName reports whether s can name a formatter:
-// `[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*` — an identifier,
-// optionally kebab-cased, where every '-' starts a word with a letter. Anything
-// else after a top-level `|` — a number (`{ w / 2 | 0 }`), an operator
-// (`a |= 2`), arithmetic (`mask | bit-1`), a member (`FLAGS.bold`), two words —
-// is an error, never a registry lookup that would pass the value through
-// silently as a missing formatter.
-func isFormatterName(s string) bool {
-	if s == "" {
-		return false
-	}
-	isLetter := func(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c == '_' || c == '$' || isLetter(c):
-		case i > 0 && c >= '0' && c <= '9':
-		case i > 0 && c == '-' && i+1 < len(s) && isLetter(s[i+1]):
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-func notFormatterError(name string, pos Position, file string) *ParseError {
-	return errAt(file, pos, "%q is not a formatter name (an identifier, optionally kebab-case like my-format) — a top-level `|` in a template expression is a formatter pipe", name)
+	return &Interpolation{Expr: text, ExprAST: ast, Pos: pos}, nil
 }
 
 // firstWord returns the leading identifier-ish run of s (after leading space).
