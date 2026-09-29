@@ -111,6 +111,14 @@ notes:
       preflight. The `add --overwrite` help now names themes too. Tests:
       TestPreflightRuntimeMissingDir, TestBuildMissingDirSaysDirectoryNotFound,
       TestAddOverwriteHelpNamesThemes.
+  - kind: state
+    text: >-
+      `puzzle check`'s generated tsconfig switches shape at TypeScript 6, not 7 (the body's
+      "switches shape for TypeScript 7" predates this): 6 and up clear baseUrl/moduleResolution;
+      below 6 keeps node resolution + baseUrl and pins module ESNext (an app nodenext module was
+      TS5109). paths is written, not inherited — the app tsconfig's own entries are merged over
+      `@/*` with targets rewritten to resolve from .puzzle/check (extends chains not followed). No
+      app tsconfig ⇒ strict:false. Details in DECISION-D165-PUZZLE-CHECK § The design.
 ---
 
 # Compiler CLI
