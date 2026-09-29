@@ -424,10 +424,17 @@ app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
   template expression as typed statements, lowered from the same expression
   tree the build compiles (D176). `{#if}`/`{#case}` become `if`/`switch`,
   `{#for}` becomes a declared visitor call whose item type is destructured out
-  of the collection, a library call goes through the shim's `__puzzle_fn`
-  (the standard functions carry their signatures, an app-registered function
-  is `any`), a method is checked as the same JavaScript method, and each
-  `@event` binding is assigned to a handler-typed const. The shim references
+  of the collection, a standard function call goes through the shim's
+  `__puzzle_fn.name(…)` and is checked against its signature, any other bare
+  call — an app-registered function — goes through
+  `__puzzle_app_fn("name")(…)`, declared
+  `(name: string) => (...args: any[]) => any` (a call, not an index signature
+  on `__PuzzleFunctions`, so it type-checks under `noUncheckedIndexedAccess`),
+  a method is checked as the same JavaScript method, and each
+  `@event` binding is assigned to a handler-typed const. The emitter keeps the
+  author's spelling where the render target adds safety: no `?.` guards and no
+  `?? {}` default on `Object.keys`/`values`/`entries` (TypeScript 5.6+ reports
+  a `??` whose left side can never be nullish). The shim references
   the ES2016–ES2023 string, array and object lib files the method table needs
   whatever the app's `target`. The root `<puzzle-view>` tag's own attributes
   and the `<puzzle-skeleton>` body are checked like any others.
@@ -453,8 +460,14 @@ app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
   node-resolution pair below 7. Verified against tsc 4.9, 5.7, and 7.0.
 - **Scope.** Template expressions are checked against the component class's
   declared fields; values produced by `data()` fall through an index signature
-  and are not typed. Cross-file inference of `data()` shapes is deliberately out
-  of scope.
+  (the scope is `InstanceType<typeof Class> & Record<string, any>`) and are not
+  typed. Cross-file inference of `data()` shapes is deliberately out of scope.
+  Known gap, not fixed: under an app's `noPropertyAccessFromIndexSignature`, a
+  dotted read of a `data()`-only field is itself a diagnostic, because it
+  resolves through that index signature.
 - **One unparsable `.pzl` does not abort the run.** It is reported as its own
   positioned diagnostic and skipped; every other file still checks, because the
-  virtual files do not link to each other.
+  virtual files do not link to each other. A file that fails to compile is
+  reported the same way, since the emitter runs the build's codegen — a
+  template that reads `event` as data and also uses it in a handler
+  (DOC-SPEC-TEMPLATE §5) is that error here too.
