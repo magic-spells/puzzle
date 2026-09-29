@@ -561,7 +561,8 @@ refresh, holding the error view in place until the rebuild commits or fails
 again, so a rebuild that never commits (a guard verdict, a supersession) leaves
 the face up and the button pressable; never automatic, never recursive. Without
 `errorView`, failures report and the position keeps its recovery placeholder.
-Event handlers and template functions surface uncaught.
+Event handlers surface uncaught; a template function or method that throws
+during render is a render failure like any other.
 
 ## Deliberately not shipped
 
