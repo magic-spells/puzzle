@@ -39,6 +39,12 @@ notes:
       The parser lives in `packages/puzzle-lang`, a separate Go module that `packages/puzzle/go.mod`
       requires through a `replace => ../puzzle-lang`. Its FILE cards bind to `../puzzle-lang/...`,
       outside this plan's code root, so stale_report cannot track them.
+  - kind: state
+    text: >-
+      The unquoted-attribute pipe gotcha above is closed by D176, not by making the pipe core: there
+      is no `|` in any expression position, so `title={ price | money }` is the positioned "`| name`
+      pipes were removed — write `name(value)`" error in both hosts, and the display transform is
+      `title={ money(price) }` everywhere.
 ---
 
 # D172 — One language, two dialects, one public name
@@ -66,16 +72,15 @@ parser (taken from `compiler/internal/parser`, which now lives in the
 
 ## Decision
 
-
-
 **Puzzle is one template language with two dialects**, the way Liquid has a
 core that Shopify extends with its own tags and objects.
 
 **The core** is everything that means the same thing in every host:
 
 - HTML markup, text, and the text/escape rules (including `\{`/`\}`).
-- `{ expr | formatter(args) }` interpolation, in text AND in attribute values
-  (quoted and unquoted), plus the formatter call syntax.
+- `{ expr }` interpolation, in text AND in attribute values (quoted and
+  unquoted), with a display transform written as a function call:
+  `{ name(expr, args) }`.
 - `{#if}`/`{:else}`, `{#for}`, `{#case}`, `{#raw}`, `{#svg}`.
 - Components: capitalized tags, dotted family tags, props.
 - **Slots: `<Children/>` and `<Slot>`/`<Slot name="…">` with fallback bodies.**
@@ -105,14 +110,15 @@ core that Shopify extends with its own tags and objects.
   bare-attribute parameter declarations, the leaf rule, forwarding through a
   wrapper's `<Children/>`. PuzzleKit implements it today; Sites has not built
   it yet (planned), and until then rejects it with an error saying so.
-- **The core expression language is a data language, not JavaScript**
+- **The core expression language is one closed, JavaScript-shaped grammar**
   ([[DECISION-D176-EXPRESSION-LANGUAGE]]): paths (`a.b`, `a?.b`,
-  `a[expr]`), the `.size` count of a list or string, literals, arithmetic,
-  comparison, `&&`/`||`/`??`, ternary. No calls on a value, no arrow
-  functions, template literals, `new`, `typeof`, regex or bitwise operators:
-  anything that computes from a value is a formatter, and a formatter appears
-  only where a value is displayed. Both hosts reject the rest with the same
-  positioned errors.
+  `a[expr]`), the `.length` count of a list or string, literals (template
+  literals included), arithmetic, comparison, `&&`/`||`/`??`, ternary, arrow
+  functions as call arguments, and three kinds of call — a library function
+  by name, a method from the shared method table, and the global namespaces
+  (`Math.*`, `Number(x)`, `Object.keys(x)`, …). No pipes, `new`, `typeof`,
+  regex or bitwise operators. Both hosts parse it with the same `expr`
+  package and reject the rest with the same positioned errors.
 
 **The dialects** add to the core, or restrict it:
 
@@ -141,9 +147,10 @@ uses, which they can read from the project (`puzzle.config.js` vs Sites'
 or restriction, never by redefinition.** A dialect may switch a construct on
 or leave it off; it never gives shared syntax a different meaning. A construct
 may move from a dialect into the core (an addition, as `<Snippet>` did), never
-the other way. **Formatters follow the same rule:** a standard set with the
-same name behaves the same in both hosts (implemented twice, in JS and in Go);
-anything else is host-specific and named so. A proposal that would need the
+the other way. **Library functions follow the same rule:** a standard function
+with the same name behaves the same in both hosts (implemented twice, in JS
+and in Go; [[DECISION-D174-STANDARD-FORMATTERS]]); anything else is
+host-specific and named so. A proposal that would need the
 same spelling to behave differently per host gets a new spelling instead.
 
 **Public naming follows the Svelte pattern.** puzzlejs.dev, the README and the
@@ -196,7 +203,8 @@ or "Puzzle.js"; puzzlejs.dev is only the address.
 - **Done (0.8.0): the parser is its own Go module.** It lives in
   `packages/puzzle-lang` (module
   `github.com/magic-spells/puzzle/packages/puzzle-lang`, packages `parser`,
-  `jsident`, `textutil`), outside any `internal/`, so another host can import
+  `expr`, `conformance`, `jsident`, `textutil`), outside any `internal/`, so
+  another host can import
   it ([[DECISION-D162-MONOREPO-PACKAGES]] lists it). It moved unchanged: no
   dialect switches yet, and no Sites syntax. The compiler builds it from the
   working tree through a `go.mod` `replace`. Outside consumers need a
@@ -204,8 +212,10 @@ or "Puzzle.js"; puzzlejs.dev is only the address.
   still vendors its pinned copy until it switches to importing a tagged
   version.
 - **Follow-up: move Sites' syntax into the shared parser behind the Sites
-  switch:** `{#let}`, `<schema>` lifting, and the unquoted attribute formatter
-  pipe (which becomes core, see the gotcha note). Sites then drops its
+  switch:** `{#let}` and `<schema>` lifting. There is no unquoted-attribute
+  pipe to move: the core has no pipes in any position (D176), so
+  `title={ price | money }` is the same positioned error in both hosts. Sites
+  then drops its
   `sitesPatches` entry and the syntax files in its vendored copy, keeping only
   its evaluator and renderer. Once a tagged `packages/puzzle-lang` release
   carries the switches, Sites imports it and stops vendoring altogether.
