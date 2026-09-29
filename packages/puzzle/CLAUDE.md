@@ -215,21 +215,28 @@ enforced, not merely advised.
   theme system (four palettes × three modes, `appearance-picker`, 100 pieces);
   D172 one language, two dialects, with the template parser extracted into the
   `packages/puzzle-lang` Go module (tagged `packages/puzzle-lang/vX.Y.Z` beside
-  each `vX.Y.Z`); D173 core semantics (a pipe is a formatter in every value
-  position, none in a condition or `{#for}` header, `?.` member guarding, loop domain,
-  slot-filled rule, value printing, object-literal args, script-less
-  components); D174 the 27-name standard formatter set, the list-formatter and
-  `noescape` removals, and sanitized `raw`; D175 translations (`t`,
-  `ctx.i18n`); D176 the expression language — REWRITTEN 2026-09-28 (D13 in
-  `.constellation/working.md`): a closed JavaScript-shaped grammar parsed once
-  in `packages/puzzle-lang/expr`, functions instead of `|` pipes, a method table
-  as the boundary, a Go evaluator in Sites; the branch still compiles the
-  pipe/`.size` language until phases P2–P4 land, and the 0.8.0 tag waits for
-  P1–P5 (see DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
+  each `vX.Y.Z`); D173 core semantics (`?.` member guarding on every step,
+  loop domain, slot-filled rule, value printing, script-less components);
+  D174 the function library (19 standard functions plus PuzzleKit's `link`
+  and `timeago`; nine 0.7 formatter names dropped for the JS methods they
+  duplicated; the list formatters and `noescape` removed; sanitized `raw`;
+  apps still register under the `formatters` config key); D175 translations
+  (`t`, `ctx.i18n`); D176 the expression language — a closed
+  JavaScript-shaped grammar parsed once in `packages/puzzle-lang/expr` (a
+  Pratt parser with a method table as the boundary), functions instead of `|`
+  pipes, `.length` not `.size`, no `this`; it landed across PRs #164 (parser),
+  #167 (codegen lowering), #168 (runtime library) and #171 (corpus migration
+  and pipe removal), so the branch compiles only the new language, with the
+  `|` steer naming each removed formatter's replacement. Still ahead of the
+  tag: P1b (`{#raw}` skip in the section splitter, HTML void elements) and
+  the P5 port/grammar sweep in the eslint/prettier plugins and editors; the
+  Go evaluator in Sites (P6) comes after (see
+  DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
-  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.6 KB
-  gzip**, todos **25.7 KB gzip**. Cards truthed through D176; the next free
+  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.7 KB
+  gzip**, todos **25.8 KB gzip** (measured after #171; the README banner
+  matches). Cards truthed through D176; the next free
   decision number is **D177**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
@@ -478,7 +485,10 @@ GitHub, never deleted.
 - `examples/todos` and scaffolded todos templates should stay aligned with the
   grammar and public docs.
 - Generated `.pzl` templates must remain compiler-tested.
-- Formatter is the project term; never call it a filter.
+- Function is the project term for the template library (`round`, `date`,
+  `t`, …); never call one a filter or a pipe. `formatter` survives only as the
+  `formatters` config key apps register under and in the registry's code
+  names.
 - Future or rejected features must be clearly labeled. Do not describe them as
   shipped.
 - Update current-state prose in card bodies. Keep only durable, surprising
