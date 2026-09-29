@@ -557,10 +557,11 @@ many other`) is a plural entry and must have `other`.
   first, then switches, stores the choice, sets `<html lang>` (except in
   memory mode, which never touches the document), and rebuilds the page at the
   same location (store records survive; `setData` state does not — keep state
-  that must survive a switch in the store). Any in-flight navigation (push,
-  replace or pop) lands first, so never `await` `setLocale()` inside `data()` or
-  a route guard — the rebuild waits for that navigation and the promise never
-  settles; call it from a handler or `mounted()`, or without `await`.
+  that must survive a switch in the store). It resolves once the new strings
+  are active; if a navigation (push, replace or pop) is in flight, that
+  navigation lands first and the page is rebuilt after it. So a root layout's
+  `data()` or a route guard may `await this.ctx.i18n.setLocale(user.locale)`;
+  asking for the locale already active does nothing.
   `setLocale` rejects if the file fails to load or the rebuild fails, so
   `.catch()` it in a switcher. `ctx.i18n` exists ONLY when
   `i18n` is configured.

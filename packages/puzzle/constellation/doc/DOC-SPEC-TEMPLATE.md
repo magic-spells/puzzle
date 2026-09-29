@@ -598,15 +598,21 @@ arrive prints the key, with a development warning.
 configured locales (every build). Otherwise the new file is fetched first; only
 then do the table, `locale`, the display locale and `<html lang>` switch
 together, the choice is stored (try/catch), and the page rebuilds once at the
-same location ([[DOC-SPEC-ROUTER]]). Any navigation still loading when the
-switch lands — a push, a `replace()` or a pop — is let finish first, and the
-rebuild runs on the page it committed. So never `await ctx.i18n.setLocale()`
-inside `data()` or a route guard: the rebuild waits for that very navigation,
-so the promise never settles — call it from a handler or `mounted()`, or
-without `await`. A failed
-fetch rejects and changes nothing. A rebuild that fails (a `data()` throw,
-reported through `onError`) rejects too, and leaves the old page on screen with
-the new locale already active — the next navigation rebuilds every level in it.
+same location ([[DOC-SPEC-ROUTER]]); the promise resolves once that rebuild
+commits. Any navigation still loading when the switch lands — a push, a
+`replace()` or a pop — is let finish first, and the page it commits is then
+rebuilt. The promise does not wait for that navigation: it resolves once the new
+strings are active. So `await ctx.i18n.setLocale(user.locale)` inside a
+layout's `data()` or a route guard is safe — that navigation lands, its new
+views render in the new strings, and the rebuild after it re-renders the levels
+it kept. Asking for the locale already active and on screen changes nothing and
+rebuilds nothing, so that `data()` re-running in the rebuild ends there. A
+failed fetch rejects and changes nothing. A rebuild that fails (a `data()`
+throw, reported through `onError`) rejects too, and leaves the old page on
+screen with the new locale already active; calling `setLocale` with that locale
+again retries the rebuild, and the next navigation rebuilds every level in it.
+A rebuild waiting behind a navigation reports a failure through `onError`
+only.
 Overlapping calls resolve last-wins: a call that a later one overtook settles
 with the later call's outcome (it resolves once that switch lands and rejects if
 it fails), so no promise reports a switch that did not happen. Called before

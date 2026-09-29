@@ -130,6 +130,19 @@ notes:
       packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
       corrected.
     sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+  - kind: state
+    text: >-
+      Same-location rebuild with a navigation in flight (D175, supersedes the earlier review-round
+      note's promise semantics): push, replace and pop all fill `#pendingNavPromise` now, and
+      `__failedView(null, true)` with one pending sets the invalid flags, schedules
+      `pending.then(again, again)` with its rejection swallowed (a failed rebuild is already
+      reported through onError), and returns null instead of that chain. setLocale therefore
+      resolves once its strings are active and never waits on the navigation, which may be the very
+      one whose layout data() or guard is awaiting it (the old chain deadlocked). The scheduled
+      rebuild re-runs that data()/guard; the i18n service's same-locale no-op stops it from
+      rebuilding again. With no navigation pending the promise still resolves on the rebuilt commit
+      and rejects on a failed rebuild. Tests: tests/i18n-app.test.js ("await setLocale inside ..."
+      cases).
 verified_at: '2026-09-25T10:47:50.423Z'
 verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
