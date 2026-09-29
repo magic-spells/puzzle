@@ -66,6 +66,41 @@ const OUTSIDE_OPTS = { capture: true };
 // from inside its parent's patch runs a render of its own, with its own flag.
 let walking = false;
 
+// Outgoing copies of reused vnodes (D170). A cached vnode (`this.__c[n]`, a
+// row's `s.c[n]`, a list row, slot content) is the SAME object in the outgoing
+// and the incoming tree. When the incoming tree reaches it first — mounted into a
+// fresh parent, or adopting another old node's element — that overwrites the
+// object's `el`/`component` while its outgoing copy still stands somewhere the
+// outgoing tree has not been walked yet. keepOutgoing() snapshots the links just
+// before they are overwritten, and every OLD-side consumer — patch()'s old
+// vnode, unmount(), releaseSubtree()'s child walk — reads through
+// outgoingOf(), so the outgoing position releases, patches or removes the copy
+// it actually describes and never the live one. A snapshot whose old position
+// was already consumed (a branch toggled back on) is simply never asked for.
+// The map lives for one pass: renders nest (a child re-rendered inside its
+// parent's patch), and the outermost one drops it.
+let outgoing = null;
+let passes = 0;
+
+function keepOutgoing(vnode) {
+	const copy = new ViewNode(vnode.tag, vnode.attrs, vnode.children);
+	copy.key = vnode.key;
+	copy.el = vnode.el;
+	copy.component = vnode.component;
+	copy.instance = vnode.instance;
+	if (vnode.tag === HTML_TAG) copy.nodes = vnode.nodes;
+	else if (vnode.tag === PORTAL_TAG) copy.portal = vnode.portal;
+	(outgoing ??= new Map()).set(vnode, copy);
+}
+
+// An old position is consumed once, so its snapshot is handed out once.
+function outgoingOf(vnode) {
+	const copy = outgoing.get(vnode);
+	if (copy === undefined) return vnode;
+	outgoing.delete(vnode);
+	return copy;
+}
+
 export class ViewManager {
 	/**
 	 * @param {Element} container host element this manager renders into
@@ -120,6 +155,15 @@ export class ViewManager {
 	 * Slot markers are expanded against `slotChildren` before diffing.
 	 */
 	render(rawTree, slotsExpanded = false) {
+		passes++;
+		try {
+			return this.#render(rawTree, slotsExpanded);
+		} finally {
+			if (--passes === 0) outgoing = null;
+		}
+	}
+
+	#render(rawTree, slotsExpanded) {
 		// The one-shot walk (PuzzleView#__walk) is consumed as the render STARTS, so
 		// no exit — the renderFresh() route, a throwing patch — can leave it set.
 		const owner = this.owner;
@@ -693,6 +737,9 @@ function snippetOutputHasMarker(nodes) {
 
 /** Create the DOM for vnode and insert it into parent (before ref, or append). */
 export function mount(vnode, parent, ref, ctx, owner = null) {
+	// A fresh vnode's `el` is null; a mounted one may still stand in the outgoing
+	// tree (see keepOutgoing).
+	if (vnode.el != null) keepOutgoing(vnode);
 	if (vnode.isComponent) return mountComponent(vnode, parent, ref, ctx, owner);
 
 	if (vnode.tag === PORTAL_TAG) {
@@ -981,6 +1028,9 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 			return;
 		}
 	}
+	// A reused vnode the incoming tree already placed elsewhere this pass: this
+	// position holds its outgoing copy (keepOutgoing).
+	if (outgoing !== null && oldVnode !== newVnode) oldVnode = outgoingOf(oldVnode);
 	if (!sameNode(oldVnode, newVnode)) {
 		// Resolve the insertion reference from the LIVE DOM node, not the cached
 		// vnode.el. For a component with async data(), mountComponent cached
@@ -1021,6 +1071,8 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		mount(newVnode, parent, ref, ctx, owner);
 		return;
 	}
+	// Adopting old's links overwrites a reused vnode's own (see keepOutgoing).
+	if (newVnode.el != null && newVnode !== oldVnode) keepOutgoing(newVnode);
 
 	if (newVnode.isComponent) {
 		// A component whose FIRST mount threw was torn down: its instance was
@@ -1362,6 +1414,7 @@ const leavingEls = new WeakSet();
  * destroy them all, not just a top-level component vnode.
  */
 function unmount(vnode) {
+	if (outgoing !== null) vnode = outgoingOf(vnode);
 	if (
 		(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
 		vnode.tag === HTML_TAG
@@ -1507,7 +1560,8 @@ function releaseSubtree(vnode) {
 	// Inline-SVG seed (v1.14, D46): string children are inert markup, never vnodes
 	// — no refs or component instances hide inside them.
 	if (typeof vnode.children === 'string') return;
-	for (const child of vnode.children) {
+	for (let child of vnode.children) {
+		if (outgoing !== null) child = outgoingOf(child);
 		// A portal inside a removed subtree: its teleported children live in the
 		// outlet, so the ancestor's el.remove() reaches neither their DOM nor their
 		// instances — tear the whole portal down explicitly.
