@@ -915,6 +915,22 @@ checklist sent you.
 
 ### Fixed
 
+- **`puzzle check` types library calls as the public types do.** `t`'s
+  variables may be any object or `null` — `t('greeting', user)` with an
+  interface-typed or class-instance `user` was rejected for lacking an index
+  signature — and `date`, `time` and `datetime` take a list of locales and
+  only the four presets. A test now fails if the check's signatures and
+  `LibraryFunctions` in `types/index.d.ts` disagree.
+- **`puzzle check` supports TypeScript 6**, which rejected the generated config's `baseUrl` and `node` resolution as
+  deprecated. On TypeScript 6 and 7, an app with no `tsconfig.json` is no
+  longer checked with `strict` on by default (`'__d.stats' is possibly
+  'undefined'` in a plain-JavaScript app).
+- **`puzzle check` keeps the app's `paths` aliases.** An import through an
+  alias from the app's `tsconfig.json` (`~/*`) reported "Cannot find module";
+  the app's own entries are now merged beside `@/*`, with comments and
+  trailing commas in the config tolerated. Aliases inherited through
+  `extends` are still not read. On TypeScript before 6, an app tsconfig with
+  `module: "nodenext"` or `"node16"` no longer fails with TS5109.
 - **A component class may have a non-ASCII name.** `export default class
   Übersicht`, `class 概要` and `class Straßenkarte` now compile, and a file
   named `Übersicht.pzl` derives that class name. The script scanner that finds

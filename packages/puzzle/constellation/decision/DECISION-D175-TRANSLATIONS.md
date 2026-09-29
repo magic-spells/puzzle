@@ -318,7 +318,9 @@ nested files and never merges locales.
   utilities take `i18n: { locale, strings }` so a test renders translated
   views without fetching.
 - **`puzzle check`** types a template `t` call through the shim's library
-  signature, `t(key: unknown, vars?: Record<string, unknown>): string`, and
+  signature, `t(key: unknown, vars?: object | null): string` — any object is
+  valid vars, an interface-typed value or a class instance included (a
+  `Record` type rejects both, lacking an index signature) — and
   `types/index.d.ts` declares the service (`PuzzleI18n`, optional `ctx.i18n`
   and `app.i18n`).
 

@@ -455,9 +455,14 @@ app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
   would break the generated workspace overridden (`rootDir`, `composite`,
   `skipLibCheck`, the `noUnused*` pair), the input extensions spelled out rather
   than globbed, and `exclude` forced empty. It is also **version-aware**: the
-  runner probes `tsc --version` once and, on TypeScript 7 and up, clears
-  `baseUrl` and `moduleResolution` (both removed there) while keeping the proven
-  node-resolution pair below 7. Verified against tsc 4.9, 5.7, and 7.0.
+  runner probes `tsc --version` once and, on TypeScript 6 and up, clears
+  `baseUrl` and `moduleResolution` (removed in 7, deprecated in 6) while keeping
+  the proven node-resolution pair below 6, with `module` pinned to `ESNext` so
+  an app's `nodenext` module is not a TS5109 error. `paths` is written, not
+  inherited: the app tsconfig's own entries are merged over the `@/*` alias
+  with their targets rewritten to resolve from `.puzzle/check/` (its `extends`
+  chain is not followed). With no app tsconfig, `strict` and `noImplicitAny`
+  are off. Verified against tsc 4.9, 5.2, 5.7, 5.9, 6.0, and 7.0.
 - **Scope.** Template expressions are checked against the component class's
   declared fields; values produced by `data()` fall through an index signature
   (the scope is `InstanceType<typeof Class> & Record<string, any>`) and are not

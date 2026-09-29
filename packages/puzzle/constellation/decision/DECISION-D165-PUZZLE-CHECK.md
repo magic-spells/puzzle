@@ -22,6 +22,15 @@ notes:
       nothing about the expression the author wrote. `emitVoid` always parenthesized;
       `emitInterpolation` did not, and every interpolation carrying an operator was that false
       positive until it was fixed pre-0.7.0.
+  - kind: gotcha
+    text: >-
+      The shim's `libraryFunctionSignatures` table is a hand copy of types/index.d.ts
+      `LibraryFunctions` with its aliases (TranslationVars, DatePreset, LocaleArgument) spelled out,
+      and it drifted once: `t` took `Record<string, unknown>` vars (rejecting an interface or
+      class-instance value, and null) and date/time/datetime took one locale string and any preset
+      string. TestLibrarySignaturesMatchPublicTypes (check/expr_test.go) now parses LibraryFunctions
+      and fails on any difference in parameter names, types or return type; the one allowed
+      difference is a shim parameter widened to `unknown` (t's key). Change both files together.
 ---
 
 `puzzle check` type-checks an app's `.pzl` files — script bodies *and* template
@@ -53,7 +62,8 @@ today's JS compiler APIs would be rework the moment it lands. What *is* stable
 across the transition is the CLI: `tsc --noEmit`, its `Version x.y.z` banner,
 and its `file(line,col): error TSxxxx: message` diagnostic line. The whole
 design is "everything we need, addressed only through the CLI protocol", and it
-is verified live against tsc **4.9.5, 5.7.3, and 7.0.2**.
+is verified live against tsc **4.9.5, 5.2.2, 5.7.3, 5.9.3, 6.0.3, and
+7.0.2**.
 
 ## The design
 
@@ -107,27 +117,46 @@ virtual file, for inspection.
 
 **The tsconfig is generated, version-aware, and defensive.** The app's own
 `tsconfig.json` is `extends`-ed when present so the app's `strict`, `lib`, and
-`paths` settings are the ones enforced — but every option that would turn
-`extends` into garbage is overridden, each for an observed failure, not a
-precaution: `rootDir` (an app `rootDir: "app"` makes every emitted file TS6059
-and nothing is checked), `composite: false` (a composite project may not
-disable emit), `skipLibCheck` (the shim pulls in framework `.d.ts` files, whose
-errors carry no `.pzl` position and nothing the user can act on), and
-`noUnusedLocals`/`noUnusedParameters` (the wrapper's synthetic bindings are not
-authored code). `include` spells out extensions rather than `src/**/*`, because
-an app with `resolveJsonModule` would otherwise pull every segment sidecar into
-the program; `exclude` is forced empty, because an inherited exclude of
-`.puzzle` would exclude the entire generated workspace and tsc would fail with
-"No inputs were found".
+`paths` settings are the ones enforced (`paths` merged, as below) — but every
+option that would turn `extends` into garbage is overridden, each for an
+observed failure, not a precaution: `rootDir` (an app `rootDir: "app"` makes
+every emitted file TS6059 and nothing is checked), `composite: false` (a
+composite project may not disable emit), `skipLibCheck` (the shim pulls in
+framework `.d.ts` files, whose errors carry no `.pzl` position and nothing the
+user can act on), and `noUnusedLocals`/`noUnusedParameters` (the wrapper's
+synthetic bindings are not authored code). `include` spells out extensions
+rather than `src/**/*`, because an app with `resolveJsonModule` would otherwise
+pull every segment sidecar into the program; `exclude` is forced empty,
+because an inherited exclude of `.puzzle` would exclude the entire generated
+workspace and tsc would fail with "No inputs were found".
 
-The version split is the TypeScript 7 accommodation: the runner probes
-`tsc --version` **once** per run and reads the major. For 7 and up, `baseUrl`
-and `moduleResolution` are cleared to JSON `null` (both were removed, and
-`paths` is replaced because targets inherited from a `baseUrl` config may be
-non-relative, which is illegal once `baseUrl` is gone). Below 7, the proven
-`moduleResolution: "node"` + `baseUrl` pair is kept, because `module: ESNext`
-defaults to classic resolution on the oldest supported compiler and package
-imports would not resolve.
+The version split is the TypeScript 6/7 accommodation: the runner probes
+`tsc --version` **once** per run and reads the major. For 6 and up, `baseUrl`
+and `moduleResolution` are cleared to JSON `null` (TypeScript 7 removed both;
+TypeScript 6 deprecates both, an error unless the app sets
+`ignoreDeprecations`), so a `paths` target resolves from the generated
+config's directory. Below 6, the proven `moduleResolution: "node"` + `baseUrl`
+pair is kept, because `module: ESNext` defaults to classic resolution on the
+oldest supported compiler and package imports would not resolve — and
+`module` is pinned to `ESNext` beside it, because an app's `node16`/`nodenext`
+module rejects node resolution (TS5109) and the check emits nothing, so the
+module format decides nothing else.
+
+`paths` is always written, never inherited: an inherited target is relative to
+the app's `baseUrl` or tsconfig rather than to the generated config, and may be
+non-relative, which is illegal once `baseUrl` is gone. The runner reads the app
+tsconfig's own `compilerOptions.paths` (tolerating tsconfig's comments and
+trailing commas), rewrites each relative target to resolve from
+`.puzzle/check/` — through the app's `baseUrl` when it set one — and merges the
+entries over the `@/*` → `app/*` alias, an app entry winning a clash. The
+app's `extends` chain is not followed: `paths` or a `baseUrl` the app inherits
+from another config do not reach the check, and a config the runner cannot
+parse contributes nothing but the `@` alias.
+
+With **no** app tsconfig the generated config supplies `target: ES2020` and
+`module: ESNext` and turns `strict` and `noImplicitAny` off — TypeScript 6 and
+7 default `strict` on, which held a plain-JavaScript app to checks it never
+opted into (`'__d.stats' is possibly 'undefined'` across examples/stress).
 
 **One bad file does not abort the run.** A `.pzl` that fails to parse or compile
 is collected as an already-positioned diagnostic and skipped; the rest of the
