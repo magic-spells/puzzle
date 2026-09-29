@@ -35,9 +35,9 @@
             <section key={ group.id } data-group="{ group.id }">
               <h2 class="m-0 sticky top-0 z-10 bg-surface px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-faint border-b border-line">
                 { group.label }
-                <span class="tabular-nums">{ group.rows.size }</span>
+                <span class="tabular-nums">{ group.rows.length }</span>
               </h2>
-              {#if group.rows.size === 0}
+              {#if group.rows.length === 0}
                 <p class="m-0 px-2 py-1 text-[10px] italic text-faint">none</p>
               {:else}
                 <ul class="m-0 p-0 list-none">
@@ -82,7 +82,7 @@
         {/if}
 
         <div class="flex-1 min-h-0 overflow-auto">
-          {#if subscribers.size === 0}
+          {#if subscribers.length === 0}
             <p class="m-0 px-3 py-2 text-[11px] text-faint">No live subscribers.</p>
           {:else}
             <ul class="m-0 p-0 list-none">

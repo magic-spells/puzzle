@@ -1,6 +1,6 @@
 <puzzle-view>
   <div>
-    {#if messages.size === 0}
+    {#if messages.length === 0}
       <p class="px-3 py-2 m-0 text-[11px] text-faint">No protocol messages yet.</p>
     {:else}
       <ul class="m-0 p-0 list-none">
