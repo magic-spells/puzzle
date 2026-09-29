@@ -89,6 +89,32 @@ produces a positioned error naming the emission and why *this* file makes it.
 `parser.LexSkip` serves only this script stream; template expressions never
 pass through a text scanner.
 
+**Names in the script are Unicode JavaScript identifiers**
+([[DECISION-D176-EXPRESSION-LANGUAGE]] rule 8). Every scan here that reads a
+name uses `jsident.IsIDStart`/`IsIDContinue`, the rule the expression lexer and
+the template tag lexer share. `parser.LexSkip` consumes only the ASCII part of
+an identifier run; `identRunEnd` and `startsNonASCIIIdent` (expr.go) carry the
+run through non-ASCII `ID_Continue` runes or open it on a non-ASCII `ID_Start`
+rune, so `tokenizeJS` reads `export default class Übersicht`, `概要` and
+`Straßenkarte` whole (a name holding a non-ASCII letter is never a keyword, so
+a `/` after it is division), and the collision scan matches `__d.金額` against
+an imported `金額` and never reads the tail of `ö__d` as `__d`. A non-ASCII
+space still separates tokens, so a no-break space before `extends` keeps
+working. A script-less file's class comes from its filename
+(`classNameFromFilename`): every rune that cannot continue an identifier
+becomes `_`, and a `_` is prefixed when the first rune cannot start one or the
+name is reserved, so `Übersicht.pzl` is class `Übersicht` and `a–b.pzl` is
+`a_b`. **A class name the scan cannot read to its end is a positioned compile
+error** at the name (`nameCut`, classname.go): when the byte after the
+class-name token is `\` (a `\u` escape) or a non-ASCII character that is
+not white space — U+30FB `・` in `データ・一覧` is `ID_Continue` from Unicode
+15.1, newer than Go 1.24's tables — the render tail would bind to a cut name
+(`データ`) and the module would crash on load. `puzzle check` reads the class
+name back from the emitted render tail (`compiledClassName`), counting every
+byte ≥ 0x80 as part of it. `classname.go` and `scriptcollide.go` have no FILE
+card of their own; this card is their contract, and [[FILE-CODEGEN-EXPRESSIONS]]
+binds the shared helpers in `expr.go`.
+
 Mode comes from the app-relative path. Views/layouts preserve the
 `<puzzle-view>` root; inline components require one render root and do not emit
 a wrapper.
@@ -202,10 +228,13 @@ emitted, so the emitters can trust every tree they lower:
   component's children and snippet bodies; only a `<Portal>` resets it.
 - **Literal presets** (`presets.go`, `checkLiteralArgs`): a string-literal
   second argument to `date`/`time`/`datetime` that is not `short`, `medium`,
-  `long` or `iso` is a positioned error (a retired preset name, `'date'`,
-  says to call that function instead), and a string-literal `in_timezone` zone
-  that cannot be a zone id (a space, an empty string, a leading digit) is one
-  too. A dynamic argument stays the runtime's development error.
+  `long` or `iso` draws a positioned build **warning** (`c.warn`; a retired
+  preset name, `'date'`, says to call that function instead), and so does a
+  string-literal `in_timezone` zone that cannot be a zone id (a space, an
+  empty string, a leading digit). It is a warning, not an error, because an
+  app may register its own function under any of those names, and the
+  compiler cannot see which presets or zones that one takes. A dynamic
+  argument stays the runtime's development error.
 - **`this`**, as a safety net behind the parser, with the parser's exact
   message (`thisMsg`).
 - **The handler/library collision warning** (`checkHandler`): an `@event`
@@ -428,7 +457,7 @@ stable app-relative path hash with the plugin's `@scope` wrapper.
 Golden tests byte-compare focused fixtures plus the canonical todos output and
 syntax-check emitted JavaScript; `expr_methods` and `expr_handlers` pin the
 method and handler lowering. `expr_test.go` pins the lowering table,
-`presets_test.go` the literal preset/zone errors, `markup_call_test.go` and
+`presets_test.go` the literal preset/zone warnings, `markup_call_test.go` and
 `markup_test.go` the markup placement, `row_facts_test.go` the tree-derived row
 facts, `handler_cache_test.go` and `event_handler_test.go` the D62 verdicts and
 handler forms. The conditional-arity suite pins nested and unequal branch
@@ -439,5 +468,13 @@ pin the lowering — item/explicit-key/counter/nested/conservative meta, the
 static island-seed case and every exclusion — `core_semantics_test.go` pins the
 D173 value rules (the member guard, object-literal arguments, the loop-guard
 imports and the literal-range fold), and the todos fixtures remain the byte
-contract the emitter is matched to, not the other way round. The check
-emitter's own tests live in `compiler/internal/check`.
+contract the emitter is matched to, not the other way round.
+`classname_test.go` pins the script's names: `TestExtractClassName` (Unicode
+class names, a no-break or ideographic space before `extends`, and both
+truncation-guard inputs), `TestClassNameFromFilename`, and
+`TestCompileUnicodeClassName` / `TestCompileUnicodeComponentTags`, which compile
+Unicode views and component tags and run `node --check` on the output;
+`scriptcollide_test.go` pins the token stream (`TestTokenizeJSUnicodeNames`,
+`TestScriptImportBindings`) and the collision scan
+(`TestCollisionForUnicodeDataName`). The check emitter's own tests live in
+`compiler/internal/check` (`TestUnicodeClassNameReachesTheWrapper` among them).

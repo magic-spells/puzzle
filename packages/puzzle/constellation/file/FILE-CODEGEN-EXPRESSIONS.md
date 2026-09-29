@@ -4,8 +4,9 @@ status: verified
 path: compiler/internal/codegen/expr.go
 language: go
 summary: >-
-  Small lexical helpers the emitters share: JS identifier tests for unquoted keys and the
-  leading-object-literal compile error. Expressions themselves are lowered in lower.go.
+  Small lexical helpers the emitters share: JS identifier tests for unquoted keys, the
+  leading-object-literal compile error, and the Unicode identifier-run helpers the <script> scans
+  extend LexSkip with. Expressions themselves are lowered in lower.go.
 connections:
   - COMPONENT-CODEGEN
   - FILE-CODEGEN-LOWER
@@ -22,4 +23,4 @@ notes:
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/codegen/expr.go`.
 
-The file is small: `isJSIdentifier` (whether an attribute or prop name can be an unquoted object key) and `startsWithObjectLiteral` with its positioned error for an expression whose braces open with an object literal (`{ { a: 1 } }`, D173 V8 — pass it as a function argument or build it in `data()`). Template expressions are lowered from their AST in `lower.go` ([[FILE-CODEGEN-LOWER]]), which resolves every name from the tree.
+The file is small: `isJSIdentifier` (whether an attribute or prop name can be an unquoted object key — ASCII only, so `jsKey` quotes a non-ASCII prop name: `<Card größe={ 3 }>` emits the key `'größe'`) and `startsWithObjectLiteral` with its positioned error for an expression whose braces open with an object literal (`{ { a: 1 } }`, D173 V8 — pass it as a function argument or build it in `data()`). It also holds the two helpers that make the `<script>` scans read Unicode names ([[COMPONENT-CODEGEN]], D176 rule 8): `identRunEnd` continues an identifier run past the ASCII part `parser.LexSkip` consumed, through every non-ASCII rune `jsident.IsIDContinue` accepts, and `startsNonASCIIIdent` reports a run that opens with a non-ASCII `jsident.IsIDStart` rune. `tokenizeJS` and the `__d.` collision scan (scriptcollide.go) call both, so `Straßenkarte` and `金額` are one name. Template expressions are lowered from their AST in `lower.go` ([[FILE-CODEGEN-LOWER]]), which resolves every name from the tree.

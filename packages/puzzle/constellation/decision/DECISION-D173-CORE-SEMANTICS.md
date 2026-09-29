@@ -358,8 +358,9 @@ through and logs a development error (naming the replacement when the name was
 removed from the library), because app functions are registered in JavaScript
 at runtime, out of the compiler's sight; `puzzle check` types each standard
 function's arguments, and a string-literal date preset or time zone the
-library does not know is a compile error (D174). The in-domain behavior of the
-standard set is pinned by D174.
+library does not know is a positioned build warning, not an error (D174): an
+app may register its own function under that name, whose presets the compiler
+cannot see. The in-domain behavior of the standard set is pinned by D174.
 
 **V18 — scoped styles and `{#svg}` paths.** Scoped styles are host-specific:
 the stamping algorithm is shared, the attribute prefix and stamp target are
