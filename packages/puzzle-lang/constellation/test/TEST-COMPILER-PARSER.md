@@ -1,5 +1,5 @@
 ---
-name: Template parser and section splitting
+name: Template parser, expression language, and section splitting
 kind: unit
 status: verified
 framework: go test
@@ -21,23 +21,24 @@ notes:
       snippet markers and the D173 V13 per-path pass. The bodies now say so. The test count is 12
       files. `go vet` and `go test ./...` pass in packages/puzzle-lang.
     sha: a602784a9822fa3ff63123e597f72624b3c9ffff
-  - kind: state
-    text: >-
-      D176: `chain_test.go` `TestNestedPipeIsError` pins the nested-pipe rejection (a `|` inside
-      call parentheses, a grouping paren, a bracket index and a formatter argument, in text,
-      attribute and prop positions) with its message and position, and that `||`, `|=` and a `|`
-      inside a string stay legal.
 connections:
   - FILE-PARSER
   - FILE-PARSER-SECTIONS
   - FILE-PARSER-SCANNER
   - FILE-PARSER-SLOT
+  - FILE-PARSER-EXPRS
+  - FILE-EXPR-LEXER
+  - FILE-EXPR-PARSER
+  - FILE-EXPR-AST
+  - FILE-EXPR-METHODS
+  - FILE-EXPR-PRINT
 ---
 
-# Template parser and section splitting
+# Template parser, expression language, and section splitting
 
-Table-driven Go tests over the compiler front end: `.pzl` section splitting,
-lexing, the template grammar, and the AST.
+Table-driven Go tests over the language module: `.pzl` section splitting,
+lexing, the template grammar and its AST, and the expression language
+(`expr`) with its shared conformance table.
 
 What they guarantee:
 
@@ -50,14 +51,35 @@ What they guarantee:
   case/when, loops, interpolation, template comments, inline SVG, element refs,
   the raw block, composition markers, Portal, snippets, and dotted component
   family tags.
-- the formatter-chain rule holds in every value position (D173 V1): a
-  top-level single `|` splits into a chain in attributes, props, marker
-  arguments and block subjects; what follows a pipe must be a formatter name
-  (a `-` must start a letter word, so `bit-1` is rejected, and a dotted
-  `fmt.eur` is not a name); a called formatter's matching `)` must end the
-  segment (`f(1) + g(2)`, `f(b)(c)` are errors, and a `)` inside a string,
-  regex or template is not the close); and a pipe in a `{#for}` header or a
-  `{:when}` value is a positioned error (`chain_test.go`).
+- **the expression grammar is the shared table.** `expr/conformance_test.go`
+  runs `conformance/expressions-parse.json` (421 cases at PR #171): each row is
+  a source, optionally with handler, bindings or call-argument options, and
+  either its S-expression tree (`expr.Print`) with every node position
+  (`expr.PrintPositions`) or its error message at an exact line and column.
+  Sites runs the same rows through `conformance.ExpressionsParse`, so both hosts
+  build the same trees and report the same errors at the same columns — the
+  pipe steer, the ambient-global steer, the `this` and `event` rules, the
+  method-table and receiver-type checks, and every excluded operator included.
+  `expr/expr_test.go` pins what the table cannot show: node positions against a
+  base, `Walk` order, `FormatNumber`, the method table and global result types,
+  binding names, and `TestLargeExpressionIsLinear`, which times six shapes (a
+  flat operator chain, a long array, a long string, a long argument list, a
+  member path, a template literal dense with substitutions) at 16 KiB to 1 MiB
+  and fails when the per-byte cost grows, retrying so a busy runner does not.
+- **every expression position carries a tree** (`exprs_test.go`): text,
+  attributes, handlers, block headers, `{:when}` lists and `{#for}` headers each
+  get a parsed tree at the expression's own file position; an expression error
+  lands on the offending token wherever the expression sits; `event` is legal
+  exactly where it is bound.
+- **the corpus proof** (`corpus_test.go`, `TestCorpusExpressionsParse`) parses
+  every `.pzl` file the monorepo ships or tests with — the framework's
+  examples and scaffold templates, the pieces registry and demo, the DevTools
+  panel, the runtime test fixtures, and the codegen and check goldens — and
+  requires a tree at every expression position. Outside the monorepo (the Go
+  module cache) the siblings are absent and it skips.
+- **the time budget** (`perf_test.go`): a 20,000-line template with
+  expressions in every position template authors use parses, trees included,
+  in under 100 ms (best of three; skipped under `-short`).
 - composition markers are unique per render path, not per file (D173 V13):
   exclusive branches may each carry the same marker, and a marker on the same
   path collides (`slot_paths_test.go`).
@@ -70,17 +92,20 @@ What they guarantee:
 Error positions and message text are treated as contract here. Loosening one
 fails a test on purpose.
 
-Covers 12 `*_test.go` files under `packages/puzzle-lang/parser`: `chain`,
-`depth`, `inlinesvg`, `integration`, `lexer`, `lexskip`, `parser`, `portal`,
-`refs`, `sections`, `slot_paths` and `snippets`. That is its own Go module
-(D172), so the compiler's `go test ./...` does not run them. Run
-`go test ./...` inside `packages/puzzle-lang` (CI's Go and Windows jobs do).
-`integration_test.go` parses copies of the todos example's `Home.pzl`,
-`TodoItem.pzl`, and `Default.pzl`, vendored under `parser/testdata/todos`, so
-the suite is self-contained and also passes from the Go module cache.
+Covers 16 `*_test.go` files: `expr/conformance_test.go` and `expr/expr_test.go`,
+and under `parser/`: `corpus`, `depth`, `exprs`, `inlinesvg`, `integration`,
+`lexer`, `lexskip`, `parser`, `perf`, `portal`, `refs`, `sections`,
+`slot_paths` and `snippets`. That is its own Go module (D172), so the
+compiler's `go test ./...` does not run them. Run `go test ./...` inside
+`packages/puzzle-lang` (CI's Go and Windows jobs do). `integration_test.go`
+parses copies of the todos example's `Home.pzl`, `TodoItem.pzl`, and
+`Default.pzl`, vendored under `parser/testdata/todos`, so the suite is
+self-contained and also passes from the Go module cache.
 `TestFixturesMatchCanonicalExample` fails when a copy drifts from
 `packages/puzzle/examples/todos` (it skips outside the monorepo), so a change
-to the example must refresh the copy in the same change.
+to the example must refresh the copy in the same change. `functions.json`,
+the function library's table in the same `conformance` package, is run by
+PuzzleKit's vitest suite, not by this module.
 
 ## Contracts it pins (in the connected `puzzle` plan)
 
@@ -92,5 +117,5 @@ DECISION-D40-ELSE-IF, DECISION-D46-INLINE-SVG, DECISION-D70-TEMPLATE-COMMENTS,
 DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS, DECISION-D144-PORTAL,
 DECISION-D150-RAW-TEMPLATE-BLOCK, DECISION-D164-PLAYGROUND-WASM-BOUNDARY,
 DECISION-D166-SNIPPETS, DECISION-D167-COMPONENT-FAMILIES,
-DECISION-D173-CORE-SEMANTICS; DOC-TEMPLATE-SYNTAX, DOC-COMPILER-DESIGN,
-DOC-TESTING.
+DECISION-D173-CORE-SEMANTICS, DECISION-D176-EXPRESSION-LANGUAGE;
+DOC-LANGUAGE-CORE, DOC-TEMPLATE-SYNTAX, DOC-COMPILER-DESIGN, DOC-TESTING.

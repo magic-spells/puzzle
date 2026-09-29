@@ -22,14 +22,8 @@ notes:
       snippet markers and the D173 V13 per-path pass. The bodies now say so. The test count is 12
       files. `go vet` and `go test ./...` pass in packages/puzzle-lang.
     sha: a602784a9822fa3ff63123e597f72624b3c9ffff
-  - kind: state
-    text: >-
-      D176: `nestedPipeIndex(expr)` scans a value with LexSkip (strings, regex, comments opaque),
-      tracks paren/bracket/brace depth, and returns the byte index of the first single `|` (not
-      `||`, not `|=`) at depth > 0, or -1. The chain splitter still finds top-level pipes as before;
-      this is the second pass that turns a nested one into an error instead of a bitwise OR.
 ---
 
 Source binding for the template parser. Behavioral intent stays on the owning component card, COMPONENT-TEMPLATE-PARSER in the connected `puzzle` plan (`repo=puzzle`); this card anchors that contract to `packages/puzzle-lang/parser/scan.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle-lang`).
 
-Every balanced scan here routes through the one `LexSkip` helper (`lexskip.go`): `scanBraceGroup`, the top-level splitters (`splitTopLevel`, `lastTopLevelIndexByte`, `topLevelIndex`), and `matchingClose`, which returns the bracket closing a given `(`/`[`/`{` and is how `parseFormatter` finds where a formatter call's argument list ends.
+Every balanced scan here routes through the one `LexSkip` helper (`lexskip.go`): `scanBraceGroup` (the one scan that finds where a `{ … }` group ends, skipping strings, regex-shaped text and comments and tracking nested braces), the inline/block comment and `{#raw}` scanners, and the top-level splitters (`splitTopLevel`, `lastTopLevelIndexByte`, `topLevelIndex`) that the `{#for}` header and `{:when}` value lists use to find their structural commas and keywords. Nothing here reads inside an expression: once a position's text is cut out, `expr.Parse` owns it, so the scanner has no pipe or formatter-argument logic.

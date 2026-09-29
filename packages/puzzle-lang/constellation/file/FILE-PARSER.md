@@ -4,9 +4,9 @@ status: verified
 path: parser/parser.go
 language: go
 summary: >-
-  Recursive-descent template parser and grammar validation, including the D173 V1 formatter-chain
-  rule (parseChain, isFormatterName, the {#for}/{:when} pipe bans) and D167 component-name
-  validation.
+  Recursive-descent template parser and grammar validation: every expression position handed to
+  expr.Parse through exprs.go, the {#for}/{#case}/{:when} header shapes, {#unless} as a negated
+  condition, binding-name checks, and D167 component-name validation.
 verified_at: '2026-09-25T10:41:32.868Z'
 verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
 notes:
@@ -25,23 +25,15 @@ notes:
       snippet markers and the D173 V13 per-path pass. The bodies now say so. The test count is 12
       files. `go vet` and `go test ./...` pass in packages/puzzle-lang.
     sha: a602784a9822fa3ff63123e597f72624b3c9ffff
-  - kind: state
-    text: >-
-      D176: `parseChain` rejects a single `|` below the top level of the base expression or of any
-      formatter argument through `nestedPipeIndex` (scan.go), with the positioned message "a
-      formatter pipe must be at the top level of the value — there is no bitwise OR in templates;
-      compute the value first (a data() field in PuzzleKit, {#let} in Sites)". `headerPipeError` (a
-      pipe in an `{#if}`/`{:else if}`/`{#unless}`/`{#case}` subject) is unchanged from PR #157.
 ---
 
 Source binding for the template parser. Behavioral intent stays on the owning component card, COMPONENT-TEMPLATE-PARSER in the connected `puzzle` plan (`repo=puzzle`); this card anchors that contract to `packages/puzzle-lang/parser/parser.go` (the Puzzle language module, D172; `path` is relative to this plan root, `packages/puzzle-lang`).
 
 Where the 0.8.0 rules live in this file:
 
-- `parseChain` is the one pipe rule for every value position that takes a chain: text interpolation, attribute values, component props, marker arguments, and the `{#if}`/`{:else if}`/`{#unless}`/`{#case}` subjects (D173 V1). Only a top-level single `|` splits. The actual splitting is `scan.go`'s top-level splitter.
-- `isFormatterName` requires each link after a pipe to be a name, bare or called: `[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*`, an identifier optionally kebab-cased where every `-` starts a word with a letter. So `mask | bit-1` (arithmetic) and `FLAGS.bold` (a member) are not names. Otherwise it reports the positioned "wrap a bitwise OR in parentheses" error.
-- `parseFormatter` finds the `)` that matches the name's `(` with `scan.go`'s `matchingClose` (string/regex/comment/template aware), and that `)` must end the segment. `f(1) + g(2)`, `f(b)(c)` and `f(1).x` are positioned errors, never `f` called with the argument text `1) + g(2`.
-- `hasTopLevelPipe` and `forPipeError` implement the `{#for}` header ban (the collection or either range bound). The `{:when}` ban is inline in the case-clause parser. Both are positioned errors that name the fix.
-- Capitalized tag names are validated as `Ident('.'Ident)*` (D167).
+- **Every expression position is one `expr.Parse`** (DECISION-D176-EXPRESSION-LANGUAGE, D173 V1), called through `parseExprAt` in `exprs.go` with the enclosing bindings in scope: interpolations (`parseInterpolationExpr`), brace-only attribute values and `@event` values (`buildAttr`; handler options for the latter), the `{#if}`/`{:else if}`/`{#unless}`/`{#case}` headers (`parseBlock`), `{:when}` value lists (`parseWhenValues`/`splitWhenValues`, which split on top-level commas only), and the `{#for}` header (`parseForHeader`, `splitForHeader`, `peelForCounter`, `splitForIn`), which splits `item in collection, i` or `a...b, x` and hands each piece to `expr`. The file holds no chain or pipe code: a `|` reaches `expr.Parse`, which rejects it with the pipe steer.
+- **`{#unless c}`** stores `!` over the parsed condition, so `{#unless}` has one tree shape.
+- **Binding names** — a `{#for}` item or counter, a `<Snippet>` parameter, a generated binding — are checked by `loopBindingIdentError`, `snippetParamIdentError` and `generatedBindingIdentError` against `expr`'s one binding-name rule; `{#for i in 1...5}` steers to `{#for 1...5, i}`.
+- **Capitalized tag names** are validated as `Ident('.'Ident)*` (`checkComponentName`, `isIdentSegment`; D167).
 
 Design-doc references in this module's comments are repo-relative (`packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md`), because the doc lives in the framework plan, not here.
