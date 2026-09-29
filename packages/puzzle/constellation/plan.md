@@ -227,13 +227,17 @@ decision cards explain why the contract has its current shape.
   with sanitized `raw`, D175 translations (`t(key, vars)`, v1.81), D176 the
   expression language (JavaScript-shaped template expressions: one closed
   grammar parsed by `packages/puzzle-lang/expr`, a method table, functions
-  instead of pipes, `.length` the count; P1–P4 are merged, and so is P1b —
-  the parser's `{#raw}` splitter skip, HTML void elements and two
-  diagnostics, PR #172 — with P5's eslint/prettier ports of it, PR #173; the
-  editor-grammar sweep, the rest of P5, is the one piece left before the tag,
-  and the Sites evaluator, P6, follows it), and
-  D168 rewritten as the merged whitespace rule. Heavily breaking for
-  templates; the CHANGELOG opens with an "Upgrading from 0.7" checklist. The
+  instead of pipes, `.length` the count). Every expression-language PR is
+  merged: P1–P4 (#164, #167, #168, #171), P1b's parser fixes (#172) with their
+  eslint/prettier ports (#173), and the final-review fixes — #174 (a `/` after
+  a non-ASCII name, `5.` or `of` is division in the brace scanner, and `event`
+  outside a handler reads the data field, with a template that also uses it in
+  a handler an error) and #175 (the `Object` globals' missing-value default,
+  `puzzle check`'s app-function calls, the `in_timezone` unknown-zone error).
+  Before the tag remain the three editor grammars and the ports' copy of
+  #174's scanner rules (PR #176, open); the Sites evaluator, P6, follows the
+  tag. Also in: D168 rewritten as the merged whitespace rule. Heavily breaking
+  for templates; the CHANGELOG opens with an "Upgrading from 0.7" checklist. The
   never-published `0.7.1` ([[RELEASE-V0-7-1]] — Quick Start via
   `puzzle init`, D169 registry version floors, the D76 background update
   notice) is folded in; there will be no `v0.7.1` tag.
