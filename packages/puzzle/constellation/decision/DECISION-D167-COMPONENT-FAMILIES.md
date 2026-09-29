@@ -9,6 +9,7 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-PUZZLE-FILE
   - FILE-CODEGEN
+  - DECISION-D176-EXPRESSION-LANGUAGE
 notes:
   - kind: deviation
     text: >-

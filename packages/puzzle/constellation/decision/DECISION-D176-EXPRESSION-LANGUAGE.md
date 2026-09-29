@@ -42,14 +42,13 @@ notes:
 # D176 — The expression language: JavaScript-shaped, parsed once, evaluated by both hosts
 
 **Status: decided by Cory on 2026-09-28, sub-decisions included; building for
-0.8.0.** Rule 7, P1–P4 and P1b are merged into `release/0.8.0` (PRs #163,
-#164, #167, #168, #171 and #172), and so are P5's eslint/prettier ports of P1b
-(PR #173) and the final-review fixes (PRs #174 and #175). What remains of P5
-before the 0.8.0 tag is the three editor grammars and the eslint/prettier port
-of #174's scanner rules (PR #176, open). P6, the Go evaluator in Sites, follows
-the tag. D173, D174 and D175 state the language's semantics, function library
-and translations in this card's terms. Two older questions remain under
-*Open*.
+0.8.0.** Every 0.8.0 language PR is merged into `release/0.8.0`: rule 7, P1–P4
+and P1b (PRs #163, #164, #167, #168, #171 and #172), P5's eslint/prettier
+ports (PRs #173 and #176), the final-review fixes (PRs #174 and #175) and the
+Unicode class and tag names (PR #177). What remains of P5 before the 0.8.0 tag
+is the three editor grammars. P6, the Go evaluator in Sites, follows the tag.
+D173, D174 and D175 state the language's semantics, function library and
+translations in this card's terms. Two older questions remain under *Open*.
 
 ## Context
 
@@ -101,7 +100,10 @@ both hosts whose message names the construct and what to write instead.
   inside one (rule 7). `__proto__`, `constructor` and `prototype`
   are rejected as member names and object keys, because they reach
   JavaScript's prototype machinery, which a Go host's plain maps would not
-  share.
+  share. The same identifier rule reads a `<script>` class name and a
+  component tag (a tag without `$`,
+  [[DECISION-D167-COMPONENT-FAMILIES]]), so `export default class Übersicht`
+  is invoked as `<Übersicht/>` (rule 8).
 - **Access:** `a.b`, `a?.b`, `a[expr]`, `a?.[expr]`.
 - **Calls,** three kinds:
   - `name(args)` calls a function from the library (rule 4). A template
@@ -386,11 +388,22 @@ Date(). we'll have limited support."
   method table, the function library and JavaScript number formatting. Its
   existing `engine/expr` allow-list is the base. Sites can lag PuzzleKit
   because it is not deployed.
-- **Identifier classes follow the Go toolchain's Unicode tables.** `expr`
-  decides `ID_Start`/`ID_Continue` with Go's `unicode` package, so the
-  PuzzleKit compiler and Sites must build with the same Go minor to agree on
-  edge characters; the identifier rows in `expressions-parse.json` pin it, so
-  a toolchain skew fails a row instead of drifting.
+- **Identifier classes follow the Go toolchain's Unicode tables.**
+  `jsident.IsIDStart`/`IsIDContinue` (`packages/puzzle-lang/jsident`) decide
+  `ID_Start`/`ID_Continue` with Go's `unicode` package, and every scan that
+  reads a name calls them: `expr`'s lexer, the template lexer's tag names
+  (D167), PuzzleKit's `<script>` scan — the class name (`extractClassName`,
+  and `classNameFromFilename` for a script-less file, so `Übersicht.pzl` is
+  class `Übersicht`), the import bindings and the `__d.` collision scan — and
+  `puzzle check`'s read-back of the class name. A component class may
+  therefore carry any JavaScript identifier name (`Übersicht`, `概要`,
+  `Straßenkarte`). A class name the scan cannot read to its end — a `\u`
+  escape inside it, or a character JavaScript accepts that the tables predate
+  (U+30FB `・`, `ID_Continue` since Unicode 15.1, while Go 1.24 ships 15.0) —
+  is a positioned compile error at the class name, never a silently cut
+  name. The PuzzleKit compiler and Sites must build with the same Go minor to
+  agree on edge characters; the identifier rows in `expressions-parse.json`
+  pin it, so a toolchain skew fails a row instead of drifting.
 - **Shared conformance** lives in puzzle-lang's `conformance` package
   (`packages/puzzle-lang/conformance`), which embeds each JSON file
   (`go:embed`), so Sites pins the rows at the language tag and both hosts run
@@ -570,11 +583,13 @@ Two questions older than this card, still undecided:
   conformance rows at the puzzle-lang tag. Sites is not deployed, so none of
   this is a Sites upgrade.
 - **The eslint and prettier ports and the pieces demo's highlighter** speak
-  this language (PR #170), and the ports' vendored section splitters skip a
-  `{#raw}` span the way P1b's does (PR #173); their copies of the brace
-  scanner take #174's division rules in PR #176. The three editor grammars,
-  in their own repos, are the one place the 0.7 grammar remains — they still
-  color a `| name` tail — until their P5 sweep lands.
+  this language (PR #170), the ports' vendored section splitters skip a
+  `{#raw}` span the way P1b's does (PR #173), and their copies of the brace
+  scanner take #174's division rules (PR #176). Neither port lexes template
+  tags, so the Unicode tag rule (PR #177, D167) needs nothing there. The three
+  editor grammars, in their own repos, are the one place the 0.7 grammar
+  remains — they still color a `| name` tail and start a component only at
+  `[A-Z]` — until their P5 sweep lands.
 - **Carried over unchanged:** D173 V2's loose `==`, V4's guarded member reads,
   V6's value printing, the markup-position rule for `raw` and
   `newline_to_br`, and rule 7.
@@ -582,8 +597,7 @@ Two questions older than this card, still undecided:
 ## Build list
 
 Each phase is a PR into `release/0.8.0`, except P6, which lands in the Sites
-repo. The 0.8.0 tag waits for the rest of P5: the editor grammars and the
-ports' copy of #174's scanner rules.
+repo. The 0.8.0 tag waits for the last piece of P5: the editor grammars.
 
 - **Rule 7 — Built** (PR #163, merged as 9ca0547e): `this` is rejected in
   every template expression, handler arguments and the handler ternary
@@ -627,10 +641,19 @@ ports' copy of #174's scanner rules.
    rule 7 error; conformance rows to 443 and `FuzzParse`; the `Object`
    globals' `?? {}` default; `puzzle check`'s `__puzzle_app_fn`; the
    `in_timezone` unknown-zone error.
-7. **P5 — Open.** The eslint and prettier ports and the pieces demo's
-   highlighter moved to the expression language in PR #170, and the ports'
-   P1b `{#raw}` case landed in PR #173 (merged as ed9245cb); the ports' copy
-   of #174's scanner rules is PR #176 (open); the three editor grammars
-   (separate repos) are being swept, the last piece before the tag.
-8. **P6 — After the tag.** Sites: the Go evaluator and the function library,
+7. **Unicode names — Built** (PR #177, merged as 87c0e5e1). The identifier
+   rules move from `expr/ident.go` to `jsident` as `IsIDStart`/`IsIDContinue`,
+   and the compiler's `<script>` scan (`tokenizeJS`, the class name, the `__d.`
+   collision scan), `classNameFromFilename` and `puzzle check`'s class-name
+   read-back use them; a component tag takes the same names (D167: any tag
+   whose first character is not `a`–`z` is a component); a class name the
+   scan cannot read to its end is a positioned error (rule 8).
+8. **P5 — Open.** The eslint and prettier ports and the pieces demo's
+   highlighter moved to the expression language in PR #170; the ports' P1b
+   `{#raw}` case landed in PR #173 (merged as ed9245cb) and their copy of
+   #174's scanner rules in PR #176 (merged as bd58f5f8). The three editor
+   grammars (separate repos) are being swept — the `| name` tail goes, and
+   the component start widens past `[A-Z]` (D167) — the last piece before the
+   tag.
+9. **P6 — After the tag.** Sites: the Go evaluator and the function library,
    and the evaluation conformance table.
