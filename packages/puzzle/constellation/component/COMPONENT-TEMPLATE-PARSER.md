@@ -96,7 +96,6 @@ client shim.
 
 ## Expressions
 
-
 The template parser owns the structure of each expression position — where a
 brace group ends, a header's shape, the `{#for}` forms, a `{:when}` list — and
 the expression language, `packages/puzzle-lang/expr`
@@ -119,7 +118,7 @@ becomes a `ParseError` at the expression's own token position (block-header
 tokens carry `ValPos`), with expr's message and note. Every node position is in
 file coordinates, which is how codegen and `puzzle check` place later errors.
 
-`expr.Options{Handler, Bindings, CallArgument}` carries what the position
+`expr.Options{Handler, Bindings}` carries what the position
 knows. Every position passes `Bindings`, the names the enclosing `{#for}` items
 and counters and `<Snippet>` parameters bind (`bind`/`unbind` in exprs.go; the
 slice handed out is capped so a later bind cannot write into it): a binding
@@ -127,17 +126,17 @@ reads as a value, and calling one is a positioned error, so `t('k')` inside
 `{#for t in …}` never reaches the library. An `@event` value adds `Handler`,
 which makes the free name `event` the DOM event — its chain unrestricted by the
 method table — and lets the handler's own call name a view handler even when a
-binding shares its name. `CallArgument` (an arrow legal at the top level) is for
-hosts and tests that parse one call argument alone; the template parser does not
-set it.
+binding shares its name.
 
 **There are no formatter chains.** A `|` in any position is expr's positioned
 error "`| name` pipes were removed — write `name(value)`; bitwise OR is not
 available", so no position splits a chain and the AST has no chain fields. A
 condition header, a `{:when}` value and a `{#for}` header are ordinary
-expressions, and a display transform is a function call. `this`, a browser
-global read as a data root (`window`, `document`, `localStorage`, …) and every
-construct outside the grammar are expr errors at their token. A template
+expressions, and a display transform is a function call. `this`, a read of the
+browser's global objects `window`, `document` or `globalThis` as a data root
+(other browser names such as `location` or `localStorage` are ordinary
+`data()` reads) and every construct outside the grammar are expr errors at
+their token. A template
 expression that starts with an object literal is rejected by codegen, not here.
 Unicode names are accepted where the grammar accepts them: a binding like
 `{#for größe in sizes}`, and snippet-parameter attribute names, whose first
