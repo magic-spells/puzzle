@@ -1,0 +1,57 @@
+<puzzle-view>
+  <!-- 0.8.0 template expressions (D176): functions, methods, arrow functions as
+       call arguments, object literals and template literals, .length and ??. -->
+  <Frame.Wrapper title={ truncate(name.trim(), 20) } class="card { tone ?? 'plain' }">
+    <Badge label={ compact_number(followers) } count={ items.length }/>
+    <p>
+      Posted by
+      <b>{ capitalize(author) }</b>,
+      { pluralize(items.length, 'item') } for { currency(price * qty) }.
+    </p>
+    <p>{ t('cart.count', { count: items.length, unit }) }</p>
+    <p>{ label(total, { digits: 2, close: '}' }) }</p>
+    <p>{ `${items.filter(n => n > 1).length} of ${items.length} }` }</p>
+    <p>{ tags.map((tag, i) => `${i + 1}:${tag.toUpperCase()}`).join(', ') }</p>
+    <p>{ Math.round(total * 100) / 100 } { `{${tone ?? '}'}}` }</p>
+    {#if items.some(n => n > 1)}
+      <ul>
+        {#for n in items.toSorted((a, b) => b - a), i}
+          <li data-i={ i } @click={ pick(n, event.target.dataset.i) }>{ n.toFixed(1) }</li>
+        {/for}
+      </ul>
+    {/if}
+    <p>{ newline_to_br(bio) }</p>
+    <div>{ raw(html) }</div>
+  </Frame.Wrapper>
+
+  <!-- D168: whitespace next to inline elements renders; <pre>/<textarea> keep
+       their bytes. -->
+  <p>tokens — <code>a</code>,
+    <code>b</code>{ sep }<code>c</code></p>
+  <pre>
+    keep   these
+	bytes exactly
+  </pre>
+  <textarea name="note">
+    indented body
+  </textarea>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Frame from './Frame/index.js';
+import Badge from './Badge.pzl';
+
+export default class GrammarSpecimen extends PuzzleView {
+	data() {
+		return { name: ' families ', tone: null, followers: 12400, items: [1, 2], tags: ['a', 'b'], author: 'ada', price: 3, qty: 2, unit: 'box', total: 1.5, bio: 'a\nb', html: '<b>hi</b>', sep: ' / ' };
+	}
+	events = {
+		pick: (n, i) => console.log(n, i),
+	};
+}
+</script>
+
+<style scoped>
+.card { color: red; }
+</style>

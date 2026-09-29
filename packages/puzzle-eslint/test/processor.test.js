@@ -29,6 +29,13 @@ async function lint(code, rules, { fix = false, filePath = 'test.pzl' } = {}) {
 	return results[0];
 }
 
+describe('plugin meta', () => {
+	it('reports the name and version from package.json', () => {
+		const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8'));
+		expect(plugin.meta).toEqual({ name: pkg.name, version: pkg.version });
+	});
+});
+
 describe('processor.preprocess', () => {
 	it('extracts one .js block for a JS file, positions preserved', () => {
 		const src = fixture('basic-js.pzl');
@@ -194,6 +201,37 @@ describe('ESLint end to end (JS)', () => {
 		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
 		expect(res.messages.filter((m) => m.ruleId === 'puzzle/no-invalid-sections')).toEqual([]);
 		expect(res.messages).toEqual([]);
+	});
+
+	// 0.8.0 template expressions (function calls in attributes and props,
+	// methods, arrow-function arguments, object and template literals,
+	// <pre>/<textarea> bodies). Template bytes stay out of the JS block, so no
+	// JavaScript rule ever judges a template expression, and a rule's report
+	// lands on the real line of the .pzl file past all of them.
+	it('lints the 0.8.0 fixture with positions mapped past the template', async () => {
+		const src = fixture('grammar-0-8.pzl');
+		const blocks = processor.preprocess(src, 'grammar-0-8.pzl');
+		expect(blocks).toHaveLength(1);
+		expect(blocks[0].text.length).toBe(src.length);
+		expect(blocks[0].text).not.toContain('compact_number');
+		expect(blocks[0].text).not.toContain('toSorted');
+		expect(blocks[0].text).not.toContain('${items');
+		expect(blocks[0].text).not.toContain('keep   these');
+
+		const res = await lint(src, { quotes: ['error', 'double'] }, { filePath: 'grammar-0-8.pzl' });
+		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
+		expect(res.messages.filter((m) => m.ruleId === 'puzzle/no-invalid-sections')).toEqual([]);
+		// Every single-quoted string the rule flags is in <script>, on its real line.
+		const lines = src.split('\n');
+		const scriptStart = lines.indexOf('<script>') + 1;
+		const flagged = res.messages.filter((m) => m.ruleId === 'quotes');
+		expect(flagged.length).toBeGreaterThan(0);
+		for (const m of flagged) {
+			expect(m.line).toBeGreaterThan(scriptStart);
+			expect(lines[m.line - 1].slice(m.column - 1)).toMatch(/^'/);
+		}
+		const importLine = lines.findIndex((l) => l.startsWith('import { PuzzleView }')) + 1;
+		expect(flagged.some((m) => m.line === importLine)).toBe(true);
 	});
 
 	it('a file with no <script> produces no JS messages', async () => {

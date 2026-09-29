@@ -281,7 +281,7 @@ describe('splitSections — {#raw} blocks (D150)', () => {
 	});
 
 	it('template grammar inside a raw body is inert text', () => {
-		const tpl = '{#raw}{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}{/raw}';
+		const tpl = '{#raw}{#if ok}{ value.toUpperCase() }{:else}{#comment}x{/comment}{/if}{/raw}';
 		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
 		expect(errors).toEqual([]);
 		expect(sections.view.content).toBe(tpl);
@@ -401,6 +401,100 @@ describe('splitSections — 0.7.0 template grammar', () => {
 		expect(sections.styles.scoped).toBe(true);
 		// The whole file was carved: the script body is the real one, and its
 		// span round-trips byte for byte.
+		expect(sections.scripts.content).toContain('export default class GrammarSpecimen');
+		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe(sections.scripts.content);
+	});
+});
+
+// 0.8.0 template expressions (D176): JavaScript-shaped values — library
+// functions, methods from the method table, arrow functions as call arguments,
+// object literals and template literals. The splitter never parses a template
+// value — sections.go does not either — so these pin only that the new shapes
+// cannot desync a section boundary, and that values the compiler rejects still
+// carve cleanly so the <script> is linted.
+describe('splitSections — 0.8.0 template expressions', () => {
+	const wrap = (tpl, tail = '<script>\nexport default 1;\n</script>\n') =>
+		`<puzzle-view>${tpl}</puzzle-view>\n${tail}`;
+	const closingScript = '<script>\nconst re = /}/;\n</script>\n';
+
+	it('carves function calls, methods and object-literal arguments in attributes and props', () => {
+		const tpl =
+			"<Frame.Wrapper title={ truncate(name.trim(), 20) } class=\"card { tone ?? 'plain' }\">" +
+			"{ t('cart.count', { count: items.length, unit }) }</Frame.Wrapper>";
+		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+	});
+
+	it('skips a brace string inside an object-literal argument', () => {
+		// A misread '}' string closes the interpolation early; a misread '{' runs
+		// it away. Either way the regex in <script> would land the boundary wrong.
+		const tpl = "<p>{ t('k', { close: '}', open: '{' }) }</p>";
+		const { sections, errors } = splitSections(wrap(tpl, closingScript), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nconst re = /}/;\n');
+	});
+
+	it('skips braces inside template literals, in the static text and in ${…}', () => {
+		for (const tpl of [
+			'<p>{ `${items.length} }` }</p>',
+			"<p>{ `{${tone ?? '}'}}` }</p>",
+			'<p>{ `${ { a: 1 }.a } and ${`nested ${x} }`}` }</p>',
+			'<p title={ `</puzzle-view> ${name}` }>x</p>',
+		]) {
+			const { sections, errors } = splitSections(wrap(tpl, closingScript), 'x.pzl');
+			expect(errors, tpl).toEqual([]);
+			expect(sections.view.content, tpl).toBe(tpl);
+			expect(sections.scripts.content, tpl).toBe('\nconst re = /}/;\n');
+		}
+	});
+
+	it('reads arrow functions, division and comparison without opening a regex', () => {
+		// `=>` and `>` are plain operators; a `/` after `)` or an identifier is
+		// division. A misread regex would swallow up to the `/` in the script.
+		for (const tpl of [
+			'{#for n in items.toSorted((a, b) => b - a)}<i>{ n }</i>{/for}',
+			'{#if items.some(n => n.qty > 1)}<b>{ items.filter(n => n.done).length / total }</b>{/if}',
+			"<p>{ tags.map((tag, i) => `${i}:${tag.toUpperCase()}`).join(', ') }</p>",
+			'<p>{ Math.round(total * 100) / 100 }</p>',
+			'<li @click={ pick(n, event.target.dataset.i) }>x</li>',
+		]) {
+			const { sections, errors } = splitSections(wrap(tpl, closingScript), 'x.pzl');
+			expect(errors, tpl).toEqual([]);
+			expect(sections.view.content, tpl).toBe(tpl);
+			expect(sections.scripts.content, tpl).toBe('\nconst re = /}/;\n');
+		}
+	});
+
+	it('carves template values the compiler rejects without an opinion', () => {
+		// A method outside the method table, `this`, `new`, a bitwise `|` and a
+		// leading object literal are positioned COMPILE errors (D176), one stage
+		// later than the splitter.
+		for (const tpl of [
+			'{ items.sort() }',
+			'{ this.label }',
+			'{ new Date() }',
+			'{ a | b }',
+			'{#if flags & 1}x{/if}',
+			'{ {a: 1} }',
+		]) {
+			const { sections, errors } = splitSections(wrap(`<p>${tpl}</p>`), 'x.pzl');
+			expect(errors, tpl).toEqual([]);
+			expect(sections.scripts.content, tpl).toBe('\nexport default 1;\n');
+		}
+	});
+
+	it('splits the 0.8.0 fixture with zero structural errors', () => {
+		const src = fixture('grammar-0-8.pzl');
+		const { sections, errors } = splitSections(src, 'grammar-0-8.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toContain('<Frame.Wrapper title={ truncate(name.trim(), 20) }');
+		expect(sections.view.content).toContain("{ `{${tone ?? '}'}}` }");
+		expect(sections.view.content).toContain('<pre>\n    keep   these\n\tbytes exactly\n  </pre>');
+		expect(sections.view.content.trimEnd().endsWith('</textarea>')).toBe(true);
+		expect(sections.styles.scoped).toBe(true);
 		expect(sections.scripts.content).toContain('export default class GrammarSpecimen');
 		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe(sections.scripts.content);
 	});

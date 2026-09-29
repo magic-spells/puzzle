@@ -8,13 +8,20 @@
  * templates actually add on top of HTML:
  *
  *   1. `{ expression }` interpolation — in text, in attribute values, and inside
- *      quoted attribute strings (`class="base {#if active}on{/if}"`).
- *   2. Block tags — `{#if}` `{#unless}` `{#case}` `{#for}` `{#svg}` `{:else if}`
- *      `{:when}` `{/if}` … — directive name as a keyword, condition as an expression.
+ *      quoted attribute strings (`class="base {#if active}on{/if}"`). `\{` and
+ *      `\}` are escapes, not interpolation.
+ *   2. Block tags — `{#if}` `{#unless}` `{#case}` `{#for}` `{#svg}` `{#raw}`
+ *      `{:else if}` `{:when}` `{/if}` … — directive name as a keyword, condition
+ *      as an expression.
  *   3. Sigil attributes — `@event={ … }` bindings and `:prop` shorthands keep their
  *      sigil and get their own color (see `.hljs-attr.directive_` in the
  *      <style> block of ui/code/Code.pzl).
- *   4. Formatters — the `| formatter(args)` tail inside an interpolation.
+ *   4. JavaScript-shaped expressions inside the braces: calls, method calls,
+ *      member access, arrows, template literals, `?.`, `??`, object literals. A
+ *      bare call to a library function (`currency(price)`, `t('cart.count', …)`)
+ *      is colored as a built-in; inside an `@event` handler a bare call is the
+ *      view's handler, so it is colored as a plain function, and `event` is
+ *      colored as the language name it is there.
  *
  * Plus two escapes back into JavaScript, because docs snippets are usually mixed:
  *   - a `<script>` block (full-file `.pzl` snippets) highlights as JS;
@@ -36,6 +43,23 @@ import javascript from 'highlight.js/lib/languages/javascript';
 // Only treat `{` as template syntax when its `}` lands on the same line. Allows
 // one level of nesting so `options={ { loop: true } }` still matches.
 const CLOSES_ON_LINE = /(?=(?:[^{}\n]|\{[^{}\n]*\})*\})/;
+
+// The template function library — a bare call to one of these is a built-in.
+const LIBRARY = [
+  'round', 'currency', 'percentage', 'number_with_delimiter', 'compact_number',
+  'pluralize', 'capitalize', 'truncate', 'strip_html', 'strip_newlines', 'escape',
+  'raw', 'newline_to_br', 'json', 'date', 'time', 'datetime', 'in_timezone', 't',
+  'link', 'timeago',
+];
+const LIBRARY_CALL = new RegExp(`(?<![.\\w$])(?:${LIBRARY.join('|')})(?=\\s*\\()`);
+
+// Globals an expression may reach: `Math.max(…)`, `Number(x)`, `Object.keys(x)`.
+const GLOBALS =
+  /(?<![.\w$])(?:Math|Number|String|Boolean|Array|Object|parseInt|parseFloat|isNaN|isFinite)\b/;
+
+// Longest first, so `?.` / `??` / `===` / `=>` aren't split. A lone `|` is not
+// part of the language, but it still reads as an operator rather than text.
+const OPERATOR = /\?\.|\?\?|\|\||&&|===|!==|==|!=|<=|>=|=>|[-+*/%<>!?:|]/;
 
 function re(...parts) {
   return new RegExp(parts.map((p) => (typeof p === 'string' ? p : p.source)).join(''));
@@ -89,26 +113,54 @@ export default function puzzleLang(hljs) {
   // Attribute names, including Puzzle's sigils: `@click`, `:href`, `data-*`.
   const ATTR_NAME_RE = /[A-Za-z_][\w.:-]*/;
 
-  // Innards shared by interpolations and block-tag conditions. All single-line
-  // `match` modes (never begin/end), so an unpaired quote can't run away and eat
-  // the closing brace.
-  const EXPR_CONTENTS = [
-    // `{ price | currency('USD') }` — the formatter tail, not the `||` operator.
-    { scope: 'built_in', match: /(?<!\|)\|(?!\|)\s*[A-Za-z_$][\w$]*/ },
-    { scope: 'string', match: /'[^'\n]*'|"[^"\n]*"|`[^`\n]*`/ },
-    { scope: 'literal', match: /\b(?:true|false|null|undefined)\b/ },
-    { scope: 'number', match: /\b\d+(?:\.\d+)?\b/ },
-    { scope: 'title.function', match: /[A-Za-z_$][\w$]*(?=\s*\()/ },
+  // Innards shared by interpolations, block-tag conditions and handlers. All
+  // single-line `match` modes except the brace/backtick pairs, which only open
+  // when they close on the same line, so an unpaired quote can't run away and
+  // eat the closing brace. Order matters: earlier rules win at the same index.
+  function expression({ handler }) {
+    const contents = [
+      { scope: 'string', match: /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/ },
+      { scope: 'literal', match: /\b(?:true|false|null|undefined)\b/ },
+      { scope: 'number', match: /(?:\b\d+(?:\.\d*)?|\B\.\d+)(?:[eE][+-]?\d+)?\b/ },
+      // `event` only means something in an `@event` handler.
+      ...(handler ? [{ scope: 'variable.language', match: /(?<![.\w$])event\b/ }] : []),
+      // `a.b`, `a?.b`, `a.m(…)` — the name after the dot. Methods read as
+      // functions; plain member reads keep the expression color.
+      { scope: 'title.function', match: /(?<=\.\s*)[A-Za-z_$][\w$]*(?=\s*\()/ },
+      { scope: 'property', match: /(?<=\.\s*)[A-Za-z_$][\w$]*/ },
+      { scope: 'built_in', match: GLOBALS },
+      // A bare call resolves to the function library everywhere except in a
+      // handler, where it names the view's handler.
+      ...(handler ? [] : [{ scope: 'built_in', match: LIBRARY_CALL }]),
+      { scope: 'title.function', match: /(?<![.\w$])[A-Za-z_$][\w$]*(?=\s*\()/ },
+      // `{ count: n }` — an object-literal key.
+      { scope: 'attr', match: /(?<=[{,]\s*)[A-Za-z_$][\w$]*(?=\s*:)/ },
+      { scope: 'operator', match: OPERATOR },
+    ];
+    // `` `Hi ${name}` `` — the `${ … }` part is an expression again.
+    const substitution = { scope: 'template-variable', begin: /\$\{/, end: /\}/, contains: contents };
+    const templateLiteral = {
+      scope: 'string',
+      begin: /`(?=[^`\n]*`)/,
+      end: /`/,
+      contains: [{ match: /\\./ }, substitution],
+    };
     // Nested object/expression braces, so the mode's own `}` terminator doesn't
-    // fire early on `{ { loop: true } }`.
-    { begin: /\{/, end: /\}/ },
-  ];
+    // fire early on `{ { loop: true } }` or `t('k', { count: n })`.
+    const nested = { begin: /\{/, end: /\}/, contains: contents };
+    contents.unshift(templateLiteral);
+    contents.push(nested);
+    return contents;
+  }
+
+  const EXPR_CONTENTS = expression({ handler: false });
+  const HANDLER_CONTENTS = expression({ handler: true });
 
   // `{ expression }` — the whole thing carries the expression color; the modes
   // above paint over it.
   const INTERPOLATION = {
     scope: 'template-variable',
-    begin: re(/\{(?!\s*[#/:])/, CLOSES_ON_LINE),
+    begin: re(/(?<!\\)\{(?!\s*[#/:])/, CLOSES_ON_LINE),
     end: /\}/,
     relevance: 2,
     contains: EXPR_CONTENTS,
@@ -117,7 +169,7 @@ export default function puzzleLang(hljs) {
   // `{#if cond}` `{:else if cond}` `{/if}` `{#for todo in todos, i}` `{#svg 'x.svg'}`
   const BLOCK_TAG = {
     scope: 'template-variable',
-    begin: re(/\{(?=\s*[#/:])/, CLOSES_ON_LINE),
+    begin: re(/(?<!\\)\{(?=\s*[#/:])/, CLOSES_ON_LINE),
     end: /\}/,
     relevance: 10,
     contains: [
@@ -127,33 +179,47 @@ export default function puzzleLang(hljs) {
     ],
   };
 
-  const TEMPLATE = [BLOCK_TAG, INTERPOLATION];
+  // `\{` / `\}` print a literal brace; matched first so they never open a mode.
+  const ESCAPE = { scope: 'char.escape', match: /\\[{}]/, relevance: 0 };
+
+  const TEMPLATE = [ESCAPE, BLOCK_TAG, INTERPOLATION];
+
+  // `@click={ save(item) }` — same grammar, but calls name the view's handlers.
+  const HANDLER = hljs.inherit(INTERPOLATION, { contains: HANDLER_CONTENTS });
+  const HANDLER_TEMPLATE = [ESCAPE, BLOCK_TAG, HANDLER];
+
+  function attrValue(template) {
+    return [
+      // `prop={ expr }` / `class={#if x}a{/if}` — bare-brace attribute values.
+      ...template.filter((m) => m !== ESCAPE).map((m) => hljs.inherit(m, { endsParent: true })),
+      {
+        scope: 'string',
+        endsParent: true,
+        variants: [
+          { begin: /"/, end: /"/, contains: template },
+          { begin: /'/, end: /'/, contains: template },
+          { begin: /[^\s"'=<>`]+/ },
+        ],
+      },
+    ];
+  }
 
   const TAG_INTERNALS = {
     endsWithParent: true,
     illegal: /</,
     relevance: 0,
     contains: [
+      // `@click={ … }` — an event binding; its value is a handler expression.
+      {
+        begin: [re(/@/, ATTR_NAME_RE), /\s*=\s*/],
+        beginScope: { 1: 'attr.directive' },
+        relevance: 5,
+        contains: attrValue(HANDLER_TEMPLATE),
+      },
       // `@change`, `:value` — sigil kept, colored apart from plain attributes.
       { scope: 'attr.directive', match: re(/[@:]/, ATTR_NAME_RE), relevance: 5 },
       { scope: 'attr', match: ATTR_NAME_RE, relevance: 0 },
-      {
-        begin: /=\s*/,
-        relevance: 0,
-        contains: [
-          // `prop={ expr }` / `class={#if x}a{/if}` — bare-brace attribute values.
-          ...TEMPLATE.map((m) => hljs.inherit(m, { endsParent: true })),
-          {
-            scope: 'string',
-            endsParent: true,
-            variants: [
-              { begin: /"/, end: /"/, contains: TEMPLATE },
-              { begin: /'/, end: /'/, contains: TEMPLATE },
-              { begin: /[^\s"'=<>`]+/ },
-            ],
-          },
-        ],
-      },
+      { begin: /=\s*/, relevance: 0, contains: attrValue(TEMPLATE) },
     ],
   };
 

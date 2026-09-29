@@ -1,7 +1,7 @@
 <puzzle-view>
   <!-- 0.7.0 template grammar: D167 dotted family tags + the \{ \} brace escape. -->
   <Frame class="note">
-    <Frame.Header>{ title | capitalize }</Frame.Header>
+    <Frame.Header>{ capitalize(title) }</Frame.Header>
     <Frame.Body>
       A literal \{ stays a brace \}, and \{{ count }\} wraps an interpolation in
       real braces.
