@@ -12,21 +12,18 @@ connections:
   - FEATURE-V1-29-COMPOSITION-FIXES
 code_refs:
   - compiler/internal/codegen/codegen.go
-  - compiler/internal/codegen/expr.go
+  - compiler/internal/codegen/lower.go
 verified_sha: c809db6680eb9355961897756f54e97f1164b88f
 notes:
-  - kind: verified
-    text: >-
-      Cacheability detection re-truthed against expr.go: one resolveExprTrackingScope pass,
-      referencesLoopScope ANDed with the __d. check.
-    sha: c809db6680eb9355961897756f54e97f1164b88f
   - kind: state
     text: >-
-      The cacheability pass is `compileEventHandler`'s one `resolveExprScan(args, evScope, scope,
-      argFacts)` call (trackedScope = the loop scope → `referencesLoopScope`), ANDed with the `__d.`
-      check; the separate `resolveExprTrackingScope` wrapper named in the verified note above had no
-      callers and is gone. The argument facts feed only `refs` and their `__d` roots — loop-local
-      reads are fire-time and record no row fact (D170).
+      D176 P2 (PR #167): the cacheability pass is `lowerer.handler` / `lowerer.handlerArgs` in
+      `lower.go`, reading the expression tree — the `resolveExprScan` text pass and its `__d.`
+      substring check are gone. `eventValue.cacheable` = no binding refs, no data roots, no library
+      call (`libRead`); `rowCacheable` = binding refs only; the emitter still checks each captured
+      binding belongs to a lowered loop. The argument facts feed only `refs` and their data roots —
+      loop-local reads are fire-time and record no row fact (D170). Handler arguments are guarded
+      (`?.`) like any expression; a library call in one makes the site non-cacheable.
 ---
 
 # D62 — data-independent `@event` handlers emit per-instance cached closures
@@ -53,6 +50,7 @@ function object per render**, with two costs:
 
 ## Decision
 
+
 Codegen caches the closure on whichever object outlives the render, and the
 choice of object is what the compiler decides per site.
 
@@ -70,10 +68,15 @@ passed on every render of that instance. Handler *semantics* are unchanged —
 
 A site is data-independent when it is the bare form `@click={ h }` (the
 compiled closure captures only the instance), or the call form
-`@click={ h(args) }` whose arguments reference **nothing from the render scope
-beyond `event`**: literals, `event` and JS globals are all fine, because they
-are evaluated at fire time *inside* the closure. (`this` is not a template
-identifier, so an argument never reads the view directly — D176 rule 5.)
+`@click={ h(args) }` whose arguments read **nothing from the render beyond the
+DOM `event`**: literals, `event` and its chains, arrow parameters, and the
+allowed JavaScript globals (`Math.*`, `Number(x)`, …) are all fine, because they
+are evaluated at fire time *inside* the closure. Two reads make a site
+render-dependent: a data root (`save(draft)` → `__d.draft`) and a **library
+function call** (`save(date(when))` → `__f`), because both are per-render
+values the closure would capture. (`this` is not a template identifier, so an
+argument never reads the view directly — [[DECISION-D176-EXPRESSION-LANGUAGE]]
+rule 7.)
 
 **Loop-capturing sites cache on the row scope.** Inside a lowered item-form
 `{#for}` ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]) the loop locals rewrite to
@@ -86,24 +89,29 @@ remove: (s.h0 ??= (event) => this.events.deleteTodo(s.item)),
 `h0` is counted from 0 per loop site. The row scope persists for the row's
 whole life and `s.item` is the row's **current** item, so one function object
 serves every render of that row and still reads the right record after an
-update, a reorder or a same-key replacement. A site qualifies when every
-binding its arguments captured belongs to a lowered loop — a range-loop
-variable or a `<Snippet>` parameter is re-bound per iteration or per expansion,
-so a closure over one must stay fresh.
+update, a reorder or a same-key replacement. A site qualifies when its
+arguments read template bindings and nothing render-dependent (no data root,
+no library call), and every binding they captured belongs to a lowered loop —
+a range-loop variable or a `<Snippet>` parameter is re-bound per iteration or
+per expansion, so a closure over one must stay fresh.
 
-**Everything else stays a fresh closure.** Arguments that read render data
-(`save(draft)` → `__d.draft`) close over `__d`, a per-render snapshot; caching
-one would freeze it. Those sites emit byte-identically to v1.28, and the parent
-roots they read join the loop site's dirty mask so the row rebuilds when the
-data behind them changes.
+**Everything else stays a fresh closure**: arguments that read a data root
+close over `__d`, a per-render snapshot, and arguments that call a library
+function close over `__f`; caching either would freeze it. The parent roots
+they read join the loop site's dirty mask so the row rebuilds when the data
+behind them changes. **A handler-valued conditional** (`c ? h1 : h2`, a branch
+may be `null`) is never cached, by the instance or by a row: its condition is a
+render-time value that may toggle function ↔ null.
 
-Detection is a single resolution pass, no new lexer: `resolveExprScan` resolves
-the arguments once — with `event` added to the render scope — and reports,
-alongside the emitted JS, which bindings and which data roots they referenced.
-Keeping the reference check inside the resolver makes it follow the resolver's
-own lexical rules — property names and text inside literals/comments/regexes do
-not count, identifiers inside template-literal interpolations do. False
-negatives (a string literal containing `"__d."`) just miss the cache — harmless.
+**The verdicts are read off the expression tree** (`lowerer.handler` in
+`compiler/internal/codegen/lower.go`, D176). The handler's arguments are
+lowered once, and a scratch fact set records which template bindings they read
+(`refs`), which data roots, and whether they call a library function
+(`libRead`); the DOM `event` and arrow parameters are not bindings. `cacheable`
+is no refs, no roots, no library call; `rowCacheable` is refs only, with no
+roots and no library call. Because the tree, not the source text, decides, a
+property name or the text of a string literal never counts as a read — a string
+literal containing `"__d."` is data-free and caches.
 
 ## Alternatives
 

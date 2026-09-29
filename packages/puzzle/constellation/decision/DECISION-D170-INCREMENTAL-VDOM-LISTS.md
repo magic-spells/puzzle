@@ -224,6 +224,18 @@ notes:
       body (an enclosing site's loop local, a root past the mask cap). The call-on-item and
       call-on-global fact paths have no template source: calls are rejected in values and handler
       arguments record no row facts.
+  - kind: state
+    text: >-
+      2026-09-29, D176 P2–P4 — supersedes the two "Row facts after D176" notes, item (5) and the
+      pipe/parentheses/comment wording of item (4) of the PR #136 compiler-corrections note, and the
+      "formatter ARGUMENT … piped base" clause of the handler-arguments note. Row facts are read off
+      the expression tree (`lower.go`); the body's Decision section states them. `volatile` comes
+      only from a `clockFunctions` call (`timeago`) and the structural cases (an enclosing site's
+      local, a root past the mask cap): there is no mutable-global case, because `jsGlobals` is gone
+      and a browser global is a parse error. There is no `.size`/`__z` lowering. A function argument
+      is opaque like any non-member use (`{ byline(post) }` → `deep`). Handler arguments are guarded
+      like any expression and still record only their data roots; a library call in one makes the
+      handler non-cacheable (D62).
 ---
 
 # D170 — Persistent list blocks and an incremental virtual DOM
