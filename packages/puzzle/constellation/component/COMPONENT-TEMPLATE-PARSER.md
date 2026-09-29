@@ -102,6 +102,7 @@ client shim.
 
 ## Expressions
 
+
 The template parser owns the structure of each expression position — where a
 brace group ends, a header's shape, the `{#for}` forms, a `{:when}` list — and
 the expression language, `packages/puzzle-lang/expr`
@@ -112,6 +113,30 @@ and tracking nested braces, so `{#if x === '}'}` and an object literal inside
 an argument scan correctly. The top-level splitters (`splitTopLevel`,
 `topLevelIndex`) peel a `{#for}` counter, a range's `...` and a `{:when}` value
 list with the same quote/depth awareness.
+
+**Division versus a regex literal (`lexskip.go`).** `LexSkip` is shared with
+the `<script>` body reader (`findScriptClose` in sections.go) and codegen's
+`tokenizeJS`, which scan real JavaScript, where a regex holding a quote, a
+backtick or a close tag must stay opaque. That is the only reason the scanner
+still guesses at regex literals the expression grammar never has, and the
+guess must never misread a division an expression can hold: a `/` after a
+token that ends an expression is division. A digit, a `.`, `)`, `]`, `}`, and
+every byte ≥ 0x80 end one (`LexPlainEndsExpr`) — outside a string a
+non-ASCII byte belongs to a name — so `{ café / 2 }`, `<p title={ 金額 / 2 }>`,
+`{#if 価格 / 2 > 1}`, `{ 5. / 2 }` and `{ of / 2 }` all close at their brace;
+a run of ASCII letters directly after a byte ≥ 0x80 is the tail of one name
+and never a keyword (`価格new / 2`); and `of`, a contextual word a template
+field may be named, is not in the regex-preceding keyword set (`return
+typeof instanceof in void delete new do else yield await case`). A
+regex-shaped template expression still closes at its brace and fails as the
+grammar's own error (a regular expression is not in the language), never
+"unclosed `{`". **Accepted gotcha:** in a `<script>`, a regex literal directly
+after a `...` spread or after `for (x of` now reads as division; it matters
+only when that regex holds a quote, a backtick or a close tag, and no `.pzl`
+in the repo has one. The eslint and prettier `split.js`/`lex.js` ports must
+mirror all three rules (`lexPlainEndsExpr`, the identifier-run check, the
+keyword set) — in JavaScript every UTF-16 unit of a non-ASCII character is
+≥ 0x80, so the rules match one to one.
 
 **Each expression position is parsed once**, by `expr.Parse(src, base, opts)`
 (`parseExprAt` in exprs.go), and its tree is stored beside the raw string:
@@ -132,7 +157,10 @@ reads as a value, and calling one is a positioned error, so `t('k')` inside
 `{#for t in …}` never reaches the library. An `@event` value adds `Handler`,
 which makes the free name `event` the DOM event — its chain unrestricted by the
 method table — and lets the handler's own call name a view handler even when a
-binding shares its name.
+binding shares its name. Everywhere else `event` is an ordinary name that reads
+the data field or prop (`{ event.title }`, `<EventCard event={ item }>`); a
+template that uses it both ways is codegen's positioned error, not the
+parser's.
 
 **There are no formatter chains.** A `|` in any position is expr's positioned
 error "`| name` pipes were removed — write `name(value)`; bitwise OR is not
