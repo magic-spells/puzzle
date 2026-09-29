@@ -51,16 +51,14 @@ notes:
       TEST-COMPILER-PARSER, with paths relative to the module. This card stays in the framework plan
       as the behavioral contract — nearly 60 cards here connect to it, and plans cannot hold
       cross-plan connections — so it has no bound code in this plan.
-  - kind: decision
+  - kind: gotcha
     text: >-
-      2026-09-28, Cory (decided with the D176 sub-decisions, though not part of the expression
-      rewrite): the HTML void elements — `area base br col embed hr img input link meta source track
-      wbr` — are accepted without a slash (`<br>`, `<input type="text">`), `<br/>` stays legal, and
-      a closing tag for a void element (`</input>`) is the positioned error. Not built yet (D176
-      P1b, its own small parser PR): today `parseElement` has no void list, so `<br>` opens a
-      context that only `</br>` closes, and the mismatch error blames the parent's close tag (review
-      finding R-LANG-BUGS-7). DOC-TEMPLATE-SYNTAX's `<input value={ x } readonly>` example compiles
-      once it lands.
+      The section splitter is quadratic on a file with thousands of unbalanced plain `{` outside a
+      raw block: `findTemplateClose`'s generic `{` case runs `scanBraceGroup`, which fails only at
+      the end of input, and the loop then advances one byte and rescans. 4,000 repeats of `{ ` take
+      about 210 ms and 28 KB of `{#` about 640 ms, the same shape in Go and in the eslint/prettier
+      `split.js` ports. Accepted for 0.8.0, not fixed: such a file is already a compile error (an
+      unclosed `{`). A `{#raw}` body does not pay it, because the splitter skips the span whole.
 ---
 
 # Template parser
@@ -71,7 +69,15 @@ positioned AST or an error list; there is no partial/best-effort output.
 `SplitSections` recognizes one `<puzzle-view>`, optional `<script>`, optional
 `<style>`, and optional `<puzzle-skeleton>`. Scripts remain opaque bytes.
 Section closing scans are quote/comment/template/interpolation aware, including
-literal close-tag text inside template comments and skeleton bodies. Scripts
+literal close-tag text inside template comments and skeleton bodies. A
+`{#raw}` span is stepped over whole ([[DECISION-D150-RAW-TEMPLATE-BLOCK]]):
+`findTemplateClose` finds it with the lexer's own `isBlockRawOpen` and
+`scanBlockRaw`, so the splitter and the lexer agree on where a raw block ends,
+nothing inside the span is read, and a literal close tag in a raw body does not
+end the section. The first close tag seen inside a skipped span is a fallback,
+returned only when no close tag follows, so a `{#raw}` missing its `{/raw}`
+still splits at the real close tag and the lexer reports the unterminated block
+at its opener. Scripts
 accept absent/`lang="js"`/`lang="ts"`; styles accept only bare `scoped`;
 skeletons accept only a static integer `min-duration`.
 
@@ -164,9 +170,25 @@ the valued one. Event names are exempt: the colon is their modifier channel, and
 `parseEventModifiers` owns it. Parser helpers enforce event/modifier grammar
 (generic modifiers: `prevent`, `stop`, `once`, and since D86 `outside` — valid
 on any event; key filters stay keyboard-only), static islands, literal inline
-SVG roots/paths, list identifiers/keys, and unique static refs. The HTML void
-elements still need a self-closing slash (`<br/>`); accepting `<br>` is planned
-(D176 P1b).
+SVG roots/paths, list identifiers/keys, and unique static refs. `ScanSVGFile`
+skips a leading UTF-8 byte-order mark before its prolog scan, and its error
+positions stay in file coordinates.
+
+**HTML void elements close at their start tag.** The void set is `area base br
+col embed hr img input link meta source track wbr` (`voidElements` in
+parser.go, matched exactly and lowercase). `parseElement` treats a void start
+tag as the whole element, so `<br>`, `<br/>` and `<br />` build the same AST,
+what follows a `<br>` belongs to the parent, and `<input value={ x } readonly>`
+compiles. Codegen has nothing void-specific to do: the emitted module is
+byte-identical to the self-closed spelling (codegen's
+`TestVoidElementsNeedNoSlash`), and the SSG serializer already writes void tags
+with no children or end tag. A closing tag for a void element (`</input>`, a
+stray `</br>`) is a positioned error at the closer, from `checkCloser`:
+"`<input>` is a void element and has no closing tag — remove the `</input>`".
+The rule holds inside `{#raw}`, where HTML stays structural; a capitalized
+`<Input>` or `<BR>` is a component, never void (D167); a `{#svg}` file's body is
+never parsed, so it is unaffected. `OverNestingDepth` (depth.go) skips void
+start tags and stray void closers, so a row of `<br>`s is not read as nesting.
 
 Component-name grammar ([[DECISION-D167-COMPONENT-FAMILIES]]): a capitalized
 tag that survives marker resolution must be a valid member path —
@@ -213,4 +235,7 @@ Components/markers are forbidden inside islands; refs are forbidden on
 components, markers, roots, loops, skeletons, and Snippet bodies.
 
 `ParseError` includes file and one-based line/column. Cross-nesting and
-did-you-mean diagnostics report the actionable source position.
+did-you-mean diagnostics report the actionable source position. A second
+`{:else}` in `{#if}`, `{#unless}` or `{#case}` is reported at the stray clause
+("a second `{:else}` in `{#if}` opened at L:C — `{:else}` must be the last
+clause"), not as an unclosed block.
