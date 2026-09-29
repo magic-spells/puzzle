@@ -223,7 +223,9 @@ serialized into page output.
 Rethrow-to-caller paths (`beforeMount`, `router.start()` — the `mount()`
 caller owns those), explicit navigation verdicts (a guard returning false),
 input-capability fallbacks (invalid anchors/selectors/session-storage), and
-event handlers/formatters, which surface uncaught as ever. UI error
+event handlers, which surface uncaught as ever. A template function or method
+that throws during render is not an exclusion: it is a render failure, and
+the boundary contains it like any other. UI error
 containment stays scoped to rendering/updating work, matching the
 boundary scope React, Svelte, and Solid settled on — browser event and timer
 errors belong to the global reporting path.
