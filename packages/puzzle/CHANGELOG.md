@@ -616,11 +616,12 @@ checklist sent you.
   - `in_timezone` is standard: nothing in the expression language re-expresses
     an instant in another zone.
 
-  The library is these 19 built-ins — `escape`, `raw`, `newline_to_br`,
-  `capitalize`, `truncate`, `strip_html`, `strip_newlines`, `pluralize`,
-  `round`, `currency`, `percentage`, `number_with_delimiter`,
-  `compact_number`, `json`, `date`, `time`, `datetime`, `in_timezone` and the
-  PuzzleKit-only `timeago` — plus `link` (the router) and `t` (translations).
+  The library is 19 standard functions both hosts ship — `escape`, `raw`,
+  `newline_to_br`, `capitalize`, `truncate`, `strip_html`, `strip_newlines`,
+  `pluralize`, `round`, `currency`, `percentage`, `number_with_delimiter`,
+  `compact_number`, `json`, `date`, `time`, `datetime`, `in_timezone` and `t`
+  (translations) — plus two PuzzleKit-only ones, `link` (the router) and
+  `timeago` (it reads the clock at render).
   Apps register their own through the `formatters` config map, which keeps
   its name, and call them the same way. An app function registered under a
   standard name still wins, now with a development warning. The examples moved

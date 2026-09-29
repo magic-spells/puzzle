@@ -7,8 +7,8 @@ read change. The router, the store, schema validation, animations and
 translations all come in the box.
 
 A Go compiler with esbuild inside turns the app into one small bundle. A
-minimal app is **21.6 KB gzip** with the router, store and validation
-included, and the complete todos example is **25.7 KB gzip**. The CLI is a
+minimal app is **21.7 KB gzip** with the router, store and validation
+included, and the complete todos example is **25.8 KB gzip**. The CLI is a
 single prebuilt binary: no Babel, no bundler config, no postinstall scripts.
 
 **[Live demo: Puzzle Sounds](https://puzzle-music-demo.vercel.app/)**, a
