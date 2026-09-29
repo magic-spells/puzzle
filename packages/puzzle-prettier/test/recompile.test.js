@@ -152,16 +152,24 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 				}
 			}
 			if (file.endsWith('grammar-0-8.pzl')) {
-				// 0.8.0 template values reach codegen identically before and after
-				// formatting: formatter chains in attributes and props, an
-				// object-literal formatter argument, `.size`, and the D168
-				// whitespace — the space before an inline element, and the
-				// <pre>/<textarea> bodies exactly as written.
+				// 0.8.0 template expressions reach codegen identically before and
+				// after formatting: library calls in attributes and props, methods,
+				// arrow-function arguments, object and template literals, a handler
+				// argument reading `event`, and the D168 whitespace — the space
+				// before an inline element, and the <pre>/<textarea> bodies exactly
+				// as written.
 				for (const literal of [
 					'new ViewNode(Frame.Wrapper',
-					'(__f["truncate"] || __f.__missing("truncate"))((__f["trim"] || __f.__missing("trim"))(__d.name), 20)',
+					'(__f["truncate"] || __f.__missing("truncate"))(__d.name?.trim(), 20)',
 					'label: (__f["compact_number"] || __f.__missing("compact_number"))(__d.followers)',
-					"('cart.count', { count: __z(__d.items), unit: __d.unit })",
+					"('cart.count', { count: __d.items?.length, unit: __d.unit })",
+					"(__d.total, { digits: 2, close: '}' })",
+					'`${__d.items?.filter((n) => n > 1)?.length} of ${__d.items?.length} }`',
+					"__d.tags?.map((tag, i) => `${i + 1}:${tag?.toUpperCase()}`)?.join(', ')",
+					"Math.round(__d.total * 100) / 100",
+					"`{${__d.tone ?? '}'}}`",
+					'__d.items?.toSorted((a, b) => b - a)',
+					'this.events.pick(s.item, event.target.dataset.i)',
 					"{ value: 'tokens — ' }",
 					"{ value: 'Posted by ' }",
 					"{ value: '    keep   these\\n\\tbytes exactly\\n  ' }",
@@ -173,7 +181,11 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 			}
 			if (file.endsWith('gnarly-template.pzl')) {
 				// Brace strings inside interpolations and an object-literal argument.
-				for (const literal of ["__d.name === '}' ? 'yes' : 'no'", "('k', { close: '}', count: __z(__d.items) })"]) {
+				for (const literal of [
+					"__d.name === '}' ? 'yes' : 'no'",
+					"(__f[\"truncate\"] || __f.__missing(\"truncate\"))('{' + __d.name + '}', 8)",
+					"('k', { close: '}', count: __d.items?.length })",
+				]) {
 					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);
 					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
 				}
@@ -183,7 +195,7 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 				// nodes before and after formatting, braces and all.
 				for (const literal of [
 					'{ "loop": true, "slides": [1, 2], "url": "/api/x" }',
-					'{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}',
+					'{#if ok}{ value.toUpperCase() }{:else}{#comment}x{/comment}{/if}',
 					'outer {#raw} inner',
 				]) {
 					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);

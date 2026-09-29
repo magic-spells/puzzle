@@ -3,7 +3,7 @@
   {#if currentFilter === 'all'}
     <div class="all">{ name === '}' ? 'yes' : 'no' }</div>
   {:else if x > 0 && y < 10}
-    <div title={ '{' + name + '}' | truncate(8) }>{ 'k' | t({ close: '}', count: items.size }) }</div>
+    <div title={ truncate('{' + name + '}', 8) }>{ t('k', { close: '}', count: items.length }) }</div>
   {/if}
 
   {## an inline template comment with an apostrophe: don't break }
