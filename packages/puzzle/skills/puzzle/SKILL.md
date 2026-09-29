@@ -561,7 +561,8 @@ many other`) is a plural entry and must have `other`.
   are active; if a navigation (push, replace or pop) is in flight, that
   navigation lands first and the page is rebuilt after it. So a root layout's
   `data()` or a route guard may `await this.ctx.i18n.setLocale(user.locale)`;
-  asking for the locale already active does nothing.
+  asking for the locale already active does nothing (unless the last rebuild
+  into it failed — then it retries).
   `setLocale` rejects if the file fails to load or the rebuild fails, so
   `.catch()` it in a switcher. `ctx.i18n` exists ONLY when
   `i18n` is configured.

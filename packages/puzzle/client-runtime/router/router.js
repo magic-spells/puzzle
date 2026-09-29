@@ -2181,7 +2181,13 @@ export class Router {
 			// rejects when the rebuild itself failed and the old chain is still on
 			// screen (a data() failure, already reported through onError), so
 			// setLocale's caller learns the page was not rebuilt.
-			const nav = this.#navigate(st.path, { push: false, replace: true, retryView: REBUILD });
+			// Tracked like a replace, so a switch made from inside this rebuild (its
+			// data() or guard asking for another locale) waits for it instead of
+			// starting a second rebuild that this one's data() would wait on.
+			const nav = this.#trackNav(
+				this.#token,
+				this.#navigate(st.path, { push: false, replace: true, retryView: REBUILD })
+			);
 			const token = this.#token;
 			return nav.then(() => {
 				if (this.#token === token && this.#state === st) {
@@ -2192,7 +2198,10 @@ export class Router {
 		const routed = st.layout === view || st.views.includes(view);
 		if (retry) {
 			return routed
-				? this.#navigate(st.path, { push: false, replace: true, retryView: view })
+				? this.#trackNav(
+						this.#token,
+						this.#navigate(st.path, { push: false, replace: true, retryView: view })
+					)
 				: null;
 		}
 		if (st.layout === view) {

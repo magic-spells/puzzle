@@ -57,25 +57,25 @@ notes:
       Function-locale caches are not keyed by locale: `setFormatLocale` clears `localeNumber`'s
       per-digit cache and `compact_number`/`timeago` rebuild their single-slot formatter when the
       slot moves — same result, and an app without i18n keeps its exact code. (10) The rebuild waits
-      for any navigation still loading — a push, a replace() or a pop (popstate, or memory-mode
-      go()/back()) — by waiting on the router's `#pendingNavPromise`: push() pairs it with
-      `#pendingNavPath`, and replace(), go() and the popstate handler fill it through `#trackNav`.
-      In that case `__failedView(null, true)` schedules `pending.then(again, again)` (its rejection
-      swallowed — a failed rebuild is already reported through onError) and returns null, so
-      setLocale's promise is NOT chained onto the navigation: the switch may come from inside that
-      navigation's own data() or guard, which would then wait on itself forever. The scheduled
-      rebuild re-runs that data() or guard; the service's same-locale no-op (`match === locale &&
-      table && !stale`, where `stale` is set only when the last refresh for the active locale
-      rejected) is what stops it rebuilding again — without it the rebuilds loop until memory runs
-      out. The push double-click guard stays keyed on `#pendingNavPath`, so a replace or pop never
-      no-ops a push. (11) The build cannot detect an app-registered `t` (the compiler never reads
-      app.js), so the `t`-without-i18n warning says "unless the app registers its own t formatter"
-      instead of being skipped. (12) The i18n cost measured on examples/i18n is about +1.3 KB gzip;
-      hello-world and todos are unchanged. (13) The entry folder rides on the manifest module as
-      `base`, not on a compiler-generated entry (the SPA entry is the app's own app/app.js; the
-      compiler generates none): `locales.Manifest.JS()` emits an expression that reads the module's
-      own `import.meta.url` and steps up one folder when the module was bundled into a
-      `chunks/<name>-<8 base32>.js` file, the only other place it can land.
+      for any navigation still loading — push, replace(), pop, or another rebuild — via
+      `#pendingNavPromise` (push() pairs it with `#pendingNavPath`; replace(), go(), popstate, the
+      rebuild and the errorView retry fill it through `#trackNav`). A tracked rebuild keeps a switch
+      made inside it (its layout data() re-asking for the user's locale) from starting a nested
+      rebuild that would queue behind it in Store.withTracking while it awaited that one. With a
+      navigation pending, `__failedView(null, true)` schedules `pending.then(again, again)`
+      (rejection swallowed; onError already has it) and returns null, so setLocale never waits on a
+      navigation that may be awaiting it. The rebuild re-runs that data() or guard; the same-locale
+      no-op (`match === locale && table && !stale`) stops it rebuilding again. `stale` is set when a
+      refresh rejects while its locale is still active — keyed on the locale, not the token, since a
+      same-locale no-op during the rebuild bumps the token. (11) The build cannot detect an
+      app-registered `t` (the compiler never reads app.js), so the `t`-without-i18n warning says
+      "unless the app registers its own t formatter" instead of being skipped. (12) The i18n cost
+      measured on examples/i18n is about +1.3 KB gzip; hello-world and todos are unchanged. (13) The
+      entry folder rides on the manifest module as `base`, not on a compiler-generated entry (the
+      SPA entry is the app's own app/app.js; the compiler generates none): `locales.Manifest.JS()`
+      emits an expression that reads the module's own `import.meta.url` and steps up one folder when
+      the module was bundled into a `chunks/<name>-<8 base32>.js` file, the only other place it can
+      land.
   - kind: state
     text: >-
       Static kernel remount on setLocale (`client-runtime/static/index.js` armRemount): it
@@ -375,9 +375,11 @@ The prerender (Node) has no `navigator` or storage and always uses
 - Called before the first commit (in `beforeMount`, for example, from a
   user-profile setting), it replaces the pending startup load and does not
   refresh anything.
-- Asking for the locale already active, with the page showing it, fetches and
-  refreshes nothing; it still overtakes a switch in flight (last-wins). After
-  a failed rebuild (see Loading) the same call is a retry, not a no-op.
+- Asking for the locale already active fetches and refreshes nothing; it
+  still overtakes a switch in flight (last-wins). The check is on the active
+  locale, not on the page having committed in it, with one exception: after a
+  rebuild into the active locale failed (see Loading), the same call is a
+  retry, not a no-op.
 
 ### Loading
 
@@ -408,21 +410,24 @@ The prerender (Node) has no `navigator` or storage and always uses
   reload, which is acceptable for a rare, user-started action; state that must
   survive a switch belongs in the store. In static output, the kernel
   re-assembles and re-mounts its page chain the same way.
-- **A navigation in flight wins.** If a push, a `replace()` or a pop (Back,
-  Forward, memory-mode `go()`) is still loading when the switch lands, the
-  rebuild waits for it and then rebuilds the page it committed, so neither a
-  mid-navigation switch nor a login flow (`setLocale(user.locale)` then
-  `push('/dashboard')` or `replace('/dashboard')`) strands the app on the
-  previous page, and a pop's entry is never rewritten under the old URL.
-  `setLocale` does not wait for that navigation: its promise resolves once the
-  new strings are active. The switch may come from inside the navigation
-  itself — a root layout's `data()` that loads the user and awaits
-  `setLocale(user.locale)`, or a guard — and a promise that waited would wait
-  on itself forever. That navigation's new views render in the new strings,
-  and the rebuild after it lands re-renders the levels it kept and any string a
-  `data()` computed before the switch. The rebuild re-runs that `data()` or
-  guard, whose `setLocale` of the now-active locale is a no-op, so it rebuilds
-  once.
+- **A navigation in flight wins.** If a push, a `replace()`, a pop (Back,
+  Forward, memory-mode `go()`) or an earlier switch's rebuild is still loading
+  when the switch lands, the rebuild waits for it and then rebuilds the page
+  it committed, so neither a mid-navigation switch nor a login flow
+  (`setLocale(user.locale)` then `push('/dashboard')` or
+  `replace('/dashboard')`) strands the app on the previous page, and a pop's
+  entry is never rewritten under the old URL. `setLocale` does not wait for
+  that navigation: its promise resolves once the new strings are active. The
+  switch may come from inside the navigation itself — a root layout's `data()`
+  that loads the user and awaits `setLocale(user.locale)`, or a guard — and a
+  promise that waited would wait on itself forever. That navigation's new
+  views render in the new strings, and the rebuild after it lands re-renders
+  the levels it kept and any string a `data()` computed before the switch. The
+  rebuild re-runs that `data()` or guard, whose `setLocale` of the now-active
+  locale is a no-op, so it rebuilds once. A rebuild is itself a navigation in
+  flight: a switch made while one loads (that rebuild's `data()` switching to
+  the user's locale, say) waits for it instead of starting a second rebuild
+  that the first one's `data()` would wait on.
 - **A failed rebuild rejects `setLocale`.** When the rebuild's `data()` throws
   (reported through `onError`), the old page stays on screen with the new
   locale already active, and `setLocale` rejects; calling it again with that

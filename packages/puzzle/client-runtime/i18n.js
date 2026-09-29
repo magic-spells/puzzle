@@ -335,11 +335,11 @@ export function createI18n(options = {}) {
 				);
 			}
 			const my = ++token;
-			// Already the active locale, on screen: nothing to fetch or re-render. The
-			// token bump still overtakes a switch in flight (last-wins). This is also
-			// what ends a switch made from inside data() or a guard: the rebuild re-runs
-			// that code, and its setLocale of the now-active locale must not rebuild
-			// again.
+			// Already the active locale: nothing to fetch or re-render (unless the last
+			// re-render into it failed). The token bump still overtakes a switch in
+			// flight (last-wins). This is also what ends a switch made from inside
+			// data() or a guard: the rebuild re-runs that code, and its setLocale of
+			// the now-active locale must not rebuild again.
 			if (match === locale && table && !stale) {
 				storeLocale(match);
 				return (pending = Promise.resolve());
@@ -353,7 +353,10 @@ export function createI18n(options = {}) {
 					storeLocale(match);
 					stale = false;
 					return Promise.resolve(refresh?.()).catch((err) => {
-						if (my === token) stale = true;
+						// Keyed on the locale, not the token: a same-locale no-op made during
+						// the rebuild (that data() re-asking, a double-click) bumps the token
+						// but leaves the page just as un-rebuilt.
+						if (locale === match) stale = true;
 						throw err;
 					});
 				},
