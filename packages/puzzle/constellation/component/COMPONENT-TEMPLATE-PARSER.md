@@ -10,17 +10,11 @@ notes:
   - kind: gotcha
     text: >-
       Nested <style> elements are legal template markup (verified during D113), but the template
-      brace grammar applies inside them: `.a > .b { color: red }` compiles to invalid JS
-      (`__s(__d.color: __d.red, …)`) because `{ … }` is an interpolation everywhere in a template.
-      Authors must escape the braces (`\{ \}`), which compiles correctly. Same applies to braces in
-      nested <script> bodies. Pre-existing behavior, not a D113 change — docs/error-message
-      improvement candidate.
-  - kind: verified
-    text: >-
-      Re-verified against current code and corrected: at least one claim on this card no longer
-      matched the runtime, and the card was rewritten to state what the code actually does. Verified
-      at this sha with the framework suite green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+      brace grammar applies inside them: in `.a > .b { color: red }` the brace group is an
+      interpolation, and its body is parsed as an expression (D176), so it is a positioned
+      expression error rather than CSS. Authors must escape the braces (`\{ \}`), which compiles
+      correctly. Same applies to braces in nested <script> bodies. Docs/error-message improvement
+      candidate.
   - kind: state
     text: >-
       The package also exports `OverNestingDepth` (packages/puzzle-lang/parser/depth.go, D164): a
@@ -45,63 +39,31 @@ notes:
       1...5}` parsed as a range whose from-bound was the string `i in 1`, compiled green, and threw
       `Cannot use 'in' operator` on the first render. A bare-identifier item on the left of a range
       is now a positioned error steering to `{#for 1...5, i}` (the counter always binds AFTER the
-      range); spread and call collections still parse as before. Pinned in
-      packages/puzzle-lang/parser/parser_test.go.
+      range). Pinned in packages/puzzle-lang/parser/parser_test.go.
   - kind: state
     text: >-
       The parser lives in `packages/puzzle-lang` (module
-      `github.com/magic-spells/puzzle/packages/puzzle-lang`, package `parser`, with the `jsident`
-      and `textutil` helpers it imports; D172), a separate Go module that `packages/puzzle/go.mod`
-      requires through `require ... v0.0.0` + `replace => ../puzzle-lang`. Its FILE cards bind to
-      `../puzzle-lang/...`, outside this plan's code root, so stale_report cannot track them and
-      `code: direct` hydration does not reach the parser sources.
-  - kind: state
-    text: >-
-      2026-09-25 — the parser's code binding moved to its own plan. `packages/puzzle-lang` now has a
-      constellation root (connected repo `puzzle-lang`; pass `repo=puzzle-lang`), which owns
-      FILE-PARSER, FILE-PARSER-SECTIONS, FILE-PARSER-SCANNER, FILE-PARSER-SLOT, and
-      TEST-COMPILER-PARSER with paths relative to that module (`parser/parser.go`, …), so
-      stale_report there tracks real parser drift. This card stays in the framework plan as the
-      behavioral contract: nearly 60 decision, feature, doc, and test cards here connect to it, and
-      plans cannot hold cross-plan connections. It therefore has no bound code in this plan; the
-      `../puzzle-lang/...` code_refs that decision cards (D12, D16, D54, D59, D70) carried were
-      dropped for the same reason. The earlier note saying the FILE cards bind outside this plan's
-      code root is superseded.
-  - kind: verified
-    text: >-
-      0.8.0 truthing sweep: body and notes checked against the merged release/0.8.0 code
-      (client-runtime formatters/views/router/ssg/static, compiler/internal/codegen,
-      packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
-      corrected.
-    sha: 5c21245a984c2fe5c86abf097189af44266f3b13
-  - kind: state
-    text: >-
-      D176 rule 4 in the parser (both dialects): a `|` that is not at the top level of a value is a
-      positioned error, never a bitwise OR. `nestedPipeIndex` (scan.go) scans a value with LexSkip
-      and reports the first single `|` (not `||`, not `|=`) found inside parentheses, brackets or
-      braces; `parseChain` (parser.go) calls it on the base and on every formatter argument, so
-      `save(x | trim)` and `!(draft | trim)` fail with "a formatter pipe must be at the top level of
-      the value — there is no bitwise OR in templates; compute the value first (a data() field in
-      PuzzleKit, {#let} in Sites)". The condition-header rule (no pipe in `{#if}`/`{:else
-      if}`/`{#unless}`/`{#case}` subjects, `headerPipeError`) and the single `{#unless}` AST shape
-      (the negation folded into `Cond`, no `Negate` field) landed with PR #157 and stand.
-      `chain_test.go`'s `TestNestedPipeIsError` pins the nested cases. The token lexer and section
-      splitter did not change, so the eslint/prettier ports and the editor grammars need no sweep.
+      `github.com/magic-spells/puzzle/packages/puzzle-lang`, package `parser`, beside `expr`,
+      `conformance`, `jsident` and `textutil`; D172), which `packages/puzzle/go.mod` requires
+      through `require ... v0.0.0` + `replace => ../puzzle-lang`. Its code binding lives in that
+      module's own constellation root (connected repo `puzzle-lang`; pass `repo=puzzle-lang`):
+      FILE-PARSER, FILE-PARSER-SECTIONS, FILE-PARSER-SCANNER, FILE-PARSER-SLOT and
+      TEST-COMPILER-PARSER, with paths relative to the module. This card stays in the framework plan
+      as the behavioral contract — nearly 60 cards here connect to it, and plans cannot hold
+      cross-plan connections — so it has no bound code in this plan.
   - kind: decision
     text: >-
       2026-09-28, Cory (decided with the D176 sub-decisions, though not part of the expression
       rewrite): the HTML void elements — `area base br col embed hr img input link meta source track
       wbr` — are accepted without a slash (`<br>`, `<input type="text">`), `<br/>` stays legal, and
-      a closing tag for a void element (`</input>`) is the positioned error. Not built yet: today
-      `parseElement` has no void list, so `<br>` opens a context that only `</br>` closes, and the
-      mismatch error blames the parent's close tag (review finding R-LANG-BUGS-7). It is a
-      puzzle-lang parser change for 0.8.0, scheduled with the [[DECISION-D176-EXPRESSION-LANGUAGE]]
-      build phases (the 0.8.0 tag waits for P1–P5); DOC-TEMPLATE-SYNTAX's `<input value={ x }
-      readonly>` example compiles once it lands.
+      a closing tag for a void element (`</input>`) is the positioned error. Not built yet (D176
+      P1b, its own small parser PR): today `parseElement` has no void list, so `<br>` opens a
+      context that only `</br>` closes, and the mismatch error blames the parent's close tag (review
+      finding R-LANG-BUGS-7). DOC-TEMPLATE-SYNTAX's `<input value={ x } readonly>` example compiles
+      once it lands.
 ---
 
 # Template parser
-
 
 HTML-aware lexer and recursive-descent parser for `.pzl` files. It returns a
 positioned AST or an error list; there is no partial/best-effort output.
@@ -132,53 +94,66 @@ skeleton root also records that at least one raw block was parsed; D89's usage
 scan consumes that deliberately over-inclusive fact to retain the literal-`@`
 client shim.
 
-One shared balanced scanner handles expressions in templates and attributes,
-skipping JS strings, regexes, comments, and nested template-literal
-interpolations. Top-level split helpers recognize formatter pipes/arguments,
-loop counters, range ellipses, and case values without confusing nested JS.
-The scanner's regex/division disambiguation must stay in
-lockstep with [[COMPONENT-CODEGEN]]'s expression scanner; a mismatch splits
-`{ /a|b/.test(name) }` at the regex's `|` as a formatter pipe.
+## Expressions
 
-A top-level `|` is a formatter pipe in every value position
-([[DECISION-D173-CORE-SEMANTICS]] V1), not only in text interpolation:
-`parseChain` splits base + chain once, and its result lands on
-`DynamicAttr.Formatters` (brace-only non-event attribute values and component
-props, including marker args). `||`, a pipe inside parentheses, a string, or a
-regex is never a split point. **Condition headers take no chain:** a top-level
-pipe (`hasTopLevelPipe`) in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}`
-header, or in an inline `{#if}` inside an attribute value (`attr.go`), is a
-positioned error from `conditionPipeError` — `formatter pipes are not allowed
-in <header> — compute the value in data() and test that field (e.g. …), write
-|| for a logical OR, or wrap a bitwise OR in parentheses, e.g. (a | b)` — never
-a bitwise OR, so `If.Cond`, `Case.Expr` and
-`InlineIfPart.Cond` are always plain expressions (an `{#unless}` folds to
-`!(cond)`). Every segment
-after a pipe must be a formatter name — `isFormatterName`,
-`[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*` (an identifier, optionally
-kebab-cased, every `-` starting a word with a letter), bare or called — in text
-interpolation as well, so `{ flags | 4 }`, `{ w / 2 | 0 }`, `{ a |= 2 }`,
-`{ mask | bit-1 }` and `{ x | FLAGS.bold }` are positioned errors steering to a
-parenthesized bitwise OR rather than lookups of a formatter named `4`. A called
-formatter's `(` must be closed by the segment's last `)` — `parseFormatter`
-finds the match with the shared scanner — so `{ a | f(1) + g(2) }` and
-`f(b)(c)` are positioned errors, never `f` called with the argument text
-`1) + g(2`.
-Event handlers take no chain. `{:when}` values take none either, and a
-top-level pipe in one is a positioned error (`parseWhenValues`) rather than a
-silent bitwise OR. A top-level pipe in a `{#for}` header (collection or range
-bound, checked after the counter is peeled) is a positioned error steering to
-shaping the list in `data()`. A template expression that starts with an object
-literal is rejected by codegen, not here; object literals are legal as call and
-formatter arguments.
 
-Every literal scanner clamps its escape skip at `len(s)`. The `j += 2` that
-steps over `\x` must not run past EOF on a literal whose last byte is a
-backslash: the contract is that an unterminated literal returns exactly
+The template parser owns the structure of each expression position — where a
+brace group ends, a header's shape, the `{#for}` forms, a `{:when}` list — and
+the expression language, `packages/puzzle-lang/expr`
+([[DECISION-D176-EXPRESSION-LANGUAGE]]), owns everything inside one expression.
+`scanBraceGroup` (scan.go) is the one balanced scanner that finds a brace
+group's end, skipping strings, regex literals and comments through `LexSkip`
+and tracking nested braces, so `{#if x === '}'}` and an object literal inside
+an argument scan correctly. The top-level splitters (`splitTopLevel`,
+`topLevelIndex`) peel a `{#for}` counter, a range's `...` and a `{:when}` value
+list with the same quote/depth awareness.
+
+**Each expression position is parsed once**, by `expr.Parse(src, base, opts)`
+(`parseExprAt` in exprs.go), and its tree is stored beside the raw string:
+`Interpolation.ExprAST`, `DynamicAttr.ExprAST`, `EventAttr.ExprAST`,
+`If.CondAST` (for `{#unless}`, a `Unary !` over the parsed condition — one AST
+shape), `Case.ExprAST`, `When.ValuesAST` (one tree per value),
+`For.CollectionAST` / `RangeFromAST` / `RangeToAST`, a marker's `ArgsAST`, an
+inline if's condition and every part of a mixed attribute. An expression error
+becomes a `ParseError` at the expression's own token position (block-header
+tokens carry `ValPos`), with expr's message and note. Every node position is in
+file coordinates, which is how codegen and `puzzle check` place later errors.
+
+`expr.Options{Handler, Bindings, CallArgument}` carries what the position
+knows. Every position passes `Bindings`, the names the enclosing `{#for}` items
+and counters and `<Snippet>` parameters bind (`bind`/`unbind` in exprs.go; the
+slice handed out is capped so a later bind cannot write into it): a binding
+reads as a value, and calling one is a positioned error, so `t('k')` inside
+`{#for t in …}` never reaches the library. An `@event` value adds `Handler`,
+which makes the free name `event` the DOM event — its chain unrestricted by the
+method table — and lets the handler's own call name a view handler even when a
+binding shares its name. `CallArgument` (an arrow legal at the top level) is for
+hosts and tests that parse one call argument alone; the template parser does not
+set it.
+
+**There are no formatter chains.** A `|` in any position is expr's positioned
+error "`| name` pipes were removed — write `name(value)`; bitwise OR is not
+available", so no position splits a chain and the AST has no chain fields. A
+condition header, a `{:when}` value and a `{#for}` header are ordinary
+expressions, and a display transform is a function call. `this`, a browser
+global read as a data root (`window`, `document`, `localStorage`, …) and every
+construct outside the grammar are expr errors at their token. A template
+expression that starts with an object literal is rejected by codegen, not here.
+Unicode names are accepted where the grammar accepts them: a binding like
+`{#for größe in sizes}`, and snippet-parameter attribute names, whose first
+character may be `@`, an ASCII letter, `_` or any letter, the rest adding marks
+and digits (a bad character is named as itself, not by its first byte).
+
+Every literal scanner in this package clamps its escape skip at `len(s)`. The
+`j += 2` that steps over `\x` must not run past EOF on a literal whose last byte
+is a backslash: the contract is that an unterminated literal returns exactly
 `len(s)`, and callers slice `s[i:end]` and index `s[end-1]`. Unclamped, a `.pzl`
 ending in `{/a\` returned `len(s)+1` and killed `puzzle build` with a Go panic
-instead of a positioned "unclosed `{`" error. Four scanners share the rule —
-two here, two in [[COMPONENT-CODEGEN]] — and they must be fixed together.
+instead of a positioned "unclosed `{`" error. expr's own lexer reads through a
+bounds-checked `peekByte` and reports an unterminated string or template
+literal as its own positioned error.
+
+## Attributes and markup
 
 Attributes are static, dynamic, mixed, event, or valueless-static values.
 Non-event names containing `:` are reserved unless their prefix is `xml`,
@@ -187,10 +162,12 @@ position. `checkAttrNamespace` runs in both attribute loops (element tags and
 section tags) at the NAME, before the `=` branch — the valued and valueless
 spellings must reject identically, and validating inside `buildAttr` reaches only
 the valued one. Event names are exempt: the colon is their modifier channel, and
-`parseEventModifiers` owns it. Parser helpers enforce event/modifier grammar (generic modifiers:
-`prevent`, `stop`, `once`, and since D86 `outside` — valid on any event; key
-filters stay keyboard-only), static islands, literal inline SVG roots/paths,
-list identifiers/keys, and unique static refs.
+`parseEventModifiers` owns it. Parser helpers enforce event/modifier grammar
+(generic modifiers: `prevent`, `stop`, `once`, and since D86 `outside` — valid
+on any event; key filters stay keyboard-only), static islands, literal inline
+SVG roots/paths, list identifiers/keys, and unique static refs. The HTML void
+elements still need a self-closing slash (`<br/>`); accepting `<br>` is planned
+(D176 P1b).
 
 Component-name grammar ([[DECISION-D167-COMPONENT-FAMILIES]]): a capitalized
 tag that survives marker resolution must be a valid member path —
@@ -199,12 +176,11 @@ tag that survives marker resolution must be a valid member path —
 construction site, so every classification path (template and skeleton bodies,
 conditional/loop/case bodies, marker fallback bodies, Snippet and Portal
 children) is covered. Any other capitalized name (a `-`, a `:`, an empty
-segment) is a positioned compile error — before D167 those flowed into codegen
-as syntactically broken JS. A dotted name whose first segment is a marker name
-(`<Slot.Foo>`) gets a steering error; the check does not run inside `{#raw}`,
-and lowercase tags are untouched, so custom elements keep their dashes. Dotted
-names are the component-family idiom — codegen emits them verbatim as member
-expressions.
+segment) is a positioned compile error. A dotted name whose first segment is a
+marker name (`<Slot.Foo>`) gets a steering error; the check does not run inside
+`{#raw}`, and lowercase tags are untouched, so custom elements keep their
+dashes. Dotted names are the component-family idiom — codegen emits them
+verbatim as member expressions.
 
 Composition grammar (D134/D141/D144/D166): `<Children>` is the default marker,
 `<Slot>` is the router outlet, `<Slot name="x">` is a named marker,
@@ -217,24 +193,25 @@ as ordinary template children, with a marker nested inside another marker's
 fallback a positioned compile error; lowercase `<children>`/`<slot>`/`<portal>`
 are positioned steering errors. Lowercase `<snippet>` with `fits` or bare params
 steers to `<Snippet ...>`; lowercase `<template>` is always an HTML element and
-capitalized `<Template>` is always a component invocation. `<Portal>` is paired-only (it exists to carry
-the children it teleports), takes no attributes — `to`/`name` get a
-named-outlets-not-supported message and `ref` the render-target message — and
-cannot appear inside an island or inside a marker's fallback body. A paired-only
-`<Snippet fits="row" item>` is legal only as a component invocation's direct
-child; `fits` is static and every other attribute is a bare parameter. Its body
-is stamped output: component invocations are legal, but composition markers and
-`ref=` are positioned errors at every depth. Slot names stay static, non-empty,
-reserved-name checked, and unique per render path: the mutually exclusive
-branches of one `{#if}`/`{:else}` or `{#case}` are separate paths (D173 V13,
-`walkBranches` in `slot.go`), so each may declare the same marker, while a
-marker after the block still collides with one inside it. Every distinct marker
-AST declaration on one path is unique even when args-bearing; one marker declaration inside a
-loop remains legal because validation visits that site once. Call-site named
-fills must be direct static `slot="x"` children, while default forwarding may
-appear inside a component invocation. Components/markers are forbidden inside
-islands; refs are forbidden on components, markers, roots, loops, skeletons,
-and Snippet bodies.
+capitalized `<Template>` is always a component invocation. `<Portal>` is
+paired-only (it exists to carry the children it teleports), takes no
+attributes — `to`/`name` get a named-outlets-not-supported message and `ref`
+the render-target message — and cannot appear inside an island or inside a
+marker's fallback body. A paired-only `<Snippet fits="row" item>` is legal only
+as a component invocation's direct child; `fits` is static and every other
+attribute is a bare parameter, which the body's expressions receive as
+bindings. Its body is stamped output: component invocations are legal, but
+composition markers and `ref=` are positioned errors at every depth. Slot names
+stay static, non-empty, reserved-name checked, and unique per render path: the
+mutually exclusive branches of one `{#if}`/`{:else}` or `{#case}` are separate
+paths (D173 V13, `walkBranches` in `slot.go`), so each may declare the same
+marker, while a marker after the block still collides with one inside it. Every
+distinct marker AST declaration on one path is unique even when args-bearing;
+one marker declaration inside a loop remains legal because validation visits
+that site once. Call-site named fills must be direct static `slot="x"`
+children, while default forwarding may appear inside a component invocation.
+Components/markers are forbidden inside islands; refs are forbidden on
+components, markers, roots, loops, skeletons, and Snippet bodies.
 
 `ParseError` includes file and one-based line/column. Cross-nesting and
 did-you-mean diagnostics report the actionable source position.

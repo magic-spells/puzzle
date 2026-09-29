@@ -7,34 +7,14 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
+  - DECISION-D176-EXPRESSION-LANGUAGE
+  - DECISION-D173-CORE-SEMANTICS
+  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D170-INCREMENTAL-VDOM-LISTS
+  - DECISION-D62-HANDLER-CACHING
 verified_at: '2026-09-25T10:47:50.423Z'
 verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 notes:
-  - kind: gotcha
-    text: >-
-      Two independent JS scanners exist and MUST agree: parser/lexskip.go (LexSkip, a skipper) and
-      codegen/expr.go (resolveExpr, a rewriter). They carry byte-identical regex-preceding-keyword
-      tables under different names with no shared symbol, and scanRegexLiteral has a twin in
-      lexskip.go. That sync was manual and undefended, and it silently drifted: neither scanner
-      handled postfix ++/-- , so `a++ / b` read the `/` as a regex opener. In the parser that
-      surfaced as `missing </script>` pointed at the tag five lines away; in the rewriter it
-      produced NO diagnostic at all — `{ a++ / b / c }` compiled clean and emitted `String(__d.a++ /
-      b / __d.c)` with `b` unscoped, failing at runtime with ReferenceError.
-
-
-      The fix had to be a 2-byte munch in LexSkip returning pee = prevEndsExpr, NOT a change to
-      LexPlainEndsExpr: that helper's signature is (c byte, prev bool) with no lookahead, so a
-      per-byte "neighbour is also +" heuristic cannot express it and would misclassify
-      `a+++/re/.source`, which is valid JS meaning `a++ + /re/.source` where the slash genuinely
-      does open a regex.
-
-
-      A differential corpus test now runs both scanners over shared fixtures and asserts identical
-      regex/division classification. Keep it: it is the only thing standing between the two scanners
-      and the next silent drift. The larger unification (a byte-preserving token/span API
-      resolveExpr could consume) is deliberately NOT done — resolveExpr rewrites rather than skips,
-      which is why it is the holdout. Note codegen already imports parser and routes five other call
-      sites through LexSkip, so there is no layering obstacle if that refactor is ever funded.
   - kind: verified
     text: >-
       Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
@@ -61,122 +41,26 @@ notes:
       drops the one newline after the start tag (never from a `{#raw}` first child), and
       `forBodyRoot` zeroes the counter for the loop body's own list, since a loop body is one root
       element and cannot hold text.
-  - kind: state
-    text: >-
-      Markup formatters (D174 group e, `markup.go`). `checkMarkupFormatters` walks the template and
-      the skeleton BEFORE any emission and rejects every placement of `raw`/`newline_to_br` except
-      the last link of a text interpolation: mid-chain, an attribute value (brace-only, quoted, or
-      an interpolation inside an inline-if branch), a component prop, a marker argument, any
-      argument, and a text interpolation inside <script>/<style>/<textarea>/<title> — all positioned
-      errors (FormatterCall has no position, so the owning node's is used). A condition header never
-      reaches this check with a chain: the parser rejects any pipe in an `{#if}`/`{:else
-      if}`/`{#unless}`/`{#case}` header or an inline-if condition (D173 V1), so `If`, `Case` and
-      `InlineIfPart` carry none. Because every other placement is gone before emission,
-      `processChildren` only has to test the LAST link (`isMarkupInterp`): such an interpolation is
-      a non-text SIBLING under D168 — `flush(true)` and `leftSibling = true`, exactly the element
-      arm — so text wrapped next to it keeps one space; `emitItem`'s `*parser.Interpolation` arm
-      calls `emitMarkup`, which compiles the chain minus its last link exactly as `buildTextRun`
-      does (same fact sink, `resolveInterpBase`, `applyFormatters`, `displayValue`) and emits `new
-      ViewNode('#html', { value })` (`br: true` for newline_to_br). The markup name itself never
-      reaches `__f`, so a markup-only file emits no `const __f` line. The node counts one slot in
-      `condStaticLen` (the `default` arm) and is dynamic to the static cache (it is an
-      Interpolation). A markup interpolation cannot be a component root or a `{#for}` body root (the
-      existing element-or-component errors). Pinned by markup_test.go (including the element-parity
-      whitespace case). The usage scan (plugin/scan.go) sets `HasRawHTML` from the same names and
-      keeps them out of the manifest.
-  - kind: state
-    text: >-
-      Since D172 the parser half of the scanner pair lives in the sibling module:
-      `packages/puzzle-lang/parser/lexskip.go` (LexSkip, LexPlainEndsExpr), imported by codegen as
-      `github.com/magic-spells/puzzle/packages/puzzle-lang/parser`. The "parser/lexskip.go" in the
-      scanner gotcha above means that file; there is no `compiler/internal/parser` anymore. The
-      codegen twin is still `compiler/internal/codegen/expr.go`, and the differential test is in
-      `expr_test.go`.
-  - kind: verified
-    text: >-
-      0.8.0 truthing sweep: body and notes checked against the merged release/0.8.0 code
-      (client-runtime formatters/views/router/ssg/static, compiler/internal/codegen,
-      packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
-      corrected.
-    sha: 5c21245a984c2fe5c86abf097189af44266f3b13
-  - kind: state
-    text: >-
-      Render facts vs fire-time reads (expr.go / codegen.go). (1) A value handed to a formatter is
-      opaque whether it is the pipe BASE or a formatter ARGUMENT: `applyFormatters` scans each
-      argument through `resolveOpaqueScan` (the same whole→opaque promotion `resolveInterpBase`
-      applies to a piped base), so `{ 'by' | byline(post) }` marks the site `deep` in every chain
-      position — text, attributes, inline-if, props, marker args, block subjects, markup chains. (2)
-      `compileEventHandler` records the handler ARGUMENTS' in-scope reads only as `refs` (for the
-      row-cache verdict) and drops them from the facts entirely — no field, no `deep`, no counter
-      read — because listRows refreshes `s.item`/`s.i` on a cached row and the arguments read them
-      at fire time; their `__d` roots still reach the mask (a closure over the render's `__d` needs
-      the row rebuilt). Consequence: `localRead.renderRead` is now true for every recorded read. (3)
-      The CONDITION of a handler-valued conditional is a render read and a value position: it goes
-      through `resolveValueScan` (guarded, D173 V4) and keeps its facts; the branches stay unguarded
-      fire-time handler code. (4) `checkMarkupFormatters` is entered with the root element itself,
-      so `<puzzle-view>` attributes are checked; it tracks foreign content (`<svg>`/`<math>` down to
-      `<foreignObject>`) and passes the surrounding context through components and snippet bodies
-      (only `<Portal>` resets it). Pinned by row_facts_test.go, event_handler_test.go
-      (TestEventHandlerConditionalConditionIsGuarded), markup_test.go.
-  - kind: state
-    text: >-
-      D176 (template values are a data language): `datalang.go` is a pre-check pass run on the root
-      and the skeleton right after `checkMarkupFormatters`, before any emission. It lexes each value
-      with `parser.LexSkip` (strings, regex bodies, comments opaque) and rejects, with a positioned
-      error at the node or attribute, calls, arrows, template literals,
-      `new`/`typeof`/`instanceof`/`in`, regex literals, `++`/`--`, assignment, a top-level comma,
-      bitwise `& ^ ~ << >> >>>`, and `.length` (the message says use `.size`). It walks every value
-      position: text, brace and quoted attributes, inline-if conditions and branches, props, marker
-      arguments, `key=`, the if/else-if/unless/case subjects, `:when` values, `for` collections and
-      range bounds, every formatter argument, and the CONDITION of a handler ternary. Two
-      exemptions: a `this.` chain in full (`thisChainTokens` — member steps, indexes, call
-      arguments, tagged templates) and `@event` handler bodies; a single `|` anywhere in an `@event`
-      value is its own error. `.size` lowering: `sizeSteps` returns the byte offsets of the count
-      steps (a `.size`/`?.size` member step outside a `this.` chain and not called); the resolver
-      (`resolveExprScanFull`, `value` flag on for template values, off for handler arguments and
-      `${…}` interiors) wraps the chain before that step in `__z(` … `)` using the `chainAt` output
-      offset each bracket frame carries (`closeChain`: a call argument list or computed step
-      continues the chain, a grouping paren or literal is the primary), so `a.b.size` →
-      `__z(__d.a?.b)` and `x.size.y` → `__z(__d.x)?.y`. The same offsets set `usesSize`, which
-      imports `sizeOf as __z` from the package root; `__z` is a reserved module-scope name
-      (`scriptcollide.go`). `ResolveCheckExpr` lowers `.size` too, the check shim declares three
-      `__z` overloads (list/string/Map/Set → number; object with a `size` field → `T['size']`; else
-      any) and `segments.go` maps `__z(` as inserted text and the authored `.size` to the `)`.
-      `classifyBindExpr` never auto-binds a trailing `.size`. A handler argument is JavaScript, so
-      `todo.tags.size` there reads the plain property (`.length` is the JS count). The `jsGlobals`
-      volatile classification (`Math.random`, `Date`) is now reachable only through `this.` chains
-      and handlers. Tests: `datalang_test.go`, the `size_count` golden, `check/size_test.go`.
-  - kind: decision
-    text: >-
-      Correction to the D176 note above: `classifyBindExpr` does NOT exclude `.size`. The first
-      build excluded it (so `value={ x.size }` stayed one-way), which broke the real case D176 rule
-      1 protects — a plain object or record with a field named `size` (`profile.size`, a product's
-      size) bound through a form control (tests/binding.test.js "applies the numeric coercion on a
-      plain-object member too"). `ident.size` classifies like any two-segment path: the display
-      reads `__z(__d.profile)` (the field, on an object) and the bind writes `profile.size`. Binding
-      the count of a list or string is meaningless and is not special-cased.
-  - kind: decision
-    text: >-
-      Correction to the D176 note above (D176 rule 5 — `this` is not a template identifier; lands
-      with `feat/remove-this-from-templates`): `datalang.go` keeps ONE exemption, `@event` handler
-      bodies. There is no `this.` chain exemption (`thisChainTokens` goes), and a bare `this` token
-      — not a member named `this`, so `x.this` stays legal — is a positioned error at the token in
-      every position the pass walks, plus handler arguments and the handler ternary condition;
-      `this?.`, `(this)` and `this[…]` get the same error. `sizeSteps` has no `this.`-chain case and
-      the resolver no `this` root. The `jsGlobals` volatile classification is reached by a
-      mutable-global READ in a value (`window.innerWidth`); calls are rejected there and handler
-      arguments record no facts, so no row fact comes from `this`.
   - kind: gotcha
     text: >-
-      After 418ac888 (PR #163): `this` is BACK in `jsKeywords` on purpose, as defense in depth — the
-      D176 pre-check rejects it first, but a path that ever bypassed the check must still not
-      compile `__d.this` or classify `this.x` as bindable (TestResolverNeverReadsThisAsData across
-      resolveExpr, resolveValueScan, ResolveCheckExpr and compileEventValue). Do not remove it as
-      dead. The pre-check places a `this` error on its own token with `exprTokenPos`, bounded to the
-      node's brace group, reading the whole file from `parser.Sections.Source` (`compiler.src`) —
-      the one extra input codegen takes from the parser for this, and what lets a `this` in a
-      `<puzzle-view>` root attribute (before `TemplatePos`) be placed too. An object-literal key
-      named `this` (`{ this: 1 }`) and a member step (`x.this`) are not references.
+      Three lists must move together, and two tests hold them: `codegen.LibraryFunctionNames`
+      (lower.go), `check.libraryFunctionSignatures` (the puzzle check shim;
+      `TestLibrarySignaturesMatchCodegen`) and `LibraryFunctions` in `types/index.d.ts`; the
+      runtime's `STANDARD_FORMATTERS` + PuzzleKit-only names in client-runtime/formatters.js are the
+      same 21. `thisMsg` in markup.go must stay word-for-word equal to `expr.msgThis` in puzzle-lang
+      (the parser rejects `this` first; codegen's copy is the safety net). `HandlerForms` is the one
+      definition of an @event value's own calls, shared by the lowering, `checkHandler` and the
+      usage scan's `plugin.handlerOwnCalls` — a second copy would let the scan count a view handler
+      as a library call.
+  - kind: state
+    text: >-
+      D176 P2 (PR #167) and P4 (PR #171): the string resolver (`resolveExpr*`, `resolveValueScan`,
+      `resolveChain`), `datalang.go`, `sizeSteps`/`__z`, `jsGlobals`/`jsKeywords`, the regex/number
+      scanners and the resolver-vs-LexSkip differential test are gone; `expr.go` keeps only small
+      lexical helpers (`isJSIdentifier`, `startsWithObjectLiteral`). Codegen still uses
+      `parser.LexSkip`, for the `<script>` token stream only (classname.go, scriptcollide.go). Every
+      changed golden across the 697-file corpus differed only in handler-argument `?.` guards and
+      `{#unless}` parens.
 ---
 
 # Render-function codegen
@@ -191,106 +75,158 @@ name exactly as a scripted component's `data()` would expose them; a script-less
 view or layout keeps the empty class.
 
 The `<script>` body is tokenized ONCE per compile (`tokenizeJS`, scriptcollide.go)
-and the one stream feeds all three consumers that used to lex those same bytes
-independently: class-name extraction, the import-collision warning scan, and the
-reserved-binding check. Tokens carry a `comment` bit because the consumers
-disagree about opaque units — a comment is whitespace to the class-keyword
-adjacency rule (`export default /* x */ class Foo {}` is a declaration) while a
-string or regex breaks it, and the binding scans treat every opaque unit alike.
-The reserved-binding check covers what the compiler **declares** as well as what
-it imports: `ViewNode`, `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `__s`, `__l`,
+and the one stream feeds all three consumers that lex those bytes: class-name
+extraction, the import-collision warning scan, and the reserved-binding check.
+Tokens carry a `comment` bit because the consumers disagree about opaque units —
+a comment is whitespace to the class-keyword adjacency rule
+(`export default /* x */ class Foo {}` is a declaration) while a string or regex
+breaks it, and the binding scans treat every opaque unit alike. The
+reserved-binding check covers what the compiler **declares** as well as what it
+imports: `ViewNode`, `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `__s`, `__l`,
 `__e`, `__r` and the `{#svg}` shared-asset locals, plus the `__L<n>` list-block
 meta consts a template with an item-form `{#for}` hoists to module scope. Each
 produces a positioned error naming the emission and why *this* file makes it.
+`parser.LexSkip` serves only this script stream; template expressions never
+pass through a text scanner.
 
 Mode comes from the app-relative path. Views/layouts preserve the
 `<puzzle-view>` root; inline components require one render root and do not emit
 a wrapper.
 
-Expression scoping is a **scopeMap** — a name mapped to the JavaScript it
-resolves to. An unmapped identifier is prefixed as model data (`__d.x`); a
-mapped one resolves to its value, which is how a loop local becomes the row
-scope's member (`todo` → `s.item`, a counter → `s.i`) through every consumer at
-once, and how `event`, JS keywords/globals, numeric literals and
-template-literal static text stay intact. An in-scope binding shadows a
-keyword-ish global, so a `{#for document of docs}` row reads `s.item`, not
-`window.document`. Reads of names imported by the script emit a warning because
-imports are not template scope. **`this` never reaches the resolver from a
-template:** the D176 pre-pass (`datalang.go`) rejects it with a positioned error
-at the `this` token in every template expression, handler arguments and the
-handler ternary condition included, while a member named `this` (`x.this`) stays
-an ordinary field read ([[DECISION-D176-EXPRESSION-LANGUAGE]] rule 5). The
-`this` in emitted code (`this.events.h`, `this.__h`, `this.__bind`) is the
-compiler's own, never an author's.
+## Expressions: lowered from the AST (`lower.go`)
 
-**Value positions are member-guarded** (D173 V4, `resolveValueScan`): in text
-interpolation, attribute values and props, `{#if}`/`{#case}` headers, inline-if
-conditions, formatter arguments, loop collections and keys, each `.`/`[` after a
-value-ending token is emitted as `?.`/`?.[`, so a missing link in a path yields
-`undefined` (which prints nothing) instead of a TypeError. Exempt: the first
-step after a JS global, a literal, or `ViewNode`; a `new` callee; and
-the whole expression when it contains a construct optional chaining cannot sit
-under (an assignment, `++`/`--`, a tagged template) — that expression falls back
-to the plain scan. The assignment detector tells a shift assignment (`<<=`,
-`>>=`, `>>>=`) from a `<=`/`>=` comparison by the doubled angle bracket before
-the `=`. Event-handler arguments, `resolveExpr` callers and the
-`puzzle check` emitter stay unguarded (`resolveExprScan`): a handler runs at
-fire time, and check must type the author's own spelling. Facts are identical
-guarded or not. Object literals (V8) are legal inside an argument position:
-an object-literal `{` pushes a key frame, a bare identifier in key position
-followed by `:` stays a key, and a shorthand key (`{ id }`) expands to
-`id: <resolved>` so it still reads model data. An expression that STARTS with an
-object literal stays a positioned error — `{ {a: 1} }` is ambiguous with the
-interpolation braces.
+The template parser attaches a parsed expression tree
+(`packages/puzzle-lang/expr`, [[DECISION-D176-EXPRESSION-LANGUAGE]]) to every
+expression position — `ExprAST`, `ArgsAST`, `CondAST`, `ValuesAST`,
+`CollectionAST`, `RangeFromAST`/`RangeToAST` — and codegen lowers those trees.
+Nothing reads an expression's source string, except `startsWithObjectLiteral`,
+a rule about the braces the author wrote. The lowering table is `lower.go`'s
+header comment and is the contract:
 
-**A pipe is a formatter chain in every value position** (D173 V1):
-`resolveChain` resolves the base, then wraps it in the same `__f[...]` calls text
-interpolation uses, for `DynamicAttr` values, props and marker arguments.
-Condition headers (if/else-if/unless/case and an attribute's inline-if) carry
-no chain — the parser rejects a pipe there — so codegen resolves them as plain
-guarded expressions (`resolveValue(cond, nil, …)`) and they never read `__f`.
-A chained form-control value never auto-binds (it is a
-display projection, not a writable path), and a chained explicit `key=` reads
-`__f`, so that loop site keeps `.map`.
+- **Names** resolve from the tree. Arrow parameters (kept on the lowerer's own
+  stack) shadow template bindings, which shadow the handler's `event`; every
+  other name is a data root, `__d.<name>`. The **scopeMap** maps an in-scope
+  binding to the JavaScript it resolves to: the empty string emits the name bare
+  (a range variable, a snippet parameter, `ViewNode`), a non-empty value rewrites
+  it — a lowered row's `todo` → `s.item`, its counter → `s.i`, a mangled
+  `__pzl<name>`. An arrow parameter spelled like a row scope object is mangled
+  so the row's locals stay reachable in the arrow body. Unicode identifiers and
+  arrow parameters cannot be mis-prefixed.
+- **Guards** (D173 V4): every member step, index step and method call is
+  written optional — `a.b` → `<a>?.b`, `a[i]` → `<a>?.[<i>]`,
+  `a.m(x)` → `<a>?.m(<x>)` — in every position, handler arguments included, so
+  a missing link yields `undefined` and prints nothing. A parenthesized chain in
+  object position keeps its parentheses (`(a?.b).c` → `(<a?.b>)?.c`), and a
+  number literal receiver is parenthesized. Two chains are written as authored:
+  a handler's free `event` chain (the DOM event is not template data) and the
+  compiler's own `ViewNode` import (the synthetic loop key).
+- **Calls.** A bare call is a library function, written through the D43 guard
+  as `(__f["name"] || __f.__missing("name"))(…)` (the name JSON-quoted, since
+  registry keys are arbitrary strings); a method stays the same JavaScript
+  method, guarded; the allowed globals (`Math.round(x)`, `Number(x)`,
+  `Math.PI`) are verbatim. A file that calls a library function gets the
+  `const __f` registry line.
+- **Operators and literals** keep JavaScript's meaning; parentheses come from
+  operator precedence, never from source spacing (`??` is never emitted mixed
+  unparenthesized with `&&`/`||`); an arrow body that is an object is
+  parenthesized; an object literal's shorthand expands (`{ s }` →
+  `{ s: <s> }`) and only its values lower (D173 V8). An expression position
+  that STARTS with an object literal is a positioned error — `{ {a: 1} }` is
+  ambiguous with the interpolation braces.
+- `LibraryFunctionNames` is the 21-name library the compiler knows (the 19
+  standard functions plus `link` and `timeago`,
+  [[DECISION-D174-STANDARD-FORMATTERS]]); `IsLibraryFunction` answers from it.
 
-The same single scan also **classifies** what an expression read — the data
-roots it touched, the loop item's members at depth one, whether it reached
-deeper or through a call, and whether it read a mutable global — so a loop
-site's meta is derived from exactly the lexical rules that rewrote it, with no
-second pass and no second scanner to keep in sync. Facts are
-collected only inside a lowered loop body and never during a look-ahead pass
-(conditional arity, `{#for}` root extraction), which re-resolve expressions in a
-scope they will not be emitted in.
+**Handler values** (`@event={ … }`, `lowerer.handler`): a bare name
+`h` → `(event) => this.events.h(event)`; one call `h(a, b)` →
+`(event) => this.events.h(<a>, <b>)` — the view's handler, never the library
+(D176 rule 4); a conditional whose branches are each one of those or `null` →
+`(<c>) ? <h1> : <h2>`; or `null`. `HandlerForms` returns an @event value's own
+forms (the value, or both branches) and is the one definition the lowering,
+`checkHandler` and the usage scan's `plugin.handlerOwnCalls` share. The DOM
+parameter is named `__ev` when a binding owns `event`. The D62 caching
+verdicts come off the same tree ([[DECISION-D62-HANDLER-CACHING]]): arguments
+are lowered once into a scratch fact set recording their binding reads
+(`refs`), data roots and library calls (`libRead`); `cacheable` is none of the
+three, `rowCacheable` is binding reads only. A handler-valued conditional is
+never cached — its condition is a guarded render-time read.
+
+**The check target.** The same lowerer writes TypeScript for `puzzle check`
+through `WriteCheckValue` / `WriteCheckEvent` (a `CheckWriter` maps every
+authored token back to its `.pzl` offset): no added guards (an authored `?.`
+stays), a library call as `__puzzle_fn.name(…)` so the shim's signatures type
+it (`check.libraryFunctionSignatures`, kept equal to `LibraryFunctionNames` by
+`TestLibrarySignaturesMatchCodegen`; app functions fall to the index signature
+`(...args: any[]) => any`), a method call with an arrow argument taking its
+receiver through `__puzzle_check_list(…)` so an untyped receiver gives the
+arrow `any` parameters, and a bare handler written as the reference
+`this.events.name` rather than a synthesized call. The shim also references the
+`lib` files the method table needs (`es2021.string`, `es2022.array`,
+`es2022.string`, …, and `es2023.array` from TypeScript 5.0; `toSorted` and
+`toReversed` type only from 5.2).
+
+## Checks before emission (`markup.go`, `presets.go`)
+
+`checkTemplateExprs` walks the template and the skeleton before anything is
+emitted, so the emitters can trust every tree they lower:
+
+- **Markup placement** (D174): `raw` and `newline_to_br` may only be the
+  outermost call of a text interpolation, with exactly one argument
+  (`{ raw(post.body) }`); anywhere else — nested, an attribute value, a prop, a
+  marker argument, a condition, a `{#for}` header, a handler argument — is a
+  positioned error at the call. A markup interpolation is also an error inside
+  a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`,
+  `<noscript>`, `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>`, `<plaintext>`)
+  and in foreign content (an `<svg>`/`<math>` subtree down to an SVG
+  `<foreignObject>`). The walk starts at the root element, so `<puzzle-view>`
+  attributes are checked, and it carries the surrounding context through a
+  component's children and snippet bodies; only a `<Portal>` resets it.
+- **Literal presets** (`presets.go`, `checkLiteralArgs`): a string-literal
+  second argument to `date`/`time`/`datetime` that is not `short`, `medium`,
+  `long` or `iso` is a positioned error (a retired preset name, `'date'`,
+  says to call that function instead), and a string-literal `in_timezone` zone
+  that cannot be a zone id (a space, an empty string, a leading digit) is one
+  too. A dynamic argument stays the runtime's development error.
+- **`this`**, as a safety net behind the parser, with the parser's exact
+  message (`thisMsg`).
+- **The handler/library collision warning** (`checkHandler`): an `@event`
+  whose own call names a library function draws a positioned, non-fatal
+  warning (`c.warn`), since that name means the library everywhere else.
+
+A markup interpolation is lowered by `emitMarkup` to
+`new ViewNode('#html', { value })` (`br: true` for `newline_to_br`): the
+argument lowers like any value, takes the `displayValue` coercion, and the
+markup name never reaches `__f`, so a markup-only file emits no `const __f`
+line. It is a non-text sibling under D168 (`processChildren` flushes the run and
+sets `leftSibling`, exactly the element arm), counts one slot in
+`condStaticLen`, and is dynamic to the static cache.
 
 A second out-of-band diagnostic family (D82, `a11y.go`) walks the fresh template
 + skeleton ASTs before `{#svg}` resolution and warns — never errors — on five
 conservative accessibility mistakes (img/input-image `alt`, iframe `title`, `a`
 `href`, static positive `tabindex`); any static/dynamic/mixed attr counts as
-present, and generated JS stays byte-identical. The expression scanner
-disambiguates regex literals from division and must stay in lockstep with
-[[COMPONENT-TEMPLATE-PARSER]]'s scanner; otherwise `name.replace(/a/g,'b')`
-miscompiles to `__d.name.replace(/__d.a/__d.g,'b')`. Both of this package's
-literal scanners clamp their `j += 2` escape skip at the input length, matching
-the parser's — an unterminated literal must end at exactly `len(expr)`, since
-the copy path slices `expr[i:j]`.
+present, and generated JS stays byte-identical.
 
-Emission covers host/component vnodes, coalesced text/interpolation,
-formatters, dynamic/mixed attrs, events, slots, snippets, portals, refs,
-islands, inline SVG, conditionals/case, and item/range loops. Markers emit
-`new ViewNode(SLOT_TAG)` with optional `name`, per-render `args`, and a lazy
-`fallback: () => [ … ]` thunk carrying the fallback body (D141): it is compiled
-in the enclosing scope like any child list but runs only when the position
-renders its fallback, so a filled marker never evaluates it.
-Caller `<Snippet>` declarations emit `SNIPPET_TAG` metadata vnodes:
-their ordered `params` plus a fresh `fn({ ...params })` closure whose body keeps
-caller scope while parameters shadow it. `<Portal>` (D144) emits one
-`PORTAL_TAG` vnode carrying the teleported children through that same
-child-emission path; a component template whose ROOT is a `<Portal>` is a
-positioned error steering to a wrapper element. **The injected import line is
-built per file from what the file actually needs** — that is the tree-shaking
-contract, not a tidiness preference: `ViewNode` always, `SLOT_TAG` when a marker
-is present, `SNIPPET_TAG` when a Snippet is present, `PORTAL_TAG` when a portal
-is, `displayValue as __s` when an interpolation coerces for display,
+## Emission
+
+Emission covers host/component vnodes, coalesced text/interpolation, library
+calls, dynamic/mixed attrs, events, slots, snippets, portals, refs, islands,
+inline SVG, conditionals/case, and item/range loops. `{#unless c}` lowers its
+parsed `!` over the condition, parenthesized as precedence requires. Markers
+emit `new ViewNode(SLOT_TAG)` with optional `name`, per-render `args`, and a
+lazy `fallback: () => [ … ]` thunk carrying the fallback body (D141): it is
+compiled in the enclosing scope like any child list but runs only when the
+position renders its fallback, so a filled marker never evaluates it. Caller
+`<Snippet>` declarations emit `SNIPPET_TAG` metadata vnodes: their ordered
+`params` plus a fresh `fn({ ...params })` closure whose body keeps caller scope
+while parameters shadow it. `<Portal>` (D144) emits one `PORTAL_TAG` vnode
+carrying the teleported children through that same child-emission path; a
+component template whose ROOT is a `<Portal>` is a positioned error steering to
+a wrapper element. **The injected import line is built per file from what the
+file actually needs** — that is the tree-shaking contract, not a tidiness
+preference: `ViewNode` always, `SLOT_TAG` when a marker is present,
+`SNIPPET_TAG` when a Snippet is present, `PORTAL_TAG` when a portal is,
+`displayValue as __s` when an interpolation coerces for display,
 `listRows as __l` when the file lowers at least one item-form `{#for}`,
 `loopItems as __e` when it emits an item-form loop as `.map`, and
 `loopRange as __r` when it emits a range loop with a non-literal bound (in that
@@ -303,29 +239,33 @@ never be imported from inside `client-runtime/` — see [[FILE-LIST-BLOCK]].
 counterless range maps over `__i`, which is its generated key), so a missing
 collection or a non-list loops zero times — with a dev warning for a non-list —
 rather than throwing; `listRows` applies the same `loopItems` normalization for
-lowered sites. A range whose bounds are both integer literals (`literalRange`:
-an optional `-` and digits, nothing else) cannot be missing or fractional, so it
-is constant-folded — an array literal for up to 16 numbers
-(`{#for 1...3}` → `[1, 2, 3].map(…)`), `Array.from({ length: n }, …)` beyond,
-`[]` for an end below its start — and imports no `loopRange`.
+lowered sites. The collection is any expression
+(`{#for t in todos.filter(t => !t.done)}`). A range whose bounds are both
+integer literals cannot be missing or fractional, so it is constant-folded — an
+array literal for up to 16 numbers (`{#for 1...3}` → `[1, 2, 3].map(…)`),
+`Array.from({ length: n }, …)` beyond, `[]` for an end below its start — and
+imports no `loopRange`.
 
-**Item-form loops lower to persistent list blocks** (`listblock.go`,
-[[DECISION-D170-INCREMENTAL-VDOM-LISTS]]). The `.map(…)` becomes
+## List blocks (`listblock.go`)
+
+**Item-form loops lower to persistent list blocks**
+([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]). The `.map(…)` becomes
 `__l(this, owner, id, coll, (s) => …, __L<id>)` in place, with the same
 surrounding layout — first argument the view, second the owner the rows hang off
 — and the site's static facts travel in a module-scope
 `const __L<id> = { key, counter?, ctrl?, roots?, fields?, deep?, volatile? }`
 emitted after the injected import line — non-default fields only, in a fixed
-order, so the common site is one short const. The key function carries D58's
-resolver (`(todo) => ViewNode.keyOf(todo)`) or an explicit `key=` rewritten
-against the arrow's own parameters; a key that reads `__d` or `__f`
-cannot live at module scope, so that site keeps `.map` entirely. The row root
-always carries the block's `key: s.k` (the author's `key` attribute is dropped,
-having become the meta's function), loop locals resolve through the scope map,
-nested loops take the enclosing row as owner and shadow as `s1`, `s2`, … by
-depth, and `Class.__roots = […]` is stamped after the module marker when any
-site carries a root mask — capped at 31 entries, past which a site degrades to
-`volatile`.
+order, so the common site is one short const. The key function is hoisted: the
+synthetic key is `(todo) => ViewNode.keyOf(todo)`, and an explicit `key=` is
+lowered against the arrow's own parameters (the item, and the counter only when
+the key reads it). A key that reads a data root or calls a library function
+reads `__d`/`__f`, which do not exist at module scope, so that site keeps `.map`
+entirely. The row root always carries the block's `key: s.k` (the author's `key`
+attribute is dropped, having become the meta's function), loop locals resolve
+through the scope map, nested loops take the enclosing row as owner and shadow
+as `s1`, `s2`, … by depth, and `Class.__roots = […]` is stamped after the module
+marker when any site carries a root mask — capped at 31 entries, past which a
+site degrades to `volatile`.
 
 Three body kinds are not lowered, and nothing nested inside one is lowered or
 cached either: a `<Snippet>` body (stamped fresh per expansion, so a block keyed
@@ -336,32 +276,40 @@ is emitted ONCE and evaluated per iteration, so a block or a cache slot taken
 inside it is shared by every iteration — the same row vnode objects mounted at N
 DOM positions, where a change to the source array reaches only the last one.
 
-A site's meta is conservative wherever the compiler cannot see through a read. A
-bare record local is on identity ONLY as a direct member access (`todo.text`) or
-as the whole expression (`{ todo }`, `todo={ todo }`, a handler argument); used
-any other way — piped through a formatter, passed into a call, interpolated into
-a template literal, reached through parens or a comment — it is opaque and marks
-the site `deep`, the same path a relation read takes. A read of a mutable global
-(`Date`, `Math.random`, `window`, `document`, `globalThis`, …) or of a
-clock-reading built-in formatter (`timeago`) marks the site `volatile`: user
-formatters are pure functions of their input by contract, but those are not.
+**Row facts come from the tree** (`exprFacts`, recorded as each expression is
+lowered, and `absorb`ed into every enclosing lowered site). A bare record local
+is on identity ONLY as a direct member access (`todo.text` — the field joins
+`fields`) or as the whole expression (`{ todo }`, `todo={ todo }`). A deeper
+path (`todo.author.name`), a computed member (`todo[k]`) or a method call on the
+local or a path off it marks the site `deep`; so does any other whole-value use
+— a function or method argument (`{ byline(post) }` hands the function the
+record), an operand, a template-literal part, an array element or an object
+value — the same path a relation read takes. A call to a clock-reading library
+function (`clockFunctions`: `timeago`) marks the site `volatile`: an app
+function is pure by contract, and a browser global is not a template read at
+all. Facts are collected only inside a lowered loop body and never during a
+look-ahead pass (conditional arity, `{#for}` root extraction), which re-lowers
+expressions in a scope they will not be emitted in.
 
 A read of a loop local owned by an ENCLOSING site marks the reading site
 `volatile`, and every site between it and the owner with it. A nested block only
 runs when its enclosing row runs, so "this body depends on what the outer row
 supplies" is exact rather than an over-approximation, and a middle site that
 cached its rows would otherwise never re-invoke the inner block. Handler
-ARGUMENTS are exempt everywhere above: they are re-read at fire time off the
-live row scope.
+ARGUMENTS contribute no row facts beyond their data roots: they are re-read at
+fire time off the live row scope.
 
 Because the row scope objects are named `s`, `s1`, …, an authored binding
 spelled the same way is mangled to `__pzl<name>` wherever it would stay BARE
 inside a lowered body — a range counter, a non-lowered loop's item or counter, a
-`<Snippet>` parameter — and its reads are rewritten through the scope map like
-any loop local. (A snippet still declares its AUTHORED parameter name in
-`params` and destructures it to the mangled local.) The row scope names
-themselves never move: `s` is the byte contract in the todos fixtures. This is
-the same mechanism that renames the DOM event parameter to `__ev` on collision.
+`<Snippet>` parameter, an arrow parameter — and its reads are rewritten through
+the scope map like any loop local. (A snippet still declares its AUTHORED
+parameter name in `params` and destructures it to the mangled local.) The row
+scope names themselves never move: `s` is the byte contract in the todos
+fixtures. This is the same mechanism that renames the DOM event parameter to
+`__ev` on collision.
+
+## Static subtrees and handlers
 
 **Maximal static subtrees are cache sites** (`staticcache.go`): a subtree whose
 every vnode has only static attributes (`ref`, `key`, `island` and `flip`
@@ -387,23 +335,27 @@ a wrapped element wraps its attributes exactly as the fixture does.
 
 Data-independent event sites cache one closure per instance in `this.__h`,
 stabilizing DOM listeners and callback props. A site inside a lowered loop whose
-arguments capture only that loop's locals caches on the **row scope** instead —
+arguments read only that loop's locals caches on the **row scope** instead —
 `(s.h<n> ??= (event) => this.events.x(s.item))`, counted per site — so the
 closure is identity-stable across renders and reads the row's current item at
 fire time; a capture of a range-loop variable or a snippet parameter stays
 fresh, because those bindings are re-created per iteration or per expansion.
-Sites whose arguments read model data keep fresh closures so their captured
-values stay correct, and the roots they read count toward the enclosing loop
-site's mask. Modifiers remain encoded in vnode attribute names for ViewManager
-to apply.
+Sites whose arguments read model data or call a library function keep fresh
+closures so their captured values stay correct, and the roots they read count
+toward the enclosing loop site's mask. Modifiers remain encoded in vnode
+attribute names for ViewManager to apply.
+
+## Two-way binding, conditional arity, inline SVG
 
 Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) lives in
-`binding.go`: `classifyBindExpr` accepts exactly `ident`/`ident.ident` (keyword,
-global, and reserved-`event` roots never classify; a bare loop variable never
-classifies, a loop-var-rooted member path does) and `detectAutoBind` applies the
-element-level conditions (form-control tag, no author `@input`/`@change`, no
-static `readonly`/`disabled`, no `multiple` on a `<select>`, static
-classifiable `type`, no formatter chain on the value). Both `attrsMultiline`
+`binding.go`: `classifyBindExpr` reads the value's tree and accepts exactly an
+`Identifier` or a non-computed, non-optional `Member` on one (keyword, `this`
+and a free `event` never classify; a bare loop variable never classifies, a
+loop-var-rooted member path does; a call, an operator or a deeper path never
+does, so `value={ capitalize(name) }` stays one-way). `x.size` classifies like
+any field. `detectAutoBind` applies the element-level conditions (form-control
+tag, no author `@input`/`@change`, no static `readonly`/`disabled`, no
+`multiple` on a `<select>`, static classifiable `type`). Both `attrsMultiline`
 and `emitAttrs` consume it — inline SVG calls that pair directly — appending
 `'@<event>:bind': this.__bind(target, field, spec)` after the authored attrs.
 The synthesized attr counts toward the width trial (layout stays deterministic)
@@ -450,16 +402,21 @@ positioned inside the SVG. Memoized scans hand out a COPY of the attr slice —
 through into every other use site. Scoped styles share a
 stable app-relative path hash with the plugin's `@scope` wrapper.
 
+## Tests
+
 Golden tests byte-compare focused fixtures plus the canonical todos output and
-syntax-check emitted JavaScript. The conditional-arity suite pins nested and
-unequal branch behavior plus the stability gate (item-form loops, explicit-key
-range loops, and slot markers disable padding); `listblock_test.go` and
-`static_cache_test.go` pin the lowering — item/explicit-key/counter/nested/
-conservative meta, the `listRows as __l` import appearing only for a file that
-lowers a site, the `mapDepth` exclusions, the row-scope shadow mangling, the
-cache threshold, the static island-seed case and every exclusion —
-`core_semantics_test.go` pins the D173 value rules (chains in every value
-position, the condition-header pipe error and `||` in headers, the member
-guard and its exemptions, object-literal arguments, the loop-guard imports and
-the literal-range fold), and the todos fixtures remain the byte contract the
-emitter is matched to, not the other way round.
+syntax-check emitted JavaScript; `expr_methods` and `expr_handlers` pin the
+method and handler lowering. `expr_test.go` pins the lowering table,
+`presets_test.go` the literal preset/zone errors, `markup_call_test.go` and
+`markup_test.go` the markup placement, `row_facts_test.go` the tree-derived row
+facts, `handler_cache_test.go` and `event_handler_test.go` the D62 verdicts and
+handler forms. The conditional-arity suite pins nested and unequal branch
+behavior plus the stability gate; `listblock_test.go` and `static_cache_test.go`
+pin the lowering — item/explicit-key/counter/nested/conservative meta, the
+`listRows as __l` import appearing only for a file that lowers a site, the
+`mapDepth` exclusions, the row-scope shadow mangling, the cache threshold, the
+static island-seed case and every exclusion — `core_semantics_test.go` pins the
+D173 value rules (the member guard, object-literal arguments, the loop-guard
+imports and the literal-range fold), and the todos fixtures remain the byte
+contract the emitter is matched to, not the other way round. The check
+emitter's own tests live in `compiler/internal/check`.
