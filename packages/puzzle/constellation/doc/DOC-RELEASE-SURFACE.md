@@ -233,10 +233,18 @@ second specification. Decision cards hold rationale and git holds chronology.
 - DOM events support bare/call handlers, `prevent`, `stop`, `once`, `outside`
   (document-capture outside-dismiss, D86), and keyboard filters. Component
   event attributes compile to callback props.
-- **Component tags and families (D167):** a capitalized tag is validated as a
-  member path — `Ident('.'Ident)*`, each segment `[A-Za-z_][A-Za-z0-9_]*` — so
-  a capitalized name carrying a `-`, a `:`, or an empty segment is a positioned
-  compile error instead of syntactically broken generated JS. A dotted tag
+- **Component tags and families (D167):** a tag whose first character is not
+  an ASCII lowercase letter `a`–`z` is a component (`<Card>`, `<Übersicht>`,
+  `<概要>`, `<_row>`); `<straße-karte>` stays a custom element. A component tag
+  is validated as a member path — `Ident('.'Ident)*`, each segment a `$`-free
+  JavaScript identifier in any script — so a component name carrying a `-`, a
+  `:`, an empty segment or a leading digit is a positioned compile error
+  instead of syntactically broken generated JS. The `<script>` class may carry
+  any JavaScript identifier name (`export default class Übersicht`; a
+  script-less `Übersicht.pzl` derives the same name), and a class name the
+  compiler's scan cannot read to its end (a `\u` escape inside it, or a letter
+  newer than Go's Unicode tables) is a positioned compile error rather than a
+  cut name. A dotted tag
   (`<Frame.Wrapper>`) emits the member expression verbatim and resolves
   lexically against module scope exactly like a plain `<Frame>`: no registry,
   no import inspection. That is the **component-family** idiom — `.pzl` stays

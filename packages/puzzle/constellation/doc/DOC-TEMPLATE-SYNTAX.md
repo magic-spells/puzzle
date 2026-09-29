@@ -401,8 +401,7 @@ Handlers live in the `events` class field of the component (arrow functions only
 
 ## Component tags with props
 
-
-Capitalized tags render child components. The component must be imported inside the `<script>` block; props are passed as attributes, with braces for dynamic values:
+A tag whose name does not start with a lowercase ASCII letter `a`–`z` renders a child component — `<UserProfile>`, `<Übersicht>`, `<概要>` — since only `a`–`z` can begin an HTML element name; `<straße-karte>` stays a custom element. The component must be imported inside the `<script>` block; props are passed as attributes, with braces for dynamic values:
 
 ```html
 <puzzle-view class="user-page">
@@ -423,9 +422,9 @@ export default class UserPage extends PuzzleView {
 </script>
 ```
 
-Props are fully reactive: when the parent's model changes a prop value, the child's `data(params, props)` re-runs with the new props. Inside a `{#for}` block you can pass the loop variable as a prop: `<TodoItem todo={todo} />`.
+Props are fully reactive: when the parent's model changes a prop value, the child's `data(params, props)` re-runs with the new props. Inside a `{#for}` block you can pass the loop variable as a prop: `<TodoItem todo={todo} />`. A component's class, tag and prop names may be any JavaScript identifier, in any script: `export default class Übersicht` is invoked as `<Übersicht größe={ 3 } />` and reads `props.größe`.
 
-**Component families and dot notation (v1.80, D167).** A capitalized tag name may be a dotted member path — `<Frame.Wrapper>` renders the `Wrapper` property of whatever `Frame` the `<script>` imported. The compiler validates every component tag as `Ident('.'Ident)*` (a dash, colon, or empty segment is a positioned compile error) and emits the path verbatim as a member expression; resolution is purely lexical, exactly like a plain `<Frame>`. `.pzl` files stay one class per file — a family is a directory grouped by a plain JS barrel:
+**Component families and dot notation (v1.80, D167).** A component tag name may be a dotted member path — `<Frame.Wrapper>` renders the `Wrapper` property of whatever `Frame` the `<script>` imported. The compiler validates every component tag as `Ident('.'Ident)*`, each segment a `$`-free JavaScript identifier (a dash, colon, empty segment, or a segment starting with a digit is a positioned compile error) and emits the path verbatim as a member expression; resolution is purely lexical, exactly like a plain `<Frame>`. `.pzl` files stay one class per file — a family is a directory grouped by a plain JS barrel:
 
 ```js
 // app/components/Frame/index.js
@@ -665,8 +664,8 @@ element:
 A closing tag for a void element is a positioned compile error at the closer:
 `<input type="text"></input>` reports "`<input>` is a void element and has no
 closing tag — remove the `</input>`". Only the lowercase names are void —
-`<Input>` is a component tag, like every capitalized tag. The rule holds inside
-`{#raw}`, where HTML is still parsed.
+`<Input>` is a component tag, like every tag that does not start with `a`–`z`.
+The rule holds inside `{#raw}`, where HTML is still parsed.
 
 ---
 

@@ -23,8 +23,8 @@ for a reader who knows HTML and has not seen Puzzle before.
 
 Puzzle is **one template language with two dialects**. A `.pzl` file is HTML
 plus a small set of brace constructs (`{ … }`, `{#if}`, `{#for}`, …) and a few
-capitalized tags (`<Children/>`, `<Slot>`, components). That shared part is the
-**core**. Each host that runs Puzzle is a **dialect** of it:
+tags HTML does not have (`<Children/>`, `<Slot>`, components). That shared part
+is the **core**. Each host that runs Puzzle is a **dialect** of it:
 
 - **PuzzleKit** — the app framework in this package. It compiles `.pzl` files to
   JavaScript that renders in the browser.
@@ -52,6 +52,9 @@ they mean in HTML, with these rules:
   comments. A lone `}` in text is literal. This includes the bodies of a
   `<script>` or `<style>` element written inside a template: `.a { color: red }`
   there is an interpolation, so escape the braces or wrap the body in `{#raw}`.
+- **`<` followed by a letter or `_` opens a tag**, in any script: `a<b` and
+  `値<上限` in text are compile errors. A `<` followed by a space, a digit or
+  `$` is text (`a < b`, `<$50`).
 - **Void elements take no closing tag**, as in HTML. The void elements are
   `area`, `base`, `br`, `col`, `embed`, `hr`, `img`, `input`, `link`, `meta`,
   `source`, `track` and `wbr`. Each one ends at its start tag: `<br>`, `<br/>`
@@ -249,21 +252,26 @@ removed at compile time and are allowed anywhere text is. §6.
 
 ## Components
 
-
-A **capitalized tag** is a component:
+A tag whose name does **not** start with a lowercase ASCII letter `a`–`z` is a
+component. Only `a`–`z` can begin an HTML element name, so `<UserCard>`,
+`<Übersicht>`, `<概要>` and `<_row>` are components, and `<straße-karte>` is a
+custom element:
 
 ```html
 <UserCard user={ author } size="small" />
 <Frame><Frame.Wrapper>…</Frame.Wrapper></Frame>
 ```
 
-- A component name is `Ident('.'Ident)*`. The dotted form `<Frame.Wrapper>` is
-  a **component family** member. Names with `-` or `:` are errors; lowercase
-  tags (including custom elements with dashes) are always plain HTML. §65,
-  [[DECISION-D167-COMPONENT-FAMILIES]].
+- A component name is `Ident('.'Ident)*`, each segment a JavaScript
+  identifier without `$`, in any script (`<Frame.Übersicht>`). The dotted form
+  `<Frame.Wrapper>` is a **component family** member. Names with `-` or `:`,
+  an empty segment, or a segment that starts with a digit are errors;
+  lowercase tags (including custom elements with dashes) are always plain
+  HTML. §65, [[DECISION-D167-COMPONENT-FAMILIES]].
 - **Props are attributes at the call site.** A static value passes a string, a
   brace-only value passes the value itself (a list stays a list), and a quoted
-  value with interpolations passes the assembled string.
+  value with interpolations passes the assembled string. A prop name may use
+  letters from any script (`<Card größe={ 3 }>`).
 - `slot="name"` on a direct child routes that child to a named slot and is not
   a prop (see Slots).
 - `Children`, `Slot`, `Snippet` and `Portal` are reserved tag names, so no
