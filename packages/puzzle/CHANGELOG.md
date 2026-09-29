@@ -915,6 +915,15 @@ checklist sent you.
 
 ### Fixed
 
+- **A component class may have a non-ASCII name.** `export default class
+  Übersicht`, `class 概要` and `class Straßenkarte` now compile, and a file
+  named `Übersicht.pzl` derives that class name. The script scanner that finds
+  the class was ASCII-only: a name starting with a non-ASCII letter was
+  reported as an anonymous class, and a name with a non-ASCII letter after an
+  ASCII start (`Straßenkarte`) was silently truncated to `Stra`, so the
+  compiled module crashed on load; `puzzle check` misread the same names. The
+  `__d.` collision scan and the expression lexer now share one set of
+  JavaScript identifier rules (`jsident.IsIDStart` / `IsIDContinue`).
 - **An `errorView` retry remounts a failed child under a reused element.** A
   failed child inside an element the parent reused (`<Card><div><Widget/></div></Card>`,
   or `<li><Widget/></li>` in a cached row) stayed blank after a retry, because
