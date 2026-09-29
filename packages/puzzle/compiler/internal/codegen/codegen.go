@@ -310,6 +310,10 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		}
 	}
 
+	if err := c.checkEventUses(); err != nil {
+		return "", err
+	}
+
 	// <script>-import collision warnings (out-of-band; goldens unaffected). Scan
 	// the emitted render expressions for `__d.<name>` reads whose <name> is an
 	// import binding in <script> — those resolve to undefined at render (SPEC §6).
@@ -499,6 +503,11 @@ type compiler struct {
 	// values remain raw vnode attrs do not pay for an unused import.
 	usesDisplayValue bool
 
+	// eventData and eventDOM are the first places the template reads `event`
+	// as data and uses it as a handler's DOM event (noteEvent); a template
+	// with both is an error (checkEventUses). Line 0 means none.
+	eventData, eventDOM expr.Pos
+
 	// src is the whole .pzl file (parser.Sections.Source), which every node
 	// Position.Offset indexes. Empty when the Sections did not come from
 	// SplitSections.
@@ -586,6 +595,35 @@ type item struct {
 
 func (c *compiler) cgErr(pos parser.Position, msg string) error {
 	return &parser.ParseError{File: c.file, Line: pos.Line, Col: pos.Col, Message: msg}
+}
+
+// noteEvent records the first place the template reads `event` as data (a
+// field or prop) and the first place a handler uses it as the DOM event. A
+// template binding or an arrow parameter named `event` is neither.
+func (c *compiler) noteEvent(kind refKind, p expr.Pos) {
+	at := &c.eventData
+	switch kind {
+	case refData:
+	case refEvent:
+		at = &c.eventDOM
+	default:
+		return
+	}
+	if at.Line == 0 || p.Offset < at.Offset {
+		*at = p
+	}
+}
+
+// checkEventUses rejects a template that reads a field or prop named `event`
+// and also uses `event` inside an @event handler, where it is always the DOM
+// event: the handler would silently get the event, not the data.
+func (c *compiler) checkEventUses() error {
+	if c.eventData.Line == 0 || c.eventDOM.Line == 0 {
+		return nil
+	}
+	return c.cgErr(exprPos(c.eventDOM), fmt.Sprintf(
+		"`event` here is the DOM event, but this template also reads `event` as data at %d:%d — rename the field or prop (inside @event handlers `event` is always the DOM event)",
+		c.eventData.Line, c.eventData.Col))
 }
 
 // emitComponentRoot enforces the D20 component-mode rules and emits the single

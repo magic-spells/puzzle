@@ -298,8 +298,10 @@ different.
    and `Date.now()`; `JSON.stringify(x)`; regex literals; `**` (use
    `Math.pow`); bitwise operators; spread; comments inside an expression;
    assignment and `++`/`--`; `typeof`, `in` and `instanceof`; and
-   `constructor`, `prototype` or `__proto__` as a member name or object key.
-   Each message names what to write instead. `encodeURIComponent`,
+   `constructor`, `prototype` or `__proto__` as a member name or object key;
+   and a template that reads a field or prop named `event` and also uses
+   `event` inside a handler, where it is always the DOM event (rename the field
+   or prop). Each message names what to write instead. `encodeURIComponent`,
    `decodeURIComponent`, `encodeURI` and `decodeURI` stay callable, so an
    `href="/search?q={ encodeURIComponent(q) }"` keeps working.
 8. **Identifiers are Unicode.** A data field, a loop variable or a snippet
@@ -432,7 +434,7 @@ checklist sent you.
     an error reports the same line and column in both hosts. The shared
     conformance lives in `packages/puzzle-lang/conformance` (embedded with
     `go:embed`, so Sites pins it at the language tag): `expressions-parse.json`
-    pins the grammar in 434 cases — every accepted tree with its node
+    pins the grammar in 443 cases — every accepted tree with its node
     positions, every error with its message and position — and
     `functions.json` pins the library in 204 rows.
   - **Errors that steer.** Everything outside the table is a positioned
@@ -458,6 +460,13 @@ checklist sent you.
     unrestricted chain (`@input={ rename(event.target.value) }`), and a
     handler that shares a library function's name draws a development
     warning.
+  - **Changed: a data field or prop named `event` reads as data outside
+    handlers**, as it did in 0.7 (the interim 0.8 branch rejected it), so
+    `<EventCard event={ item }>` and its `{ event.title }` work. Inside an
+    `@event` handler `event` is always the DOM event. A template that does
+    both is a compile error at the handler's `event` that names the data read,
+    because the handler would silently get the DOM event: rename the field or
+    prop. `value={ event.x }` now two-way binds like any other field.
 - **Translations: `{ t('cart.title') }` (D175).** Add
   `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` to `puzzle.config.js`
   and one `app/locales/<tag>.json` per locale. Files may nest (flattened to
@@ -925,6 +934,14 @@ checklist sent you.
 - **`\{` and `\}` work in a quoted attribute value** (broken since 0.7.0). A
   lone `title="\{"` failed to compile, and `title="\{" data-x="}"` swallowed
   the next attribute.
+- **Division after a non-ASCII name, a trailing-dot number or a field named
+  `of` works** (broken since 0.7.0, which had the same scanner).
+  `{ 金額 / 2 }`, `{ café / 2 }`, `{ 5. / 2 }` and `{ of / 2 }` failed with
+  "unclosed '{'" in every template position: text, attribute values, block
+  headers, arrow bodies and call arguments. A `<script>` holding
+  `const half = 金額 / 2; const s = "it's";` failed with "missing </script>".
+  The brace scanner took the `/` for the start of a regular expression and read
+  past the closing brace.
 - **A static page keeps a locale switch made from `mounted()`.** The switch
   was dropped, leaving the prerendered language on screen under the new locale.
 - **A static locale switch that fails no longer leaks views.** Every view
