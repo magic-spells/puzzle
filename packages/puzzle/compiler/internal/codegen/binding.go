@@ -140,7 +140,7 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope scopeMap) *autoBind {
 		if !ok || at.Name != attrName {
 			continue
 		}
-		if len(at.Formatters) > 0 {
+		if len(at.Formatters) > 0 { // P4: remove
 			// TEMPORARY (P4: remove): `value={ name | upcase }` displays a
 			// formatted value (D173 V1); there is no field to write the edit back
 			// to, so it stays one-way — as `value={ capitalize(name) }` does.

@@ -364,7 +364,7 @@ func collectAttrCalls(attrs []parser.Attr, usage *Usage, allow map[string]bool) 
 		case *parser.DynamicAttr:
 			// A brace-only attribute, prop or marker argument (D173 V1).
 			collectExprCalls(a.ExprAST, nil, usage, allow)
-			collectFormatterCalls(a.Formatters, usage, allow)
+			collectFormatterCalls(a.Formatters, usage, allow) // P4: remove
 		case *parser.EventAttr:
 			// The handler's own call names a view handler, never the library
 			// (§9 c); calls inside its arguments and its condition are library
@@ -375,14 +375,10 @@ func collectAttrCalls(attrs []parser.Attr, usage *Usage, allow map[string]bool) 
 }
 
 // handlerOwnCalls returns the calls of an @event value that name a view
-// handler: the whole value, or either branch of a handler-valued conditional.
+// handler: the calls among its handler forms (codegen.HandlerForms).
 func handlerOwnCalls(n expr.Node) map[*expr.Call]bool {
 	own := map[*expr.Call]bool{}
-	forms := []expr.Node{n}
-	if cond, ok := n.(*expr.Conditional); ok {
-		forms = []expr.Node{cond.Consequent, cond.Alternate}
-	}
-	for _, f := range forms {
+	for _, f := range codegen.HandlerForms(n) {
 		if call, ok := f.(*expr.Call); ok {
 			own[call] = true
 		}
@@ -409,7 +405,7 @@ func collectPartCalls(parts []parser.Part, usage *Usage, allow map[string]bool) 
 // TEMPORARY pipe chain (P4: remove).
 func collectInterpCalls(in *parser.Interpolation, usage *Usage, allow map[string]bool) {
 	collectExprCalls(in.ExprAST, nil, usage, allow)
-	collectFormatterCalls(in.Formatters, usage, allow)
+	collectFormatterCalls(in.Formatters, usage, allow) // P4: remove
 }
 
 // collectExprCalls records every library function a tree calls — a Call whose
@@ -519,7 +515,7 @@ func collectAttrTKeys(attrs []parser.Attr, keys map[string]bool) {
 		case *parser.MixedAttr:
 			collectPartTKeys(a.Parts, keys)
 		case *parser.DynamicAttr:
-			noteChainTKeys(a.ExprAST, a.Formatters, keys)
+			noteChainTKeys(a.ExprAST, a.Formatters, keys) // P4: remove
 		case *parser.EventAttr:
 			exprTKeysSkipping(a.ExprAST, handlerOwnCalls(a.ExprAST), keys)
 		}
@@ -542,11 +538,11 @@ func collectPartTKeys(parts []parser.Part, keys map[string]bool) {
 }
 
 func noteTKeys(in *parser.Interpolation, keys map[string]bool) {
-	noteChainTKeys(in.ExprAST, in.Formatters, keys)
+	noteChainTKeys(in.ExprAST, in.Formatters, keys) // P4: remove
 }
 
 // noteChainTKeys records the keys of a value position: every `t('key')` call
-// in it, and — TEMPORARY until P4 — a string literal piped first into `t`.
+// in it, and — TEMPORARY (P4: remove) — a string literal piped first into `t`.
 func noteChainTKeys(n expr.Node, fmts []parser.FormatterCall, keys map[string]bool) {
 	exprTKeys(n, keys)
 	for _, fc := range fmts {
@@ -554,7 +550,7 @@ func noteChainTKeys(n expr.Node, fmts []parser.FormatterCall, keys map[string]bo
 			exprTKeys(a, keys)
 		}
 	}
-	if len(fmts) > 0 && fmts[0].Name == TranslateFormatter {
+	if len(fmts) > 0 && fmts[0].Name == TranslateFormatter { // P4: remove
 		if lit, ok := n.(*expr.Literal); ok && lit.Kind == expr.LitString {
 			keys[lit.Str] = true
 		}

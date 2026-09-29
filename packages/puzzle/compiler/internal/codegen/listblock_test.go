@@ -76,6 +76,17 @@ func TestListBlockExplicitKey(t *testing.T) {
 	}
 }
 
+// A hoisted key whose expression opens with an object literal is wrapped in
+// parentheses, or the arrow would read its `{` as a block (the rule arrow()
+// applies to an arrow body).
+func TestListBlockExplicitKeyStartingWithObject(t *testing.T) {
+	got := compileSrc(t, listSrc("  {#for item in items}<li key={ ({ a: item.id }).a }>{ item.text }</li>{/for}"))
+	if !strings.Contains(got, "const __L0 = { key: (item) => ({ a: item?.id }?.a), fields: ['text'] };") {
+		t.Errorf("an object-led key must be parenthesized in the key arrow:\n%s", got)
+	}
+	nodeCheck(t, got)
+}
+
 // An explicit key that reads the counter takes the second arrow parameter.
 func TestListBlockExplicitKeyReadsCounter(t *testing.T) {
 	got := compileSrc(t, listSrc("  {#for todo in todos, i}<li key={ i }>{ todo.text }</li>{/for}"))
@@ -573,7 +584,7 @@ func TestListMetaEnclosingLocalPropagatesThroughMiddleSite(t *testing.T) {
 
 // A nested site reading only its OWN locals stays non-volatile, and a handler
 // ARGUMENT reading an enclosing local is a fire-time read that does not count —
-// the same carve-out a mutable global in a handler argument has.
+// the same carve-out a clock read in a handler argument has.
 func TestListMetaOwnLocalsStayNonVolatile(t *testing.T) {
 	got := compileSrc(t, listSrc(
 		"  {#for group in groups}\n"+

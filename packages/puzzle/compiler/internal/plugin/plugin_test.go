@@ -1033,9 +1033,10 @@ export default class Home extends PuzzleView {}
 	}
 }
 
-// Guard the implicit contract between scan.go (collectFormatters) and codegen
-// (applyFormatters): the scanner must see a formatter in EVERY position codegen
-// emits one, else the name is seeded nowhere and its guarded call falls through
+// Guard the implicit contract between scan.go (collectUsage) and codegen's
+// lowering (lower.go, which emits every library call and TEMPORARY pipe link):
+// the scanner must see a function in EVERY position codegen emits one, else
+// the name is seeded nowhere and its guarded call falls through
 // to the D43 __missing pass-through instead of the real builtin — a silent wrong
 // render the JS suite can't catch (it aliases to builtins-all). One distinct
 // formatter per emit site: text run, quoted-attr interpolation, and an
@@ -1060,7 +1061,7 @@ export default class Home extends PuzzleView {}
 	// downcase = text run, upcase = attr interpolation, trim = inline-if branch.
 	for site, want := range map[string]string{"text": "downcase", "attr": "upcase", "inline-if": "trim"} {
 		if !got[want] {
-			t.Errorf("scanner missed formatter %q at emit site %q; collectFormatters is out of sync with codegen.applyFormatters: %#v", want, site, got)
+			t.Errorf("scanner missed formatter %q at emit site %q; collectUsage is out of sync with codegen's lowering: %#v", want, site, got)
 		}
 	}
 }

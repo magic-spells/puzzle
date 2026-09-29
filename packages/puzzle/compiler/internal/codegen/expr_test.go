@@ -156,7 +156,7 @@ func TestLowering(t *testing.T) {
 		{"template literal", "`hi ${name}!`", nil, "`hi ${__d.name}!`"},
 		{"template literal row local", "`${todo.id}`", row, "`${s.item?.id}`"},
 		{"template literal escapes", "`a\\`b \\${c} ${d}`", nil, "`a\\`b \\${c} ${__d.d}`"},
-		// TEMPORARY until P4: `.size` is the count.
+		// TEMPORARY (P4: remove): `.size` is the count.
 		{"size", "items.size", nil, "__z(__d.items)"},
 		{"size of a path", "a.b.size", nil, "__z(__d.a?.b)"},
 		{"size of an optional path", "a?.b.size", nil, "__z(__d.a?.b)"},

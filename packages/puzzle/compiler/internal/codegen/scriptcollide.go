@@ -10,8 +10,9 @@ import (
 
 // scriptcollide.go — the <script>-import collision WARNING (v0.1 hardening).
 //
-// A template expression can only read data() fields: resolveExpr rewrites every
-// non-scope, non-global, non-keyword identifier ROOT to `__d.<name>` (expr.go).
+// A template expression can only read data() fields: the lowering (lower.go)
+// compiles every name that is not a template binding, an arrow parameter, or a
+// handler's DOM event to `__d.<name>`.
 // So a name that is actually an IMPORT in <script> — `{ count > MAX }` with MAX
 // imported — silently becomes `__d.MAX` → undefined at render, with no
 // diagnostic. This pass detects that collision and emits a Warning (out-of-band:
@@ -416,6 +417,7 @@ func reservedBindingEmission(name string) (verb, what, why string) {
 	case "__s":
 		return "imports", "the display helper as __s", "this template coerces an interpolation for display"
 	case "__z":
+		// TEMPORARY until the corpus migrates to `.length` (P4: remove).
 		return "imports", "the `.size` helper as __z", "this template reads `.size`, the count of a list or string"
 	case "__l":
 		return "imports", "listRows as __l", "this template has an item-form {#for} lowered to a persistent list block"
@@ -454,7 +456,7 @@ func collectDataCollisions(emitted string, imports, seen map[string]bool, out *[
 		c := s[i]
 		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
 			// The `__d` identifier run followed immediately by ".<name>" is a data
-			// member read emitted by resolveExpr (LexSkip stops the run at the '.').
+			// root read the lowering emitted (LexSkip stops the run at the '.').
 			if isIdentStart(c) && s[i:next] == "__d" && next < len(s) && s[next] == '.' {
 				k := next + 1
 				start := k

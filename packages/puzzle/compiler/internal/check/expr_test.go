@@ -25,7 +25,7 @@ func TestLibrarySignaturesMatchCodegen(t *testing.T) {
 	if got, want := strings.Join(names, ","), strings.Join(codegen.LibraryFunctionNames, ","); got != want {
 		t.Fatalf("signature table\n  %s\nlibrary\n  %s", got, want)
 	}
-	shim := shimSource(5)
+	shim := shimSource(TypeScriptVersion{Major: 5, Minor: 2})
 	if strings.Contains(shim, "__LIBRARY_SIGNATURES__") {
 		t.Fatal("the shim placeholder was not filled")
 	}
@@ -37,20 +37,89 @@ func TestLibrarySignaturesMatchCodegen(t *testing.T) {
 }
 
 // The method table's lib files are referenced whatever the app's target, and
-// es2023.array only where the compiler has it.
+// es2023.array only from TypeScript 5.2, the first to type toSorted and
+// toReversed.
 func TestShimReferencesLanguageLibs(t *testing.T) {
-	for _, major := range []int{4, 5, 7} {
-		shim := shimSource(major)
+	for _, tc := range []struct {
+		ts     TypeScriptVersion
+		es2023 bool
+	}{
+		{TypeScriptVersion{4, 9}, false},
+		{TypeScriptVersion{5, 0}, false},
+		{TypeScriptVersion{5, 1}, false},
+		{TypeScriptVersion{5, 2}, true},
+		{TypeScriptVersion{5, 9}, true},
+		{TypeScriptVersion{7, 0}, true},
+	} {
+		shim := shimSource(tc.ts)
 		for _, lib := range []string{"es2022.array", "es2022.string", "es2021.string", "es2019.array"} {
 			if !strings.Contains(shim, `/// <reference lib="`+lib+`" />`) {
-				t.Errorf("TypeScript %d: shim is missing lib %s", major, lib)
+				t.Errorf("TypeScript %+v: shim is missing lib %s", tc.ts, lib)
 			}
 		}
-		if got, want := strings.Contains(shim, `/// <reference lib="es2023.array" />`), major >= 5; got != want {
-			t.Errorf("TypeScript %d: es2023.array referenced = %v, want %v", major, got, want)
+		if got := strings.Contains(shim, `/// <reference lib="es2023.array" />`); got != tc.es2023 {
+			t.Errorf("TypeScript %+v: es2023.array referenced = %v, want %v", tc.ts, got, tc.es2023)
 		}
 		if !strings.HasPrefix(shim, "/// <reference types=\"@magic-spells/puzzle/puzzle-env\" />\n/// <reference lib=") {
-			t.Errorf("TypeScript %d: the lib references must lead the file:\n%s", major, shim[:200])
+			t.Errorf("TypeScript %+v: the lib references must lead the file:\n%s", tc.ts, shim[:200])
+		}
+	}
+}
+
+func TestParseTypeScriptVersion(t *testing.T) {
+	for _, tc := range []struct {
+		output string
+		want   TypeScriptVersion
+		ok     bool
+	}{
+		{"Version 5.7.3\n", TypeScriptVersion{5, 7}, true},
+		{"Version 5.2.2", TypeScriptVersion{5, 2}, true},
+		{"Version 5.1.6", TypeScriptVersion{5, 1}, true},
+		{"Version 4.9.5", TypeScriptVersion{4, 9}, true},
+		{"Version 7.0.2", TypeScriptVersion{7, 0}, true},
+		{"Version 5.3.0-beta", TypeScriptVersion{5, 3}, true},
+		{"Version 5.10.1", TypeScriptVersion{5, 10}, true},
+		{"Version 5", TypeScriptVersion{}, false},
+		{"tsc: command not found", TypeScriptVersion{}, false},
+		{"", TypeScriptVersion{}, false},
+	} {
+		got, err := parseTypeScriptVersion(tc.output)
+		if (err == nil) != tc.ok || got != tc.want {
+			t.Errorf("parseTypeScriptVersion(%q) = %+v, %v; want %+v, ok %v", tc.output, got, err, tc.want, tc.ok)
+		}
+	}
+	if !(TypeScriptVersion{5, 10}).AtLeast(TypeScriptVersion{5, 2}) || (TypeScriptVersion{5, 1}).AtLeast(TypeScriptVersion{5, 2}) ||
+		!(TypeScriptVersion{6, 0}).AtLeast(TypeScriptVersion{5, 2}) {
+		t.Error("AtLeast compares major, then minor")
+	}
+}
+
+// The arrow wrapper ends the optional chain it cuts through, so the method
+// step takes the `?.` over; a parenthesized chain stays its own chain, and
+// TypeScript reports its possibly-undefined result as it would in JavaScript.
+func TestCheckListWrapperKeepsOptionalChain(t *testing.T) {
+	source := []byte(`<puzzle-view>
+  <p>{ user?.posts.filter(p => p.published).length }</p>
+  <p>{ user.posts?.map(p => p.id) }</p>
+  <p>{ (user?.posts).filter(p => p.published) }</p>
+</puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`)
+	files, err := emitFiles(source, "app/views/Home.pzl", ".puzzle/check/src/views/Home.pzl", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(files[0].Contents)
+	for _, want := range []string{
+		"void (__puzzle_check_list(__d.user?.posts)?.filter((p) => p.published).length);",
+		"void (__puzzle_check_list(__d.user.posts)?.map((p) => p.id));",
+		"void (__puzzle_check_list(__d.user?.posts).filter((p) => p.published));",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("generated file is missing %q:\n%s", want, got)
 		}
 	}
 }
@@ -115,6 +184,8 @@ func TestExpressionLanguageTypeChecksWithLiveTSC(t *testing.T) {
   <p>{ name.trim().toUpperCase() } { currency(price, '$', 2) } { truncate(title, 20) }</p>
   <p>{ list.filter(x => x.on).map((x, i) => i + x.n).join(', ') } { list.reduce((s, x) => s + x.n, 0) }</p>
   <p>{ tags.toSorted().at(-1) ?? '' } { Object.keys(counts).length } { Math.max(0, n - 1) }</p>
+  <p>{ pluralize(n, 'comment') } { pluralize(n, 'child', 'children') }</p>
+  <p>{ user?.posts.filter(p => p.published).length } { user?.posts.map(p => p.title.trim()).at(0) }</p>
   <p>{ myFormat(name).length + 1 } { myFormat(name, 2).nested.value } { `+"`${ name } x`"+` }</p>
   <button @click={ pick(tags.filter(t => t.length > 1)) } @input={ rename(event.target.value) }>x</button>
 </puzzle-view>
@@ -126,6 +197,7 @@ export default class Home extends PuzzleView {
   n = 1;
   tags: string[] = [];
   counts: Record<string, number> = {};
+  user?: { posts: { published: boolean; title: string }[] };
 }
 </script>
 `)

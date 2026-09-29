@@ -88,8 +88,8 @@ import { resetRowMetrics, rowMetrics } from '../row-metrics.js';
 //
 // `inline` (the DEFAULT, and what benchmarks/baseline.json was recorded from)
 // passes data-capturing callback props: `@select={ selectRow(row) }`. `row` is a
-// loop variable, so codegen cannot cache the closure (D62, see
-// compiler/internal/codegen/expr.go compileEventValue) and mints a fresh arrow
+// loop variable, so codegen cannot cache the closure (D62, see the caching
+// verdict of handler in compiler/internal/codegen/lower.go) and mints a fresh arrow
 // per row per parent render. Those arrows are component PROPS, so they take
 // part in patchComponent's `shallowEqual(oldProps, newProps)` bailout — and a
 // fresh function object never compares equal. Every mounted row therefore

@@ -150,7 +150,7 @@ type Result struct {
 	JS           string
 	InlinedFiles []string
 	// Warnings are non-fatal codegen diagnostics (v0.1 hardening): a template
-	// expression that references a <script> import, which resolveExpr rewrites to
+	// expression that references a <script> import, which the lowering compiles to
 	// __d.<name> → undefined at render (SPEC §6). Out-of-band — the generated JS is
 	// unaffected, so goldens never move. The plugin/pzlc print them to stderr.
 	Warnings []Warning
@@ -343,9 +343,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if c.usesDisplayValue {
 		imports = append(imports, "displayValue as __s")
 	}
-	// The `.size` helper (D176, TEMPORARY until P4) follows the same rule: only
+	// The `.size` helper (D176, TEMPORARY — P4: remove) follows the same rule: only
 	// a module whose template reads a count imports it.
-	if c.usesSize {
+	if c.usesSize { // P4: remove
 		imports = append(imports, "sizeOf as __z")
 	}
 	// The list block is imported ONLY by a module that lowered at least one
@@ -505,8 +505,8 @@ type compiler struct {
 	usesDisplayValue bool
 
 	// Set when a template value's `.size` is lowered to the package-root helper
-	// imported as `__z` (D176, TEMPORARY until P4).
-	usesSize bool
+	// imported as `__z` (D176, TEMPORARY — P4: remove).
+	usesSize bool // P4: remove
 	// src is the whole .pzl file (parser.Sections.Source), which every node
 	// Position.Offset indexes. Empty when the Sections did not come from
 	// SplitSections.
@@ -1635,7 +1635,7 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
-		return jsKey(at.Name) + ": " + c.value(at.ExprAST, at.Formatters, scope), nil
+		return jsKey(at.Name) + ": " + c.value(at.ExprAST, at.Formatters, scope), nil // P4: remove
 	case *parser.MixedAttr:
 		return jsKey(at.Name) + ": " + c.emitMixed(at.Parts, scope), nil
 	case *parser.EventAttr:
@@ -1717,7 +1717,7 @@ func (c *compiler) emitMixedFacts(parts []parser.Part, scope scopeMap, facts *ex
 		case *parser.StaticPart:
 			b.WriteString(tplEscape(pp.Text))
 		case *parser.InterpPart:
-			js := c.valueInto(pp.Interp.ExprAST, pp.Interp.Formatters, scope, facts)
+			js := c.valueInto(pp.Interp.ExprAST, pp.Interp.Formatters, scope, facts) // P4: remove
 			b.WriteString("${")
 			b.WriteString(c.displayValue(js, pp.Interp.Expr))
 			b.WriteString("}")
@@ -1750,7 +1750,7 @@ func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprF
 		case *parser.StaticPart:
 			segs = append(segs, jsString(pp.Text))
 		case *parser.InterpPart:
-			js := c.valueInto(pp.Interp.ExprAST, pp.Interp.Formatters, scope, facts)
+			js := c.valueInto(pp.Interp.ExprAST, pp.Interp.Formatters, scope, facts) // P4: remove
 			segs = append(segs, c.displayValue(js, pp.Interp.Expr))
 		case *parser.InlineIfPart:
 			cond := c.cond(pp.CondAST, scope, facts)
@@ -1917,7 +1917,7 @@ func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftSibling, 
 			if startsWithObjectLiteral(t.Expr) {
 				return "", false, c.cgErr(t.Pos, objectLiteralMsg)
 			}
-			js := c.valueInto(t.ExprAST, t.Formatters, scope, facts)
+			js := c.valueInto(t.ExprAST, t.Formatters, scope, facts) // P4: remove
 			segs = append(segs, seg{js: c.displayValue(js, t.Expr), static: false})
 		}
 	}

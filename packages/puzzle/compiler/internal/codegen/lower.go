@@ -27,7 +27,7 @@ import (
 //	a.b   a?.b                       <a>?.b          every step optional: reads never throw (D173 V4)
 //	a[i]  a?.[i]                     <a>?.[<i>]
 //	(a?.b).c                         (<a?.b>)?.c     a Chain in object position keeps its parentheses
-//	x.size, not called               __z(<x>)        TEMPORARY until P4 migrates the corpus
+//	x.size, not called               __z(<x>)        TEMPORARY (P4: remove)
 //	f(a, b), library function        (__f["f"] || __f.__missing("f"))(<a>, <b>)   the D43 guard
 //	a.m(x), method                   <a>?.m(<x>)     a call on a missing receiver is undefined (§9 d)
 //	Math.round(x)  Number(x)         verbatim        a JavaScript global the language allows
@@ -40,7 +40,7 @@ import (
 //	[a, b]                           [<a>, <b>]
 //	{ k: v, 'q-r': v, s }            { k: <v>, 'q-r': <v>, s: <s> }   shorthand expanded
 //	event.target.value (handler)     verbatim        a DOM event chain is not template data (§9 k)
-//	base | f(a) | g                  (__f["g"] || …)((__f["f"] || …)(<base>, <a>))   TEMPORARY until P4
+//	base | f(a) | g                  (__f["g"] || …)((__f["f"] || …)(<base>, <a>))   TEMPORARY (P4: remove)
 //
 // Handler values (@event={ … }):
 //
@@ -296,7 +296,7 @@ type lowerer struct {
 }
 
 func newLowerer(w exprWriter, target lowerTarget, scope scopeMap, facts *exprFacts) *lowerer {
-	return &lowerer{w: w, target: target, scope: scope, facts: facts, sizeCompat: true}
+	return &lowerer{w: w, target: target, scope: scope, facts: facts, sizeCompat: true} // P4: remove
 }
 
 // renderLowerer returns a render-target lowerer for the compiler's current position.
@@ -645,18 +645,41 @@ func (l *lowerer) call(c *expr.Call) {
 		// guard so a missing receiver yields undefined (§9 d). A computed callee
 		// is a parse error.
 		verbatim := l.verbatimChain(callee.Object)
+		optional := callee.Optional
 		if l.target == targetCheck && hasArrowArg(c.Args) {
 			l.w.WriteString("__puzzle_check_list(")
 			l.top(callee.Object)
 			l.w.WriteString(")")
+			// The wrapper ends the optional chain it cuts through: a `?.` inside
+			// it short-circuits nothing after it, so the method step takes the
+			// `?.` over — `user?.posts.filter(…)` stays valid TypeScript.
+			optional = optional || hasOptionalLink(callee.Object)
 		} else {
 			l.object(callee.Object)
 		}
-		l.step(verbatim, callee.Optional, false)
+		l.step(verbatim, optional, false)
 		l.w.WriteMapped(callee.Property, callee.PropPos.Offset)
 		l.args(c.Args)
 	default:
 		panic(fmt.Sprintf("codegen: unhandled callee %T", c.Callee))
+	}
+}
+
+// hasOptionalLink reports whether the member/call chain n holds a `?.` link
+// of its own — a parenthesized chain inside it is a separate chain.
+func hasOptionalLink(n expr.Node) bool {
+	for {
+		switch m := n.(type) {
+		case *expr.Member:
+			if m.Optional {
+				return true
+			}
+			n = m.Object
+		case *expr.Call:
+			n = m.Callee
+		default:
+			return false
+		}
 	}
 }
 
@@ -928,7 +951,7 @@ func (l *lowerer) noteCall(c *expr.Call) {
 // value lowers a value position — an expression and its TEMPORARY pipe chain —
 // recording what it reads into l.facts.
 func (l *lowerer) value(n expr.Node, fmts []parser.FormatterCall) {
-	if len(fmts) == 0 {
+	if len(fmts) == 0 { // P4: remove
 		l.note(n, readWhole)
 		l.top(n)
 		return
@@ -966,8 +989,8 @@ func (l *lowerer) value(n expr.Node, fmts []parser.FormatterCall) {
 	}
 }
 
-// value lowers a value position with the emitter's fact sink and returns the
-// JS; the chained form of the old resolveValue.
+// value lowers a value position with the emitter's fact sink, distributes
+// what it read to the enclosing list sites, and returns the JS.
 func (c *compiler) value(n expr.Node, fmts []parser.FormatterCall, scope scopeMap) string {
 	f := c.factSink()
 	out := c.valueInto(n, fmts, scope, f)
@@ -1016,9 +1039,21 @@ type eventValue struct {
 	refs []string
 }
 
-// handlerForm checks one handler form — the whole value, or one branch of a
-// handler-valued conditional (where null is also a form) — and returns the
-// view handler's name and the call's arguments (nil for the bare form).
+// HandlerForms returns the handler forms of an @event value: the value itself,
+// or both branches of a handler-valued conditional. A form's own call names
+// the view's handler, never the library (§9 c). It is the one definition the
+// lowering, the markup check (checkHandler), and the build's usage scan
+// (plugin.handlerOwnCalls) share.
+func HandlerForms(n expr.Node) []expr.Node {
+	if cond, ok := n.(*expr.Conditional); ok {
+		return []expr.Node{cond.Consequent, cond.Alternate}
+	}
+	return []expr.Node{n}
+}
+
+// handlerForm checks one handler form (see HandlerForms; in a conditional,
+// null is also a form) and returns the view handler's name and the call's
+// arguments (nil for the bare form).
 func handlerForm(n expr.Node, src string, branch bool) (name *expr.Identifier, args []expr.Node, call bool, err error) {
 	switch n := n.(type) {
 	case *expr.Identifier:
@@ -1056,9 +1091,10 @@ func (l *lowerer) handler(n expr.Node, src string, bareAsReference bool) (eventV
 		l.w.WriteString("null")
 		return eventValue{}, nil
 	}
+	handlerForms := HandlerForms(n)
 	cond, isCond := n.(*expr.Conditional)
 	if !isCond {
-		name, args, call, err := handlerForm(n, src, false)
+		name, args, call, err := handlerForm(handlerForms[0], src, false)
 		if err != nil {
 			return eventValue{}, err
 		}
@@ -1076,7 +1112,7 @@ func (l *lowerer) handler(n expr.Node, src string, bareAsReference bool) (eventV
 		call bool
 	}
 	var forms [2]form
-	for i, br := range []expr.Node{cond.Consequent, cond.Alternate} {
+	for i, br := range handlerForms {
 		name, args, call, err := handlerForm(br, src, true)
 		if err != nil {
 			return eventValue{}, err
@@ -1147,9 +1183,9 @@ func (l *lowerer) writeHandler(name *expr.Identifier, args []expr.Node, call boo
 		return
 	}
 	savedEvent, savedSize := l.event, l.sizeCompat
-	l.event, l.sizeCompat = eventParam, false
+	l.event, l.sizeCompat = eventParam, false // P4: remove
 	l.args(args)
-	l.event, l.sizeCompat = savedEvent, savedSize
+	l.event, l.sizeCompat = savedEvent, savedSize // P4: remove
 }
 
 func sortedKeys(m map[string]*localRead) []string {

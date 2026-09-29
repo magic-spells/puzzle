@@ -9,7 +9,7 @@ import (
 )
 
 // core_semantics_test.go — D173 group (b), expressions and loops, end to end:
-// V1 pipes in every value position (TEMPORARY until P4), V2 `==` keeps its
+// V1 pipes in every value position (TEMPORARY — P4: remove), V2 `==` keeps its
 // JavaScript meaning, V4 the member guard, V8 object literals as arguments,
 // V12 the loop guards — and the expression language (DESIGN-expr-v2) compiling
 // in every position. The lowering rules one by one are in expr_test.go; V15
@@ -345,7 +345,7 @@ func TestCalledLoopKeyKeepsMap(t *testing.T) {
 	)
 }
 
-// TEMPORARY until P4: the `.size` helper is imported only by a module whose
+// TEMPORARY (P4: remove): the `.size` helper is imported only by a module whose
 // template reads a count — never for a handler argument — and a skeleton read
 // counts.
 func TestSizeHelperImport(t *testing.T) {

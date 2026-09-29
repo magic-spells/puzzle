@@ -63,13 +63,13 @@ func TestEventHandlerGlobalNamedLoopVarNotCached(t *testing.T) {
 	if !strings.Contains(got, "__l(this, this, 0, __d.documents, (s) =>") {
 		t.Fatalf("document loop item was not lowered to a list block:\n%s", got)
 	}
-	// A loop binding SHADOWS the same-named JS global: the handler must read the
-	// row's item, never window.document.
+	// A loop binding owns its name: the handler must read the row's item, never
+	// window.document (and never the data field `document` either).
 	if !strings.Contains(got, "'@click': (s.h0 ??= (event) => this.events.open(s.item))") {
-		t.Errorf("a jsGlobals-named loop item must resolve to the row scope:\n%s", got)
+		t.Errorf("a loop item named like a browser global must resolve to the row scope:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing a jsGlobals-named loop item must not use the per-instance cache:\n%s", got)
+		t.Errorf("handler capturing a loop item named like a browser global must not use the per-instance cache:\n%s", got)
 	}
 }
 

@@ -58,7 +58,7 @@ declare global {
     visit: (value: number) => void,
   ): void;
 
-  // A template value's .size (D176, TEMPORARY until P4) is emitted as
+  // P4: remove. A template value's .size (D176, TEMPORARY) is emitted as
   // __z(value), the runtime's sizeOf helper: a list's or string's count,
   // otherwise the value's own size field. Most template data is untyped, which
   // the first overload answers with a number; a typed object reads its field.
@@ -66,7 +66,7 @@ declare global {
   function __z<T extends { readonly size?: unknown }>(value: T): T['size'];
   function __z(value: unknown): any;
 
-  // A TEMPORARY pipe chain (P4: remove) is checked as nested calls.
+  // P4: remove. A TEMPORARY pipe chain is checked as nested calls.
   function __puzzle_check_formatter(
     name: string,
     value: any,
@@ -108,7 +108,7 @@ var libraryFunctionSignatures = []struct{ name, signature string }{
 	{"percentage", "(value: unknown, places?: number): string"},
 	{"number_with_delimiter", "(value: unknown, delimiter?: string): string"},
 	{"compact_number", "(value: unknown): string"},
-	{"pluralize", "(count: unknown, singular: string, plural: string): string"},
+	{"pluralize", "(count: unknown, singular: string, plural?: string): string"},
 	{"date", "(value: unknown, preset?: string, locale?: string): string"},
 	{"time", "(value: unknown, preset?: string, locale?: string): string"},
 	{"datetime", "(value: unknown, preset?: string, locale?: string): string"},
@@ -131,30 +131,31 @@ var libraryFunctionSignatures = []struct{ name, signature string }{
 // app's own target: an app on `target: ES2020` would otherwise see `.at()`,
 // `.replaceAll()`, and `.toSorted()` reported as missing. A `/// <reference
 // lib>` adds a file without replacing the app's `lib` list. es2023.array
-// (findLast, toSorted, toReversed) first ships with TypeScript 5 — toSorted
-// and toReversed with 5.2 — so it is referenced from 5 on; every other file
-// exists in 4.9, the oldest compiler puzzle check supports.
+// types findLast from TypeScript 5.0 but toSorted and toReversed only from
+// 5.2, so it is referenced from 5.2 on (on 5.0 and 5.1 those two report as
+// missing, as they would in the app's own code); every other file exists in
+// 4.9, the oldest compiler puzzle check supports.
 var languageLibs = []struct {
-	lib      string
-	minMajor int
+	lib string
+	min TypeScriptVersion
 }{
-	{"es2016.array.include", 0}, // includes
-	{"es2017.object", 0},        // Object.values, Object.entries
-	{"es2017.string", 0},        // padStart, padEnd
-	{"es2019.array", 0},         // flat
-	{"es2019.string", 0},        // trimStart, trimEnd
-	{"es2021.string", 0},        // replaceAll
-	{"es2022.array", 0},         // at
-	{"es2022.string", 0},        // at
-	{"es2023.array", 5},         // findLast, toSorted, toReversed
+	{"es2016.array.include", TypeScriptVersion{}}, // includes
+	{"es2017.object", TypeScriptVersion{}},        // Object.values, Object.entries
+	{"es2017.string", TypeScriptVersion{}},        // padStart, padEnd
+	{"es2019.array", TypeScriptVersion{}},         // flat
+	{"es2019.string", TypeScriptVersion{}},        // trimStart, trimEnd
+	{"es2021.string", TypeScriptVersion{}},        // replaceAll
+	{"es2022.array", TypeScriptVersion{}},         // at
+	{"es2022.string", TypeScriptVersion{}},        // at
+	{"es2023.array", TypeScriptVersion{5, 2}},     // findLast, toSorted, toReversed
 }
 
-// shimSource is the shim for the app's TypeScript major version, with the
-// method table's lib files and the library signatures filled in.
-func shimSource(typescriptMajor int) string {
+// shimSource is the shim for the app's TypeScript version, with the method
+// table's lib files and the library signatures filled in.
+func shimSource(ts TypeScriptVersion) string {
 	var libs strings.Builder
 	for _, l := range languageLibs {
-		if typescriptMajor >= l.minMajor {
+		if ts.AtLeast(l.min) {
 			libs.WriteString("/// <reference lib=\"" + l.lib + "\" />\n")
 		}
 	}
@@ -209,8 +210,9 @@ func sourceDir(root string) (string, error) {
 	return dir, nil
 }
 
-// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/.
-func Generate(appRoot string, typescriptMajor int) (*Result, error) {
+// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/
+// for the app's TypeScript compiler version.
+func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
 	root, err := filepath.Abs(appRoot)
 	if err != nil {
 		return nil, err
@@ -279,10 +281,10 @@ func Generate(appRoot string, typescriptMajor int) (*Result, error) {
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shimSource(typescriptMajor)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shimSource(ts)), 0o644); err != nil {
 		return nil, err
 	}
-	config, err := tsconfig(root, typescriptMajor)
+	config, err := tsconfig(root, ts.Major)
 	if err != nil {
 		return nil, err
 	}
@@ -546,7 +548,7 @@ func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent i
 				return err
 			}
 		case *parser.Interpolation:
-			e.emitVoid(n.ExprAST, n.Formatters, scope, indent)
+			e.emitVoid(n.ExprAST, n.Formatters, scope, indent) // P4: remove
 		case *parser.If:
 			if err := e.emitIf(n, scope, indent); err != nil {
 				return err
@@ -570,7 +572,7 @@ func (e *emitter) emitAttrs(attrs []parser.Attr, scope map[string]bool, indent i
 	for _, attr := range attrs {
 		switch a := attr.(type) {
 		case *parser.DynamicAttr:
-			e.emitVoid(a.ExprAST, a.Formatters, scope, indent)
+			e.emitVoid(a.ExprAST, a.Formatters, scope, indent) // P4: remove
 		case *parser.EventAttr:
 			name := fmt.Sprintf("__puzzle_check_event_%d", e.eventSite)
 			e.eventSite++
@@ -590,7 +592,7 @@ func (e *emitter) emitParts(parts []parser.Part, scope map[string]bool, indent i
 	for _, part := range parts {
 		switch p := part.(type) {
 		case *parser.InterpPart:
-			e.emitVoid(p.Interp.ExprAST, p.Interp.Formatters, scope, indent)
+			e.emitVoid(p.Interp.ExprAST, p.Interp.Formatters, scope, indent) // P4: remove
 		case *parser.InlineIfPart:
 			e.b.WriteString(spaces(indent) + "if (")
 			codegen.WriteCheckValue(e.b, p.CondAST, nil, scope)

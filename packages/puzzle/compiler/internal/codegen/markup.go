@@ -32,7 +32,7 @@ func IsMarkupFormatter(name string) bool {
 // when it is written as one — no pipe chain, and the whole expression a call
 // to `raw` or `newline_to_br` — or nil.
 func markupCallOf(in *parser.Interpolation) *expr.Call {
-	if len(in.Formatters) > 0 {
+	if len(in.Formatters) > 0 { // P4: remove
 		return nil
 	}
 	call, ok := in.ExprAST.(*expr.Call)
@@ -52,7 +52,7 @@ func markupName(in *parser.Interpolation) string {
 	if call := markupCallOf(in); call != nil {
 		return call.Callee.(*expr.Identifier).Name
 	}
-	if n := len(in.Formatters); n > 0 && IsMarkupFormatter(in.Formatters[n-1].Name) {
+	if n := len(in.Formatters); n > 0 && IsMarkupFormatter(in.Formatters[n-1].Name) { // P4: remove
 		return in.Formatters[n-1].Name
 	}
 	return ""
@@ -200,7 +200,7 @@ func (c *compiler) checkTextInterp(in *parser.Interpolation, parentTag string) e
 		if err := c.checkNested(in.ExprAST); err != nil {
 			return err
 		}
-		for _, fc := range in.Formatters {
+		for _, fc := range in.Formatters { // P4: remove
 			for _, a := range fc.ArgsAST {
 				if err := c.checkNested(a); err != nil {
 					return err
@@ -275,7 +275,7 @@ func (c *compiler) checkAttrExprs(attrs []parser.Attr, where string) error {
 	for _, attr := range attrs {
 		switch a := attr.(type) {
 		case *parser.DynamicAttr:
-			if err := c.checkChain(a.ExprAST, a.Formatters, a.Pos, where); err != nil {
+			if err := c.checkChain(a.ExprAST, a.Formatters, a.Pos, where); err != nil { // P4: remove
 				return err
 			}
 		case *parser.MixedAttr:
@@ -297,7 +297,7 @@ func (c *compiler) checkChain(n expr.Node, fmts []parser.FormatterCall, pos pars
 	if err := c.checkExpr(n, where); err != nil {
 		return err
 	}
-	for _, fc := range fmts {
+	for _, fc := range fmts { // P4: remove
 		if IsMarkupFormatter(fc.Name) {
 			return c.cgErr(pos, fmt.Sprintf(
 				"`%s` renders markup, so it can only end a text interpolation — not %s (D174)",
@@ -317,7 +317,7 @@ func (c *compiler) checkParts(parts []parser.Part, pos parser.Position, where st
 		switch p := part.(type) {
 		case *parser.InterpPart:
 			if p.Interp != nil {
-				if err := c.checkChain(p.Interp.ExprAST, p.Interp.Formatters, pos, where); err != nil {
+				if err := c.checkChain(p.Interp.ExprAST, p.Interp.Formatters, pos, where); err != nil { // P4: remove
 					return err
 				}
 			}
@@ -336,22 +336,13 @@ func (c *compiler) checkParts(parts []parser.Part, pos parser.Position, where st
 	return nil
 }
 
-// handlerCalls returns the handler forms of an @event value — the whole value,
-// or both branches of a handler-valued conditional — that name a view handler.
-func handlerCalls(n expr.Node) []expr.Node {
-	if cond, ok := n.(*expr.Conditional); ok {
-		return []expr.Node{cond.Consequent, cond.Alternate}
-	}
-	return []expr.Node{n}
-}
-
 // checkHandler checks an @event value. Its own call names the view's handler,
 // never the library (§9 c), so only calls inside its arguments and its
 // condition are library calls; a handler named like a standard function draws
 // a warning, since the same name means the library everywhere else.
 func (c *compiler) checkHandler(a *parser.EventAttr) error {
 	skip := map[*expr.Call]bool{}
-	for _, form := range handlerCalls(a.ExprAST) {
+	for _, form := range HandlerForms(a.ExprAST) {
 		var name *expr.Identifier
 		switch f := form.(type) {
 		case *expr.Identifier:
@@ -405,7 +396,7 @@ func (c *compiler) emitMarkup(in *parser.Interpolation, scope scopeMap) (string,
 	} else {
 		// TEMPORARY (P4: remove): the pipe form; the chain before the markup
 		// link compiles as a text interpolation's does.
-		js = c.valueInto(in.ExprAST, in.Formatters[:len(in.Formatters)-1], scope, facts)
+		js = c.valueInto(in.ExprAST, in.Formatters[:len(in.Formatters)-1], scope, facts) // P4: remove
 	}
 	value := c.displayValue(js, in.Expr)
 	if name == "newline_to_br" {

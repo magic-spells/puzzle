@@ -41,7 +41,7 @@ import (
 // it reads (a bitmask over the class's `__roots`), the item members it reads at
 // depth one plus a `deep` flag for anything the record revision cannot cover,
 // and `volatile` for a body whose output can change with no data mutation (a
-// mutable global, a clock-reading formatter). Defaults are omitted, so the
+// clock-reading library function). Defaults are omitted, so the
 // common site is one short const.
 //
 // Two loops are deliberately NOT lowered:
@@ -137,7 +137,7 @@ func (c *compiler) factSink() *exprFacts {
 }
 
 // absorb distributes one expression's facts to every enclosing lowered loop.
-// Roots and volatile reads (a mutable global, a clock-reading formatter) reach
+// Roots and volatile reads (a clock-reading library function) reach
 // all of them (the read happens inside every enclosing body). An item/counter
 // read is attributed by matching the name's CURRENT resolution against the
 // site's own rewrite, so a <Snippet> parameter or an inner range variable that
@@ -353,7 +353,12 @@ func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lo
 		// A key calling a library function (`key={ slug(id) }`, or the
 		// TEMPORARY chained `key={ id | slug }`) reads `__f`, which the libRead
 		// check below turns into a `.map` site.
-		js = c.valueInto(attr.ExprAST, attr.Formatters, keyScope, facts)
+		js = c.valueInto(attr.ExprAST, attr.Formatters, keyScope, facts) // P4: remove
+		if len(attr.Formatters) == 0 && startsWithObject(attr.ExprAST) {
+			// The key becomes an arrow's body, where a leading `{` would read as a
+			// block: `(item) => ({ a: item?.id }?.a)`, as arrow() writes one.
+			js = "(" + js + ")"
+		}
 	case *parser.MixedAttr:
 		js = c.emitMixedFacts(attr.Parts, keyScope, facts)
 	default:

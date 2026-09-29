@@ -49,12 +49,13 @@ DnD possible with **zero framework changes**:
    (`client-runtime/views/viewManager.js` `setAttr`; lexer/parser/codegen never validate
    the event name). `@pointerdown`, `@pointercancel`, anything — all work.
 2. **Handlers get the real DOM event, and loop vars pass through.** Two compiled forms
-   (`compiler/internal/codegen/expr.go`, `compileEventValue`):
+   (`compiler/internal/codegen/lower.go`, `handler`):
    `@click={ handler }` → `(event) => this.events.handler(event)`, and
-   `@click={ handler(event, task.id) }` → `(event) => this.events.handler(event, task.id)`
+   `@click={ handler(event, task.id) }` → `(event) => this.events.handler(event, task?.id)`
    with `event` in scope. `event.preventDefault()` / `stopPropagation()` work normally.
    Constraint: the callee must be a bare name in the component's `events = {}` class
-   field, and the value must be a single call expression (no member access, no arrows).
+   field, and the value must be one of those two forms (or a conditional choosing
+   between them and `null`); the arguments are ordinary template expressions.
 3. **`@name` on a *component* tag is a callback prop, not a listener** (D16). In this
    demo: `<TaskCard @grab={ startDrag(event, task.id) } />` compiles to a prop
    `grab: (event) => this.events.startDrag(event, task.id)`; TaskCard's own root div has
