@@ -31,6 +31,16 @@ jobs:
         working-directory: packages/puzzle-lang
       - run: go vet ./...
       - run: go build ./...
+      # The live-tsc tests (internal/check, and the scaffold's TypeScript
+      # build-and-check in cmd/puzzle) skip silently when
+      # node_modules/typescript is missing, so install it before `go test` or
+      # CI never runs `puzzle check` against a real compiler.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/puzzle/package-lock.json
+      - run: npm ci
       - run: go test ./...
       # cmd/pzl-wasm sits behind a `js && wasm` build tag, so the `go build
       # ./...` above never compiles it — the playground compiler (D164) could
