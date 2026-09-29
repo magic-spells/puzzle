@@ -409,6 +409,27 @@ export default class T extends PuzzleView {
 	}
 }
 
+// Outside a handler `event` is an ordinary name: a data field or prop named
+// `event` reads `__d.event` like any other, a component prop may be named
+// `event`, and a handler's `event` is still the DOM event parameter.
+func TestEventOutsideAHandlerIsDataPzlCompile(t *testing.T) {
+	res, err := compileTemplate(t, "<puzzle-view><h1>{ event.title }</h1>"+
+		"{#for item in events}<EventCard event={ item }/>{/for}"+
+		"<button @click={ save(event) }>x</button></puzzle-view>", "")
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	for _, want := range []string{
+		"__d.event?.title",
+		"event: s.item",
+		"(event) => this.events.save(event)",
+	} {
+		if !strings.Contains(res.JS, want) {
+			t.Errorf("compiled output missing %q:\n%s", want, res.JS)
+		}
+	}
+}
+
 // A `}` inside a nested template literal does not close the braces, and the
 // lowered literal reproduces the source.
 func TestNestedTemplateLiteralExpressionCompile(t *testing.T) {

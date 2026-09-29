@@ -17,8 +17,9 @@
 // at it is unrestricted — any property, any method (`event.target.closest('li')`,
 // `event.preventDefault()`), no method-table check — because it is not
 // template data. A bound `event` shadows it, as in JavaScript, and its chain
-// is ordinary data. Sites has no handlers, so the extension never applies
-// there.
+// is ordinary data. Outside a handler `event` is an ordinary name that reads
+// the data field or prop of that name. Sites has no handlers, so the
+// extension never applies there.
 //
 // Names a template binds — arrow parameters, {#for} items and counters,
 // <Snippet> parameters, Sites' {#let} — follow one rule (IsIdentifier and

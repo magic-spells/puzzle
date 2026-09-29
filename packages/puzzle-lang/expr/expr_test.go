@@ -165,10 +165,25 @@ func TestParseDefaultOptions(t *testing.T) {
 	if _, err := Parse("x => x", Pos{Line: 1, Col: 1}); err == nil {
 		t.Error("an arrow at the top level must fail: arrows are call arguments only")
 	}
-	if _, err := Parse("event", Pos{Line: 1, Col: 1}); err == nil {
-		t.Error("event must fail outside a handler")
+	// The default is not a handler: `event` there is the DOM event, whose
+	// chain skips the method table; in a value position it is data.
+	if _, err := Parse("event.target.closest('li')", Pos{Line: 1, Col: 1}); err == nil {
+		t.Error("outside a handler an event chain is data and keeps the method table")
 	}
-	mustParse(t, "event", Pos{Line: 1, Col: 1}, Options{Handler: true})
+	mustParse(t, "event.target.closest('li')", Pos{Line: 1, Col: 1}, Options{Handler: true})
+}
+
+// Outside a handler `event` is an ordinary name: a data field or prop named
+// `event` reads like any other, as a plain member tree.
+func TestEventOutsideAHandlerIsData(t *testing.T) {
+	n := mustParse(t, "event.title", Pos{Line: 1, Col: 1})
+	m, ok := n.(*Member)
+	if !ok || m.Computed || m.Optional || m.Property != "title" {
+		t.Fatalf("event.title: got %T %s, want a plain member", n, Print(n))
+	}
+	if id, ok := m.Object.(*Identifier); !ok || id.Name != "event" {
+		t.Fatalf("event.title: object %T, want the identifier event", m.Object)
+	}
 }
 
 // A binding-name rule, shared by arrow parameters here and by the template

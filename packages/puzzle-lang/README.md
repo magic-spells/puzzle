@@ -94,8 +94,8 @@ name is a value: it reads, and calling it is an error, so `t('key')` inside
   it, as in JavaScript, and its chain is ordinary data even in a handler. The
   handler's own call — the whole value, or a branch of a top-level
   conditional — names a view handler, so it may share a name with a binding.
-  Outside a handler a free `event` is an error, so a data field named `event`
-  must be renamed to be shown.
+  Outside a handler `event` is an ordinary name: it reads the data field or
+  prop named `event`, like any other.
 - `Bindings` lists the names the enclosing template constructs bind; the
   template parser passes them, and each reads but cannot be called.
 

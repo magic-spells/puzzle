@@ -20,10 +20,11 @@ type Options struct {
 	// (`event.target.closest('li')`, `event.preventDefault()`) with no
 	// method-table check — the browser's Event object is not template data. A
 	// bound `event` (a binding or an arrow parameter) shadows it, as in
-	// JavaScript, and its chain is ordinary data. Outside a handler a free
-	// `event` is an error. The handler's own call (the whole value, or a
-	// branch of a top-level conditional) names a view handler, so it may share
-	// a name with a binding.
+	// JavaScript, and its chain is ordinary data. Outside a handler `event` is
+	// an ordinary name: it reads the data field or prop of that name, like any
+	// other. The handler's own call (the whole value, or a branch of a
+	// top-level conditional) names a view handler, so it may share a name with
+	// a binding.
 	Handler bool
 	// Bindings are the names the enclosing template constructs bind: {#for}
 	// items and counters and <Snippet> parameters (in Sites, {#let} names).
@@ -771,9 +772,6 @@ func (p *parser) parseName() Node {
 	if IsGlobalFunction("", t.text) {
 		return p.parseGlobalFunction()
 	}
-	if t.text == "event" && !p.opts.Handler && !p.eventBound() {
-		p.fail(t.pos, msgEvent)
-	}
 	id := &Identifier{Start: t.pos, Name: t.text}
 	if !isPunct(p.peek(1), "(") {
 		p.noteAmbient(id)
@@ -969,9 +967,6 @@ func (p *parser) parseObject() Node {
 				}
 				if msg := globalValueMessage(t.text); msg != "" {
 					p.fail(t.pos, msg)
-				}
-				if t.text == "event" && !p.opts.Handler && !p.eventBound() {
-					p.fail(t.pos, msgEvent)
 				}
 				id := &Identifier{Start: t.pos, Name: t.text}
 				p.noteAmbient(id)

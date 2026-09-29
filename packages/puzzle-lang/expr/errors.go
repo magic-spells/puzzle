@@ -33,7 +33,6 @@ const (
 
 	msgExpected        = "expected an expression"
 	msgThis            = "`this` is not available in template expressions — return the value from data() (a getter or a computed field), or use a function for a display transform"
-	msgEvent           = "`event` is only available in an event handler — a data field named `event` cannot be read in a template; rename the field"
 	msgArrowPlace      = "arrow functions are only available as a call argument, e.g. `items.filter(item => item.done)`"
 	msgArrowParam      = "arrow function parameters are plain names — defaults, rest parameters, and destructuring are not available in template expressions"
 	msgArrowBlock      = "an arrow function body is one expression, not a `{ … }` block — to return an object, wrap it in parentheses: `x => ({ … })`"
