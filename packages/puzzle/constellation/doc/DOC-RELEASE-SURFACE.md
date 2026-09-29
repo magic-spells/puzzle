@@ -110,12 +110,17 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `<script>` is real JS. `lang="ts"` enables esbuild transpilation only — the
   build itself never type-checks. Type checking is the separate opt-in
   `puzzle check` command (D165), which runs the app's own `tsc` over emitted
-  virtual files and reports diagnostics at real `.pzl` positions; editors still
+  virtual files and reports diagnostics at real `.pzl` positions (a standard
+  function call is checked against its signature, and an app function types
+  as `(...args: any[]) => any` through a call, `__puzzle_app_fn("name")(…)`,
+  so it passes under `noUncheckedIndexedAccess`); editors still
   do not check `.pzl` script bodies, and the scaffolded TypeScript config
   covers standalone `.ts`/`.js` files and declarations.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and function calls; dynamic/mixed/boolean attributes;
-  controlled `value`, `checked`, `disabled`, and `selected` properties.
+  controlled `value`, `checked`, `disabled`, and `selected` properties. HTML
+  void elements take no closing tag (`<br>`, `<input …>`); a closer such as
+  `</input>` is a positioned compile error.
 - **The function library is the D174 standard set** — 19 functions with the
   same arguments and meaning as Sites — plus the PuzzleKit-only `link` and
   `timeago`. Numbers: `round`, `currency`, `percentage`,
@@ -139,7 +144,13 @@ second specification. Decision cards hold rationale and git holds chronology.
   a development warning. A string-literal preset that `date`/`time`/`datetime`
   does not know, or a literal `in_timezone` zone that cannot be a zone id, is a
   positioned compile warning naming the valid presets; a dynamic one is a
-  development error at run time. A shared JSON conformance table
+  development error at run time. An `in_timezone` zone `Intl` rejects renders
+  the date un-shifted with a development error once per zone; a `null` or
+  `''` zone renders un-shifted silently, and an omitted zone is `'UTC'`.
+  Static and hybrid prerender print the locale-rendered functions and
+  `timeago` in the build machine's locale (`LANG`, or `LC_ALL` when set; or
+  `i18n.defaultLocale` when configured) and `TZ`, and the browser re-renders
+  them in the viewer's. A shared JSON conformance table
   (`packages/puzzle-lang/conformance/functions.json`, embedded by the
   language module so Sites runs the same rows) pins the identical-output part.
 - **`raw` and `newline_to_br` render live HTML (D174 group e).** `raw` always
@@ -169,18 +180,23 @@ second specification. Decision cards hold rationale and git holds chronology.
   count is `.length`; `.size` reads a field named `size`. `new`, `typeof`,
   bitwise operators, `**`, `in`, `instanceof`, assignment, `++`/`--`, regular
   expressions, `Date` and `JSON` are positioned compile errors naming the
-  alternative. `window`, `document` and `globalThis` read as a data root steer
+  alternative, so a `/` after any operand is division (`{ café / 2 }`).
+  `window`, `document` and `globalThis` read as a data root steer
   to `data()`; every other name, `location` included, reads the `data()` field
   of that name. A template expression never reaches the view instance: `this`
   is a positioned compile error in every template expression, `@event` handler
   arguments included, and an `@event` handler is the one door into the view's
   JavaScript (a chain rooted at the free `event` is the DOM event, outside the
-  method table).
+  method table). Outside a handler `event` is an ordinary name that reads the
+  data field or prop (`<EventCard event={ item }>` and its `{ event.title }`),
+  and a template that reads `event` as data and also uses it in a handler is a
+  positioned compile error at the handler's use: rename the field or prop.
 - **Core semantics (D173):** there is no pipe — a `|` anywhere is a positioned
   compile error ("`| name` pipes were removed — write `name(value)`; bitwise
   OR is not available", naming the JavaScript replacement when the name after
   it is a removed function). Every member step and method call in a template
-  value compiles to `?.`, so a missing intermediate prints nothing.
+  value compiles to `?.`, so a missing intermediate prints nothing, and
+  `Object.keys`/`values`/`entries` of a missing value return `[]`.
   A loop over a non-list runs zero times (a non-array non-nullish value warns
   in development); range bounds truncate. `NaN`, ±Infinity and any object,
   `Date` included, print nothing (with a development warning); a list in a
