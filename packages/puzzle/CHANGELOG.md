@@ -941,9 +941,12 @@ checklist sent you.
   plain-JavaScript component reported "Expected 0 arguments, but got 1" —
   on DOM events and component callback props alike — though the call is
   legal JavaScript and the documented form. A JavaScript component's
-  handlers now take any arguments; a misspelled handler name and the
-  argument expressions are still checked, and a `lang="ts"` component's
-  handler calls stay fully checked.
+  handlers now take any arguments, and handler names are now checked: a
+  misspelled one is reported, where before it passed. A JavaScript
+  component's template handlers must therefore be declared in its `events`
+  field — one attached at runtime (`this.events.play = …` in the
+  constructor or `created()`) is reported. Argument expressions are still
+  checked, and a `lang="ts"` component's handler calls stay fully checked.
 - **A component class may have a non-ASCII name.** `export default class
   Übersicht`, `class 概要` and `class Straßenkarte` now compile, and a file
   named `Übersicht.pzl` derives that class name. The script scanner that finds

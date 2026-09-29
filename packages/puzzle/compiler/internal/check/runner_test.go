@@ -576,9 +576,10 @@ func TestJSHandlerArityIsNotChecked(t *testing.T) {
 	}
 }
 
-// Relaxing a JavaScript handler's parameters leaves the rest of the call
-// checked: its argument expressions are template expressions like any other,
-// and the handler itself must exist.
+// Relaxing a JavaScript handler's parameters leaves its argument expressions
+// checked as template expressions like any other, and the handler name is now
+// checked against the component's events field — TypeScript reads a JS object
+// literal as open, so a misspelled handler was not reported before.
 func TestJSHandlerArgumentsAndNameAreChecked(t *testing.T) {
 	root := liveTSCApp(t)
 	writeLiveView(t, root, handlerArityComponent("", "value.upper"))

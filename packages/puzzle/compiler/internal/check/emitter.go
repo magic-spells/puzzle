@@ -84,10 +84,14 @@ __LIBRARY_SIGNATURES__
   // their types are what TypeScript infers from untyped JS: play: () => {}
   // takes nothing, and the documented @click={ play(event) } would be an
   // arity error on legal code. The check wrapper sees such a component through
-  // this type, which keeps every handler NAME (a misspelled one is still
-  // reported) and lets it take any arguments; the argument expressions are
-  // still checked where they are written. A TypeScript component is never
-  // wrapped, so its handler calls stay fully checked.
+  // this type, which lets every handler take any arguments and closes the set
+  // of handler NAMES to the keys of its events field: TypeScript reads a JS
+  // object literal as open, so a misspelled handler was never reported until
+  // this type made it one. A handler attached at runtime rather than declared
+  // in events (this.events.play = … in the constructor or created()) is
+  // reported too. The argument expressions are still checked where they are
+  // written. A TypeScript component is never wrapped, so its handler calls
+  // stay fully checked.
   type __PuzzleCheckJSView<V> = V extends { events: infer E }
     ? Omit<V, 'events'> & { events: { [K in keyof E]: (...args: any[]) => any } }
     : V;
@@ -583,8 +587,9 @@ func emitCheckedFile(
 	}
 	view := "InstanceType<typeof " + className + ">"
 	if !includeScript {
-		// A plain-JavaScript component: its handlers take any arguments (the
-		// shim's __PuzzleCheckJSView says why).
+		// A plain-JavaScript component: its handlers take any arguments and
+		// must be declared in its events field (the shim's __PuzzleCheckJSView
+		// says why).
 		view = "__PuzzleCheckJSView<" + view + ">"
 	}
 	b.WriteString("void function (this: " + view + " & Record<string, any>): void {\n")
