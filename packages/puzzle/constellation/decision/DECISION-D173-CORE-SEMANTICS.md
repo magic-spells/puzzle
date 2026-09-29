@@ -179,17 +179,12 @@ default (V4). Renderer: whitespace (V10), raw escaping (V11), loop bounds
 
 ## Alternatives rejected
 
-- **Formatter pipes** (`{ price | currency }`) — a second syntax beside JS,
-  collides with bitwise OR, needed per-header bans and its own AST fields
-  every port had to apply. A function call is JS and has one shape.
 - **`==` means `===`, or reject `==`** — redefines or forbids valid JS; the
   optional lint rule covers strict teams.
 - **Lower `=== null` to `== null`** — changes a valid JS result.
 - **Mandatory `?.`** — keeps a crash for anyone who forgets it.
 - **Unify V5 via runtime helpers** — cost on the hottest path for inputs no
   correct template produces.
-- **`.size` as a code-point count** — not JS, shadowed records' own `size`
-  fields, cost a runtime helper.
 - **Code points in Sites, UTF-16 in PuzzleKit** — the hosts would disagree.
 - **One host's whitespace rule wholesale** — see D168.
 - **Static slot-filled rule** (any non-whitespace authored content fills) —

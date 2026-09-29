@@ -55,6 +55,10 @@ out, a function `(to, from) => element` to choose the target. Spec: SPEC §51.
   `document.title` is announced only when non-empty and different from the last
   announcement; otherwise the committed leaf route's `name`, or its `path` when
   the name would repeat.
+- **Known residual:** navigation #0 announces nothing, so `#announcedTitle`
+  still holds the shipped title after it. If #0 resolved a title (a titled home
+  route) and the next navigation resolves none, that first announcement reads
+  #0's leftover title once, because it differs from the seed.
 
 ## Consequences
 

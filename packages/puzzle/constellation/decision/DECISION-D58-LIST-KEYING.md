@@ -15,8 +15,9 @@ verified_at: '2026-07-14T07:07:57.217Z'
 # D58 — List keying: pk-aware auto-key, explicit key override, null-key warning
 
 ## Decision
+
 - **Runtime-resolved auto-key: `ViewNode.keyOf(item)`.** An item-form `{#for}` keys each row through this static helper, which resolves when the real object is in hand:
-  - a store record (`item instanceof PuzzleModel`) → `item[item.constructor.primaryKey()]`, so template keying agrees with `.primary()`;
+  - a store record (`item instanceof PuzzleModel`) → `item[item.constructor.primaryKey()]`, so template keying agrees with `.primary()`. **Gotcha:** a record whose primary key is null/undefined returns that value with **no** warning — the null-key diagnostic covers only the non-record path below — so such rows fall back to positional reconciliation silently;
   - anything else → `item?.id`;
   - null/undefined → a dev-only warn-once naming the item, and `null` (positional fallback, now diagnosed).
 - **Explicit key wins.** A `key` attribute (static or dynamic) on the `{#for}` body root replaces the synthetic key; `keyOf` is not applied to it. This is the override for non-record data with other identity fields. Keys must be stable and unique.

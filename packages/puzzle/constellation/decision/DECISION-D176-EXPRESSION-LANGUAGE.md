@@ -278,16 +278,9 @@ headers take any expression (`{#for t in todos.filter(t => !t.done)}`,
 
 ## Alternatives rejected
 
-- **A Puzzle data language with Liquid-style pipes** (`.size` as the count,
-  pipes only in display positions, a 27-name formatter set) — custom syntax
-  that breaks "it's just JS in the braces", and it drifted in practice: a JS
-  deny-list in PuzzleKit and an allow-list parser in Sites disagreed on ~a
-  dozen inputs; a token-scanning resolver mis-prefixed Unicode identifiers
-  and arrow params. A closed grammar parsed once with one conformance table
-  removes that class of drift.
 - **Full JS via an engine in Sites** — "it needs to be in Go."
 - **Vue's open-ended model** — a Go host cannot evaluate arbitrary JS.
-- **Each host accepts its own subset** — that is the drift above; Sites only
+- **Each host accepts its own subset** — two parsers drift; Sites only
   switches entries off.
 - **Keep `upcase`/`trim`/`join`… as functions** — two ways to say one thing.
 - **`===` only** — `==` keeps its JS meaning; Go implements the coercion.
