@@ -12,7 +12,9 @@ import { FormatterRegistry } from '../client-runtime/formatters.js';
 import { listRows, loopItems, loopRange } from '../client-runtime/views/listBlock.js';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { mountView } from '../client-runtime/testing/index.js';
 import CoreHost from './fixtures/core-semantics/CoreHost.compiled.js';
+import ObjectGlobals from './fixtures/core-semantics/ObjectGlobals.compiled.js';
 
 let mounted = null;
 
@@ -125,6 +127,25 @@ describe('D173 core semantics — compiled output', () => {
 		expect(doc.querySelector('.prose').textContent).toBe('tokens — a, b and items 3');
 		expect(doc.querySelector('.pre').textContent).toBe('  indented\n    more 3\n');
 		expect(doc.querySelector('.ta').value).toBe('  keep\n    this');
+	});
+});
+
+// JavaScript's Object.keys/values/entries throw on null and undefined; a
+// template never throws on a missing value, so the compiler defaults the
+// argument to `{}` and a missing object counts 0.
+describe('Object globals over a missing value (D173 V4)', () => {
+	it('count 0 instead of throwing, and read a present value unchanged', async () => {
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const view = await mountView(ObjectGlobals);
+		try {
+			expect(view.find('.keys').textContent).toBe('0');
+			expect(view.find('.values').textContent).toBe('0');
+			expect(view.find('.entries').textContent).toBe('0');
+			expect(view.find('.present').textContent).toBe('a,b');
+			expect(view.find('.string').textContent).toBe('3');
+		} finally {
+			view.destroy();
+		}
 	});
 });
 

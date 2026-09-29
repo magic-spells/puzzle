@@ -370,10 +370,13 @@ checklist sent you.
   coerced its input, so `{ zip | upcase }` on a number printed `12345`;
   `{ zip.toUpperCase() }` throws on a number and sends the view to
   `errorView`. Coerce first where the value may not be a string:
-  `{ String(zip).toUpperCase() }`.
+  `{ String(zip ?? '').toUpperCase() }` — a bare `String(zip)` turns a
+  `null` into the text `null` and prints `NULL`, where `| upcase` printed
+  nothing.
 - **`.length` is not `| size`.** It prints nothing for `null` or an object
-  where `| size` gave `0` or the object's key count
-  (`Object.keys(obj).length`).
+  where `| size` gave `0` or the object's key count. Write
+  `Object.keys(obj).length` for the key count; it counts `0` when `obj` is
+  missing, as `| size` did.
 - **`+` concatenates strings.** `| plus` coerced both sides to numbers;
   `{ count + 1 }` with a string `count` of `'2'` prints `21`. Convert first:
   `{ Number(count) + 1 }`.
@@ -393,6 +396,16 @@ checklist sent you.
   development error that names `.toUpperCase()`, and in production the value
   passes through unchanged. The `|` form (`{ name | upcase }`) fails the build
   with the replacement, so convert pipes rather than rename them.
+- **Prerendered pages format numbers and dates on the build machine.**
+  `output: 'static'` and `output: 'hybrid'` pages print
+  `number_with_delimiter`, `pluralize`, `compact_number`, `date`, `time`,
+  `datetime` and `timeago` in the build machine's locale (`LANG`, or
+  `LC_ALL` when set) and time zone (`TZ`) — the locale is `i18n.defaultLocale`
+  instead when the app configures `i18n`, but the time zone still follows
+  `TZ` — and the browser then re-renders them in the viewer's. The dates
+  behaved this way in 0.7; the three number functions follow the locale only
+  since 0.8 (0.7's `| number_with_delimiter` always used `,`). For
+  deterministic HTML, pin the locale and `TZ` on the build machine.
 
 ### Added
 
@@ -688,6 +701,18 @@ checklist sent you.
   exists (it used to be reachable only by throwing): it never writes a stray
   top-level `name`. Cost: +34 B gzip on the todos example, nothing on
   hello-world.
+- **`Object.keys` over a missing value, app functions in `puzzle check`,
+  and a mistyped time zone.** `Object.keys(x)`, `Object.values(x)` and
+  `Object.entries(x)` with `x` missing return `[]` instead of failing the
+  view with a `TypeError` — the compiler passes `x ?? {}`, so any other value
+  reaches them unchanged — and `{ Object.keys(settings).length }` prints `0`;
+  `puzzle check` types an app function through a call rather than an index
+  signature, so `{ myFn(x) }` no longer fails under
+  `noUncheckedIndexedAccess` ("Cannot invoke an object which is possibly
+  'undefined'") while the standard functions keep their signatures; and an
+  `in_timezone` zone `Intl` rejects (`'America/New_Yrok'`, which passes the
+  compile-time shape check) is a development error, once per zone, and
+  still renders the date un-shifted.
 - **BREAKING: a loop over something that is not a list runs zero times (D173
   V12).** A missing collection (`null`/`undefined`) loops zero times silently;
   any other non-array (a string, an object, a number) loops zero times with a

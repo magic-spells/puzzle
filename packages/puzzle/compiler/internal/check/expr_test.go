@@ -148,6 +148,7 @@ func TestExpressionLanguageEmits(t *testing.T) {
 	source := []byte(`<puzzle-view>
   <p>{ name.trim().toUpperCase() } { currency(price, '$') } { Math.round(n) }</p>
   <p>{ items.filter(t => !t.done).length } { tags?.at(0) ?? 'none' }</p>
+  <p>{ Object.keys(counts).length } { myFormat(name) }</p>
   <button @click={ save(t('saved'), event.target.value) }>x</button>
 </puzzle-view>
 <script lang="ts">
@@ -166,6 +167,8 @@ export default class Home extends PuzzleView {}
 		"void (Math.round(__d.n));",
 		"void (__puzzle_check_list(__d.items).filter((t) => !t.done).length);",
 		"void (__d.tags?.at(0) ?? 'none');",
+		"void (Object.keys(__d.counts).length);",
+		`void (__puzzle_app_fn("myFormat")(__d.name));`,
 		"= (event) => this.events.save(__puzzle_fn.t('saved'), event.target.value);",
 	} {
 		if !strings.Contains(got, want) {
@@ -234,5 +237,55 @@ export default class Home extends PuzzleView { n = 1; price = 3; tags: string[] 
 				t.Fatalf("diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 			}
 		})
+	}
+}
+
+// An app function is typed through a call (`__puzzle_app_fn("name")(…)`), not an
+// index signature, so it stays callable under the two strict index-signature
+// flags — noUncheckedIndexedAccess typed an index-signature member as possibly
+// undefined ("Cannot invoke an object which is possibly 'undefined'"). The
+// standard functions keep their declared signatures. An Object global keeps
+// the author's spelling here (the render target's `?? {}` default is not
+// emitted), so a literal argument is not a TypeScript 5.6+ "left operand is
+// never nullish" error.
+func TestAppFunctionsTypeCheckUnderStrictIndexFlags(t *testing.T) {
+	root := liveTSCApp(t)
+	cfg := `{"compilerOptions":{"strict":true,"noUncheckedIndexedAccess":true,"noPropertyAccessFromIndexSignature":true}}`
+	if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeLiveView(t, root, `<puzzle-view>
+  <p>{ myFormat(name) } { myFormat(name, 2).nested.value } { currency(price, '$') }</p>
+  <p>{ Object.keys({ a: 1 }).length } { Object.values(settings).filter(v => v).length }</p>
+</puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  name = 'ab';
+  price = 3;
+  settings: Record<string, boolean> = {};
+}
+</script>
+`)
+	if _, err := Run(root); err != nil {
+		t.Fatalf("app and standard function calls must type-check under the strict index flags: %v", err)
+	}
+
+	// The standard signatures are not loosened with them.
+	bad := `<puzzle-view><p>{ myFormat(name) } { currency(price, 2) }</p></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView { name = 'ab'; price = 3; }
+</script>
+`
+	writeLiveView(t, root, bad)
+	_, err := Run(root)
+	if err == nil {
+		t.Fatal("expected the standard signature to reject a number symbol")
+	}
+	line, col := pzlPosition(t, bad, "2) }")
+	want := fmt.Sprintf("app/views/Home.pzl:%d:%d: Argument of type 'number' is not assignable to parameter of type 'string'.", line, col)
+	if got := err.Error(); got != want {
+		t.Fatalf("diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
 }

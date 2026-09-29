@@ -60,12 +60,15 @@ declare global {
 
   // A bare call names the function library: the standard functions typed
   // below, and any app-registered function, untyped — its arguments and its
-  // result are any, as an untyped data() value is.
+  // result are any, as an untyped data() value is. An app function is reached
+  // through __puzzle_app_fn rather than an index signature on this interface,
+  // which noUncheckedIndexedAccess would type as possibly undefined (and
+  // noPropertyAccessFromIndexSignature would reject as a dotted read).
   interface __PuzzleFunctions {
 __LIBRARY_SIGNATURES__
-    [name: string]: (...args: any[]) => any;
   }
   const __puzzle_fn: __PuzzleFunctions;
+  function __puzzle_app_fn(name: string): (...args: any[]) => any;
 
   // A method call whose arguments hold an arrow function takes its receiver
   // through here. An untyped data value (any) becomes any[], so the arrow's

@@ -110,7 +110,15 @@ func TestLowering(t *testing.T) {
 		{"Math function", "Math.round(x * 100) / 100", nil, "Math.round(__d.x * 100) / 100"},
 		{"bare global", "Number(x) + parseInt(y)", nil, "Number(__d.x) + parseInt(__d.y)"},
 		{"URI global", "'/search?q=' + encodeURIComponent(q)", nil, "'/search?q=' + encodeURIComponent(__d.q)"},
-		{"Object.keys", "Object.keys(user).length", nil, "Object.keys(__d.user)?.length"},
+		// The Object globals default a missing argument to {} (D173 V4): JavaScript
+		// throws on null/undefined, a template never does.
+		{"Object.keys", "Object.keys(user).length", nil, "Object.keys(__d.user ?? {})?.length"},
+		{"Object.values", "Object.values(a.b)", nil, "Object.values(__d.a?.b ?? {})"},
+		{"Object.entries over a row local", "Object.entries(todo)", row, "Object.entries(s.item ?? {})"},
+		{"Object global over ||", "Object.keys(a || b)", nil, "Object.keys((__d.a || __d.b) ?? {})"},
+		{"Object global over ??", "Object.keys(a ?? b)", nil, "Object.keys(__d.a ?? __d.b ?? {})"},
+		{"Object global over a conditional", "Object.keys(c ? a : b)", nil, "Object.keys((__d.c ? __d.a : __d.b) ?? {})"},
+		{"other globals take their argument as is", "Number(x) + Array.isArray(y)", nil, "Number(__d.x) + Array.isArray(__d.y)"},
 		{"Math constant", "Math.PI * r", nil, "Math.PI * __d.r"},
 		{"step off a Math constant", "Math.PI.toFixed(2)", nil, "Math.PI?.toFixed(2)"},
 		// Arrow functions: a fresh scope whose parameters shadow everything.
