@@ -236,6 +236,34 @@ notes:
       is opaque like any non-member use (`{ byline(post) }` → `deep`). Handler arguments are guarded
       like any expression and still record only their data roots; a library call in one makes the
       handler non-cacheable (D62).
+  - kind: gotcha
+    text: >-
+      The index-shift gotcha has a NESTED form the parent-list pre-scan cannot see: a cached vnode
+      inside a FRESH parent whose index moved (`{#for tag in tags}<span/>{/for}<button
+      class={c}><svg ref=… @click:outside=…/></button>`, two variable runs around `<div
+      class={c}><div class="a">…</div></div>`, variable slot content before a fresh `<footer>`, a
+      row's inner keyless loop before a fresh `<em>` holding `s.c[0]`). The fresh parent pairs with
+      a different old node, so the incoming tree reaches the cached object FIRST — mount() into the
+      new parent, or patch() adopting another old node's element — overwriting its `el`/`component`,
+      and the outgoing tree then releases or patches its old position THROUGH THE SAME OBJECT: refs
+      nulled on the live element, its outside listener swept while the detached one leaked on
+      document past destroy(), static markup ending up inside the wrong row, a nested component
+      lost. Rule the patcher keeps: an old position always releases/patches the copy it describes.
+      Mechanism (viewManager.js keepOutgoing/outgoingOf): mount() of a vnode whose `el` is already
+      set, and patch() adopting into a reused newVnode (`el` set, not the old object), first
+      snapshot its links (el, component, instance, html `nodes`, portal range) into a map keyed by
+      the vnode; the OLD-side consumers — patch()'s oldVnode, unmount(), releaseSubtree()'s child
+      walk — read through that map and consume each entry once. Nothing is released early, so a
+      snapshot whose old position was already consumed (a cached branch toggled back on, an old
+      position another vnode already adopted) is simply never asked for; that is why the snapshot is
+      taken unconditionally rather than behind a liveness test, which `el.parentNode` cannot answer
+      exactly. The map lives for one outermost ViewManager.render (renders nest; a depth counter
+      drops it). Cost when unused: one null test per mount/patch/unmount/child release. Consequence:
+      unlike the top-level case, a nested shifted subtree is REMOUNTED (fresh DOM, a nested
+      component recreated, the old instance destroyed), not moved. Rejected: a full-depth pre-scan
+      (O(tree) per level), and release-at-remount with pass stamps (cannot tell the vnode's own old
+      element from one another vnode already adopted, and loses the old position that a later
+      patch(old, new) needs). Tests: the nested block in tests/static-cache-shift.test.js.
 ---
 
 # D170 — Persistent list blocks and an incremental virtual DOM
