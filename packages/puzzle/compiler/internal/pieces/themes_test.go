@@ -346,6 +346,59 @@ func TestAddThemeDefaultImportedButDeletedIsRecopied(t *testing.T) {
 	}
 }
 
+// A MENTION of pieces.css is not an import: a comment, or an import commented
+// out, leaves the default palette unwired, so `add theme default` copies it and
+// prints the import line — what it does for an app that never mentions it.
+func TestAddThemeDefaultCommentMentionIsNotWired(t *testing.T) {
+	for _, tc := range []struct{ name, styles string }{
+		{"commented-out import", "@import \"tailwindcss\";\n/* @import './pieces.css'; */\n"},
+		{"prose comment", "@import \"tailwindcss\";\n/* tokens used to live in pieces.css */\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := multiThemeFixture(t)
+			app := newApp(t, false)
+			writeStyles(t, app, tc.styles)
+
+			res, err := AddThemes(themeOpts(reg, app, "default"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st := themeState(t, res, "default").State; st != ThemeCopied {
+				t.Errorf("state = %q, want %q", st, ThemeCopied)
+			}
+			if !fileExists(filepath.Join(app, "app", "styles", "pieces.css")) {
+				t.Error("pieces.css should have been copied")
+			}
+			if out := renderThemes(res); !strings.Contains(out, "add `@import './pieces.css';`") {
+				t.Errorf("an unwired palette must print the import line:\n%s", out)
+			}
+		})
+	}
+}
+
+// Only a live @import statement whose target is ./pieces.css counts as wiring.
+func TestPiecesCssImported(t *testing.T) {
+	for _, tc := range []struct {
+		css  string
+		want bool
+	}{
+		{`@import './pieces.css';`, true},
+		{`@import "./pieces.css" layer(tokens);`, true},
+		{`@import url(./pieces.css);`, true},
+		{`@import url("./pieces.css");`, true},
+		{`@import 'pieces.css';`, true},
+		{`/* @import './pieces.css'; */`, false},
+		{`/* the tokens live in pieces.css */`, false},
+		{`@import './themes/pieces.css';`, false},
+		{`@import './pieces.css.bak';`, false},
+		{`.a { content: "./pieces.css"; }`, false},
+	} {
+		if got := piecesCssImported(tc.css); got != tc.want {
+			t.Errorf("piecesCssImported(%q) = %v, want %v", tc.css, got, tc.want)
+		}
+	}
+}
+
 // The hand-merge marker still means the tokens live in styles.css itself, even
 // beside a pieces.css import.
 func TestAddThemeDefaultMarkerBesideImportIsWired(t *testing.T) {
