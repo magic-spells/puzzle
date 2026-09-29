@@ -315,17 +315,22 @@ export class PuzzleApp {
 		// strings now, while the other services are wired, so the fetch overlaps
 		// beforeMount; mount() awaits it below, before navigation #0. Manifest paths
 		// are dist-relative: path routing resolves them under routerBase, while the
-		// hash and memory modes always serve the shell from the dist root, so they
-		// resolve against the document. A switch re-runs the committed location as a
-		// same-location rebuild (router __failedView(null, true)). Every reference
-		// spells the inline probe, so an app without i18n ships none of this.
+		// hash and memory modes resolve them next to the entry module — the manifest's
+		// `base`, the folder the build's app.js was served from — so a script embed
+		// on another site's page still finds them (the document is only the fallback
+		// for a manifest without one). Memory mode takes no document-level side
+		// effects, so it leaves <html lang> alone. A switch re-runs the committed
+		// location as a same-location rebuild (router __failedView(null, true)).
+		// Every reference spells the inline probe, so an app without i18n ships none
+		// of this.
 		if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
 			this.i18n = createI18n({
 				...this.config.__i18n,
-				url: (path) =>
+				url: (path, base) =>
 					routerMode
-						? new URL(path, document.baseURI).href
+						? new URL(path, base ?? document.baseURI).href
 						: normalizeBase(routerBase) + '/' + path,
+				lang: routerMode?.name !== 'memory',
 				refresh: () => this.router?.__failedView(null, true),
 			});
 		}

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -78,6 +80,34 @@ func TestLoadFlattensNestingAndKeepsPlurals(t *testing.T) {
 	}
 }
 
+// The manifest's base is the folder of the entry app.js wherever the module was
+// bundled: app.js itself, or a split chunk one folder down (D175 URLs rule).
+// Evaluated in node with import.meta.url swapped for each module URL.
+func TestManifestBaseIsTheEntryFolder(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not on PATH")
+	}
+	cases := map[string]string{
+		"https://widget.cdn/app/app.js":                       "https://widget.cdn/app/",
+		"https://widget.cdn/app/app.js?v=3":                   "https://widget.cdn/app/",
+		"https://widget.cdn/app/chunks/chunk-AB2CD3EF.js":     "https://widget.cdn/app/",
+		"https://widget.cdn/app/chunks/About-QRST4567.js?t=1": "https://widget.cdn/app/",
+		"https://cdn.example/chunks/app.js":                   "https://cdn.example/chunks/",
+		"http://localhost:5173/app.js":                        "http://localhost:5173/",
+		"file:///srv/site/dist/chunks/chunk-ZZZZ2222.js":      "file:///srv/site/dist/",
+	}
+	for url, want := range cases {
+		expr := strings.Replace(manifestBase, "import.meta.url", strconv.Quote(url), 1)
+		out, err := exec.Command("node", "-e", "console.log("+expr+")").CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", url, err, out)
+		}
+		if got := strings.TrimSpace(string(out)); got != want {
+			t.Errorf("base for %s = %s, want %s", url, got, want)
+		}
+	}
+}
+
 func TestLoadEmitsMinifiedHashedFilesAndManifest(t *testing.T) {
 	root := writeLocales(t, map[string]string{
 		"en.json": `{ "a": "A", "b": "B" }`,
@@ -101,7 +131,7 @@ func TestLoadEmitsMinifiedHashedFilesAndManifest(t *testing.T) {
 		t.Fatalf("en file not minified/sorted: %s", got)
 	}
 	js := res.Manifest.JS()
-	wantJS := `export default {"defaultLocale":"en","locales":{"en":"` + res.Manifest.Paths["en"] + `","es":"` + res.Manifest.Paths["es"] + `"}};` + "\n"
+	wantJS := `export default {"defaultLocale":"en","locales":{"en":"` + res.Manifest.Paths["en"] + `","es":"` + res.Manifest.Paths["es"] + `"},"base":` + manifestBase + `};` + "\n"
 	if js != wantJS {
 		t.Fatalf("manifest JS = %s\nwant %s", js, wantJS)
 	}

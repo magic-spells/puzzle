@@ -150,10 +150,12 @@ export function fillPlaceholders(text, vars) {
  * before its first render.
  *
  * @param {object} [options]
- * @param {object} [options.manifest] `{ defaultLocale, locales: { tag: path } }`;
- *   defaults to the build's manifest module
- * @param {(path: string) => string} [options.url] resolves a dist-relative
- *   manifest path to a fetchable URL
+ * @param {object} [options.manifest] `{ defaultLocale, locales: { tag: path },
+ *   base }` — `base` is the URL of the folder the build's entry module was served
+ *   from; defaults to the build's manifest module
+ * @param {(path: string, base?: string) => string} [options.url] resolves a
+ *   dist-relative manifest path (and the manifest's base) to a fetchable URL
+ * @param {boolean} [options.lang] false leaves `<html lang>` alone (memory mode)
  * @param {Record<string, object>} [options.tables] preloaded tables by tag — the
  *   prerender and the testing utilities pass these so nothing is fetched
  * @param {string} [options.locale] a forced starting locale (the prerender always
@@ -166,7 +168,7 @@ export function createI18n(options = {}) {
 	if (!manifest) return null;
 	const tags = Object.keys(manifest.locales);
 	const defaultLocale = manifest.defaultLocale;
-	const { tables, url = (path) => path, refresh } = options;
+	const { tables, url = (path) => path, refresh, lang = true } = options;
 
 	let table = null;
 	let locale = defaultLocale;
@@ -185,18 +187,19 @@ export function createI18n(options = {}) {
 	const load = (tag) => {
 		const preloaded = tables?.[tag] ?? readIsland(tag);
 		if (preloaded) return Promise.resolve(preloaded);
-		return fetch(url(manifest.locales[tag])).then((res) => {
+		return fetch(url(manifest.locales[tag], manifest.base)).then((res) => {
 			if (!res.ok) throw new Error(`[puzzle] locale "${tag}" failed to load (HTTP ${res.status})`);
 			return res.json();
 		});
 	};
 
-	// The table, the locale, the formatter locale and <html lang> switch together.
+	// The table, the locale, the formatter locale and <html lang> switch together
+	// (not <html lang> in memory mode, which touches nothing document-wide).
 	const apply = (tag, strings) => {
 		table = strings;
 		locale = tag;
 		setFormatLocale(tag);
-		if (typeof document !== 'undefined') document.documentElement.lang = tag;
+		if (lang && typeof document !== 'undefined') document.documentElement.lang = tag;
 	};
 
 	// The startup load: the active locale, falling back ONCE to the default when
