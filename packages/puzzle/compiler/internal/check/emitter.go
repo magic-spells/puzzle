@@ -131,10 +131,11 @@ var libraryFunctionSignatures = []struct{ name, signature string }{
 // app's own target: an app on `target: ES2020` would otherwise see `.at()`,
 // `.replaceAll()`, and `.toSorted()` reported as missing. A `/// <reference
 // lib>` adds a file without replacing the app's `lib` list. es2023.array
-// types findLast from TypeScript 5.0 but toSorted and toReversed only from
-// 5.2, so it is referenced from 5.2 on (on 5.0 and 5.1 those two report as
-// missing, as they would in the app's own code); every other file exists in
-// 4.9, the oldest compiler puzzle check supports.
+// first ships with TypeScript 5.0, typing findLast, so it is referenced from
+// 5.0 on; toSorted and toReversed join that file only in 5.2, so on 5.0 and
+// 5.1 no lib reference can type them and they report as missing, as they
+// would in the app's own code. Every other file exists in 4.9, the oldest
+// compiler puzzle check supports.
 var languageLibs = []struct {
 	lib string
 	min TypeScriptVersion
@@ -147,7 +148,7 @@ var languageLibs = []struct {
 	{"es2021.string", TypeScriptVersion{}},        // replaceAll
 	{"es2022.array", TypeScriptVersion{}},         // at
 	{"es2022.string", TypeScriptVersion{}},        // at
-	{"es2023.array", TypeScriptVersion{5, 2}},     // findLast, toSorted, toReversed
+	{"es2023.array", TypeScriptVersion{5, 0}},     // findLast; toSorted, toReversed from 5.2
 }
 
 // shimSource is the shim for the app's TypeScript version, with the method

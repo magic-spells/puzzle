@@ -37,16 +37,17 @@ func TestLibrarySignaturesMatchCodegen(t *testing.T) {
 }
 
 // The method table's lib files are referenced whatever the app's target, and
-// es2023.array only from TypeScript 5.2, the first to type toSorted and
-// toReversed.
+// es2023.array from TypeScript 5.0, the first to ship it: on 5.0 and 5.1 it
+// types findLast (toSorted and toReversed join it in 5.2, and no reference
+// can add them earlier).
 func TestShimReferencesLanguageLibs(t *testing.T) {
 	for _, tc := range []struct {
 		ts     TypeScriptVersion
 		es2023 bool
 	}{
 		{TypeScriptVersion{4, 9}, false},
-		{TypeScriptVersion{5, 0}, false},
-		{TypeScriptVersion{5, 1}, false},
+		{TypeScriptVersion{5, 0}, true},
+		{TypeScriptVersion{5, 1}, true},
 		{TypeScriptVersion{5, 2}, true},
 		{TypeScriptVersion{5, 9}, true},
 		{TypeScriptVersion{7, 0}, true},
