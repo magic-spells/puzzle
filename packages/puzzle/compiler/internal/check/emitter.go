@@ -342,7 +342,8 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 	// relative to the app's baseUrl or tsconfig, not to this config, and may be
 	// non-relative, which is illegal once baseUrl is cleared. The app's own
 	// entries are merged in with their targets rewritten from here — `prefix`
-	// is where the app root sits relative to the directory targets resolve from.
+	// is where the app root sits relative to the directory targets resolve from
+	// — and the @ alias is written over them last.
 	var aliasTarget, prefix string
 	if typescriptMajor >= 6 {
 		// JSON null deliberately clears either setting inherited from the app.
@@ -356,14 +357,17 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 		// Before TypeScript 6, module: ESNext defaults to classic resolution. Keep
 		// the proven node/baseUrl pair so package imports and the @ alias resolve
 		// under the oldest supported compiler (4.9). Module is pinned with it: an
-		// app's node16/nodenext module rejects node resolution (TS5109), and the
-		// check emits nothing, so the module format has nothing else to decide.
+		// app's node16/nodenext module rejects node resolution (TS5109). Pinning
+		// it drops the default-import interop node16/nodenext imply, so a default
+		// import of an `export =` package would be TS1259; the check emits
+		// nothing, and esbuild interops those imports, so allow them.
 		opts["baseUrl"] = "../.."
 		opts["moduleResolution"] = "node"
 		opts["module"] = "ESNext"
+		opts["allowSyntheticDefaultImports"] = true
 		aliasTarget = "app/*"
 	}
-	paths := map[string]any{"@/*": []string{aliasTarget}}
+	paths := map[string]any{}
 	if hasAppConfig {
 		config["extends"] = "../../tsconfig.json"
 		for key, targets := range appPaths(appConfig, prefix) {
@@ -378,6 +382,9 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 		opts["strict"] = false
 		opts["noImplicitAny"] = false
 	}
+	// Written after the app's entries: the build aliases @ to app/ in esbuild,
+	// which wins over tsconfig paths, so the check must resolve it the same way.
+	paths["@/*"] = []string{aliasTarget}
 	opts["paths"] = paths
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {

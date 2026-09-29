@@ -54,6 +54,9 @@ func TestLibrarySignaturesMatchPublicTypes(t *testing.T) {
 		t.Fatal("types/index.d.ts has no LibraryFunctions interface")
 	}
 	end := strings.Index(src[start:], "\n}\n")
+	if end < 0 {
+		t.Fatal("types/index.d.ts: LibraryFunctions has no closing brace")
+	}
 	aliases := map[string]string{}
 	for _, m := range regexp.MustCompile(`(?m)^export type (\w+) = ([^;\n]+);$`).FindAllStringSubmatch(src, -1) {
 		aliases[m[1]] = m[2]

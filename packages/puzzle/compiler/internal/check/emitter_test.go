@@ -225,10 +225,12 @@ func TestTsconfigVersionedDefaults(t *testing.T) {
 // The generated config writes paths rather than inheriting them, so the app's
 // own aliases are merged in, their targets rewritten to resolve from
 // .puzzle/check (from the app root, through the app's baseUrl when it set
-// one). An app entry wins over the @ alias on a clash. tsconfig's comments and
-// trailing commas are tolerated; an unreadable config leaves the @ alias.
-// Before TypeScript 6 the module is pinned to ESNext beside node resolution,
-// so an app's nodenext module no longer fails with TS5109.
+// one). The @ alias wins a clash, as it does in the build, where esbuild's
+// alias beats tsconfig paths. tsconfig's comments and trailing commas are
+// tolerated; an unreadable config leaves the @ alias. Before TypeScript 6 the
+// module is pinned to ESNext beside node resolution, so an app's nodenext
+// module no longer fails with TS5109, and default imports of `export =`
+// packages stay allowed as nodenext allowed them (TS1259 otherwise).
 func TestTsconfigMergesAppPaths(t *testing.T) {
 	jsonc := "\xef\xbb\xbf{\n  // an app alias\n  \"compilerOptions\": {\n    \"module\": \"nodenext\", /* the app's */\n" +
 		"    \"paths\": { \"~/*\": [\"./app/*\"], \"http://x/*\": [\"app/x/*\",], },\n  },\n}\n"
@@ -246,10 +248,10 @@ func TestTsconfigMergesAppPaths(t *testing.T) {
 			"@/*": {"../../app/*"}, "~/*": {"../../app/*"}, "http://x/*": {"../../app/x/*"},
 		}},
 		{"baseUrl-typescript-5", 5, `{"compilerOptions":{"baseUrl":"src","paths":{"@/*":["./*"],"lib":["../lib/index.ts"]}}}`, "ESNext", map[string][]string{
-			"@/*": {"src/*"}, "lib": {"lib/index.ts"},
+			"@/*": {"app/*"}, "lib": {"lib/index.ts"},
 		}},
 		{"baseUrl-typescript-6", 6, `{"compilerOptions":{"baseUrl":"src","paths":{"@/*":["./*"],"lib":["../lib/index.ts"]}}}`, nil, map[string][]string{
-			"@/*": {"../../src/*"}, "lib": {"../../lib/index.ts"},
+			"@/*": {"../../app/*"}, "lib": {"../../lib/index.ts"},
 		}},
 		{"unparsable", 7, `{"compilerOptions": {"paths": `, nil, map[string][]string{"@/*": {"../../app/*"}}},
 	}
@@ -266,9 +268,10 @@ func TestTsconfigMergesAppPaths(t *testing.T) {
 			var config struct {
 				Extends         string
 				CompilerOptions struct {
-					Module any
-					Strict any
-					Paths  map[string][]string
+					Module    any
+					Strict    any
+					Synthetic any `json:"allowSyntheticDefaultImports"`
+					Paths     map[string][]string
 				}
 			}
 			if err := json.Unmarshal(data, &config); err != nil {
@@ -282,6 +285,13 @@ func TestTsconfigMergesAppPaths(t *testing.T) {
 			}
 			if config.CompilerOptions.Module != tc.module {
 				t.Errorf("module = %v, want %v", config.CompilerOptions.Module, tc.module)
+			}
+			var synthetic any // unset from TypeScript 6: the app's own setting applies
+			if tc.major < 6 {
+				synthetic = true
+			}
+			if config.CompilerOptions.Synthetic != synthetic {
+				t.Errorf("allowSyntheticDefaultImports = %v, want %v", config.CompilerOptions.Synthetic, synthetic)
 			}
 			got, _ := json.Marshal(config.CompilerOptions.Paths)
 			want, _ := json.Marshal(tc.paths)

@@ -139,8 +139,11 @@ config's directory. Below 6, the proven `moduleResolution: "node"` + `baseUrl`
 pair is kept, because `module: ESNext` defaults to classic resolution on the
 oldest supported compiler and package imports would not resolve — and
 `module` is pinned to `ESNext` beside it, because an app's `node16`/`nodenext`
-module rejects node resolution (TS5109) and the check emits nothing, so the
-module format decides nothing else.
+module rejects node resolution (TS5109). Pinning it drops the default-import
+interop those module modes imply, so `allowSyntheticDefaultImports` is set
+with it: otherwise a default import of an `export =` package that the app's
+own tsc accepts is TS1259. The check emits nothing, and esbuild interops those
+imports anyway.
 
 `paths` is always written, never inherited: an inherited target is relative to
 the app's `baseUrl` or tsconfig rather than to the generated config, and may be
@@ -148,7 +151,9 @@ non-relative, which is illegal once `baseUrl` is gone. The runner reads the app
 tsconfig's own `compilerOptions.paths` (tolerating tsconfig's comments and
 trailing commas), rewrites each relative target to resolve from
 `.puzzle/check/` — through the app's `baseUrl` when it set one — and merges the
-entries over the `@/*` → `app/*` alias, an app entry winning a clash. The
+entries beside the `@/*` → `app/*` alias, which is written last and wins a
+clash: the build aliases `@` to `app/` in esbuild, whose alias beats tsconfig
+`paths`, so the check resolves it the same way. The
 app's `extends` chain is not followed: `paths` or a `baseUrl` the app inherits
 from another config do not reach the check, and a config the runner cannot
 parse contributes nothing but the `@` alias.
