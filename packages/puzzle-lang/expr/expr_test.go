@@ -1,7 +1,11 @@
 package expr
 
 import (
+	"fmt"
 	"math"
+	"os"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -203,43 +207,132 @@ func TestGlobalResultTypes(t *testing.T) {
 	}
 }
 
-// A large expression parses in linear time: a flat operator chain, a long
-// array, a long string, and a long argument list. Each size quadruples; the
-// time must not grow sixteenfold.
+// A large expression parses in linear time. Each shape (a flat operator
+// chain, a long array, a long string, a long argument list, a member path, and
+// a template literal with a substitution every five bytes) is timed at 16 KiB,
+// 64 KiB, 256 KiB, and 1 MiB. A linear parse costs about the same per byte at
+// every size; a quadratic one costs 16 times more per byte at 256 KiB than at
+// 16 KiB, and 64 times more at 1 MiB. The test fits the linear model t = c·n,
+// c being the cheapest per-byte cost the shape showed, and fails a size that
+// ran longer than linearHeadroom·c·n (linearHeadroomCI when CI is set) and
+// longer than linearFloor.
+//
+// A timing test on a shared runner needs a fair measurement and a repeatable
+// verdict:
+//   - every timed parse starts from a collected heap with collection paused,
+//     so the time is the parser's own work. What collection costs depends on
+//     heap state the parse does not control: a small parse can finish below
+//     the runtime's minimum heap and never collect, and a heavy shape timed
+//     just before can leave a heap goal high enough that a mid-size parse
+//     skips collection while the 1 MiB one pays for it — the lopsided
+//     comparison that once put the linear template shape at 22 times the time
+//     for 4 times the input on a Windows runner. A memory limit restarts
+//     collection before a regression that allocates quadratically exhausts
+//     memory;
+//   - each size keeps the best of five runs;
+//   - a shape that fails is timed again, up to linearAttempts in all. A real
+//     regression fails every attempt; a busy runner does not.
 func TestLargeExpressionIsLinear(t *testing.T) {
 	if testing.Short() {
 		t.Skip("timing test")
 	}
-	shapes := map[string]func(n int) string{
-		"operator chain": func(n int) string { return strings.Repeat("a + ", n/4) + "a" },
-		"array":          func(n int) string { return "[" + strings.Repeat("1, ", n/3) + "1]" },
-		"string":         func(n int) string { return "'" + strings.Repeat("x", n) + "'" },
-		"arguments":      func(n int) string { return "f(" + strings.Repeat("a.b, ", n/5) + "c)" },
-		"member path":    func(n int) string { return "a" + strings.Repeat(".b", n/2) },
-		"template":       func(n int) string { return "`" + strings.Repeat("x${a}", n/5) + "`" },
+	headroom := linearHeadroom
+	if os.Getenv("CI") != "" {
+		headroom = linearHeadroomCI
 	}
-	for name, gen := range shapes {
-		small, large := gen(1<<18), gen(1<<20)
-		ts := timeParse(t, small)
-		tl := timeParse(t, large)
-		t.Logf("%s: %v / %v", name, ts, tl)
-		if tl > 16*ts && tl > 50*time.Millisecond {
-			t.Errorf("%s: 256 KiB in %v, 1 MiB in %v — not linear", name, ts, tl)
+	shapes := []struct {
+		name string
+		gen  func(n int) string
+	}{
+		{"operator chain", func(n int) string { return strings.Repeat("a + ", n/4) + "a" }},
+		{"array", func(n int) string { return "[" + strings.Repeat("1, ", n/3) + "1]" }},
+		{"string", func(n int) string { return "'" + strings.Repeat("x", n) + "'" }},
+		{"arguments", func(n int) string { return "f(" + strings.Repeat("a.b, ", n/5) + "c)" }},
+		{"member path", func(n int) string { return "a" + strings.Repeat(".b", n/2) }},
+		{"template", func(n int) string { return "`" + strings.Repeat("x${a}", n/5) + "`" }},
+	}
+	for _, s := range shapes {
+		var failures []string
+		for attempt := 1; attempt <= linearAttempts; attempt++ {
+			report, ok := measureLinear(t, s.gen, headroom)
+			if ok {
+				t.Logf("%s: %s", s.name, report)
+				break
+			}
+			failures = append(failures, report)
+		}
+		if len(failures) == linearAttempts {
+			t.Errorf("%s: not linear in %d attempts (headroom %g×):\n\t%s",
+				s.name, linearAttempts, headroom, strings.Join(failures, "\n\t"))
 		}
 	}
 }
 
-func timeParse(t *testing.T, src string) time.Duration {
+const (
+	// linearHeadroom is how far above the fitted linear model a size may run.
+	// Linear shapes measure within 1.2× of it; a quadratic one runs 16× over
+	// it at 256 KiB, and a quadratic term more than about twice the linear
+	// cost at 1 MiB crosses 3×.
+	linearHeadroom = 3.0
+	// linearHeadroomCI allows for a shared runner's noisier clock and memory.
+	// A quadratic shape still runs 16× over the model at 256 KiB, and a
+	// quadratic term more than about four times the linear cost at 1 MiB
+	// crosses 5×.
+	linearHeadroomCI = 5.0
+	// linearFloor exempts a size that parsed faster than this: too fast to
+	// judge. A real quadratic path crosses it by 256 KiB.
+	linearFloor = 20 * time.Millisecond
+	// linearAttempts is how many times a failing shape is timed before the
+	// test fails.
+	linearAttempts = 3
+)
+
+var linearSizes = []int{16 << 10, 64 << 10, 256 << 10, 1 << 20}
+
+// measureLinear times gen's source at each of linearSizes, smallest first,
+// and reports whether every size stayed within headroom of the fitted linear
+// model. It stops at the first size that did not, so a quadratic regression
+// never runs its largest input.
+func measureLinear(t *testing.T, gen func(n int) string, headroom float64) (string, bool) {
 	t.Helper()
+	var times []time.Duration
+	var perByte []float64 // ns per byte of source
+	var parts []string
+	cheapest, worst := math.Inf(1), 0.0
+	for _, n := range linearSizes {
+		src := gen(n)
+		d := bestParse(t, src)
+		c := float64(d.Nanoseconds()) / float64(len(src))
+		times, perByte = append(times, d), append(perByte, c)
+		cheapest = min(cheapest, c)
+		parts = append(parts, fmt.Sprintf("%d KiB %v (%.0f ns/B)", n>>10, d.Round(10*time.Microsecond), c))
+		worst = 0
+		for i, c := range perByte {
+			over := c / cheapest
+			if times[i] >= linearFloor && over > headroom {
+				return fmt.Sprintf("%s — %d KiB ran %.1f× the linear fit", strings.Join(parts, ", "), linearSizes[i]>>10, over), false
+			}
+			worst = max(worst, over)
+		}
+	}
+	return fmt.Sprintf("%s — worst %.2f× the linear fit", strings.Join(parts, ", "), worst), true
+}
+
+// bestParse returns the fastest of five parses of src, each started from a
+// collected heap with collection paused until the heap reaches 1 GiB (a
+// 1 MiB shape allocates at most about 450 MiB).
+func bestParse(t *testing.T, src string) time.Duration {
+	t.Helper()
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
+	defer debug.SetMemoryLimit(debug.SetMemoryLimit(1 << 30))
 	best := time.Duration(math.MaxInt64)
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 5; i++ {
+		runtime.GC()
 		start := time.Now()
 		if _, err := Parse(src, Pos{Line: 1, Col: 1}); err != nil {
 			t.Fatalf("parse %d bytes: %v", len(src), err)
 		}
-		if d := time.Since(start); d < best {
-			best = d
-		}
+		best = min(best, time.Since(start))
 	}
 	return best
 }
