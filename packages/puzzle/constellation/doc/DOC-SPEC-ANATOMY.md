@@ -178,6 +178,7 @@ export default class TodoHome extends PuzzleView {
 
 ## 25. TypeScript scripts: `<script lang="ts">` (v1.22)
 
+
 Opt a component's logic into TypeScript. Shipped in v1.22 (D54); parser + esbuild plugin + CLI — **codegen and the runtime kernel are untouched**, and a `<script>` with no `lang` (or `lang="js"`) compiles byte-for-byte as before.
 
 ```html
@@ -197,9 +198,10 @@ export default class Home extends PuzzleView {
 ```
 
 - **Attribute:** the only attribute `<script>` accepts is `lang`. `lang="ts"` → TypeScript; **absent or `lang="js"` → JavaScript** (identical to pre-v1.22). An unknown value, empty value, dynamic `lang={…}`, or a second attribute is a **positioned compile error** (with a did-you-mean for near-misses like `"typescript"`). The Go compiler still treats the `<script>` body as an **opaque string** — it never parses TS (D3).
-- **Transpile-only (like Vite):** esbuild strips types during the build. Neither the Puzzle build, a scaffolded `tsc --noEmit`, nor an editor type-checks a `.pzl` `<script>` body; `tsc` and editor checking cover the standalone `.ts`/`.js` files and declarations included by `tsconfig.json`. The generated render tail + injected import are plain JS (valid TS), so one loader covers the mixed module: the plugin sets `Loader: LoaderTS`; standalone `pzlc` runs esbuild's Transform API to strip types.
+- **Transpile-only (like Vite):** esbuild strips types during the build, and the build never type-checks. Checking is the separate `puzzle check` (D165, [[DOC-SPEC-BUILD]] §63), which runs the app's own `tsc` over `.pzl` scripts, template expressions and the app's `.ts` modules; a plain `tsc` or an editor covers the standalone `.ts`/`.js` files and declarations included by `tsconfig.json`, not a `.pzl` `<script>` body. The generated render tail + injected import are plain JS (valid TS), so one loader covers the mixed module: the plugin sets `Loader: LoaderTS`; standalone `pzlc` runs esbuild's Transform API to strip types.
 - **`.pzl` stays the only extension** — a `.pzt` alias was considered and deferred (D54).
-- **Typings:** the package ships `types/index.d.ts` (all four exports + config/store/router/formatters, wired via `exports.types`) and a `puzzle-env.d.ts` shim (`declare module '*.pzl'` → `typeof PuzzleView`) so `import X from './X.pzl'` resolves. `puzzle init --typescript` scaffolds a strict/noEmit `tsconfig.json`; the default stays JS. `examples/typed-todos` is the worked example.
+- **Typings:** the package ships `types/index.d.ts` (all four exports + config/store/router/formatters, wired via `exports.types`) and a `puzzle-env.d.ts` shim (`declare module '*.pzl'` → `typeof PuzzleView`) so `import X from './X.pzl'` resolves. `examples/typed-todos` is the worked example.
+- **Scaffold:** `puzzle init --typescript` (or answering yes to the TypeScript prompt, §42) writes the template's TypeScript variant — every component `<script lang="ts">` with a typed `data()` return, props, events and lifecycle hooks; `app/main.ts`, `app/routes.ts` and (todos) the models as `.ts`; a strict/noEmit `tsconfig.json`; and a `package.json` with `typescript` `^7` and `"check": "puzzle check"`. The build entry is always `app/app.js`, so in a TypeScript app it is a one-line `export { default } from './main'`. The default stays JavaScript.
 - **Authoring note:** under `strict`/`noImplicitAny`, annotate `data(params, props)` and event-handler params explicitly — TypeScript does not apply contextual typing from a base-class declaration to a subclass class-body override.
 
 ## 29. Scoped styles: `<style scoped>` (v1.27)

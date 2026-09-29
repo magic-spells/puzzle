@@ -160,8 +160,9 @@ for (const { pkg } of MATRIX) {
 	console.log(`  OK  npm/${pkg}/package.json version = ${manifest.version}`);
 }
 
-// The `@magic-spells/puzzle` dependency RANGES no version field carries. The two
-// scaffold manifests are go:embed-ed into the CLI binary, so a stale range ships
+// The `@magic-spells/puzzle` dependency RANGES no version field carries. The
+// scaffold manifests (each template plus its TypeScript overlay, `<name>-ts`)
+// are go:embed-ed into the CLI binary, so a stale range ships
 // a broken `puzzle init`: caret ranges do not cross a 0.x minor, so "^0.3.1"
 // installs 0.3.x into an app scaffolded by a 0.4.0 binary. It cannot be fixed by
 // republishing the JS — the platform binaries have to be rebuilt. Same
@@ -169,6 +170,8 @@ for (const { pkg } of MATRIX) {
 const SCAFFOLD_TEMPLATES = [
 	'compiler/internal/scaffold/templates/default/package.json',
 	'compiler/internal/scaffold/templates/todos/package.json',
+	'compiler/internal/scaffold/templates/default-ts/package.json',
+	'compiler/internal/scaffold/templates/todos-ts/package.json',
 ];
 
 // A range "resolves to" the release when its base version IS the release:

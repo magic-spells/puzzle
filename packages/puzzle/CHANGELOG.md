@@ -596,6 +596,17 @@ checklist sent you.
   `@change({ scheme, mode })` for the app to persist through the `appearance`
   export. The pieces docs shell opens it from the rail's foot as a non-modal
   popover.
+- **`puzzle init --typescript` scaffolds a TypeScript app (D54).** Answering
+  yes to the TypeScript prompt, or passing the flag, used to add only a
+  `tsconfig.json` to the JavaScript starter. Both templates now have a
+  TypeScript variant: every component is `<script lang="ts">` with typed
+  `data()`, props, events and lifecycle hooks; the modules are `.ts`
+  (`main.ts`, `routes.ts`, and the todos template's models), with
+  `app/app.js` kept as a one-line entry that re-exports `main.ts`, because
+  the build always starts from that path; and `package.json` adds
+  `typescript` `^7` plus a `check` script that runs `puzzle check`. Both
+  variants pass `puzzle check` clean under the strict tsconfig on
+  TypeScript 6 and 7. The JavaScript scaffold is unchanged byte for byte.
 - **puzzle-pieces: 100 pieces.** New: `image-zoom` (a wrapper over
   `@magic-spells/image-zoom`), `split-text`, `hamburger` (a menu button with
   converge, twist and slide motion), and CSS-only loading motion — `spinner`

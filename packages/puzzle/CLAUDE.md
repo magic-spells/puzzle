@@ -304,7 +304,7 @@ enforced, not merely advised.
 - Before every release, sweep the `@magic-spells/puzzle` dependency ranges that
   are NOT bumped by the version scripts and point them at the version being
   published:
-  - `compiler/internal/scaffold/templates/{default,todos}/package.json` — these
+  - `compiler/internal/scaffold/templates/{default,todos}{,-ts}/package.json` — these
     are `go:embed`ed into the binary, so a stale range ships a broken
     `puzzle init`: caret ranges do not cross 0.x minors, so `^0.1.0` installs
     `0.1.x` into an app scaffolded by a `0.3.0` binary. Fixing this requires

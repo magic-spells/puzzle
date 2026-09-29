@@ -41,7 +41,10 @@ CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
 `dev` (SSE live reload, state-preserving full-page refresh), `build` (`--static`,
 `--hybrid`, `--mode production|development`), `check` (run the app-installed
 TypeScript compiler over `.pzl` scripts and template expressions), `preview`
-(serve an existing `dist/` with production-host semantics), `init`, `generate`,
+(serve an existing `dist/` with production-host semantics), `init` (`--template
+default|todos`; `--typescript` scaffolds `<script lang="ts">` components, `.ts`
+modules behind a one-line `app/app.js` entry, a strict tsconfig and an
+`npm run check` script), `generate`,
 `add` (tailwind integration, `piece <name…>`, `theme <name…>`, `skills`),
 `upgrade`, `doctor`, `info`.
 
