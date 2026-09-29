@@ -175,6 +175,7 @@ value a call returns prints by D173 V6.
 
 ### Markup and escaping
 
+
 - **`escape(s)`** (F8): its output is plain text, so the page shows the
   value's characters (`<b>` appears as `<b>`, never as `&lt;b&gt;`). In a
   text interpolation it is an identity.
@@ -309,7 +310,7 @@ value a call returns prints by D173 V6.
   allowlist, with no top-level side effects) behind
   `__PUZZLE_HAS_RAW_SANITIZE__` (`raw` called). An app that uses neither ships
   nothing, a `newline_to_br`-only app pays about 0.4 KB gzip, and a `raw` app
-  about 2.5 KB. A `'#html'` vnode that reaches a build with the node's define
+  about 2.3 KB. A `'#html'` vnode that reaches a build with the node's define
   false fails loudly at the metadata-tag guard; a `raw` vnode in a build
   without the sanitizer renders nothing, never unsanitized markup. The static
   and hybrid prerender (`client-runtime/ssg/serialize.js`) emits the same
