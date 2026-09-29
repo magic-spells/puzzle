@@ -306,3 +306,41 @@ export function scanBlockComment(s, open) {
 	}
 	return { ok: false };
 }
+
+// isBlockRawOpen reports whether s[open] begins a {#raw} lex-off block opener
+// (D150). The keyword match is exact; content after it is allowed and ignored,
+// matching {#comment}. Mirrors isBlockRawOpen.
+export function isBlockRawOpen(s, open) {
+	if (open + 2 > s.length || s[open] !== '{' || s[open + 1] !== '#') return false;
+	return firstWord(s.slice(open + 2)) === 'raw';
+}
+
+// matchRawCloser reports whether s[open] begins a whitespace-tolerant {/raw}
+// closer (D150). Mirrors matchRawCloser. Returns { ok, end }.
+function matchRawCloser(s, open) {
+	let i = open + 1;
+	if (i >= s.length || s[i] !== '/') return { ok: false };
+	i++;
+	while (i < s.length && isSpaceByte(s[i])) i++;
+	const kw = 'raw';
+	if (i + kw.length > s.length || s.slice(i, i + kw.length) !== kw) return { ok: false };
+	i += kw.length;
+	while (i < s.length && isSpaceByte(s[i])) i++;
+	if (i >= s.length || s[i] !== '}') return { ok: false };
+	return { ok: true, end: i + 1 };
+}
+
+// scanBlockRaw locates a {#raw} … {/raw} block (D150) from the opening '{'
+// without inspecting its body as template grammar: the opener runs to its first
+// '}', then the FIRST valid closer wins (raw blocks do not nest). Mirrors
+// scanBlockRaw. Returns { ok, end } with end just past the closer.
+export function scanBlockRaw(s, open) {
+	const openerEnd = s.indexOf('}', open + 2);
+	if (openerEnd < 0) return { ok: false };
+	for (let i = openerEnd + 1; i < s.length; i++) {
+		if (s[i] !== '{') continue;
+		const m = matchRawCloser(s, i);
+		if (m.ok) return { ok: true, end: m.end };
+	}
+	return { ok: false };
+}

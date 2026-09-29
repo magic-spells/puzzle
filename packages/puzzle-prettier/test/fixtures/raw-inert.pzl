@@ -1,0 +1,29 @@
+<puzzle-view>
+	<!-- Raw bodies are skipped whole by the splitter (D150): an unbalanced {,
+	     a quote, a // and a literal close tag are all inert in them. -->
+	<p>{#raw}Write { to open an interpolation — don't forget the }.{/raw}</p>
+	<pre>{#raw}function greet(name) {
+  // it's a sample{/raw}</pre>
+	<p>{# raw}Use { user's name } here{/ raw }</p>
+	<pre>{#raw}<puzzle-view>{ sample }</puzzle-view>{/raw}</pre>
+	<!-- HTML void elements need no slash. -->
+	<p>one<br>two<br/>three<br />four</p>
+	<input type="text" value={ name } readonly>
+	<img src="a.png" alt="a"><hr><wbr>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class RawInert extends PuzzleView {
+	data() {
+		// Pages I'm linking to (and not this one).
+		const pages = ['docs', "it's"].filter((p) => p !== 'docs');
+		return { name: pages[0] }
+	}
+}
+</script>
+
+<style>
+pre { color : red ; }
+</style>

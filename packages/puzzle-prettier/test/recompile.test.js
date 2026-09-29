@@ -202,6 +202,24 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
 				}
 			}
+			if (file.endsWith('raw-inert.pzl')) {
+				// The splitter steps over each raw span whole (D150), so a lone '{',
+				// a quote, a // and a literal </puzzle-view> in a raw body neither
+				// end the view nor run into the script. Void elements need no
+				// slash. Both reach codegen identically before and after formatting.
+				for (const literal of [
+					"value: 'Write { to open an interpolation — don\\'t forget the }.'",
+					"// it\\'s a sample",
+					"value: 'Use { user\\'s name } here'",
+					"new ViewNode('puzzle-view', {}, [",
+					"new ViewNode('br', {}, []),\n      new ViewNode('text', { value: 'two' })",
+					'readonly: true',
+					"new ViewNode('wbr', {}, [])",
+				]) {
+					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);
+					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
+				}
+			}
 		}
 
 		if (regressions.length) {
@@ -211,7 +229,13 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 		// The fixtures with literal assertions above must actually compile, or
 		// their checks silently drop out of scope.
 		expect(compiled).toEqual(
-			expect.arrayContaining(['grammar-0-7.pzl', 'grammar-0-8.pzl', 'gnarly-template.pzl', 'raw-block.pzl']),
+			expect.arrayContaining([
+				'grammar-0-7.pzl',
+				'grammar-0-8.pzl',
+				'gnarly-template.pzl',
+				'raw-block.pzl',
+				'raw-inert.pzl',
+			]),
 		);
 	}, 120_000);
 });
