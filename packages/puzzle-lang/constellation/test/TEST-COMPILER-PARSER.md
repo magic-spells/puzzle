@@ -57,6 +57,18 @@ What they guarantee:
   the opener.
 - the lexer skips correctly inside strings, comments, and raw regions, so
   template-looking bytes inside script or raw blocks are not treated as grammar.
+- **a `/` after an operand is division in every template position**
+  (`lexskip_test.go`). `TestLexPlainEndsExpr` pins which bytes end an
+  expression — a digit, `.`, `)`, `]`, `}` and every byte ≥ 0x80 — and
+  `TestParseDivisionInEveryTemplatePosition` parses `café / 2`, `金額 / 2`,
+  `価格new / 2`, `5. / 2` and `of / 2` in text, attributes, block headers,
+  arrow bodies and call arguments, each of which the brace scan once ran past
+  its closing `}` ("unclosed '{'"). `TestParseRegexShapedExpressionIsAnExpressionError`
+  pins that a regex-shaped expression still closes at its brace and fails with
+  the grammar's own error, and `TestScriptScanSkipsARegexHoldingAQuote` that the
+  `<script>` scan keeps a regex holding a quote opaque — the reason the regex
+  skip stays — while a division after a non-ASCII name in the same body is
+  still division.
 - every shipped construct parses: conditionals and their else-if chains, unless,
   case/when, loops, interpolation, template comments, inline SVG, element refs,
   the raw block, composition markers, Portal, snippets, and dotted component
@@ -68,31 +80,45 @@ What they guarantee:
   component. A void closing tag (`</input>`, `</br>`, a stray `</img>`) is an
   error at the closer, with its exact message and line and column.
 - **the expression grammar is the shared table.** `expr/conformance_test.go`
-  runs `conformance/expressions-parse.json` (421 cases at PR #171): each row is
+  runs `conformance/expressions-parse.json` (443 cases at PR #174): each row is
   a source, optionally with handler, bindings or call-argument options, and
   either its S-expression tree (`expr.Print`) with every node position
   (`expr.PrintPositions`) or its error message at an exact line and column.
   Sites runs the same rows through `conformance.ExpressionsParse`, so both hosts
   build the same trees and report the same errors at the same columns — the
-  pipe steer, the ambient-global steer, the `this` and `event` rules, the
+  pipe steer (a `|` inside a string or template literal is not one), the
+  ambient-global steer, the `this` rule (handler values included), `event` as
+  the DOM event in a handler and a plain name elsewhere (`event.title` in plain
+  mode is `(. event title)`), the prototype names, CRLF sources, the
   method-table and receiver-type checks, and every excluded operator included.
   `expr/expr_test.go` pins what the table cannot show: node positions against a
   base, `Walk` order, `FormatNumber`, the method table and global result types,
-  binding names, and `TestLargeExpressionIsLinear`, which times six shapes (a
+  binding names, `TestEventOutsideAHandlerIsData`, and
+  `TestLargeExpressionIsLinear`, which times six shapes (a
   flat operator chain, a long array, a long string, a long argument list, a
   member path, a template literal dense with substitutions) at 16 KiB to 1 MiB
   and fails when the per-byte cost grows, retrying so a busy runner does not.
+- **`expr.Parse` is fuzzed** (`expr/fuzz_test.go`, `FuzzParse`): seeded from
+  every conformance row in the plain, handler and bindings modes, it requires a
+  tree or a positioned `*expr.Error` (never a panic or neither), every node and
+  error position inside the source, and the same result from a second parse. A
+  plain `go test` runs the seeds; the fuzzer runs by hand
+  (`go test -run '^$' -fuzz=FuzzParse -fuzztime=60s ./expr`), not in CI.
 - **every expression position carries a tree** (`exprs_test.go`): text,
   attributes, handlers, block headers, `{:when}` lists and `{#for}` headers each
   get a parsed tree at the expression's own file position; an expression error
-  lands on the offending token wherever the expression sits; `event` is legal
-  exactly where it is bound.
+  lands on the offending token wherever the expression sits. `event` is the DOM
+  event only in an `@event` value (`TestEventIsTheHandlersDOMEvent`, including
+  `pick(event.target.closest('li'))`, which parses only on the DOM event, and a
+  handler after a `{#for event in rows}` block closes) and reads the data field
+  everywhere else — `{ event.title }` in a view body and `event={ item }` as a
+  component prop (`TestEventOutsideAHandlerReadsTheDataField`).
 - **the corpus proof** (`corpus_test.go`, `TestCorpusExpressionsParse`) parses
   every `.pzl` file the monorepo ships or tests with — the framework's
   examples and scaffold templates, the pieces registry and demo, the DevTools
   panel, the runtime test fixtures, and the codegen and check goldens — and
-  requires a tree at every expression position: 675 files and 10,094
-  expressions at PR #172. Outside the monorepo (the Go module cache) the
+  requires a tree at every expression position: 676 files and 10,099
+  expressions at PR #175. Outside the monorepo (the Go module cache) the
   siblings are absent and it skips.
 - **the time budgets** (`perf_test.go`, best of three, skipped under `-short`,
   three times the budget when `CI` is set): a 20,000-line template with
@@ -118,10 +144,11 @@ What they guarantee:
 Error positions and message text are treated as contract here. Loosening one
 fails a test on purpose.
 
-Covers 16 `*_test.go` files: `expr/conformance_test.go` and `expr/expr_test.go`,
-and under `parser/`: `corpus`, `depth`, `exprs`, `inlinesvg`, `integration`,
-`lexer`, `lexskip`, `parser`, `perf`, `portal`, `refs`, `sections`,
-`slot_paths` and `snippets` — 1,211 passing tests and subtests at PR #172.
+Covers 17 `*_test.go` files: `expr/conformance_test.go`, `expr/expr_test.go`
+and `expr/fuzz_test.go`, and under `parser/`: `corpus`, `depth`, `exprs`,
+`inlinesvg`, `integration`, `lexer`, `lexskip`, `parser`, `perf`, `portal`,
+`refs`, `sections`, `slot_paths` and `snippets` — 2,573 passing tests and
+subtests at PR #174 (1,786 in `expr`, 787 in `parser`).
 That is its own Go module (D172), so the
 compiler's `go test ./...` does not run them. Run `go test ./...` inside
 `packages/puzzle-lang` (CI's Go and Windows jobs do). `integration_test.go`
@@ -135,7 +162,12 @@ the function library's table in the same `conformance` package, is run by
 PuzzleKit's vitest suite, not by this module. The codegen side of the void
 rule — the self-closed and slash-less spellings emit byte-identical modules —
 is PuzzleKit's `TestVoidElementsNeedNoSlash`
-(`packages/puzzle/compiler/internal/codegen/core_semantics_test.go`).
+(`packages/puzzle/compiler/internal/codegen/core_semantics_test.go`), and the
+codegen side of the `event` rule — a template that reads `event` as data and
+also uses it in a handler is an error — is PuzzleKit's
+`TestEventAsDataAndInAHandlerIsAnError` and
+`TestEventOutsideAHandlerIsDataPzlCompile`
+(`packages/puzzle/compiler/internal/codegen/expr_test.go`).
 
 ## Contracts it pins (in the connected `puzzle` plan)
 
