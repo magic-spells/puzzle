@@ -30,7 +30,7 @@ notes:
 
 Template braces always enter Puzzle grammar, so static JSON, JavaScript, CSS,
 and examples containing literal block syntax cannot be written directly in a
-template. Value-level `escape` and `raw` formatters run after the
+template. The value-level `escape()` and `raw()` functions run after the
 lexer and cannot solve a lexer failure. `{#comment}` already proves that a block
 body can be located without lexing it, but comments discard that body.
 
@@ -38,9 +38,9 @@ body can be located without lexing it, but comments discard that body.
 
 `{#raw}…{/raw}` is an additive, non-nesting lex-off block. The scanner locates
 the first whitespace-tolerant closer without inspecting the body. While inside
-that span, braces are literal bytes: interpolation, block/branch tags,
-formatter pipes, and brace-valued event bindings do not activate Puzzle
-grammar. HTML tokenization remains active, so elements and their static
+that span, braces are literal bytes: interpolation (and every expression and
+function call inside one), block/branch tags, and brace-valued event bindings
+do not activate Puzzle grammar. HTML tokenization remains active, so elements and their static
 attributes still become ordinary vnodes, and an HTML void element (`<br>`,
 `<input …>`) closes at its start tag there as it does everywhere. Opener
 content after `raw` is ignored, matching `{#comment}`.
