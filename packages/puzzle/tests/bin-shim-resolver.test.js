@@ -128,6 +128,7 @@ describe('bin/puzzle.js platform resolution', () => {
 		// A checkout build — `go install …@latest` cannot resolve the module.
 		expect(stderr).toContain('git clone https://github.com/magic-spells/puzzle');
 		expect(stderr).toContain('cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle');
+		expect(stderr).toContain('on Windows use -o puzzle.exe');
 		expect(stderr).not.toContain('go install');
 	});
 });

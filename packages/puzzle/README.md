@@ -127,6 +127,8 @@ git clone https://github.com/magic-spells/puzzle
 cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle
 ```
 
+On Windows use `-o puzzle.exe`.
+
 ## Project Structure
 
 ```

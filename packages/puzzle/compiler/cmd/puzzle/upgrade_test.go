@@ -653,6 +653,7 @@ func TestUpgradeManualInstallInstructions(t *testing.T) {
 	for _, want := range []string{
 		"git clone https://github.com/magic-spells/puzzle",
 		"cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle",
+		"on Windows use -o puzzle.exe",
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("manual install output missing %q:\n%s", want, stdout.String())

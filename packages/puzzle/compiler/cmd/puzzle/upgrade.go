@@ -200,6 +200,7 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 		fmt.Fprintln(stdout, "Build the latest release from source with Go:")
 		fmt.Fprintln(stdout, "  git clone https://github.com/magic-spells/puzzle")
 		fmt.Fprintln(stdout, "  cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle")
+		fmt.Fprintln(stdout, "  (on Windows use -o puzzle.exe)")
 		return nil
 	case installWorkspace:
 		// Guessing a member would install into a package the user never named,

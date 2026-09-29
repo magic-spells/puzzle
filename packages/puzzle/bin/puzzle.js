@@ -56,7 +56,8 @@ if (!binPath) {
 			`  npm install\n\n` +
 			`For unsupported platforms, build the CLI from source with Go:\n` +
 			`  git clone https://github.com/magic-spells/puzzle\n` +
-			`  cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle\n`
+			`  cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle\n` +
+			`  (on Windows use -o puzzle.exe)\n`
 	);
 	process.exit(1);
 }
