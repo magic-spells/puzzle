@@ -1,16 +1,10 @@
 {
-	"about": "Function library conformance table (D176 §4; the standard set of D174). Each case calls `name(input, ...args)` and expects `expect`. Both hosts run it: PuzzleKit from tests/formatters.test.js, Sites from its Go function tests. JSON null is the missing value, as input and as expected output. A case with `zone` renders in that IANA time zone; every other case is zone-independent. The rows for the deprecated names (abs, ceil, floor, upcase, downcase, trim, strip, replace, join — a JavaScript method or Math global covers each) stay until those functions are deleted. Otherwise only locale-independent behavior belongs here: the locale-rendered functions appear through their iso presets, pluralize's word choice (small counts), and number_with_delimiter with an explicit delimiter (or of negative zero, which prints an unsigned 0). The one exception is the no-preset rows of date, time and datetime, which pin the defaults (date the medium date, time the short time, datetime the medium date with the short time) in `en`, the locale both hosts render: a date row with a `locale` renders in that locale. An in_timezone row's expect is the wall clock the returned date reads as, `YYYY-MM-DDTHH:MM:SS`: an instant re-expressed in the zone (UTC by default), a `YYYY-MM-DD` calendar date unchanged at its own midnight (D114), and a missing value as the empty string. The raw rows pin the shared markup allowlist (D174): rich text that survives, then an XSS corpus in which every case must come out inert. A raw row's expect is the exact sanitized markup; newline_to_br's is the escaped text with a <br> per line break. The `t` rows (D175) add a `locale`: the key is looked up in `translations[locale]`, then in `translations.en` (the default locale); each host fills and loads the tables its own way (PuzzleKit fills at build time, Sites falls back at lookup). `{count}` rows stay in `en`. An exact count of 0 uses an entry's `zero` form when it has one, in every locale (D175).",
+	"about": "Function library conformance table (D176 §4; the standard set of D174). Each case calls `name(input, ...args)` and expects `expect`. Both hosts run it: PuzzleKit from tests/formatters.test.js, Sites from its Go function tests. JSON null is the missing value, as input and as expected output. A case with `zone` renders in that IANA time zone; every other case is zone-independent. What a JavaScript method or Math global covers (upcase, trim, join, abs and the rest) is not a function and has no rows. Only locale-independent behavior belongs here: the locale-rendered functions appear through their iso presets, pluralize's word choice (small counts), and number_with_delimiter with an explicit delimiter (or of negative zero, which prints an unsigned 0). The one exception is the no-preset rows of date, time and datetime, which pin the defaults (date the medium date, time the short time, datetime the medium date with the short time) in `en`, the locale both hosts render: a date row with a `locale` renders in that locale. An in_timezone row's expect is the wall clock the returned date reads as, `YYYY-MM-DDTHH:MM:SS`: an instant re-expressed in the zone (UTC by default), a `YYYY-MM-DD` calendar date unchanged at its own midnight (D114), and a missing value as the empty string. The raw rows pin the shared markup allowlist (D174): rich text that survives, then an XSS corpus in which every case must come out inert. A raw row's expect is the exact sanitized markup; newline_to_br's is the escaped text with a <br> per line break. The `t` rows (D175) add a `locale`: the key is looked up in `translations[locale]`, then in `translations.en` (the default locale); each host fills and loads the tables its own way (PuzzleKit fills at build time, Sites falls back at lookup). `{count}` rows stay in `en`. An exact count of 0 uses an entry's `zero` form when it has one, in every locale (D175).",
 	"translations": {
 		"en": { "cart.title": "Your cart", "nav.home": "Home", "greeting": "Hello, {name}!", "echo": "{a} and {b}", "item_count": { "one": "{count} item", "other": "{count} items" }, "cart_items": { "zero": "Your cart is empty", "one": "{count} item", "other": "{count} items" } },
 		"pl": { "cart.title": "Twój koszyk", "files": { "one": "{count} plik", "few": "{count} pliki", "many": "{count} plików", "other": "{count} pliku" }, "pages": { "one": "{count} strona", "other": "{count} stron" } }
 	},
 	"cases": [
-		{ "name": "abs", "input": -3, "args": [], "expect": 3 },
-		{ "name": "abs", "input": 2.5, "args": [], "expect": 2.5 },
-		{ "name": "ceil", "input": 1.2, "args": [], "expect": 2 },
-		{ "name": "ceil", "input": -1.2, "args": [], "expect": -1 },
-		{ "name": "floor", "input": 1.8, "args": [], "expect": 1 },
-		{ "name": "floor", "input": -1.2, "args": [], "expect": -2 },
 		{ "name": "round", "input": 1.005, "args": [2], "expect": 1.01 },
 		{ "name": "round", "input": 2.5, "args": [], "expect": 3 },
 		{ "name": "round", "input": -2.5, "args": [], "expect": -3 },
@@ -34,15 +28,11 @@
 		{ "name": "number_with_delimiter", "input": 999, "args": [","], "expect": "999" },
 		{ "name": "number_with_delimiter", "input": -0, "args": [], "expect": "0" },
 
-		{ "name": "downcase", "input": "HeLLo", "args": [], "expect": "hello" },
-		{ "name": "upcase", "input": "HeLLo", "args": [], "expect": "HELLO" },
 		{ "name": "capitalize", "input": "hello world", "args": [], "expect": "Hello world" },
 		{ "name": "capitalize", "input": "iPhone", "args": [], "expect": "IPhone" },
 		{ "name": "capitalize", "input": "NASA", "args": [], "expect": "NASA" },
 		{ "name": "capitalize", "input": "élan", "args": [], "expect": "Élan" },
 		{ "name": "capitalize", "input": "", "args": [], "expect": "" },
-		{ "name": "trim", "input": "  a b  ", "args": [], "expect": "a b" },
-		{ "name": "strip", "input": "\n a b \t", "args": [], "expect": "a b" },
 		{ "name": "truncate", "input": "hello world", "args": [8], "expect": "hello w…" },
 		{ "name": "truncate", "input": "hello world", "args": [8, "..."], "expect": "hello..." },
 		{ "name": "truncate", "input": "short", "args": [100], "expect": "short" },
@@ -50,9 +40,6 @@
 		{ "name": "truncate", "input": "hello", "args": [3, "....."], "expect": "..." },
 		{ "name": "truncate", "input": "hello", "args": [0], "expect": "" },
 		{ "name": "truncate", "input": "😀😀😀😀", "args": [3], "expect": "😀😀…" },
-		{ "name": "replace", "input": "a-b-c", "args": ["-", "+"], "expect": "a+b+c" },
-		{ "name": "replace", "input": "a-b-c", "args": ["-"], "expect": "abc" },
-		{ "name": "replace", "input": "a.b", "args": [".", "!"], "expect": "a!b" },
 		{ "name": "strip_html", "input": "<p>Hi <b>there</b></p>", "args": [], "expect": "Hi there" },
 		{ "name": "strip_html", "input": "a < b", "args": [], "expect": "a < b" },
 		{ "name": "strip_html", "input": "1 <2", "args": [], "expect": "1 <2" },
@@ -171,8 +158,6 @@
 		{ "name": "newline_to_br", "input": "", "args": [], "expect": "" },
 		{ "name": "newline_to_br", "input": "x\n\ny", "args": [], "expect": "x<br><br>y" },
 
-		{ "name": "join", "input": ["a", "b"], "args": [], "expect": "a, b" },
-		{ "name": "join", "input": ["a", "b"], "args": [" | "], "expect": "a | b" },
 		{ "name": "json", "input": { "b": 1, "a": [1, "x", null] }, "args": [], "expect": "{\"a\":[1,\"x\",null],\"b\":1}" },
 		{ "name": "json", "input": { "b": 1, "9": 2, "10": 3 }, "args": [], "expect": "{\"10\":3,\"9\":2,\"b\":1}" },
 		{ "name": "json", "input": null, "args": [], "expect": "null" },

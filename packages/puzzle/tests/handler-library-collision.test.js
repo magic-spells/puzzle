@@ -81,11 +81,12 @@ describe('handler/library name collision (D176 §4)', () => {
 		expect(shadowWarnings(warn)[0]).toMatch(/^\[puzzle\] app\/components\/Stamped\.pzl: handler `link`/);
 	});
 
-	it('stays quiet for other names, the deprecated built-ins and a view without handlers', async () => {
+	it('stays quiet for other names, names JavaScript covers and a view without handlers', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const formatters = makeFormatterRegistry();
-		// `join`, `trim` and `floor` are still registered built-ins, but they are
-		// leaving the library, so a handler of that name is not a collision.
+		// `join`, `trim` and `floor` are not library functions — `.join()`,
+		// `.trim()` and `Math.floor()` say them — so a handler of that name is not
+		// a collision.
 		await new (viewWith('QuietView', ['toggle', 'join', 'trim', 'floor']))({ formatters }).mount(container());
 		await new (viewWith('NoHandlers', []))({ formatters }).mount(container());
 		class Bare extends PuzzleView {
@@ -98,10 +99,10 @@ describe('handler/library name collision (D176 §4)', () => {
 		expect(shadowWarnings(warn)).toHaveLength(0);
 	});
 
-	it('warns for an app function registered under a deprecated name, which stays the app\'s', async () => {
+	it('warns for an app function registered under a name JavaScript covers, which is the app\'s', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		// The app's own join and replace replace the seeded deprecated built-ins;
-		// trim is still the built-in, so a trim handler is not a collision.
+		// The app registered its own join and replace, so those names are in its
+		// library; trim is not, so a trim handler is not a collision.
 		const formatters = makeFormatterRegistry({
 			join: (list) => list.join(' / '),
 			replace: (s) => s,

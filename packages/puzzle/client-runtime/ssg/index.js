@@ -826,7 +826,7 @@ async function writeStaticDir({
  * In STATIC it is a per-page makeRouterStub over the same snapshot — the SAME stub
  * the browser kernel (static/index.js buildStaticContext) wires, and it encodes
  * history-style too, or router.url()/current would differ between the prerendered
- * HTML and the client re-render for any based app (the `{ path | link }` formatter
+ * HTML and the client re-render for any based app (the `{ link(path) }` function
  * reads router.url; a view may read router.current). Static pages ship no router
  * and no click interception, so a hash-shaped href (`#/about`) would be a dead link
  * on a page that physically lives at /about/index.html; the file layout is

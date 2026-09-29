@@ -7,38 +7,20 @@
  * Compiled render code receives the RAW function map (getAll()), never the registry
  * instance: it calls `__formatters.escape(...)` and, for every library call,
  * `(__formatters.name || __formatters.__missing('name'))(...)` directly — the
- * __missing typo-guard (v1.12, D43). The call shape is the same for a `name(…)`
- * call and for the pipe spelling codegen still accepts until the corpus moves.
+ * __missing typo-guard (v1.12, D43).
  *
  * Renamed from FilterRegistry (constellation/doc/DOC-DECISIONS.md D7) with fixes from
  * constellation/doc/DOC-CODE-REVIEW.md §2.6: null/undefined render as '', `round` returns a
- * number, `replace` replaces all occurrences, `number_with_delimiter` keeps
- * decimals.
+ * number, `number_with_delimiter` keeps decimals.
  */
 
 import manifestFormatters from '@magic-spells/puzzle/formatters/manifest';
-import {
-	escape,
-	upcase,
-	downcase,
-	trim,
-	strip,
-	replace,
-	join,
-	abs,
-	ceil,
-	floor,
-} from './formatters/builtins.js';
+import { escape } from './formatters/builtins.js';
 
 // `raw` is no longer seeded here (D174): templates reach it only through the
 // live-HTML node, never through the registry, and seeding it would pull the
 // sanitizer into every bundle.
 const requiredBuiltins = { escape };
-
-// The deprecated built-ins themselves (formatters/deprecated.js), so
-// warnHandlerShadows can tell one seeded into a registry from an app function
-// registered under the same name. Dev-only, like STANDARD_FORMATTERS.
-const DEPRECATED_BUILTINS = { upcase, downcase, trim, strip, replace, join, abs, ceil, floor };
 
 // The standard library (D174, D176 §4): the names Sites implements with the
 // same arguments and meaning. An app function registered under one of these
@@ -47,9 +29,9 @@ const DEPRECATED_BUILTINS = { upcase, downcase, trim, strip, replace, join, abs,
 // deliberately absent — overriding those is ordinary. `t` is standard (D175) but
 // not a built-in: the i18n service registers it when the app configures
 // translations. `in_timezone` joined the standard set with D176: no JavaScript
-// in the expression language re-expresses an instant in another zone. The
-// deprecated names (formatters/deprecated.js) left it: a JavaScript method or
-// `Math` global covers each, and `round` stays because nothing in JavaScript
+// in the expression language re-expresses an instant in another zone. What a
+// JavaScript method or `Math` global covers is not in it (REMOVED_FORMATTERS
+// names each replacement), and `round` stays because nothing in JavaScript
 // rounds to places in one call.
 // Referenced only behind `__PUZZLE_DEV__`, so production tree-shakes it.
 export const STANDARD_FORMATTERS = [
@@ -65,7 +47,8 @@ const PUZZLEKIT_FORMATTERS = ['link', 'timeago'];
 
 // Removed built-ins (D174, D176) and what replaces each, for the unknown-name
 // guard: a list is shaped and counted with array methods and `.length`,
-// arithmetic is the operators and a fallback is `??` (D176 §3–4).
+// arithmetic is the operators, a fallback is `??`, and a string or number
+// transform JavaScript already has is its method or `Math` global (D176 §3–4).
 // Dev-only, like STANDARD_FORMATTERS.
 const OPERATOR_HINT = 'use the operator (`a + b`, `a - b`, `a * b`, `a / b`, `a % b`)';
 const REMOVED_FORMATTERS = {
@@ -86,6 +69,16 @@ const REMOVED_FORMATTERS = {
 	modulo: OPERATOR_HINT,
 	default: "use `??` (`{ name ?? 'fallback' }`)",
 	split: "use `.split()` (`tags.split(',')`)",
+	upcase: 'use `.toUpperCase()` (`name.toUpperCase()`)',
+	downcase: 'use `.toLowerCase()` (`name.toLowerCase()`)',
+	trim: 'use `.trim()`',
+	strip: 'use `.trim()`',
+	replace:
+		"use `.replaceAll(search, replacement)` for plain strings, or `.split(search).join(replacement)`, which is exactly what this did",
+	join: "use `.join(', ')` — this joined with ', ' by default, and `.join()` with no argument joins with ','",
+	abs: 'use `Math.abs(x)`',
+	ceil: 'use `Math.ceil(x)`',
+	floor: 'use `Math.floor(x)`',
 };
 
 // Levenshtein edit distance — tight two-row DP, no dependency. Powers the
@@ -260,10 +253,7 @@ let warnedShadows;
  * bare `save(…)` calls the view's handler; everywhere else it calls the library,
  * so one name would mean two things in one template. The library here is the
  * standard and PuzzleKit-only names plus whatever this app registered (its own
- * functions, `t`, `link`). A deprecated built-in does not count, since it is
- * leaving the library — but an app function registered under a deprecated name
- * (`join`, `replace`) does, because that name stays the app's after the
- * built-in goes. PuzzleView.mount() calls this from behind the inline
+ * functions, `t`, `link`). PuzzleView.mount() calls this from behind the inline
  * `__PUZZLE_DEV__` probe, so production drops it.
  *
  * @param {object} view a PuzzleView instance (reads `events` and `ctx.formatters`)
@@ -274,11 +264,7 @@ export function warnHandlerShadows(view) {
 	const registered = view.ctx?.formatters?.getAll?.();
 	for (const name of Object.keys(events)) {
 		if (name === '__missing') continue;
-		// In the registry, and not merely the deprecated built-in seeded there.
-		const registeredHere =
-			registered != null &&
-			Object.hasOwn(registered, name) &&
-			!(Object.hasOwn(DEPRECATED_BUILTINS, name) && registered[name] === DEPRECATED_BUILTINS[name]);
+		const registeredHere = registered != null && Object.hasOwn(registered, name);
 		const inLibrary =
 			registeredHere || STANDARD_FORMATTERS.includes(name) || PUZZLEKIT_FORMATTERS.includes(name);
 		if (!inLibrary) continue;

@@ -9,16 +9,17 @@
 // (built by the registry, not here) and `timeago`. The identical-output part of
 // the standard set is pinned by the shared conformance table,
 // packages/puzzle-lang/conformance/functions.json.
-// A JavaScript method or `Math` global covers the deprecated names — `upcase`,
-// `downcase`, `trim`, `strip`, `replace`, `join`, `abs`, `ceil`, `floor` — which
-// still work and warn once in development (./deprecated.js). Lists are shaped
-// and counted with array methods and `.length`, arithmetic is the operators and
-// a fallback is `??`, so there are no functions for those.
+// What a JavaScript method or `Math` global already says is not a function
+// here: `.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll()`,
+// `.join()`, `Math.abs()`, `Math.ceil()`, `Math.floor()`. Lists are shaped and
+// counted with array methods and `.length`, arithmetic is the operators and a
+// fallback is `??`, so there are no functions for those either. `round` stays:
+// `.toFixed()` returns a padded string, so nothing in JavaScript rounds half
+// away from zero to a number in one call.
 
 import { calendarISO, isCalendarDate, noDate, parseDateInput } from '../dates.js';
 import { formatLocale, localeNumber } from './locale.js';
 import { sanitizeHtml, newlineToBr } from '../sanitize.js';
-import { warnDeprecated } from './deprecated.js';
 
 // null/undefined render as empty string, never the literal "null"/"undefined"
 const str = (v) => (v == null ? '' : String(v));
@@ -81,9 +82,8 @@ export function escape(v) {
 }
 
 // The two markup functions (D174 group e, kept by D176 §4). A template never
-// calls these: codegen lowers a text interpolation that ends in either name —
-// as the last pipe link today; as the outermost call once codegen lowers from
-// the AST — to the live-HTML node (views/html.js), which runs the same
+// calls these: codegen lowers a text interpolation whose outermost call is
+// either name to the live-HTML node (views/html.js), which runs the same
 // sanitizer, and anywhere else either name is a compile error. So an app
 // function registered under `raw` can never inject markup. The functions return
 // the markup strings the node renders — for script code, and for the shared
@@ -97,24 +97,6 @@ export function newline_to_br(v) {
 }
 
 // ── Text ──────────────────────────────────────────────────────────────────────
-
-// Deprecated (D176 §4): `.trim()`.
-export function trim(v) {
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('trim');
-	return str(v).trim();
-}
-
-// Deprecated (D176 §4): `.toLowerCase()`.
-export function downcase(v) {
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('downcase');
-	return str(v).toLowerCase();
-}
-
-// Deprecated (D176 §4): `.toUpperCase()`.
-export function upcase(v) {
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('upcase');
-	return str(v).toUpperCase();
-}
 
 // Upper-cases the first character and leaves the rest alone, so `iPhone` and
 // `NASA` survive (D174 F1). The old behavior is `capitalize(s.toLowerCase())`.
@@ -139,30 +121,6 @@ export function truncate(v, length = 100, ellipsis = '…') {
 	if (chars.length <= n) return s;
 	const ell = [...str(ellipsis)].slice(0, n);
 	return chars.slice(0, n - ell.length).join('') + ell.join('');
-}
-
-// Deprecated (D176 §4): for plain strings use `.replaceAll(search, replacement)`;
-// the old formatter was `.split(search).join(replacement)`, which is the exact
-// equivalent for a non-empty search and a replacement string. `.replaceAll()`
-// differs at the edges: a missing replacement inserts "undefined" where this
-// inserts nothing, `$&`-style patterns in the replacement expand, and an empty
-// search inserts everywhere where this leaves the input alone.
-export function replace(v, search, replacement = '') {
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('replace');
-	const s = str(v);
-	// A RegExp is applied as given — a PuzzleKit addition. Anything else is a
-	// literal search, coerced like the input (`replace(n, 0, '-')`), that
-	// replaces ALL occurrences (Liquid semantics); a missing or empty one leaves
-	// the input alone rather than matching "undefined" or every gap.
-	if (search instanceof RegExp) return s.replace(search, str(replacement));
-	const needle = str(search);
-	return needle === '' ? s : s.split(needle).join(str(replacement));
-}
-
-// Deprecated (D176 §4): `.trim()` removes the same whitespace.
-export function strip(v) {
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('strip');
-	return str(v).replace(/^\s+|\s+$/g, '');
 }
 
 // Scan to the `>` closing a tag that starts at `start`, skipping quoted attribute
@@ -271,24 +229,6 @@ export function round(v, places = 0) {
 	return roundHalfAway(Number(v), Math.min(100, Math.max(-100, p)));
 }
 
-// Deprecated (D176 §4): `Math.floor(x)`.
-export function floor(v) {
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('floor');
-	return Math.floor(Number(v));
-}
-
-// Deprecated (D176 §4): `Math.ceil(x)`.
-export function ceil(v) {
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('ceil');
-	return Math.ceil(Number(v));
-}
-
-// Deprecated (D176 §4): `Math.abs(x)`.
-export function abs(v) {
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('abs');
-	return Math.abs(Number(v));
-}
-
 // Groups thousands with `,`, puts the sign before the symbol (`-$1,234.50`), and
 // rounds by round's rule (D174 F3). An amount that rounds to zero is unsigned.
 export function currency(v, symbol = '$', places = 2) {
@@ -340,13 +280,6 @@ export function compact_number(v) {
 }
 
 // ── Values ────────────────────────────────────────────────────────────────────
-
-// Deprecated (D176 §4): `.join(', ')` — note the default separator here is ', '
-// where `.join()` alone uses ','.
-export function join(arr, sep = ', ') {
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnDeprecated('join');
-	return Array.isArray(arr) ? arr.join(sep) : str(arr);
-}
 
 // Compare two strings by Unicode code point (UTF-8 byte order, which is what Go's
 // map-key sort uses). UTF-16 code-unit order differs only when a surrogate meets

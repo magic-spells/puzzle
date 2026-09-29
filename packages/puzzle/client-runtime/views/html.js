@@ -19,7 +19,7 @@ import { sanitizeHtml, newlineToBr } from '../sanitize.js';
 /**
  * The markup a live-HTML vnode renders — shared with the SSG serializer. The
  * sanitizer sits behind its own define, `__PUZZLE_HAS_RAW_SANITIZE__` (set only
- * when a template pipes to `raw`), so an app that uses just `newline_to_br`
+ * when a template calls `raw`), so an app that uses just `newline_to_br`
  * ships the escape-and-<br> helper without the sanitizer. A `raw` vnode that
  * reaches such a build (a template the usage scan never read) renders nothing:
  * never unsanitized markup.
