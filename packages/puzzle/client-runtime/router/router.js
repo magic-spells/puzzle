@@ -319,14 +319,16 @@ export class Router {
 	// #recoverFailedNavigation (block/failure); a newer navigation to a DIFFERENT path
 	// overwrites it and still supersedes normally.
 	#pendingNavPath = null;
-	// The #navigate promise of the navigation #pendingNavPath names — the two move
-	// together at every set/clear point, so whenever the path slot is non-null this
-	// holds the promise for THAT navigation. push()'s double-click no-op returns it
-	// instead of a fresh resolved promise, so the second caller settles when the
-	// in-flight navigation does. Written by push() (the only caller that can leave
-	// #pendingNavPath non-null, and the only place the promise object exists);
-	// cleared alongside the path in #navigate, #commitState, #recoverFailedNavigation
-	// and stop().
+	// The #navigate promise of the in-flight push, replace or pop (null when idle).
+	// Every clear point of #pendingNavPath clears it too, but it is set more widely:
+	// the path slot names pushes only, while this slot is written by push() (paired
+	// with its path, so whenever the path slot is non-null this holds the promise
+	// for THAT navigation) and by replace(), go() and the popstate handler through
+	// #trackNav. push()'s double-click no-op returns it instead of a fresh resolved
+	// promise, so the second caller settles when the in-flight navigation does; a
+	// locale rebuild (__failedView(null, true), D175) waits on it, so a replace or a
+	// Back pop still loading lands before the committed location is rebuilt.
+	// Cleared in #navigate, #commitState, #recoverFailedNavigation and stop().
 	#pendingNavPromise = null;
 	// Guard redirects re-enter the normal pipeline through push()/replace() — the
 	// redirect inherits the denied navigation's verb — so every destination gets its
@@ -883,7 +885,20 @@ export class Router {
 		if (this.#state && sameNavKey(path) === sameNavKey(this.#state.path)) {
 			return Promise.resolve();
 		}
-		return this.#navigate(path, { push: false, replace: true });
+		return this.#trackNav(this.#token, this.#navigate(path, { push: false, replace: true }));
+	}
+
+	/**
+	 * Record a replace/pop navigation's promise in #pendingNavPromise (push() pairs
+	 * its own). `token` is #token read BEFORE the #navigate call (arguments evaluate
+	 * left to right): #navigate runs synchronously to its token bump, so an
+	 * unchanged token means it never took ownership (an unmatched path) and there is
+	 * nothing in flight to record, and a filled slot means a re-entrant navigation
+	 * fired inside that stretch claimed it — its own record must stand.
+	 */
+	#trackNav(token, nav) {
+		if (this.#token !== token && this.#pendingNavPromise == null) this.#pendingNavPromise = nav;
+		return nav;
 	}
 
 	/**
@@ -939,7 +954,10 @@ export class Router {
 		}
 		const target = mode.go(n);
 		if (!target) return;
-		return this.#navigate(target.path, { push: false, pop: true, memoryIndex: target.index });
+		return this.#trackNav(
+			this.#token,
+			this.#navigate(target.path, { push: false, pop: true, memoryIndex: target.index })
+		);
 	}
 
 	/** Go back one entry (v1.11, D42). Equivalent to go(-1). */
@@ -1159,8 +1177,8 @@ export class Router {
 		// index move), a real navigation despite the shared path. A pop/replace/initial
 		// nav starting here clears the slot for that reason.
 		//
-		// The paired promise is always cleared here and re-attached by push() the
-		// moment this call returns (see push()): the promise object does not exist
+		// The promise is always cleared here and re-attached by push() or #trackNav
+		// the moment this call returns (see push()): the promise object does not exist
 		// yet inside #navigate, and leaving the PREVIOUS navigation's promise
 		// standing next to a fresh target would hand a re-entrant same-path push a
 		// promise for a navigation that is already over.
@@ -2144,10 +2162,11 @@ export class Router {
 			// layout. It is left set if this navigation is superseded or fails, so the
 			// next navigation rebuilds every level too — no view keeps stale strings.
 			st.chainInvalid = st.layoutInvalid = true;
-			// A push still loading owns where the app is going: rebuilding the committed
-			// location now would supersede it and strand the app on the old page. Let it
-			// land (or fail), then rebuild wherever the app ended up.
-			const pending = this.#pendingNavPath != null && this.#pendingNavPromise;
+			// A push, replace or pop still loading owns where the app is going:
+			// rebuilding the committed location now would supersede it and strand the
+			// app on the old page (and a pop's entry under the old URL). Let it land
+			// (or fail), then rebuild wherever the app ended up.
+			const pending = this.#pendingNavPromise;
 			if (pending) {
 				const again = () => this.__failedView(null, true);
 				return pending.then(again, again);
@@ -2974,7 +2993,7 @@ export class Router {
 			this.#applyFragmentPop(path, savedPosition);
 			return;
 		}
-		this.#navigate(path, { push: false, pop: true, savedPosition });
+		this.#trackNav(this.#token, this.#navigate(path, { push: false, pop: true, savedPosition }));
 	}
 
 	/**

@@ -484,6 +484,34 @@ func TestEventAsDataAndInAHandlerIsAnError(t *testing.T) {
 	}
 }
 
+// An outer {#for} variable named `event` read by an inner loop's key is a loop
+// local, not data: the key's trial lowering (listKeyArrow), which sees only the
+// inner row's own names, must not record it as a data read and fail the build
+// beside a DOM-event handler.
+func TestNestedLoopKeyReadingAnOuterEventLoopVariableCompiles(t *testing.T) {
+	for _, key := range []string{"key={ `${event.id}-${a.id}` }", `key="{ event.id }-{ a.id }"`} {
+		t.Run(key, func(t *testing.T) {
+			src := "<puzzle-view>\n" +
+				"<input @input={ search(event.target.value) }>\n" +
+				"{#for event in events}<ul>\n" +
+				"  {#for a in event.attendees}<li " + key + ">{ a.name }</li>{/for}\n" +
+				"</ul>{/for}\n" +
+				"</puzzle-view>"
+			if _, err := compileTemplate(t, src, ""); err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+		})
+	}
+	// A key that reads a real `event` field still counts as a data read.
+	src := "<puzzle-view>\n" +
+		"<input @input={ search(event.target.value) }>\n" +
+		"{#for a in attendees}<li key={ `${event.id}-${a.id}` }>{ a.name }</li>{/for}\n" +
+		"</puzzle-view>"
+	if _, err := compileTemplate(t, src, ""); err == nil || !strings.Contains(err.Error(), "also reads `event` as data at 3:") {
+		t.Fatalf("a data `event` in a key must still be caught, got %v", err)
+	}
+}
+
 // A `}` inside a nested template literal does not close the braces, and the
 // lowered literal reproduces the source.
 func TestNestedTemplateLiteralExpressionCompile(t *testing.T) {

@@ -60,7 +60,8 @@ const REMOVED_FORMATTERS = {
 	compact: 'use `.filter()` (`items.filter((item) => item != null)`); for a short count, compact_number',
 	first: 'use `items[0]` or `items.at(0)`',
 	last: 'use `items.at(-1)`',
-	noescape: 'use raw',
+	// 0.7's noescape printed its value as text; raw() renders sanitized HTML.
+	noescape: 'print it with a plain `{ value }` — raw() is only for HTML you mean to render',
 	size: 'use the `.length` property (`items.length`)',
 	plus: OPERATOR_HINT,
 	minus: OPERATOR_HINT,

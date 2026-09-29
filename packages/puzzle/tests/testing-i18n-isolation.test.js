@@ -57,7 +57,8 @@ describe('/testing restores the formatter locale and <html lang> on destroy', ()
 			routes: [{ path: '/', view: Prices }],
 			i18n: { locale: 'fr', strings: {} },
 		});
-		expect(document.documentElement.lang).toBe('fr');
+		// createTestApp routes in memory mode, which leaves <html lang> alone.
+		expect(document.documentElement.getAttribute('lang')).toBeNull();
 		app.destroy();
 		expect(document.documentElement.getAttribute('lang')).toBeNull();
 

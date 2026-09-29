@@ -41,10 +41,11 @@ notes:
       staleness gate, `mount()` awaits `this.i18n.__ready()`; a rejection (active and default locale
       both failed) goes through the same teardown as a rejected `beforeMount`. `refresh` is
       `router.__failedView(null, true)` — the same-location rebuild. Manifest paths resolve against
-      `normalizeBase(routerBase)` in path mode and `document.baseURI` in hash/memory mode.
-      `unmount()` nulls `this.i18n`. `config.__i18n` is an INTERNAL seam (tests and `/testing`'s
-      `createTestApp` pass `{ manifest, tables, locale }` to skip fetching); it is not public
-      config.
+      `normalizeBase(routerBase)` in path mode and, in hash/memory mode, against the i18n manifest's
+      `base` (the entry app.js's folder), falling back to `document.baseURI`; memory mode also
+      passes `lang: false`, so the service never writes `<html lang>`. `unmount()` nulls
+      `this.i18n`. `config.__i18n` is an INTERNAL seam (tests and `/testing`'s `createTestApp` pass
+      `{ manifest, tables, locale }` to skip fetching); it is not public config.
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
-import { memoryRouter } from '../client-runtime/router/modes.js';
+import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 import { createTestApp, mountView } from '../client-runtime/testing/index.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
 
@@ -154,11 +154,38 @@ describe('PuzzleApp + i18n', () => {
 		expect(app.i18n).toBe(null);
 	});
 
-	it('hash and memory modes resolve manifest paths against the document', async () => {
+	it('hash and memory modes resolve manifest paths next to the entry module', async () => {
+		// The build's manifest carries `base`, the folder app.js was served from.
 		const fetch = stubFetch({ 'locales/en.AAAA.json': EN });
-		const { app } = make({ routerMode: memoryRouter() });
+		const { app } = make({
+			routerMode: hashRouter(),
+			__i18n: { manifest: { ...MANIFEST, base: 'https://example.test/shop/' }, locale: 'en' },
+		});
 		await app.mount();
-		expect(fetch.mock.calls[0][0]).toBe(new URL('locales/en.AAAA.json', document.baseURI).href);
+		expect(fetch.mock.calls[0][0]).toBe('https://example.test/shop/locales/en.AAAA.json');
+	});
+
+	it('a script embed fetches its locale files from the app folder, not the host page', async () => {
+		history.replaceState({}, '', '/blog/post/1');
+		const fetch = stubFetch({ 'locales/en.AAAA.json': EN });
+		const { app, el } = make({
+			routerMode: memoryRouter(),
+			__i18n: { manifest: { ...MANIFEST, base: 'https://widget.cdn/app/' }, locale: 'en' },
+		});
+		await app.mount();
+		expect(fetch.mock.calls[0][0]).toBe('https://widget.cdn/app/locales/en.AAAA.json');
+		expect(el.querySelector('h1').textContent).toBe('Home');
+	});
+
+	it('memory mode leaves <html lang> alone, on load and on a switch', async () => {
+		document.documentElement.lang = 'fr';
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const { app, el } = make({ routerMode: memoryRouter() });
+		await app.mount();
+		expect(document.documentElement.lang).toBe('fr');
+		await app.i18n.setLocale('es');
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+		expect(document.documentElement.lang).toBe('fr');
 	});
 
 	it('setLocale in beforeMount replaces the startup load and refreshes nothing', async () => {
@@ -324,6 +351,88 @@ describe('PuzzleApp + i18n', () => {
 		expect(el.querySelector('h1').textContent).toBe('Acerca de');
 		expect(el.querySelector('header').textContent).toBe('Tienda');
 		expect(history.length).toBe(before + 1);
+	});
+
+	it('setLocale then replace ends on the replaced page in the new locale', async () => {
+		let releaseEs;
+		const esGate = new Promise((r) => (releaseEs = r));
+		stubFetch(
+			{ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES },
+			{ gates: { 'locales/es.BBBB.json': esGate } }
+		);
+		const slow = gatedAbout();
+		const { app, el } = make({ routes: slow.routes });
+		await app.mount();
+		const before = history.length;
+		const switched = app.i18n.setLocale('es');
+		const replaced = app.router.replace('/about');
+		releaseEs();
+		await tick();
+		slow.release();
+		await Promise.all([switched, replaced]);
+		expect(location.pathname).toBe('/about');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+		expect(history.length).toBe(before);
+	});
+
+	// A Back pop still loading when the switch lands: the rebuild waits for it, so
+	// the pop commits and the rebuild runs there — never over the entry it left.
+	function gatedHome() {
+		let gate = Promise.resolve();
+		class SlowHome extends Home {
+			async data() {
+				await gate;
+				return super.data();
+			}
+		}
+		return {
+			hold() {
+				let release;
+				gate = new Promise((r) => (release = r));
+				return release;
+			},
+			routes: [
+				{ path: '/', view: SlowHome, layout: Layout },
+				{ path: '/about', view: About, layout: Layout },
+			],
+		};
+	}
+
+	it('a switch landing while a Back pop loads waits for it, then rebuilds that page', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const slow = gatedHome();
+		const { app, el } = make({ routes: slow.routes });
+		await app.mount();
+		await app.router.push('/about');
+		const release = slow.hold();
+		history.back();
+		for (let i = 0; i < 5; i++) await tick();
+		const switched = app.i18n.setLocale('es');
+		for (let i = 0; i < 5; i++) await tick();
+		release();
+		await switched;
+		expect(location.pathname).toBe('/');
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
+	});
+
+	it('memory mode: a switch landing while back() loads waits for it, then rebuilds that page', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		const slow = gatedHome();
+		const { app, el } = make({ routes: slow.routes, routerMode: memoryRouter() });
+		await app.mount();
+		await app.router.push('/about');
+		const release = slow.hold();
+		const back = app.router.back();
+		await tick();
+		const switched = app.i18n.setLocale('es');
+		await tick();
+		release();
+		await Promise.all([back, switched]);
+		expect(app.router.current.path).toBe('/');
+		expect(el.querySelector('h1').textContent).toBe('Inicio');
+		expect(el.querySelector('header').textContent).toBe('Tienda');
 	});
 
 	it('a switch plays no enter or out animation on the rebuilt chain', async () => {

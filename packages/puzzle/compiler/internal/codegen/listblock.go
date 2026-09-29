@@ -339,6 +339,13 @@ func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lo
 		keyScope[f.Counter] = ""
 	}
 	facts := &exprFacts{}
+	// This is a trial lowering in a scope that hides the enclosing render
+	// scope, so an outer loop variable named `event` resolves as data here and
+	// noteEvent would record a data read that is not one. Undo it: a key that
+	// truly reads data is not lowerable (below), and its render-scope lowering
+	// on the `.map` path records the read for real.
+	eventData := c.eventData
+	defer func() { c.eventData = eventData }()
 	var js string
 	switch attr := findKeyAttr(attrsOf(root)).(type) {
 	case *parser.StaticAttr:
