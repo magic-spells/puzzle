@@ -44,10 +44,12 @@ notes:
 **Status: decided by Cory on 2026-09-28, sub-decisions included; building for
 0.8.0.** Rule 7, P1–P4 and P1b are merged into `release/0.8.0` (PRs #163,
 #164, #167, #168, #171 and #172), and so are P5's eslint/prettier ports of P1b
-(PR #173); what remains of P5 is the three editor grammars, the one piece the
-0.8.0 tag still waits for. P6, the Go evaluator in Sites, follows the tag.
-D173, D174 and D175 state the language's semantics, function library and
-translations in this card's terms. Two older questions remain under *Open*.
+(PR #173) and the final-review fixes (PRs #174 and #175). What remains of P5
+before the 0.8.0 tag is the three editor grammars and the eslint/prettier port
+of #174's scanner rules (PR #176, open). P6, the Go evaluator in Sites, follows
+the tag. D173, D174 and D175 state the language's semantics, function library
+and translations in this card's terms. Two older questions remain under
+*Open*.
 
 ## Context
 
@@ -95,7 +97,8 @@ both hosts whose message names the construct and what to write instead.
 - **Identifiers:** JavaScript `ID_Start`/`ID_Continue` (Unicode letters,
   digits and marks, `_`, `$`). Reserved words are rejected except `eval` and
   `arguments`, which read like any data field; `this` is rejected (rule 7);
-  `event` is a handler-only name. `__proto__`, `constructor` and `prototype`
+  `event` is an ordinary name outside an `@event` value and the DOM event
+  inside one (rule 7). `__proto__`, `constructor` and `prototype`
   are rejected as member names and object keys, because they reach
   JavaScript's prototype machinery, which a Go host's plain maps would not
   share.
@@ -156,10 +159,14 @@ does), number-to-string conversion as JavaScript does it (`0.1 + 0.2`, `-0` →
 `"0"`, `1e21`), `NaN` and `Infinity`, `?.` short-circuiting, and `??`. Two
 deviations hold in both hosts:
 
-1. **A member read never throws** (D173 V4): `a.b.c` on a missing path is
+1. **A missing value never throws** (D173 V4): `a.b.c` on a missing path is
    `undefined` (nil in Go), which prints nothing. A method call on a missing
    value is guarded the same way: `x.trim()` with `x` missing is `undefined`
    and prints nothing (PuzzleKit draws no development warning for it).
+   `Object.keys`, `Object.values` and `Object.entries` of a missing value are
+   `[]`, so `{ Object.keys(settings).length }` prints `0`: PuzzleKit passes
+   the argument as `<arg> ?? {}`, so any other value reaches the global
+   unchanged, and Sites' evaluator needs the same default for parity.
 2. **Printing is display, not expression semantics** (D173 V6): `null`,
    `undefined`, `NaN`, ±Infinity and dates print nothing, a list joins, and any
    other object prints nothing and draws a development warning.
@@ -229,8 +236,12 @@ because nothing in the language re-expresses an instant in another zone.
   under a standard name wins, D174), and the compiler cannot see which
   presets that one takes. A dynamic unknown preset renders the function's
   default at run time, and in development the standard function logs an
-  error once per preset name; a zone `Intl` cannot resolve leaves the date
-  un-shifted.
+  error once per preset name. A zone `Intl` rejects (`'America/New_Yrok'`,
+  which passes the literal check) renders the date un-shifted and, in
+  development, logs an error once per zone, through the same warn-once
+  ledger as the preset errors (production strips it); a `null` or `''` zone
+  renders un-shifted with no error, and an omitted zone keeps the `'UTC'`
+  default.
 - **An app registers its own functions** through the `formatters` config map,
   which keeps its name, and calls them bare, as Cory put it:
   `{ specialFormat(product.title) }`. `puzzle check` types an app function as
@@ -310,9 +321,23 @@ Date(). we'll have limited support."
   lowers it as written, with no guards. `event` itself cannot be called. A
   bound `event` (a `{#for}` item, a snippet parameter, an arrow parameter)
   shadows the DOM event as in JavaScript, and its chain is ordinary data;
-  PuzzleKit then names the DOM parameter `__ev`. A free `event` outside a
-  handler is an error that says to rename a data field called `event`. This
-  is a PuzzleKit-only extension by construction: Sites has no handlers.
+  PuzzleKit then names the DOM parameter `__ev`. This is a PuzzleKit-only
+  extension by construction: Sites has no handlers.
+- **Outside a handler `event` is an ordinary name.** It reads the data field
+  or prop of that name (`__d.event` in PuzzleKit, guarded like any read), so
+  `<EventCard event={ item }>` and its `{ event.title }` work, and
+  `value={ event.title }` two-way binds like any field (D147). Inside a
+  handler the free `event` is always the DOM event and shadows a field of
+  that name, so a template that both reads `event` as data — text, an
+  attribute, a block header, a handler's conditional test (a render-time
+  read) — and uses the free `event` inside a handler is a positioned
+  PuzzleKit compile error at the handler's use that names the data read:
+  "`event` here is the DOM event, but this template also reads `event` as
+  data at 2:9 — rename the field or prop". Otherwise the handler would
+  silently receive the DOM event. A bound `event` counts as neither use,
+  passing `event={ item }` to a child is not a read, and a bare handler
+  (`@click={ save }`) has no authored `event`. `puzzle check` reports the
+  same error.
 - The handler is a dialect extension in the D172 sense, like `<Portal>`: Sites
   rejects `@event` with an error that says so.
 - **No `{#let}` in PuzzleKit.** Cory: it "would allow people to put logic in
@@ -329,16 +354,22 @@ Date(). we'll have limited support."
   which shadow the handler's `event`; every other name is `__d.<name>`), so
   an arrow parameter or a Unicode identifier can never be prefixed wrongly.
   Every member step, index step and method call is guarded (`?.`), handler
-  arguments included; a library call becomes
+  arguments included; `Object.keys`, `values` and `entries` take their first
+  argument as `<arg> ?? {}` (deviation 1); a library call becomes
   `(__f["name"] || __f.__missing("name"))(…)`; a method stays the same
   JavaScript method; `Math.*` stays `Math.*`; parentheses come from
   precedence. D170's row facts and D62's handler-caching verdicts are read
   off the same tree.
 - **`puzzle check` emits TypeScript from the same tree** (the check target of
-  the lowerer): no added guards (an authored `?.` stays), a library call
-  through the shim's `__puzzle_fn`, whose standard signatures are
-  `libraryFunctionSignatures` (kept equal to `codegen.LibraryFunctionNames` by
-  a test) and whose index signature types app functions as `any`, and a method
+  the lowerer): no added guards or `?? {}` defaults (an authored `?.` stays,
+  and TypeScript 5.6+ reports a `??` whose left side can never be nullish), a
+  standard function call as the shim's `__puzzle_fn.name(…)`, whose
+  signatures are `libraryFunctionSignatures` (kept equal to
+  `codegen.LibraryFunctionNames` by a test), any other bare call as
+  `__puzzle_app_fn("name")(…)`, declared
+  `(name: string) => (...args: any[]) => any` — a call rather than an index
+  signature on `__PuzzleFunctions`, so an app function type-checks under
+  `noUncheckedIndexedAccess` — and a method
   call with an arrow argument takes its receiver through
   `__puzzle_check_list(…)`, so an untyped receiver gives the arrow `any`
   parameters instead of a strict-mode implicit-any error. Because methods map
@@ -365,11 +396,16 @@ Date(). we'll have limited support."
   (`go:embed`), so Sites pins the rows at the language tag and both hosts run
   the same ones. `expressions-parse.json` pins the grammar: an expression and
   its S-expression tree with every node position, or its positioned error
-  (434 cases, including handler and bindings cases; Sites runs
+  (443 cases, including handler and bindings cases; Sites runs
   them through `conformance.ExpressionsParse` and `expr.Print`).
   `functions.json` pins the function library (`conformance.Functions`). A
-  corpus proof parses every `.pzl` expression in the monorepo. The evaluation
-  table, an expression and its inputs → the value, is still planned.
+  corpus proof parses every `.pzl` expression in the monorepo, and `FuzzParse`
+  (`expr/fuzz_test.go`) fuzzes `expr.Parse` from the conformance rows in the
+  plain, handler and bindings modes: a tree or a positioned `*expr.Error`,
+  every position inside the source, and the same result on a second parse
+  (`go test` runs its seeds; the fuzzer runs by hand, not in CI). The
+  evaluation table, an expression and its inputs → the value, is still
+  planned.
 
 ### 9. Template rules around the expression
 
@@ -482,6 +518,11 @@ Two questions older than this card, still undecided:
   `location`), a bare read of one already means that `data()` field in both
   hosts and never the browser's object, so a steer would only block
   legitimate data; a method call on one still fails at the method table.
+- **`event` as a handler-only name**, an error anywhere outside an `@event`
+  value. Rejected: a field or prop named `event` is ordinary data (an events
+  app's `<EventCard event={ item }>`), 0.7 compiled it, and the only real
+  hazard — one template reading the field and also using `event` in a
+  handler — is the rule 7 compile error.
 - **Rename the registration API to `app.function()` or a `functions` config
   key.** Rejected for now: the `formatters` config key keeps its name, and so
   do the compiler-facing `formatters` runtime modules.
@@ -530,8 +571,9 @@ Two questions older than this card, still undecided:
   this is a Sites upgrade.
 - **The eslint and prettier ports and the pieces demo's highlighter** speak
   this language (PR #170), and the ports' vendored section splitters skip a
-  `{#raw}` span the way P1b's does (PR #173). The three editor grammars, in
-  their own repos, are the one place the 0.7 grammar remains — they still
+  `{#raw}` span the way P1b's does (PR #173); their copies of the brace
+  scanner take #174's division rules in PR #176. The three editor grammars,
+  in their own repos, are the one place the 0.7 grammar remains — they still
   color a `| name` tail — until their P5 sweep lands.
 - **Carried over unchanged:** D173 V2's loose `==`, V4's guarded member reads,
   V6's value printing, the markup-position rule for `raw` and
@@ -540,7 +582,8 @@ Two questions older than this card, still undecided:
 ## Build list
 
 Each phase is a PR into `release/0.8.0`, except P6, which lands in the Sites
-repo. The 0.8.0 tag waits for P5's editor grammars.
+repo. The 0.8.0 tag waits for the rest of P5: the editor grammars and the
+ports' copy of #174's scanner rules.
 
 - **Rule 7 — Built** (PR #163, merged as 9ca0547e): `this` is rejected in
   every template expression, handler arguments and the handler ternary
@@ -577,9 +620,17 @@ repo. The 0.8.0 tag waits for P5's editor grammars.
    need no slash (`<input>`, with `</input>` the error), a second `{:else}`
    reports at its own position, and a byte-order mark in a `{#svg}` file is
    accepted.
-6. **P5 — Open.** The eslint and prettier ports and the pieces demo's
+6. **Final review — Built** (PR #174, merged as 2bedeeb5; PR #175, merged as
+   4b7762f8). The brace scanner reads a `/` after a non-ASCII name, a
+   trailing-dot number or `of` as division; `event` outside a handler reads
+   the data field, and a template that also uses `event` in a handler is the
+   rule 7 error; conformance rows to 443 and `FuzzParse`; the `Object`
+   globals' `?? {}` default; `puzzle check`'s `__puzzle_app_fn`; the
+   `in_timezone` unknown-zone error.
+7. **P5 — Open.** The eslint and prettier ports and the pieces demo's
    highlighter moved to the expression language in PR #170, and the ports'
-   P1b `{#raw}` case landed in PR #173 (merged as ed9245cb); the three editor
-   grammars (separate repos) are being swept, the last piece before the tag.
-7. **P6 — After the tag.** Sites: the Go evaluator and the function library,
+   P1b `{#raw}` case landed in PR #173 (merged as ed9245cb); the ports' copy
+   of #174's scanner rules is PR #176 (open); the three editor grammars
+   (separate repos) are being swept, the last piece before the tag.
+8. **P6 — After the tag.** Sites: the Go evaluator and the function library,
    and the evaluation conformance table.
