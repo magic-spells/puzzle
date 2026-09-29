@@ -4,8 +4,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
+
+// parseBindExpr parses a value expression with scope's names bound, or
+// returns nil for text the expression grammar rejects.
+func parseBindExpr(src string, scope scopeMap) expr.Node {
+	n, err := expr.Parse(src, expr.Pos{Line: 1, Col: 1}, expr.Options{Bindings: bindings(scope)})
+	if err != nil {
+		return nil
+	}
+	return n
+}
 
 func TestClassifyBindExpr(t *testing.T) {
 	t.Parallel()
@@ -34,11 +45,11 @@ func TestClassifyBindExpr(t *testing.T) {
 		{name: "ternary", raw: "a ? b : c"},
 		{name: "computed member", raw: "todo[k]"},
 		{name: "optional member", raw: "a?.b"},
-		{name: "formatter", raw: "x | money"},
-		{name: "this root", raw: "this.x"},
+		{name: "library call", raw: "money(x)"},
+		{name: "global call", raw: "Number(x)"},
 		{name: "keyword", raw: "true"},
-		{name: "global", raw: "window"},
-		{name: "event member", raw: "event.target"},
+		// There are no JavaScript globals as values: `window` is a data field.
+		{name: "window is data", raw: "window", field: "window", bare: true, ok: true},
 		{name: "scoped event member", raw: "event.detail", scope: scopeMap{"event": ""}, target: "event", field: "detail", ok: true},
 		{name: "quoted empty", raw: "''"},
 		{name: "object literal", raw: "{ a: 1 }"},
@@ -51,7 +62,11 @@ func TestClassifyBindExpr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			target, field, bare, ok := classifyBindExpr(tt.raw, tt.scope)
+			n := parseBindExpr(tt.raw, tt.scope)
+			if n == nil {
+				t.Fatalf("%q does not parse", tt.raw)
+			}
+			target, field, bare, ok := classifyBindExpr(n, tt.scope)
 			if target != tt.target || field != tt.field || bare != tt.bare || ok != tt.ok {
 				t.Fatalf(
 					"classifyBindExpr(%q) = (%q, %q, %t, %t), want (%q, %q, %t, %t)",
@@ -66,8 +81,8 @@ func TestClassifyBindExpr(t *testing.T) {
 func TestDetectAutoBind(t *testing.T) {
 	t.Parallel()
 
-	dynamic := func(name, expr string) parser.Attr {
-		return &parser.DynamicAttr{Name: name, Expr: expr}
+	dynamic := func(name, src string) parser.Attr {
+		return &parser.DynamicAttr{Name: name, Expr: src, ExprAST: parseBindExpr(src, scopeMap{"todo": ""})}
 	}
 	static := func(name, value string) parser.Attr {
 		return &parser.StaticAttr{Name: name, Value: value}

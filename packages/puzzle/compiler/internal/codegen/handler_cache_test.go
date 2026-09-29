@@ -55,15 +55,21 @@ func TestHandlerCacheDataArgNotCached(t *testing.T) {
 	}
 }
 
-// A string literal containing "__d." is a conservative false negative: correct
-// output, but not cached (the substring guard rejects it).
-func TestHandlerCacheStringLiteralFalseNegative(t *testing.T) {
+// Data-independence is read off the tree, not the emitted text: a string
+// literal that happens to contain "__d." reads no data, so it is cached.
+func TestHandlerCacheStringLiteralIsDataFree(t *testing.T) {
 	got := compileSrc(t, viewSrc(`  <button @click={ h('__d.') }>x</button>`, plainScripts))
-	if !strings.Contains(got, "'@click': (event) => this.events.h('__d.')") {
-		t.Errorf("string-literal handler must emit correct plain output:\n%s", got)
+	if !strings.Contains(got, "'@click': ((this.__h ??= {})[0] ??= (event) => this.events.h('__d.'))") {
+		t.Errorf("a data-free string argument must be cached:\n%s", got)
 	}
+}
+
+// A library call in an argument reads the render's `__f`, so the handler is not
+// data-independent and keeps its fresh closure.
+func TestHandlerCacheLibraryArgNotCached(t *testing.T) {
+	got := compileSrc(t, viewSrc(`  <button @click={ h(t('x')) }>x</button>`, plainScripts))
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("string literal containing __d. must miss the cache (false negative):\n%s", got)
+		t.Errorf("a handler calling a library function must not be cached:\n%s", got)
 	}
 }
 
@@ -78,7 +84,7 @@ func TestHandlerCacheLoopVariable(t *testing.T) {
 	// Loop-var capture → the ROW cache, not the per-instance one: the closure is
 	// stable for the life of the row because it reads the item at fire time
 	// (D62 amended by D170, stable loop handlers).
-	if !strings.Contains(got, "'@click': (s.h0 ??= (event) => this.events.h(s.item.id))") {
+	if !strings.Contains(got, "'@click': (s.h0 ??= (event) => this.events.h(s.item?.id))") {
 		t.Errorf("loop-var handler must cache on the row scope:\n%s", got)
 	}
 	// Bare handler in the same loop → still the per-instance cache at site 0
@@ -174,7 +180,7 @@ func TestRowHandlerSiteNumbering(t *testing.T) {
 	for _, want := range []string{
 		"'@click': (s.h0 ??= (event) => this.events.a(s.item))",
 		"'@mouseover': (event) => this.events.b(__d.count)",
-		"'@focus': (s.h1 ??= (event) => this.events.c(s.item.id))",
+		"'@focus': (s.h1 ??= (event) => this.events.c(s.item?.id))",
 		"'@blur': ((this.__h ??= {})[0] ??= (event) => this.events.d(event))",
 	} {
 		if !strings.Contains(got, want) {

@@ -50,7 +50,7 @@ func TestRowFactsHandlerArgumentsAreFireTime(t *testing.T) {
 	if !strings.Contains(got, "const __L0 = { key: (todo) => ViewNode.keyOf(todo), fields: ['text'] };") {
 		t.Errorf("handler-argument reads must not reach the site meta:\n%s", got)
 	}
-	if !strings.Contains(got, "(s.h0 ??= (event) => this.events.remove(s.item.id, s.item.author.id, s.i))") {
+	if !strings.Contains(got, "(s.h0 ??= (event) => this.events.remove(s.item?.id, s.item?.author?.id, s.i))") {
 		t.Errorf("the handler must stay row-cached and read the live row scope:\n%s", got)
 	}
 

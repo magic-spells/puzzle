@@ -57,6 +57,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
@@ -234,20 +235,15 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		svgDedup:              opts.SVGDedup,
 		svgCache:              opts.SVGCache,
 		assetReadsUnavailable: opts.AssetReadsUnavailable,
+		warnings:              warnings,
 	}
 	scope := scopeMap{}
 
-	// Markup formatters (D174) may only end a text interpolation's chain; every
-	// other placement is a positioned error before anything is emitted. The root
+	// The markup functions (D174) may only be the outermost call of a text
+	// interpolation; every other placement is a positioned error before
+	// anything is emitted, as is a `this` the parser let through. The root
 	// itself goes through the check so its <puzzle-view> attributes are covered.
-	if err := c.checkMarkupFormatters([]parser.Node{root}, ""); err != nil {
-		return "", err
-	}
-	// Template values are a data language (D176): no calls on data, no
-	// `.length`, no JavaScript-only syntax outside handler bodies, and no
-	// `this` anywhere. Checked up front, so every value the emitters resolve
-	// passes.
-	if err := c.checkDataLanguage([]parser.Node{root}); err != nil {
+	if err := c.checkTemplateExprs([]parser.Node{root}, ""); err != nil {
 		return "", err
 	}
 
@@ -298,10 +294,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		return "", err
 	}
 	if skel != nil {
-		if err := c.checkMarkupFormatters(skel.Children, ""); err != nil {
-			return "", err
-		}
-		if err := c.checkDataLanguage(skel.Children); err != nil {
+		if err := c.checkTemplateExprs(skel.Children, ""); err != nil {
 			return "", err
 		}
 		collectA11yWarnings(skel.Children, opts.Filename, warnings)
@@ -350,8 +343,8 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if c.usesDisplayValue {
 		imports = append(imports, "displayValue as __s")
 	}
-	// The `.size` helper (D176) follows the same rule: only a module whose
-	// template reads a count imports it.
+	// The `.size` helper (D176, TEMPORARY until P4) follows the same rule: only
+	// a module whose template reads a count imports it.
 	if c.usesSize {
 		imports = append(imports, "sizeOf as __z")
 	}
@@ -418,9 +411,10 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	b.WriteString(className)
 	b.WriteString(".prototype.render = function () {\n")
 	b.WriteString("  const __d = this.getData();\n")
-	// The formatter registry is read only by a formatter chain, so the binding is
-	// emitted only when one was compiled (usesFormatters, set by applyFormatters).
-	// rootExpr and skelExpr are both fully built above, so the flag is final here.
+	// The function registry is read only by a library call (or a TEMPORARY pipe
+	// chain), so the binding is emitted only when one was compiled
+	// (usesFormatters, set by absorbFlags). rootExpr and skelExpr are both fully
+	// built above, so the flag is final here.
 	if c.usesFormatters {
 		b.WriteString("  const __f = this.ctx.formatters.getAll();\n")
 	}
@@ -510,13 +504,16 @@ type compiler struct {
 	// values remain raw vnode attrs do not pay for an unused import.
 	usesDisplayValue bool
 
-	// Set by the D176 pre-check when a template value reads `.size`, which the
-	// resolver lowers to the package-root helper imported as `__z`.
+	// Set when a template value's `.size` is lowered to the package-root helper
+	// imported as `__z` (D176, TEMPORARY until P4).
 	usesSize bool
 	// src is the whole .pzl file (parser.Sections.Source), which every node
-	// Position.Offset indexes, so a `this` error lands on its own token rather
-	// than on its node. Empty when the Sections did not come from SplitSections.
+	// Position.Offset indexes. Empty when the Sections did not come from
+	// SplitSections.
 	src string
+	// warnings collects out-of-band diagnostics (Result.Warnings); nil in a
+	// compile that does not report them.
+	warnings *[]Warning
 
 	// Set when a `.map` item loop (usesLoopItems) or a range loop
 	// (usesLoopRange) is emitted, so the runtime loop guards (D173 V12) are
@@ -524,13 +521,13 @@ type compiler struct {
 	usesLoopItems bool
 	usesLoopRange bool
 
-	// Set when an emitted interpolation carries a non-empty formatter chain, which
-	// is the only thing that reads __f. It gates the `const __f =
-	// this.ctx.formatters.getAll()` line in BOTH render() and renderSkeleton() —
-	// module-wide, so a formatter in either body emits the line in both. A third
-	// tracker of the same signal is internal/plugin/scan.go collectFormatterCalls
-	// (the built-in tree-shaking allow-list); the two are kept in sync by
-	// plugin_test.go's built-in sync tests.
+	// Set when an emitted expression calls a library function (or runs a
+	// TEMPORARY pipe chain), which is the only thing that reads __f. It gates
+	// the `const __f = this.ctx.formatters.getAll()` line in BOTH render() and
+	// renderSkeleton() — module-wide, so a call in either body emits the line in
+	// both. A third tracker of the same signal is internal/plugin/scan.go
+	// collectUsage (the built-in tree-shaking allow-list); the two are kept in
+	// sync by plugin_test.go's built-in sync tests.
 	usesFormatters bool
 
 	// SVG-dedup emission state (v1.14 D46 amendment). svgDedup selects the
@@ -940,9 +937,11 @@ func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (stri
 // an unstable conditional emits both branches unpadded, byte-identically to the
 // pre-padding form. Nested conditionals make this decision independently.
 func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, error) {
-	// A condition takes no formatter chain (D173 V1: the parser rejects a pipe
-	// in a condition header), but it is a value position for guarded access.
-	cond := groupCond(c.resolveValue(n.Cond, nil, scope))
+	// A condition takes no pipe chain (D173 V1: the parser rejects a pipe in a
+	// condition header), but it is a value position for guarded access.
+	f := c.factSink()
+	cond := c.cond(n.CondAST, scope, f)
+	c.absorb(f, scope)
 	thenItems, err := c.processChildren(n.Then, scope)
 	if err != nil {
 		return "", err
@@ -1131,7 +1130,7 @@ func (c *compiler) caseStaticLen(n *parser.Case, scope scopeMap) (int, bool, err
 // cleanly in nested cases: user expressions never resolve to it, and each arm
 // only ever compares its own `__c`.
 func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, error) {
-	caseExpr := c.resolveValue(n.Expr, nil, scope)
+	caseExpr := c.value(n.ExprAST, nil, scope)
 
 	// Pre-process every clause body + the else and compute the max static arity.
 	// Padding applies only when every branch has provably fixed occupancy; an
@@ -1177,9 +1176,9 @@ func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, er
 	var b strings.Builder
 	b.WriteString("...(((__c) =>\n")
 	for i, cl := range n.Clauses {
-		conds := make([]string, len(cl.Values))
-		for k, v := range cl.Values {
-			conds[k] = "__c === (" + c.resolve(v, scope) + ")"
+		conds := make([]string, len(cl.ValuesAST))
+		for k, v := range cl.ValuesAST {
+			conds[k] = "__c === (" + c.value(v, nil, scope) + ")"
 		}
 		condStr := strings.Join(conds, " || ")
 		items := clauseItems[i]
@@ -1226,13 +1225,14 @@ func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, er
 // current number (range form): the item form adds the second .map parameter;
 // the range form names the value parameter after the counter.
 // literalRange constant-folds a range whose bounds are both integer literals
-// (`{#for 1...3}`): nothing can be missing or fractional, so the loop needs no
-// `loopRange` guard or import. A short range emits its numbers as an array
-// literal; a long one generates them. It reports false for any other bound.
-func literalRange(from, to string) (string, bool) {
-	lo, errLo := strconv.Atoi(strings.TrimSpace(from))
-	hi, errHi := strconv.Atoi(strings.TrimSpace(to))
-	if errLo != nil || errHi != nil || !isIntLiteral(from) || !isIntLiteral(to) {
+// (`{#for 1...3}`, `{#for -1...1}`): nothing can be missing or fractional, so
+// the loop needs no `loopRange` guard or import. A short range emits its
+// numbers as an array literal; a long one generates them. It reports false for
+// any other bound.
+func literalRange(from, to expr.Node) (string, bool) {
+	lo, okLo := intLiteral(from)
+	hi, okHi := intLiteral(to)
+	if !okLo || !okHi {
 		return "", false
 	}
 	n := hi - lo + 1
@@ -1250,35 +1250,45 @@ func literalRange(from, to string) (string, bool) {
 	}
 }
 
-// isIntLiteral accepts an optional leading `-` and decimal digits, and nothing
-// else (strconv.Atoi alone would also take `+1`, which a template author writes
-// as an expression).
-func isIntLiteral(s string) bool {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "-")
-	if s == "" || len(s) > 9 {
-		return false
+// intLiteral reports the value of a range bound written as an integer literal
+// of at most nine digits, optionally negated (`-1`) — and nothing else: `+1`,
+// `1.5`, `1e3` and every non-literal are left to the loopRange guard.
+func intLiteral(n expr.Node) (int, bool) {
+	neg := false
+	if u, ok := n.(*expr.Unary); ok && u.Op == "-" {
+		neg, n = true, u.Operand
 	}
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
+	lit, ok := n.(*expr.Literal)
+	if !ok || lit.Kind != expr.LitNumber || lit.Raw == "" || len(lit.Raw) > 9 {
+		return 0, false
+	}
+	for i := 0; i < len(lit.Raw); i++ {
+		if lit.Raw[i] < '0' || lit.Raw[i] > '9' {
+			return 0, false
 		}
 	}
-	return true
+	v, err := strconv.Atoi(lit.Raw)
+	if err != nil {
+		return 0, false
+	}
+	if neg {
+		v = -v
+	}
+	return v, true
 }
 
 func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, error) {
 	if f.IsRange {
-		gen, folded := literalRange(f.RangeFrom, f.RangeTo)
+		gen, folded := literalRange(f.RangeFromAST, f.RangeToAST)
 		if !folded {
 			c.usesLoopRange = true
-			gen = "__r(" + c.resolve(f.RangeFrom, scope) + ", " + c.resolve(f.RangeTo, scope) + ")"
+			gen = "__r(" + c.value(f.RangeFromAST, nil, scope) + ", " + c.value(f.RangeToAST, nil, scope) + ")"
 		}
 		gen += ".map(("
 		if f.Counter != "" {
 			bodyScope, counter := c.bareBinding(scope, f.Counter)
 			c.mapDepth++
-			body, err := c.forBody(f, bodyScope, f.Counter, ind+2, nil)
+			body, err := c.forBody(f, bodyScope, identNode(f.Counter), ind+2, nil)
 			c.mapDepth--
 			if err != nil {
 				return "", err
@@ -1289,7 +1299,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		// Counterless range: the generated value binds as the compiler-private
 		// `__i` and keys the row.
 		c.mapDepth++
-		body, err := c.forBody(f, scopeAdd(scope, "__i"), "__i", ind+2, nil)
+		body, err := c.forBody(f, scopeAdd(scope, "__i"), identNode("__i"), ind+2, nil)
 		c.mapDepth--
 		if err != nil {
 			return "", err
@@ -1313,7 +1323,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		}
 	}
 
-	coll := c.resolve(f.Collection, scope)
+	coll := c.value(f.CollectionAST, nil, scope)
 	bodyScope, itemParam := c.bareBinding(scope, f.Item)
 	params := itemParam
 	if f.Counter != "" {
@@ -1328,7 +1338,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 	// This body is NOT lowered: nothing inside it may take a site id or a cache
 	// slot, because the one it took would be shared by every iteration.
 	c.mapDepth++
-	body, err := c.forBody(f, bodyScope, "ViewNode.keyOf("+f.Item+")", ind+2, nil)
+	body, err := c.forBody(f, bodyScope, keyOfNode(f.Item), ind+2, nil)
 	c.mapDepth--
 	if err != nil {
 		return "", err
@@ -1347,7 +1357,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 // block's resolved `key: s.k`, because an explicit key has already moved into
 // the site meta's key function, so the author's attribute is dropped from the
 // root instead of suppressing the prepend (D170 emission contract).
-func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr string, ind int, site *loopSite) (string, error) {
+func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr expr.Node, ind int, site *loopSite) (string, error) {
 	only, explicitKey, err := c.forBodyRoot(f, scope)
 	if err != nil {
 		return "", err
@@ -1355,7 +1365,7 @@ func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr string, ind in
 	if site != nil {
 		explicitKey = false
 	}
-	key := &parser.DynamicAttr{Name: "key", Expr: keyExpr}
+	key := &parser.DynamicAttr{Name: "key", Expr: "key", ExprAST: keyExpr}
 	switch n := only.(type) {
 	case *parser.Element:
 		attrs := n.Attrs
@@ -1625,12 +1635,12 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
-		return jsKey(at.Name) + ": " + c.resolveValue(at.Expr, at.Formatters, scope), nil
+		return jsKey(at.Name) + ": " + c.value(at.ExprAST, at.Formatters, scope), nil
 	case *parser.MixedAttr:
 		return jsKey(at.Name) + ": " + c.emitMixed(at.Parts, scope), nil
 	case *parser.EventAttr:
 		facts := c.factSink()
-		ev, err := compileEventValue(at.Expr, scope, facts)
+		ev, err := c.compileEvent(at, scope, facts)
 		if err != nil {
 			return "", c.cgErr(at.Pos, err.Error())
 		}
@@ -1707,13 +1717,12 @@ func (c *compiler) emitMixedFacts(parts []parser.Part, scope scopeMap, facts *ex
 		case *parser.StaticPart:
 			b.WriteString(tplEscape(pp.Text))
 		case *parser.InterpPart:
-			resolved := c.resolveInterpBase(pp.Interp.Expr, pp.Interp.Formatters, scope, facts)
-			expr := c.applyFormatters(resolved, pp.Interp.Formatters, scope, facts)
+			js := c.valueInto(pp.Interp.ExprAST, pp.Interp.Formatters, scope, facts)
 			b.WriteString("${")
-			b.WriteString(c.displayValue(expr, pp.Interp.Expr))
+			b.WriteString(c.displayValue(js, pp.Interp.Expr))
 			b.WriteString("}")
 		case *parser.InlineIfPart:
-			cond := groupCond(c.resolveChain(pp.Cond, nil, scope, facts))
+			cond := c.cond(pp.CondAST, scope, facts)
 			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
@@ -1741,11 +1750,10 @@ func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprF
 		case *parser.StaticPart:
 			segs = append(segs, jsString(pp.Text))
 		case *parser.InterpPart:
-			resolved := c.resolveInterpBase(pp.Interp.Expr, pp.Interp.Formatters, scope, facts)
-			expr := c.applyFormatters(resolved, pp.Interp.Formatters, scope, facts)
-			segs = append(segs, c.displayValue(expr, pp.Interp.Expr))
+			js := c.valueInto(pp.Interp.ExprAST, pp.Interp.Formatters, scope, facts)
+			segs = append(segs, c.displayValue(js, pp.Interp.Expr))
 		case *parser.InlineIfPart:
-			cond := groupCond(c.resolveChain(pp.Cond, nil, scope, facts))
+			cond := c.cond(pp.CondAST, scope, facts)
 			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
@@ -1909,9 +1917,8 @@ func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftSibling, 
 			if startsWithObjectLiteral(t.Expr) {
 				return "", false, c.cgErr(t.Pos, objectLiteralMsg)
 			}
-			resolved := c.resolveInterpBase(t.Expr, t.Formatters, scope, facts)
-			expr := c.applyFormatters(resolved, t.Formatters, scope, facts)
-			segs = append(segs, seg{js: c.displayValue(expr, t.Expr), static: false})
+			js := c.valueInto(t.ExprAST, t.Formatters, scope, facts)
+			segs = append(segs, seg{js: c.displayValue(js, t.Expr), static: false})
 		}
 	}
 	if len(segs) == 0 {
@@ -1976,105 +1983,6 @@ func (c *compiler) displayValue(expr, source string) string {
 	c.usesDisplayValue = true
 	label := jsString(strings.TrimSpace(source))
 	return "__s(" + expr + ", typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? " + label + " : 0)"
-}
-
-// applyFormatters nests a formatter chain as calls into the raw formatter map:
-// `{ x | a | b(c) }` → `(__f["b"] || __f.__missing("b"))((__f["a"] || __f.__missing("a"))(x), c)`.
-// Access is BRACKETED with a JSON-quoted name, uniformly for every formatter —
-// matching the runtime registry, whose keys are arbitrary strings (so a
-// hyphenated `foo-bar` is a legitimate name). Dot access (`__f.foo-bar`) would
-// have parsed as subtraction: valid JS, silent at build, then a runtime
-// ReferenceError before the D43 guard could engage. Every call is wrapped in the
-// __missing typo-guard (v1.12, D43 — supersedes the D25 bare-call deferral): a
-// name absent from the runtime registry resolves to __f.__missing(name), a
-// factory that warns once (naming the offender, with a did-you-mean) and returns
-// a pass-through formatter, so a typo'd formatter renders the raw value instead
-// of crashing the view. The name is passed as a JS string literal so the runtime
-// error can identify it. See DOC-SPEC §6.
-//
-// An empty chain returns base untouched and records nothing: c.usesFormatters
-// gates the `const __f` line, so only a real formatter call pays for the
-// registry read.
-func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, scope scopeMap, facts *exprFacts) string {
-	if len(fmts) == 0 {
-		return base
-	}
-	c.usesFormatters = true
-	out := base
-	for _, fc := range fmts {
-		if facts != nil && clockFormatters[fc.Name] {
-			// A built-in that reads the clock is not a pure function of its
-			// input, so a cached row would freeze its output (D170 volatile).
-			facts.volatileRead = true
-		}
-		name := strconv.Quote(fc.Name)
-		var b strings.Builder
-		b.WriteString("(__f[")
-		b.WriteString(name)
-		b.WriteString("] || __f.__missing(")
-		b.WriteString(name)
-		b.WriteString("))(")
-		b.WriteString(out)
-		for _, a := range fc.Args {
-			b.WriteString(", ")
-			// An argument is handed to the formatter exactly as the base is, so
-			// a whole loop record passed as one (`'by' | byline(post)`) is as
-			// opaque as `post | byline`.
-			b.WriteString(resolveOpaqueScan(a, scope, facts))
-		}
-		b.WriteString(")")
-		out = b.String()
-	}
-	return out
-}
-
-// resolveInterpBase resolves an interpolation's base expression into facts. A
-// FORMATTER PIPE makes a whole-value read of a loop local OPAQUE: the formatter
-// is handed the record itself and may read anything off it (`{ post |
-// authorName }` reaching `post.author.name`), which the row revision cannot
-// cover, so the site goes conservative exactly as a relation read makes it.
-// `{ post }` alone — the display of the record — stays on identity.
-func (c *compiler) resolveInterpBase(expr string, fmts []parser.FormatterCall, scope scopeMap, facts *exprFacts) string {
-	if len(fmts) == 0 {
-		return resolveValueScan(expr, scope, facts)
-	}
-	return resolveOpaqueScan(expr, scope, facts)
-}
-
-// resolveOpaqueScan is resolveValueScan for a value handed to a formatter — a
-// pipe base or a formatter argument: a whole-value read of a loop local there
-// is OPAQUE (see resolveInterpBase).
-func resolveOpaqueScan(expr string, scope scopeMap, facts *exprFacts) string {
-	if facts == nil {
-		return resolveValueScan(expr, scope, nil)
-	}
-	sub := &exprFacts{}
-	out := resolveValueScan(expr, scope, sub)
-	for _, read := range sub.locals {
-		if read.whole {
-			read.opaque = true
-		}
-	}
-	facts.merge(sub)
-	return out
-}
-
-// resolveChain resolves a value position's base expression and applies its
-// formatter chain. Every position that takes a chain (D173 V1) emits through
-// it: text and quoted-attribute interpolations, brace-only attributes, props
-// and marker arguments, and the `{#if}`/`{#unless}`/`{#case}` subjects. An
-// empty chain emits exactly what resolving the expression alone would.
-func (c *compiler) resolveChain(expr string, fmts []parser.FormatterCall, scope scopeMap, facts *exprFacts) string {
-	return c.applyFormatters(c.resolveInterpBase(expr, fmts, scope, facts), fmts, scope, facts)
-}
-
-// resolveValue is resolveChain with the emitter's fact sink, the chained form
-// of c.resolve.
-func (c *compiler) resolveValue(expr string, fmts []parser.FormatterCall, scope scopeMap) string {
-	f := c.factSink()
-	out := c.resolveChain(expr, fmts, scope, f)
-	c.absorb(f, scope)
-	return out
 }
 
 var wsRun = regexp.MustCompile(`[ \t\r\n]+`)
@@ -2343,6 +2251,23 @@ func scopeAddAs(scope scopeMap, name, js string) scopeMap {
 	return out
 }
 
+// identNode is a synthetic Identifier for a name the compiler itself reads —
+// a loop's generated key (`__i`, a range counter, the row block's key
+// sentinel). It has no source position; the render target never maps one.
+func identNode(name string) *expr.Identifier {
+	return &expr.Identifier{Name: name}
+}
+
+// keyOfNode is the synthetic `ViewNode.keyOf(<item>)` key of a `.map` loop
+// row (D58). ViewNode is in the body scope, and a chain off it is never
+// guarded.
+func keyOfNode(item string) expr.Node {
+	return &expr.Call{
+		Callee: &expr.Member{Object: identNode("ViewNode"), Property: "keyOf"},
+		Args:   []expr.Node{identNode(item)},
+	}
+}
+
 var spaces = strings.Repeat(" ", 256)
 
 func sp(n int) string {
@@ -2353,14 +2278,4 @@ func sp(n int) string {
 		spaces += spaces
 	}
 	return spaces[:n]
-}
-
-// groupCond parenthesizes a condition that is itself a top-level ternary, so the
-// compiler's own `? then : else` cannot re-associate it into the condition's
-// false branch. Every other operator a condition can use binds tighter.
-func groupCond(js string) string {
-	if _, _, _, ok := splitEventConditional(js); ok {
-		return "(" + js + ")"
-	}
-	return js
 }

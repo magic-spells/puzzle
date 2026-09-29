@@ -616,25 +616,25 @@ func TestListMetaOpaqueRecordReads(t *testing.T) {
 	}
 }
 
-// --- C5: mutable globals and clock-reading built-ins make a site volatile ---
+// --- C5: clock-reading functions make a site volatile ---
 
 // `volatile` is the escape hatch for a body the compiler's dependency model
 // cannot see through: a value that can change with no data mutation makes
-// every row dirty on every pass. A template cannot reach the view through
-// `this` (D176 rule 5), so a mutable global and a clock-reading formatter are
-// the two ways a body reads one. A cached row holding
-// `{ window.location.hash }` would show `#old` forever.
+// every row dirty on every pass. The expression language reaches no mutable
+// global (DESIGN-expr-v2 §1: no window, document, Date, or Math.random) and no
+// view instance, so a name like `window` is a data field, tracked through the
+// roots mask like any other; the Math globals it has are pure.
 func TestListMetaVolatileGlobals(t *testing.T) {
 	cases := []struct {
 		name         string
 		body         string
 		wantVolatile bool
 	}{
-		{"window", "<li>{ window.location.hash }{ todo.text }</li>", true},
-		{"document", "<li>{ document.title }{ todo.text }</li>", true},
-		{"globalThis", "<li>{ globalThis.x }{ todo.text }</li>", true},
+		{"window is data", "<li>{ window.location.hash }{ todo.text }</li>", false},
+		{"document is data", "<li>{ document.title }{ todo.text }</li>", false},
 		{"Math.PI stays pure", "<li>{ Math.PI * todo.a }</li>", false},
-		{"Intl stays pure", "<li>{ Intl.NumberFormat }{ todo.text }</li>", false},
+		{"Math.round stays pure", "<li>{ Math.round(todo.a) }</li>", false},
+		{"timeago call", "<li>{ timeago(todo.createdAt) }</li>", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -644,11 +644,11 @@ func TestListMetaVolatileGlobals(t *testing.T) {
 			}
 		})
 	}
-	// A mutable global in a HANDLER ARGUMENT is read at fire time against the
-	// live page, not during render, so it does not make the row volatile.
-	handler := compileSrc(t, listSrc("  {#for todo in todos}<li @click={ go(window.scrollY) }>{ todo.text }</li>{/for}"))
+	// A clock read in a HANDLER ARGUMENT happens at fire time, not during
+	// render, so it does not make the row volatile.
+	handler := compileSrc(t, listSrc("  {#for todo in todos}<li @click={ go(timeago(todo.at)) }>{ todo.text }</li>{/for}"))
 	if strings.Contains(handler, "volatile: true") {
-		t.Errorf("a global inside a handler argument must not mark the site volatile:\n%s", handler)
+		t.Errorf("a clock read inside a handler argument must not mark the site volatile:\n%s", handler)
 	}
 }
 
