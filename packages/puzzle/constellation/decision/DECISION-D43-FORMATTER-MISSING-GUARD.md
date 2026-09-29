@@ -43,10 +43,11 @@ is impossible by design: custom formatters are registered at runtime in the app
 config, and the Go compiler never parses JS (the real-JS rule, SPEC §4).
 
 ## Decision
+
 - **`__missing` is a factory, so the warning can name the typo.** Codegen passes
   the *name* — `__f.__missing("captialize")` — and the factory returns a
   pass-through formatter after logging once per name:
-  `[puzzle] unknown formatter "captialize" — value passed through unchanged (did
+  `[puzzle] unknown function "captialize" — value passed through unchanged (did
   you mean "capitalize"?)`. The suggestion is a nearest known registry key at
   edit distance ≤ 2 (omitted when nothing is close). Warn-once matches the
   established runtime pattern (malformed animation specs, duplicate keys).

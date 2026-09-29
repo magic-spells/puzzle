@@ -16,7 +16,7 @@ change: feature
 
 # v1.12 — The `__missing` formatter typo-guard
 
-A typo'd formatter (`{ name | captialize }`) no longer crashes the render with an anonymous `TypeError` — it warns once, names the offender (with a did-you-mean), and passes the value through. Driven by [[DECISION-D43-FORMATTER-MISSING-GUARD]], superseding the [[DECISION-D25-BARE-FORMATTER-CALLS]] deferral.
+A typo'd function name (`{ captialize(name) }`) no longer crashes the render with an anonymous `TypeError` — it warns once, names the offender (with a did-you-mean), and passes the value through. Driven by [[DECISION-D43-FORMATTER-MISSING-GUARD]], superseding the [[DECISION-D25-BARE-FORMATTER-CALLS]] deferral.
 
 ## Intent
 
