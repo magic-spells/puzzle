@@ -162,9 +162,45 @@ func TestParseDefaultOptions(t *testing.T) {
 		t.Error("an arrow at the top level must fail without CallArgument")
 	}
 	if _, err := Parse("event", Pos{Line: 1, Col: 1}); err == nil {
-		t.Error("event must fail without AllowEvent")
+		t.Error("event must fail outside a handler")
 	}
-	mustParse(t, "event", Pos{Line: 1, Col: 1}, Options{AllowEvent: true})
+	mustParse(t, "event", Pos{Line: 1, Col: 1}, Options{Handler: true})
+}
+
+// A binding-name rule, shared by arrow parameters here and by the template
+// parser's {#for} and <Snippet> bindings.
+func TestBindingNames(t *testing.T) {
+	for _, name := range []string{"item", "größe", "値段", "$el", "_x", "eval2", "async", "of", "Date", "JSON"} {
+		if !IsIdentifier(name) || BindingNameReason(name) != "" {
+			t.Errorf("%q should be bindable (%q)", name, BindingNameReason(name))
+		}
+	}
+	for _, name := range []string{"", "1x", "a-b", "a b", "a.b"} {
+		if IsIdentifier(name) {
+			t.Errorf("%q is not an identifier", name)
+		}
+	}
+	for name, reason := range map[string]string{
+		"class": "strict-mode", "this": "strict-mode", "eval": "strict-mode", "arguments": "strict-mode",
+		"null": "strict-mode", "NaN": "literal", "Infinity": "literal", "undefined": "literal",
+		"event": "DOM event", "Math": "global", "Number": "global", "Boolean": "global",
+		"Object": "global", "parseInt": "global", "isFinite": "global", "Array": "global",
+	} {
+		if got := BindingNameReason(name); !strings.Contains(got, reason) {
+			t.Errorf("%q: reason %q, want one mentioning %q", name, got, reason)
+		}
+	}
+}
+
+// The receiver-type table covers every global function.
+func TestGlobalResultTypes(t *testing.T) {
+	for ns, fns := range GlobalFunctions {
+		for _, fn := range fns {
+			if globalResultTypes[ns+"."+fn] == "" {
+				t.Errorf("%s.%s has no result type", ns, fn)
+			}
+		}
+	}
 }
 
 // A large expression parses in linear time: a flat operator chain, a long

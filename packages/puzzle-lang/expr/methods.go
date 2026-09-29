@@ -72,10 +72,88 @@ var methodNames = func() map[string]bool {
 }()
 
 // IsMethod reports whether name is a method of any receiver type — the union
-// of StringMethods, ArrayMethods, and NumberMethods. The parser rejects a
-// method call whose name is not in it; which receiver actually has the method
-// is a runtime question for the host.
+// of StringMethods, ArrayMethods, and NumberMethods. The parser checks every
+// method call's name against it. When the receiver's type is certain from the
+// syntax alone (receiverType: a literal, or a global call whose result type
+// is fixed), the parser checks the call against that type's list instead.
+// Every other receiver is checked by name only here: its type is a runtime
+// fact, which PuzzleKit's lowering checks through TypeScript and Sites'
+// evaluator checks when it runs.
 func IsMethod(name string) bool { return methodNames[name] }
+
+// receiverType names the type of n when the syntax alone fixes it — "a
+// string", "a number", "an array", "a boolean", "an object", "null", or
+// "undefined" — and returns "" for any receiver whose type is known only at
+// run time (a name, a path, a method's result, an operator).
+func receiverType(n Node) string {
+	switch n := n.(type) {
+	case *Literal:
+		switch n.Kind {
+		case LitString:
+			return "a string"
+		case LitNumber:
+			return "a number"
+		case LitBool:
+			return "a boolean"
+		case LitNull:
+			return "null"
+		case LitUndefined:
+			return "undefined"
+		}
+	case *TemplateLiteral:
+		return "a string"
+	case *Array:
+		return "an array"
+	case *Object:
+		return "an object"
+	case *Global:
+		if IsGlobalConstant(n.Namespace, n.Name) {
+			return "a number"
+		}
+	case *Call:
+		if g, ok := n.Callee.(*Global); ok {
+			return globalResultTypes[g.Namespace+"."+g.Name]
+		}
+	}
+	return ""
+}
+
+// globalResultTypes is the fixed result type of each global function, keyed
+// "namespace.name" ("" namespace for the bare functions). Every Math function
+// returns a number.
+var globalResultTypes = func() map[string]string {
+	m := map[string]string{
+		".String": "a string", ".Number": "a number", ".parseInt": "a number", ".parseFloat": "a number",
+		".Boolean": "a boolean", ".isNaN": "a boolean", ".isFinite": "a boolean",
+		"Object.keys": "an array", "Object.values": "an array", "Object.entries": "an array",
+		"Array.isArray": "a boolean",
+	}
+	for _, fn := range GlobalFunctions["Math"] {
+		m["Math."+fn] = "a number"
+	}
+	return m
+}()
+
+// typeHasMethod reports whether a receiver of type typ (a receiverType
+// result) has the method name. Booleans, objects, null, and undefined have
+// none.
+func typeHasMethod(typ, name string) bool {
+	var list []string
+	switch typ {
+	case "a string":
+		list = StringMethods
+	case "a number":
+		list = NumberMethods
+	case "an array":
+		list = ArrayMethods
+	}
+	for _, m := range list {
+		if m == name {
+			return true
+		}
+	}
+	return false
+}
 
 // IsGlobalFunction reports whether namespace.name (or the bare name, for
 // namespace "") is a global a template may call.

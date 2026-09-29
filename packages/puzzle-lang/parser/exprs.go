@@ -49,29 +49,30 @@ func (c *posCursor) at(j int) Position {
 	return c.pos
 }
 
-// exprScope is what an expression position may see: whether `event` is bound
-// there (by a {#for} or <Snippet> naming a binding `event`). An @event handler
-// always sees `event`, whatever the scope.
+// exprScope is what an expression position sees: the names the enclosing
+// {#for} blocks and <Snippet> bodies bind. The expression parser lets a
+// binding be read and never called.
 type exprScope struct {
-	eventBound bool
+	bindings []string
 }
 
 func (s exprScope) valueOpts() expr.Options {
-	return expr.Options{AllowEvent: s.eventBound}
+	return expr.Options{Bindings: s.bindings}
 }
 
 func (s exprScope) argOpts() expr.Options {
-	return expr.Options{AllowEvent: s.eventBound, CallArgument: true}
+	return expr.Options{Bindings: s.bindings, CallArgument: true}
 }
 
-// scope returns the expression scope at the parser's current position.
+// handlerOpts is an @event value's: `event` is the DOM event there.
+func (s exprScope) handlerOpts() expr.Options {
+	return expr.Options{Bindings: s.bindings, Handler: true}
+}
+
+// scope returns the expression scope at the parser's current position. The
+// full slice expression keeps a later bind from writing into it.
 func (p *parser) scope() exprScope {
-	for _, name := range p.bound {
-		if name == "event" {
-			return exprScope{eventBound: true}
-		}
-	}
-	return exprScope{}
+	return exprScope{bindings: p.bound[:len(p.bound):len(p.bound)]}
 }
 
 // bind pushes the names a {#for} or <Snippet> binds for its body and returns

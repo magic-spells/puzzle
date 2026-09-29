@@ -135,7 +135,7 @@ func printNode(b *strings.Builder, n Node) {
 		b.WriteString("(object")
 		for _, e := range n.Entries {
 			b.WriteString(" (")
-			if isPlainName(e.Key) {
+			if IsIdentifier(e.Key) {
 				b.WriteString(e.Key)
 			} else {
 				b.WriteString(quote(e.Key))
@@ -164,18 +164,20 @@ func printBinary(b *strings.Builder, op string, l, r Node) {
 	b.WriteByte(')')
 }
 
-// isPlainName reports whether an object key prints bare: a name that lexes as
-// one identifier token.
-func isPlainName(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i, r := range s {
-		if i == 0 && !isIDStart(r) || i > 0 && !isIDContinue(r) {
-			return false
+// PrintPositions renders the start position of every node in n, in Walk
+// order, as space-separated line:col:offset — the form the conformance
+// fixtures pin node positions with.
+func PrintPositions(n Node) string {
+	var b strings.Builder
+	Walk(n, func(n Node) bool {
+		if b.Len() > 0 {
+			b.WriteByte(' ')
 		}
-	}
-	return true
+		p := n.Pos()
+		fmt.Fprintf(&b, "%d:%d:%d", p.Line, p.Col, p.Offset)
+		return true
+	})
+	return b.String()
 }
 
 // quote renders s single-quoted for the S-expression form.

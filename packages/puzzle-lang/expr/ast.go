@@ -9,7 +9,19 @@
 // operators, all with JavaScript precedence). Anything outside it is a
 // positioned *Error naming the construct. The shared fixtures in
 // ../conformance/expressions-parse.json are the contract; Print renders the
-// tree in the compact form those fixtures use.
+// tree in the compact form those fixtures use, and PrintPositions its node
+// positions.
+//
+// One PuzzleKit-only extension: an @event handler value (Options.Handler)
+// has `event` in scope, the browser's DOM event, and a member chain rooted at
+// it is unrestricted — any property, any method (`event.target.closest('li')`,
+// `event.preventDefault()`), no method-table check — because it is not
+// template data. Sites has no handlers, so the extension never applies there.
+//
+// Names a template binds — arrow parameters, {#for} items and counters,
+// <Snippet> parameters, Sites' {#let} — follow one rule (IsIdentifier and
+// BindingNameReason), and a bound name is a value: it reads, and calling it
+// is an error.
 package expr
 
 // Pos is a source position: 1-based line and column plus the 0-based byte

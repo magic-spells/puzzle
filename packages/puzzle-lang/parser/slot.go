@@ -1,6 +1,10 @@
 package parser
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
+)
 
 // slot.go — compile-time validation for the composition markers (named slots
 // v1.21/D53; capitalized grammar v1.64/D134; fallback bodies D141). See
@@ -160,7 +164,7 @@ func snippetMarkerAttrs(attrs []Attr, file string) (fits string, params []string
 		if name == "fits" {
 			return "", nil, errAt(file, attrPos(a), `"fits" routes a <Snippet> — write fits="row"; it cannot be a parameter`)
 		}
-		if !isBareIdent(name) {
+		if !expr.IsIdentifier(name) {
 			return "", nil, errAt(file, attrPos(a), "snippet parameter %q must be a valid identifier", name)
 		}
 		if identErr := snippetParamIdentError(name, attrPos(a), file); identErr != nil {

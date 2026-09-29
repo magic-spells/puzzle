@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // lexer.go is the HTML-aware template lexer
@@ -425,20 +426,42 @@ func (l *lexer) nextTag() (Token, error) {
 			l.expectValue = false
 			return Token{Type: TokAttrBare, Value: val, Raw: raw, Line: line, Col: col, Offset: off}, nil
 		}
-		if c == '@' || isNameStart(c) {
+		if c == '@' || isNameStart(c) || attrRuneLen(l.input[l.pos:]) > 0 {
 			j := l.pos
 			if c == '@' {
 				j++
 			}
-			for j < len(l.input) && isNameChar(l.input[j]) {
-				j++
+			for j < len(l.input) {
+				if isNameChar(l.input[j]) {
+					j++
+				} else if n := attrRuneLen(l.input[j:]); n > 0 {
+					j += n
+				} else {
+					break
+				}
 			}
 			name := l.input[l.pos:j]
 			l.jumpTo(j)
 			return Token{Type: TokAttrName, Value: name, Raw: raw, Line: line, Col: col, Offset: off}, nil
 		}
-		return Token{}, l.errf(line, col, "unexpected character %q in tag", string(rune(c)))
+		r, _ := utf8.DecodeRuneInString(l.input[l.pos:])
+		return Token{}, l.errf(line, col, "unexpected character %q in tag", string(r))
 	}
+}
+
+// attrRuneLen is the byte length of the non-ASCII letter, mark, or digit that
+// starts s, or 0. HTML allows Unicode attribute names, and a <Snippet>
+// parameter is an attribute name that must follow the expression language's
+// Unicode identifier rule (`<Snippet größe>`).
+func attrRuneLen(s string) int {
+	if s == "" || s[0] < utf8.RuneSelf {
+		return 0
+	}
+	r, n := utf8.DecodeRuneInString(s)
+	if r != utf8.RuneError && (unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsDigit(r)) {
+		return n
+	}
+	return 0
 }
 
 // lexQuotedValue scans a quoted attribute value. The enclosing quote ends the

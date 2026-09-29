@@ -67,10 +67,11 @@ var keywordMessages = map[string]string{
 	"import":     msgImport,
 }
 
-// reservedMessage returns the error for name used where a value or a binding
-// is expected, or "" when name is an ordinary identifier. true, false, null,
-// undefined, NaN, and Infinity are literals, not identifiers, so they are
-// reserved here too.
+// reservedMessage returns the error for name READ as a value, or "" when name
+// is an ordinary identifier. true, false, null, undefined, NaN, and Infinity
+// are literals, not identifiers, so they are reserved here too. eval and
+// arguments are not: strict mode forbids only binding them, so a data field
+// by either name reads like any other.
 func reservedMessage(name string) string {
 	if m, ok := keywordMessages[name]; ok {
 		return m
@@ -81,9 +82,50 @@ func reservedMessage(name string) string {
 	switch name {
 	case "true", "false", "null", "undefined", "NaN", "Infinity":
 		return "`" + name + "` is a literal value and cannot name a binding"
+	case "eval", "arguments":
+		return ""
 	}
 	if jsident.IsReservedBindingIdentifier(name) {
 		return "`" + name + "` is a reserved word in JavaScript and cannot name a value"
+	}
+	return ""
+}
+
+// IsIdentifier reports whether s is one JavaScript identifier by shape: an
+// ID_Start character (`$` and `_` included) followed by ID_Continue
+// characters. It says nothing about reserved words; BindingNameReason does.
+func IsIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if r == utf8.RuneError {
+			return false
+		}
+		if i == 0 && !isIDStart(r) || i > 0 && !isIDContinue(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// BindingNameReason is the one rule for a name a template BINDS — an arrow
+// parameter, a {#for} item or counter, a <Snippet> parameter (and a Sites
+// {#let} name). It returns "" when identifier-shaped name may be bound, or a
+// phrase that completes "<name> …" when it may not: a strict-mode reserved
+// word (eval and arguments included), a literal word, `event` (the DOM event
+// of a handler), or a JavaScript global the language gives a meaning to.
+// Check the shape with IsIdentifier first.
+func BindingNameReason(name string) string {
+	switch {
+	case jsident.IsReservedBindingIdentifier(name):
+		return "is not a legal binding identifier in strict-mode JavaScript"
+	case name == "NaN" || name == "Infinity" || name == "undefined":
+		return "is a literal value and cannot name a binding"
+	case name == "event":
+		return "is the DOM event of an event handler and cannot name a binding"
+	case globalValueMessage(name) != "":
+		return "is a JavaScript global and cannot name a binding"
 	}
 	return ""
 }

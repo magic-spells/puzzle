@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
-	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
 )
 
 // parser.go is the recursive-descent parser over the lexer's token stream
@@ -30,8 +29,8 @@ type parser struct {
 	// attribute-namespace reservation are all switched off.
 	raw bool
 	// bound holds the names the enclosing {#for} blocks and <Snippet> bodies
-	// bind, innermost last. The expression parser needs one fact from it:
-	// whether `event` is bound (see exprScope).
+	// bind, innermost last: the expression parser lets them be read and
+	// never called (see exprScope).
 	bound []string
 }
 
@@ -721,8 +720,9 @@ func buildAttr(name string, npos Position, v Token, file string, sc exprScope) (
 		if perr != nil {
 			return nil, perr
 		}
-		// A handler always sees `event`, the DOM event it runs for.
-		ast, perr := parseExprAt(v.Value, vpos.advance("{"), file, expr.Options{AllowEvent: true})
+		// A handler sees `event`, the DOM event it runs for, and its own call
+		// names a view handler even when a binding shares the name.
+		ast, perr := parseExprAt(v.Value, vpos.advance("{"), file, sc.handlerOpts())
 		if perr != nil {
 			return nil, perr
 		}
@@ -1249,7 +1249,7 @@ func splitForHeader(rest string, pos Position, file string) (*forHeader, *ParseE
 		// `{#for i in 1...5}` parses as a range whose from-bound is "i in 1" and
 		// compiles to a green build that throws `Cannot use 'in' operator` on the
 		// first render. Steer to the documented form instead.
-		if item, low, ok := splitForIn(from); ok && isBareIdent(item) {
+		if item, low, ok := splitForIn(from); ok && expr.IsIdentifier(item) {
 			return nil, errAt(file, pos, "{#for} range loops bind the counter after the range — write {#for %s...%s, %s}", low, to, item)
 		}
 		return &forHeader{For: &For{IsRange: true, RangeFrom: from, RangeTo: to, Counter: counter, Pos: pos}, headText: rest, headSplit: idx}, nil
@@ -1258,11 +1258,12 @@ func splitForHeader(rest string, pos Position, file string) (*forHeader, *ParseE
 	if !ok {
 		return nil, errAt(file, pos, "{#for} expects 'item in items' (got %q)", rest)
 	}
-	// The loop variable must be a bare JS identifier — the same rule the counter
-	// is held to (isBareIdent). splitForIn only bounds the item at whitespace, so
+	// The loop variable must be one identifier by the expression language's rule
+	// (expr.IsIdentifier, Unicode letters included), as the counter and snippet
+	// parameters are. splitForIn only bounds the item at whitespace, so
 	// a name like "todo-item" reaches here and must be rejected with a positioned
 	// error rather than compiling into invalid `.map((todo-item) => …)`.
-	if !isBareIdent(item) {
+	if !expr.IsIdentifier(item) {
 		return nil, errAt(file, pos, "{#for} item must be a valid identifier (got %q)", item)
 	}
 	if perr := loopBindingIdentError(item, pos, file); perr != nil {
@@ -1289,14 +1290,15 @@ func peelForCounter(rest string, pos Position, file string) (head, counter strin
 	if tail == "" {
 		return "", "", errAt(file, pos, "{#for} loop counter is empty (trailing ',' in %q)", rest)
 	}
-	if !isBareIdent(tail) {
+	if !expr.IsIdentifier(tail) {
 		return rest, "", nil
 	}
 	return strings.TrimSpace(rest[:idx]), tail, nil
 }
 
-// isBareIdent reports whether s is a single JS identifier — the shape a {#for}
-// loop counter must have (letters, digits, '_', '$'; not leading with a digit).
+// isBareIdent reports whether s is an ASCII JS identifier — the shape a `ref`
+// name must have (letters, digits, '_', '$'; not leading with a digit), since
+// it becomes this.refs.<name>. Template bindings use expr.IsIdentifier.
 func isBareIdent(s string) bool {
 	if s == "" {
 		return false
@@ -1327,12 +1329,17 @@ func snippetParamIdentError(name string, pos Position, file string) *ParseError 
 	return generatedBindingIdentError(name, pos, file, "snippet parameter")
 }
 
+// generatedBindingIdentError checks a template binding name — a {#for} item or
+// counter, a snippet parameter — against the names the compiler reserves and
+// then against the language's one binding-name rule (expr.BindingNameReason,
+// the rule arrow parameters follow too): no strict-mode reserved word, literal
+// word, `event`, or JavaScript global the language gives a meaning to.
 func generatedBindingIdentError(name string, pos Position, file, kind string) *ParseError {
 	if name == "ViewNode" || name == "SLOT_TAG" || name == "SNIPPET_TAG" || name == "PORTAL_TAG" || strings.HasPrefix(name, "__") {
 		return errAt(file, pos, "%s %q uses a reserved name (identifiers starting with %q and the names %q, %q, %q and %q are reserved by the compiler)", kind, name, "__", "ViewNode", "SLOT_TAG", "SNIPPET_TAG", "PORTAL_TAG")
 	}
-	if jsident.IsReservedBindingIdentifier(name) {
-		return errAt(file, pos, "%s %q is not a legal binding identifier in strict-mode JavaScript", kind, name)
+	if reason := expr.BindingNameReason(name); reason != "" {
+		return errAt(file, pos, "%s %q %s", kind, name, reason)
 	}
 	return nil
 }
@@ -1341,7 +1348,7 @@ func generatedBindingIdentError(name string, pos Position, file, kind string) *P
 // delimited token, "in" is a whole word, and the rest is the collection
 // expression. The item is bounded at whitespace (not by a character class) so
 // any first token — including a valid `$foo` or an invalid `todo-item` — reaches
-// the caller intact for a single isBareIdent check.
+// the caller intact for a single identifier check.
 func splitForIn(rest string) (item, coll string, ok bool) {
 	item, coll, _, ok = splitForInAt(rest)
 	return item, coll, ok

@@ -14,12 +14,20 @@ import (
 
 // Options adjusts Parse for the position the expression sits in.
 type Options struct {
-	// AllowEvent makes `event` a legal name: the template parser sets it for an
-	// @event handler (where `event` is the DOM event) and for an expression
-	// inside a {#for} or <Snippet> that binds a name `event`. Elsewhere a free
-	// `event` — one that is not an enclosing arrow function's parameter — is an
-	// error: `event` is a handler-only name.
-	AllowEvent bool
+	// Handler marks an @event handler value — a PuzzleKit extension; Sites has
+	// no handlers. Only there is `event` a legal name: it is the DOM event, so
+	// a member chain rooted at it reads any property and calls any method
+	// (`event.target.closest('li')`, `event.preventDefault()`) with no
+	// method-table check — the browser's Event object is not template data.
+	// And the handler's own call (the whole value, or a branch of a top-level
+	// conditional) names a view handler, so it may share a name with a
+	// binding.
+	Handler bool
+	// Bindings are the names the enclosing template constructs bind: {#for}
+	// items and counters and <Snippet> parameters (in Sites, {#let} names).
+	// A binding is a value: reading it is legal, calling it is an error, so
+	// `t('key')` inside `{#for t in …}` never reaches the library's `t`.
+	Bindings []string
 	// CallArgument marks the source as one argument of a call — the template
 	// parser's formatter arguments, `x | f(arg)` — so an arrow function is
 	// legal at its top level, as it is inside any argument list.
@@ -60,7 +68,52 @@ func Parse(src string, base Pos, opts ...Options) (n Node, err error) {
 			n, err = nil, b.err
 		}
 	}()
-	return p.parseTop(), nil
+	n = p.parseTop()
+	p.checkBindingCalls(n)
+	return n, nil
+}
+
+// checkBindingCalls rejects a call whose callee is a template binding. It runs
+// on the finished tree because a handler's own call is exempt, and which call
+// that is shows only in the tree's shape. (An arrow parameter called in its
+// body is rejected while parsing; see callee.)
+func (p *parser) checkBindingCalls(root Node) {
+	if len(p.opts.Bindings) == 0 {
+		return
+	}
+	var handlerCalls []Node
+	if p.opts.Handler {
+		handlerCalls = append(handlerCalls, root)
+		if c, ok := root.(*Conditional); ok {
+			handlerCalls = append(handlerCalls, c.Consequent, c.Alternate)
+		}
+	}
+	Walk(root, func(n Node) bool {
+		c, ok := n.(*Call)
+		if !ok {
+			return true
+		}
+		id, ok := c.Callee.(*Identifier)
+		if !ok || !p.isBinding(id.Name) {
+			return true
+		}
+		for _, h := range handlerCalls {
+			if h == n {
+				return true
+			}
+		}
+		p.fail(id.Start, "`"+id.Name+"` is a template variable here and cannot be called")
+		return false
+	})
+}
+
+func (p *parser) isBinding(name string) bool {
+	for _, b := range p.opts.Bindings {
+		if b == name {
+			return true
+		}
+	}
+	return false
 }
 
 const maxPooledTokens = 4096
@@ -259,7 +312,7 @@ var excludedOperators = map[string]string{
 	"=":  msgAssign, "+=": msgAssign, "-=": msgAssign, "*=": msgAssign, "/=": msgAssign, "%=": msgAssign,
 	"**=": msgAssign, "<<=": msgAssign, ">>=": msgAssign, ">>>=": msgAssign, "&=": msgAssign,
 	"|=": msgAssign, "^=": msgAssign, "&&=": msgAssign, "||=": msgAssign, "??=": msgAssign,
-	"++": msgUpdate, "--": msgUpdate,
+	"++": msgUpdate, "--": msgUpdate, "~": msgBitwise,
 }
 
 func (p *parser) parseBinary(minBP int) Node {
@@ -348,13 +401,16 @@ func (p *parser) parseUnary() Node {
 // A chain holding a `?.` link is wrapped in a Chain node.
 func (p *parser) parsePostfix() Node {
 	n := p.parsePrimary()
+	// A chain rooted at a handler's DOM `event` is the browser's Event, not
+	// template data: its members and methods are unrestricted.
+	domEvent := p.opts.Handler && rootIsEvent(n)
 	optional := false
 	for {
 		t := p.cur()
 		switch {
 		case isPunct(t, "."):
 			p.advance()
-			n = p.memberName(n, false)
+			n = p.memberName(n, false, domEvent)
 		case isPunct(t, "?."):
 			optional = true
 			p.advance()
@@ -370,7 +426,7 @@ func (p *parser) parsePostfix() Node {
 			case c.kind == tTemplate || c.kind == tTemplateHead:
 				p.fail(c.pos, msgTaggedTemplate)
 			default:
-				n = p.memberName(n, true)
+				n = p.memberName(n, true, domEvent)
 			}
 		case isPunct(t, "["):
 			p.advance()
@@ -378,7 +434,7 @@ func (p *parser) parsePostfix() Node {
 			p.expectClose("]", t)
 			n = &Member{Start: n.Pos(), Object: n, Index: idx, Computed: true, PropPos: t.pos}
 		case isPunct(t, "("):
-			callee := p.callee(n, t)
+			callee := p.callee(n, t, domEvent)
 			p.advance()
 			args := p.parseArgs(t)
 			n = &Call{Start: n.Pos(), Callee: callee, Args: args}
@@ -393,9 +449,29 @@ func (p *parser) parsePostfix() Node {
 	}
 }
 
+// rootIsEvent reports whether the member/call chain n starts at the name
+// `event`, parentheses and optional chains included.
+func rootIsEvent(n Node) bool {
+	for {
+		switch m := n.(type) {
+		case *Member:
+			n = m.Object
+		case *Call:
+			n = m.Callee
+		case *Chain:
+			n = m.Expr
+		case *Identifier:
+			return m.Name == "event"
+		default:
+			return false
+		}
+	}
+}
+
 // memberName finishes `obj.name` / `obj?.name`: any IdentifierName, reserved
-// words included, as in JavaScript.
-func (p *parser) memberName(obj Node, optional bool) Node {
+// words included, as in JavaScript. domEvent lifts the prototype-name rule on
+// a handler's DOM event chain.
+func (p *parser) memberName(obj Node, optional, domEvent bool) Node {
 	t := p.cur()
 	if t.kind != tIdent {
 		if t.kind == tError {
@@ -403,7 +479,7 @@ func (p *parser) memberName(obj Node, optional bool) Node {
 		}
 		p.fail(t.pos, "expected a property name after `.`, found "+describe(t))
 	}
-	if prototypeNames[t.text] {
+	if prototypeNames[t.text] && !domEvent {
 		p.fail(t.pos, prototypeMessage(t.text))
 	}
 	p.advance()
@@ -412,11 +488,21 @@ func (p *parser) memberName(obj Node, optional bool) Node {
 
 // callee checks what is about to be called at open and returns the callee
 // node: a library function name, a Global, or a method whose name is in the
-// table. It runs before the arguments are parsed so an error in the callee is
-// reported before one further along in the source.
-func (p *parser) callee(n Node, open *token) Node {
+// table — checked against the receiver's type when that type is certain from
+// the syntax alone (receiverType). On a handler's DOM event chain (domEvent)
+// any method is callable. It runs before the arguments are parsed so an error
+// in the callee is reported before one further along in the source.
+func (p *parser) callee(n Node, open *token, domEvent bool) Node {
 	switch c := n.(type) {
 	case *Identifier:
+		for _, prm := range p.params {
+			if prm == c.Name {
+				p.fail(c.Start, "`"+c.Name+"` is a parameter here and cannot be called")
+			}
+		}
+		if c.Name == "event" {
+			p.fail(c.Start, "`event` is the DOM event here and cannot be called")
+		}
 		return c
 	case *Global:
 		if IsGlobalConstant(c.Namespace, c.Name) {
@@ -427,8 +513,17 @@ func (p *parser) callee(n Node, open *token) Node {
 		if c.Computed {
 			p.fail(c.PropPos, msgComputedCall)
 		}
+		if domEvent {
+			return c
+		}
 		if c.Property == "length" {
 			p.fail(c.PropPos, msgLengthCall)
+		}
+		if typ := receiverType(c.Object); typ != "" {
+			if !typeHasMethod(typ, c.Property) {
+				p.fail(c.PropPos, "`."+c.Property+"()` is not available on "+typ+" in template expressions")
+			}
+			return c
 		}
 		if !IsMethod(c.Property) {
 			receiver := ""
@@ -509,11 +604,10 @@ func (p *parser) parseArrow() Node {
 			}
 			p.fail(t.pos, msgArrowParam)
 		}
-		if msg := reservedMessage(t.text); msg != "" {
-			p.fail(t.pos, msg)
-		}
-		if globalValueMessage(t.text) != "" {
-			p.fail(t.pos, "`"+t.text+"` is a JavaScript global and cannot name a parameter")
+		// The token is identifier-shaped; the binding-name rule is the one
+		// {#for} and <Snippet> bindings follow.
+		if reason := BindingNameReason(t.text); reason != "" {
+			p.fail(t.pos, "`"+t.text+"` "+reason)
 		}
 		if seen[t.text] {
 			p.fail(t.pos, "duplicate arrow function parameter `"+t.text+"`")
@@ -554,16 +648,6 @@ func (p *parser) parseArrow() Node {
 	body := p.parseExpr()
 	p.params = p.params[:mark]
 	return &Arrow{Start: start.pos, Params: params, Body: body}
-}
-
-// eventBound reports whether an enclosing arrow function binds `event`.
-func (p *parser) eventBound() bool {
-	for _, name := range p.params {
-		if name == "event" {
-			return true
-		}
-	}
-	return false
 }
 
 func (p *parser) parsePrimary() Node {
@@ -637,7 +721,7 @@ func (p *parser) parseName() Node {
 	if IsGlobalFunction("", t.text) {
 		return p.parseGlobalFunction()
 	}
-	if t.text == "event" && !p.opts.AllowEvent && !p.eventBound() {
+	if t.text == "event" && !p.opts.Handler {
 		p.fail(t.pos, msgEvent)
 	}
 	p.advance()
@@ -813,7 +897,7 @@ func (p *parser) parseObject() Node {
 				if msg := globalValueMessage(t.text); msg != "" {
 					p.fail(t.pos, msg)
 				}
-				if t.text == "event" && !p.opts.AllowEvent && !p.eventBound() {
+				if t.text == "event" && !p.opts.Handler {
 					p.fail(t.pos, msgEvent)
 				}
 				obj.Entries = append(obj.Entries, Entry{Key: t.text, KeyPos: t.pos, Shorthand: true,

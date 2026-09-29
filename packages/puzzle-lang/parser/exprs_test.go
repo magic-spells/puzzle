@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -154,38 +155,120 @@ func TestExpressionErrorsLandOnTheToken(t *testing.T) {
 	}
 }
 
-func TestEventIsHandlerOnlyUnlessBound(t *testing.T) {
-	ok := []string{
+// parseErr parses a template body and returns its ParseError, or nil.
+func parseErr(t *testing.T, body string) *ParseError {
+	t.Helper()
+	_, err := Parse([]byte("<puzzle-view>"+body+"</puzzle-view>"), "t.pzl")
+	if err == nil {
+		return nil
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("%s: error type %T, want *ParseError", body, err)
+	}
+	return pe
+}
+
+// `event` is the DOM event of an @event handler and nothing else: legal only
+// in a handler, where a chain rooted at it is unrestricted, and never a name a
+// template binds.
+func TestEventIsTheHandlersDOMEvent(t *testing.T) {
+	for _, body := range []string{
 		"<button @click={ go(event) }>x</button>",
 		"<button @click={ event ? a : null }>x</button>",
-		"{#for event in events}<p title={ event.name }>{ event.id }</p>{/for}",
-		"{#for x in xs, event}<p>{ event }</p>{/for}",
-		"{#for 1...3, event}<p>{ event }</p>{/for}",
-		"{#for event in events}{#for x in event.items}<p>{ event.id }</p>{/for}{/for}",
-		`<Card><Snippet fits="row" event>{ event.id }</Snippet></Card>`,
-		"<p>{ items | fmt(event => event.id) }</p>",
+		"<li @click={ pick(event.target.closest('li').dataset.id) }>x</li>",
+		"<button @click={ go(event.preventDefault()) }>x</button>",
+		"<input @change={ load(event.target.files.item(0)) }/>",
+		"{#for row in rows}<li @click={ pick(row, event.currentTarget.getAttribute('data-x')) }>x</li>{/for}",
 		"<p>{ event2 }{ events }</p>",
-	}
-	for _, body := range ok {
-		if _, err := Parse([]byte("<puzzle-view>"+body+"</puzzle-view>"), "t.pzl"); err != nil {
-			t.Errorf("%s: %v", body, err)
+	} {
+		if pe := parseErr(t, body); pe != nil {
+			t.Errorf("%s: %v", body, pe)
 		}
 	}
-	bad := []string{
+	for _, body := range []string{
 		"<p>{ event }</p>",
 		"<p title={ event.x }>x</p>",
 		"{#if event}<b>a</b>{/if}",
-		// A loop's header is outside its own scope.
-		"{#for event in event.items}<b>a</b>{/for}",
-		// The binding ends with its loop.
-		"{#for event in events}<b>a</b>{/for}<p>{ event }</p>",
-		`<Card><Snippet fits="row" item>{ event }</Snippet></Card>`,
-	}
-	for _, body := range bad {
-		_, err := Parse([]byte("<puzzle-view>"+body+"</puzzle-view>"), "t.pzl")
-		pe, isPE := err.(*ParseError)
-		if !isPE || !strings.HasPrefix(pe.Message, "`event` is only available in an event handler — a data field named `event` cannot be read in a template; rename the field") {
-			t.Errorf("%s: got %v, want the event error", body, err)
+	} {
+		pe := parseErr(t, body)
+		if pe == nil || !strings.HasPrefix(pe.Message, "`event` is only available in an event handler — a data field named `event` cannot be read in a template; rename the field") {
+			t.Errorf("%s: got %v, want the event error", body, pe)
 		}
+	}
+	// Outside a handler a chain is data: the method table applies again.
+	if pe := parseErr(t, "<p>{ row.target.closest('li') }</p>"); pe == nil || !strings.Contains(pe.Message, "`.closest()` is not available") {
+		t.Errorf("a data chain must keep the method table: %v", pe)
+	}
+}
+
+// A template binding is a value: it reads, and it is never called — so the
+// library's `t` stays unreachable through a loop variable named t. A
+// handler's own call names a view handler, so it may share a binding's name.
+func TestBindingsAreNeverCalled(t *testing.T) {
+	for _, tc := range []struct{ body, name string }{
+		{"{#for t in items}<p>{ t('key') }</p>{/for}", "t"},
+		{"{#for x in xs, i}<p>{ i(1) }</p>{/for}", "i"},
+		{`<Card><Snippet fits="row" fmt>{ fmt(1) }</Snippet></Card>`, "fmt"},
+		{"{#for t in items}<p title={ label | pad(t(1)) }>x</p>{/for}", "t"},
+		{"{#for t in items}<button @click={ save(t(1)) }>x</button>{/for}", "t"},
+	} {
+		pe := parseErr(t, tc.body)
+		if pe == nil || pe.Message != "`"+tc.name+"` is a template variable here and cannot be called" {
+			t.Errorf("%s: got %v", tc.body, pe)
+			continue
+		}
+		line, col := at(t, "<puzzle-view>"+tc.body, tc.name+"(")
+		if pe.Line != line || pe.Col != col {
+			t.Errorf("%s: at %d:%d, want %d:%d", tc.body, pe.Line, pe.Col, line, col)
+		}
+	}
+	for _, body := range []string{
+		"{#for t in items}<p>{ t.label }{ fmt(t) }</p>{/for}",
+		"{#for save in saves}<button @click={ save(1) }>x</button>{/for}",
+		"{#for save in saves}<button @click={ ok ? save(1) : null }>x</button>{/for}",
+		"{#for t in items}{/for}<p>{ t('key') }</p>",
+	} {
+		if pe := parseErr(t, body); pe != nil {
+			t.Errorf("%s: %v", body, pe)
+		}
+	}
+}
+
+// Template bindings follow the expression language's identifier rule —
+// Unicode names included — and its exclusions.
+func TestBindingNamesFollowTheLanguageRule(t *testing.T) {
+	for _, body := range []string{
+		"{#for größe in sizes}<p>{ größe }</p>{/for}",
+		"{#for x in xs, zähler}<p>{ zähler }</p>{/for}",
+		"{#for 1...3, 値}<p>{ 値 }</p>{/for}",
+		`<Card><Snippet fits="row" größe>{ größe }</Snippet></Card>`,
+	} {
+		if pe := parseErr(t, body); pe != nil {
+			t.Errorf("%s: %v", body, pe)
+		}
+	}
+	for _, tc := range []struct{ body, want string }{
+		{"{#for event in events}<b>a</b>{/for}", `loop variable "event" is the DOM event of an event handler and cannot name a binding`},
+		{"{#for x in xs, event}<b>a</b>{/for}", `loop variable "event" is the DOM event of an event handler and cannot name a binding`},
+		{"{#for NaN in xs}<b>a</b>{/for}", `loop variable "NaN" is a literal value and cannot name a binding`},
+		{"{#for undefined in xs}<b>a</b>{/for}", `loop variable "undefined" is a literal value and cannot name a binding`},
+		{"{#for Math in xs}<b>a</b>{/for}", `loop variable "Math" is a JavaScript global and cannot name a binding`},
+		{"{#for 1...3, Number}<b>a</b>{/for}", `loop variable "Number" is a JavaScript global and cannot name a binding`},
+		{"{#for eval in xs}<b>a</b>{/for}", `loop variable "eval" is not a legal binding identifier in strict-mode JavaScript`},
+		{`<Card><Snippet fits="row" Boolean>x</Snippet></Card>`, `snippet parameter "Boolean" is a JavaScript global and cannot name a binding`},
+		{`<Card><Snippet fits="row" event>x</Snippet></Card>`, `snippet parameter "event" is the DOM event of an event handler and cannot name a binding`},
+		{"{#for grö-ße in xs}<b>a</b>{/for}", `{#for} item must be a valid identifier (got "grö-ße")`},
+	} {
+		pe := parseErr(t, tc.body)
+		if pe == nil || pe.Message != tc.want {
+			t.Errorf("%s: got %v, want %q", tc.body, pe, tc.want)
+		}
+	}
+	// A character that is not a letter, mark, or digit is still an error in a
+	// tag, named as the character, not as one of its bytes.
+	nbsp := string(rune(0xA0))
+	if pe := parseErr(t, "<Card><Snippet fits=\"row\" a"+nbsp+"b>x</Snippet></Card>"); pe == nil || pe.Message != "unexpected character "+strconv.Quote(nbsp)+" in tag" {
+		t.Errorf("NBSP in a tag: got %v", pe)
 	}
 }

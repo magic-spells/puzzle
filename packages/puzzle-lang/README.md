@@ -43,8 +43,11 @@ strict-mode escapes; template literals with nested `${ }`; decimal numbers
 Unicode identifiers. Member access `a.b`, `a?.b`, `a[i]`, `a?.[i]`;
 `__proto__`, `constructor`, and `prototype` are rejected as member names and
 object keys. Calls: a library function `name(args)`, a method `a.m(args)` /
-`a?.m(args)` whose name must be in the method table (`methods.go`), and the
-allowed JavaScript globals (`Math.round`, `Object.keys`, `Array.isArray`,
+`a?.m(args)` whose name must be in the method table (`methods.go`) — checked
+against the receiver's own type when the syntax fixes it (`'s'.filter(f)`,
+`[1].trim()`, `(1).trim()`, `String(x).map(f)` are errors), by name alone
+otherwise, since a data value's type is known only when the template runs —
+and the allowed JavaScript globals (`Math.round`, `Object.keys`, `Array.isArray`,
 `Number`, `String`, `Boolean`, `parseInt`, `parseFloat`, `isNaN`,
 `isFinite`). A global is only ever called — `items.filter(Boolean)` is an
 error; write `x => Boolean(x)` — except the two readable constants `Math.PI`
@@ -63,12 +66,29 @@ one, what to write instead.
 `ChainExpression`). Every node has `Pos()`; `Walk` visits a tree in source
 order; `Print` renders the compact S-expression the fixtures use.
 
-**Options.** `AllowEvent` makes `event` legal — the template parser sets it
-for an `@event` handler and inside a `{#for}` or `<Snippet>` that binds a name
-`event`; elsewhere `event` is an error, so a data field named `event` must be
-renamed to be shown. `CallArgument` parses the source as one
-call argument (the template parser's formatter arguments), where an arrow is
-legal at the top level.
+**Names.** `eval` and `arguments` read like any data field. A name a
+template *binds* — an arrow parameter, a `{#for}` item or counter, a
+`<Snippet>` parameter (a `{#let}` name in Sites) — follows one rule,
+`IsIdentifier` plus `BindingNameReason`: a Unicode identifier that is not a
+strict-mode reserved word (`eval` and `arguments` included), a literal word
+(`NaN`, `Infinity`, `undefined`), `event`, or a JavaScript global the language
+gives a meaning to (`Math`, `Number`, `Boolean`, …). A bound name is a value:
+it reads, and calling it is an error, so `t('key')` inside `{#for t in …}`
+never reaches the library's `t`.
+
+**Options.**
+- `Handler` parses an `@event` handler value. It is a PuzzleKit-only
+  extension; Sites has no handlers. Only there is `event` legal: it is the
+  browser's DOM event, so a member chain rooted at it reads any property and
+  calls any method with no method-table check (`event.target.closest('li')`,
+  `event.preventDefault()`, `event.target.files.item(0)`). The handler's own
+  call — the whole value, or a branch of a top-level conditional — names a
+  view handler, so it may share a name with a binding. Everywhere else `event`
+  is an error, so a data field named `event` must be renamed to be shown.
+- `Bindings` lists the names the enclosing template constructs bind; the
+  template parser passes them, and each reads but cannot be called.
+- `CallArgument` parses the source as one call argument (the template
+  parser's formatter arguments), where an arrow is legal at the top level.
 
 **In the template parser.** Every AST field that holds an expression string
 has a parsed sibling filled while parsing — `Interpolation.ExprAST`,
@@ -78,9 +98,17 @@ and `For.CollectionAST` / `RangeFromAST` / `RangeToAST` — and an expression
 error is a `ParseError` at the offending token. `{#unless}` keeps its folded
 `!(…)` string, and its tree is a `Unary` `!` over the parsed condition.
 
+The template parser binds names with the same rule: `{#for größe in sizes}`
+and `<Snippet fits="row" größe>` work, and `{#for event in …}` or
+`<Snippet Math>` is a positioned error.
+
 **The contract** is `conformance/expressions-parse.json`: every grammar rule
-and every error, with exact line and column. `go test ./expr` runs it; a host
-runs the same rows through `conformance.ExpressionsParse` and `expr.Print`.
+and every error. An accepted case pins its tree and the position of every
+node (line, column, and offset, in `Walk` order, from `expr.PrintPositions`);
+a rejected case pins its message, line, column, and offset; a few cases start
+from a base position inside a file. `go test ./expr` runs it; a host runs the
+same rows through `conformance.ExpressionsParse`, `expr.Print`, and
+`expr.PrintPositions`.
 
 ## Who imports it
 
