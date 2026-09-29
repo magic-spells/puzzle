@@ -37,8 +37,7 @@ proposal that would need one spelling to behave differently per host gets a new
 spelling instead. The rationale, the naming ("Puzzle" in prose, "PuzzleKit" for
 the app layer) and the parser architecture are in
 [[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]]. The places where today's two
-implementations still break the rule are listed at the end of this card as open
-questions.
+implementations still break the rule are listed at the end of this card.
 
 Where a construct already has a full contract in [[DOC-SPEC-TEMPLATE]], this
 card states the rule and links the `§N`. It does not restate it.
@@ -76,7 +75,7 @@ they mean in HTML, with these rules:
 <p>Price: \{ not an interpolation \}</p>
 ```
 
-## Interpolation and formatters
+## Interpolation and functions
 
 
 `{ expression }` writes a value into text or an attribute. Every host prints a
@@ -91,55 +90,42 @@ value by one rule ([[DECISION-D173-CORE-SEMANTICS]] V6):
 - Any other object prints nothing, and a host may warn in development (PuzzleKit
   does). Format the value or print one of its fields.
 
-A **formatter** presents a value for display. Write it after a pipe:
+A **function** presents a value for display. Call it the way JavaScript calls
+a function, with the value as the first argument
+([[DECISION-D176-EXPRESSION-LANGUAGE]] rule 4):
 
 ```html
-<p>{ post.title | upcase }</p>
-<p>{ post.body | truncate(120) }</p>
-<p>{ product.name | trim | capitalize }</p>
-<p>{ price * (1 - discount) | currency }</p>
-<a title={ price | currency }>…</a>
+<p>{ post.title.toUpperCase() }</p>
+<p>{ truncate(post.body, 120) }</p>
+<p>{ capitalize(product.name.trim()) }</p>
+<p>{ currency(price * (1 - discount)) }</p>
+<a title={ currency(price) }>…</a>
 ```
 
-- `{ value | name }` or `{ value | name(arg, arg) }`. The value is any
-  expression (compute first, then present); arguments are expressions, in
-  parentheses, separated by commas. An argument may be an object literal:
-  `{ 'cart.count' | t({ count: n }) }`.
-- Chains run left to right and have no length limit.
-- Only a **top-level single `|`** is a pipe. `||` is logical OR; a `|` inside
-  a string, a regex or a template literal is text; and a single `|` nested
-  inside parentheses, brackets, braces or a formatter's arguments is a compile
-  error ([[DECISION-D176-EXPRESSION-LANGUAGE]]): there is no bitwise OR in
-  templates, so `{ (a | b) }` and `@click={ save(x | trim) }` never compile
-  to one.
-- **What follows a pipe must be a formatter name**
-  (`[A-Za-z_$][A-Za-z0-9_$]*(-[A-Za-z][A-Za-z0-9_$]*)*`: an identifier,
-  optionally kebab-cased, every `-` starting a word with a letter), bare or
-  called, and a call's `)` ends the segment. `{ flags | 4 }`, `{ a |= 2 }`,
-  `{ mask | bit-1 }` or `{ a | f(1) + g(2) }` is a compile error.
-- **A formatter never duplicates an operator or a property** (D176). A count
-  is the `.size` property, arithmetic is `+ - * / %` before the pipe, and a
-  fallback is `??`: `{ items.size }`, `{ ratio * 100 | percentage }`,
-  `{ name ?? 'Anonymous' }`. There is no `size`, `plus` or `default`
-  formatter.
-- A formatter should be a pure function of its input. In PuzzleKit, filtering
-  and sorting belong in `data()`; Sites, which has no script, provides list
-  formatters for them.
+- A call is an ordinary expression, so it goes wherever a value goes: text,
+  attribute values, props, marker arguments, conditions and `{#for}` headers.
+  Arguments are expressions separated by commas, and an object literal is one:
+  `{ t('cart.count', { count: n }) }`. Calls nest: `{ b(a(x)) }`.
+- **There is no pipe.** A `|` anywhere in an expression is a positioned
+  compile error in both hosts: "`| name` pipes were removed — write
+  `name(value)`; bitwise OR is not available". When the name after the `|` is
+  one the library dropped, the message names its JavaScript replacement
+  instead (`| upcase` → `.toUpperCase()`). `||` is logical OR.
+- **A function never duplicates an operator, a method or a `Math` global**
+  (D176). A count is `.length`, arithmetic is `+ - * / %` and `Math.*`, a
+  fallback is `??`, and a string or list transform is a method from the table
+  (see Expressions): `{ items.length }`, `{ percentage(ratio * 100) }`,
+  `{ name ?? 'Anonymous' }`, `{ tags.join(', ') }`.
+- A bare call resolves to the function library and a bare name to data, so a
+  data field is never callable and never shadows a function.
+- `raw` and `newline_to_br` return markup, so each may only be the outermost
+  call of a text interpolation, with one argument: `{ raw(post.body) }`
+  ([[DECISION-D174-STANDARD-FORMATTERS]]).
+- A function should be a pure function of its input.
 
-**A pipe is a formatter in every display position** (D173 V1): text
-interpolation, quoted and brace-only attribute values, component props and
-marker arguments. **Formatters never go in a condition or loop header:** a
-top-level pipe in an `{#if}`, `{:else if}`, `{#unless}` or `{#case}` header, in
-an attribute value's inline `{#if}`, in a `{:when}` value, or in a `{#for}`
-header (the collection or a range bound) is a compile error, never a bitwise OR.
-Name the value first (PuzzleKit: compute it in `data()` and test or loop over
-that field; Sites: `{#let}`). `||` keeps working in every header. `@event`
-handler bodies are PuzzleKit JavaScript, not value positions. Both hosts
-reject all of it at compile time.
-
-Which formatter names exist is a host decision; the names both hosts implement
-identically are the **standard set** (see Standard formatters below). Full
-PuzzleKit contract: §6 and [[COMPONENT-FORMATTERS]].
+Which functions exist beyond the standard library is a host decision; the names
+both hosts implement identically are the **standard library** (see Standard
+functions below). Full PuzzleKit contract: §6 and [[COMPONENT-FORMATTERS]].
 
 ## Attributes
 
@@ -176,9 +162,9 @@ Each dialect reserves its own attribute names on top of this (PuzzleKit:
 
 
 ```html
-{#if items.size > 3}
+{#if items.length > 3}
   <p>many</p>
-{:else if items.size > 0}
+{:else if items.length > 0}
   <p>a few</p>
 {:else}
   <p>none</p>
@@ -195,13 +181,11 @@ Each dialect reserves its own attribute names on top of this (PuzzleKit:
 
 - **`{#if}`** takes any number of `{:else if cond}` clauses and one optional
   trailing `{:else}`. `{#unless}` is the inverted form; it allows `{:else}` but
-  not `{:else if}`. Each condition is a plain expression: a formatter pipe in
-  it is an error (D173 V1), so compute the value first (PuzzleKit: a `data()`
-  field, `{#if hasTags}`; Sites: `{#let}`). A count needs no formatter:
-  `{#if tags.size > 0}`. §6.
+  not `{:else if}`. Each condition is one expression, calls and methods
+  included: `{#if tags.length > 0}`, `{#if post.title.startsWith('Draft')}`.
+  §6.
 - **`{#case expr}`** compares with strict equality. The subject and the
-  `{:when}` values are plain expressions; a formatter pipe in either is an
-  error (D173 V1). A `{:when}` may list
+  `{:when}` values are expressions. A `{:when}` may list
   several values, separated by commas, as alternatives. The first match wins and
   there is no fall-through. Only whitespace may appear before the first
   `{:when}`, and `{:else}` must be last. §6.
@@ -216,8 +200,9 @@ Each dialect reserves its own attribute names on top of this (PuzzleKit:
 
   Both range bounds are expressions (`{#for start...end, x}`). A range whose end
   is below its start runs zero times. `{#for i in 1...5}` is an error that
-  steers to `{#for 1...5, i}`: the counter always comes after the range. A
-  formatter pipe anywhere in the header is an error (D173 V1). §6.
+  steers to `{#for 1...5, i}`: the counter always comes after the range. The
+  collection is any expression, a method chain included:
+  `{#for t in todos.filter(t => !t.done)}`. §6.
   How PuzzleKit keys and caches rows (§28) is PuzzleKit behavior, not core.
 - **The loop domain** (D173 V12): `{#for x in c}` iterates lists. A missing
   collection runs zero times with no warning; any other non-list (a string, an
@@ -369,57 +354,117 @@ rejects them until it does.
 ## Expressions
 
 
+A template expression is **JavaScript's expression syntax, closed by one
+grammar and a method table** ([[DECISION-D176-EXPRESSION-LANGUAGE]]). One
+parser in the language module (`packages/puzzle-lang/expr`) reads every
+expression into a tree both hosts consume: PuzzleKit lowers it to JavaScript,
+Sites evaluates it in Go. Anything outside the grammar is a positioned compile
+error in both hosts, at the same line and column, whose message names the
+construct and what to write instead. Every expression position takes the same
+grammar: text, attribute values, props, marker arguments, conditions, `{:when}`
+values, `{#for}` headers, and PuzzleKit's `@event` handler arguments.
 
-
-**A template expression is data plus operators, not JavaScript**
-([[DECISION-D176-EXPRESSION-LANGUAGE]]). The **core expression language**
-is the part of JavaScript expression syntax that both hosts evaluate the same
-way; it is based on Sites' `DECISION-EXPRESSION-SUBSET`
-(`sites/constellation/decision/`). Both hosts accept exactly the core and
-reject the rest with the same positioned errors. **A template expression never
-reaches the view instance:** every value it shows comes through `data()` and
-the model (PuzzleKit) or the render context (Sites). Anything else that needs
-code is a formatter, or is computed first — in a `data()` field (PuzzleKit) or
-a `{#let}` (Sites) — and read as a plain value. PuzzleKit's one door into the
-view's JavaScript is an `@event` handler, which reaches the view through its
-own name (`@click={ save(x) }` calls the view's `save`) and runs at fire time.
-Sites' `==` is still strict equality until it adopts V2, below.
+**A template expression never reaches the view instance.** Every value it
+shows comes through `data()` and the model (PuzzleKit) or the render context
+(Sites). A value that needs more logic than an expression holds is computed
+first — in a `data()` field (PuzzleKit) or a `{#let}` (Sites) — and read as a
+plain value. PuzzleKit's one door into the view's JavaScript is an `@event`
+handler (see Handlers below).
 
 **Names.** An identifier reads from the scope the host supplies (PuzzleKit:
-`data()` fields; Sites: the render context and props) plus the loop variables
-of enclosing `{#for}` blocks. Identifiers may use letters from any script, `_`
-and `$`. **`this` is not a name** in any template expression: PuzzleKit rejects
-it with a positioned compile error, handler arguments included, that steers to
-a `data()` field or a formatter (D176 rule 5). A field named `this` is still an
-ordinary member read (`x.this`).
+`data()` fields; Sites: the render context and props), plus the names the
+template binds: `{#for}` items and counters, `<Snippet>` parameters and arrow
+parameters. Identifiers follow JavaScript's `ID_Start`/`ID_Continue`, so
+letters, digits and marks from any script, `_` and `$` all work
+(`{ größe }`). Reserved words are errors, except `eval` and `arguments`, which
+read like any field. `__proto__`, `constructor` and `prototype` are errors as
+member names and object keys. A bound name is a value: calling it (`t('key')`
+inside `{#for t in …}`) is an error.
+
+- **`this` is not a name** in any template expression, handler arguments
+  included. It is a positioned compile error at the `this` token that steers
+  to a `data()` field or a function (D176 rule 7). A field named `this` is an
+  ordinary member read (`x.this`).
+- **The page's global objects are not template data.** `window`, `document`
+  and `globalThis` read as a data root are an error: "`window` is not
+  available in template expressions — read it in data() and pass the value".
+  A binding or arrow parameter with one of those names is fine. Every other
+  name is an ordinary data read, `location` and `localStorage` included: it
+  reads the `data()` field of that name, never the browser's.
 
 **Literals.**
 
 | Kind | Examples |
 |---|---|
-| number | `12`, `1.25`, `.5`, `1e3` (decimal only) |
-| string | `'quiet'`, `"quiet"`; escapes `\'` `\"` `\\` `\n` `\t` only |
+| number | `12`, `1.25`, `.5`, `1e3` — decimal only; hex, octal, binary, BigInt, `1_000` and a leading zero are errors |
+| string | `'quiet'`, `"quiet"`, with JavaScript's strict-mode escapes (`\n`, `\xHH`, `\u{…}`, …); a raw line break or a legacy octal escape is an error |
+| template literal | `` `${first} ${last}` `` |
 | boolean | `true`, `false` |
 | absent | `null`, `undefined` |
+| number constants | `NaN`, `Infinity` |
 | list | `[]`, `[price, qty]` |
-| object | `{ height: 480 }`, `{ 'cart.count': n }` — in argument and nested positions only |
+| object | `{ height: 480 }`, `{ 'cart.count': n }`, `{ count }` — never at the start of an expression |
 
-**Object literals** (D173 V8) are allowed where a value is an argument or
-nested inside another value — `{ photo | resize({ height: 480 }) }` — but not
-at the start of an expression, where `{ {` is ambiguous with the interpolation
-brace. Keys are identifiers or quoted strings; values are core expressions.
-Shorthand (`{ count }`), computed keys and spread are PuzzleKit JavaScript, not
-core.
+**Object literals** (D173 V8) take identifier keys, quoted keys and shorthand,
+with expressions as values; computed keys, spread, methods and numeric keys
+are errors. An expression cannot start with one, where `{ {` reads as a
+doubled interpolation brace, so its place is a function argument:
+`{ t('cart.items', { count: items.length }) }`.
 
-**Access.** `a.b`, `a?.b`, `a[expr]`, and **`.size`**, the one built-in
-property: the count of a list (items) or a string (code points, so `'😀'.size`
-is 1 in both hosts). On anything else `.size` is an ordinary field read
-(`file.size`). `.length` is a compile error in both hosts; a field really
-named `length` is `obj['length']`. **Reading a member of a missing value
-yields a missing value** (D173 V4), and a missing value prints nothing, so
-`{ a.b.c }` with `a.b` unset renders an empty string in both hosts; `?.` is
-legal and unnecessary. PuzzleKit gets there by guarding every member and index
-step in codegen; a path that exists evaluates exactly as before.
+**Access.** `a.b`, `a?.b`, `a[expr]`, `a?.[expr]`. **Reading a member of a
+missing value yields a missing value, and so does calling a method on one**
+(D173 V4), and a missing value prints nothing: `{ a.b.c }` with `a.b` unset,
+or `{ note.trim() }` with `note` unset, renders an empty string in both hosts.
+`?.` is legal and unnecessary. PuzzleKit guards every member step, index step
+and method call in codegen; a path that exists evaluates exactly as before.
+`.size` is not special: it reads a field named `size` like any other
+(`file.size`).
+
+**Calls.** Three kinds, and nothing else is callable:
+
+- **A function**, `name(args)`. A bare call resolves to the function library
+  (see Standard functions), never to data; a bare name resolves to data, never
+  to a function, so the two cannot shadow each other: `{ currency(price) }`,
+  `{ date(post.createdAt, 'long') }`, `{ specialFormat(product.title) }` (an
+  app's own function).
+- **A method**, `value.m(args)` or `value?.m(args)`, from the method table:
+
+  | Receiver | Methods |
+  |---|---|
+  | string | `length` (a property, in UTF-16 units), `at`, `charAt`, `includes`, `startsWith`, `endsWith`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `split`, `replace` (first occurrence), `replaceAll`, `trim`, `trimStart`, `trimEnd`, `toUpperCase`, `toLowerCase`, `padStart`, `padEnd`, `repeat`, `concat` |
+  | list | `length` (a property), `at`, `includes`, `indexOf`, `lastIndexOf`, `slice`, `concat`, `join`, `flat`, `find`, `findIndex`, `findLast`, `filter`, `map`, `some`, `every`, `reduce`, `toSorted`, `toReversed` |
+  | number | `toFixed`, `toString` (no radix) |
+  | boolean, `null`, `undefined`, a record, an object | none: read an object's fields, or iterate it with `Object.keys`, `values` or `entries` |
+
+  Each means what it means in JavaScript, and none mutates its receiver: there
+  is no `push`, `sort`, `reverse` or `splice`. A name outside the table is an
+  error that names the alternative (`sort` → `toSorted()`, `push` →
+  `concat()`, `substr` → `slice()`, `getFullYear` → `date(v, preset)`).
+  `.length()` is an error; `.length` is a property. When the syntax fixes the
+  receiver's type — a literal, a template literal, `Math.PI`, a global call
+  such as `Number(x)` — the method is checked against that type at parse time,
+  so `'s'.filter(f)` is an error in both hosts. On a data path the name only
+  has to be in the table; PuzzleKit's `puzzle check` then type-checks it as the
+  same JavaScript method, and Sites checks the runtime type.
+- **A global**, from a fixed list: `Math.abs`, `ceil`, `floor`, `round`,
+  `trunc`, `max`, `min`, `sign`, `pow`, `sqrt` and the constants `Math.PI` and
+  `Math.E`; `Number(x)`, `String(x)`, `Boolean(x)`; `Array.isArray(x)`;
+  `Object.keys`, `values`, `entries(x)`; `parseInt`, `parseFloat`, `isNaN`,
+  `isFinite`; and the pure URI functions `encodeURIComponent`,
+  `decodeURIComponent`, `encodeURI` and `decodeURI`
+  (`href="/search?q={ encodeURIComponent(query) }"`). There is no `Date`,
+  `JSON`, `Intl`, `Map`, `Set` or `fetch`; dates and JSON display through
+  `date()` and `json()`. A global is only ever called: `items.filter(Boolean)`
+  is an error that says `x => Boolean(x)`.
+
+A computed method call (`a[name]()`), calling a call's result (`f(x)(y)`) and
+an optional call (`f?.(x)`) are errors.
+
+**Arrow functions** appear only as call arguments, with an expression body and
+plain parameters: `todos.filter(t => !t.done)`,
+`rows.toSorted((a, b) => a.rank - b.rank)`, `items.map((item, i) => i + 1)`.
+A callback receives `(item, index)`. An object body is written
+`x => ({ … })`; defaults, rest and destructuring are errors.
 
 **Operators**, loosest binding first:
 
@@ -434,8 +479,8 @@ step in codegen; a path that exists evaluates exactly as before.
 | `<` `<=` `>` `>=` | number with number, or string with string |
 | `+` `-` | numbers; `+` concatenates when either side is a string |
 | `*` `/` `%` | numbers |
-| `!x` `-x` | prefix; `!x` is always a boolean |
-| `.` `?.` `[…]` | postfix, binds tightest |
+| `!x` `-x` `+x` | prefix; `!x` is always a boolean, `+x` converts to a number |
+| `.` `?.` `[…]` `(…)` | postfix member access and calls, binding tightest |
 
 - **`==` and `!=` mean what they mean in JavaScript** (D173 V2): PuzzleKit
   compiles them unchanged (pinned by a codegen test); Sites implements
@@ -446,28 +491,50 @@ step in codegen; a path that exists evaluates exactly as before.
   is false), while Sites has one absent value.
 - **A fallback is `??`, never `||`** (D176): `{ nickname ?? name }` replaces
   only a missing value, so `{ count ?? 'none' }` still prints `0`, where `||`
-  would swallow `0` and `''`. There is no `default` formatter.
+  would swallow `0` and `''`.
 - **`??` may not be mixed with `&&` or `||` without parentheses.**
-  `a ?? b || c` is an error; write `(a ?? b) || c` or `a ?? (b || c)`. (This is
-  JavaScript's own rule: Sites reports it at compile time, PuzzleKit's bundler
-  rejects it.)
+  `a ?? b || c` is an error that offers `(a ?? b) || c` and `a ?? (b || c)`,
+  as in JavaScript; the shared parser reports it for both hosts.
 - **Truthiness:** `false`, `0`, `NaN`, `''`, `null` and `undefined` are falsy.
   Everything else is truthy, **including an empty list and an empty object**.
-  Test `items.size > 0` when you mean "has items".
-- **Math is the operators** (D176): `{ price * qty | currency }`,
-  `{ total / count | round }`. There are no `plus`/`minus`/`times`/
-  `divided_by`/`modulo` formatters; `round`, `floor`, `ceil` and `abs` stay,
-  because no operator spells them.
+  Test `items.length > 0` when you mean "has items".
+- **Math is the operators and `Math.*`** (D176), then a function to present
+  the result: `{ currency(price * qty) }`, `{ round(total / count, 1) }`,
+  `{ Math.max(0, remaining) }`. `round` is a function because it takes decimal
+  places, which `Math.round` does not.
+- **A date value** takes only `<`, `<=`, `>`, `>=` and binary `-`, which
+  coerce it to milliseconds in both hosts. It has no methods, and a template
+  cannot construct one (there is no `new` and no `Date`). Display it with
+  `date()`, `time()`, `datetime()` or `timeago()` (D176 rule 6).
 
-**Not in the language, and a compile error in both hosts** (D176): method
-and function calls on a value (`s.trim()`, `items.filter(…)`, `Math.round(x)`,
-`String(x)`, `items.at(-1)` — a formatter is the portable way to run code),
-assignment, `++`/`--`, arrow functions, `new`, `typeof`, `instanceof`, `in`,
-template literals, regular expressions, the comma operator, bitwise operators
-(a nested single `|` included), spread, and `.length`. In PuzzleKit an
-`@event` handler body is exempt: it is JavaScript evaluated at fire time,
-though `this` is rejected there as everywhere else. Arithmetic or comparison on
-operands of mixed or non-number types is not portable either (V5).
+**Not in the language, and a compile error in both hosts** (D176): the bitwise
+operators (a `|` gets the pipe steer above), `**` (write `Math.pow`), `in`,
+`instanceof`, `typeof`, `void`, `delete`, `new`, the comma operator,
+assignment, `++`/`--`, regular expressions, comments, statements, `function`,
+classes, `await`/`yield`, tagged templates and spread. Arithmetic or comparison
+on operands of mixed or non-number types is host-defined (V5).
+
+**Constant arguments are checked.** A string-literal preset that `date`,
+`time` or `datetime` does not know (`time(v, 'shrot')`), or a string-literal
+`in_timezone` zone that cannot be a zone id, draws a positioned compile
+warning in PuzzleKit that names the valid presets. It is a warning, not an
+error, because an app may register its own function under any of those names.
+A dynamic preset the library does not know is a development error at run time
+that renders the function's default (D174).
+
+**Handlers (PuzzleKit only).** An `@event` value is the one door into the
+view's JavaScript: a bare handler name, one call to a handler, a conditional
+whose branches are each one of those or `null`, or `null`
+(`@click={ save(items.length - 1) }`). The handler's own call names the view's
+handler, never a library function; its arguments and the conditional's test
+are ordinary expressions, evaluated when the event fires, with `event` in
+scope. A chain rooted at a free `event` is the DOM event, not template data,
+so the method table does not apply to it: `event.target.value`,
+`event.target.closest('li')` and `event.preventDefault()` are legal and
+compile as written. A bound `event` (a loop item, a snippet or arrow
+parameter) shadows the DOM event, as in JavaScript, and a free `event` outside
+a handler is an error. Sites has no handlers and rejects `@event` (see
+Dialects).
 
 ## Dialects
 
@@ -477,11 +544,11 @@ operands of mixed or non-number types is not portable either (V5).
 | | PuzzleKit | Sites |
 |---|---|---|
 | File structure | `<puzzle-view>` root (§3); optional `<puzzle-skeleton>` (§16), `<script>` class (§4, `lang="ts"` §25), `<style>` / `<style scoped>` (§29) | No wrapper; the directory decides the file kind; optional `<schema>`, `<script>` (browser JavaScript), `<style>` / `<style scoped>` — `sites/constellation/decision/DECISION-TEMPLATE-GRAMMAR.md`, `DECISION-NO-VIEW-WRAPPERS-IN-THEMES.md` |
-| Expressions | The core, plus one door into the view's JavaScript: an `@event` handler, which reaches the view through its own name ([[DECISION-D176-EXPRESSION-LANGUAGE]]); `this` and everything else JavaScript-only is a compile error | The core subset, with `==` still spelled as `===` until V2 lands — `DECISION-EXPRESSION-SUBSET.md` |
+| Expressions | The D176 grammar, method table and globals, lowered to JavaScript; plus the `@event` handler, the one door into the view's JavaScript, whose free `event` chain is the DOM event and skips the method table ([[DECISION-D176-EXPRESSION-LANGUAGE]]) | The same grammar and table once its Go evaluator reads the shared tree (D176 P6, planned); a shared-table entry Sites switches off is a positioned error there (D176 rule 5). Today its own `engine/expr` allow-list, with pipes and with `==` spelled as `===` until V2 lands — `DECISION-EXPRESSION-SUBSET.md` |
 | Naming a computed value | a `data()` field (no `{#let}`: logic belongs in the script) | `{#let}` |
-| Adds | `@event` + modifiers (§5, §47); callback props (§6); implicit two-way binding (§6, [[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); `<Portal>` ([[DECISION-D144-PORTAL]]); `island` (§17); `key` (§28); `ref` (§38); `flip` (§46); formatters `link`, `timeago`, `in_timezone`; a script-less component reads its props (V15) | `{#let}` template variables (its value is a formatter-chain position); implicit props (bare names); `<Form>`; reserved layout slots and section groups; Sites formatters (`split`, `url`, `image_url`, `t`, the list formatters, …) — `sites/engine/constellation/doc/DOC-TEMPLATE-LANGUAGE.md` |
-| Restricts | — | `@event` and `<Portal>` are compile errors; `ref`/`key`/`flip`/`island` are dropped with a warning; an unknown formatter or a wrong argument count is a compile error; interpolation is not allowed in `<script>`/`<style>` bodies or event-handler attributes — `DECISION-AUTO-ESCAPE.md` |
-| Not yet built | — | `<Snippet>` and marker arguments (core; planned) |
+| Adds | `@event` + modifiers (§5, §47); callback props (§6); implicit two-way binding (§6, [[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); `<Portal>` ([[DECISION-D144-PORTAL]]); `island` (§17); `key` (§28); `ref` (§38); `flip` (§46); the functions `link` and `timeago`, and an app's own functions (the `formatters` config); a script-less component reads its props (V15) | `{#let}` template variables (its value is one more expression position); implicit props (bare names); `<Form>`; reserved layout slots and section groups; Sites-only functions (`url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`, `image_tag`, `class_map`) — `sites/engine/constellation/doc/DOC-TEMPLATE-LANGUAGE.md` |
+| Restricts | — | `@event` and `<Portal>` are compile errors; `ref`/`key`/`flip`/`island` are dropped with a warning; an unknown function or a wrong argument count is a compile error; interpolation is not allowed in `<script>`/`<style>` bodies or event-handler attributes — `DECISION-AUTO-ESCAPE.md` |
+| Not yet built | — | `<Snippet>` and marker arguments (core; planned); the Go evaluator over the shared expression tree and the function library (D176 P6) |
 
 ## Section map
 
@@ -514,8 +581,8 @@ which part.
 | §6 item | Layer |
 |---|---|
 | Interpolation and nullish display | core (the undefined-value dev warning is PuzzleKit) |
-| Expression boundary | core (data plus operators, no `this`, D176); the handler-body door is PuzzleKit |
-| Formatters | core syntax; the purity contract (D170), the unknown-formatter guard, `link` and the calendar-date rule are PuzzleKit |
+| Expression boundary | core (the D176 grammar, method table and globals; no `this`); the handler door and its `event` chain are PuzzleKit |
+| Functions | core call syntax and the standard library (D174); the purity contract (D170), the unknown-name guard, app-registered functions, `link`, `timeago` and the calendar-date rule are PuzzleKit |
 | Conditionals, `{:else if}`, `{#unless}`, `{#case}` | core |
 | Loops | core forms; auto-keying is PuzzleKit (§28) |
 | Attribute values (interpolation, inline `{#if}`) | core |
@@ -543,105 +610,113 @@ which part.
 Template-relevant sections in DOC-SPEC-VIEW are all PuzzleKit: §12 animations,
 §16 `<puzzle-skeleton>`, §38 `ref`, §46 `flip`.
 
-## Standard formatters
+## Standard functions
 
+[[DECISION-D174-STANDARD-FORMATTERS]] fixes the **standard library: 19
+functions** with the same arguments and meaning in both hosts. The shared
+conformance table (`packages/puzzle-lang/conformance/functions.json`, embedded
+by the language module's `conformance` package, so both hosts run the same rows
+at the same module version) pins the identical-output ones and the
+locale-independent rows of the rest. D174 has each function's contract; this
+table records where each host stands against it. `t` is defined by
+[[DECISION-D175-TRANSLATIONS]]. A name that a JavaScript method, an operator or
+a `Math` global already spells is not a function
+([[DECISION-D176-EXPRESSION-LANGUAGE]]).
 
-
-
-[[DECISION-D174-STANDARD-FORMATTERS]] fixes the **standard set: 27 names**
-with the same arguments and meaning in both hosts, pinned for identical output
-by the shared conformance table (`packages/puzzle-lang/conformance/formatters.json`,
-embedded by the language module's `conformance` package, so both hosts run the
-same rows at the same module version). D174 has each name's
-contract; this table records where each host stands against it. `t` joined
-the set with [[DECISION-D175-TRANSLATIONS]]; `size`, the arithmetic
-formatters, `default` and `split` left it with
-[[DECISION-D176-EXPRESSION-LANGUAGE]] (a count is `.size`, arithmetic is
-the operators, a fallback is `??`, and `split` is Sites-only).
-
-**PuzzleKit implements D174 groups (a), (g), (e) and (h)**: `client-runtime/formatters/builtins.js`
-is the standard set plus `timeago` and `in_timezone`, with the router-backed
-`link` added by the registry and the service-bound `t` added by the i18n
-service when the app configures translations (30 names). With translations
-configured, the locale-rendered rows follow the app's active locale instead
-of the viewer's (D175). `raw` and `newline_to_br` render real markup: a text
-interpolation whose chain ends in either compiles to a live-HTML node, `raw`
-through the shared allowlist sanitizer, and either name anywhere else is a
-compile error.
+**PuzzleKit implements the library.** `client-runtime/formatters/builtins.js`
+is the standard set without `t`, plus `timeago`; the registry adds the
+router-backed `link`, and the i18n service adds `t` when the app configures
+translations (21 names). With translations configured, the locale-rendered
+rows follow the app's active locale instead of the viewer's (D175). `raw` and
+`newline_to_br` render real markup: a text interpolation whose outermost call
+is either compiles to a live-HTML node, `raw` through the shared allowlist
+sanitizer, and either anywhere else is a compile error. A call to a removed
+name passes the value through with a development error that names the
+replacement.
 
 **Sites has not moved yet** (`sites/engine/engine/formatters/*.go`, 61 names
-including four aliases); its column describes today's registry.
+including four aliases, applied with pipes); its column describes today's
+registry. It takes the library up with its Go evaluator (D176 P6).
 
-Counts: 27 standard (20 identical-output, 6 locale-rendered, 1 translation),
-3 PuzzleKit-only, 25 Sites-only.
+Counts: 19 standard (12 identical-output, 6 locale-rendered, 1 translation),
+2 PuzzleKit-only, 7 Sites-only, and Sites' list formatters, open until P6.
 
 | Name | PuzzleKit | Sites today | Status |
 |---|---|---|---|
-| `abs`, `ceil`, `floor`, `downcase`, `upcase`, `trim`, `strip`, `join` | as D174 | same | standard, both hosts |
-| `round` | as D174: half away from zero on the decimal value, negative places | same rule on the binary value (`1.005` → `1.00`) | standard; Sites pending (F19 fixture) |
+| `round` | as D174: half away from zero on the decimal value, negative places; returns a number | same rule on the binary value (`1.005` → `1.00`) | standard; Sites pending (F19 fixture) |
 | `currency` | as D174: `-$1,234.50` | same | standard (F3) |
 | `percentage` | as D174: the number as written | same | standard (F14) |
 | `capitalize` | as D174: first character only | same | standard (F1) |
 | `truncate` | as D174: code points, length optional, never over length | length required | standard; Sites pending (F25) |
-| `replace` | as D174: replacement optional; a RegExp is a PuzzleKit addition | both arguments required | standard; Sites pending (F17) |
 | `strip_html` | as D174: quote-aware scanner | same | standard (F23) |
 | `strip_newlines` | as D174: CR and LF | same | standard (F24) |
 | `escape` | as D174: identity on text | drops the trusted-markup mark | standard (F8) |
-| `raw` | as D174: sanitized markup through the shared allowlist; only the last link of a text interpolation | trusted markup, unsanitized | standard; Sites pending the render-time sanitizer (F16) |
-| `newline_to_br` | as D174: escapes, then markup `<br>` for CR LF, CR and LF; only the last link of a text interpolation | same | standard (F12) |
+| `raw` | as D174: sanitized markup through the shared allowlist; only the outermost call of a text interpolation | trusted markup, unsanitized | standard; Sites pending the render-time sanitizer (F16) |
+| `newline_to_br` | as D174: escapes, then markup `<br>` for CR LF, CR and LF; only the outermost call of a text interpolation | same | standard (F12) |
 | `json` | as D174: sorted keys, missing / non-finite → `null` | Go encoder; NaN errors | standard; Sites pending (F9) |
-| `date`, `time`, `datetime` | as D174: `short`/`medium`/`long`/`iso`, viewer locale and zone | same presets, en-US, the value's own zone | locale-rendered; Sites pending the site zone (F4–F6) |
+| `in_timezone` | as D174: re-expresses an instant in a zone for `date`/`time`/`datetime` to present; a literal zone that cannot be a zone id draws a compile warning | — | standard; new to Sites |
+| `date`, `time`, `datetime` | as D174: `short`/`medium`/`long`/`iso`, viewer locale and zone; with no preset the medium date, the short time, and the medium date with the short time; a literal preset the library does not know draws a compile warning | same presets, en-US, the value's own zone | locale-rendered; Sites pending the site zone and the defaults (F4–F6) |
 | `number_with_delimiter` | as D174: viewer locale; explicit delimiter forces one | fixed `,` | locale-rendered; Sites pending |
 | `compact_number` | `Intl` compact notation | — | locale-rendered; Sites pending |
 | `pluralize` | as D174: count in the viewer locale, then the word | ungrouped count, then the word | locale-rendered; Sites pending (F15) |
-| `t` | as D175: the active locale's build-filled table, the key itself on a miss, single-pass `{name}`, CLDR plural entries chosen by a numeric `count` through `Intl.PluralRules`, `{count}` in the locale's number format; present only with `i18n` configured | lookup with the `en` fallback, the key on a miss, single-pass `{name}`; flat files, no plurals | standard (D175); Sites pending plural entries, nested files and the `{count}` number format |
+| `t` | as D175: `t(key, vars)`; the active locale's build-filled table, the key itself on a miss, single-pass `{name}`, CLDR plural entries chosen by a numeric `count` through `Intl.PluralRules`, `{count}` in the locale's number format; present only with `i18n` configured | lookup with the `en` fallback, the key on a miss, single-pass `{name}`; flat files, no plurals | standard (D175); Sites pending plural entries, nested files and the `{count}` number format |
 | `link` | router-aware href for a path (§6, D79) | — (Sites has `url`) | PuzzleKit-only |
-| `timeago`, `in_timezone` | relative time; time-zone shift | — (no clock or zone at render time, by design) | PuzzleKit-only |
-| `size`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `default` | removed: `.size`, the operators, `??` (development logs the replacement) | in the registry | removed from both (D176); Sites pending |
-| `split` | removed: split the string in `data()` | separator required, nil stays nil | Sites-only (D176) |
-| `noescape` | removed | alias of `raw` | removed from both; Sites pending |
+| `timeago` | relative time, read from the clock at render time | — (no clock at render time, by design) | PuzzleKit-only |
+| `upcase`, `downcase`, `trim`, `strip`, `replace`, `join`, `abs`, `ceil`, `floor` | removed: `.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll()`, `.join(', ')`, `Math.abs`/`ceil`/`floor` (development names the replacement) | in the registry | removed from both (D176); Sites pending |
+| `size`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `default` | removed: `.length`, the operators, `??` | in the registry | removed from both (D176); Sites pending |
+| `noescape` | removed: `raw` | alias of `raw` | removed from both; Sites pending |
 | `upper`, `lower` | — | aliases of `upcase`, `downcase` | removed from Sites; pending |
-| `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last` | removed (list shaping is `data()` or a plain expression) | list formatters | Sites-only |
-| `reject`, `find`, `sort_natural`, `slice`, `sum`, `concat`, `push`, `contains`, `group_by` | — | list queries and list building | Sites-only |
+| `split` | removed: `.split()` | separator required, nil stays nil | the method covers it; Sites decides at P6 |
+| `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last` | removed: `.toSorted()`, `.filter()`, `.map()`, `.toReversed()`, `.filter(x => x != null)`, `.at(0)`, `.at(-1)`; `uniq` is `data()` | list formatters | the methods cover most; Sites decides at P6 |
+| `reject`, `find`, `sort_natural`, `slice`, `sum`, `concat`, `push`, `contains`, `group_by` | — (`.filter()`, `.find()`, `.slice()`, `.concat()`, `.reduce()`, `.includes()`) | list queries and list building | the methods cover most; Sites decides at P6 |
 | `url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`, `image_tag` | — | platform-bound | Sites-only |
 | `class_map` | — | class names from a map | Sites-only |
 
 ## Known divergences
-
 
 Same syntax, different result. [[DECISION-D173-CORE-SEMANTICS]] decides every
 item. An entry marked **PuzzleKit follows the core** is built in PuzzleKit (the
 rule is stated in the core sections above); it stays listed until Sites changes
 too.
 
-**Resolved in the core above** (group (b), expressions and loops): V1 (a pipe is
-a formatter in every display position; banned in condition headers, `{#for}`
-headers and `{:when}` values; a nested single `|` is an error), V2 (`==`/`!=`
-are JavaScript loose equality), V3 (`x == null` is the portable absence test;
-strict comparison against `null`/`undefined` is host-defined), V4 (reading
-through a missing value prints nothing), V7 (`.size` counts code points in
-both hosts; `.length` is an error), V8 (object literals in argument and nested
-positions), V15 (a script-less PuzzleKit component reads its props), and the
-[[DECISION-D176-EXPRESSION-LANGUAGE]] rule that a template expression is
-data plus operators (no calls on a value; `size`, the arithmetic formatters and
-`default` removed). PuzzleKit implements all of them. Sites still has to adopt
-V1's `{#for}`-header and nested-pipe errors (it already rejects a chain in a
-condition header), V2 (loose equality in its evaluator), and D176's `.length`
-error and registry removals on its next parser sync.
+**Resolved in the core above** (expressions and loops): V1 (every expression
+position is one expression of the D176 grammar; a display transform is a
+function call, and a `|` is an error), V2 (`==`/`!=` are JavaScript loose
+equality), V3 (`x == null` is the portable absence test; strict comparison
+against `null`/`undefined` is host-defined), V4 (reading through a missing
+value, or calling a method on one, prints nothing), V7 (the count is
+`.length`, and strings follow JavaScript's UTF-16 units, case mapping and
+whitespace set), V8 (object literals as values, never at the start of an
+expression), V15 (a script-less PuzzleKit component reads its props), and
+[[DECISION-D176-EXPRESSION-LANGUAGE]]'s closed grammar, method table and
+function library. PuzzleKit implements all of them. Sites takes them up with
+its Go evaluator over the shared tree (D176 P6): V2's loose equality, V7's
+string semantics (it counts runes today, and `'ß'` upper-cases to `ß`), and
+the library's removals.
 
-**Still open:**
+**Host-specific by decision:**
 
 - **V5 — arithmetic and comparison on non-numbers.** `'2' * 3`, `null + 1`,
-  `-'2'`, `1 < '2'`: JavaScript coerces; Sites yields nil. Should core define
-  these as nil, or leave them undefined?
+  `-'2'`, `1 < '2'`: PuzzleKit follows JavaScript's coercion; Sites yields a
+  missing value with a warning. A date orders and subtracts to milliseconds in
+  both hosts. Authors coerce in `data()` (PuzzleKit) or a `{#let}` (Sites).
+- **V17 — function failure policy.** An unknown name or a wrong argument count
+  is a compile error in Sites. In PuzzleKit the value passes through with a
+  development error (naming the replacement for a removed name), because app
+  functions register at runtime; `puzzle check` types the standard functions'
+  arguments, and a literal date preset or zone the library does not know draws
+  a compile warning. Out-of-domain input is coerced or passed through in
+  PuzzleKit, and warns and renders nothing in Sites.
+- **V18 — scoped styles.** Both hosts accept `<style scoped>` with the same
+  stamping algorithm but different prefixes and targets (PuzzleKit:
+  `data-pzl-…` on the template root; Sites: `data-sites-…` on `<html>`, a
+  section wrapper, or a component root).
+
+**Decided, Sites still to change:**
+
 - **V6 — value printing. PuzzleKit follows the core** (see Interpolation and
-  formatters). Sites still prints an object as `[object]` and a number at or
+  functions). Sites still prints an object as `[object]` and a number at or
   above 1e21 (or below 1e-6) as plain digits instead of exponent form.
-- **V7 — Unicode tables.** The count question is closed by D176 (`.size` is
-  code points everywhere), but case mapping still differs on special cases
-  (`'ß' | upcase` is `SS` in PuzzleKit, `ß` in Sites), and the two whitespace
-  sets `trim` removes differ on U+0085 and U+FEFF. Which Unicode tables are
-  core?
 - **V9 — list and object values in a brace-only attribute. PuzzleKit follows
   the core** (see Attributes). Sites today joins a list with spaces and drops
   an object with a warning; dropping `false` and empty items from the list is
@@ -653,9 +728,10 @@ error and registry removals on its next parser sync.
   whitespace between two inline siblings, so indentation between buttons
   becomes a gap there, and still drops the gap between an interpolation and a
   following `{#if}`, gluing the two words.
-- **V11 — text inside `{#raw}`.** PuzzleKit creates a literal text node, so
-  `{#raw}&amp;{/raw}` displays `&amp;`. Sites writes raw text unescaped, so the
-  browser displays `&`. Is raw text subject to the "not entity-decoded" rule?
+- **V11 — text inside `{#raw}`. PuzzleKit follows the core:** raw text is not
+  entity-decoded, so `{#raw}&amp;{/raw}` displays `&amp;`. Sites still writes
+  raw text unescaped, so the browser displays `&`; it changes to escape `&`,
+  `<` and `>` there, except inside `<script>` and `<style>`.
 - **V12 — the loop domain. PuzzleKit follows the core** (see Control blocks).
   Sites still renders nothing for a non-integer range bound instead of
   truncating it, and warns on a map rather than on every non-list.
@@ -666,19 +742,10 @@ error and registry removals on its next parser sync.
   Sites still counts an empty `{#for}` and a call-site `{#if}` that renders
   nothing as filled, so its fallback stays hidden.
 - **V16 — dotted component tags in Sites.** Family tags are core, and the
-  shared parser accepts `<Frame.Wrapper>`. But a Sites component file name must
-  match `^[A-Z][A-Za-z0-9]*$` in a flat `components/` folder, so no file can
-  back a dotted tag. How does Sites map a dotted tag to a file?
-- **V17 — formatter failure policy.** An unknown name or wrong argument count
-  is a compile error in Sites; in PuzzleKit the value passes through unchanged
-  with a development console error, and the argument count is never checked.
-  Out-of-domain input (a string to `round`, a non-list to `join`) is
-  coerced or passed through in PuzzleKit, and warns and renders nothing in
-  Sites. Is the failure policy per host (a restriction) or core?
-- **V18 — scoped styles and `{#svg}` paths.** Both hosts accept
-  `<style scoped>` with the same stamping algorithm but different prefixes and
-  targets (PuzzleKit: `data-pzl-…` on the template root; Sites: `data-sites-…`
-  on `<html>`, a section wrapper, or a component root). Sites also accepts an
-  explicit `assets/` prefix in `{#svg}` paths, which PuzzleKit resolves as
-  `app/assets/assets/…`. Should scoped styles and the `{#svg}` path rule be
-  core?
+  shared parser accepts `<Frame.Wrapper>`, but Sites rejects a dotted tag for
+  now with a positioned error saying component families are not supported
+  there yet.
+- **V18 — `{#svg}` paths.** The path is relative to the host's assets root in
+  both hosts. Sites still accepts an explicit `assets/` prefix, which
+  PuzzleKit resolves as `app/assets/assets/…`; it changes to a compile error
+  that steers to the bare path.
