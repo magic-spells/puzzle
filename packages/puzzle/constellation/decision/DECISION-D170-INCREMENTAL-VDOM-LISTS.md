@@ -259,8 +259,6 @@ this paragraph and on [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] are its record.
 ## Decision
 
 
-
-
 Keep the virtual DOM and make it incremental. Six additive pieces; `.pzl`
 syntax is unchanged.
 
@@ -284,11 +282,13 @@ syntax is unchanged.
    primitives on `!==` alone; the index when the body reads the counter; a
    parent root the body reads, via a per-render `__dirty` mask over the
    compiler-emitted `Class.__roots`; and a `volatile` body — one whose
-   expressions read a mutable global, pipe through a clock-reading built-in
-   formatter, or read a loop local belonging to an ENCLOSING site. A template
+   expressions call a clock-reading library function (`timeago`, the one name
+   in codegen's `clockFunctions`; an app-registered function is pure by
+   contract) or read a loop local belonging to an ENCLOSING site. A template
    expression never reaches the view instance (`this` is not a template
-   identifier, [[DECISION-D176-EXPRESSION-LANGUAGE]] rule 5), so the view
-   itself is never a row input. Sites reading a relation, a computed getter or
+   identifier, [[DECISION-D176-EXPRESSION-LANGUAGE]] rule 7) or ambient
+   browser state (a browser global is not a template read, D176 rule 1), so
+   neither is ever a row input. Sites reading a relation, a computed getter or
    a deep path are **conservative** (checked once per model class against the
    schema, cached on the block) and never cache their record rows.
    A null key builds uncached (today's positional path, already warned by
@@ -339,13 +339,20 @@ syntax is unchanged.
    props), never against the old prop object — after an in-place mutation both
    sides hold the same already-advanced record. Relation and computed-getter
    changes still require the child to query in its own `data()`.
-5. **Loop handlers are identity-stable**: a handler whose arguments capture
-   only lowered-loop locals rewrites those locals to the row scope and caches
-   the closure on the row (`(s.h<n> ??= …)`), reading the current item at fire
-   time. A handler reading `__d.` keeps its fresh closure and its roots join
-   the site's mask. A handler argument is evaluated at fire time against live
-   state, so a mutable global there, and an enclosing row's local there, make
-   no site volatile — only the body's own render-time expressions do.
+5. **Loop handlers are identity-stable**: a handler whose arguments read only
+   lowered-loop locals (and the DOM `event`) rewrites those locals to the row
+   scope and caches the closure on the row (`(s.h<n> ??= …)`), reading the
+   current item at fire time. Its arguments are lowered like any expression,
+   guarded included (`remove(todo.id)` → `this.events.remove(s.item?.id)`). A
+   handler whose arguments read a data root (`__d`) or call a library function
+   (`__f`) is not data-independent: it keeps its fresh closure every render,
+   and its roots join the site's mask. Handler arguments contribute no other
+   row facts — no `fields`, no `deep`, no counter read, no volatility: they are
+   evaluated at fire time against `s.item`/`s.i`, which `listRows` reassigns on
+   every pass even for a cached row, so they never see a stale value, and an
+   enclosing row's local read there makes no site volatile. The condition of a
+   handler-valued conditional is a render read like any other, and such a
+   value is never cached.
 6. **One flush, one `data()` run** for a child that both receives a record
    prop and queries that record: `Store` publishes `_flushSeq` for the
    duration of delivery, and a refresh started inside it stamps `_settleMark`
@@ -362,11 +369,13 @@ and evaluated per iteration, so a block or a cache slot taken inside it is
 shared by every iteration — the same row vnode objects mounted at N DOM
 positions, where a change to the source array reaches only the last one, and one
 static vnode whose `el`, `ref=` and outside-listener teardown all point at the
-last iteration. An **explicit `key=` moves into the site meta** as
-`(item) => <expr>` only when it reads nothing that lives inside `render()`; a
-key reading `__d` or `__f` keeps `.map` for the whole site rather than
-emitting a module-scope arrow that would throw — and that fallback body is one
-of the non-lowered bodies above.
+last iteration. An **explicit `key=` is hoisted into the site meta** as
+`(item) => <expr>` only when it reads nothing that lives inside `render()`: the
+meta const sits at module scope, where `__d` and `__f` do not exist. A key
+reading a data root, or calling a library function (`key={ slug(id) }` reads
+`__f`), keeps `.map` for the whole site rather than emitting a module-scope
+arrow that would throw — and that fallback body is one of the non-lowered
+bodies above. The synthetic key (`ViewNode.keyOf(item)`) is always hoisted.
 
 **A read of a loop local owned by an ENCLOSING site makes the reading site
 volatile**, and every site between it and the owner with it. A nested block only
@@ -376,23 +385,28 @@ row whose own item did not change comes back cached while the outer row's item
 or counter moved underneath it, and a middle site that cached its rows would
 never re-invoke the inner block at all.
 
-**A read the compiler cannot see through is conservative.** A bare record local
-is on identity ONLY as a direct member access (`todo.text`, `todo?.text`) or as
-the whole expression (`{ todo }`, `todo={ todo }`, a handler argument). Used any
-other way it is opaque and marks the site `deep`, the same path a relation read
-takes: piped through a formatter (which is handed the record itself), passed
-into a call, interpolated into a template literal, or reached through
-parentheses or a comment.
+**A read the compiler cannot see through is conservative.** Row facts are read
+off each expression's tree (`compiler/internal/codegen/lower.go`, D176), never
+off its source text. A bare record local is on identity ONLY as a direct member
+access (`todo.text`, `todo?.text` — the field joins the site's `fields`) or as
+the whole expression (`{ todo }`, `todo={ todo }`). A deeper path
+(`todo.author.name`), a computed member (`todo[k]`) or a method call on the
+local or a path off it (`todo.text.trim()`) marks the site `deep`. Used any
+other way the local is opaque and marks the site `deep` as well, the same path
+a relation read takes: passed to a function (`{ byline(post) }` hands the
+function the record itself) or into a method's arguments, used as an operand,
+a template-literal part, an array element or an object value.
 
 **Row scope names are reserved by mangling, not by hoping.** The row scope
 objects are `s`, `s1`, …, so an authored binding spelled the same way that stays
 BARE inside a lowered body — a range counter, a non-lowered loop's item or
-counter, a `<Snippet>` parameter — is rewritten to `__pzl<name>` and its reads
-resolve through the scope map like any loop local. (A snippet still declares its
-AUTHORED parameter name in `params` and destructures it to the mangled local.)
-The row scope names themselves never move: `s` is the byte contract in the todos
-fixtures. It is the same mechanism that renames the DOM event parameter to
-`__ev` when an authored binding owns `event`.
+counter, a `<Snippet>` parameter, an arrow parameter — is rewritten to
+`__pzl<name>` and its reads resolve through the scope map like any loop local.
+(A snippet still declares its AUTHORED parameter name in `params` and
+destructures it to the mangled local.) The row scope names themselves never
+move: `s` is the byte contract in the todos fixtures. It is the same mechanism
+that renames the DOM event parameter to `__ev` when an authored binding owns
+`event`.
 
 ## Alternatives rejected
 
@@ -416,7 +430,6 @@ fixtures. It is the same mechanism that renames the DOM event parameter to
 ## Consequences
 
 
-
 - Contracts, spelled out in the SPEC ([[DOC-SPEC-TEMPLATE]] §28/§31,
   [[DOC-SPEC-ANATOMY]] §4): a record prop invalidates
   its child on the record's own mutations (a child that needs a *related*
@@ -426,14 +439,14 @@ fixtures. It is the same mechanism that renames the DOM event parameter to
   inputs in cached rows are re-asserted from the controls list. Nothing else
   observable changes: keys, sibling namespace, branches, skeletons, slots,
   portals, animations, SSG output, takeover, router, DevTools protocol, HMR.
-- **A formatter must be a pure function of its input.** That was always the
-  intent and is now load-bearing: a cached row does not re-run its formatters,
-  so one that reads the clock or any other ambient value would freeze its
-  output. The shipped built-ins that do (`timeago` today) are known to the
-  compiler and make a site `volatile`; a user-defined formatter is pure by
-  contract. A value that depends on the clock or other ambient state is
-  computed in `data()` and read as a field: a parent root that changed this
-  render dirties every row that reads it.
+- **A library function must be a pure function of its arguments.** That was
+  always the intent and is now load-bearing: a cached row does not re-run its
+  calls, so a function that reads the clock or any other ambient value would
+  freeze its output. The one shipped function that does, `timeago`, is named
+  in codegen's `clockFunctions` and makes a site `volatile`; an app-registered
+  function is pure by contract. A value that depends on the clock or other
+  ambient state is computed in `data()` and read as a field: a parent root that
+  changed this render dirties every row that reads it.
 - The root dirty mask is 32-bit and the compiler caps `__roots` at 31 entries;
   a site reading a root past the cap is marked `volatile` (always dirty) rather
   than silently landing in the wrong bit. A template whose loops read no parent
