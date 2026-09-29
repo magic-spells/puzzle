@@ -142,7 +142,6 @@ The ordering decisions, each fixing an audited prototype bug:
 
 ## 5. What triggers a re-render — the complete table
 
-
 | Trigger | `data()` re-runs? | What happens |
 |---|---|---|
 | Store record created/updated/destroyed, matching a query this component made in `data()` | **yes** | batched flush → `withTracking` re-run → new tree → diff/patch |
@@ -155,7 +154,7 @@ Two flushes exist and both batch: the **store flush** (many record changes → e
 
 Subscriptions reset on every `data()` re-run: the component is subscribed to exactly what its *latest* `data()` actually queried — a filter change that stops querying a record stops those notifications automatically.
 
-**What a `{#for}` costs on a parent render (D170).** An item-form loop is a persistent list block, so the parent pays one key read per item plus a rebuild for each row whose inputs changed; unchanged rows return their previous vnode subtree and `patch()` short-circuits on the spot. A row is dirty when its item reference changed, when a record item's render revision advanced, when the index changed and the body reads the counter, when a parent `data()` root the body reads changed this render, when the body is volatile (it reads a mutable global, pipes through a clock-reading built-in formatter such as `timeago`, or reads an enclosing loop's item or counter), or when its site is conservative (it reads a relation, a computed getter or a deep path). A template never reaches the view instance (`this` is not a template identifier, D176), so the view itself is never a row input. Plain objects and arrays have no revision, so their rows rebuild every render — they still reuse the row's cached handlers and static subtrees. Rows the pass never visited are dropped and leave through the ordinary unmount path, with leave animations and FLIP unchanged. Range loops and loops inside a `<Snippet>` body keep the old per-render `.map`.
+**What a `{#for}` costs on a parent render (D170).** An item-form loop is a persistent list block, so the parent pays one key read per item plus a rebuild for each row whose inputs changed; unchanged rows return their previous vnode subtree and `patch()` short-circuits on the spot. A row is dirty when its item reference changed, when a record item's render revision advanced, when the index changed and the body reads the counter, when a parent `data()` root the body reads changed this render, when the body is volatile (it calls the clock-reading library function `timeago`, or reads an enclosing loop's item or counter), or when its site is conservative (it reads a relation, a computed getter or a deep path). A template never reaches the view instance (`this` is not a template identifier, D176) or ambient browser state (a browser global is never a template read), so neither is ever a row input. Plain objects and arrays have no revision, so their rows rebuild every render — they still reuse the row's cached handlers and static subtrees. Rows the pass never visited are dropped and leave through the ordinary unmount path, with leave animations and FLIP unchanged. Range loops and loops inside a `<Snippet>` body keep the old per-render `.map`.
 
 ## 6. Who owns what
 

@@ -46,8 +46,12 @@ compile errors.
 `puzzle dev` full-page reloads for store records and JSON-safe local view data.
 It is not per-module hot replacement.
 
-**formatter** — A display transformation used in interpolation pipes. Built-ins
-are tree-shaken from template use; apps may register custom functions.
+**function** — A display transform a template calls by bare name, value first:
+`{ currency(price) }`, `{ truncate(title, 40) }` (D176). The library is the 19
+standard functions shared with Sites plus PuzzleKit's `link` and `timeago`.
+Built-ins are tree-shaken from template use; apps register their own under the
+`formatters` config key, which keeps the name these had when they were applied
+with a `|` pipe (before 0.8.0).
 
 **island** — A host element whose children become browser/third-party-owned
 after mount. Puzzle continues patching the island element but not its subtree.

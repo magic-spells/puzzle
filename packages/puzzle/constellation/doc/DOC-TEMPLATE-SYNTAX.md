@@ -41,75 +41,81 @@ Single braces evaluate an expression against the component model (the object ret
 </span>
 ```
 
-**A template expression is data plus operators, not JavaScript (D176).** It reads fields (`a.b`, `a?.b`, `a[expr]`) and literals, and combines them with arithmetic (`+ - * / %`), comparison, `&&` / `||` / `!`, the ternary, and `??` — the fallback operator, which replaces only a missing value, so `{ count ?? 'none' }` still prints `0`. A fallback is `??`, never `||` (which swallows `0` and `''`). `.size` is the count:
+**A template expression is JavaScript's expression syntax, from a closed table (D176).** One grammar, parsed once and shared with Sites: literals (strings, numbers, template literals, arrays, objects), field reads (`a.b`, `a?.b`, `a[expr]`), arithmetic (`+ - * / %`), comparison (`< <= > >= == != === !==`), `&&` / `||` / `!`, the ternary, and `??` — the fallback operator, which replaces only a missing value, so `{ count ?? 'none' }` still prints `0`. A fallback is `??`, never `||` (which swallows `0` and `''`). `.length` is the count:
 
 ```html
-<div class="text-2xl font-bold text-gray-700">{ activeTodos.size }</div>
+<div class="text-2xl font-bold text-gray-700">{ activeTodos.length }</div>
 
 <button @click={ clearCompleted }>
-  Clear Completed ({ completedTodos.size })
+  Clear Completed ({ completedTodos.length })
 </button>
 
-<p>{ price * quantity | currency }</p>
+<p>{ currency(price * quantity) }</p>
 <p>{ nickname ?? name }</p>
+<p>{ `${user.first} ${user.last}` }</p>
 ```
 
-`.size` counts a list's items or a string's characters (code points, the same count `truncate` uses); on any other value it is an ordinary field read, so `file.size` still works. `.length` is a positioned compile error ("use `.size`"); a data field genuinely named `length` is `obj['length']`.
+`.length` counts a list's items or a string's UTF-16 units, as in JavaScript. `.size` is not special: it reads a field named `size` (`file.size`).
 
-**No calls on data.** A template never calls JavaScript on a value, and each of these is a positioned compile error naming its replacement: method calls (`name.trim()`, `set.has(x)`, `items.at(-1)` — that one is `items[items.size - 1]`), function calls (`String(x)`, `Number(x)`, `Math.round(x)`, `JSON.stringify(x)` — display coercion is automatic, and `| round` exists), arrow functions, template literals (`{ a } { b }` or `a + ' ' + b`), `new`, `typeof`, `instanceof`, `in`, regex literals, `++` / `--`, assignment and the comma operator. Compute the value first — a `data()` field — and read that. Formatter calls (`| truncate(20)`) are not calls on data and are unaffected.
+**Calls come in three kinds**, and nothing else is callable:
 
-**A template never reaches the view instance.** `this` is not available in any template expression — values, conditions, `{#for}` headers, `key=`, formatter and marker arguments, and `@event` handler arguments alike — and writing it is a positioned compile error that says to return the value from `data()` (a getter or a computed field) or use a formatter for a display transform. The one door into the view's JavaScript is an `@event` handler, which reaches the view through its own name (`@click={ save(x) }` calls the view's `save`) and runs at fire time.
+- a **function** from the library, by bare name — `{ currency(price) }`, `{ truncate(post.body, 120) }` (see Functions below);
+- a **method** from the table on a string (`trim`, `toUpperCase`, `toLowerCase`, `includes`, `startsWith`, `endsWith`, `slice`, `split`, `replace`, `replaceAll`, `padStart`, …), a list (`filter`, `map`, `find`, `some`, `every`, `reduce`, `includes`, `join`, `slice`, `at`, `toSorted`, `toReversed`, `flat`, …) or a number (`toFixed`, `toString`) — `{ name.trim() }`, `{ tags.join(', ') }`, `{ items.at(-1).title }`;
+- a **global** from a short list — `Math.*` (`round`, `floor`, `ceil`, `abs`, `min`, `max`, `pow`, …), `Number(x)`, `String(x)`, `Boolean(x)`, `parseInt`, `parseFloat`, `isNaN`, `isFinite`, `Array.isArray(x)`, `Object.keys/values/entries(x)`, and `encodeURIComponent`, `decodeURIComponent`, `encodeURI`, `decodeURI`.
+
+Arrow functions go only in call arguments (`items.filter(i => i.done)`, `rows.toSorted((a, b) => a.rank - b.rank)`). No method mutates: there is no `push`, `sort`, `reverse` or `splice` — use `concat`, `toSorted` and `toReversed`. Everything outside the table is a positioned compile error that names the replacement: another method (`sort` → `toSorted()`), `new` and `Date` (dates reach a template from `data()` and print through `date()`), `JSON`, `typeof`, `instanceof`, `in`, `**` (`Math.pow`), regex literals, comments, `++` / `--`, assignment, the comma operator, spread and the bitwise operators. `window`, `document` and `globalThis` are compile errors too — read the browser value in `data()` and pass it; any other name, `location` and `localStorage` included, reads the `data()` field of that name. When a value needs more logic than one expression holds, compute it in `data()` and read that field.
+
+**Reading through a missing value never throws.** Every member step and method call is guarded, so `{ user.address.city }` prints nothing when `address` is missing, and so does `{ note.trim() }` when `note` is; writing `?.` is legal but unnecessary.
+
+**A template never reaches the view instance.** `this` is not available in any template expression — values, conditions, `{#for}` headers, `key=`, function and marker arguments, and `@event` handler arguments alike — and writing it is a positioned compile error that says to return the value from `data()` (a getter or a computed field) or use a function for a display transform. The one door into the view's JavaScript is an `@event` handler, which reaches the view through its own name (`@click={ save(x) }` calls the view's `save`) and runs at fire time.
 
 Model getters work too: computed properties defined as plain getters on a `PuzzleModel` class (`get fullName() { ... }`) can be read directly in templates — `{ user.fullName }`.
 
-## Formatters: `{ value | formatter(args) }`
+## Functions: `{ name(value, args) }`
 
-Formatters transform a value for display, Liquid-style. They chain left to right with `|`, and take arguments in parentheses.
+A function transforms a value for display. Call it the way JavaScript calls a function, with the value first; calls nest.
 
 ```html
 <!-- From TodoItem.pzl -->
-<span class="text-xs text-gray-400">{ todo.createdAt | datetime('short') }</span>
+<span class="text-xs text-gray-400">{ datetime(todo.createdAt, 'short') }</span>
 ```
 
 ```html
-{ text | trim | capitalize }
-{ price | currency('$', 2) }
-{ comments.size | pluralize('comment') }   <!-- 3 comments -->
+{ capitalize(text.trim()) }
+{ currency(price, '$', 2) }
+{ pluralize(comments.length, 'comment') }   <!-- 3 comments -->
+{ truncate(capitalize(title), 40) }
 ```
 
-**Pipes go in values, never in conditions (D173 V1).** A formatter works in text, in attribute values (`title={ price | currency }`, `href="{ path | link }"`), in component props and in marker arguments. A pipe in an `{#if}`, `{:else if}`, `{#unless}`, `{#case}` or `{#for}` header, in a `{:when}` value, or in an inline `{#if}` inside an attribute value is a compile error: formatters are for display, and the value a branch tests belongs in `data()`. `||` still works in every header. A `|` nested inside parentheses, brackets or braces is a compile error in every position (D176): there is no bitwise OR in the language, so `@click={ save(x | trim) }` and `disabled={ !(draft | trim) }` do not compile — compute the value first.
+**A call is an ordinary expression, so it goes anywhere a value goes (D173 V1):** text, attribute values (`title={ currency(price) }`, `href={ link('/about') }`), component props, marker arguments, conditions and `{#for}` headers. A bare `name(…)` always names the function library and a bare `name` always reads `data()`, so a data field is never callable and never shadows a function.
+
+**There is no pipe (D176).** The 0.7 spelling `{ price | currency }` is a positioned compile error at the `|` that says to write `currency(price)`; when the name after the `|` is a removed function, the error names its JavaScript replacement instead (`| upcase` → `.toUpperCase()`). There is no bitwise OR, and `||` is still logical OR.
 
 ```html
-<!-- Error: formatter pipes are not allowed in an {#if} condition -->
-{#if title | trim}<h1>{ title }</h1>{/if}
+<!-- Error: `| name` pipes were removed — write name(value) -->
+<p>{ price | currency }</p>
 
-<!-- Do: count with .size, or compute the value in data() and test the field -->
-{#if post.tags.size > 0}<p>Tagged</p>{/if}
-{#if hasTitle}<h1>{ title }</h1>{/if}
+<!-- Do -->
+<p>{ currency(price) }</p>
 ```
 
-Custom formatters are registered in the `PuzzleApp` config (`formatters: { ... }` in `app.js`) and used the same way; `this.ctx.formatters` exposes the registry if you ever need it in JS.
+Custom functions are registered in the `PuzzleApp` config (`formatters: { ... }` in `app.js` — the key keeps its name) and called the same way: `{ specialFormat(product.title) }`. `this.ctx.formatters` exposes the registry if you ever need it in JS.
 
-**The built-ins are the standard set (D174)** — the same names, arguments and meaning in PuzzleKit and Sites — plus the browser-only `link`, `timeago` and `in_timezone`: numbers (`abs`, `ceil`, `floor`, `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`), text (`downcase`, `upcase`, `capitalize`, `trim`, `strip`, `truncate`, `replace`, `strip_html`, `strip_newlines`, `pluralize`), markup (`escape`, `raw`, `newline_to_br`), values (`join`, `json`) and dates (`date`, `time`, `datetime` with the presets `short`, `medium` — the default — `long` and `iso`). DOC-SPEC-TEMPLATE §6 has each one's contract. **Counting, arithmetic and fallbacks are the expression's job, not formatters (D176):** `size`, `plus`, `minus`, `times`, `divided_by`, `modulo` and `default` are not built-ins — write `tags.size`, `a + b` (then a formatter to present it: `{ total / count | round }`) and `name ?? 'Untitled'` — and `split` is Sites-only (split the string in `data()`). An app formatter registered under a standard name wins, with a development warning.
+**The built-ins are the standard library (D174)** — 19 functions with the same names, arguments and meaning in PuzzleKit and Sites — plus the PuzzleKit-only `link` and `timeago`: numbers (`round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`), text (`capitalize`, `truncate`, `strip_html`, `strip_newlines`, `pluralize`), markup (`escape`, `raw`, `newline_to_br`), values (`json`), dates (`date`, `time` and `datetime` with the presets `short`, `medium`, `long` and `iso` — with no preset, `date` renders the medium date, `time` the short time and `datetime` both — plus `in_timezone`) and translation (`t`). DOC-SPEC-TEMPLATE §6 has each one's contract. A string-literal preset the library does not know (`time(at, 'shrot')`) is a compile warning that names the valid presets. **What JavaScript already spells is not a function (D176):** count with `.length`, do arithmetic with the operators and `Math.*` (then a function to present the result: `{ round(total / count, 1) }`), fall back with `??`, and transform strings and lists with methods — `.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll(a, b)`, `.join(', ')`, `.split(',')` — and `Math.abs`, `Math.ceil` and `Math.floor`. An app function registered under a standard name wins, with a development warning.
 
-**Markup: `raw` and `newline_to_br` render real HTML (D174).** Every other interpolation is a text node, so a value can never become markup by accident, and `{ markup | escape }` is an identity — the page shows the value's characters. `{ post.body | raw }` is the one way in, and it always goes through an allowlist sanitizer: document markup, links and images survive, with `class`, `id`, `title`, `lang` and `dir` on any kept tag (DOMPurify's defaults; no `id` on `<img>`, none starting with `__`) and `target="_blank"` on a link, which always gets `rel="noopener noreferrer"`; `<script>` (with its contents), every `on*` handler, `style` and `name`, any other `target`, `<iframe>`/`<object>`/`<embed>`/`<style>`/`<svg>`/forms, and any URL that is not relative, `http(s)` — or, on a link, `mailto:`/`tel:` — are removed. Because `class` and `id` survive, the value can use the app's CSS and shadow an undefined global by id: for untrusted user HTML that is a UI-overlay and naming risk, not code execution. `{ note | newline_to_br }` escapes the text and turns each line break into a real `<br>`, with no other markup.
+**Markup: `raw` and `newline_to_br` render real HTML (D174).** Every other interpolation is a text node, so a value can never become markup by accident, and `{ escape(markup) }` is an identity — the page shows the value's characters. `{ raw(post.body) }` is the one way in, and it always goes through an allowlist sanitizer: document markup, links and images survive, with `class`, `id`, `title`, `lang` and `dir` on any kept tag (DOMPurify's defaults; no `id` on `<img>`, none starting with `__`) and `target="_blank"` on a link, which always gets `rel="noopener noreferrer"`; `<script>` (with its contents), every `on*` handler, `style` and `name`, any other `target`, `<iframe>`/`<object>`/`<embed>`/`<style>`/`<svg>`/forms, and any URL that is not relative, `http(s)` — or, on a link, `mailto:`/`tel:` — are removed. Because `class` and `id` survive, the value can use the app's CSS and shadow an undefined global by id: for untrusted user HTML that is a UI-overlay and naming risk, not code execution. `{ newline_to_br(note) }` escapes the text and turns each line break into a real `<br>`, with no other markup.
 
 ```html
-<article>{ post.bodyHtml | raw }</article>
-<p>{ comment.text | newline_to_br }</p>
-<div>{ post.bodyHtml | truncate(200) | raw }</div>   <!-- the chain before raw runs as text formatters -->
+<article>{ raw(post.bodyHtml) }</article>
+<p>{ newline_to_br(comment.text) }</p>
+<div>{ raw(truncate(post.bodyHtml, 200)) }</div>   <!-- the call inside raw runs on text -->
 ```
 
-A markup formatter must be the **last** formatter of a **text** interpolation. After it the value is markup, not text, so `{ x | raw | upcase }`, `title={ x | raw }`, `<Card body={ x | raw } />`, `raw(…)` with arguments, and a markup interpolation inside a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`, `<noscript>`, `<xmp>`, `<iframe>`, …) are all positioned compile errors. Because the compiler lowers these two names itself, an app formatter registered as `raw` is never called from a template (it draws a development warning), so no app code can inject markup. The value renders as sibling nodes with no wrapper element — for whitespace it counts as a non-text sibling, like an element — and the markup path is compiled out of apps that never use it (the sanitizer, of apps that only use `newline_to_br`). Neither formatter is related to `{#raw}`: formatters run on a runtime value after the template has already lexed, while a raw block makes author-written source braces literal at compile time.
+A markup function must be the **outermost** call of a **text** interpolation, with one argument. After it the value is markup, not text, so `{ raw(x).toUpperCase() }`, `{ escape(raw(x)) }`, `title={ raw(x) }`, `<Card body={ raw(x) } />`, `raw(a, b)`, and a markup interpolation inside a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`, `<noscript>`, `<xmp>`, `<iframe>`, …) are all positioned compile errors. Because the compiler lowers these two names itself, an app function registered as `raw` is never called from a template (it draws a development warning), so no app code can inject markup. The value renders as sibling nodes with no wrapper element — for whitespace it counts as a non-text sibling, like an element — and the markup path is compiled out of apps that never use it (the sanitizer, of apps that only use `newline_to_br`). Neither function is related to `{#raw}`: functions run on a runtime value after the template has already lexed, while a raw block makes author-written source braces literal at compile time.
 
-**Typos don't crash (v1.12, D43).** A formatter name that isn't registered renders the value **unchanged** and logs one `console.error` naming it — `[puzzle] unknown formatter "captialize" — value passed through unchanged (did you mean "capitalize"?)`. Formatters are resolved at render time (custom ones are registered in the app config), so this can't be a compile error — watch the console when a formatter seems to do nothing. A removed built-in (`sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last`, `noescape`, and D176's `size`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `default`, `split`) passes through the same way, and the message names its replacement.
+**Typos don't crash (v1.12, D43).** A function name that isn't registered renders the value **unchanged** and logs one `console.error` naming it — `[puzzle] unknown function "captialize" — value passed through unchanged (did you mean "capitalize"?)`. Functions are resolved at render time (custom ones are registered in the app config), so this can't be a compile error — watch the console when a function seems to do nothing. A removed built-in (`upcase`, `downcase`, `trim`, `strip`, `replace`, `join`, `abs`, `ceil`, `floor`, `size`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `default`, `split`, `noescape`, and the list formatters `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first`, `last`) passes through the same way, and the message names its replacement.
 
-**Formatters are display-only — there are no list formatters.** Filtering, sorting, and any other data logic belongs in `data()`, not in the template; pick an item with a plain expression (`items[0]`, `items[items.size - 1]`):
-
-```html
-<!-- Don't: logic in the template -->
-{ users | filter(isActive) | sort('name') }
-```
+**Keep data logic in `data()`.** Array methods cover display shaping — `{#for t in todos.filter(t => !t.done)}`, `{ items.at(-1).title }`, `{ tags.join(', ') }` — and there are no list functions. Sorting by a rule, deduplicating, combining models, and anything a second view would repeat belongs in `data()`:
 
 ```js
 // Do: logic in data()
@@ -125,11 +131,11 @@ data(params, props) {
 
 ## Conditionals: `{#if} … {:else} … {/if}`
 
-`{#if expr}` renders its block when the expression is truthy. `{:else}` is optional. The condition is a plain template expression — fields, `.size`, comparisons, `&&`/`||`/`!`, `??` and the ternary — with no formatter pipe and no calls on data.
+`{#if expr}` renders its block when the expression is truthy. `{:else}` is optional. The condition is one template expression — fields, `.length`, comparisons, `&&`/`||`/`!`, `??`, the ternary, and method and function calls (`{#if post.title.startsWith('Draft')}`).
 
 ```html
 <!-- From Home.pzl: empty state -->
-{#if todos.size > 0}
+{#if todos.length > 0}
   <div class="max-h-96 overflow-y-auto">
     <!-- ... todo list ... -->
   </div>
@@ -144,16 +150,16 @@ data(params, props) {
 Conditionals nest freely and can guard whole sections:
 
 ```html
-{#if completedTodos.size > 0}
+{#if completedTodos.length > 0}
   <button @click={ clearCompleted }>
-    Clear Completed ({ completedTodos.size })
+    Clear Completed ({ completedTodos.length })
   </button>
 {/if}
 ```
 
 ### Chained conditions: `{:else if}` (v1.9, D40)
 
-Branch ladders don't need nesting: any number of `{:else if expr}` clauses may sit between the `{#if}` body and the optional `{:else}`. Each condition is a plain template expression, exactly like `{#if}`, and `{:else}` must be the last clause.
+Branch ladders don't need nesting: any number of `{:else if expr}` clauses may sit between the `{#if}` body and the optional `{:else}`. Each condition is one template expression, exactly like `{#if}`'s, and `{:else}` must be the last clause.
 
 ```html
 {#if user.isLoggedIn}
@@ -169,13 +175,13 @@ It desugars to nested `{#if}` blocks internally, so it behaves identically to wr
 
 ### Inverted conditional: `{#unless}` (v1.7, D36)
 
-`{#unless expr}` renders its body when `expr` is **falsy** — the mirror of `{#if}`. An optional `{:else}` renders when `expr` is truthy. `expr` is any plain template expression.
+`{#unless expr}` renders its body when `expr` is **falsy** — the mirror of `{#if}`. An optional `{:else}` renders when `expr` is truthy. `expr` is any template expression.
 
 ```html
-{#unless todos.size}
+{#unless todos.length}
   <p class="empty">No todos yet — add one above.</p>
 {:else}
-  <p>{ todos.size } to go</p>
+  <p>{ todos.length } to go</p>
 {/unless}
 ```
 
@@ -222,7 +228,7 @@ The range form repeats a block a fixed number of times, useful for static placeh
 {/for}
 ```
 
-As with formatters, keep filtering and sorting out of the template — build `filteredTodos` in `data()` and loop over the result.
+The collection is any expression, so an array method works in the header (`{#for t in todos.filter(t => !t.done)}`); for a list the view needs more than once, or one that takes real logic, build it in `data()` (`filteredTodos`) and loop over the result.
 
 ### Loop counter — trailing `, name` (v1.2, D29)
 
@@ -288,7 +294,7 @@ Bind an attribute to an expression by using braces as the entire attribute value
 </button>
 ```
 
-`canAdd` is a `data()` field (`canAdd: localData.newTodoText.trim() !== ''`): the template reads the flag rather than calling `.trim()` itself, and it never reads a getter through `this` — a template has no `this`. When the state the flag depends on changes through a bare `setData()` (which re-renders without re-running `data()`), follow it with `this.refresh()` so `data()` recomputes the flag; a two-way-bound input does that for you (next section).
+`canAdd` is a `data()` field (`canAdd: localData.newTodoText.trim() !== ''`). `disabled={ newTodoText.trim() === '' }` would work too — `.trim()` is in the method table — but a named flag reads better; either way the template never reads a getter through `this`, because a template has no `this`. When the state the flag depends on changes through a bare `setData()` (which re-renders without re-running `data()`), follow it with `this.refresh()` so `data()` recomputes the flag; a two-way-bound input does that for you (next section).
 
 ```html
 <!-- From TodoItem.pzl: checkbox reflects the record -->
@@ -343,7 +349,7 @@ Every condition must hold. Anything else compiles as a plain one-way display bin
 | Condition | Binds | Stays one-way |
 | --------- | ----- | ------------- |
 | Element | plain `<input>`, `<textarea>`, `<select>` | any component tag — `<Field value={ x } />` passes an ordinary prop |
-| Expression | a bare identifier or one-member path: `draft`, `todo.completed`, `profile.name` | anything else: `draft \|\| ''`, `draft ?? ''`, `a.b.c`, `items[i]`, `x?.y`, ternaries, formatter chains |
+| Expression | a bare identifier or one-member path: `draft`, `todo.completed`, `profile.name` | anything else: `draft \|\| ''`, `draft ?? ''`, `a.b.c`, `items[i]`, `x?.y`, ternaries, calls (`draft.trim()`) |
 | Handlers | no `@input` or `@change` on the element | an author-written `@input` / `@change` (with any modifiers) — you own the write |
 | Attributes | no static `readonly` or `disabled` | either one present |
 | `type` | absent, or a static string the matrix below classifies | dynamic `type={ … }`; `file`, `radio`, `submit`, `button`, `reset`, `image`, `hidden`; `<select multiple>`; `value=` on a checkbox (that is the submit value) |
@@ -616,8 +622,8 @@ brace grammar for the body, but keeps parsing HTML:
 {#raw}<b>this is still a real element</b>{/raw}
 ```
 
-Inside the block, interpolations, block tags, branches, formatter pipes, and
-event-looking brace values are literal. The body is static source — no runtime
+Inside the block, interpolations, block tags, branches, and event-looking brace
+values are literal. The body is static source — no runtime
 value can reach it — so this is not raw HTML injection.
 
 Raw blocks do not nest; the first closer wins. The closer tolerates whitespace
@@ -637,7 +643,7 @@ elements use ordinary HTML entity escaping. `<script>` and `<style>` use their
 RAWTEXT serialization rule; JSON-typed scripts safely encode `<` as `\u003c`,
 which `JSON.parse()` decodes to the original value.
 
-The `raw` **formatter** solves a different, value-level problem and cannot be
+The `raw` **function** solves a different, value-level problem and cannot be
 used to put literal braces in template source.
 
 ---
@@ -651,7 +657,7 @@ These boundaries are deliberate and remain unshipped:
 - array refs or refs inside loops;
 - dynamic `ref`, `slot`, or `island` names;
 - an unsanitized raw HTML injection syntax (`{@html expr}`); the sanitized
-  `raw` formatter is the supported way to render a value as markup, and
+  `raw` function is the supported way to render a value as markup, and
   `{#raw}` is static source, both documented above;
 - components or composition markers inside an island subtree.
 
@@ -665,12 +671,13 @@ modifiers, and `{:else if}` are shipped and documented above.
 | Construct | Syntax | Example |
 | --------- | ------ | ------- |
 | Interpolation | `{ expr }` | `{ todo.text }` |
-| Formatter | `{ value \| fmt(args) }` | `{ todo.createdAt \| datetime('short') }` |
-| Formatter chain | `{ value \| fmt \| fmt2 }` | `{ text \| trim \| capitalize }` |
-| Count, math, fallback | `x.size`, `+ - * / %`, `a ?? b` | `{ tags.size }`, `{ price * qty \| currency }`, `{ nickname ?? name }` |
-| Conditional | `{#if expr} … {:else} … {/if}` | `{#if todos.size > 0} … {:else} … {/if}` |
+| Function | `{ fn(value, args) }` | `{ datetime(todo.createdAt, 'short') }` |
+| Nested calls | `{ fn2(fn(value)) }` | `{ truncate(capitalize(title), 40) }` |
+| Method | `{ value.method(args) }` | `{ name.toUpperCase() }`, `{ tags.join(', ') }` |
+| Count, math, fallback | `x.length`, `+ - * / %`, `Math.*`, `a ?? b` | `{ tags.length }`, `{ currency(price * qty) }`, `{ nickname ?? name }` |
+| Conditional | `{#if expr} … {:else} … {/if}` | `{#if todos.length > 0} … {:else} … {/if}` |
 | Conditional chain | `{#if a} … {:else if b} … {:else} … {/if}` | `{#if user.isLoggedIn} … {:else if user.isPending} … {/if}` |
-| Inverted conditional | `{#unless expr} … {:else} … {/unless}` | `{#unless todos.size} … {/unless}` |
+| Inverted conditional | `{#unless expr} … {:else} … {/unless}` | `{#unless todos.length} … {/unless}` |
 | Multi-branch | `{#case expr}{:when v1, v2} … {:else} … {/case}` | `{#case status}{:when 'active'} … {/case}` |
 | Loop (items) | `{#for item in items} … {/for}` | `{#for todo in filteredTodos} … {/for}` |
 | Loop (range) | `{#for 1...n} … {/for}` | `{#for 1...5} … {/for}` |
