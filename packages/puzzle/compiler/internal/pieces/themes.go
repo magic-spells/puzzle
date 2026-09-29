@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -230,6 +231,38 @@ func themeImportedFromPackage(styles, name string) bool {
 	return false
 }
 
+// piecesCssImported reports whether styles.css pulls app/styles/pieces.css in
+// through a live `@import` statement — a quoted or url() target that resolves to
+// `./pieces.css`. A comment that mentions the file, or an import commented out,
+// is not wiring.
+func piecesCssImported(styles string) bool {
+	for _, stmt := range importStatements(stripCSSComments(styles)) {
+		if target := importTarget(stmt); target != "" && path.Clean(target) == "pieces.css" {
+			return true
+		}
+	}
+	return false
+}
+
+// importTarget returns the URL an `@import` statement body names — its leading
+// quoted string or url(…) — or "" when it names none.
+func importTarget(stmt string) string {
+	s := strings.TrimSpace(stmt)
+	if strings.HasPrefix(s, "url(") {
+		end := strings.IndexByte(s, ')')
+		if end < 0 {
+			return ""
+		}
+		return strings.Trim(strings.TrimSpace(s[len("url("):end]), `"'`)
+	}
+	if s != "" && (s[0] == '"' || s[0] == '\'') {
+		if end := strings.IndexByte(s[1:], s[0]); end >= 0 {
+			return s[1 : 1+end]
+		}
+	}
+	return ""
+}
+
 // stripCSSComments removes /* … */ blocks (CSS has no line comments). An
 // unterminated comment swallows the rest of the file, exactly as a browser
 // parses it.
@@ -385,11 +418,13 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 		if isDefaultTheme(reg, t) {
 			// The default palette's "is it needed at all?" question belongs to
 			// planTheme — the same code `add piece` runs — so the two commands agree
-			// on when pieces.css is wanted. Only its state (c) (pieces.css present
-			// but unwired) continues below, where it gets the SAME already-installed
-			// rules every other palette gets: `add theme default` must behave like
-			// `add theme dim`. `add piece` itself is unchanged and still never
-			// rewrites pieces.css.
+			// on when pieces.css is wanted. Only the hand-merge marker and the package
+			// import stop here; every other state — (c), a live `@import
+			// './pieces.css'`, or a mere mention planTheme's substring test took for
+			// wiring — continues below, where it gets the SAME already-installed rules
+			// every other palette gets: `add theme default` must behave like `add
+			// theme dim`. `add piece` itself is unchanged and still never rewrites
+			// pieces.css.
 			plan, defaultAdvisory, perr := planTheme(&Options{AppRoot: opts.AppRoot, Fetcher: opts.Fetcher}, reg)
 			if perr != nil {
 				return nil, perr
@@ -402,16 +437,30 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 				result.Themes = append(result.Themes, outcome)
 				continue
 			}
-			if defaultAdvisory == "" { // (a) styles.css already carries the tokens
-				if themeImportedFromPackage(styles, t.Name) {
-					outcome.State = ThemeWiredViaPackage
-				} else {
-					outcome.State = ThemeWired
-				}
+			switch {
+			case defaultAdvisory != "": // (c) present but unwired
+				advisory, adviseWhenUpToDate = defaultAdvisory, true
+			case themeImportedFromPackage(styles, t.Name):
+				outcome.State = ThemeWiredViaPackage
 				result.Themes = append(result.Themes, outcome)
 				continue
+			case strings.Contains(styles, themeMarker): // the tokens live in styles.css
+				outcome.State = ThemeWired
+				result.Themes = append(result.Themes, outcome)
+				continue
+			case piecesCssImported(styles):
+				// A live `@import './pieces.css'`: the app USES the file, so it is
+				// hashed, refreshed, refused or --overwritten like any other palette,
+				// and a deleted one is copied back behind its import. The import is
+				// already there, so no import line is printed.
+				advisory = ""
+			default:
+				// planTheme's (a) matched only a MENTION of pieces.css — a comment, an
+				// import commented out. That is not wiring: the palette is handled
+				// exactly as in an app that never mentions it — copied when absent,
+				// the import line printed either way.
+				advisory, adviseWhenUpToDate = themeImportAdvisory, true
 			}
-			advisory, adviseWhenUpToDate = defaultAdvisory, true
 		} else if themeImportedFromPackage(styles, t.Name) {
 			// Provided by the package already — a copy could only drift from it.
 			outcome.State = ThemeWiredViaPackage

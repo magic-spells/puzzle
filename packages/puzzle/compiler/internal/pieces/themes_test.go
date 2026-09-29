@@ -248,6 +248,177 @@ func TestAddThemeDefaultQuietWhenMarkerPresent(t *testing.T) {
 	}
 }
 
+// --- the default palette behind its own `@import './pieces.css'` -------------------
+//
+// The standard wiring — the line the advisory prints — says the app USES
+// pieces.css, not that styles.css carries the tokens. `add theme default` must
+// then treat the file like any other palette: refresh an unmodified older copy,
+// refuse a modified one unless --overwrite, and re-copy a deleted one. Only the
+// hand-merge marker and the package import mean "wired". (`add piece` still never
+// rewrites pieces.css — TestAddThemeQuietWhenStylesImportsPiecesCss.)
+
+const piecesImportStyles = "@import \"tailwindcss\";\n@import './pieces.css';\n"
+
+func TestAddThemeDefaultImportedRefreshesUnmodifiedOlderCopy(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	if _, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)}); err != nil {
+		t.Fatal(err)
+	}
+	writeStyles(t, app, piecesImportStyles)
+	// The registry moved on (0.8 added tokens and a mode to the default palette).
+	const newer = "/* puzzle-pieces design tokens v2 */\n:root { --brand: #111; --rail: #222; }\n"
+	write(t, reg, "theme/pieces.css", newer)
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatalf("an unmodified older pieces.css must not be refused: %v", err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeUpdated {
+		t.Errorf("state = %q, want %q", st, ThemeUpdated)
+	}
+	dest := filepath.Join(app, "app", "styles", "pieces.css")
+	if got, _ := os.ReadFile(dest); string(got) != newer {
+		t.Errorf("pieces.css was not refreshed, got %q", got)
+	}
+	if got := readLockFile(t, app).Pieces["theme/pieces.css"].Files["app/styles/pieces.css"]; got != sha(newer) {
+		t.Errorf("pieces.lock still records %q", got)
+	}
+	// Already imported: no import line to print.
+	if len(res.NextSteps) != 0 {
+		t.Errorf("a refresh needs no next steps; got %+v", res.NextSteps)
+	}
+}
+
+func TestAddThemeDefaultImportedModifiedRefusesThenOverwrites(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	if _, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)}); err != nil {
+		t.Fatal(err)
+	}
+	writeStyles(t, app, piecesImportStyles)
+	const mine = "/* puzzle-pieces design tokens, my edit */\n:root { --brand: #f00; }\n"
+	dest := filepath.Join(app, "app", "styles", "pieces.css")
+	write(t, app, "app/styles/pieces.css", mine)
+
+	_, err := AddThemes(themeOpts(reg, app, "default"))
+	if err == nil {
+		t.Fatal("expected a refusal for a locally modified, imported pieces.css")
+	}
+	if !strings.Contains(err.Error(), "app/styles/pieces.css") || !strings.Contains(err.Error(), "--overwrite") {
+		t.Errorf("refusal should name the file and --overwrite, got: %v", err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != mine {
+		t.Errorf("the refused run must not touch pieces.css, got %q", got)
+	}
+
+	opts := themeOpts(reg, app, "default")
+	opts.Overwrite = true
+	res, err := AddThemes(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q", st, ThemeCopied)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != defaultThemeCSS {
+		t.Errorf("--overwrite should restore the registry copy, got %q", got)
+	}
+}
+
+func TestAddThemeDefaultImportedButDeletedIsRecopied(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, piecesImportStyles)
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q", st, ThemeCopied)
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, "app", "styles", "pieces.css")); string(got) != defaultThemeCSS {
+		t.Errorf("pieces.css should be copied behind the dangling import, got %q", got)
+	}
+	if out := renderThemes(res); strings.Contains(out, "add `@import './pieces.css';`") {
+		t.Errorf("the import already exists, so it must not be advised again:\n%s", out)
+	}
+}
+
+// A MENTION of pieces.css is not an import: a comment, or an import commented
+// out, leaves the default palette unwired, so `add theme default` copies it and
+// prints the import line — what it does for an app that never mentions it.
+func TestAddThemeDefaultCommentMentionIsNotWired(t *testing.T) {
+	for _, tc := range []struct{ name, styles string }{
+		{"commented-out import", "@import \"tailwindcss\";\n/* @import './pieces.css'; */\n"},
+		{"prose comment", "@import \"tailwindcss\";\n/* tokens used to live in pieces.css */\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := multiThemeFixture(t)
+			app := newApp(t, false)
+			writeStyles(t, app, tc.styles)
+
+			res, err := AddThemes(themeOpts(reg, app, "default"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st := themeState(t, res, "default").State; st != ThemeCopied {
+				t.Errorf("state = %q, want %q", st, ThemeCopied)
+			}
+			if !fileExists(filepath.Join(app, "app", "styles", "pieces.css")) {
+				t.Error("pieces.css should have been copied")
+			}
+			if out := renderThemes(res); !strings.Contains(out, "add `@import './pieces.css';`") {
+				t.Errorf("an unwired palette must print the import line:\n%s", out)
+			}
+		})
+	}
+}
+
+// Only a live @import statement whose target is ./pieces.css counts as wiring.
+func TestPiecesCssImported(t *testing.T) {
+	for _, tc := range []struct {
+		css  string
+		want bool
+	}{
+		{`@import './pieces.css';`, true},
+		{`@import "./pieces.css" layer(tokens);`, true},
+		{`@import url(./pieces.css);`, true},
+		{`@import url("./pieces.css");`, true},
+		{`@import 'pieces.css';`, true},
+		{`/* @import './pieces.css'; */`, false},
+		{`/* the tokens live in pieces.css */`, false},
+		{`@import './themes/pieces.css';`, false},
+		{`@import './pieces.css.bak';`, false},
+		{`.a { content: "./pieces.css"; }`, false},
+	} {
+		if got := piecesCssImported(tc.css); got != tc.want {
+			t.Errorf("piecesCssImported(%q) = %v, want %v", tc.css, got, tc.want)
+		}
+	}
+}
+
+// The hand-merge marker still means the tokens live in styles.css itself, even
+// beside a pieces.css import.
+func TestAddThemeDefaultMarkerBesideImportIsWired(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, piecesImportStyles+"/* puzzle-pieces design tokens */\n")
+	write(t, app, "app/styles/pieces.css", "/* whatever the app keeps */\n")
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeWired {
+		t.Errorf("state = %q, want %q", st, ThemeWired)
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, "app", "styles", "pieces.css")); string(got) != "/* whatever the app keeps */\n" {
+		t.Errorf("a wired app's pieces.css must be left alone, got %q", got)
+	}
+}
+
 // --- unknown names --------------------------------------------------------------
 
 func TestAddThemeUnknownNameWritesNothing(t *testing.T) {

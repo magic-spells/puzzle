@@ -93,3 +93,19 @@ export function tagReminderLines(version) {
 		`  git tag ${langTag} && git push origin ${langTag}`,
 	];
 }
+
+/**
+ * The README's status line (`> **Status: 0.8.0** — the current release`) names
+ * the release the tarball ships in. It sat at 0.7.0 in the 0.8.0 package
+ * because no version script touches it and nothing checked it.
+ *
+ * @param {string} readme README.md's contents
+ * @param {string} version the framework version being released ('0.8.0')
+ * @returns {string|null} the problem, or null when the line names `version`
+ */
+export function readmeStatusProblem(readme, version) {
+	const match = readme.match(/\*\*Status: ([^*]+)\*\*/);
+	if (!match) return 'README.md has no "**Status: <version>**" line';
+	const stated = match[1].trim();
+	return stated === version ? null : `README.md says "Status: ${stated}", expected "${version}"`;
+}

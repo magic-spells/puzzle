@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
 	FormatterRegistry,
@@ -8,9 +9,15 @@ import {
 } from '../client-runtime/formatters.js';
 import fullBuiltins from '../client-runtime/formatters/builtins-all.js';
 import builtinNames from '../client-runtime/formatters/builtins.json';
-import conformance from '../../puzzle-lang/conformance/formatters.json';
 import { createI18n } from '../client-runtime/i18n.js';
 import { setFormatLocale } from '../client-runtime/formatters/locale.js';
+
+// The shared conformance table lives in the language module (the Go side embeds
+// it). Read with JSON.parse rather than a JSON import: Vite's JSON module
+// transform writes `-0` back out as `0`, and the negative-zero rows need the sign.
+const conformance = JSON.parse(
+	readFileSync(new URL('../../puzzle-lang/conformance/formatters.json', import.meta.url), 'utf8')
+);
 
 const f = new FormatterRegistry().getAll();
 
@@ -366,6 +373,47 @@ describe('FormatterRegistry', () => {
 		it('compact_number fails soft on a missing or non-numeric value', () => {
 			expect(f.compact_number(null)).toBe('');
 			expect(f.compact_number('abc')).toBe('abc');
+		});
+
+		// A non-finite NUMBER prints nothing, as a bare `{ 0 / 0 }` does (D173 V6):
+		// `{ cart.total / cart.items.size | currency }` on an empty cart, or a price
+		// times a quantity that has not loaded. A STRING still passes through as text
+		// (D174 deviation 2). Pinned here rather than in the conformance table,
+		// because JSON has no NaN or Infinity literal.
+		it('the text-producing number formatters print nothing for NaN and ±Infinity', () => {
+			const missing = undefined;
+			for (const v of [0 / 0, 120 / 0, -5 / 0, missing * 2]) {
+				expect(f.currency(v), `currency(${v})`).toBe('');
+				expect(f.percentage(v), `percentage(${v})`).toBe('');
+				expect(f.number_with_delimiter(v), `number_with_delimiter(${v})`).toBe('');
+				expect(f.number_with_delimiter(v, ','), `number_with_delimiter(${v}, ',')`).toBe('');
+				expect(f.compact_number(v), `compact_number(${v})`).toBe('');
+				expect(f.pluralize(v, 'item'), `pluralize(${v})`).toBe('');
+			}
+			// round keeps returning the number; the display step prints NaN as nothing.
+			expect(f.round(0 / 0)).toBeNaN();
+			expect(f.currency('Infinity')).toBe('Infinity');
+		});
+
+		// Intl renders -0 as "-0"; the explicit-delimiter path and V6 print "0". A
+		// negative fraction through ceil/round, or a negative number times zero, is
+		// how a template gets one.
+		it('negative zero prints as 0 through the locale-rendered paths', async () => {
+			expect(f.number_with_delimiter(-0)).toBe('0');
+			expect(f.number_with_delimiter(-0, ',')).toBe('0');
+			expect(f.compact_number(-0)).toBe('0');
+			expect(f.pluralize(f.ceil(-0.2), 'day')).toBe('0 days');
+			const i18n = createI18n({
+				manifest: { defaultLocale: 'en', locales: { en: '' } },
+				tables: { en: { left: '{count} left' } },
+				locale: 'en',
+			});
+			try {
+				await i18n.__ready();
+				expect(i18n.t('left', { count: -0 })).toBe('0 left');
+			} finally {
+				setFormatLocale(undefined);
+			}
 		});
 	});
 
@@ -771,7 +819,8 @@ describe('standard formatter conformance table (D174)', () => {
 		for (const name of covered) expect(STANDARD_FORMATTERS).toContain(name);
 	});
 
-	it.each(local.map((c) => [`${c.name}(${JSON.stringify(c.input)}, ${JSON.stringify(c.args)})`, c]))(
+	const show = (v) => (Object.is(v, -0) ? '-0' : JSON.stringify(v));
+	it.each(local.map((c) => [`${c.name}(${show(c.input)}, ${JSON.stringify(c.args)})`, c]))(
 		'%s',
 		(_label, c) => {
 			const out = f[c.name](fromJSON(c.input), ...c.args.map(fromJSON));

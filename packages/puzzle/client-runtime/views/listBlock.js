@@ -144,8 +144,10 @@ export function listRows(view, owner, id, items, factory, meta) {
 			//   mutated in place with no revision to observe, so it is always dirty,
 			//   exactly as today. Primitive items cache on `!==` alone;
 			// - the index, when the body reads the counter;
-			// - a parent root the body reads, or an unanalysable body.
+			// - a parent root the body reads, or an unanalysable body;
+			// - a row with no vnode: its last build threw (see below).
 			dirty =
+				row.vnode === null ||
 				row.item !== item ||
 				(rev >= 0
 					? rev !== row.rev || deep || (checkFields && isConservative(block, item, fields))
@@ -162,6 +164,12 @@ export function listRows(view, owner, id, items, factory, meta) {
 
 		if (dirty) {
 			built++;
+			// The row's item, index and revision are already committed above, so a
+			// factory that THROWS must not leave the previous vnode (or a new row's
+			// null) looking clean: cleared first, the row stays dirty until a build
+			// completes. Only a view that renders the same instance again after a
+			// throw (the hybrid/static takeover) ever sees the difference.
+			row.vnode = null;
 			row.vnode = factory(row);
 			// Controlled form values inside a CACHED row are re-asserted from this
 			// list by patch()'s identity short-circuit, which is the contract

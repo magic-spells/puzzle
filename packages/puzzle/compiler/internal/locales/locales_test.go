@@ -172,6 +172,8 @@ func TestLoadRejections(t *testing.T) {
 		{"flatten collision", map[string]string{"en.json": `{"a.b": "x", "a": {"b": "y"}}`}, cfg("en", "en"), `"a.b" is defined twice (as "a.b" and as "a → b")`},
 		{"duplicate key", map[string]string{"en.json": `{"a": "x", "a": "y"}`}, cfg("en", "en"), `"a" is defined twice in the same object`},
 		{"underscore file", map[string]string{"en.json": `{}`, "en_US.json": `{}`}, cfg("en", "en"), `use "en-US"`},
+		// A non-tag file name is still an error (D175: the file name is a locale tag).
+		{"non-tag file", map[string]string{"en.json": `{}`, "glossary.json": `{}`}, cfg("en", "en"), "app/locales/glossary.json: the file name must be a locale tag"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -233,6 +235,30 @@ func TestLoadWarnsOnUnlistedFile(t *testing.T) {
 	}
 	if len(res.Files) != 1 {
 		t.Fatalf("an unlisted locale must not be emitted: %v", res.Manifest.Paths)
+	}
+}
+
+// Files the user never made — an Emacs lock file (`.#en.json`, a dangling
+// symlink while a buffer has unsaved changes) and a macOS AppleDouble file
+// (`._en.json`, on exFAT/FAT/SMB volumes) — must not fail the build.
+func TestLoadSkipsDotfiles(t *testing.T) {
+	root := writeLocales(t, map[string]string{
+		"en.json":   `{"a": "A"}`,
+		"._en.json": "\x00\x05\x16\x07 not json",
+	})
+	lock := filepath.Join(root, "app", "locales", ".#en.json")
+	if err := os.Symlink("cory@host.1234:1700000000", lock); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	res, err := Load(root, cfg("en", "en"))
+	if err != nil {
+		t.Fatalf("dotfiles must be ignored, got: %v", err)
+	}
+	if len(res.Warnings) != 0 {
+		t.Fatalf("dotfiles must not warn either: %q", res.Warnings)
+	}
+	if got := table(t, res, "en")["a"]; got != "A" {
+		t.Fatalf("en table = %v", table(t, res, "en"))
 	}
 }
 

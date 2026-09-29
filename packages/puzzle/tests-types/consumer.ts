@@ -81,6 +81,8 @@ import type { RenderProfile } from '@magic-spells/puzzle/testing';
 
 const renderedNull: string = displayValue(null);
 const renderedNamedValue: string = displayValue(0, 'count');
+// A list prints its items joined by `sep` (the attribute-value path).
+const renderedList: string = displayValue(['a', false, 'b'], 0, ' ');
 const generatedSnippetNode = new ViewNode(SNIPPET_TAG, {
 	fits: 'row',
 	params: ['item'],
@@ -90,6 +92,7 @@ const snippetTag: string = SNIPPET_TAG;
 const isGeneratedSnippet: boolean = generatedSnippetNode.isSnippet;
 void renderedNull;
 void renderedNamedValue;
+void renderedList;
 void snippetTag;
 void isGeneratedSnippet;
 
@@ -570,6 +573,8 @@ prerender(config).then((result: PrerenderResult) => {
 		content: page.html ?? '',
 		title: page.title,
 		head,
+		// The build's locale island (D175), inserted before `</body>`.
+		island: '',
 	});
 });
 
@@ -610,6 +615,7 @@ prerender(config, { mode: 'static' }).then((result: PrerenderResult) => {
 		slug: 'index',
 		data: islandData ?? {},
 		base: '/app',
+		island: '',
 	});
 });
 
@@ -694,10 +700,20 @@ void profileRenders;
 // Translations (D175)
 // ---------------------------------------------------------------------------
 
+// Translation variables are any object value — a data field, a store record, a
+// value typed by an interface (which carries no index signature).
+interface Profile {
+	name: string;
+	count: number;
+}
+declare const profile: Profile;
+
 class LocaleSwitcher extends PuzzleView {
 	data() {
 		const i18n: PuzzleI18n | undefined = this.ctx.i18n;
 		const label: string = i18n ? i18n.t('cart.items', { count: 3 }) : '';
+		const welcome: string = i18n ? i18n.t('welcome', profile) : '';
+		void welcome;
 		const tags: readonly string[] = i18n?.locales ?? [];
 		return { label, tags, current: i18n?.locale, fallback: i18n?.defaultLocale };
 	}

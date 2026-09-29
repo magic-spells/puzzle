@@ -60,6 +60,12 @@ const ONCE_SPENT = '\x00once';
 // capture flag — a mismatched remove silently leaves the document listener live.
 const OUTSIDE_OPTS = { capture: true };
 
+// The one-shot walk of the render in progress (PuzzleView#__walk). A render takes
+// the flag off its owner as it STARTS and holds it here for its own patch, putting
+// the enclosing render's value back when it ends: a child component re-rendered
+// from inside its parent's patch runs a render of its own, with its own flag.
+let walking = false;
+
 export class ViewManager {
 	/**
 	 * @param {Element} container host element this manager renders into
@@ -114,6 +120,11 @@ export class ViewManager {
 	 * Slot markers are expanded against `slotChildren` before diffing.
 	 */
 	render(rawTree, slotsExpanded = false) {
+		// The one-shot walk (PuzzleView#__walk) is consumed as the render STARTS, so
+		// no exit — the renderFresh() route, a throwing patch — can leave it set.
+		const owner = this.owner;
+		const walk = owner?.__walk;
+		if (walk) owner.__walk = false;
 		// D145's "never patched over an unknown tree" is an invariant of the manager.
 		// Route the next ordinary render through a fresh mount so it never diffs
 		// against vnodes whose DOM links may be detached. A recovery render is always
@@ -180,6 +191,8 @@ export class ViewManager {
 			const bracketed = el != null && el.parentNode === this.container;
 			const before = bracketed ? el.previousSibling : null;
 			const after = bracketed ? el.nextSibling : null;
+			const outer = walking;
+			walking = walk;
 			try {
 				patch(this.currentTree, newTree, this.container, this.ctx, this.owner);
 			} catch (err) {
@@ -189,6 +202,8 @@ export class ViewManager {
 				// new one and left components from the old one live.
 				this.unknownTrees = [this.currentTree, newTree];
 				throw err;
+			} finally {
+				walking = outer;
 			}
 		}
 		this.currentTree = newTree;
@@ -871,6 +886,13 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 				);
 				child.__showErrorView?.(err, info);
 				vnode.instance = null;
+				// The next patch that remounts this position may receive the element
+				// above it as the SAME object (a cached row, slot content) — at any
+				// level up to the root: a list row around a wrapper whose slot content
+				// holds this child. So the owner's next render, and the next render of
+				// every view above it that mounted it, walks its reused vnodes once
+				// (PuzzleView#__walk).
+				for (let view = owner; view; view = view.__retryParent) view.__walk = true;
 				// Gated: ungated this would ADD the property outside the constructor in a
 				// non-takeover build — exactly the hidden-class transition the gate above
 				// exists to avoid.
@@ -903,14 +925,28 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	// fall through to the ordinary path. Two shapes reach that state: a destroyed
 	// instance — a failed position holding a bare comment placeholder or an error
 	// view (D115/D145) — and a null one, which is mountComponent's `takeoverFailed`
-	// arm parking a comment without ever constructing a child. Both recover in
-	// patch()'s `dead == null || dead.isDestroyed` arm below, and a CACHED row
-	// vnode is the object that would otherwise strand them: returning here forever
-	// means a retry (which works by asking the parent to re-render) can never mount
-	// a fresh child, and a takeover-failed row stays blank until its record
-	// happens to change. Element vnodes carry `component === null` too, hence the
-	// tag test — one property read on the hot path, with the getter reached only
-	// for components.
+	// arm parking a comment without ever constructing a child. Both reach patch()'s
+	// `dead == null || dead.isDestroyed` arm below. A destroyed instance recovers
+	// there: a fresh child mounts at its placeholder. A takeover-failed vnode still
+	// carries its flag, so the same object only parks a new placeholder — its row
+	// stays blank until the row is rebuilt with a fresh vnode (its record changes).
+	// A CACHED row vnode is the object that would otherwise strand the destroyed
+	// shape: returning here forever means a retry (which works by asking the
+	// parent to re-render) can never mount a fresh child. Element vnodes carry
+	// `component === null` too, hence the tag test — one property read on the hot
+	// path, with the getter reached only for components.
+	//
+	// A failed component can also sit BELOW a reused vnode — `<li><Avatar/></li>`
+	// as a cached row, `<Card><div><Widget/></div></Card>` as slot content the
+	// wrapper splices back in by reference, `<li><Card><Widget/></Card></li>` with
+	// both — and returning there strands it just the same. The failure handler
+	// marks the owning view and every view above it, and an errorView retry marks
+	// the owner it refreshes, with the one-shot `__walk` flag. For that one render
+	// (`walking`) an element falls through to the ordinary path, and a
+	// LIVE component that is itself marked is patched through patchComponent, whose
+	// parent update re-renders it — a wrapper with slot content does — so its own
+	// walk continues down to the dead component and remounts it. A same-object
+	// patch changes nothing else: every compare sees equal values.
 	//
 	// (2) A live component's `el` still has to be refreshed. patchComponent
 	// re-reads `newVnode.el = child.element` on every parent render because a
@@ -929,7 +965,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	// re-assert and reads `undefined` here.
 	if (oldVnode === newVnode) {
 		const live = newVnode.component;
-		if (live !== null ? !live.isDestroyed : typeof newVnode.tag !== 'function') {
+		if (live !== null ? !live.isDestroyed && !live.__walk : typeof newVnode.tag !== 'function' && !walking) {
 			if (live !== null) newVnode.el = live.element;
 			// The `controls` list is what reaches controls under a cached ROW ROOT.
 			// It collects from the row vnode down, so a controlled row root is in its

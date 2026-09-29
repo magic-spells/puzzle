@@ -922,6 +922,55 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// `dist`, `build` and `vendor` are build-output and vendored trees only at the
+// scan (project) root. A first-party folder of the same name deeper down —
+// app/components/vendor/ — is source, and pruning it compiled `raw`, its
+// sanitizer and its formatters out of a component the app renders (the
+// component vanished in production). node_modules and dot-directories stay
+// pruned at any depth.
+func TestScanUsagePrunesBuildTreesOnlyAtTheRoot(t *testing.T) {
+	const bio = `<puzzle-view><div class="bio">{ html | raw } { price | currency }</div></puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Bio extends PuzzleView {}
+</script>
+`
+	for _, dir := range []string{"vendor", "build", "dist"} {
+		t.Run("nested "+dir, func(t *testing.T) {
+			root := writeApp(t, map[string]string{"app/components/" + dir + "/Bio.pzl": bio})
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if !usage.HasRawHTML || !usage.HasRawSanitize || !usage.Formatters["currency"] {
+				t.Errorf("app/components/%s/ was pruned: HasRawHTML=%v HasRawSanitize=%v currency=%v",
+					dir, usage.HasRawHTML, usage.HasRawSanitize, usage.Formatters["currency"])
+			}
+		})
+		t.Run("root "+dir, func(t *testing.T) {
+			root := writeApp(t, map[string]string{dir + "/Bio.pzl": bio})
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if usage.HasRawHTML || usage.Formatters["currency"] {
+				t.Errorf("%s/ at the project root must stay pruned: %+v", dir, usage)
+			}
+		})
+	}
+	for _, rel := range []string{"app/node_modules/pkg/Bio.pzl", "app/components/.cache/Bio.pzl"} {
+		t.Run(rel, func(t *testing.T) {
+			usage, err := ScanUsage(writeApp(t, map[string]string{rel: bio}))
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if usage.HasRawHTML || usage.Formatters["currency"] {
+				t.Errorf("%s must stay pruned at any depth: %+v", rel, usage)
+			}
+		})
+	}
+}
+
 // A component imported from a sibling directory (outside app/) still ships its
 // formatters: the scan walks the whole project so `upcase` is seeded and the
 // generated render's guarded `(__f["upcase"] || __f.__missing("upcase"))(...)` call

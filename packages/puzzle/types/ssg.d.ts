@@ -237,6 +237,8 @@ export declare function injectShell(
 		content: string;
 		title: string | null;
 		head?: ResolvedRouteHead | null;
+		/** Markup inserted before the shell's `</body>` — the build's locale island (D175). */
+		island?: string;
 	}
 ): string;
 
@@ -269,5 +271,7 @@ export declare function injectStaticShell(
 		 * resolves it instead of 404ing at the domain root.
 		 */
 		base?: string;
+		/** Markup inserted before the shell's `</body>` — the build's locale island (D175). */
+		island?: string;
 	}
 ): string;

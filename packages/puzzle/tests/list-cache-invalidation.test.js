@@ -10,9 +10,11 @@
 // again the mask is clean. So the block also tracks the view's render counter
 // and treats "I missed a render" as "every row is dirty this pass".
 //
-// The same condition is what lets an errorView retry reach a failed child that
-// is sitting under a cached row: the owner's refresh would otherwise
-// short-circuit at the row root and never revisit the destroyed child below it.
+// The last block pins an errorView retry reaching a failed child that is
+// sitting under a cached row: the owner's refresh would otherwise short-circuit
+// at the row root and never revisit the destroyed child below it (the retry's
+// one-shot walk — tests/failed-child-under-cached-vnode.test.js covers the
+// slot-content and no-errorView shapes).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp, mountView, settled } from '../client-runtime/testing/index.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';

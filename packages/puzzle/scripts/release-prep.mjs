@@ -45,7 +45,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, copyFileSync, chmodSync, statSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { packedBinaryProblem, tagReminderLines } from './release-checks.mjs';
+import { packedBinaryProblem, readmeStatusProblem, tagReminderLines } from './release-checks.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -145,6 +145,11 @@ if (dtMatch[1] !== version) {
 	);
 }
 console.log(`  OK  client-runtime/devtools.js FRAMEWORK_VERSION = ${dtMatch[1]}`);
+
+// The README ships in the tarball and names the release in its status line.
+const readmeProblem = readmeStatusProblem(readFileSync(join(repoRoot, 'README.md'), 'utf8'), version);
+if (readmeProblem) fail(readmeProblem);
+console.log(`  OK  README.md Status = ${version}`);
 
 // Each platform manifest must pin the same version.
 for (const { pkg } of MATRIX) {

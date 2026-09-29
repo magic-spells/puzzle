@@ -5,7 +5,7 @@ A SPA-first JavaScript framework with single-file components, reactive data bind
 **[▶ Live demo](https://puzzle-music-demo.vercel.app/)** — the [music example app](examples/music) built with Puzzle.
 
 - **~200 ms production builds** — compile, bundle, Tailwind, and minify, end to end (todos example, Apple Silicon)
-- **Small apps, honestly measured** — a minimal app is 21.6 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 25.7 KB gzip. Regenerated every release by `npm run measure:size`
+- **Small apps, honestly measured** — a minimal app is 21.7 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 25.8 KB gzip. Regenerated every release by `npm run measure:size`
 - **Zero JavaScript toolchain** — the CLI is one prebuilt Go binary; no Babel, no bundler config, no postinstall scripts
 
 ## Quick start
@@ -34,7 +34,7 @@ client runtime and the CLI:
 npm install -D @magic-spells/puzzle
 ```
 
-> **Status: 0.7.0** — the current release. The browser runtime, Go
+> **Status: 0.8.0** — the current release. The browser runtime, Go
 > compiler, static generator, and CLI are implemented and covered by Go,
 > Vitest/jsdom, type, package, example, and browser-focused checks.
 >
@@ -119,11 +119,15 @@ who clone it only need `npm install` — no global CLI required.
 ### Other platforms, or building from source
 
 The prebuilt binaries cover macOS, Linux, and Windows. On any other platform — or
-if you prefer to build the CLI yourself — install it from source with Go:
+if you prefer to build the CLI yourself — build it from a checkout with Go, then
+put the `puzzle` binary on your `PATH`:
 
 ```bash
-go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest
+git clone https://github.com/magic-spells/puzzle
+cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle
 ```
+
+On Windows use `-o puzzle.exe`.
 
 ## Project Structure
 

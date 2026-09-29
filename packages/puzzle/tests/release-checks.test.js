@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import {
 	piecesFallbackNotice,
 	packedBinaryProblem,
+	readmeStatusProblem,
 	tagReminderLines,
 } from '../scripts/release-checks.mjs';
 
@@ -175,5 +176,31 @@ describe('tagReminderLines', () => {
 		const src = readFileSync(join(repoRoot, 'scripts/release-prep.mjs'), 'utf8');
 		expect(src).toContain('tagReminderLines(version)');
 		expect(src).not.toMatch(/exec\w*\(\s*['"]git['"]/);
+	});
+});
+
+describe('readmeStatusProblem', () => {
+	it('accepts a status line naming the version and reports any other', () => {
+		expect(readmeStatusProblem('> **Status: 0.8.0** — the current release.', '0.8.0')).toBeNull();
+		expect(readmeStatusProblem('> **Status: 0.7.0** — the current release.', '0.8.0')).toBe(
+			'README.md says "Status: 0.7.0", expected "0.8.0"'
+		);
+		expect(readmeStatusProblem('# Puzzle\n', '0.8.0')).toMatch(/no "\*\*Status: <version>\*\*" line/);
+	});
+
+	it('reads the status line out of a full README', () => {
+		const readme = '# Puzzle\n\nIntro.\n\n> **Status: 0.9.0** — the current release. More prose.\n';
+		expect(readmeStatusProblem(readme, '0.9.0')).toBeNull();
+		expect(readmeStatusProblem(readme, '0.10.0')).toBe(
+			'README.md says "Status: 0.9.0", expected "0.10.0"'
+		);
+	});
+
+	// The real README is checked against package.json by release-prep only, like
+	// every other version stamp — a fresh release branch bumps package.json first,
+	// and must not fail `npm test` until the README is edited.
+	it('release-prep runs the check on the real README', () => {
+		const src = readFileSync(join(repoRoot, 'scripts/release-prep.mjs'), 'utf8');
+		expect(src).toMatch(/readmeStatusProblem\(\s*readFileSync\(join\(repoRoot, 'README\.md'\)/);
 	});
 });
