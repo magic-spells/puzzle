@@ -129,7 +129,7 @@ data(params, props) {
 }
 ```
 
-This is the blessed pattern for object/array props (inline object literals in templates remain a compile error, §6): build in `data()`, wrap in `this.memo(...)` keyed by the ingredients. Combined with §31, a child re-runs `data()` only when a prop meaningfully changes. `memo` is a reserved method name on `PuzzleView`.
+This is the blessed pattern for object/array props: build in `data()`, wrap in `this.memo(...)` keyed by the ingredients. A template may write an object literal as a function argument (D173 V8, §6), but a prop's expression cannot start with one, and a literal built in the template would be a fresh object every render anyway. Combined with §31, a child re-runs `data()` only when a prop meaningfully changes. `memo` is a reserved method name on `PuzzleView`.
 
 ## 34. App lifecycle hooks (v1.31)
 
@@ -221,7 +221,7 @@ animations = {
 
 ## 46. FLIP keyed-reorder animation: the `flip` directive attribute (v1.51)
 
-A keyed `{#for}` row root may declare `flip` (bare) or `flip={ flipOptions }` — the options object built in `data()` or script scope, since §6 template expressions do not admit inline object literals — to animate **retained** elements from their old visual position to their new one when keyed reconciliation moves them — First/Last/Invert/Play over the completed patch, so DOM order, accessibility order, and hit testing are already final while only the paint catches up (D85).
+A keyed `{#for}` row root may declare `flip` (bare) or `flip={ flipOptions }` — the options object built in `data()`, since a template expression cannot start with an object literal (§6; D173 V8 allows one only as a function argument or nested inside another expression) — to animate **retained** elements from their old visual position to their new one when keyed reconciliation moves them — First/Last/Invert/Play over the completed patch, so DOM order, accessibility order, and hit testing are already final while only the paint catches up (D85).
 
 - `flip` is a **framework directive** like `key`/`island`/`ref` — stripped from DOM attributes and SSG output, zero new template grammar.
 - Translation only (no width/height scaling); position deltas under 0.5 CSS px skip; a pre-existing base transform is composed under the correction and restored untouched; animation state is fully released on settle so author CSS stays authoritative.
