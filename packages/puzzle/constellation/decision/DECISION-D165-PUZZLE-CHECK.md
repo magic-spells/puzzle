@@ -201,6 +201,25 @@ falls through the index signature and is not. One consequence under an app's
 (`__d.total`) is itself a diagnostic, because it resolves through that index
 signature — a known gap, not fixed.
 
+**A JavaScript component's handlers take any arguments, and must be
+declared.** Its handler parameters are whatever TypeScript infers from untyped
+JS — `play: () => {}` takes nothing — so the documented
+`@click={ play(event) }`, legal JavaScript, would be an arity error at every
+such site. For a JS component the wrapper's `this` is
+`__PuzzleCheckJSView<InstanceType<typeof Class>> & Record<string, any>`: the
+shim type replaces `events` with a mapped type over its keys that types each
+handler `(...args: any[]) => any`. That drops the handler's arity and
+parameter types, and it closes the set of handler **names**: TypeScript reads
+a JS object literal as open, so without the mapped type a misspelled handler
+was never reported, and with it `plya(event)` is
+`Property 'plya' does not exist`. The consequence is that a JS component's
+template handlers must be declared in its `events` field — a handler attached
+at runtime (`this.events.play = …` in the constructor or `created()`) is
+reported. The argument expressions are still checked where they are written.
+DOM events and component callback props both lower to `this.events.name(…)`,
+so both are covered. A `lang="ts"` component is never wrapped: its handlers
+are declared, and a call that does not match one is reported.
+
 **Library calls are typed by name, never through an index signature.** A
 standard function emits `__puzzle_fn.name(…)` and is checked against its real
 signature (`libraryFunctionSignatures`). Any other bare call — an app function
@@ -267,6 +286,15 @@ spelling.
 - **Promoting JS components into `checkJs`.** It turns every untyped app into a
   wall of inference noise on the first run. The unchecked mirror keeps the
   template win available to JS apps at zero cost.
+- **Checking a JS handler's inferred arity, and asking authors to write the
+  bare form instead.** `@click={ play }` compiles to the same code as
+  `@click={ play(event) }`, but the call form is the documented idiom and legal
+  JavaScript; flagging it is the inference noise the unchecked mirror exists to
+  avoid (examples/music alone reported 39 such sites). Typing a JS component's
+  `events` as plain `any` would also have removed the arity errors, but it
+  checks nothing about handler names; the mapped type over `events`' keys
+  reports a misspelled handler, which neither `any` nor the open object-literal
+  type the JS mirror infers ever did.
 - **Inferring a snippet parameter's type from the marker that fills it.** It is
   the same cross-file guess `data()` inference was rejected for, one file
   further out: the marker lives in the component's `.pzl`, which the walk
