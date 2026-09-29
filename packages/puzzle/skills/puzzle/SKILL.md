@@ -380,7 +380,10 @@ Rules that bite:
   `retry()` uses a full same-location navigation for routed failures or the
   parent's normal refresh for component failures, never automatically. There
   is no per-view error member — write error UI as normal template markup, never
-  as hand-built ViewNodes. Event handlers and template functions stay uncaught.
+  as hand-built ViewNodes. Event handlers stay uncaught (browser events are
+  outside the boundary); a template function or method that throws during
+  render fails that view like any other render throw, so `errorView` takes
+  over.
 - **`island` freezes children.** An element with the `island` attribute keeps
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view
