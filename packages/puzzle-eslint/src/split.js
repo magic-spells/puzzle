@@ -77,8 +77,10 @@ export function posAt(src, off) {
 // Shared lexical-skip scanner (mirror of lexskip.go)
 // ---------------------------------------------------------------------------
 
+// `of` is deliberately absent: it is a contextual word, and a template field
+// named `of` is data.
 const lexRegexPrecedingKeywords = new Set([
-	'return', 'typeof', 'instanceof', 'in', 'of', 'void', 'delete', 'new',
+	'return', 'typeof', 'instanceof', 'in', 'void', 'delete', 'new',
 	'do', 'else', 'yield', 'await', 'case',
 ]);
 
@@ -143,7 +145,9 @@ function lexSkip(s, i, prevEndsExpr) {
 	if (isIdentStart(c)) {
 		let j = i;
 		while (j < s.length && isIdentChar(s[j])) j++;
-		if (lexPrecededByDot(s, i)) {
+		// An ASCII run straight after a non-ASCII unit is the tail of one name
+		// (`価格new`), never a keyword; so is a property name (`.return`).
+		if ((i > 0 && s.charCodeAt(i - 1) >= 0x80) || lexPrecededByDot(s, i)) {
 			return { next: j, pee: true, consumed: true };
 		}
 		return { next: j, pee: !lexRegexPrecedingKeywords.has(s.slice(i, j)), consumed: true };
@@ -168,10 +172,15 @@ function lexScanTemplateLiteral(s, i) {
 	return s.length;
 }
 
+// A digit, a '.', a closing )/]/}, or any code unit >= 0x80 ends an expression:
+// outside a string or comment a non-ASCII character belongs to a name (`café`,
+// `金額`), and a '.' ends a number (`5.`) or leads a property name. Every UTF-16
+// unit of a non-ASCII character (surrogate halves included) is >= 0x80, just as
+// every UTF-8 byte of it is, so this matches lexskip.go one to one.
 function lexPlainEndsExpr(c, prev) {
 	if (isSpaceByte(c)) return prev;
 	if (c === ')' || c === ']' || c === '}') return true;
-	if (c >= '0' && c <= '9') return true;
+	if ((c >= '0' && c <= '9') || c === '.' || c.charCodeAt(0) >= 0x80) return true;
 	return false;
 }
 

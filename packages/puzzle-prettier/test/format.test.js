@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { format, sectionMap, splitSections } from './helpers.js';
+import { lexSkip, lexPlainEndsExpr } from '../src/lex.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(here, 'fixtures');
@@ -561,6 +562,95 @@ describe('lexer table parity with the compiler', () => {
 		expect(splitSections(src).map((x) => x.name)).toEqual(['puzzle-view']);
 		// and it still round-trips through Prettier unchanged
 		expect(await format(src)).toBe(src);
+	});
+});
+
+// Mirrors the lexskip.go fix for division after a non-ASCII name, a
+// trailing-dot number, or a field named `of`: each used to leave the scanner
+// expecting an operand, so the '/' opened a bogus regex that ran to the '/' of
+// the script's /}/ and landed the section boundary in the wrong place. Every
+// UTF-16 unit of a non-ASCII character is >= 0x80, as every UTF-8 byte is, so
+// a surrogate pair (CJK Extension B, emoji) behaves like Go's multi-byte run.
+describe('division after a non-ASCII name, `5.` or `of`', () => {
+	it('lexPlainEndsExpr: a digit, `.`, a closer, or any unit >= 0x80 ends an expression', () => {
+		for (const c of ['5', '.', ')', ']', '}', 'é', '\u0080', 'ÿ', '金', '\ud840', '\udc00']) {
+			expect(lexPlainEndsExpr(c, false), JSON.stringify(c)).toBe(true);
+		}
+		for (const c of ['+', '(', ',', '=', '!', '\x7f']) {
+			expect(lexPlainEndsExpr(c, true), JSON.stringify(c)).toBe(false);
+		}
+		for (const c of [' ', '\t', '\n', '\r']) {
+			expect(lexPlainEndsExpr(c, true), JSON.stringify(c)).toBe(true);
+			expect(lexPlainEndsExpr(c, false), JSON.stringify(c)).toBe(false);
+		}
+	});
+
+	it('lexSkip: `of` ends an expression; an ASCII tail of a non-ASCII name is never a keyword', () => {
+		expect(lexSkip('of /x/', 0, false)).toEqual({ next: 2, pee: true, consumed: true });
+		expect(lexSkip('return /x/', 0, false)).toEqual({ next: 6, pee: false, consumed: true });
+		expect(lexSkip('価格new /x/', 2, false)).toEqual({ next: 5, pee: true, consumed: true });
+		// The low surrogate of U+20000 sits directly before the run.
+		expect(lexSkip('𠀀typeof /x/', 2, false)).toEqual({ next: 8, pee: true, consumed: true });
+		// Only the unit directly before counts: a space breaks the name.
+		expect(lexSkip('価格 new /x/', 3, false)).toEqual({ next: 6, pee: false, consumed: true });
+	});
+
+	it('reads the / as division in every template position', async () => {
+		for (const tpl of [
+			'<p>{ café / 2 }</p>',
+			'<p title={ 金額 / 2 }>x</p>',
+			'{#if 価格 / 2 > 1}<b>y</b>{/if}',
+			'<p>{ items.map(радиус => радиус / 2) }</p>',
+			'<p>{ round(π / 2) }</p>',
+			'<p title="a { café / 2 } b">x</p>',
+			'{#case n}{:when 金額 / 2, 0}<b>z</b>{/case}',
+			'{#for x in 一覧.slice(総数 / 2), i}<b>{ x }</b>{/for}',
+			'<p>{ 価格new / 2 }</p>',
+			'<p>{ 価格return / 2 }</p>',
+			'<p>{ 5. / 2 }</p>',
+			'<p>{ of / 2 }</p>',
+			'<p>{ a /2}</p>',
+			'<p>{ a/ 2 }</p>',
+			'<p>{ a / b / c }</p>',
+			'<p>{ 𠀀 / 2 }</p>',
+			'<p>{ 𠀀new / 2 }</p>',
+			'<p>{ 😀 / 2 }</p>',
+			'<p>{ x😀 / 2 }</p>',
+		]) {
+			const src = `<puzzle-view>${tpl}</puzzle-view>\n<script>\nconst re = /}/;\n</script>\n`;
+			const b = sectionMap(src);
+			expect(Object.keys(b).sort(), tpl).toEqual(['puzzle-view', 'script']);
+			expect(b['puzzle-view'].inner, tpl).toBe(tpl);
+			expect(b['script'].inner, tpl).toBe('\nconst re = /}/;\n');
+			expect(await format(src), tpl).toBe(src);
+		}
+	});
+
+	it('still reads a regex in <script> after (, = and return', () => {
+		// A regex holding a quote must stay opaque, or the quote opens a string
+		// that swallows </script>. A division after a non-ASCII name in the same
+		// body is still division.
+		for (const body of [
+			"\nconst half = 金額 / 2;\nconst quote = /'/;\nexport default class A {}\n",
+			"\nconst half = 𠀀 / 2;\nfoo(/'/);\nexport default class A {}\n",
+			"\nfunction f() { return /'/; }\nconst r = café / 2;\n",
+			'\nconst re = /}/;\nconst n = 5. / 2;\n',
+			"\nconst tick = x.replace(/`([^`]+)`/g, '$1');\n",
+		]) {
+			const src = `<puzzle-view><p>x</p></puzzle-view>\n<script>${body}</script>\n<style>p { color: red }</style>\n`;
+			const b = sectionMap(src);
+			expect(Object.keys(b).sort(), body).toEqual(['puzzle-view', 'script', 'style']);
+			expect(b['script'].inner, body).toBe(body);
+			expect(b['style'].inner, body).toBe('p { color: red }');
+		}
+	});
+
+	it('still reads a regex after an operator or a keyword that cannot end an expression', async () => {
+		for (const tpl of ['<b>{ (a + /}/.source).length }</b>', '<b>{ typeof /}/ }</b>']) {
+			const src = `<puzzle-view>${tpl}</puzzle-view>\n`;
+			expect(sectionMap(src)['puzzle-view'].inner, tpl).toBe(tpl);
+			expect(await format(src), tpl).toBe(src);
+		}
 	});
 });
 
