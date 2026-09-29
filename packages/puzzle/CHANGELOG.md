@@ -237,7 +237,8 @@ different.
    needs a `refresh()` after the write, because `setData()` alone does not
    re-run `data()`. A handler still reaches the view through its own name:
    `@click={ save(x) }` calls the view's `save`.
-3. **The function library is 19 built-ins plus `link` and `t`.** The list
+3. **The function library is 19 standard functions plus the PuzzleKit-only
+   `link` and `timeago`.** The list
    functions `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first` and
    `last` are gone: shape a list with array methods (`items.filter(i =>
    i.done)`, `items.toSorted((a, b) => a.rank - b.rank)`, `items.at(-1)`) or in
