@@ -227,11 +227,13 @@ enforced, not merely advised.
   pipes, `.length` not `.size`, no `this`; it landed across PRs #164 (parser),
   #167 (codegen lowering), #168 (runtime library) and #171 (corpus migration
   and pipe removal), so the branch compiles only the new language, with the
-  `|` steer naming each removed formatter's replacement. Still ahead of the
-  tag: P1b (`{#raw}` skip in the section splitter, HTML void elements) and
-  the P5 port/grammar sweep in the eslint/prettier plugins and editors; the
-  Go evaluator in Sites (P6) comes after (see
-  DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
+  `|` steer naming each removed formatter's replacement. PR #172 (P1b) then
+  made the section splitter skip `{#raw}` spans, made HTML void elements legal
+  without a closer, and fixed the second-`{:else}` position and the `{#svg}`
+  BOM; PR #173 ported the splitter change to the eslint/prettier plugins. Still
+  ahead of the tag: the three editor grammars (in progress in the satellites
+  session) and the final review; the Go evaluator in Sites (P6) comes after
+  (see DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
   "Upgrading from 0.7" checklist. Production sizes: hello-world **21.7 KB
