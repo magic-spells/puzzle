@@ -42,13 +42,12 @@ notes:
 # D176 — The expression language: JavaScript-shaped, parsed once, evaluated by both hosts
 
 **Status: decided by Cory on 2026-09-28, sub-decisions included; building for
-0.8.0.** Rule 7 and P1–P4 are merged into `release/0.8.0` (PRs #163, #164,
-#167, #168 and #171); P1b, the template parser's markup fixes, is PR #172,
-reviewed and awaiting merge; P5 is open — the eslint/prettier ports of P1b
-(PR #173) and the three editor grammars; P6, the Go evaluator in Sites,
-follows the 0.8.0 tag. The tag waits for P1b and P5. D173, D174 and D175
-state the language's semantics, function library and translations in this
-card's terms. Two older questions remain under *Open*.
+0.8.0.** Rule 7, P1–P4 and P1b are merged into `release/0.8.0` (PRs #163,
+#164, #167, #168, #171 and #172), and so are P5's eslint/prettier ports of P1b
+(PR #173); what remains of P5 is the three editor grammars, the one piece the
+0.8.0 tag still waits for. P6, the Go evaluator in Sites, follows the tag.
+D173, D174 and D175 state the language's semantics, function library and
+translations in this card's terms. Two older questions remain under *Open*.
 
 ## Context
 
@@ -530,10 +529,10 @@ Two questions older than this card, still undecided:
   conformance rows at the puzzle-lang tag. Sites is not deployed, so none of
   this is a Sites upgrade.
 - **The eslint and prettier ports and the pieces demo's highlighter** speak
-  this language (PR #170). The ports lack P1b's `{#raw}` case in their vendored
-  section splitters until PR #173 merges. The three editor grammars, in their
-  own repos, are the one place the 0.7 grammar remains — they still color a
-  `| name` tail — until their P5 sweep lands.
+  this language (PR #170), and the ports' vendored section splitters skip a
+  `{#raw}` span the way P1b's does (PR #173). The three editor grammars, in
+  their own repos, are the one place the 0.7 grammar remains — they still
+  color a `| name` tail — until their P5 sweep lands.
 - **Carried over unchanged:** D173 V2's loose `==`, V4's guarded member reads,
   V6's value printing, the markup-position rule for `raw` and
   `newline_to_br`, and rule 7.
@@ -541,7 +540,7 @@ Two questions older than this card, still undecided:
 ## Build list
 
 Each phase is a PR into `release/0.8.0`, except P6, which lands in the Sites
-repo. The 0.8.0 tag waits for P1b and P5.
+repo. The 0.8.0 tag waits for P5's editor grammars.
 
 - **Rule 7 — Built** (PR #163, merged as 9ca0547e): `this` is rejected in
   every template expression, handler arguments and the handler ternary
@@ -573,14 +572,14 @@ repo. The 0.8.0 tag waits for P1b and P5.
    nine covered names, `formatters/deprecated.js`, `size.js` and `sizeOf`; the
    CHANGELOG, skill, README and example docs; D173–D176 and the component
    cards truthed.
-5. **P1b — PR #172, reviewed, awaiting merge.** The template parser's markup
+5. **P1b — Built** (PR #172, merged as 2765ea1b). The template parser's markup
    fixes: the section splitter skips a `{#raw}` body, the HTML void elements
    need no slash (`<input>`, with `</input>` the error), a second `{:else}`
    reports at its own position, and a byte-order mark in a `{#svg}` file is
    accepted.
 6. **P5 — Open.** The eslint and prettier ports and the pieces demo's
-   highlighter moved to the expression language in PR #170; the ports' P1b
-   cases are PR #173, stacked on #172; the three editor grammars (separate
-   repos) are being swept.
+   highlighter moved to the expression language in PR #170, and the ports'
+   P1b `{#raw}` case landed in PR #173 (merged as ed9245cb); the three editor
+   grammars (separate repos) are being swept, the last piece before the tag.
 7. **P6 — After the tag.** Sites: the Go evaluator and the function library,
    and the evaluation conformance table.
