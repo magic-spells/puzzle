@@ -628,9 +628,11 @@ value can reach it — so this is not raw HTML injection.
 
 Raw blocks do not nest; the first closer wins. The closer tolerates whitespace
 (`{/raw}`, `{/ raw }`, `{/raw }`), and anything after the opener keyword is
-ignored. A literal `{/raw}` cannot appear in the body. Raw blocks are allowed at
-text positions, not inside attribute values; an unterminated block reports the
-opening position and the missing `{/raw}`.
+ignored. A literal `{/raw}` cannot appear in the body. A literal
+`</puzzle-view>` can: the compiler finds a file's sections around a raw block,
+never inside it, so a sample that shows a whole `.pzl` file works. Raw blocks
+are allowed at text positions, not inside attribute values; an unterminated
+block reports the opening position and the missing `{/raw}`.
 
 For a single literal brace — anywhere, attribute values included — escape it:
 `\{` and `\}` compile to the literal characters. The HTML form idiom is the case
@@ -645,6 +647,26 @@ which `JSON.parse()` decodes to the original value.
 
 The `raw` **function** solves a different, value-level problem and cannot be
 used to put literal braces in template source.
+
+## HTML void elements
+
+HTML's void elements — `area`, `base`, `br`, `col`, `embed`, `hr`, `img`,
+`input`, `link`, `meta`, `source`, `track` and `wbr` — take no closing tag, as
+in HTML. The start tag is the whole element, so `<br>`, `<br/>` and `<br />`
+compile to the same output, and what follows a `<br>` belongs to the parent
+element:
+
+```html
+<p>First line<br>second line</p>
+<img src="/logo.svg" alt="Puzzle">
+<input value={ x } readonly>   <!-- static readonly keeps it one-way -->
+```
+
+A closing tag for a void element is a positioned compile error at the closer:
+`<input type="text"></input>` reports "`<input>` is a void element and has no
+closing tag — remove the `</input>`". Only the lowercase names are void —
+`<Input>` is a component tag, like every capitalized tag. The rule holds inside
+`{#raw}`, where HTML is still parsed.
 
 ---
 
@@ -702,6 +724,7 @@ modifiers, and `{:else if}` are shipped and documented above.
 | Comment (inline) | `{## text }` | `{## TODO: swap for real data }` |
 | Comment (block) | `{#comment} … {/comment}` (body raw — can wrap broken markup) | `{#comment}{#if wip}…{/comment}` |
 | Raw source block | `{#raw} … {/raw}` (braces literal; HTML still parsed) | `<pre>{#raw}const x = { a: 1 };{/raw}</pre>` |
+| Void element | `<br>`, `<img …>`, `<input …>` — no closing tag, `/>` optional; `</input>` is an error | `<p>a<br>b</p>`, `<input value={ x } readonly>` |
 
 ## Related documentation
 
