@@ -654,3 +654,74 @@ describe('splitSections — 0.8.0 template expressions', () => {
 		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe(sections.scripts.content);
 	});
 });
+
+// Mirrors the lexskip.go fix for division after a non-ASCII name, a
+// trailing-dot number, or a field named `of`. Each of those used to leave the
+// scanner expecting an operand, so the '/' opened a bogus regex that ran to the
+// '/' of the script's /}/ and landed the section boundary in the wrong place.
+// Every UTF-16 unit of a non-ASCII character is >= 0x80, as every UTF-8 byte
+// is, so a surrogate pair (CJK Extension B, emoji) behaves like Go's
+// multi-byte run.
+describe('splitSections — division after a non-ASCII name, `5.` or `of`', () => {
+	const wrap = (tpl, tail) => `<puzzle-view>${tpl}</puzzle-view>\n${tail}`;
+	const closingScript = '<script>\nconst re = /}/;\n</script>\n';
+
+	it('reads the / as division in every template position', () => {
+		for (const tpl of [
+			'<p>{ café / 2 }</p>',
+			'<p title={ 金額 / 2 }>x</p>',
+			'{#if 価格 / 2 > 1}<b>y</b>{/if}',
+			'<p>{ items.map(радиус => радиус / 2) }</p>',
+			'<p>{ round(π / 2) }</p>',
+			'<p title="a { café / 2 } b">x</p>',
+			'{#case n}{:when 金額 / 2, 0}<b>z</b>{/case}',
+			'{#for x in 一覧.slice(総数 / 2), i}<b>{ x }</b>{/for}',
+			'<p>{ 価格new / 2 }</p>',
+			'<p>{ 価格return / 2 }</p>',
+			'<p>{ 5. / 2 }</p>',
+			'<p>{ of / 2 }</p>',
+			'<p>{ a /2}</p>',
+			'<p>{ a/ 2 }</p>',
+			'<p>{ a / b / c }</p>',
+			// Astral characters are two UTF-16 units, both >= 0x80.
+			'<p>{ 𠀀 / 2 }</p>',
+			'<p>{ 𠀀new / 2 }</p>',
+			'<p>{ 😀 / 2 }</p>',
+			'<p>{ x😀 / 2 }</p>',
+		]) {
+			const { sections, errors } = splitSections(wrap(tpl, closingScript), 'x.pzl');
+			expect(errors, tpl).toEqual([]);
+			expect(sections.view.content, tpl).toBe(tpl);
+			expect(sections.scripts.content, tpl).toBe('\nconst re = /}/;\n');
+		}
+	});
+
+	it('still reads a regex in <script> after (, = and return', () => {
+		// A regex holding a quote must stay opaque, or the quote opens a string
+		// that swallows </script>. A division after a non-ASCII name in the same
+		// body is still division.
+		for (const body of [
+			"\nconst half = 金額 / 2;\nconst quote = /'/;\nexport default class A {}\n",
+			"\nconst half = 𠀀 / 2;\nfoo(/'/);\nexport default class A {}\n",
+			"\nfunction f() { return /'/; }\nconst r = café / 2;\n",
+			'\nconst re = /}/;\nconst n = 5. / 2;\n',
+			"\nconst tick = x.replace(/`([^`]+)`/g, '$1');\n",
+		]) {
+			const src = wrap('<p>x</p>', `<script>${body}</script>\n<style>p { color: red }</style>\n`);
+			const { sections, errors } = splitSections(src, 'x.pzl');
+			expect(errors, body).toEqual([]);
+			expect(sections.scripts.content, body).toBe(body);
+			expect(sections.styles.content, body).toBe('p { color: red }');
+		}
+	});
+
+	it('still reads a regex after a keyword that cannot end an expression', () => {
+		// `(a + /}/.source)` and `typeof /}/` keep their regex reading, so the
+		// '}' inside the literal does not close the interpolation.
+		for (const tpl of ['<b>{ (a + /}/.source).length }</b>', '<b>{ typeof /}/ }</b>']) {
+			const { sections, errors } = splitSections(wrap(tpl, '<script>\nexport default 1;\n</script>\n'), 'x.pzl');
+			expect(errors, tpl).toEqual([]);
+			expect(sections.view.content, tpl).toBe(tpl);
+		}
+	});
+});
