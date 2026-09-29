@@ -338,6 +338,8 @@ func parseFile(path, rel string) (map[string]any, []string, []string) {
 	if err != nil {
 		return nil, []string{fmt.Sprintf("%s: %v", rel, err)}, nil
 	}
+	// A UTF-8 byte order mark (Windows editors write one) is not JSON; drop it.
+	src = bytes.TrimPrefix(src, []byte("\xEF\xBB\xBF"))
 	dec := &lineDecoder{Decoder: json.NewDecoder(bytes.NewReader(src)), src: src}
 	root, err := readValue(dec)
 	if err == nil {

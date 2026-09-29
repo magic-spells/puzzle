@@ -292,6 +292,19 @@ func TestLoadSkipsDotfiles(t *testing.T) {
 	}
 }
 
+// Windows editors (Notepad, older Visual Studio) save UTF-8 with a byte order
+// mark; the file is still valid JSON text and must load.
+func TestLoadAcceptsUTF8BOM(t *testing.T) {
+	root := writeLocales(t, map[string]string{"en.json": "\xEF\xBB\xBF{\n  \"a\": \"A\"\n}\n"})
+	res, err := Load(root, cfg("en", "en"))
+	if err != nil {
+		t.Fatalf("a BOM must be accepted, got: %v", err)
+	}
+	if got := table(t, res, "en")["a"]; got != "A" {
+		t.Fatalf("en table = %v", table(t, res, "en"))
+	}
+}
+
 func TestWriteTo(t *testing.T) {
 	root := writeLocales(t, map[string]string{"en.json": `{"a":"A"}`, "es.json": `{"a":"B"}`})
 	res, err := Load(root, cfg("en", "en", "es"))
