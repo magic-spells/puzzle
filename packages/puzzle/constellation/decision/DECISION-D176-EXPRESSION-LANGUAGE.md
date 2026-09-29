@@ -106,7 +106,8 @@ deviations hold in both hosts:
 ### 3. The method table is the boundary
 
 A method is callable only when the table lists it for the receiver's runtime
-type. Each entry is a JavaScript method with a Go reimplementation that behaves
+type; the one exception is a chain rooted at `event` inside an `@event`
+handler (rule 7). Each entry is a JavaScript method with a Go reimplementation that behaves
 exactly like it, pinned by a conformance row. No entry mutates its receiver:
 there is no `push`, `pop`, `splice`, `sort` or `reverse`, and `toSorted` and
 `toReversed` cover display. The v1 table:
@@ -207,6 +208,12 @@ Date(). we'll have limited support."
   use the same expression grammar, with `event` in scope, and are evaluated
   when the event fires. The handler ternary's condition is an ordinary
   expression.
+- **A chain rooted at `event` is unrestricted.** Inside an `@event` handler,
+  `event` is the DOM event, not template data, so the method table (rule 3)
+  does not apply to a chain rooted at it: any member read and any DOM method
+  call is legal (`event.target.value`, `event.target.closest('li')`,
+  `event.preventDefault()`). This is a PuzzleKit-only extension by
+  construction: Sites has no handlers, so it never sees an `event` chain.
 - The handler is a dialect extension in the D172 sense, like `<Portal>`: Sites
   rejects `@event` with an error that says so.
 - **No `{#let}` in PuzzleKit.** Cory: it "would allow people to put logic in
@@ -228,10 +235,15 @@ Date(). we'll have limited support."
   table, the function library and JavaScript number formatting. Its existing
   `engine/expr` allow-list is the base. Sites can lag PuzzleKit because it is
   not deployed.
-- **Shared conformance:** `tests/conformance/expressions.json` (an expression
-  and its inputs → the value) and `functions.json` move into puzzle-lang
-  (`go:embed`), so Sites pins them at the language tag and both hosts run the
-  same rows.
+- **Shared conformance** lives in puzzle-lang's `conformance` package
+  (`packages/puzzle-lang/conformance`), which embeds each JSON file
+  (`go:embed`), so Sites pins the rows at the language tag and both hosts run
+  the same ones. `expressions-parse.json` pins the grammar: an expression and
+  its tree, or its positioned error (341 cases, run by `expr`'s tests; Sites
+  runs them through `conformance.ExpressionsParse` and `expr.Print`).
+  `formatters.json` moved there from `packages/puzzle/tests/conformance` and
+  becomes the function library's rows in P3. The evaluation table, an
+  expression and its inputs → the value, is still planned.
 
 ### 9. Template rules around the expression
 
@@ -369,6 +381,13 @@ Two questions older than this rewrite, still undecided:
   pins the grammar, the method table, the function library and the
   conformance rows at the puzzle-lang tag. Sites is not deployed, so none of
   this is a Sites upgrade.
+- **Identifier classes follow the Go toolchain's Unicode tables.** `expr`
+  decides `ID_Start`/`ID_Continue` with Go's `unicode` package, whose tables
+  track the Unicode version of each Go release. The PuzzleKit compiler and
+  Sites must therefore build with the same Go minor to agree on edge
+  characters, such as a letter a newer Unicode version adds. This is a known
+  dependency, not a bug: the identifier rows in `expressions-parse.json` pin
+  it, so a toolchain skew fails a row instead of drifting silently.
 - **The eslint and prettier ports** drop pipe handling, and the three editor
   grammars get a sweep (P5).
 - **Other cards:** D173 (V1 and the pipe forms, V7's `.size`), D174 (the
@@ -392,9 +411,12 @@ repo. The 0.8.0 tag waits for P1–P5.
   (typed-todos `Home.pzl`, chat `Composer.pzl`, blog `PostDetail.pzl`) moved
   into `data()`. `this` stays in the resolver's keyword table as defense in
   depth.
-1. **P1 — Building.** puzzle-lang: the expression grammar, AST, parser and
-   positioned errors (the `expr` package), and the `expressions.json`
-   fixtures. Roughly 1.5k lines of Go plus tests.
+1. **P1 — PR #164 in review.** puzzle-lang: the expression grammar, AST,
+   parser and positioned errors (the `expr` package); the template parser
+   filling a parsed sibling for every expression field (codegen still reads
+   the strings until P2); and the `conformance` package with
+   `expressions-parse.json` (341 parse cases) and `formatters.json`, moved
+   from `packages/puzzle/tests/conformance`.
 2. **P2 — Planned.** Codegen lowers from the AST, replacing the resolver's
    token scan, `datalang.go` and `sizeSteps`; D170 row facts come from the
    AST; the `puzzle check` emitter; goldens. The largest phase: the resolver is

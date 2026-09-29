@@ -125,6 +125,13 @@ notes:
       allowlist carry over; whether `tel:` stays in the allowlist and whether `currency`'s delimiter
       follows the locale remain open on D176. This card is rewritten in place when the code lands
       (D176 build list P4); until then it describes what `release/0.8.0` ships.
+  - kind: state
+    text: >-
+      The conformance table no longer lives at `packages/puzzle/tests/conformance/formatters.json`
+      (the first state note's path): PR #164 moves it into the language module at
+      `packages/puzzle-lang/conformance/formatters.json`. The `conformance` package embeds it
+      (`go:embed`, `conformance.Formatters`), so Sites runs the same rows pinned at the puzzle-lang
+      tag, and PuzzleKit's vitest suite imports the JSON file directly.
 ---
 
 # D174 — The standard formatter set

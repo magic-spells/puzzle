@@ -655,7 +655,9 @@ landed once it did. Items marked **[after #150]** build on PR #150's
 7. **[now] The `t` formatter.** Registered over the service if absent;
    `STANDARD_FORMATTERS` gains `t`; the D43 development hint names `i18n` for
    `t`. Tests: `tests/formatters.test.js`, and the shared conformance table
-   gains the `t` rows (`tests/conformance/formatters.json`).
+   gains the `t` rows (`packages/puzzle-lang/conformance/formatters.json`,
+   embedded by the language module's `conformance` package so Sites runs the
+   same rows).
 8. **[after #150] Formatter locale threading.** The new
    `client-runtime/formatters/locale.js` and the `builtins.js` edits described
    under Formatter locale. Tests: formatter locale cases in a child process

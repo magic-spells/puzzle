@@ -550,8 +550,9 @@ Template-relevant sections in DOC-SPEC-VIEW are all PuzzleKit: §12 animations,
 
 [[DECISION-D174-STANDARD-FORMATTERS]] fixes the **standard set: 27 names**
 with the same arguments and meaning in both hosts, pinned for identical output
-by the shared conformance table (`tests/conformance/formatters.json` in
-`packages/puzzle`, which Sites' Go tests are to run too). D174 has each name's
+by the shared conformance table (`packages/puzzle-lang/conformance/formatters.json`,
+embedded by the language module's `conformance` package, so both hosts run the
+same rows at the same module version). D174 has each name's
 contract; this table records where each host stands against it. `t` joined
 the set with [[DECISION-D175-TRANSLATIONS]]; `size`, the arithmetic
 formatters, `default` and `split` left it with

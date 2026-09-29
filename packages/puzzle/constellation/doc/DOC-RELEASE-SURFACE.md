@@ -127,7 +127,8 @@ second specification. Decision cards hold rationale and git holds chronology.
   `long`, `iso`. Translation: `t` (D175). No list formatters (list shaping is `data()`); a removed name
   passes through with a development hint, and an app formatter shadowing a
   standard name draws a development warning. A shared JSON conformance table
-  (`tests/conformance/formatters.json`) pins the identical-output part.
+  (`packages/puzzle-lang/conformance/formatters.json`, embedded by the
+  language module so Sites runs the same rows) pins the identical-output part.
 - **`raw` and `newline_to_br` render live HTML (D174 group e).** `raw` always
   runs an allowlist sanitizer — the same code in the browser and in prerender —
   that keeps document markup, links and images, `class`/`id`/`title`/`lang`/
