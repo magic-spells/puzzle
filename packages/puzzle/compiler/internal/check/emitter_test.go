@@ -245,6 +245,23 @@ func TestEmitPreservesTypeScriptBytes(t *testing.T) {
 	}
 }
 
+// The class name is read back off the compiled render tail; a non-ASCII name
+// must come back whole, or the checked wrapper names a class that does not exist.
+func TestUnicodeClassNameReachesTheWrapper(t *testing.T) {
+	for _, className := range []string{"Übersicht", "概要", "Straßenkarte"} {
+		t.Run(className, func(t *testing.T) {
+			source := []byte("<puzzle-view><div>{ title }</div></puzzle-view>\n<script lang=\"ts\">\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class " + className + " extends PuzzleView {}\n</script>\n")
+			files, err := emitFiles(source, "app/views/V.pzl", ".puzzle/check/src/views/V.pzl", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := "InstanceType<typeof " + className + ">"; !bytes.Contains(files[0].Contents, []byte(want)) {
+				t.Fatalf("wrapper does not bind this to %s:\n%s", className, files[0].Contents)
+			}
+		})
+	}
+}
+
 func virtualFileWithExtension(t *testing.T, files []virtualFile, ext string) virtualFile {
 	t.Helper()
 	for _, file := range files {

@@ -497,8 +497,11 @@ func compiledClassName(js string) (string, error) {
 	return js[j:i], nil
 }
 
+// isIdentByte reports whether c can belong to the class name codegen wrote
+// before the render tail. Any byte >= 0x80 does: the name is a valid
+// identifier (`Übersicht`, `概要`) and the byte before it is a newline.
 func isIdentByte(c byte) bool {
-	return c == '_' || c == '$' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+	return c == '_' || c == '$' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c >= 0x80
 }
 
 func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent int) error {

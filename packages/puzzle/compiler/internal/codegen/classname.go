@@ -3,6 +3,7 @@ package codegen
 import (
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
@@ -171,19 +172,21 @@ func isASCIISpace(b byte) bool {
 
 // classNameFromFilename derives a valid JS class identifier from a .pzl filename
 // for scriptless components (DOC-SPEC.md §4, where <script> is optional). The
-// base name has its extension stripped, every character that is not a JS
-// identifier char replaced with '_', and a leading '_' prepended when the result
-// would otherwise start with a digit or be reserved in strict-mode JavaScript.
-// An empty/degenerate name falls back to a stable default.
+// base name has its extension stripped, every character that cannot continue a
+// JS identifier (jsident.IsIDContinue — so `Übersicht` stays whole) replaced
+// with '_', and a leading '_' prepended when the result would otherwise not
+// start an identifier (a digit, a combining mark) or be reserved in
+// strict-mode JavaScript. An empty/degenerate name falls back to a stable
+// default.
 func classNameFromFilename(filename string) string {
 	base := filepath.Base(filename)
 	if ext := filepath.Ext(base); ext != "" {
 		base = strings.TrimSuffix(base, ext)
 	}
 	var b strings.Builder
-	for i := 0; i < len(base); i++ {
-		if c := base[i]; isIdentChar(c) {
-			b.WriteByte(c)
+	for _, r := range base {
+		if jsident.IsIDContinue(r) {
+			b.WriteRune(r)
 		} else {
 			b.WriteByte('_')
 		}
@@ -192,7 +195,7 @@ func classNameFromFilename(filename string) string {
 	if name == "" {
 		return "PuzzleComponent"
 	}
-	if name[0] >= '0' && name[0] <= '9' || jsident.IsReservedBindingIdentifier(name) {
+	if first, _ := utf8.DecodeRuneInString(name); !jsident.IsIDStart(first) || jsident.IsReservedBindingIdentifier(name) {
 		name = "_" + name
 	}
 	return name

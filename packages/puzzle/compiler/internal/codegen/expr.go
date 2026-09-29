@@ -1,6 +1,11 @@
 package codegen
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
+)
 
 // expr.go holds the small lexical helpers the emitters share. Template
 // expressions themselves are lowered from their AST (lower.go).
@@ -11,6 +16,40 @@ func isIdentStart(b byte) bool {
 
 func isIdentChar(b byte) bool {
 	return isIdentStart(b) || (b >= '0' && b <= '9')
+}
+
+// identRunEnd returns the end of the identifier run that continues at s[j]:
+// ASCII name bytes plus every non-ASCII rune jsident.IsIDContinue accepts — the
+// template expression lexer's rule — so `Straßenkarte` and `金額` are one name.
+// parser.LexSkip consumes only the ASCII part of a run; the <script> scans
+// extend it here.
+func identRunEnd(s string, j int) int {
+	for j < len(s) {
+		if c := s[j]; c < utf8.RuneSelf {
+			if !isIdentChar(c) {
+				break
+			}
+			j++
+			continue
+		}
+		r, n := utf8.DecodeRuneInString(s[j:])
+		if !jsident.IsIDContinue(r) {
+			break
+		}
+		j += n
+	}
+	return j
+}
+
+// startsNonASCIIIdent reports whether s[i] opens a name with a non-ASCII
+// ID_Start rune (`Übersicht`, `概要`) — a run parser.LexSkip leaves to the
+// caller byte by byte.
+func startsNonASCIIIdent(s string, i int) bool {
+	if s[i] < utf8.RuneSelf {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(s[i:])
+	return jsident.IsIDStart(r)
 }
 
 // isJSIdentifier reports whether s is a bare ASCII JS identifier — whether an
