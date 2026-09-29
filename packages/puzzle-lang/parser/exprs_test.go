@@ -168,9 +168,10 @@ func parseErr(t *testing.T, body string) *ParseError {
 	return pe
 }
 
-// `event` is the DOM event of an @event handler and nothing else: legal only
-// in a handler, where a chain rooted at it is unrestricted, and never a name a
-// template binds.
+// In an @event handler `event` is the DOM event, and a chain rooted at it is
+// unrestricted. Everywhere else it is an ordinary name that reads the data
+// field or prop of that name, and a template binding named `event` shadows
+// both.
 func TestEventIsTheHandlersDOMEvent(t *testing.T) {
 	for _, body := range []string{
 		"<button @click={ go(event) }>x</button>",
@@ -180,19 +181,14 @@ func TestEventIsTheHandlersDOMEvent(t *testing.T) {
 		"<input @change={ load(event.target.files.item(0)) }/>",
 		"{#for row in rows}<li @click={ pick(row, event.currentTarget.getAttribute('data-x')) }>x</li>{/for}",
 		"<p>{ event2 }{ events }</p>",
-	} {
-		if pe := parseErr(t, body); pe != nil {
-			t.Errorf("%s: %v", body, pe)
-		}
-	}
-	for _, body := range []string{
+		// Outside a handler, the data field or prop named `event`.
 		"<p>{ event }</p>",
 		"<p title={ event.x }>x</p>",
 		"{#if event}<b>a</b>{/if}",
+		"<p>{ { event } }</p>",
 	} {
-		pe := parseErr(t, body)
-		if pe == nil || !strings.HasPrefix(pe.Message, "`event` is only available in an event handler — a data field named `event` cannot be read in a template; rename the field") {
-			t.Errorf("%s: got %v, want the event error", body, pe)
+		if pe := parseErr(t, body); pe != nil {
+			t.Errorf("%s: %v", body, pe)
 		}
 	}
 	// Outside a handler a chain is data: the method table applies again.
@@ -209,6 +205,12 @@ func TestEventIsTheHandlersDOMEvent(t *testing.T) {
 		"<p>{ fmt(items, event => event.id) }</p>",
 		"{#for event in rows}<li @click={ pick(event.id) }>x</li>{/for}",
 		"<li @click={ go(event.target.closest('li'), items.map(event => event.id)) }>x</li>",
+		// The binding ends with its loop: after it, and in its own header,
+		// `event` is the data field again, and a handler's `event` the DOM
+		// event (whose chain skips the method table).
+		"{#for event in events}<b>a</b>{/for}<p>{ event }</p>",
+		"{#for event in event.items}<b>a</b>{/for}",
+		"{#for event in rows}<b>a</b>{/for}<li @click={ go(event.target.closest('li')) }>x</li>",
 	} {
 		if pe := parseErr(t, body); pe != nil {
 			t.Errorf("%s: %v", body, pe)
@@ -219,12 +221,40 @@ func TestEventIsTheHandlersDOMEvent(t *testing.T) {
 	for _, tc := range []struct{ body, want string }{
 		{"{#for event in rows}<li @click={ pick(event.target.closest('li')) }>x</li>{/for}", "`.closest()` is not available"},
 		{"<li @click={ save(items.map(event => event.closest('li'))) }>x</li>", "`.closest()` is not available"},
-		{"{#for event in events}<b>a</b>{/for}<p>{ event }</p>", "`event` is only available in an event handler"},
-		{"{#for event in event.items}<b>a</b>{/for}", "`event` is only available in an event handler"},
+		// Outside a handler the data field's chain keeps the method table.
+		{"<p>{ event.target.closest('li') }</p>", "`.closest()` is not available"},
 	} {
 		if pe := parseErr(t, tc.body); pe == nil || !strings.Contains(pe.Message, tc.want) {
 			t.Errorf("%s: got %v, want %q", tc.body, pe, tc.want)
 		}
+	}
+}
+
+// A data field or prop named `event` works in a view body and as a component
+// prop, and a handler's `event` is still the DOM event.
+func TestEventOutsideAHandlerReadsTheDataField(t *testing.T) {
+	root := parseContent(t, "<h1>{ event.title }</h1>"+
+		"{#for item in events}<EventCard event={ item }/>{/for}"+
+		"<button @click={ save(event) }>x</button>"+
+		"<li @click={ pick(event.target.closest('li')) }>y</li>")
+	kids := elementChildren(root.Children)
+	title := kids[0].(*Element).Children[0].(*Interpolation)
+	if got := expr.Print(title.ExprAST); got != "(. event title)" {
+		t.Errorf("{ event.title }: got %s, want the plain member (. event title)", got)
+	}
+	card := elementChildren(kids[1].(*For).Body)[0].(*Component)
+	prop := card.Props[0].(*DynamicAttr)
+	if prop.Name != "event" || expr.Print(prop.ExprAST) != "item" {
+		t.Errorf("event={ item }: got %s={ %s }", prop.Name, expr.Print(prop.ExprAST))
+	}
+	click := kids[2].(*Element).Attrs[0].(*EventAttr)
+	if got := expr.Print(click.ExprAST); got != "(call save event)" {
+		t.Errorf("@click={ save(event) }: got %s", got)
+	}
+	// Only the DOM event's chain skips the method table, so this parses only
+	// because the handler's `event` is still the DOM event.
+	if pick := kids[3].(*Element).Attrs[0].(*EventAttr); pick.ExprAST == nil {
+		t.Error("@click={ pick(event.target.closest('li')) }: no tree")
 	}
 }
 

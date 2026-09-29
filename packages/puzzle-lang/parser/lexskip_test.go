@@ -3,6 +3,8 @@ package parser
 import (
 	"strings"
 	"testing"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 )
 
 func TestScanBraceGroupRegex(t *testing.T) {
@@ -160,6 +162,8 @@ func TestLexSkip(t *testing.T) {
 		{"identifier run", "abc+", 0, false, 3, true, true},
 		{"keyword return leaves regex", "return /x/", 0, false, 6, false, true},
 		{"keyword as property ends expr", ".return /x/", 1, false, 7, true, true},
+		{"contextual of ends expr", "of /x/", 0, false, 2, true, true},
+		{"keyword-shaped tail of a non-ASCII name ends expr", "価格new /x/", len("価格"), false, len("価格new"), true, true},
 		{"increment preserves expression-ending state", "++ / b", 0, true, 2, true, true},
 		{"decrement preserves expression-start state", "--a / b", 0, false, 2, false, true},
 		{"operator not consumed", "+ a", 0, false, 0, false, false},
@@ -312,7 +316,11 @@ func TestLexPlainEndsExpr(t *testing.T) {
 		{')', false, true},  // closing bracket ends an expression
 		{']', false, true},
 		{'}', false, true},
-		{'5', false, true}, // digit ends an expression
+		{'5', false, true},  // digit ends an expression
+		{'.', false, true},  // a trailing-dot number (`5.`) ends an expression
+		{0xA9, false, true}, // last byte of `é`: a non-ASCII name ends an expression
+		{0x80, false, true},
+		{0xFF, false, true},
 		{'+', true, false}, // operator does not end an expression
 		{'(', true, false}, // opening bracket does not end an expression
 		{',', true, false},
@@ -321,5 +329,111 @@ func TestLexPlainEndsExpr(t *testing.T) {
 		if got := LexPlainEndsExpr(tc.c, tc.prev); got != tc.want {
 			t.Errorf("LexPlainEndsExpr(%q, %v) = %v, want %v", tc.c, tc.prev, got, tc.want)
 		}
+	}
+}
+
+// firstExprAST returns the tree of the first expression position in nodes,
+// depth first: an interpolation, an element attribute value, or an {#if}
+// condition.
+func firstExprAST(nodes []Node) expr.Node {
+	for _, n := range nodes {
+		switch t := n.(type) {
+		case *Interpolation:
+			return t.ExprAST
+		case *If:
+			return t.CondAST
+		case *Element:
+			for _, a := range t.Attrs {
+				if d, ok := a.(*DynamicAttr); ok {
+					return d.ExprAST
+				}
+			}
+			if x := firstExprAST(t.Children); x != nil {
+				return x
+			}
+		}
+	}
+	return nil
+}
+
+// A '/' after any operand is division in every template position. The brace
+// scan used to take a '/' after a name ending in a non-ASCII letter, after a
+// trailing-dot number, or after a field named `of` for a regex opener and run
+// past the closing '}', so the expression grammar never saw a division it
+// accepts (conformance: `café / 2`) and the author got "unclosed '{'".
+func TestParseDivisionInEveryTemplatePosition(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{"text interpolation, accented name", "<p>{ café / 2 }</p>", "(/ café 2)"},
+		{"attribute value, CJK name", "<p title={ 金額 / 2 }>x</p>", "(/ 金額 2)"},
+		{"{#if} header, CJK name", "{#if 価格 / 2 > 1}<b>y</b>{/if}", "(> (/ 価格 2) 1)"},
+		{"arrow body, Cyrillic name", "<p>{ items.map(радиус => радиус / 2) }</p>", "(call (. items map) (=> (радиус) (/ радиус 2)))"},
+		{"call argument, Greek name", "<p>{ round(π / 2) }</p>", "(call round (/ π 2))"},
+		// Parse-only rows: the {:when} list split and the {#for} counter peel
+		// run the same scan, so a misread slash would hide their commas.
+		{"quoted attribute interpolation", `<p title="a { café / 2 } b">x</p>`, ""},
+		{"{:when} value list", "{#case n}{:when 金額 / 2, 0}<b>z</b>{/case}", ""},
+		{"{#for} collection before a counter", "{#for x in 一覧.slice(総数 / 2), i}<b>{ x }</b>{/for}", ""},
+		// An ASCII run straight after a non-ASCII letter continues the same
+		// name, so a keyword-shaped tail is not a keyword.
+		{"name ending in a keyword-shaped ASCII tail", "<p>{ 価格new / 2 }</p>", "(/ 価格new 2)"},
+		{"slash in a string", "<p>{ 'a/b' + x }</p>", "(+ 'a/b' x)"},
+		{"slash in a template literal", "<p>{ `a/${x}/b` }</p>", "(tpl 'a/' x '/b')"},
+		{"chained division", "<p>{ a / b / c }</p>", "(/ (/ a b) c)"},
+		{"no space after the slash", "<p>{ a /2}</p>", "(/ a 2)"},
+		{"no space before the slash", "<p>{ a/ 2 }</p>", "(/ a 2)"},
+		{"trailing-dot number", "<p>{ 5. / 2 }</p>", "(/ 5 2)"},
+		{"field named of", "<p>{ of / 2 }</p>", "(/ of 2)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := parseContent(t, tc.content)
+			if tc.want == "" {
+				return
+			}
+			got := firstExprAST(root.Children)
+			if got == nil {
+				t.Fatalf("no expression tree in %q", tc.content)
+			}
+			if p := expr.Print(got); p != tc.want {
+				t.Errorf("%q:\n got  %s\n want %s", tc.content, p, tc.want)
+			}
+		})
+	}
+}
+
+// A regex-shaped expression still closes at its brace: the scan steps over
+// the would-be literal, and the error is the expression grammar's own — a
+// regular expression is not part of the language — never "unclosed '{'".
+func TestParseRegexShapedExpressionIsAnExpressionError(t *testing.T) {
+	src := "<puzzle-view><p>{ /x}/ }</p></puzzle-view>\n<script></script>"
+	_, err := Parse([]byte(src), "t.pzl")
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("want a ParseError, got %v", err)
+	}
+	if !strings.HasPrefix(pe.Message, "regular expression literals are not available") {
+		t.Fatalf("a regex-shaped expression must reach the expression parser, got %d:%d %s", pe.Line, pe.Col, pe.Message)
+	}
+	if line, col := at(t, src, "/x}/"); pe.Line != line || pe.Col != col {
+		t.Errorf("error at %d:%d, want %d:%d (%s)", pe.Line, pe.Col, line, col, pe.Message)
+	}
+}
+
+// The <script> scan is why the regex skip stays: a regex literal holding a
+// quote must stay opaque, or the quote opens a string that swallows the close
+// tag. A division after a non-ASCII name in the same body is still division.
+func TestScriptScanSkipsARegexHoldingAQuote(t *testing.T) {
+	body := "\nconst half = 金額 / 2;\nconst quote = /'/;\nexport default class A {}\n"
+	src := "<puzzle-view><p>x</p></puzzle-view>\n<script>" + body + "</script>\n<style>p { color: red }</style>"
+	sec, err := SplitSections(src, "A.pzl")
+	if err != nil {
+		t.Fatalf("SplitSections: %v", err)
+	}
+	if sec.Scripts != body {
+		t.Fatalf("script body = %q, want %q", sec.Scripts, body)
 	}
 }

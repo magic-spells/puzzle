@@ -52,6 +52,8 @@ func TestClassifyBindExpr(t *testing.T) {
 		// a template binding may own the name.
 		{name: "a binding named window", raw: "window.open", scope: scopeMap{"window": ""}, target: "window", field: "open", ok: true},
 		{name: "scoped event member", raw: "event.detail", scope: scopeMap{"event": ""}, target: "event", field: "detail", ok: true},
+		// Outside a handler `event` is an ordinary data field.
+		{name: "a data field named event", raw: "event.title", target: "event", field: "title", ok: true},
 		{name: "quoted empty", raw: "''"},
 		{name: "object literal", raw: "{ a: 1 }"},
 		{name: "scoped bare", raw: "todo", scope: scopedTodo},

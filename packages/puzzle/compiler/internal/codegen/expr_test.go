@@ -417,6 +417,73 @@ export default class T extends PuzzleView {
 	}
 }
 
+// Outside a handler `event` is an ordinary name: a data field or prop named
+// `event` reads `__d.event` like any other, a component prop may be named
+// `event`, and a handler's `event` is still the DOM event parameter. Each
+// compiles on its own; a loop variable named `event` is a binding, not data.
+func TestEventOutsideAHandlerIsDataPzlCompile(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		want       []string
+	}{
+		{"a data field and a prop named event",
+			"<h1>{ event.title }</h1>{#for item in events}<EventCard event={ item }/>{/for}",
+			[]string{"__d.event?.title", "event: s.item"}},
+		{"the DOM event alone", "<button @click={ save(event) }>x</button>",
+			[]string{"(event) => this.events.save(event)"}},
+		{"a loop variable named event beside the DOM event",
+			"{#for event in events}<li @click={ pick(event) }>{ event.name }</li>{/for}<button @click={ go(event) }>x</button>",
+			[]string{"(event) => this.events.go(event)"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := compileTemplate(t, "<puzzle-view>"+tc.body+"</puzzle-view>", "")
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(res.JS, want) {
+					t.Errorf("compiled output missing %q:\n%s", want, res.JS)
+				}
+			}
+		})
+	}
+}
+
+// A template that reads `event` as data AND uses it in a handler is an error
+// at the handler use, naming the data read: inside a handler `event` is always
+// the DOM event, so `open(event.id)` would silently get the MouseEvent's id.
+func TestEventAsDataAndInAHandlerIsAnError(t *testing.T) {
+	const tail = " — rename the field or prop (inside @event handlers `event` is always the DOM event)"
+	for _, tc := range []struct {
+		name, src, want string
+		mode            EmissionMode
+	}{
+		{"a card reading its event prop", "<puzzle-view><article>\n" +
+			"  <h2>{ event.title }</h2>\n" +
+			"  <button @click={ open(event.id) }>open</button>\n" +
+			"</article></puzzle-view>",
+			"EventCard.pzl:3:25: `event` here is the DOM event, but this template also reads `event` as data at 2:9" + tail,
+			ModeComponent},
+		{"a bound input beside a DOM-event handler", "<puzzle-view>\n" +
+			"<input value={ event.title }>\n" +
+			"<input @input={ log(event.target.value) }>\n" +
+			"</puzzle-view>",
+			"EventCard.pzl:3:21: `event` here is the DOM event, but this template also reads `event` as data at 2:16" + tail,
+			ModeView},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sec, err := parser.SplitSections(tc.src, "EventCard.pzl")
+			if err != nil {
+				t.Fatalf("split: %v", err)
+			}
+			_, err = Compile(sec, Options{Filename: "EventCard.pzl", Mode: tc.mode})
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("got  %v\nwant %s", err, tc.want)
+			}
+		})
+	}
+}
+
 // A `}` inside a nested template literal does not close the braces, and the
 // lowered literal reproduces the source.
 func TestNestedTemplateLiteralExpressionCompile(t *testing.T) {

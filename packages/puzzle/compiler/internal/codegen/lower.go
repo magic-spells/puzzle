@@ -287,6 +287,10 @@ type lowerer struct {
 
 	// usesLib reports that the emitted text needs the `__f` registry line.
 	usesLib bool
+
+	// c records where the template uses `event` (noteEvent); nil for the
+	// puzzle check target.
+	c *compiler
 }
 
 func newLowerer(w exprWriter, target lowerTarget, scope scopeMap, facts *exprFacts) *lowerer {
@@ -296,6 +300,7 @@ func newLowerer(w exprWriter, target lowerTarget, scope scopeMap, facts *exprFac
 // renderLowerer returns a render-target lowerer for the compiler's current position.
 func (c *compiler) renderLowerer(w exprWriter, scope scopeMap, facts *exprFacts) *lowerer {
 	l := newLowerer(w, targetRender, scope, facts)
+	l.c = c
 	for _, site := range c.loops {
 		l.rowScopes = append(l.rowScopes, site.scope)
 	}
@@ -519,6 +524,9 @@ func (l *lowerer) logicalOperand(op string, n expr.Node, minPrec int) {
 
 func (l *lowerer) ident(id *expr.Identifier) {
 	kind, js := l.resolve(id.Name)
+	if id.Name == "event" && l.c != nil {
+		l.c.noteEvent(kind, id.Start)
+	}
 	switch kind {
 	case refData:
 		l.w.WriteString("__d.")

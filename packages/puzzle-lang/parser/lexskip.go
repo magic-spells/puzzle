@@ -8,19 +8,25 @@ package parser
 // literal, regex literal, and comment skipping live here ONCE instead of being
 // pasted into each loop.
 //
-// Regex-vs-division disambiguation mirrors resolveExpr in codegen/expr.go: a '/'
-// after a token that can END an expression (identifier/number/string/regex/`)`/
-// `]`/`}`) is division, otherwise it opens a regex literal. Callers thread a
-// prevEndsExpr bool through their loop: LexSkip both consumes opaque lexical
-// units and reports the state that follows them, and LexPlainEndsExpr folds the
-// plain bytes the caller processes itself back into that same state.
+// Regex-vs-division disambiguation: a '/' after a token that can END an
+// expression (identifier/number/string/regex/`)`/`]`/`}`) is division,
+// otherwise it opens a regex literal. The template expression grammar (D176)
+// has no regex literals, but this scanner also walks real JavaScript — the
+// <script> body (findScriptClose, and the compiler's tokenizeJS) — where a
+// regex holding a quote or a close tag must stay opaque, so the guess stays.
+// It must never misread a division an expression can hold: every byte of a
+// non-ASCII name, and a trailing-dot number's '.', ends an expression. Callers
+// thread a prevEndsExpr bool through their loop: LexSkip both consumes opaque
+// lexical units and reports the state that follows them, and LexPlainEndsExpr
+// folds the plain bytes the caller processes itself back into that same state.
 
 // lexRegexPrecedingKeywords are identifier keywords that CANNOT end an
 // expression, so a '/' immediately after one opens a regex literal (not
-// division). Mirrors regexPrecedingKeywords in codegen/expr.go.
+// division). `of` is deliberately absent: it is a contextual word, and a
+// template field named `of` is data.
 var lexRegexPrecedingKeywords = map[string]bool{
 	"return": true, "typeof": true, "instanceof": true, "in": true,
-	"of": true, "void": true, "delete": true, "new": true,
+	"void": true, "delete": true, "new": true,
 	"do": true, "else": true, "yield": true, "await": true, "case": true,
 }
 
@@ -51,8 +57,9 @@ func lexIsSpace(b byte) bool {
 // so strings/comments/regexes/nested backticks inside an interpolation cannot
 // expose a brace or section-close sentinel to the caller. An identifier run is
 // consumed as a unit so a keyword that cannot end an expression
-// (return/typeof/…) leaves a following '/' a regex, exactly as resolveExpr does;
-// a keyword used as a property name (`.return`) still ends an expression.
+// (return/typeof/…) leaves a following '/' a regex; a keyword used as a property
+// name (`.return`), or an ASCII run straight after a non-ASCII byte (the tail of
+// one name, `価格new`), still ends an expression.
 // Identifier runs and strings contain no separators or brackets, so swallowing
 // them whole never hides a separator/depth char from the caller.
 func LexSkip(s string, i int, prevEndsExpr bool) (next int, pee bool, consumed bool) {
@@ -112,7 +119,7 @@ func LexSkip(s string, i int, prevEndsExpr bool) (next int, pee bool, consumed b
 		for j < len(s) && lexIsIdentChar(s[j]) {
 			j++
 		}
-		if lexPrecededByDot(s, i) {
+		if i > 0 && s[i-1] >= 0x80 || lexPrecededByDot(s, i) {
 			return j, true, true
 		}
 		return j, !lexRegexPrecedingKeywords[s[i:j]], true
@@ -146,17 +153,19 @@ func lexScanTemplateLiteral(s string, i int) int {
 }
 
 // LexPlainEndsExpr folds a single plain byte c (one LexSkip did NOT consume:
-// operator, bracket, separator, digit, or whitespace) into prevEndsExpr. A digit
-// or a closing )/]/} ends an expression; whitespace is insignificant and leaves
-// the state unchanged; every other operator/delimiter means the next '/' opens a
-// regex.
+// operator, bracket, separator, digit, whitespace, or a non-ASCII byte) into
+// prevEndsExpr. A digit, a '.', a closing )/]/}, or any byte >= 0x80 ends an
+// expression — outside a string or comment a non-ASCII byte belongs to a name
+// (`café`, `金額`), and a '.' ends a number (`5.`) or leads a property name;
+// whitespace is insignificant and leaves the state unchanged; every other
+// operator/delimiter means the next '/' opens a regex.
 func LexPlainEndsExpr(c byte, prev bool) bool {
 	switch {
 	case lexIsSpace(c):
 		return prev
 	case c == ')' || c == ']' || c == '}':
 		return true
-	case c >= '0' && c <= '9':
+	case c >= '0' && c <= '9', c == '.', c >= 0x80:
 		return true
 	default:
 		return false

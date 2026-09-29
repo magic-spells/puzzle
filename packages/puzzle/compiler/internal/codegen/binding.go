@@ -33,11 +33,6 @@ func classifyBindExpr(n expr.Node, scope scopeMap) (target, field string, bare, 
 		if !isIdent || n.Computed || n.Optional || root.Name == "this" {
 			return "", "", false, false
 		}
-		// `event` outside a handler is not a template name; unless a binding
-		// owns it, a path rooted on it is never a bindable data path.
-		if _, bound := scope[root.Name]; root.Name == "event" && !bound {
-			return "", "", false, false
-		}
 		// `x.size` classifies like any field: on an object it IS the field
 		// (`product.size`). A `.length` count is a field read too; binding one
 		// is meaningless and is not special-cased.
