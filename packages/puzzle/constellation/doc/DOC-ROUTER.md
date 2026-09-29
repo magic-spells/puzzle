@@ -582,20 +582,20 @@ Change that one config line (and its import) and everything else — views, layo
 
 ### Links
 
-**Write links path-shaped with the `link` formatter (v1.46, D79)** — the portable spelling that works in every mode:
+**Write links path-shaped with the `link` function (v1.46, D79)** — the portable spelling that works in every mode:
 
 ```html
-<a href="{ '/about' | link }">About</a>
-<a href="{ '/user/' + user.id | link }">{ user.name }</a>
+<a href="{ link('/about') }">About</a>
+<a href="{ link('/user/' + user.id) }">{ user.name }</a>
 ```
 
-The formatter calls `router.url(path)` at render time: path mode renders `/about` (prefixed under a `routerBase`), hash mode renders `#/about`, memory mode leaves it unchanged. Strings not starting with `/` pass through untouched, so external URLs and `mailto:` links can be piped safely (or just not piped). Because the **attribute itself** is rewritten, cmd-click, open-in-new-tab, and copy-link all get the correct URL — something click interception alone could never fix. Switching `routerMode` (or `routerBase`) is then truly a one-line change with zero template edits. `router.url()` is also public for script-land hrefs.
+`link` calls `router.url(path)` at render time: path mode renders `/about` (prefixed under a `routerBase`), hash mode renders `#/about`, memory mode leaves it unchanged. Strings not starting with `/` pass through untouched, so external URLs and `mailto:` links can go through `link()` safely (or skip it). Because the **attribute itself** is rewritten, cmd-click, open-in-new-tab, and copy-link all get the correct URL — something click interception alone could never fix. Switching `routerMode` (or `routerBase`) is then truly a one-line change with zero template edits. `router.url()` is also public for script-land hrefs.
 
 How the interceptor treats hrefs in hash mode (unchanged by D79):
 
-- `<a href="#/about">` is a **route link** — intercepted and routed via `push` (full commit semantics). Hand-written hash hrefs remain valid; `| link` is the portable spelling.
+- `<a href="#/about">` is a **route link** — intercepted and routed via `push` (full commit semantics). Hand-written hash hrefs remain valid; `link()` is the portable spelling.
 - A bare `<a href="#faq">` stays a **native in-page anchor** — the router leaves it to the browser.
-- A same-origin link with a **different pathname** falls through to the browser (a real navigation away from the app shell) — deliberately *not* claimed, so plain-path escape-hatch links keep working; that's also why path-shaped route links must go through `| link`.
+- A same-origin link with a **different pathname** falls through to the browser (a real navigation away from the app shell) — deliberately *not* claimed, so plain-path escape-hatch links keep working; that's also why path-shaped route links must go through `link()`.
 
 > **Caveat (inherent to hash routing).** Clicking a bare in-page anchor (`#faq`) replaces the whole fragment, which clobbers the current route from the URL. The rendered view survives and **back** returns you to the route, but the URL no longer names it while you're on the anchor. This is true of hash routing everywhere, not a Puzzle quirk — hash-mode apps should avoid bare-anchor links.
 
@@ -699,7 +699,7 @@ The router is available in components as `this.ctx.router` (one of exactly three
 | `replace(path)` (v1.49) | `router.replace('/items?q=cabin')` | Like `push()` — same pipeline, same atomic commit — but **replaces the current history entry** and leaves scroll untouched by default. For URL-backed transient state (see [URL-backed transient state](#url-backed-transient-state-query-hash-and-replace-v149)) — and the redirect verb (auth/guard redirects, post-action redirects). |
 | `go(n)` (v1.11) | `router.go(-2)` | Move through history: delegates to `history.go(n)` in path/hash mode; moves the internal stack in memory mode. Out-of-range `n` is a silent no-op. |
 | `back()` / `forward()` (v1.11) | `router.back()` | Shorthands for `go(-1)` / `go(1)`. |
-| `url(path)` (v1.46) | `router.url('/about')` | Encode a base-free path as a mode-correct href (`/about`, `#/about`, …). Templates should use the `link` formatter, which calls this. |
+| `url(path)` (v1.46) | `router.url('/about')` | Encode a base-free path as a mode-correct href (`/about`, `#/about`, …). Templates use the `link` function (`href="{ link('/about') }"`), which calls this. |
 
 And that's essentially it for components — `push()`/`replace()`, the v1.11 history methods, `url()`, plus automatic link interception cover the intended navigation surface. Declarative route protection is the `guard` field (v1.53 — see [Route guards](#route-guards-v153)), not a method. Named-route navigation remains **Planned — not shipped** (see [[DOC-SPEC]]). (Hash routing is available as of v1.6, memory mode as of v1.11 — see above.)
 

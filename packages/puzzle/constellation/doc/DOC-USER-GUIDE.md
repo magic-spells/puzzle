@@ -168,7 +168,7 @@ const app = new PuzzleApp({
   // app/public/api/ into dist/api/ at build time.
   apiURL: '/api',
 
-  // Global formatters available in all templates
+  // App functions, called by name in every template: { byline(author.name) }
   // (display transformation only — logic belongs in data())
   formatters: {
     byline: (name) => (name ? `By ${name}` : 'By an unknown author')
@@ -523,7 +523,6 @@ export default class HomeView extends PuzzleView {
 
 ### views/PostDetail.pzl
 
-
 This is the view for the `/posts/:id` route. It reads `params.id`, joins the post
 to its author and comments, and hosts a comment form. Views receive **only route
 params and props** in `data(params, props)` — the router does not inject a
@@ -541,10 +540,10 @@ params and props** in `data(params, props)` — the router does not inject a
       <h1 class="post__title">{ post.title }</h1>
       <div class="post__meta">
         {#if author}
-          <span class="post__author">{ author.name | byline }</span>
+          <span class="post__author">{ byline(author.name) }</span>
           <span class="post__dot">·</span>
         {/if}
-        <span>{ post.publishedAt | date('long') }</span>
+        <span>{ date(post.publishedAt, 'long') }</span>
         <span class="post__dot">·</span>
         <span>{ post.readingTime } min read</span>
       </div>
@@ -553,10 +552,10 @@ params and props** in `data(params, props)` — the router does not inject a
 
     <section class="comments">
       <h2 class="comments__title">
-        { comments.size | pluralize('comment') }
+        { pluralize(comments.length, 'comment') }
       </h2>
 
-      {#if comments.size > 0}
+      {#if comments.length > 0}
         <ul class="comment-list">
           {#for comment in comments}
             <CommentItem comment={ comment } @remove={ removeComment(comment) }></CommentItem>
@@ -633,9 +632,10 @@ export default class PostDetailView extends PuzzleView {
       comments,
       commentText: local.commentText,
       authorName: local.authorName,
-      // A template reads data and never calls JavaScript on it (no `.trim()`
-      // there, D176), and it has no `this`: the flag is a data() field. The
-      // two-way binds re-run data() on every keystroke, so it stays current.
+      // A named flag keeps the rule in data(), where view logic lives (the
+      // template could spell `!commentText.trim()`, but it never reaches the
+      // view instance). The two-way binds re-run data() on every keystroke,
+      // so it stays current.
       canComment: (local.commentText ?? '').trim() !== ''
     };
   }
@@ -733,12 +733,11 @@ Notes on this view:
 - **The data story is D161 end-to-end:** the tracked `findOne('post', …)` faults the post in (round 1), the follow-up `findOne('user', post.authorId)` faults the author (round 2), and the view commits once settled — so the `{:else}` branch means a genuine 404 (the model's custom `loadOne` returns a 404 Response for unknown ids), never "still loading". No seed, no loading flag.
 - **`post.comments` is a relationship traversal** — reactive, local-only, never a request; sorting happens in `data()` like any query.
 - The comment form carries **no field handlers at all**: `value={ authorName }` and `value={ commentText }` are two-way bindings on bare local keys (D147), so `events` only has to `createRecord('comment', …)` on submit and clear the draft.
-- **`comments.size`** is the template's count (D176) — `.length` is a compile error — and **`canComment` is a `data()` field**: a template never calls `.trim()` on a value and never reaches the view instance (`this` is not a template identifier), so `data()` computes the flag and the template reads it. The two-way binds refresh on every keystroke, and `addComment` calls `this.refresh()` after clearing the draft, so the flag follows the text.
+- **Display transforms are function calls** (D176): `byline(author.name)` is the app function registered in `app.js`, and `date(…, 'long')` and `pluralize(comments.length, 'comment')` come from the standard library. **`comments.length`** is the count, and **`canComment` is a `data()` field**: the template could test `!commentText.trim()` inline (`.trim()` is in the method table), but a template never reaches the view instance (`this` is not a template name), so view logic lives in `data()` and the template reads the named flag. The two-way binds refresh on every keystroke, and `addComment` calls `this.refresh()` after clearing the draft, so the flag follows the text.
 - `<CommentItem @remove={ removeComment(comment) }>` is a **callback prop** carrying the loop variable; the child reports intent and the **parent owns the mutation** (`comment.destroy()`).
 - The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see the D27 decision card), so this section no longer mirrors that file verbatim.
 
 ### Form idioms (v1.68, D147)
-
 
 `value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>`, or
 `<select>` bind **two ways** — the compiler writes the write-back handler, so
@@ -813,8 +812,8 @@ that rejection, the error reaches your `onError` hook with `phase: 'bind'`.
 
 **Opting a field out.** Three escapes, all ordinary syntax: write your own
 `@input` or `@change` (either one suppresses the synthesized write entirely),
-use a non-path expression (`value={ name ?? '' }` — a template expression is
-data plus operators, so `String(name)` is a compile error, D176), or add a
+use a non-path expression (`value={ name ?? '' }` — only a bare key or a
+one-member path binds), or add a
 static `readonly`. Handlers on other events — `@blur`, `@keydown:enter` —
 coexist with the bind rather than replacing it, so a field wired as
 `value={ name }` with only a `@keydown:enter` commit handler is **not** an
@@ -928,6 +927,7 @@ on the child's own `<button>`. The `press` callback prop is guarded before it's
 called — `this.$emit` does not exist in v1.
 
 ### components/PostCard.pzl
+
 ```html
 <puzzle-view>
   <a class="post-card" href="/posts/{ post.id }">
@@ -937,11 +937,11 @@ called — `this.$emit` does not exist in v1.
       {/for}
     </div>
     <h3 class="post-card__title">{ post.title }</h3>
-    <p class="post-card__excerpt">{ post.body | truncate(140) }</p>
+    <p class="post-card__excerpt">{ truncate(post.body, 140) }</p>
     <div class="post-card__meta">
       <span>{ post.readingTime } min read</span>
       <span class="post-card__dot">·</span>
-      <span>{ post.publishedAt | timeago }</span>
+      <span>{ timeago(post.publishedAt) }</span>
     </div>
   </a>
 </puzzle-view>
@@ -979,12 +979,13 @@ the shipped `examples/blog/app/components/PostCard.pzl` now uses Tailwind
 utilities instead (see the D27 decision card).
 
 ### components/CommentItem.pzl
+
 ```html
 <puzzle-view>
   <li class="comment-item">
     <div class="comment-item__head">
       <span class="comment-item__author">{ comment.author }</span>
-      <span class="comment-item__time">{ comment.createdAt | timeago }</span>
+      <span class="comment-item__time">{ timeago(comment.createdAt) }</span>
     </div>
     <p class="comment-item__text">{ comment.text }</p>
     <button class="comment-item__remove" type="button" @click={ handleRemove }>Delete</button>
@@ -1084,7 +1085,7 @@ events = {
 
 ### Object props: keep references stable with `this.memo()` (v1.29, D64)
 
-Props are compared with a shallow `===` check, so an **object or array prop compares by reference** — and inline object literals are a compile error in templates, so these props are always built in `data()`. If `data()` builds a *fresh* object on every run, the child sees a "changed" prop on every unrelated store change and re-runs its own `data()` (and a wrapper component may push spurious updates into whatever it wraps). Wrap derived objects in `this.memo(key, deps, factory)` — the same reference comes back until a dependency actually changes:
+Props are compared with a shallow `===` check, so an **object or array prop compares by reference**. An object literal cannot start a template expression, so an object prop is built in `data()`, and a list built in the template (`items={ todos.filter(t => !t.done) }`) is a fresh array on every render. If `data()` builds a *fresh* object on every run, the child sees a "changed" prop on every unrelated store change and re-runs its own `data()` (and a wrapper component may push spurious updates into whatever it wraps). Wrap derived objects in `this.memo(key, deps, factory)` — the same reference comes back until a dependency actually changes:
 
 ```javascript
 data(params, props) {
@@ -1123,6 +1124,7 @@ events = {
 ```
 
 ### Template Patterns
+
 ```html
 <!-- Conditionals -->
 {#if user.isLoggedIn}
@@ -1136,10 +1138,11 @@ events = {
   <div>{ post.title }</div>
 {/for}
 
-<!-- Formatters -->
-{ user.name | capitalize }
-{ post.publishedAt | timeago }
-{ price | currency('$', 2) }
+<!-- Functions and methods (D176) -->
+{ capitalize(user.name) }
+{ timeago(post.publishedAt) }
+{ currency(price, '$', 2) }
+{ tags.join(', ') }
 
 <!-- Callback prop on a component tag (D16) -->
 <Button @press={ handleClick } variant="primary">

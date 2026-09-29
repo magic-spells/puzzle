@@ -157,7 +157,7 @@ same principle applied to the shell). Three things moved out:
 ### The prerender `ctx.router`
 
 Both modes need a `router` in `ctx` that answers `url()` and `current` exactly
-as the browser will, or a prerendered `href` (the `{ path | link }` formatter
+as the browser will, or a prerendered `href` (the `link(path)` function
 reads `router.url`) disagrees with the client's re-render. **Static** mode uses
 `makeRouterStub` over the page's route snapshot: every navigation method
 throws, `current` is the snapshot, and `url()` is the shared encoder — hard-coded

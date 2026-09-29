@@ -48,15 +48,13 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## Package and application
 
-
-
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `lazy` (the D163 route-view loader marker), and
   compiler support exports (`ViewNode`, `SLOT_TAG`, `PORTAL_TAG`,
   `SNIPPET_TAG` — the D166 snippet marker tag, with `isSnippet` on the ViewNode
-  type surface — `displayValue`, the D176 `.size` helper `sizeOf` (imported as
-  `__z`), and the D170/D173 list runtime `listRows`, `loopItems` and
-  `loopRange`, each imported by a compiled module only when it emits it).
+  type surface — `displayValue`, and the D170/D173 list runtime `listRows`,
+  `loopItems` and `loopRange`, each imported by a compiled module only when it
+  emits it).
 - Subpaths: `@magic-spells/puzzle/adapter`, `/morph`, `/router-modes`, `/ssg`,
   `/static`, `/testing`, `/fixtures`, and `/puzzle-env`. (`/router-modes` exports
   `hashRouter()` and `memoryRouter({ initialPath })`, the opt-in router modes —
@@ -69,7 +67,7 @@ second specification. Decision cards hold rationale and git holds chronology.
   exports the frozen `adapter` capability — plus `adapter.defaults()`, the
   app-wide dialect tier — and `PuzzleAdapterError`, D157/D158. A
   compiler-internal `/formatters/manifest` subpath also exists for the
-  tree-shaken formatter manifest, and `/i18n/manifest` for the translation
+  tree-shaken manifest of built-in functions, and `/i18n/manifest` for the translation
   runtime the compiler wires in only when `i18n` is configured, D175.)
 - `puzzle` binary shim selects one of five optional platform binary packages:
   macOS and Linux on arm64/x64, and Windows on x64 (`puzzle-win32-x64`, whose
@@ -92,11 +90,11 @@ second specification. Decision cards hold rationale and git holds chronology.
   flatten to dotted; CLDR-category objects are plural entries). The compiler
   validates the files, fills missing keys from the default with a warning, and
   emits `dist/locales/<tag>.<hash>.json`; the browser fetches only the active
-  one. `{ 'key' | t(vars) }` in templates; `this.ctx.i18n` / `app.i18n` carry
+  one. `{ t('key', vars) }` in templates; `this.ctx.i18n` / `app.i18n` carry
   `t`, `locale`, `locales`, `defaultLocale` and `setLocale(tag)` (fetch, then
   switch, persist to `localStorage.__puzzleLocale`, set `<html lang>`, rebuild
   in place). Prerendered pages render the default locale with its table
-  inline. With `i18n` configured, the date and number formatters follow the
+  inline. With `i18n` configured, the date and number functions follow the
   active locale. Unconfigured apps ship none of it (`__PUZZLE_HAS_I18N__`).
 - The app is SPA-first. Prerendered output comes in two modes (D67/D81), never a
   request-time SSR server or hydration protocol: `output: 'hybrid'` ships
@@ -114,20 +112,33 @@ second specification. Decision cards hold rationale and git holds chronology.
   do not check `.pzl` script bodies, and the scaffolded TypeScript config
   covers standalone `.ts`/`.js` files and declarations.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
-- Interpolation and formatter chains; dynamic/mixed/boolean attributes;
+- Interpolation and function calls; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
-- **Built-in formatters are the D174 standard set** — 27 names with the same
-  arguments and meaning as Sites — plus the browser-only `link`, `timeago` and
-  `in_timezone`. Numbers: `abs`, `ceil`, `floor`, `round`, `currency`,
-  `percentage`, `number_with_delimiter`, `compact_number`. Text: `downcase`,
-  `upcase`, `capitalize`, `trim`, `strip`, `truncate`, `replace`,
+- **The function library is the D174 standard set** — 19 functions with the
+  same arguments and meaning as Sites — plus the PuzzleKit-only `link` and
+  `timeago`. Numbers: `round`, `currency`, `percentage`,
+  `number_with_delimiter`, `compact_number`. Text: `capitalize`, `truncate`,
   `strip_html`, `strip_newlines`, `pluralize` (prints the count and the word).
-  Markup: `escape`, `raw`, `newline_to_br`. Values: `join`, `json`.
-  Dates: `date`, `time`, `datetime` with presets `short`, `medium` (default),
-  `long`, `iso`. Translation: `t` (D175). No list formatters (list shaping is `data()`); a removed name
-  passes through with a development hint, and an app formatter shadowing a
-  standard name draws a development warning. A shared JSON conformance table
-  (`packages/puzzle-lang/conformance/formatters.json`, embedded by the
+  Markup: `escape`, `raw`, `newline_to_br`. Values: `json`. Dates: `date`,
+  `time`, `datetime` with presets `short`, `medium`, `long`, `iso` (with no
+  preset, the medium date, the short time, and the medium date with the short
+  time), and `in_timezone`. Translation: `t` (D175). A template calls one by
+  name and calls nest (`{ currency(price) }`,
+  `{ truncate(capitalize(title), 40) }`); an app registers its own through the
+  `formatters` config key and calls it the same way. What a JavaScript method,
+  an operator or a `Math` global already spells is not a function (D176):
+  `upcase`, `downcase`, `trim`, `strip`, `replace`, `join`, `abs`, `ceil` and
+  `floor` are removed in favor of `.toUpperCase()`, `.toLowerCase()`,
+  `.trim()`, `.replaceAll()`, `.join(', ')` and `Math.abs`/`ceil`/`floor`, as
+  are `size`, `plus`, `minus`, `times`, `divided_by`, `modulo`, `default` and
+  the list formatters (list shaping is array methods or `data()`). A call to a
+  removed name passes the value through with a development error naming the
+  replacement, and an app function registered under a standard name wins with
+  a development warning. A string-literal preset that `date`/`time`/`datetime`
+  does not know, or a literal `in_timezone` zone that cannot be a zone id, is a
+  positioned compile warning naming the valid presets; a dynamic one is a
+  development error at run time. A shared JSON conformance table
+  (`packages/puzzle-lang/conformance/functions.json`, embedded by the
   language module so Sites runs the same rows) pins the identical-output part.
 - **`raw` and `newline_to_br` render live HTML (D174 group e).** `raw` always
   runs an allowlist sanitizer — the same code in the browser and in prerender —
@@ -135,34 +146,47 @@ second specification. Decision cards hold rationale and git holds chronology.
   `dir`, and `target="_blank"` with a forced `rel="noopener noreferrer"`; drops
   scripts, styles, embeds, SVG/MathML, every `on*`, `style` and `name`; and
   keeps a URL only when relative or `http(s)` (links also `mailto:`/`tel:`).
-  Both must be the last formatter of a text interpolation (anywhere else is a
-  positioned compile error); the compiler lowers them to a `#html` vnode and
-  never calls them through the registry. Gated by `__PUZZLE_HAS_RAW_HTML__`
-  and, for the sanitizer, `__PUZZLE_HAS_RAW_SANITIZE__`.
-- **Template expressions are a data language (D176):** fields, literals,
-  `.size` (the count of a list or string, via the `__z` helper),
-  `+ - * / %`, comparisons, `&&`/`||`/`!`, `??` and the ternary. `.length`,
-  calls on data values (`x.trim()`, `String(x)`, `set.has(x)`, `Math.*`),
-  arrow functions, template literals and a `|` nested inside brackets are
-  positioned compile errors. A template expression never reaches the view
-  instance: `this` is a positioned compile error in every template expression,
-  `@event` handler arguments included, and an `@event` handler body is the one
-  door into the view's JavaScript. `size`, `plus`, `minus`, `times`,
-  `divided_by`, `modulo` and `default` are no longer formatters, and `split` is
-  Sites-only.
-- **Core semantics (D173):** a `|` is a formatter pipe in every value position
-  (text, attributes, props, marker arguments) and must be followed by a
-  formatter name; a pipe in a condition header (`{#if}`, `{:else if}`,
-  `{#unless}`, `{#case}`, an attribute's inline `{#if}`), a `{#for}` header or
-  a `{:when}` value is a compile error, never a bitwise OR. Every member step in a
-  template value compiles to `?.`, so a missing intermediate prints nothing.
+  Each may only be the outermost call of a text interpolation
+  (`{ raw(post.body) }`; anywhere else is a positioned compile error); the
+  compiler lowers them to a `#html` vnode and never calls them through the
+  registry. Gated by `__PUZZLE_HAS_RAW_HTML__` and, for the sanitizer,
+  `__PUZZLE_HAS_RAW_SANITIZE__`.
+- **Template expressions are JavaScript expressions, closed (D176):** one
+  grammar in every position — text, attributes, props, marker arguments,
+  conditions, `{:when}` values, `{#for}` headers and `@event` handler
+  arguments — parsed once by `packages/puzzle-lang/expr`. Literals (template
+  literals, lists, and objects anywhere but the start of an expression),
+  names, `a.b` / `a?.b` / `a[i]`, calls, arrow functions as call arguments, and
+  the operators `! - + * / % < <= > >= == != === !== && || ?? ?:`. A call is a
+  library function (a bare `name(args)`, never data), a method from the fixed
+  string/list/number table (`title.toUpperCase()`,
+  `todos.filter(t => !t.done)`, `n.toFixed(2)`), or an allowed global
+  (`Math.*`, `Number`/`String`/`Boolean`, `Array.isArray`,
+  `Object.keys`/`values`/`entries`, `parseInt`/`parseFloat`/`isNaN`/`isFinite`,
+  and `encodeURIComponent`/`decodeURIComponent`/`encodeURI`/`decodeURI`). The
+  count is `.length`; `.size` reads a field named `size`. `new`, `typeof`,
+  bitwise operators, `**`, `in`, `instanceof`, assignment, `++`/`--`, regular
+  expressions, `Date` and `JSON` are positioned compile errors naming the
+  alternative. `window`, `document` and `globalThis` read as a data root steer
+  to `data()`; every other name, `location` included, reads the `data()` field
+  of that name. A template expression never reaches the view instance: `this`
+  is a positioned compile error in every template expression, `@event` handler
+  arguments included, and an `@event` handler is the one door into the view's
+  JavaScript (a chain rooted at the free `event` is the DOM event, outside the
+  method table).
+- **Core semantics (D173):** there is no pipe — a `|` anywhere is a positioned
+  compile error ("`| name` pipes were removed — write `name(value)`; bitwise
+  OR is not available", naming the JavaScript replacement when the name after
+  it is a removed function). Every member step and method call in a template
+  value compiles to `?.`, so a missing intermediate prints nothing.
   A loop over a non-list runs zero times (a non-array non-nullish value warns
   in development); range bounds truncate. `NaN`, ±Infinity and any object,
   `Date` included, print nothing (with a development warning); a list in a
   brace-only attribute is a space-joined token list. Object literals are legal
-  as arguments (V8), a script-less component reads its props by name (V15), a
-  composition position counts as filled only when its content renders a node
-  (V14), and markers in exclusive branches are not duplicates (V13).
+  as values but never start an expression (V8), a script-less component reads
+  its props by name (V15), a composition position counts as filled only when
+  its content renders a node (V14), and markers in exclusive branches are not
+  duplicates (V13).
 - Template text follows the merged whitespace rule (D168, D173 V10): a run of
   whitespace collapses to one space; newline-bearing whitespace is dropped at
   a parent's first or last child and between two non-text siblings, and is one
@@ -255,7 +279,7 @@ second specification. Decision cards hold rationale and git holds chronology.
   instance or row; a row handler capturing a loop variable is identity-stable.
   A record prop carries a render revision, so a child refreshes on that
   record's own mutations through `update()` or any store path — a direct field
-  assignment is not observed, and formatters must be pure.
+  assignment is not observed, and template functions must be pure.
 
 ## Data layer
 
@@ -308,7 +332,6 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## Routing and motion
 
-
 - Path routing (the inline default, D159), hash, and memory modes; nested
   relative children; index routes; catch-all routes; merged params; top-level
   layouts; route titles + managed head metadata (`meta`
@@ -320,7 +343,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `push`, `replace` (no history entry, scroll untouched by default, D83),
   `go`, `back`, and `forward`; guarded same-origin link interception;
   router base paths and anchors; `router.url()` + the built-in `link`
-  formatter for mode-agnostic path-shaped hrefs.
+  function (`href={ link('/about') }`) for mode-agnostic path-shaped hrefs.
 - Route guards (D87): an inherited `guard` route field runs root→leaf before
   views construct or load — allow / block / redirect (replace semantics,
   loop-capped). SPA-runtime only; hybrid/static prerender passes warn on
@@ -363,7 +386,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Go parser/codegen feeds an esbuild `.pzl` plugin; scripts stay untouched and
   render functions attach to the user class prototype.
 - Production: ES2022, minified, console calls stripped by default, tree-shaken
-  formatter manifest, collected component CSS. The D89 usage scan also gates
+  built-in function manifest, collected component CSS. The D89 usage scan also gates
   whole modules and code paths behind literal defines — `views/flip.js`
   (`__PUZZLE_HAS_FLIP__`), `views/portal.js` (`__PUZZLE_HAS_PORTAL__`), the
   D150 literal-`@` shim (`__PUZZLE_HAS_RAW_AT__`), `router/lazy.js`
@@ -536,7 +559,7 @@ refresh, holding the error view in place until the rebuild commits or fails
 again, so a rebuild that never commits (a guard verdict, a supersession) leaves
 the face up and the button pressable; never automatic, never recursive. Without
 `errorView`, failures report and the position keeps its recovery placeholder.
-Event handlers and formatters surface uncaught.
+Event handlers and template functions surface uncaught.
 
 ## Deliberately not shipped
 
