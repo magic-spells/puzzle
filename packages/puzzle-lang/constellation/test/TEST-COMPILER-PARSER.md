@@ -45,12 +45,28 @@ What they guarantee:
 - section scanning finds template, script, and style boundaries without ever
   parsing the script body. Script bytes stay untouched JavaScript or
   TypeScript.
+- **a `{#raw}` span is skipped whole by the section splitter** (D150,
+  `sections_test.go`). `TestSplitSectionsRawBlockIsInert` covers the docs-page
+  shape, a code sample with `// it's`, an odd quote between balanced braces, an
+  unbalanced brace with no quote, the whitespace-tolerant closer, a literal
+  `</puzzle-view>` in the body, and a skeleton body; each one failed with
+  "missing </puzzle-view>" on the splitter that scanned raw bodies as brace
+  groups. `TestSplitSectionsUnterminatedRawBlock` pins the fallback: a `{#raw}`
+  with no closer at all, or whose next `{/raw}` sits in the skeleton, still
+  splits at the real close tag, and the parse reports "unterminated {#raw}" at
+  the opener.
 - the lexer skips correctly inside strings, comments, and raw regions, so
   template-looking bytes inside script or raw blocks are not treated as grammar.
 - every shipped construct parses: conditionals and their else-if chains, unless,
   case/when, loops, interpolation, template comments, inline SVG, element refs,
   the raw block, composition markers, Portal, snippets, and dotted component
   family tags.
+- **HTML void elements close at their start tag** (`TestParseVoidElements`):
+  `<br>`, `<br/>` and `<br />` build the same tree, children after `<br>`
+  belong to the parent, every void name is covered, `<input value={ x }
+  readonly>` parses, the rule holds inside `{#raw}`, and `<Input>` stays a
+  component. A void closing tag (`</input>`, `</br>`, a stray `</img>`) is an
+  error at the closer, with its exact message and line and column.
 - **the expression grammar is the shared table.** `expr/conformance_test.go`
   runs `conformance/expressions-parse.json` (421 cases at PR #171): each row is
   a source, optionally with handler, bindings or call-argument options, and
@@ -75,19 +91,29 @@ What they guarantee:
   every `.pzl` file the monorepo ships or tests with — the framework's
   examples and scaffold templates, the pieces registry and demo, the DevTools
   panel, the runtime test fixtures, and the codegen and check goldens — and
-  requires a tree at every expression position. Outside the monorepo (the Go
-  module cache) the siblings are absent and it skips.
-- **the time budget** (`perf_test.go`): a 20,000-line template with
+  requires a tree at every expression position: 675 files and 10,094
+  expressions at PR #172. Outside the monorepo (the Go module cache) the
+  siblings are absent and it skips.
+- **the time budgets** (`perf_test.go`, best of three, skipped under `-short`,
+  three times the budget when `CI` is set): a 20,000-line template with
   expressions in every position template authors use parses, trees included,
-  in under 100 ms (best of three; skipped under `-short`).
+  in under 100 ms; and a 40 KB `{#raw}` block of `{` parses in under 20 ms
+  (`TestLargeRawBlockParsesWithinBudget`; about 0.3 ms, against 3.79 s when the
+  splitter scanned raw bodies as brace groups).
 - composition markers are unique per render path, not per file (D173 V13):
   exclusive branches may each carry the same marker, and a marker on the same
   path collides (`slot_paths_test.go`).
 - the playground's nesting-depth guard counts depth without parsing, exactly for
-  well-formed input (D164, `depth_test.go`).
+  well-formed input, with void tags and stray void closers pushing and popping
+  nothing (D164, `depth_test.go`).
+- an inline SVG file may start with a UTF-8 byte-order mark, with or without an
+  XML prolog after it (`TestScanSVGFile`, `inlinesvg_test.go`).
 - rejections are positioned and actionable. A lowercase composition marker is a
   compile error steering to the capitalized form, not a silent no-op. That
-  steering error is asserted, not just the rejection.
+  steering error is asserted, not just the rejection. A second `{:else}` in
+  `{#if}`, `{#unless}` or `{#case}` is named at the stray clause, not reported
+  as an unclosed block (`TestParseElseIfErrors`, `TestParseUnlessErrors`,
+  `TestParseCaseErrors`, and the position check in `TestParseErrorPositions`).
 
 Error positions and message text are treated as contract here. Loosening one
 fails a test on purpose.
@@ -95,7 +121,8 @@ fails a test on purpose.
 Covers 16 `*_test.go` files: `expr/conformance_test.go` and `expr/expr_test.go`,
 and under `parser/`: `corpus`, `depth`, `exprs`, `inlinesvg`, `integration`,
 `lexer`, `lexskip`, `parser`, `perf`, `portal`, `refs`, `sections`,
-`slot_paths` and `snippets`. That is its own Go module (D172), so the
+`slot_paths` and `snippets` — 1,211 passing tests and subtests at PR #172.
+That is its own Go module (D172), so the
 compiler's `go test ./...` does not run them. Run `go test ./...` inside
 `packages/puzzle-lang` (CI's Go and Windows jobs do). `integration_test.go`
 parses copies of the todos example's `Home.pzl`, `TodoItem.pzl`, and
@@ -105,7 +132,10 @@ self-contained and also passes from the Go module cache.
 `packages/puzzle/examples/todos` (it skips outside the monorepo), so a change
 to the example must refresh the copy in the same change. `functions.json`,
 the function library's table in the same `conformance` package, is run by
-PuzzleKit's vitest suite, not by this module.
+PuzzleKit's vitest suite, not by this module. The codegen side of the void
+rule — the self-closed and slash-less spellings emit byte-identical modules —
+is PuzzleKit's `TestVoidElementsNeedNoSlash`
+(`packages/puzzle/compiler/internal/codegen/core_semantics_test.go`).
 
 ## Contracts it pins (in the connected `puzzle` plan)
 
