@@ -15,8 +15,8 @@
         <div class="fmt-row flex gap-4 px-4 py-0.5 border-b border-line/40">
           <span class="fmt-seq w-12 shrink-0 text-faint tabular-nums">{ tick }</span>
           {#if formatted}
-            <span class="fmt-date w-32 shrink-0 text-fg">{ row.createdAt | datetime('short') }</span>
-            <span class="fmt-ago flex-1 text-muted">{ row.createdAt | timeago }</span>
+            <span class="fmt-date w-32 shrink-0 text-fg">{ datetime(row.createdAt, 'short') }</span>
+            <span class="fmt-ago flex-1 text-muted">{ timeago(row.createdAt) }</span>
           {:else}
             <span class="fmt-date w-32 shrink-0 text-fg">{ row.label }</span>
             <span class="fmt-ago flex-1 text-muted">{ row.text }</span>

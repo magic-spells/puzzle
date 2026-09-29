@@ -5,13 +5,13 @@
       <div class="flex justify-end">
         <div class="max-w-[80%] rounded-2xl rounded-br-md bg-accent text-white px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap">{ message.content }</div>
       </div>
-      <div class="mt-1 pr-1 text-right text-[11px] text-faint">{ message.createdAt | clock }</div>
+      <div class="mt-1 pr-1 text-right text-[11px] text-faint">{ clock(message.createdAt) }</div>
     {:when 'assistant'}
       <div class="flex gap-3">
         <div class="shrink-0 w-8 h-8 grid place-items-center rounded-full bg-accent/20 text-accent text-sm font-semibold ring-1 ring-accent/30">◆</div>
         <div class="min-w-0">
           <div class="max-w-[80%] rounded-2xl rounded-tl-md bg-surface-2 text-fg px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap">{ message.content }{#if message.pending}<span class="pz-caret">▍</span>{/if}</div>
-          <div class="mt-1 pl-1 text-[11px] text-faint">{#if message.model}{ message.model } · {/if}{ message.createdAt | clock }</div>
+          <div class="mt-1 pl-1 text-[11px] text-faint">{#if message.model}{ message.model } · {/if}{ clock(message.createdAt) }</div>
         </div>
       </div>
     {:when 'system'}

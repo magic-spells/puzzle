@@ -28,7 +28,7 @@
         <p class="mt-2 text-muted">Try a different name, @handle, or #hashtag.</p>
       </div>
     {:else}
-      {#if userResults.size}
+      {#if userResults.length}
         <div>
           <h2 class="px-4 py-3 text-lg font-bold text-fg border-b border-line">People</h2>
           {#for u in userResults, i}
@@ -47,7 +47,7 @@
           {/for}
         </div>
       {/if}
-      {#if chirpResults.size}
+      {#if chirpResults.length}
         <div>
           <h2 class="px-4 py-3 text-lg font-bold text-fg border-b border-line">Chirps</h2>
           {#for post in chirpResults, i}
@@ -60,12 +60,12 @@
     <!-- Default view: trends then suggestions. -->
     <div class="border-b border-line">
       <h2 class="px-4 pt-4 pb-2 text-xl font-bold text-fg">Trends for you</h2>
-      {#if trends.size}
+      {#if trends.length}
         {#for t in trends, i}
           <button type="button" class="w-full text-left px-4 py-3 hover:bg-surface-2 transition-colors" @click={ setQuery(t.tag) }>
             <div class="text-xs text-muted">Trending in dev</div>
             <div class="font-bold text-fg">{ t.tag }</div>
-            <div class="text-xs text-muted">{ t.count | compact_number } { t.count | plural('chirp', 'chirps') }</div>
+            <div class="text-xs text-muted">{ compact_number(t.count) } { plural(t.count, 'chirp', 'chirps') }</div>
           </button>
         {/for}
       {:else}

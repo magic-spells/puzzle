@@ -80,8 +80,8 @@ func TestGoldens(t *testing.T) {
 func TestFormatterMissingGuard(t *testing.T) {
 	got := compileFile(t, "testdata/formatter_chain.pzl", ModeView)
 	for _, want := range []string{
-		`(__f["join"] || __f.__missing("join"))(__d.tags, ', ')`,
-		`(__f["upcase"] || __f.__missing("upcase"))(`,
+		`(__f["capitalize"] || __f.__missing("capitalize"))(__d.title)`,
+		`(__f["truncate"] || __f.__missing("truncate"))(`,
 		`(__f["currency"] || __f.__missing("currency"))(__d.price, '$', 2)`,
 	} {
 		if !strings.Contains(got, want) {

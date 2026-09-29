@@ -4,7 +4,7 @@
     @click={ handleSelect }>
     <div class="min-w-0 flex-1">
       <div class="truncate text-sm font-medium {#if active}text-fg{/if}{#if !active}text-muted group-hover:text-fg{/if}">{ conversation.displayTitle }</div>
-      <div class="text-[11px] text-faint">{ conversation.updatedAt | timeago }</div>
+      <div class="text-[11px] text-faint">{ timeago(conversation.updatedAt) }</div>
     </div>
 
     <!-- Delete. @click:stop (v1.7, D38) keeps the click from bubbling to the row's

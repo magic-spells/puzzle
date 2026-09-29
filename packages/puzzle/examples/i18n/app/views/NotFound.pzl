@@ -1,5 +1,5 @@
 <puzzle-view>
-  <p class="text-muted">{ 'notFound' | t }</p>
+  <p class="text-muted">{ t('notFound') }</p>
 </puzzle-view>
 
 <script>

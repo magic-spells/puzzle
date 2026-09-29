@@ -1,14 +1,14 @@
 <puzzle-view>
-  <div class="intro">{ intro | raw }</div>
-  <p class="mix">Before { lead } { body | truncate(40) | raw } after</p>
-  <p class="note">{ note | newline_to_br }</p>
-  <div class="cond">{#if flag}{ extra | raw }{:else}plain{/if} tail</div>
+  <div class="intro">{ raw(intro) }</div>
+  <p class="mix">Before { lead } { raw(truncate(body, 40)) } after</p>
+  <p class="note">{ newline_to_br(note) }</p>
+  <div class="cond">{#if flag}{ raw(extra) }{:else}plain{/if} tail</div>
   <ul class="rows">
     {#for row in rows}
-      <li>{ row.label }: { row.html | raw }</li>
+      <li>{ row.label }: { raw(row.html) }</li>
     {/for}
   </ul>
-  <div class="keyed">{ header | raw }{#for row in rows}<span>{ row.label }</span>{/for}</div>
+  <div class="keyed">{ raw(header) }{#for row in rows}<span>{ row.label }</span>{/for}</div>
 </puzzle-view>
 
 <script>

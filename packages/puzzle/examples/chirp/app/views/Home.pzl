@@ -27,14 +27,14 @@
   <ComposeBox />
 
   <!-- Feed, or the appropriate empty state. -->
-  {#if feed.size}
+  {#if feed.length}
     {#for post in feed, i}
       <ChirpCard post={ post } index={ i } />
     {/for}
   {:else}
     {#if activeTab === 'following'}
       <!-- {#unless} showcase (v1.7, D36): the "Following" tab with nobody in it. -->
-      {#unless following.size}
+      {#unless following.length}
         <div class="py-16 px-8 text-center">
           <h2 class="text-xl font-bold text-fg">Your Following feed is quiet</h2>
           <p class="mt-2 text-muted">You're not following anyone yet — find folks on <a href="/explore" class="text-accent hover:underline">Explore</a>.</p>

@@ -24,7 +24,7 @@
         {#if authorVerified}<span class="text-accent shrink-0">✓</span>{/if}
         <a href="{ authorPath }" class="text-muted truncate hover:underline" @click={ nav(authorPath, event) }>{ authorAt }</a>
         <span class="text-muted shrink-0">·</span>
-        <span class="text-muted shrink-0">{ post.createdAt | timeago }</span>
+        <span class="text-muted shrink-0">{ timeago(post.createdAt) }</span>
       </div>
 
       <!-- Replying-to context line, only for replies. -->
@@ -50,13 +50,13 @@
            and this same card re-renders with the new count. -->
       <div class="flex items-center gap-6 mt-2 text-muted text-sm">
         <button type="button" class="flex items-center gap-1.5 hover:text-accent transition-colors" @click={ nav('/post/' + post.id, event) }>
-          <span class="text-base leading-none">💬</span>{#if post.replyCount}<span>{ post.replyCount | compact_number }</span>{/if}
+          <span class="text-base leading-none">💬</span>{#if post.replyCount}<span>{ compact_number(post.replyCount) }</span>{/if}
         </button>
         <button type="button" class="flex items-center gap-1.5 transition-colors {#if post.rechirped}text-boost{/if}{#if !post.rechirped}hover:text-boost{/if}" @click={ toggleRechirp(event) }>
-          <span class="text-base leading-none">🔁</span>{#if post.rechirpCount}<span>{ post.rechirpCount | compact_number }</span>{/if}
+          <span class="text-base leading-none">🔁</span>{#if post.rechirpCount}<span>{ compact_number(post.rechirpCount) }</span>{/if}
         </button>
         <button type="button" class="flex items-center gap-1.5 transition-colors {#if post.liked}text-like{/if}{#if !post.liked}hover:text-like{/if}" @click={ toggleLike(event) }>
-          <span class="text-base leading-none">{#if post.liked}♥{:else}♡{/if}</span>{#if post.likeCount}<span>{ post.likeCount | compact_number }</span>{/if}
+          <span class="text-base leading-none">{#if post.liked}♥{:else}♡{/if}</span>{#if post.likeCount}<span>{ compact_number(post.likeCount) }</span>{/if}
         </button>
       </div>
     </div>

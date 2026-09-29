@@ -37,7 +37,7 @@ LazyRows.prototype.render = function () {
           ] }),
           new ViewNode(SLOT_TAG, { name: 'note', args: { item: s.item?.item }, fallback: () => [
             new ViewNode('em', { class: 'lazy-note' }, [
-              new ViewNode('text', { value: __s((__f["probe"] || __f.__missing("probe"))(s.item?.item), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'row.item' : 0) }),
+              new ViewNode('text', { value: __s((__f["probe"] || __f.__missing("probe"))(s.item?.item), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probe(row.item)' : 0) }),
             ]),
           ] }),
         ])
@@ -48,7 +48,7 @@ LazyRows.prototype.render = function () {
         new ViewNode('li', { key: s.k }, [
           new ViewNode(SLOT_TAG, { name: 'name', args: { value: s.item }, fallback: () => [
             new ViewNode('i', { class: 'lazy-name' }, [
-              new ViewNode('text', { value: __s((__f["probeName"] || __f.__missing("probeName"))(s.item), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'name' : 0) }),
+              new ViewNode('text', { value: __s((__f["probeName"] || __f.__missing("probeName"))(s.item), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probeName(name)' : 0) }),
             ]),
           ] }),
         ])

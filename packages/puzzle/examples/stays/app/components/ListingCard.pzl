@@ -41,14 +41,14 @@
     <!-- Row 1: location + rating on one baseline. -->
     <div class="flex items-baseline justify-between gap-2">
       <span class="font-semibold text-fg text-[15px] truncate">{ listing.location }</span>
-      <span class="text-sm text-fg shrink-0">★ { listing.rating | rating }</span>
+      <span class="text-sm text-fg shrink-0">★ { rating(listing.rating) }</span>
     </div>
 
     <!-- Row 2–4: the secondary lines, all muted gray under the near-black location. -->
     <div class="text-muted text-sm truncate mt-0.5">{ listing.title }</div>
     <div class="text-muted text-sm">{ listing.type }</div>
     <div class="mt-1 text-fg">
-      <span class="font-semibold">{ listing.pricePerNight | currency('$', 0) }</span><span class="text-muted"> night</span>
+      <span class="font-semibold">{ currency(listing.pricePerNight, '$', 0) }</span><span class="text-muted"> night</span>
     </div>
   </a>
 </puzzle-view>

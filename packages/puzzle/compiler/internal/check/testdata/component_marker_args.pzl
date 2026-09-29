@@ -1,7 +1,7 @@
 <puzzle-view>
   <div>
     <header>
-      <Slot name="heading" total={ members.size }>Team</Slot>
+      <Slot name="heading" total={ members.length }>Team</Slot>
     </header>
     <ol>
       {#for member in members, index}

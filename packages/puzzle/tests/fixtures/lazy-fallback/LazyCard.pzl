@@ -1,6 +1,6 @@
 <puzzle-view>
 <div class="lazy-card">
-  <h3><Slot name="label"><em class="lazy-card-fallback">{ label | probe }</em></Slot></h3>
+  <h3><Slot name="label"><em class="lazy-card-fallback">{ probe(label) }</em></Slot></h3>
   <Children>{#for tip in tips}<i class="lazy-tip">{ tip }</i>{/for}</Children>
   <input class="lazy-card-input" />
 </div>

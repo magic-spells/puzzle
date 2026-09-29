@@ -21,7 +21,7 @@ MarkerFallbacks.prototype.render = function () {
   return new ViewNode('puzzle-view', { class: 'fallbacks' }, [
     new ViewNode(SLOT_TAG, { fallback: () => [
       new ViewNode('p', { class: 'pzl-test-fallback' }, [
-        new ViewNode('text', { value: __s((__f["number"] || __f.__missing("number"))(__d.n), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'n' : 0) }),
+        new ViewNode('text', { value: __s((__f["number"] || __f.__missing("number"))(__d.n), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'number(n)' : 0) }),
       ]),
     ] }),
     new ViewNode(SLOT_TAG, { name: 'control', fallback: () => [

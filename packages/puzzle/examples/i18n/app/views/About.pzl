@@ -1,6 +1,6 @@
 <puzzle-view class="space-y-4">
-  <h1 class="text-3xl font-semibold">{ 'about.title' | t }</h1>
-  <p class="text-muted leading-relaxed">{ 'about.body' | t }</p>
+  <h1 class="text-3xl font-semibold">{ t('about.title') }</h1>
+  <p class="text-muted leading-relaxed">{ t('about.body') }</p>
   <p class="text-sm text-muted">{ locale }</p>
 </puzzle-view>
 

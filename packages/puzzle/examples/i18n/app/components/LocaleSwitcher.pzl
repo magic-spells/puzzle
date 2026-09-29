@@ -1,6 +1,6 @@
 <puzzle-view>
   <div class="flex items-center gap-2 text-sm">
-    <span class="text-muted">{ 'language' | t }</span>
+    <span class="text-muted">{ t('language') }</span>
     {#for option in options}
       <button
         key={ option.tag }

@@ -1,6 +1,6 @@
 <puzzle-view>
   <div class="prose-doc rounded-2xl border border-line bg-surface p-6">
-    <h2 class="font-display text-2xl text-ink">{ 'template syntax' | titlecase }</h2>
+    <h2 class="font-display text-2xl text-ink">{ titlecase('template syntax') }</h2>
     <p>
       A Puzzle template is HTML with a small set of block tags and inline
       expressions. The heading above was produced by piping a plain string through

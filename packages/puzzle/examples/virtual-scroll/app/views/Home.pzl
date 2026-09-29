@@ -4,7 +4,7 @@
     <div class="p-5 border-b border-line flex items-baseline justify-between gap-4">
       <div>
         <div class="font-mono text-2xl tabular-nums text-fg">
-          rendering { visibleRows.size } <span class="text-faint">of</span> { total } rows
+          rendering { visibleRows.length } <span class="text-faint">of</span> { total } rows
         </div>
         <div class="mt-1 text-[11px] uppercase tracking-[0.22em] text-faint">
           fixed-height windowing · userland recipe

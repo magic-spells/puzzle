@@ -67,7 +67,7 @@
        the anchor block/handle at open time. -->
   {#if menuOpen}
     <div class="gr-menu" style="left:{ menuX }px; top:{ menuY }px">
-      {#if menuCommands.size}
+      {#if menuCommands.length}
         {#for cmd in menuCommands, i}
           <div
             class="gr-menu-row {#if i === menuHighlight}is-active{/if}{#if cmd.danger} is-danger{/if}"

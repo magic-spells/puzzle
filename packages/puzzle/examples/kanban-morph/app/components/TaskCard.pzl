@@ -5,7 +5,7 @@
     {:else}
       <button type="button" class="kanban-card-body px-4 py-3.5" data-puzzle-morph="task-{ task.id }" aria-haspopup="dialog" @click={ keyOpen(event) }>
         <span class="block text-sm font-semibold leading-5 text-fg">{ task.title }</span>
-        <span class="mt-1 block text-xs leading-4 text-faint">{ task.description | truncate(64) }</span>
+        <span class="mt-1 block text-xs leading-4 text-faint">{ truncate(task.description, 64) }</span>
       </button>
     {/if}
   </div>

@@ -1,6 +1,6 @@
 <puzzle-view class="fallbacks">
   <Children>
-    <p class="pzl-test-fallback">{ n | number }</p>
+    <p class="pzl-test-fallback">{ number(n) }</p>
   </Children>
   <Slot name="control">
     {#if show}

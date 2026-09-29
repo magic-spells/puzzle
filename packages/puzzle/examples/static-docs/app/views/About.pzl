@@ -20,7 +20,7 @@
   </section>
 
   <p class="mt-10 text-sm text-faint">
-    { principles.size } principles, all baked into this page's static HTML.
+    { principles.length } principles, all baked into this page's static HTML.
   </p>
 </puzzle-view>
 
