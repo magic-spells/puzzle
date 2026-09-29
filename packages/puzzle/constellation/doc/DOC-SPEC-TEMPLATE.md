@@ -148,7 +148,7 @@ The Shopify-snippet ergonomic for icons: one SVG file on disk, referenced by nam
 
 **Resolution.** Paths resolve from the conventional **`app/assets/`** folder only — `'icons/cart.svg'` means `app/assets/icons/cart.svg`. Absolute, `./`, `../`, and directory-escaping paths are compile errors (portable src strings; relative-to-`.pzl` resolution can be added later without breaking anything). `app/assets/` is **compile-time only** — never copied to `dist/` (contrast `app/public/`, which is copied verbatim and never inlined). Missing file, missing `app/assets/` dir, or a malformed file are positioned compile errors (in the `.pzl` for path problems; in the `.svg` for file problems). Under `puzzle dev`, inlined files are registered as esbuild watch files: editing only the `.svg` rebuilds, and creating a previously-missing file recovers the build.
 
-**Inlining semantics — the file is inert.** The compiler strips an optional XML prolog/DOCTYPE, requires a single `<svg …>` root (nested `<svg>` inside is fine — depth-counted), tokenizes **only the root open tag** to lift its attributes onto a vnode, and embeds everything inside as a **verbatim string**. File contents are never template-parsed: `{ expr }`, `{#blocks}`, components, and event handlers inside the file do nothing (literal `{` is fine — it's just text). At runtime the root `<svg>` is a real vnode (the differ places/removes it; created via the SVG-namespace path) whose string children are seeded once via `innerHTML` and then **island-owned (D44)**: never reconciled, zero diff cost per patch regardless of file size. String-versus-array children are part of node identity, like the island flip: a `{#svg}` seed and authored `<svg>` markup sharing one conditional position are a replacement boundary in both directions, never a patch. The escape hatch is explicit: want a reactive or animated SVG? Paste the markup into the template directly — arbitrary SVG in templates has always compiled (no element whitelist, automatic `createElementNS` namespace propagation), `<text>` included: it shares the runtime's reserved text-node tag and is told apart by the absence of a `value` attr on the vnode (the text-node marker always carries one).
+**Inlining semantics — the file is inert.** The compiler skips a leading UTF-8 byte-order mark (some .NET and Visual Studio exports carry one, and browsers accept it; error positions stay in the file's own coordinates), strips an optional XML prolog/DOCTYPE, requires a single `<svg …>` root (nested `<svg>` inside is fine — depth-counted), tokenizes **only the root open tag** to lift its attributes onto a vnode, and embeds everything inside as a **verbatim string**. File contents are never template-parsed: `{ expr }`, `{#blocks}`, components, and event handlers inside the file do nothing (literal `{` is fine — it's just text). At runtime the root `<svg>` is a real vnode (the differ places/removes it; created via the SVG-namespace path) whose string children are seeded once via `innerHTML` and then **island-owned (D44)**: never reconciled, zero diff cost per patch regardless of file size. String-versus-array children are part of node identity, like the island flip: a `{#svg}` seed and authored `<svg>` markup sharing one conditional position are a replacement boundary in both directions, never a patch. The escape hatch is explicit: want a reactive or animated SVG? Paste the markup into the template directly — arbitrary SVG in templates has always compiled (no element whitelist, automatic `createElementNS` namespace propagation), `<text>` included: it shares the runtime's reserved text-node tag and is told apart by the absence of a `value` attr on the vnode (the text-node marker always carries one).
 
 **Styling contract.** No per-use attributes on the tag — `{#svg 'path' class="…"}` was rejected as an incoherent mix of Liquid-tag and HTML-attribute syntax (Shopify's own `{% render %}` takes none). Style the icon the Shopify way: `currentColor` (and `width="100%" height="100%"` or a `viewBox`) in the file; color/hover classes on the parent; sizing via a wrapper `<span class="size-5">`, a `[&_svg]:size-5` child selector, or in-file dimensions. Liquid-style params (`{#svg 'path', class: '…'}`) remain a reserved, backwards-compatible future extension.
 
@@ -278,6 +278,8 @@ syntax:
 - HTML remains structural. `{#raw}<b>hi</b>{/raw}` emits a real `<b>` vnode,
   not the source string `"<b>hi</b>"`. Attributes inside that markup are static;
   `@click={ handler }` is an authored literal attribute, never a Puzzle listener.
+  A void element (`<br>`, `<input …>`) closes at its start tag, as it does
+  outside the block.
 - A brace-valued attribute keeps its bytes verbatim, but the scan that finds its
   closing `}` is JS-lexically aware — a `}` inside a string, template literal,
   regex literal, or comment does not end the value, so `data-json={ {"text": "}"} }`
@@ -289,6 +291,18 @@ syntax:
   `{/ raw }`, and `{/raw }` are equivalent. A literal `{/raw}` therefore cannot
   occur in the body. Content after the opener keyword is ignored, matching
   `{#comment}`.
+- The section splitter steps over the block whole. The scan that finds a
+  section's close tag recognizes a `{#raw}` opener and skips to the block's
+  first tolerant closer with the lexer's own scanner, reading nothing in
+  between, so the splitter and the lexer always agree on where the block ends.
+  Braces, quotes and `//` in the body cannot carry that scan into the
+  `<script>`, and a literal section close tag in the body is text:
+  `<pre>{#raw}<puzzle-view>…</puzzle-view>{/raw}</pre>` compiles. When a
+  `{#raw}` has no `{/raw}` of its own (none follows, or the next one sits in a
+  later section), the skipped span runs past the section's real close tag; the
+  first close tag inside a skipped span is kept as a fallback and used only
+  when no close tag follows the span, so the file still splits at its real close
+  tag and the lexer reports the unterminated block at its opener.
 - Raw blocks are legal at text positions, including skeleton bodies. A raw
   opener inside a quoted or brace-only attribute value is a positioned compile
   error. An unterminated block errors at its opening brace with the expected
