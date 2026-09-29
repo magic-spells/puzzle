@@ -78,7 +78,7 @@ by lowering to JavaScript, Sites by evaluating in Go.
 The `expr` package in puzzle-lang (`packages/puzzle-lang/expr`: lexer, Pratt
 parser, AST, method table, printer) parses every template expression into an
 AST both hosts consume. The template parser calls `expr.Parse(src, base,
-Options{Handler, Bindings, CallArgument})` once per expression position and
+Options{Handler, Bindings})` once per expression position and
 stores the tree beside the source string. Every node carries a file position,
 so an error reports the same line:col in both hosts, and parsing is linear in
 the source. Anything outside this grammar is a positioned compile error in
@@ -114,17 +114,25 @@ both hosts whose message names the construct and what to write instead.
   - the global namespaces: `Math.abs`, `ceil`, `floor`, `round`, `trunc`,
     `max`, `min`, `sign`, `pow`, `sqrt`; `Number(x)`, `String(x)`,
     `Boolean(x)`; `Array.isArray(x)`; `Object.keys`, `values`, `entries(x)`;
-    `parseInt`, `parseFloat`, `isNaN`, `isFinite`. Globals are only ever
+    `parseInt`, `parseFloat`, `isNaN`, `isFinite`; `encodeURIComponent`,
+    `decodeURIComponent`, `encodeURI`, `decodeURI` (so
+    `href="/search?q={ encodeURIComponent(q) }"` works). Globals are only ever
     called, except the readable constants `Math.PI` and `Math.E`; `Math` on
     its own is not a value, and `items.filter(Boolean)` says to write
     `x => Boolean(x)`. There is no `Date`, `JSON`, `Intl`, `Map`, `Set` or
     `fetch`; dates and JSON are the `date()` and `json()` functions.
-- **Browser globals are not template data.** A read of `window`, `document`,
-  `globalThis`, `navigator`, `location`, `console`, `localStorage` or
-  `sessionStorage` as a data root is a positioned error: "`window` is not
-  available in template expressions — read it in data() and pass the value".
-  A binding or arrow parameter with that name, a call's callee and a handler
-  value's own name are exempt.
+- **The browser's global objects are not template data.** A read of
+  `window`, `document` or `globalThis` as a data root — a bare read, the root
+  of a member chain, or an object shorthand (`{ window }`) — is a positioned
+  error: "`window` is the browser window, which template expressions cannot
+  reach — read the value you need in data() and return it". Every other
+  browser global name — `navigator`, `location`, `console`, `localStorage`,
+  `sessionStorage` — is an ordinary name that reads the `data()` field of that
+  name (`__d.location` in PuzzleKit); a method call on one
+  (`localStorage.getItem(k)`, `console.log(x)`) is an error only because the
+  method is not in the table (rule 3). A binding or arrow parameter named
+  `window`, `document` or `globalThis`, a call's callee and a handler value's
+  own name are exempt.
 - **Arrow functions** only as call arguments, with an expression body and
   plain parameters (no defaults, rest or destructuring): `x => expr`,
   `(x, i) => expr`; an object body is written `x => ({ … })`.
@@ -213,10 +221,16 @@ because nothing in the language re-expresses an instant in another zone.
 
 - **Date presets.** `date(v)` defaults to the medium date, `time(v)` to the
   short time (`3:04 PM`), and `datetime(v)` to the medium date with the short
-  time (`Sep 24, 2026, 3:04 PM`). A string-literal preset the library does not
-  know, or an `in_timezone` literal that cannot be a zone id, is a positioned
-  compile error in PuzzleKit; a dynamic one is a development error that
-  renders the default.
+  time (`Sep 24, 2026, 3:04 PM`); the presets all three share are `short`,
+  `medium`, `long` and `iso`. A string-literal preset the standard function
+  does not know, or an `in_timezone` literal that cannot be a zone id, is a
+  positioned build warning in PuzzleKit (`codegen/presets.go`), not an error:
+  an app may register its own `date`, `time` or `datetime` (an app function
+  under a standard name wins, D174), and the compiler cannot see which
+  presets that one takes. A dynamic unknown preset renders the function's
+  default at run time, and in development the standard function logs an
+  error once per preset name; a zone `Intl` cannot resolve leaves the date
+  un-shifted.
 - **An app registers its own functions** through the `formatters` config map,
   which keeps its name, and calls them bare, as Cory put it:
   `{ specialFormat(product.title) }`. `puzzle check` types an app function as
@@ -236,6 +250,11 @@ because nothing in the language re-expresses an instant in another zone.
 - **`raw` and `newline_to_br` keep the markup-position rule** (D174): each may
   only be the outermost call of a text interpolation, with one argument;
   anywhere else is a positioned compile error.
+- **A function that throws fails the render.** Nothing wraps a library,
+  app-registered or method call in a `try`: a throw during render fails that
+  view like any render throw, and the app's `errorView` takes over
+  ([[DECISION-D145-ERROR-BOUNDARIES]]). Only a throw inside an `@event`
+  handler stays uncaught.
 
 ### 5. One shared table; Sites switches entries off
 
@@ -346,7 +365,7 @@ Date(). we'll have limited support."
   (`go:embed`), so Sites pins the rows at the language tag and both hosts run
   the same ones. `expressions-parse.json` pins the grammar: an expression and
   its S-expression tree with every node position, or its positioned error
-  (421 cases, including handler, bindings and call-argument cases; Sites runs
+  (434 cases, including handler and bindings cases; Sites runs
   them through `conformance.ExpressionsParse` and `expr.Print`).
   `functions.json` pins the function library (`conformance.Functions`). A
   corpus proof parses every `.pzl` expression in the monorepo. The evaluation
@@ -453,10 +472,16 @@ Two questions older than this card, still undecided:
   a fallback when the view has no handler of that name. Rejected: a handler
   value's own call always names the view's handler; a collision draws a
   warning instead (rule 4).
-- **Browser globals as template reads** (`window.scrollY`,
-  `localStorage.theme`). Rejected: none is template data, Sites has none, and
-  as a bare name each silently read a `data()` field of the same name; the
+- **The browser's global objects as template reads** (`window.scrollY`,
+  `document.title`). Rejected: none is template data, Sites has none, and as
+  a bare name each would silently read a `data()` field of the same name; the
   steer points to `data()`.
+- **Rejecting every browser global name** — `navigator`, `location`,
+  `console`, `localStorage` and `sessionStorage` beside the three global
+  objects. Rejected: each is a plausible `data()` field name (a store's
+  `location`), a bare read of one already means that `data()` field in both
+  hosts and never the browser's object, so a steer would only block
+  legitimate data; a method call on one still fails at the method table.
 - **Rename the registration API to `app.function()` or a `functions` config
   key.** Rejected for now: the `formatters` config key keeps its name, and so
   do the compiler-facing `formatters` runtime modules.
@@ -484,6 +509,10 @@ Two questions older than this card, still undecided:
 - **Keep `this` as a read-only root.** Rejected: still a second path into the
   view; `data()` is the path.
 - **Add `{#let}` to PuzzleKit.** Rejected (rule 7).
+- **A literal unknown date preset as a compile error.** Rejected: an app may
+  register its own `date`, `time` or `datetime`, whose presets the compiler
+  cannot see, so an error would fail a correct build; a warning still catches
+  a typo like `time(at, 'shrot')`.
 
 ## Consequences
 
