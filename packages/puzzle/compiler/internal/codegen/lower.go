@@ -30,6 +30,7 @@ import (
 //	f(a, b), library function        (__f["f"] || __f.__missing("f"))(<a>, <b>)   the D43 guard
 //	a.m(x), method                   <a>?.m(<x>)     a call on a missing receiver is undefined (§9 d)
 //	Math.round(x)  Number(x)         verbatim        a JavaScript global the language allows
+//	Object.keys(x)  values  entries  Object.keys(<x> ?? {})   a missing value is [], never a throw (render target only)
 //	Math.PI                          verbatim
 //	x => e   (x, i) => e             (x) => <e>      a fresh scope; an object body is parenthesized
 //	`a ${x}`                         `a ${<x>}`
@@ -619,6 +620,10 @@ func (l *lowerer) call(c *expr.Call) {
 		l.libraryCall(callee, c.Args)
 	case *expr.Global:
 		l.global(callee)
+		if callee.Namespace == "Object" && len(c.Args) > 0 && l.target != targetCheck {
+			l.objectGlobalArgs(c.Args)
+			return
+		}
 		l.args(c.Args)
 	case *expr.Member:
 		// A method from the table: the same JavaScript method, called through a
@@ -702,6 +707,25 @@ func (l *lowerer) args(args []expr.Node) {
 		if i > 0 {
 			l.w.WriteString(", ")
 		}
+		l.top(a)
+	}
+	l.w.WriteString(")")
+}
+
+// objectGlobalArgs writes the arguments of `Object.keys`, `values` or
+// `entries` (the Object namespace holds only those three) with the first one
+// defaulted to `{}`: JavaScript throws on a null or undefined argument, and a
+// missing value never throws in a template (D173 V4), so `Object.keys(x)` with
+// `x` missing is `[]`. Any other value — a string, a number, a list — reaches
+// the global unchanged. The render target only: the check target adds no
+// guards, as it adds no `?.` — and TypeScript 5.6+ reports a `??` whose left
+// side can never be nullish (`Object.keys({ a: 1 } ?? {})`, TS2869).
+func (l *lowerer) objectGlobalArgs(args []expr.Node) {
+	l.w.WriteString("(")
+	l.logicalOperand("??", args[0], precOr)
+	l.w.WriteString(" ?? {}")
+	for _, a := range args[1:] {
+		l.w.WriteString(", ")
 		l.top(a)
 	}
 	l.w.WriteString(")")

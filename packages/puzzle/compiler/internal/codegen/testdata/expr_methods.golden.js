@@ -29,7 +29,7 @@ ExprMethods.prototype.render = function () {
       new ViewNode('text', { value: __s(__d.tags?.toSorted()?.join(', '), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'tags.toSorted().join(\', \')' : 0) }),
     ]),
     new ViewNode('p', { class: 'count' }, [
-      new ViewNode('text', { value: __s(__d.tags?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'tags.length' : 0) + ' of ' + __s(Object.keys(__d.filters)?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'Object.keys(filters).length' : 0) }),
+      new ViewNode('text', { value: __s(__d.tags?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'tags.length' : 0) + ' of ' + __s(Object.keys(__d.filters ?? {})?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'Object.keys(filters).length' : 0) }),
     ]),
     new ViewNode('p', { class: 'price' }, [
       new ViewNode('text', { value: __s((__d.price * 1.2)?.toFixed(2), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? '(price * 1.2).toFixed(2)' : 0) + ' / ' + __s(Math.round(__d.price), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'Math.round(price)' : 0) + ' / ' + __s(Math.max(0, __d.stock - __d.held), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'Math.max(0, stock - held)' : 0) }),
