@@ -28,5 +28,6 @@ npm run build      # production build (types stripped)
 npm run typecheck  # tsc --noEmit (strict) — .ts/.js files and declarations
 ```
 
-The app entry stays `app/app.js` (the build resolves that exact path); it imports
-the extensionless `.ts` modules, which esbuild resolves natively.
+The app entry is `app/app.ts` — the build starts from `app/app.ts` when it
+exists, otherwise `app/app.js`, and refuses an app that has both. It imports the
+extensionless `.ts` modules, which esbuild resolves natively.

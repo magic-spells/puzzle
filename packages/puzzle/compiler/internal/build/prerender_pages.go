@@ -122,12 +122,12 @@ type staticModules struct {
 }
 
 // prerenderStaticPages runs the true static-pages build against the app rooted
-// at absRoot, writing content-complete HTML pages (via the node prerender pass)
+// at absRoot (whose resolved entry is appEntry — see ResolveEntry), writing content-complete HTML pages (via the node prerender pass)
 // plus one per-page ES-module bundle under staging/_puzzle. cfg + dev select the
 // same minify/define/dropConsole policy as the main app.js pass. prof may be nil
 // (profiling off); it splits this pass into its three expensive steps — the node
 // prerender bundle, the render run, and the per-page browser bundles.
-func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, cfg config.Config, dev bool, prof *buildProfile, pc *passContext) error {
+func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[string]bool, cfg config.Config, dev bool, prof *buildProfile, pc *passContext) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
@@ -155,7 +155,7 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	// 1. Node prerender pass in mode 'static': the JS side renders each static
 	//    route, captures its store payload into the page's data island, strips the
 	//    app.js tag, and returns the extended summary behind the sentinel.
-	stdin, err := staticPrerenderStdin(absRoot, adapterModule)
+	stdin, err := staticPrerenderStdin(absRoot, appEntry, adapterModule)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 		if err != nil {
 			return err
 		}
-		src, err := staticEntrySource(absRoot, page, summary, modelsModule, formattersModule, adapterModule)
+		src, err := staticEntrySource(absRoot, appEntry, page, summary, modelsModule, formattersModule, adapterModule)
 		if err != nil {
 			return err
 		}
@@ -207,16 +207,16 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 		entryFiles = append(entryFiles, file)
 	}
 
-	// 3. Warn when app.js registered services that have no conventional module
-	//    the per-page browser graph can import.
+	// 3. Warn when the app entry registered services that have no conventional
+	//    module the per-page browser graph can import.
 	out := ui.New(os.Stdout)
 	if summary.HasModels && modelsModule == "" {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"),
-			"models registered in app.js will not exist client-side in static mode — export them from app/models/index.js or app/models/index.ts")
+			"models registered in the app entry will not exist client-side in static mode — export them from app/models/index.js or app/models/index.ts")
 	}
 	if summary.HasFormatters && formattersModule == "" {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"),
-			"custom formatters registered in app.js will not exist client-side in static mode — export them from app/formatters.js or app/formatters.ts")
+			"custom formatters registered in the app entry will not exist client-side in static mode — export them from app/formatters.js or app/formatters.ts")
 	}
 	if staticCaptured(summary, adapterModule) {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), staticCaptureNote)
@@ -272,8 +272,8 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 // source change would throw that context's cache away, which is the whole thing
 // being bought. A one-shot build passes three arguments and renders everything,
 // so this line is inert there.
-func staticPrerenderStdin(absRoot, adapterModule string) (string, error) {
-	entry, err := json.Marshal(appEntryPath(absRoot))
+func staticPrerenderStdin(absRoot, appEntry, adapterModule string) (string, error) {
+	entry, err := json.Marshal(filepath.ToSlash(appEntry))
 	if err != nil {
 		return "", fmt.Errorf("encoding prerender entry path: %w", err)
 	}
@@ -319,14 +319,14 @@ func slugFromEntry(entry string) (string, error) {
 // are emitted only when the source files exist — an absent binding must never be
 // referenced. Route + service options are embedded verbatim from the summary;
 // the adapter is resolved by staticAdapterImport.
-func staticEntrySource(absRoot string, page staticPage, summary staticSummary, modelsModule, formattersModule, adapterModule string) (string, error) {
+func staticEntrySource(absRoot, appEntry string, page staticPage, summary staticSummary, modelsModule, formattersModule, adapterModule string) (string, error) {
 	var b strings.Builder
 	b.WriteString("import { mountStatic } from '@magic-spells/puzzle/static';\n")
 	// adapterBinding is emitted after every import, so the generated module reads
 	// as an import block followed by statements.
 	adapterBinding := ""
 	if summary.HasAdapter {
-		adapterImport, binding, err := staticAdapterImport(absRoot, summary, adapterModule)
+		adapterImport, binding, err := staticAdapterImport(absRoot, appEntry, summary, adapterModule)
 		if err != nil {
 			return "", err
 		}
@@ -438,7 +438,7 @@ func staticEntrySource(absRoot string, page staticPage, summary staticSummary, m
 // Tier 3 is a fallback, never an error: configuring the adapter inline is legal
 // app code and must build. It costs page weight (the app entry pulls the route
 // table and every view into the shared chunk), which staticCaptureNote reports.
-func staticAdapterImport(absRoot string, summary staticSummary, adapterModule string) (string, string, error) {
+func staticAdapterImport(absRoot, appEntry string, summary staticSummary, adapterModule string) (string, string, error) {
 	if !summary.AdapterConfigured {
 		return "import { adapter } from '@magic-spells/puzzle/adapter';\n", "", nil
 	}
@@ -449,7 +449,7 @@ func staticAdapterImport(absRoot string, summary staticSummary, adapterModule st
 		}
 		return fmt.Sprintf("import adapter from %s;\n", spec), "", nil
 	}
-	spec, err := json.Marshal(absModuleImport(absRoot, appEntryPath(absRoot)))
+	spec, err := json.Marshal(absModuleImport(absRoot, appEntry))
 	if err != nil {
 		return "", "", err
 	}
@@ -469,7 +469,7 @@ func staticCaptured(summary staticSummary, adapterModule string) bool {
 // staticCaptureNote is the advisory the capture tier prints: the build works,
 // but every page now carries the whole app graph, and moving the capability into
 // app/adapter.js is the one-line fix.
-const staticCaptureNote = "config.adapter is configured in app.js, so each static page imports app/app.js to reach it — the route table and every view land in the shared page chunk; export the capability from app/adapter.js (or app/adapter.ts) and pass that value to keep pages lean"
+const staticCaptureNote = "config.adapter is configured in the app entry, so each static page imports the entry to reach it — the route table and every view land in the shared page chunk; export the capability from app/adapter.js (or app/adapter.ts) and pass that value to keep pages lean"
 
 // findStaticModule returns the first conventional app module that exists,
 // preferring JavaScript when both JavaScript and TypeScript variants are present.

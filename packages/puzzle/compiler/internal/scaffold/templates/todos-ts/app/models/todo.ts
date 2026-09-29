@@ -59,8 +59,8 @@ export default class Todo extends PuzzleModel {
   }
 
   // This model declares no server location, so it never fetches: findOne and
-  // findMany are pure local reads over the store app/main.ts seeds. The upgrade
-  // path to a real API is written out in app/main.ts.
+  // findMany are pure local reads over the store app/app.ts seeds. The upgrade
+  // path to a real API is written out in app/app.ts.
 }
 
 // A Todo record: the model's methods and getters plus the schema's fields.

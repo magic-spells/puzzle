@@ -60,11 +60,18 @@ func runDoctor(w io.Writer, out *ui.Printer, dir string) int {
 		fail("node", "not found on PATH — install Node.js")
 	}
 
-	// Entry point — the one path build.Build strictly requires.
-	if fsFileExists(filepath.Join(dir, "app", "app.js")) {
-		pass("entry (app/app.js)", "found")
+	// Entry point — the one path build.Build strictly requires, resolved by the
+	// same rule the build uses (app/app.ts, else app/app.js; never both).
+	if entry, err := build.ResolveEntry(dir); err == nil {
+		rel := build.EntryJS
+		if strings.HasSuffix(entry, ".ts") {
+			rel = build.EntryTS
+		}
+		pass("entry", rel)
+	} else if fsFileExists(filepath.Join(dir, filepath.FromSlash(build.EntryTS))) {
+		fail("entry", "app/app.ts and app/app.js both exist — keep one")
 	} else {
-		fail("entry (app/app.js)", "missing — expected app/app.js")
+		fail("entry", "missing — expected app/app.ts or app/app.js")
 	}
 
 	// index.html — build copies from app/public/ (falling back to a flat public/).

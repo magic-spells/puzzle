@@ -1,0 +1,41 @@
+<puzzle-view>
+  <button class="UserCard" @click={ handleClick(event) }>
+    { label }
+  </button>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// `label` is a prop passed by the parent component.
+interface UserCardProps {
+  label?: string;
+}
+
+// What data() hands the template.
+interface UserCardModel {
+  label: string;
+}
+
+export default class UserCard extends PuzzleView {
+  data(_params: Record<string, string>, props: UserCardProps): UserCardModel {
+    return {
+      label: props.label || 'UserCard',
+    };
+  }
+
+  // Event handlers are arrow functions so `this` is the instance.
+  events = {
+    handleClick: (_event: Event): void => {
+      console.log('UserCard clicked');
+    },
+  };
+}
+</script>
+
+<style>
+.UserCard {
+  display: inline-flex;
+  align-items: center;
+}
+</style>

@@ -27,6 +27,7 @@ my-app/
 ├── puzzle.config.js       # { styles: { use: ['tailwindcss'] }, output: 'static' | 'hybrid' }
 └── app/
     ├── app.js             # new PuzzleApp({ target: '#app', routes, models, formatters }); MUST `export default app` for prerender modes
+    │                      #   (app.ts in a TypeScript app — the build takes app/app.ts over app/app.js and refuses both)
     ├── routes.js          # route table (see below)
     ├── public/index.html  # the shell: #app mount + <script type="module" src="/app.js">
     ├── styles/styles.css  # global entry; Tailwind v4 via the config's styles pipeline
@@ -43,8 +44,10 @@ CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
 TypeScript compiler over `.pzl` scripts and template expressions), `preview`
 (serve an existing `dist/` with production-host semantics), `init` (`--template
 default|todos`; `--typescript` scaffolds `<script lang="ts">` components, `.ts`
-modules behind a one-line `app/app.js` entry, a strict tsconfig and an
-`npm run check` script), `generate`,
+modules with an `app/app.ts` entry, a strict tsconfig and an
+`npm run check` script), `generate` (TypeScript stubs — `<script lang="ts">`,
+`app/models/<name>.ts`, an `index.ts` family barrel — when the project root
+has a `tsconfig.json`),
 `add` (tailwind integration, `piece <name…>`, `theme <name…>`, `skills`),
 `upgrade`, `doctor`, `info`.
 

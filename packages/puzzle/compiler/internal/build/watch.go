@@ -30,9 +30,16 @@ import (
 type WatchBuilder struct {
 	root   string
 	outdir string
-	entry  string // app/app.js, or the generated --fixtures wrapper (D98)
-	pl     *plugin.Plugin
-	ctx    api.BuildContext
+	entry  string // the app entry, or the generated --fixtures wrapper (D98)
+	// appEntry is the app entry ResolveEntry chose at construction (app/app.ts
+	// or app/app.js). The esbuild context is frozen over it, so every rebuild
+	// re-resolves and refuses to go on once the answer changes.
+	appEntry string
+	// refused holds the changed paths of rebuilds the entry check turned away,
+	// replayed into the next rebuild.
+	refused []string
+	pl      *plugin.Plugin
+	ctx     api.BuildContext
 
 	// fixtures is the generated --fixtures wrapper, zero when the flag is off. Its
 	// resolver plugin has to be re-registered every time a fresh esbuild context is
@@ -137,7 +144,7 @@ type WatchOptions struct {
 	// field for why.
 	Splitting bool
 	// Fixtures bundles the generated `--fixtures` wrapper entry instead of
-	// app/app.js (D98), installing the fixtures/mock module before the app boots.
+	// the app entry (D98), installing the fixtures/mock module before the app boots.
 	// The wrapper is generated ONCE here, at construction, and left in place for
 	// the process lifetime — it lives under <root>/.puzzle/, which is outside every
 	// watched directory and pruned from the usage scan, so writing it can never
@@ -150,7 +157,7 @@ type WatchOptions struct {
 }
 
 // NewWatchBuilder creates the incremental builder for the app rooted at root
-// (the directory containing app/app.js). It validates the entry point and
+// (the directory containing the app/app.ts or app/app.js entry). It validates the entry point and
 // constructs (but does not yet run) the esbuild context. Always development
 // mode: readable, unminified output.
 func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
@@ -158,15 +165,16 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolving app root: %w", err)
 	}
-	entry := filepath.Join(absRoot, "app", "app.js")
-	if _, err := os.Stat(entry); err != nil {
-		return nil, fmt.Errorf("entry point not found: %s (expected app/app.js under %s)", entry, absRoot)
+	entry, err := ResolveEntry(absRoot)
+	if err != nil {
+		return nil, err
 	}
+	appEntry := entry
 	var fixtures fixturesWrapper
 	if opts.Fixtures {
 		// `puzzle dev` has no prerender mode, so the only --fixtures precondition
 		// left to check is the config file itself.
-		fixtures, err = prepareFixtures(absRoot, "")
+		fixtures, err = prepareFixtures(absRoot, appEntry, "")
 		if err != nil {
 			return nil, err
 		}
@@ -202,6 +210,7 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 		root:        absRoot,
 		outdir:      outdir,
 		entry:       entry,
+		appEntry:    appEntry,
 		pl:          pl,
 		ctx:         ctx,
 		defined:     pl.Features(),
@@ -255,6 +264,15 @@ func (b *WatchBuilder) RebuildProfile(changed []string, prof *PhaseProfile) (Reb
 
 func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildResult, error) {
 	var out RebuildResult
+	// A batch the entry check refuses is carried into the next rebuild rather
+	// than dropped: the usage scan, locale reload and public sync below all key
+	// off `changed`, and the rebuild after the fix must still see those paths.
+	changed = append(b.refused, changed...)
+	if err := entryUnchanged(b.root, b.appEntry); err != nil {
+		b.refused = changed
+		return out, err
+	}
+	b.refused = nil
 	currentPublic := publicDir(b.root)
 	syncPublic := !b.landed || currentPublic != b.publicSource ||
 		pathsTouchDir(changed, currentPublic) || pathsTouchDir(changed, b.publicSource)

@@ -36,7 +36,7 @@ const app = new PuzzleApp({
     });
     store.createRecord('todo', {
       id: 't2',
-      text: 'These rows are seeded in app/main.ts — beforeMount({ store })',
+      text: 'These rows are seeded in app/app.ts — beforeMount({ store })',
       completed: false,
       createdAt: new Date('2026-08-01T10:30:00.000Z'),
       updatedAt: new Date('2026-08-01T10:30:00.000Z'),

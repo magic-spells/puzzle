@@ -1,5 +1,5 @@
 // Package build drives a full `puzzle build` (constellation/doc/DOC-COMPILER-DESIGN.md §b): one
-// esbuild api.Build pass over app/app.js with the .pzl plugin registered, then
+// esbuild api.Build pass over the app entry (app/app.ts or app/app.js) with the .pzl plugin registered, then
 // the collected global CSS and the static public/ assets are written next to
 // the bundle. It replaces the Phase 1 prototype orchestrator (internal/compiler,
 // deleted): no intermediate files, no runtime concatenation — the runtime is a
@@ -76,7 +76,8 @@ type Options struct {
 	Profiler *PhaseProfile
 }
 
-// Build compiles the app rooted at root (the directory containing app/app.js)
+// Build compiles the app rooted at root (the directory containing the app/app.ts
+// or app/app.js entry — see ResolveEntry)
 // into root/dist. It returns a formatted error if esbuild reports any errors.
 func Build(root string, opts Options) error {
 	prof := opts.Profiler
@@ -96,9 +97,9 @@ func Build(root string, opts Options) error {
 	// rule matches turned a 112ms source scan into 14s on the reference site.
 	SweepWorkDirs(absRoot)
 
-	entry := filepath.Join(absRoot, "app", "app.js")
-	if _, err := os.Stat(entry); err != nil {
-		return fmt.Errorf("entry point not found: %s (expected app/app.js under %s)", entry, absRoot)
+	entry, err := ResolveEntry(absRoot)
+	if err != nil {
+		return err
 	}
 	outdir := filepath.Join(absRoot, "dist")
 
@@ -139,7 +140,7 @@ func Build(root string, opts Options) error {
 	var fixtures fixturesWrapper
 	if opts.Fixtures {
 		var ferr error
-		fixtures, ferr = prepareFixtures(absRoot, mode)
+		fixtures, ferr = prepareFixtures(absRoot, entry, mode)
 		// The scratch dir is removed on failure as well as success, so a rejected
 		// build leaves the app tree exactly as it found it.
 		defer cleanupFixturesWorkDir(absRoot, fixtures.CreatedWorkDir)
@@ -342,7 +343,7 @@ func Build(root string, opts Options) error {
 	switch mode {
 	case "hybrid":
 		endHybrid := prof.phase("prerender (hybrid)")
-		hybridErr := prerenderHybrid(absRoot, staging, publicFiles, pc)
+		hybridErr := prerenderHybrid(absRoot, entry, staging, publicFiles, pc)
 		endHybrid()
 		if hybridErr != nil {
 			return hybridErr
@@ -350,7 +351,7 @@ func Build(root string, opts Options) error {
 	case "static":
 		// The per-page pass decides its own source-map mode from cfg + dev
 		// (staticPagesSourcemap), so there is no generate-then-delete pass here.
-		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development, prof, pc); err != nil {
+		if err := prerenderStaticPages(absRoot, entry, staging, publicFiles, cfg, opts.Development, prof, pc); err != nil {
 			return err
 		}
 	}

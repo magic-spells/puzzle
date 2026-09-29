@@ -153,8 +153,8 @@ function unresolvableEndpointError(url) {
 			`time in Node, which has no page origin to resolve an app-relative URL ` +
 			`against (a browser resolves it against the page it is on; Node cannot).\n` +
 			`  Have an API? Give the app an absolute origin — ` +
-			`apiURL: 'https://api.example.com' in app/app.js — so the build fetches it ` +
-			`for real.\n` +
+			`apiURL: 'https://api.example.com' in the app entry (app/app.ts or app/app.js) — ` +
+			`so the build fetches it for real.\n` +
 			`  No API? Remove \`endpoint\` from the model's \`static adapter\` — a model ` +
 			`with no endpoint and no read verb never fetches — and seed the store in ` +
 			`\`beforeMount({ store })\`.`

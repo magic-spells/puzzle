@@ -1,0 +1,6 @@
+import Frame from './Frame.pzl';
+import Wrapper from './Wrapper.pzl';
+import Content from './Content.pzl';
+
+export { Frame, Wrapper, Content };
+export default Object.assign(Frame, { Wrapper, Content });

@@ -21,6 +21,9 @@ code_refs:
   - compiler/internal/scaffold/scaffold.go
   - compiler/internal/scaffold/templates/default-ts
   - compiler/internal/scaffold/templates/todos-ts
+  - compiler/internal/build/entry.go
+  - compiler/internal/generate/generate.go
+  - compiler/internal/generate/templates.go
 verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 notes:
   - kind: verified
@@ -43,6 +46,7 @@ TS natively, so the enabling work is almost entirely **plumbing a flag**, not ne
 compilation.
 
 ## Decision
+
 - **Mechanism: a `lang` attribute on `<script>`.** `lang="ts"` → TypeScript;
   absent or `lang="js"` → JavaScript (byte-identical to pre-v1.22). Any other
   value, an empty value, a dynamic `lang={…}`, or a second attribute is a
@@ -72,31 +76,54 @@ compilation.
   `import X from './X.pzl'` resolve in an editor; under `puzzle check` the
   import resolves to the component's own virtual file instead, so it carries the
   real class.
+- **The build entry is `app/app.ts` or `app/app.js`.** The entry is
+  `app/app.ts` when it exists, otherwise `app/app.js`; an app with **both** is a
+  hard error naming both files — the build never guesses. One helper
+  (`build.ResolveEntry`, `compiler/internal/build/entry.go`) holds the rule, and
+  every consumer calls it: the one-shot build, the SPA and static dev watchers,
+  both prerender passes (hybrid and static, including the static capture tier's
+  page-entry import), the `--fixtures` wrapper, and `puzzle doctor`. Neither file
+  is the long-standing "entry point not found" error. A dev session's esbuild
+  context is frozen over the entry it started with, so each rebuild re-resolves
+  and fails with "restart puzzle dev" once the answer changes (a second entry
+  appears, or the entry is renamed). The output stays `dist/app.js`.
+  `puzzle.config.js` stays JavaScript — node reads it before any bundling, and
+  nothing in the app imports it.
 - **`puzzle init --typescript` scaffolds a TypeScript app** (the D32 surface; the
   interactive `Use TypeScript? [y/N]` prompt is the same switch). The default
   stays JavaScript. Each template has a TypeScript variant, written as the
   template's tree with an overlay, `templates/<name>-ts/`, laid over it: an
   overlay file replaces the base file at the same path, and an overlay `x.ts`
-  drops the base `x.js` it ports. The overlay carries only what a TypeScript
+  drops the base `x.js` it ports — which is how the overlay's `app/app.ts`
+  removes the base `app/app.js`. The overlay carries only what a TypeScript
   app writes differently — every component as `<script lang="ts">` with typed
-  `data()` return, props, events and lifecycle hooks; `main.ts`, `routes.ts`
-  and the todos models as `.ts` (a `Route[]`, a model plus its record type);
-  the README; and a `package.json` adding `typescript` `^7` and a
-  `"check": "puzzle check"` script — so styles, `public/` and
-  `puzzle.config.js` stay single-sourced. Init then writes a strict/noEmit
-  `tsconfig.json` (the `@` alias `paths`, the `puzzle-env.d.ts` include) that
-  both the editor and `puzzle check` read. **The entry stays `app/app.js`**: the
-  build resolves that one path (and the dev server, prerender, fixtures wrapper
-  and `puzzle doctor` with it), so the TypeScript variant's `app/app.js` is a
-  one-line `export { default } from './main'` and the app is configured and
-  mounted in `main.ts`. `puzzle.config.js` stays JavaScript too — node reads it,
-  and nothing in the app imports it. Both variants pass `puzzle check` clean
-  under TypeScript 6 and 7; the scaffold tests build and check them, pin the
-  JavaScript output to `templates/<name>/` byte for byte, require each ported
-  `.pzl` to keep its JavaScript twin's markup, and require each TypeScript
-  `package.json` to equal its base plus exactly the two additions.
+  `data()` return, props, events and lifecycle hooks; the `app/app.ts` entry
+  (the app configured and mounted there directly), `routes.ts` and the todos
+  models as `.ts` (a `Route[]`, a model plus its record type); the README; and
+  a `package.json` adding `typescript` `^7` and a `"check": "puzzle check"`
+  script — so styles, `public/` and `puzzle.config.js` stay single-sourced.
+  Init then writes a strict/noEmit `tsconfig.json` (the `@` alias `paths`, the
+  `puzzle-env.d.ts` include) that both the editor and `puzzle check` read. Both
+  variants pass `puzzle check` clean under TypeScript 6 and 7; the scaffold
+  tests build and check them, pin the JavaScript output to `templates/<name>/`
+  byte for byte, require each ported `.pzl` to keep its JavaScript twin's
+  markup, and require each TypeScript `package.json` to equal its base plus
+  exactly the two additions.
+- **`puzzle generate` writes TypeScript in a TypeScript app.** A TypeScript app
+  is one with a `tsconfig.json` at the project root — the marker init writes (a
+  JavaScript scaffold gets `jsconfig.json`); that is the one rule
+  (`generate.IsTypeScriptApp`). There, component, view and layout stubs are
+  `<script lang="ts">` with typed props and a typed `data()` model as named
+  interfaces and typed event handlers (no `any`), in the scaffold's idiom and
+  with the JavaScript stub's markup and style byte for byte; `model` writes
+  `app/models/<name>.ts` with a fields interface and a `<Name>Record` type; a
+  family's barrel is `index.ts` (the same bytes — they are valid TypeScript);
+  and the registration hint names `app/models/index.ts` with an extensionless
+  import. A JavaScript app's stubs are byte-identical to before, pinned by
+  `internal/generate/testdata/js` goldens.
 
 ## Alternatives rejected
+
 - **A `.pzt` file extension (implying `lang="ts"`).** Deferred, not refused. An
   extension alias multiplies surface everywhere a glob names `.pzl`: parser file
   filters, `generate`/`init` templates, Tailwind `@source` lines, editor
@@ -124,18 +151,28 @@ compilation.
 - **Deriving the TypeScript variant by transforming the JavaScript files.** A
   rewrite can flip `<script>` to `<script lang="ts">` but cannot author types;
   the typed code has to be written, so it lives as files.
-- **Accepting `app/app.ts` as a second build entry.** Every entry consumer
-  (build, watch, static watch, prerender, fixtures wrapper, doctor) names
-  `app/app.js`; a one-line re-export gets a fully typed app without touching any
-  of them.
+- **Keeping `app/app.js` as the only entry, with a one-line
+  `export { default } from './main'` shim in TypeScript apps.** It worked, but
+  every TypeScript app then carried a JavaScript file whose only job was to
+  satisfy the build, and the real setup lived in a `main.ts` no convention
+  named. Resolving `app/app.ts` is one helper the consumers already share.
+- **Picking one entry when both exist** (TypeScript first, say). Two entries
+  almost always mean a half-finished migration; silently building one of them
+  ships whichever the rule favors while the developer edits the other.
+- **Detecting a TypeScript app for `generate` by an `app/app.ts` entry, or by
+  any `.ts` file.** `tsconfig.json` is what makes an app type-check — the
+  editor and `puzzle check` both read it — and init writes it for exactly the
+  TypeScript variant, so it is the marker a user can see and control.
 
 ## Consequences
+
 Parser + plugin + CLI amendment; **codegen and the runtime kernel are
 untouched** (render bytes identical; JS `.pzl` files compile byte-for-byte as
 before). New surface: `Sections.ScriptsLang`, the plugin's loader switch, the
 `pzlc` Transform pass, `types/index.d.ts` + `puzzle-env.d.ts`, `init
 --typescript` and the `templates/<name>-ts/` overlays (whose `package.json`
 framework ranges `release:prep` asserts beside the base templates'), the
-Sublime grammar's `source.ts` embed, and `examples/typed-todos`.
-Ships in the `pretest` example-build gate (asserts the bundle has no TS syntax).
-`puzzle generate` stubs are still JavaScript.
+`app/app.ts` entry (`build.ResolveEntry`), TypeScript `generate` stubs, the
+Sublime grammar's `source.ts` embed, and `examples/typed-todos` (whose entry is
+`app/app.ts`). Ships in the `pretest` example-build gate (asserts the bundle has
+no TS syntax).

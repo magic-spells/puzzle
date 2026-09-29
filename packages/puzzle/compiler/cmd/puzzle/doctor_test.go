@@ -64,6 +64,31 @@ func TestDoctorMissingAppJS(t *testing.T) {
 	}
 }
 
+// A TypeScript app's entry is app/app.ts; doctor resolves it by the build's rule.
+func TestDoctorTypeScriptEntry(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "app", "app.ts"), "export default 1;\n")
+	mustWrite(t, filepath.Join(dir, "app", "public", "index.html"), "<html></html>\n")
+	var buf bytes.Buffer
+	runDoctor(&buf, plainPrinter(), dir)
+	if !strings.Contains(buf.String(), "✓ entry") || !strings.Contains(buf.String(), "app/app.ts") {
+		t.Errorf("expected the entry check to pass on app/app.ts, got:\n%s", buf.String())
+	}
+}
+
+// Both entries is a hard failure naming both files — the build refuses it too.
+func TestDoctorBothEntries(t *testing.T) {
+	dir := healthyProject(t)
+	mustWrite(t, filepath.Join(dir, "app", "app.ts"), "export default 1;\n")
+	var buf bytes.Buffer
+	if fails := runDoctor(&buf, plainPrinter(), dir); fails == 0 {
+		t.Fatalf("expected a failure for two entries, got 0:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "app/app.ts and app/app.js both exist") {
+		t.Errorf("expected the entry check to name both files, got:\n%s", buf.String())
+	}
+}
+
 func TestDoctorConfigLoadFailure(t *testing.T) {
 	doctorRequireNode(t)
 	dir := healthyProject(t)

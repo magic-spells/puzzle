@@ -16,8 +16,7 @@ Then open http://localhost:3000.
 ```
 __APP_NAME__/
 ├── app/
-│   ├── app.js            # Build entry — hands off to main.ts
-│   ├── main.ts           # App init: target, routes, models, formatters
+│   ├── app.ts            # Build entry: target, routes, models, formatters
 │   ├── routes.ts         # Route definitions
 │   ├── models/           # Todo model (schema + methods + record type) and registry
 │   ├── components/       # TodoItem.pzl
