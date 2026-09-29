@@ -4,7 +4,8 @@
 // The names split into the STANDARD set (D174), which Sites implements too with
 // the same arguments and meaning, and three PuzzleKit-only names: `link` (built
 // by the registry, not here), `timeago` and `in_timezone`. The identical-output
-// part of the standard set is pinned by tests/conformance/formatters.json.
+// part of the standard set is pinned by the shared conformance table,
+// packages/puzzle-lang/conformance/formatters.json.
 // List shaping (sort, filter, map, pick, split) is JavaScript in PuzzleKit —
 // `data()` — so there are deliberately no list formatters here beyond `join`.
 // Counting, arithmetic and fallbacks are the template language's own `.size`,

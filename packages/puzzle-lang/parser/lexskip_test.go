@@ -290,6 +290,9 @@ func TestParseTrailingBackslashPositionedError(t *testing.T) {
 	}
 }
 
+// A postfix update before a division must not hide the interpolation's close:
+// the brace scan ends the group at the right `}`, so the error is the
+// expression grammar's own `++` error at the operator, never an unclosed '{'.
 func TestParsePostfixUpdateBeforeDivisionClosesInterpolation(t *testing.T) {
 	src := `<puzzle-view>
   <div>{ index++ / total }</div>
@@ -297,8 +300,13 @@ func TestParsePostfixUpdateBeforeDivisionClosesInterpolation(t *testing.T) {
 <script>
 export default class A {}
 </script>`
-	if _, err := Parse([]byte(src), "A.pzl"); err != nil {
-		t.Fatalf("postfix update before division must not hide the interpolation close: %v", err)
+	_, err := Parse([]byte(src), "A.pzl")
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("want the `++` ParseError, got %v", err)
+	}
+	if !strings.Contains(pe.Message, "`++` and `--` are not available") || pe.Line != 2 || pe.Col != 15 {
+		t.Fatalf("postfix update before division must be the grammar's `++` error at 2:15, got %d:%d %s", pe.Line, pe.Col, pe.Message)
 	}
 }
 

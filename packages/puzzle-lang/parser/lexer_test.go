@@ -1,9 +1,41 @@
 package parser
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
+
+// An attribute name may use Unicode — a <Snippet> parameter follows the
+// expression language's identifier rule — but it starts with `@`, an ASCII
+// letter, `_`, or a letter: a leading combining mark or digit would lex here
+// and then fail in the browser's setAttribute, so it is an error naming the
+// character.
+func TestAttrNameUnicodeStart(t *testing.T) {
+	name := "gr" + string(rune(0xF6)) + string(rune(0xDF)) + "e" + string(rune(0x301)) + "-x"
+	assertTokens(t, "<p "+name+`="y">`, []tv{
+		{TokTagOpen, "p"}, {TokAttrName, name}, {TokEquals, ""}, {TokAttrQuoted, "y"}, {TokTagEnd, ""},
+	})
+	for _, bad := range []string{
+		string(rune(0x301)) + "a", // a leading combining mark
+		string(rune(0x663)),       // a leading Arabic-Indic digit
+	} {
+		lx := newLexer("<p "+bad+`="y">`, Position{Line: 1, Col: 1, Offset: 0}, "test.pzl")
+		var err error
+		for err == nil {
+			var tk Token
+			tk, err = lx.Next()
+			if err == nil && tk.Type == TokEOF {
+				break
+			}
+		}
+		first := []rune(bad)[0]
+		want := "test.pzl:1:4: unexpected character " + strconv.Quote(string(first)) + " in tag"
+		if err == nil || err.Error() != want {
+			t.Errorf("%U: got %v, want %q", first, err, want)
+		}
+	}
+}
 
 // lexAll tokenizes input in text mode (file coords starting at 1:1) and returns
 // every token before EOF, failing the test on any lexer error.

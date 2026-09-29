@@ -35,17 +35,16 @@ func dynamicAttr(t *testing.T, attrs []Attr, name string) *DynamicAttr {
 }
 
 func TestChainInBraceOnlyAttribute(t *testing.T) {
-	root := parseContent(t, `<a title={ price | currency } data-x={ a || b } data-r={ /a|b/.test(s) } data-s={ 'a|b' } data-c={ f(a || b) }>x</a>`)
+	root := parseContent(t, `<a title={ price | currency } data-x={ a || b } data-s={ 'a|b' } data-c={ f(a || b) }>x</a>`)
 	el := elementChildren(root.Children)[0].(*Element)
 
 	title := dynamicAttr(t, el.Attrs, "title")
 	if title.Expr != "price" || fmtNames(title.Formatters) != "currency" {
 		t.Errorf("title: got %q | %q", title.Expr, fmtNames(title.Formatters))
 	}
-	// `||` (nested too), a regex and a string are not pipes.
+	// `||` (nested too) and a string are not pipes.
 	for name, want := range map[string]string{
 		"data-x": "a || b",
-		"data-r": "/a|b/.test(s)",
 		"data-s": "'a|b'",
 		"data-c": "f(a || b)",
 	} {
@@ -53,6 +52,12 @@ func TestChainInBraceOnlyAttribute(t *testing.T) {
 		if d.Expr != want || len(d.Formatters) != 0 {
 			t.Errorf("%s: got %q with chain %q, want %q and no chain", name, d.Expr, fmtNames(d.Formatters), want)
 		}
+	}
+	// Nor is a `|` inside a regex: the value stays one expression, whose only
+	// error is the grammar's regex error at the regex.
+	_, err := Parse([]byte(`<puzzle-view><a data-r={ /a|b/.test(s) }>x</a></puzzle-view>`), "t.pzl")
+	if pe, ok := err.(*ParseError); !ok || !strings.Contains(pe.Message, "regular expression literals are not available") || pe.Col != 26 {
+		t.Errorf("regex attribute: got %v", err)
 	}
 }
 
@@ -118,8 +123,8 @@ func TestConditionHeaderKeepsJavaScriptOr(t *testing.T) {
 	root := parseContent(t, `{#if a || b}<b>a</b>{:else if c || d}<b>b</b>{/if}`+
 		`{#unless a || b}<b>c</b>{/unless}`+
 		`{#case a || b}{:when 'a'}<b>e</b>{/case}`+
-		`{#if (a || b) && /x|y/.test(s) && s !== 'p|q' && f(a || b)}<b>f</b>{/if}`+
-		"{#if `x${a | b}` === s}<b>g</b>{/if}")
+		`{#if (a || b) && s !== 'p|q' && f(a || b)}<b>f</b>{/if}`+
+		"{#if `x${a || b}|` === s}<b>g</b>{/if}")
 	kids := elementChildren(root.Children)
 
 	ifn := kids[0].(*If)
@@ -135,12 +140,23 @@ func TestConditionHeaderKeepsJavaScriptOr(t *testing.T) {
 	if cs := kids[2].(*Case); cs.Expr != "a || b" {
 		t.Errorf("{#case}: got %q", cs.Expr)
 	}
-	if nested := kids[3].(*If); nested.Cond != "(a || b) && /x|y/.test(s) && s !== 'p|q' && f(a || b)" {
+	if nested := kids[3].(*If); nested.Cond != "(a || b) && s !== 'p|q' && f(a || b)" {
 		t.Errorf("nested pipes: got %q", nested.Cond)
 	}
-	// A `|` inside a template literal's ${…} is nested JavaScript, not a pipe.
-	if tpl := kids[4].(*If); tpl.Cond != "`x${a | b}` === s" {
+	// A `|` in a template literal's text, and a `||` in its ${…}, are not pipes.
+	if tpl := kids[4].(*If); tpl.Cond != "`x${a || b}|` === s" {
 		t.Errorf("template literal: got %q", tpl.Cond)
+	}
+	// A regex or a single `|` inside ${…} is not a pipe either; each is one
+	// grammar error at its own position.
+	for src, want := range map[string]string{
+		"{#if a && /x|y/.test(s)}<b>f</b>{/if}": "1:24: regular expression literals are not available",
+		"{#if `x${a | b}` === s}<b>g</b>{/if}":  "1:25: the `|` operator is not available",
+	} {
+		_, err := Parse([]byte("<puzzle-view>"+src+"</puzzle-view>"), "t.pzl")
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: got %v, want %q", src, err, want)
+		}
 	}
 
 	root = parseContent(t, `<p class="x {#if a || b}on{/if}">z</p>`)
@@ -315,21 +331,33 @@ func TestNestedPipeIsError(t *testing.T) {
 			t.Errorf("%s: position %d:%d, want %d:%d", tc.src, pe.Line, pe.Col, tc.line, tc.col)
 		}
 	}
-	// `||` at any depth, and a `|` in a string, regex, template literal or
-	// comment, are not pipes.
+	// `||` at any depth, and a `|` in a string or template literal, are not
+	// pipes.
 	for _, src := range []string{
 		"<p>{ f(a || b) | upcase }</p>",
-		"<p>{ [a || b, 'x|y', /p|q/] | json }</p>",
+		"<p>{ [a || b, 'x|y'] | json }</p>",
 		"<p>{ a | join(' | ') }</p>",
 		"<p>{ f(`${a}|${b}`) }</p>",
-		"<p>{ f(a /* x | y */) }</p>",
 		"<a title={ f({ k: 'a|b' }) }>x</a>",
-		"{#if f(a || b) && /x|y/.test(s)}<b>a</b>{/if}",
+		"{#if f(a || b) && s}<b>a</b>{/if}",
 		"{#for x in pick(a || b)}<b>x</b>{/for}",
 		"{#case s}{:when ('a|b')}<b>x</b>{/case}",
 	} {
 		if _, err := Parse([]byte("<puzzle-view>"+src+"</puzzle-view>"), "t.pzl"); err != nil {
 			t.Errorf("%s: unexpected error %v", src, err)
+		}
+	}
+	// Nor is a `|` in a regex or a comment. Both are outside the expression
+	// grammar, so each value is one grammar error at the regex or comment —
+	// never a pipe split, and never the nested-pipe error.
+	for src, want := range map[string]string{
+		"<p>{ [a || b, /p|q/] | json }</p>":             "1:28: regular expression literals are not available",
+		"<p>{ f(a /* x | y */) }</p>":                   "1:23: comments are not available",
+		"{#if f(a || b) && /x|y/.test(s)}<b>a</b>{/if}": "1:32: regular expression literals are not available",
+	} {
+		_, err := Parse([]byte("<puzzle-view>"+src+"</puzzle-view>"), "t.pzl")
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: got %v, want %q", src, err, want)
 		}
 	}
 }
@@ -366,10 +394,16 @@ func TestFormatterCallMustEndTheSegment(t *testing.T) {
 	if pe, ok := err.(*ParseError); !ok || !strings.Contains(pe.Message, "missing closing ')'") {
 		t.Errorf("unclosed call: got %v", err)
 	}
-	// A ')' inside a string, regex, template or nested group is not the close.
+	// A ')' inside a regex is not the close either: the regex is the argument's
+	// one error, the grammar's, at the regex.
+	_, err = Parse([]byte(`<puzzle-view><p>{ a | f(/\)/, "x)") }</p></puzzle-view>`), "t.pzl")
+	if err == nil || !strings.Contains(err.Error(), "1:25: regular expression literals are not available") {
+		t.Errorf("regex argument: got %v", err)
+	}
+	// A ')' inside a string, template or nested group is not the close.
 	for src, want := range map[string]string{
 		`{ a | replace(')', '(') | upcase }`: `replace(')', '(') | upcase`,
-		`{ a | f(/\)/, "x)") }`:              `f(/\)/, "x)")`,
+		`{ a | f('x)', "x)") }`:              `f('x)', "x)")`,
 		"{ a | f(`)${ (b) }`) }":             "f(`)${ (b) }`)",
 		`{ a | t({ n: (1) }) }`:              `t({ n: (1) })`,
 		`{ a | f((1), [2]) }`:                `f((1), [2])`,

@@ -505,7 +505,7 @@ func parseAttrString(attrsRaw string, base Position, file, section string) ([]At
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
 			}
-			a, e := buildAttr(name, npos, p.cur, file)
+			a, e := buildAttr(name, npos, p.cur, file, exprScope{})
 			if e != nil {
 				return nil, e
 			}

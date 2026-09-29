@@ -136,7 +136,8 @@ func TestEventHandlerRejectedFormsRemainPositionedErrors(t *testing.T) {
 		message string
 	}{
 		{"binary expression", "a + b", "event handler must be a bare method name or a single call expression"},
-		{"arrow function", "(e) => close(e)", "event handler callee must be a plain method name"},
+		// Rejected by the expression grammar while parsing, at the arrow.
+		{"arrow function", "(e) => close(e)", "arrow functions are only available as a call argument"},
 		{"this member", "this.close", dataThisMsg},
 		{"member expression", "handlers.close", "event handler must be a bare method name or a single call expression"},
 	}

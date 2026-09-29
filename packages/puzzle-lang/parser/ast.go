@@ -1,5 +1,7 @@
 package parser
 
+import "github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
+
 // ast.go defines the template AST produced by the parser
 // (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c). Every node carries
 // the Position of its opening token for error reporting and downstream codegen
@@ -94,8 +96,13 @@ type Text struct {
 // Interpolation is `{ expr | fmt(args) | ... }`: a base expression plus an
 // optional formatter chain. Only a top-level `|` is a pipe; a nested single `|`
 // is a parse error (D176 — there is no bitwise OR).
+//
+// Every expression string in this AST has a parsed sibling (…AST, an
+// expr.Node with file positions) filled during parsing. Codegen still reads
+// the strings; the trees are what the next compiler stage lowers.
 type Interpolation struct {
 	Expr       string
+	ExprAST    expr.Node
 	Formatters []FormatterCall
 	Pos        Position
 }
@@ -105,11 +112,15 @@ type Interpolation struct {
 // whose condition is negated as `!(…)` — its one AST shape (D176). Cond is a
 // plain expression: a condition header takes no formatter chain (D173 V1,
 // D176), so any `|` in it other than `||` is a parse error.
+//
+// CondAST is the parsed condition. For {#unless} it is a Unary `!` wrapping
+// the parsed inner condition, while Cond keeps the folded `!(…)` string.
 type If struct {
-	Cond string
-	Then []Node
-	Else []Node
-	Pos  Position
+	Cond    string
+	CondAST expr.Node
+	Then    []Node
+	Else    []Node
+	Pos     Position
 }
 
 // For is `{#for item in collection}` or the range form `{#for from...to}`
@@ -117,14 +128,17 @@ type If struct {
 // optional trailing `, name` binds a loop counter (Counter, empty when absent):
 // the 0-based index for the item form, the current number for the range form.
 type For struct {
-	Item       string
-	Collection string
-	IsRange    bool
-	RangeFrom  string
-	RangeTo    string
-	Counter    string
-	Body       []Node
-	Pos        Position
+	Item          string
+	Collection    string
+	CollectionAST expr.Node
+	IsRange       bool
+	RangeFrom     string
+	RangeFromAST  expr.Node
+	RangeTo       string
+	RangeToAST    expr.Node
+	Counter       string
+	Body          []Node
+	Pos           Position
 }
 
 // Case is `{#case expr} {:when v1, v2} … {:when v3} … {:else} … {/case}`
@@ -140,6 +154,7 @@ type For struct {
 // is a parse error.
 type Case struct {
 	Expr    string
+	ExprAST expr.Node
 	Clauses []WhenClause
 	Else    []Node
 	Pos     Position
@@ -148,9 +163,10 @@ type Case struct {
 // WhenClause is one `{:when v1, v2, …}` arm of a Case: its comma-separated
 // top-level Values (OR-matched) and the Body rendered on a match.
 type WhenClause struct {
-	Values []string
-	Body   []Node
-	Pos    Position
+	Values    []string
+	ValuesAST []expr.Node
+	Body      []Node
+	Pos       Position
 }
 
 // InlineSVG is `{#svg 'icons/heart.svg'}` (v1.14, D46): the framework's first
@@ -181,10 +197,14 @@ func (*InlineSVG) isNode()     {}
 
 // FormatterCall is one link in an interpolation's formatter chain. Args are raw
 // JS expression strings (e.g. "'short'", "', '") emitted as-is by codegen; they
-// participate in scope resolution like any other expression.
+// participate in scope resolution like any other expression. ArgsAST holds
+// the parsed arguments, one per Args entry; each is parsed as a call argument,
+// so an arrow function is legal there. The formatter Name is not validated
+// here: the function library owns names.
 type FormatterCall struct {
-	Name string
-	Args []string
+	Name    string
+	Args    []string
+	ArgsAST []expr.Node
 }
 
 // Attr is an element attribute or component prop.
@@ -220,6 +240,7 @@ type StaticAttr struct {
 type DynamicAttr struct {
 	Name       string
 	Expr       string
+	ExprAST    expr.Node
 	Formatters []FormatterCall
 	Pos        Position
 }
@@ -229,10 +250,12 @@ type DynamicAttr struct {
 // component tag codegen turns it into a callback prop (D16) and rejects any
 // modifiers. Name is the bare event (excludes '@' and modifiers); Modifiers
 // holds the validated modifier list in written order (empty when none).
+// ExprAST is the parsed handler value, parsed with `event` in scope.
 type EventAttr struct {
 	Name      string
 	Modifiers []string
 	Expr      string
+	ExprAST   expr.Node
 	Pos       Position
 }
 
@@ -269,10 +292,11 @@ type InterpPart struct {
 // elements and no {#for} (parse error otherwise). Cond is a plain expression,
 // as on If: a condition takes no formatter chain (D173 V1, D176).
 type InlineIfPart struct {
-	Cond string
-	Then []Part
-	Else []Part
-	Pos  Position
+	Cond    string
+	CondAST expr.Node
+	Then    []Part
+	Else    []Part
+	Pos     Position
 }
 
 func (*StaticPart) isPart()   {}

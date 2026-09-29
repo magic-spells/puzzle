@@ -13,9 +13,8 @@ package parser
 //   1. ref={ expr } / ref="a{ x }" — dynamic or interpolated: ref names a
 //      static compile-time slot, not a runtime expression.
 //   2. bare `ref` / ref="" — a name is required (it becomes this.refs.<name>).
-//   3. ref="my-chart" / ref="a.b" — the name must be a bare JS identifier (the
-//      same isBareIdent rule as the {#for} counter), since it becomes a
-//      property access this.refs.<name>.
+//   3. ref="my-chart" / ref="a.b" — the name must be a bare ASCII JS identifier
+//      (isBareIdent), since it becomes a property access this.refs.<name>.
 //   4. ref on a Component tag — a ref wires a DOM node, not a child instance;
 //      the @ready callback-prop idiom is how a parent reaches into a child.
 //   5. ref on <Children>/<Slot> — a marker is a render target, not a real element.
