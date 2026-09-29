@@ -231,7 +231,7 @@ export default class DefaultLayout extends PuzzleView {
 
 Layouts are full `PuzzleView` components — they can have `data()`, `events`, and lifecycle hooks like any other component. Different routes can use different layouts (e.g. `DefaultLayout` for pages, `AuthLayout` for login).
 
-Note: `<Slot/>` is the **router outlet** — the place the router injects the routed view. Reusable components use `<Children/>` for their default marker and `<Slot name="…"/>` for named slots (v1.64, D134); all markers are self-closing and render nothing when unfilled. Scoped slots remain deferred. See [[DOC-SPEC]] §24.
+Note: `<Slot/>` is the **router outlet** — the place the router injects the routed view. Reusable components use `<Children/>` for their default marker and `<Slot name="…"/>` for named slots (v1.64, D134). A marker is self-closing, or paired with a fallback body that renders when nothing fills it (D141) — for the outlet, when no child route occupies it. Content a component stamps once per item is a `<Snippet>` (D166); there are no scoped slots. See [[DOC-SPEC]] §24 and §64.
 
 ---
 
@@ -660,7 +660,7 @@ this.ctx.router.push('/user/1');
 this.ctx.router.current.path; // '/user/1'
 ```
 
-**But `<a href>`s carry the base.** An anchor is a *real document URL* — middle-click, copy-link, and open-in-new-tab have to work — so write hrefs with the base (`href="/myapp/user/1"`, or a relative href). Only `push()` paths are base-free.
+**Hrefs go through `link()`.** An anchor is a *real document URL* — middle-click, copy-link, and open-in-new-tab read the attribute itself — so the rendered href must carry the base. Write it base-free and let the router add it: `<a href="{ link('/user/1') }">` renders `href="/myapp/user/1"` in path mode and `#/myapp/user/1` in hash mode (D79, see [Links](#links)). Hand-writing the base into an href (`href="/myapp/user/1"`) ties the template to one deploy path and one router mode.
 
 Per mode:
 
