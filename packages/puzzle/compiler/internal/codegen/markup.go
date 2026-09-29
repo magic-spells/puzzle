@@ -11,11 +11,10 @@ import (
 // The markup functions (D174). `raw` injects its value as HTML through the
 // runtime's allowlist sanitizer; `newline_to_br` escapes its value and turns
 // each line break into a real <br>. Their output is markup, not text, so each
-// may only be the OUTERMOST call of a TEXT interpolation — `{ raw(post.body) }`
-// — or, in the TEMPORARY pipe form (P4: remove), the last link of a text
-// interpolation's chain, `{ post.body | raw }`. That is how the compiler knows
-// which interpolations render markup, and it is why an app function can never
-// inject markup: the registry is never consulted for these two names.
+// may only be the OUTERMOST call of a TEXT interpolation — `{ raw(post.body) }`.
+// That is how the compiler knows which interpolations render markup, and it is
+// why an app function can never inject markup: the registry is never consulted
+// for these two names.
 //
 // A text interpolation rendering markup is lowered to the live-HTML vnode
 // (`new ViewNode('#html', { value })`, client-runtime/views/html.js) instead of
@@ -28,13 +27,9 @@ func IsMarkupFormatter(name string) bool {
 	return name == "raw" || name == "newline_to_br"
 }
 
-// markupCallOf returns the call a text interpolation renders markup through
-// when it is written as one — no pipe chain, and the whole expression a call
-// to `raw` or `newline_to_br` — or nil.
+// markupCallOf returns the call a text interpolation renders markup through —
+// the whole expression a call to `raw` or `newline_to_br` — or nil.
 func markupCallOf(in *parser.Interpolation) *expr.Call {
-	if len(in.Formatters) > 0 { // P4: remove
-		return nil
-	}
 	call, ok := in.ExprAST.(*expr.Call)
 	if !ok {
 		return nil
@@ -47,13 +42,10 @@ func markupCallOf(in *parser.Interpolation) *expr.Call {
 
 // markupName returns the markup function a text interpolation renders
 // through, or "". checkTemplateExprs has already rejected every other
-// placement, so only the outermost call and the last pipe link are tested.
+// placement, so only the outermost call is tested.
 func markupName(in *parser.Interpolation) string {
 	if call := markupCallOf(in); call != nil {
 		return call.Callee.(*expr.Identifier).Name
-	}
-	if n := len(in.Formatters); n > 0 && IsMarkupFormatter(in.Formatters[n-1].Name) { // P4: remove
-		return in.Formatters[n-1].Name
 	}
 	return ""
 }
@@ -92,7 +84,7 @@ func markupContext(parentTag, tag string) string {
 // expression parser rejects `this` first with these same words (puzzle-lang
 // expr.msgThis — keep the two identical; the design's P3 note rewords both);
 // an AST that reached codegen some other way still never compiles one.
-const thisMsg = "`this` is not available in template expressions — return the value from data() (a getter or a computed field), or use a formatter for a display transform"
+const thisMsg = "`this` is not available in template expressions — return the value from data() (a getter or a computed field), or use a function for a display transform"
 
 func exprPos(p expr.Pos) parser.Position {
 	return parser.Position{Line: p.Line, Col: p.Col, Offset: p.Offset}
@@ -101,10 +93,10 @@ func exprPos(p expr.Pos) parser.Position {
 // checkTemplateExprs walks a template (or skeleton) before anything is
 // emitted and rejects, with a positioned error, what the lowering cannot
 // accept: a markup function anywhere but the outermost call of a text
-// interpolation (or the last link of its pipe chain), and — as a safety net
-// behind the parser — `this`. It also warns once per handler whose name
-// shadows a standard library function (§9 c). The emitters can then trust
-// every expression they lower.
+// interpolation, a literal date preset or time zone the library does not know
+// (checkLiteralArgs), and — as a safety net behind the parser — `this`. It
+// also warns once per handler whose name shadows a standard library function
+// (§9 c). The emitters can then trust every expression they lower.
 func (c *compiler) checkTemplateExprs(nodes []parser.Node, parentTag string) error {
 	for _, n := range nodes {
 		var err error
@@ -168,8 +160,8 @@ func (c *compiler) checkTemplateExprs(nodes []parser.Node, parentTag string) err
 }
 
 // checkTextInterp validates one text interpolation: a markup function must be
-// its outermost call (or the last pipe link), take the one value, and not sit
-// inside a text-only element or foreign content.
+// its outermost call, take the one value, and not sit inside a text-only
+// element or foreign content.
 func (c *compiler) checkTextInterp(in *parser.Interpolation, parentTag string) error {
 	name := ""
 	if call := markupCallOf(in); call != nil {
@@ -180,33 +172,8 @@ func (c *compiler) checkTextInterp(in *parser.Interpolation, parentTag string) e
 		if err := c.checkNested(call.Args[0]); err != nil {
 			return err
 		}
-	} else {
-		// TEMPORARY (P4: remove): the pipe form.
-		last := len(in.Formatters) - 1
-		for i, fc := range in.Formatters {
-			if !IsMarkupFormatter(fc.Name) {
-				continue
-			}
-			if i != last {
-				return c.cgErr(in.Pos, fmt.Sprintf(
-					"`%s` must be the last formatter in the chain — its output is markup, which no formatter takes as input (D174)",
-					fc.Name))
-			}
-			if len(fc.Args) > 0 {
-				return c.cgErr(in.Pos, fmt.Sprintf("`%s` takes no arguments", fc.Name))
-			}
-			name = fc.Name
-		}
-		if err := c.checkNested(in.ExprAST); err != nil {
-			return err
-		}
-		for _, fc := range in.Formatters { // P4: remove
-			for _, a := range fc.ArgsAST {
-				if err := c.checkNested(a); err != nil {
-					return err
-				}
-			}
-		}
+	} else if err := c.checkNested(in.ExprAST); err != nil {
+		return err
 	}
 	if name == "" {
 		return nil
@@ -244,7 +211,8 @@ func (c *compiler) checkExpr(n expr.Node, where string) error {
 	})
 }
 
-// walkExpr walks n, failing on `this` and handing every markup call to
+// walkExpr walks n, failing on `this` and on a library call's unknown literal
+// preset or zone (checkLiteralArgs), and handing every markup call to
 // onMarkup. skip holds the calls that are not library calls: an event
 // handler's own call names a view handler.
 func (c *compiler) walkExpr(n expr.Node, skip map[*expr.Call]bool, onMarkup func(*expr.Call, string) error) error {
@@ -262,8 +230,12 @@ func (c *compiler) walkExpr(n expr.Node, skip map[*expr.Call]bool, onMarkup func
 			if skip[n] {
 				return true
 			}
-			if id, ok := n.Callee.(*expr.Identifier); ok && IsMarkupFormatter(id.Name) {
-				err = onMarkup(n, id.Name)
+			if id, ok := n.Callee.(*expr.Identifier); ok {
+				if IsMarkupFormatter(id.Name) {
+					err = onMarkup(n, id.Name)
+				} else {
+					err = c.checkLiteralArgs(id.Name, n)
+				}
 			}
 		}
 		return err == nil
@@ -275,11 +247,11 @@ func (c *compiler) checkAttrExprs(attrs []parser.Attr, where string) error {
 	for _, attr := range attrs {
 		switch a := attr.(type) {
 		case *parser.DynamicAttr:
-			if err := c.checkChain(a.ExprAST, a.Formatters, a.Pos, where); err != nil { // P4: remove
+			if err := c.checkExpr(a.ExprAST, where); err != nil {
 				return err
 			}
 		case *parser.MixedAttr:
-			if err := c.checkParts(a.Parts, a.Pos, where); err != nil {
+			if err := c.checkParts(a.Parts, where); err != nil {
 				return err
 			}
 		case *parser.EventAttr:
@@ -291,33 +263,12 @@ func (c *compiler) checkAttrExprs(attrs []parser.Attr, where string) error {
 	return nil
 }
 
-// checkChain checks a value position that is not a text interpolation: its
-// expression, and its TEMPORARY pipe chain (P4: remove).
-func (c *compiler) checkChain(n expr.Node, fmts []parser.FormatterCall, pos parser.Position, where string) error {
-	if err := c.checkExpr(n, where); err != nil {
-		return err
-	}
-	for _, fc := range fmts { // P4: remove
-		if IsMarkupFormatter(fc.Name) {
-			return c.cgErr(pos, fmt.Sprintf(
-				"`%s` renders markup, so it can only end a text interpolation — not %s (D174)",
-				fc.Name, where))
-		}
-		for _, a := range fc.ArgsAST {
-			if err := c.checkExpr(a, where); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (c *compiler) checkParts(parts []parser.Part, pos parser.Position, where string) error {
+func (c *compiler) checkParts(parts []parser.Part, where string) error {
 	for _, part := range parts {
 		switch p := part.(type) {
 		case *parser.InterpPart:
 			if p.Interp != nil {
-				if err := c.checkChain(p.Interp.ExprAST, p.Interp.Formatters, pos, where); err != nil { // P4: remove
+				if err := c.checkExpr(p.Interp.ExprAST, where); err != nil {
 					return err
 				}
 			}
@@ -325,10 +276,10 @@ func (c *compiler) checkParts(parts []parser.Part, pos parser.Position, where st
 			if err := c.checkExpr(p.CondAST, where); err != nil {
 				return err
 			}
-			if err := c.checkParts(p.Then, pos, where); err != nil {
+			if err := c.checkParts(p.Then, where); err != nil {
 				return err
 			}
-			if err := c.checkParts(p.Else, pos, where); err != nil {
+			if err := c.checkParts(p.Else, where); err != nil {
 				return err
 			}
 		}
@@ -389,15 +340,9 @@ func (c *compiler) emitMarkup(in *parser.Interpolation, scope scopeMap) (string,
 	}
 	facts := c.factSink()
 	defer c.absorb(facts, scope)
-	name := markupName(in)
-	var js string
-	if call := markupCallOf(in); call != nil {
-		js = c.valueInto(call.Args[0], nil, scope, facts)
-	} else {
-		// TEMPORARY (P4: remove): the pipe form; the chain before the markup
-		// link compiles as a text interpolation's does.
-		js = c.valueInto(in.ExprAST, in.Formatters[:len(in.Formatters)-1], scope, facts) // P4: remove
-	}
+	call := markupCallOf(in)
+	name := call.Callee.(*expr.Identifier).Name
+	js := c.valueInto(call.Args[0], scope, facts)
 	value := c.displayValue(js, in.Expr)
 	if name == "newline_to_br" {
 		return "new ViewNode('#html', { value: " + value + ", br: true })", nil

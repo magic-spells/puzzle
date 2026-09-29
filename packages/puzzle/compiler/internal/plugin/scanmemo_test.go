@@ -32,7 +32,7 @@ export default class V extends PuzzleView {}
 `
 
 const currencyView = `<puzzle-view>
-  <p>{ total | currency }</p>
+  <p>{ currency(total) }</p>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -90,8 +90,8 @@ func TestUsageScannerSymlinkedRoot(t *testing.T) {
 	real := t.TempDir()
 	name := filepath.Join("app", "views", "Home.pzl")
 	writePZL(t, filepath.Join(real, name), `<puzzle-view>
-  <Portal><p>{ total | currency }</p></Portal>
-  <List><Snippet item>{ item | upcase }</Snippet></List>
+  <Portal><p>{ currency(total) }</p></Portal>
+  <List><Snippet item>{ capitalize(item) }</Snippet></List>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -110,7 +110,7 @@ export default class Home extends PuzzleView {}
 	canonicalPath := filepath.Join(resolved, name)
 	want := Usage{
 		HasPortal: true, HasSnippets: true,
-		Formatters: map[string]bool{"currency": true, "upcase": true},
+		Formatters: map[string]bool{"currency": true, "capitalize": true},
 	}
 	s := NewUsageScanner()
 	for _, root := range []string{real, link, real} {

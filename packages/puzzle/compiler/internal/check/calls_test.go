@@ -5,15 +5,13 @@ import (
 	"testing"
 )
 
-// D173 V1: a pipe is a formatter in brace-only attributes, props and marker
-// arguments, so puzzle check must type-check those positions as formatter calls
-// — the same `__puzzle_check_formatter(name, value, ...args)` wrapping a text
-// interpolation gets — rather than as a bitwise OR, and each piece must still
-// map back to its own .pzl bytes. Condition headers take no chain, so they are
-// checked as the plain JavaScript they are.
-func TestChainedValuePositionsAreChecked(t *testing.T) {
+// A library call in a brace-only attribute, a prop or a marker argument is
+// checked as a call on the shim's function table (`__puzzle_fn.name(…)`), the
+// same as in a text interpolation, and condition headers are checked as the
+// plain JavaScript they are — `||` stays logical OR.
+func TestCallValuePositionsAreChecked(t *testing.T) {
 	source := []byte(`<puzzle-view>
-  <a title={ price | currency('USD') } data-n={ count | round }>x</a>
+  <a title={ currency(price, 'USD') } data-n={ round(count) }>x</a>
   {#if tags || others}<b>a</b>{:else if a || b}<b>b</b>{/if}
   {#unless user || guest}<b>c</b>{/unless}
   {#case status || 'none'}{:when 'a'}<b>d</b>{/case}
@@ -30,8 +28,8 @@ export default class Home extends PuzzleView {}
 	}
 	got := string(files[0].Contents)
 	for _, want := range []string{
-		`void (__puzzle_check_formatter("currency", __d.price, 'USD'));`,
-		`void (__puzzle_check_formatter("round", __d.count));`,
+		`void (__puzzle_fn.currency(__d.price, 'USD'));`,
+		`void (__puzzle_fn.round(__d.count));`,
 		`if (__d.tags || __d.others) {`,
 		`if (__d.a || __d.b) {`,
 		`if (!(__d.user || __d.guest)) {`,
@@ -41,8 +39,5 @@ export default class Home extends PuzzleView {}
 		if !strings.Contains(got, want) {
 			t.Errorf("generated wrapper is missing %q:\n%s", want, got)
 		}
-	}
-	if strings.Contains(got, "__d.price | ") || strings.Contains(got, "__d.count | ") {
-		t.Errorf("a chain was checked as a bitwise OR:\n%s", got)
 	}
 }

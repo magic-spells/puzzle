@@ -30,7 +30,7 @@ func TestMarkerArgumentExpressionsAreChecked(t *testing.T) {
 	source := []byte(`<puzzle-view>
   <div>
     <header>
-      <Slot name="heading" total={ members.size }>Team</Slot>
+      <Slot name="heading" total={ members.length }>Team</Slot>
     </header>
     {#for member in members, index}
       <li key={ member.id }>
@@ -50,9 +50,9 @@ export default class Roster extends PuzzleView {}
 	}
 	got := string(files[0].Contents)
 	for _, want := range []string{
-		"void (__z(__d.members));", // <Slot name="…"> argument
-		"void (member);",           // <Children> argument, the loop binding
-		"void (index);",            // <Children> argument, the loop counter
+		"void (__d.members.length);", // <Slot name="…"> argument
+		"void (member);",             // <Children> argument, the loop binding
+		"void (index);",              // <Children> argument, the loop counter
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("generated wrapper is missing %q:\n%s", want, got)

@@ -396,12 +396,12 @@ export default class Home extends PuzzleView {}
 func TestScanFormatters(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view>
-  <h1 class="state { status | downcase }">{ title | upcase | custom }</h1>
+  <h1 class="state { capitalize(status) }">{ custom(title.toUpperCase()) }</h1>
   {#if show}
-    <p>{ amount | currency('$') }</p>
+    <p>{ currency(amount, '$') }</p>
   {/if}
   {#for todo in todos}
-    <span>{ todo.name | truncate(5) }</span>
+    <span>{ truncate(todo.name, 5) }</span>
   {/for}
 </puzzle-view>
 
@@ -417,9 +417,9 @@ export default class Home extends PuzzleView {}
 		t.Fatalf("ScanFormatters: %v", err)
 	}
 
-	for _, want := range []string{"downcase", "upcase", "currency", "truncate"} {
+	for _, want := range []string{"capitalize", "currency", "truncate"} {
 		if !got[want] {
-			t.Errorf("ScanFormatters missing built-in formatter %q in %#v", want, got)
+			t.Errorf("ScanFormatters missing built-in function %q in %#v", want, got)
 		}
 	}
 	for _, notWant := range []string{"custom", "escape"} {
@@ -429,16 +429,16 @@ export default class Home extends PuzzleView {}
 	}
 }
 
-// The formatters D176 removed (`.size`, the operators and `??` replace them;
-// `split` is Sites-only) are no longer built-ins: a template that still pipes
-// through one must not pull it into the virtual manifest, where importing a
-// name builtins.js no longer exports would fail the build. The runtime's
-// unknown-name guard names the replacement instead.
+// Names that are not built-ins — the ones JavaScript already covers (`upcase`,
+// `join`: `.toUpperCase()`, `.join()`), the old data-language helpers (`size`,
+// `plus`) and the Sites-only `split` — never enter the virtual manifest, where
+// importing a name builtins.js does not export would fail the build. A call to
+// one reaches the runtime's unknown-name guard, which names the replacement.
 func TestFormatterManifestSkipsRemovedBuiltins(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view>
-  <p>{ subtitle | default('Untitled') | upcase }</p>
-  <p>{ items | size }{ n | plus(1) }{ tags | split(',') | join }</p>
+  <p>{ upcase(subtitle) }</p>
+  <p>{ size(items) }{ plus(n, 1) }{ join(split(tags, ',')) }</p>
 </puzzle-view>
 
 <script>
@@ -452,7 +452,7 @@ export default class Home extends PuzzleView {}
 	if err != nil {
 		t.Fatalf("ScanFormatters: %v", err)
 	}
-	for _, removed := range []string{"default", "size", "plus", "split"} {
+	for _, removed := range []string{"upcase", "size", "plus", "split", "join"} {
 		if got[removed] {
 			t.Errorf("ScanFormatters kept removed formatter %q in %#v", removed, got)
 		}
@@ -466,8 +466,8 @@ export default class Home extends PuzzleView {}
 		t.Fatalf("formatterManifest: %v", err)
 	}
 	for _, want := range []string{
-		`import { escape, upcase, join } from "/runtime/formatters/builtins.js";`,
-		`export default { escape, upcase, join };`,
+		`import { escape } from "/runtime/formatters/builtins.js";`,
+		`export default { escape };`,
 	} {
 		if !strings.Contains(manifest, want) {
 			t.Errorf("manifest missing %q:\n%s", want, manifest)
@@ -602,12 +602,11 @@ export default class Home extends PuzzleView {}
 		skeleton string
 		want     bool
 	}{
-		{name: "absent", template: `<puzzle-view><p>{ body | upcase }</p></puzzle-view>`},
-		{name: "raw block is not the formatter", template: `<puzzle-view>{#raw}<p>{ body | raw }</p>{/raw}</puzzle-view>`},
-		{name: "raw", template: `<puzzle-view><p>{ body | truncate(9) | raw }</p></puzzle-view>`, want: true},
-		{name: "newline_to_br", template: `<puzzle-view><p>{ body | newline_to_br }</p></puzzle-view>`, want: true},
-		{name: "in a loop row", template: `<puzzle-view><ul>{#for c in cs}<li>{ c.html | raw }</li>{/for}</ul></puzzle-view>`, want: true},
-		{name: "in skeleton", template: `<puzzle-view><p>x</p></puzzle-view>`, skeleton: `<puzzle-skeleton><p>{ hint | raw }</p></puzzle-skeleton>`, want: true},
+		{name: "absent", template: `<puzzle-view><p>{ body.toUpperCase() }</p></puzzle-view>`},
+		{name: "raw block is not the function", template: `<puzzle-view>{#raw}<p>{ raw(body) }</p>{/raw}</puzzle-view>`},
+		{name: "raw", template: `<puzzle-view><p>{ raw(body) }</p></puzzle-view>`, want: true},
+		{name: "in a loop row", template: `<puzzle-view><ul>{#for c in cs}<li>{ raw(c.html) }</li>{/for}</ul></puzzle-view>`, want: true},
+		{name: "in skeleton", template: `<puzzle-view><p>x</p></puzzle-view>`, skeleton: `<puzzle-skeleton><p>{ raw(hint) }</p></puzzle-skeleton>`, want: true},
 		{name: "raw call", template: `<puzzle-view><p>{ raw(truncate(body, 9)) }</p></puzzle-view>`, want: true},
 		{name: "newline_to_br call", template: `<puzzle-view><p>{ newline_to_br(body) }</p></puzzle-view>`, want: true},
 		{name: "a view handler named raw is not the function", template: `<puzzle-view><button @click={ raw(body) }>x</button></puzzle-view>`},
@@ -627,13 +626,13 @@ export default class Home extends PuzzleView {}
 				t.Errorf("Features().RawHTML = %v, want %v", usage.Features().RawHTML, tt.want)
 			}
 			// Only `raw` keeps the sanitizer; `newline_to_br` alone does not.
-			wantSanitize := tt.want && (strings.Contains(tt.template+tt.skeleton, "| raw") || strings.Contains(tt.template, "{ raw("))
+			wantSanitize := tt.want && strings.Contains(tt.template+tt.skeleton, "{ raw(")
 			if usage.HasRawSanitize != wantSanitize {
 				t.Errorf("HasRawSanitize = %v, want %v", usage.HasRawSanitize, wantSanitize)
 			}
 			for _, name := range []string{"raw", "newline_to_br"} {
 				if usage.Formatters[name] {
-					t.Errorf("markup formatter %q entered the manifest set: %v", name, usage.Formatters)
+					t.Errorf("markup function %q entered the manifest set: %v", name, usage.Formatters)
 				}
 			}
 		})
@@ -869,7 +868,7 @@ export default class Home extends PuzzleView {}
 	// escape is the always-seeded safety default; nothing else may appear.
 	for name := range usage.Formatters {
 		if name != "escape" {
-			t.Errorf("Formatters seeded %q from a source file with no formatter chain", name)
+			t.Errorf("Formatters seeded %q from a source file with no function call", name)
 		}
 	}
 }
@@ -883,7 +882,7 @@ func TestPluginFeaturesCarryEveryUsageBit(t *testing.T) {
 		t.Errorf("fresh plugin Features() = %+v, want all false", got)
 	}
 	pl.SetUsage(Usage{
-		Formatters:  map[string]bool{"upcase": true},
+		Formatters:  map[string]bool{"capitalize": true},
 		HasFlip:     true,
 		HasPortal:   true,
 		HasRawAt:    true,
@@ -932,7 +931,7 @@ export default class Home extends PuzzleView {}
 // component vanished in production). node_modules and dot-directories stay
 // pruned at any depth.
 func TestScanUsagePrunesBuildTreesOnlyAtTheRoot(t *testing.T) {
-	const bio = `<puzzle-view><div class="bio">{ html | raw } { price | currency }</div></puzzle-view>
+	const bio = `<puzzle-view><div class="bio">{ raw(html) } { currency(price) }</div></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Bio extends PuzzleView {}
@@ -975,18 +974,18 @@ export default class Bio extends PuzzleView {}
 }
 
 // A component imported from a sibling directory (outside app/) still ships its
-// formatters: the scan walks the whole project so `upcase` is seeded and the
-// generated render's guarded `(__f["upcase"] || __f.__missing("upcase"))(...)` call
-// resolves to the real formatter instead of the D43 pass-through.
+// functions: the scan walks the whole project so `truncate` is seeded and the
+// generated render's guarded `(__f["truncate"] || __f.__missing("truncate"))(...)` call
+// resolves to the real function instead of the D43 pass-through.
 func TestScanFormattersOutsideAppDir(t *testing.T) {
 	root := writeApp(t, map[string]string{
-		"app/views/Home.pzl": `<puzzle-view><h1>{ title | downcase }</h1></puzzle-view>
+		"app/views/Home.pzl": `<puzzle-view><h1>{ capitalize(title) }</h1></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
 </script>
 `,
-		"shared/Card.pzl": `<puzzle-view><span>{ label | upcase }</span></puzzle-view>
+		"shared/Card.pzl": `<puzzle-view><span>{ truncate(label, 3) }</span></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Card extends PuzzleView {}
@@ -998,7 +997,7 @@ export default class Card extends PuzzleView {}
 	if err != nil {
 		t.Fatalf("ScanFormatters: %v", err)
 	}
-	for _, want := range []string{"downcase", "upcase"} {
+	for _, want := range []string{"capitalize", "truncate"} {
 		if !got[want] {
 			t.Errorf("ScanFormatters missing %q from project-wide scan: %#v", want, got)
 		}
@@ -1009,24 +1008,24 @@ export default class Card extends PuzzleView {}
 // app actually imports it), and vendored trees are pruned entirely.
 func TestScanFormattersTolerantAndPrunes(t *testing.T) {
 	root := writeApp(t, map[string]string{
-		"app/views/Home.pzl": `<puzzle-view><h1>{ title | downcase }</h1></puzzle-view>
+		"app/views/Home.pzl": `<puzzle-view><h1>{ capitalize(title) }</h1></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
 </script>
 `,
 		// Malformed template (unclosed {#if}) — previously fatal to the build.
-		"app/components/Broken.pzl": `<puzzle-view>{#if oops}<p>{ x | upcase }</p></puzzle-view>`,
+		"app/components/Broken.pzl": `<puzzle-view>{#if oops}<p>{ truncate(x, 2) }</p></puzzle-view>`,
 		// Vendored .pzl must be pruned, not scanned.
-		"node_modules/pkg/Thing.pzl": `<puzzle-view>{ v | currency('$') }</puzzle-view>`,
+		"node_modules/pkg/Thing.pzl": `<puzzle-view>{ currency(v, '$') }</puzzle-view>`,
 	})
 
 	got, err := ScanFormatters(root)
 	if err != nil {
 		t.Fatalf("ScanFormatters must tolerate a broken .pzl, got error: %v", err)
 	}
-	if !got["downcase"] {
-		t.Errorf("ScanFormatters dropped a valid file's formatter: %#v", got)
+	if !got["capitalize"] {
+		t.Errorf("ScanFormatters dropped a valid file's function: %#v", got)
 	}
 	if got["currency"] {
 		t.Errorf("ScanFormatters walked node_modules (found currency): %#v", got)
@@ -1034,19 +1033,19 @@ export default class Home extends PuzzleView {}
 }
 
 // Guard the implicit contract between scan.go (collectUsage) and codegen's
-// lowering (lower.go, which emits every library call and TEMPORARY pipe link):
-// the scanner must see a function in EVERY position codegen emits one, else
-// the name is seeded nowhere and its guarded call falls through
-// to the D43 __missing pass-through instead of the real builtin — a silent wrong
-// render the JS suite can't catch (it aliases to builtins-all). One distinct
-// formatter per emit site: text run, quoted-attr interpolation, and an
-// inline-{#if} branch inside an attribute value.
+// lowering (lower.go, which emits every library call): the scanner must see a
+// function in EVERY position codegen emits one, else the name is seeded
+// nowhere and its guarded call falls through to the D43 __missing
+// pass-through instead of the real builtin — a silent wrong render the JS
+// suite can't catch (it aliases to builtins-all). One distinct function per
+// emit site: text run, quoted-attr interpolation, and an inline-{#if} branch
+// inside an attribute value.
 func TestScanFormattersCoversAllEmitSites(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view>
-  <p>{ title | downcase }</p>
-  <h1 class="s { status | upcase }">x</h1>
-  <div class="{#if on}{ label | trim }{/if}">y</div>
+  <p>{ capitalize(title) }</p>
+  <h1 class="s { truncate(status, 3) }">x</h1>
+  <div class="{#if on}{ json(label) }{/if}">y</div>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -1058,42 +1057,10 @@ export default class Home extends PuzzleView {}
 	if err != nil {
 		t.Fatalf("ScanFormatters: %v", err)
 	}
-	// downcase = text run, upcase = attr interpolation, trim = inline-if branch.
-	for site, want := range map[string]string{"text": "downcase", "attr": "upcase", "inline-if": "trim"} {
+	// capitalize = text run, truncate = attr interpolation, json = inline-if branch.
+	for site, want := range map[string]string{"text": "capitalize", "attr": "truncate", "inline-if": "json"} {
 		if !got[want] {
-			t.Errorf("scanner missed formatter %q at emit site %q; collectUsage is out of sync with codegen's lowering: %#v", want, site, got)
-		}
-	}
-}
-
-// D173 V1 made a pipe a formatter in every value position, so each chained
-// position is an emit site the scan must seed: a brace-only attribute, a
-// component prop, a marker argument, and an interpolation in an inline {#if}
-// branch. Condition headers take no chain (a pipe there is a parse error).
-func TestScanFormattersCoversChainPositions(t *testing.T) {
-	root := writeApp(t, map[string]string{
-		"app/views/Home.pzl": `<puzzle-view>
-  <a title={ name | capitalize }>x</a>
-  <Card items={ list | round }><Children item={ row | join }/></Card>
-  <p class="{#if on}{ n | ceil }{:else}{ m | floor }{/if}">y</p>
-</puzzle-view>
-<script>
-import { PuzzleView } from '@magic-spells/puzzle';
-import Card from './Card.pzl';
-export default class Home extends PuzzleView {}
-</script>
-`,
-	})
-	got, err := ScanFormatters(root)
-	if err != nil {
-		t.Fatalf("ScanFormatters: %v", err)
-	}
-	for site, want := range map[string]string{
-		"attribute": "capitalize", "prop": "round", "marker arg": "join",
-		"inline if then": "ceil", "inline if else": "floor",
-	} {
-		if !got[want] {
-			t.Errorf("scanner missed formatter %q in the %s position: %#v", want, site, got)
+			t.Errorf("scanner missed function %q at emit site %q; collectUsage is out of sync with codegen's lowering: %#v", want, site, got)
 		}
 	}
 }
@@ -1150,7 +1117,7 @@ func TestScanUsageCoversMarkerFallbacks(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view>
   <Children>
-    <p>{ amount | round }</p>
+    <p>{ round(amount) }</p>
     <div flip>row</div>
   </Children>
 </puzzle-view>
@@ -1184,7 +1151,7 @@ func TestScanFormattersCoversSkeleton(t *testing.T) {
 </puzzle-view>
 
 <puzzle-skeleton>
-  <p>{ when | date('long') }</p>
+  <p>{ date(when, 'long') }</p>
 </puzzle-skeleton>
 
 <script>
@@ -1296,7 +1263,7 @@ func TestFormatterManifestFreshAcrossIncrementalRebuilds(t *testing.T) {
 import manifest from '@magic-spells/puzzle/formatters/manifest';
 console.log(Home, manifest);
 `,
-		"app/views/Home.pzl": `<puzzle-view><h1>{ title | upcase }</h1></puzzle-view>
+		"app/views/Home.pzl": `<puzzle-view><h1>{ capitalize(title) }</h1></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
@@ -1350,15 +1317,15 @@ export default class Home extends PuzzleView {}
 
 	rescan()
 	first := rebuild("first")
-	if !strings.Contains(first, "upcase") {
-		t.Fatalf("first manifest missing the used formatter upcase:\n%s", first)
+	if !strings.Contains(first, "capitalize") {
+		t.Fatalf("first manifest missing the used function capitalize:\n%s", first)
 	}
 	if strings.Contains(first, "timeago") {
 		t.Fatalf("first manifest unexpectedly already imports timeago:\n%s", first)
 	}
 
 	// Add a NEW formatter usage mid-session, rescan, and rebuild the same context.
-	if err := os.WriteFile(home, []byte(`<puzzle-view><h1>{ title | upcase } <span>{ when | timeago }</span></h1></puzzle-view>
+	if err := os.WriteFile(home, []byte(`<puzzle-view><h1>{ capitalize(title) } <span>{ timeago(when) }</span></h1></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
@@ -1371,8 +1338,8 @@ export default class Home extends PuzzleView {}
 	if !strings.Contains(second, "timeago") {
 		t.Errorf("virtual manifest did not pick up a formatter first used mid-session across an incremental rebuild; the OnLoad result is stale-cached:\n%s", second)
 	}
-	if !strings.Contains(second, "upcase") {
-		t.Errorf("second manifest dropped the still-used upcase:\n%s", second)
+	if !strings.Contains(second, "capitalize") {
+		t.Errorf("second manifest dropped the still-used capitalize:\n%s", second)
 	}
 }
 
@@ -1388,8 +1355,8 @@ console.log(manifest);
 	pl := New(root)
 	pl.SetRuntimeDir(runtimeDir)
 	pl.SetFormatters(map[string]bool{
-		"upcase": true,
-		"join":   true,
+		"capitalize": true,
+		"json":       true,
 	})
 
 	res := api.Build(api.BuildOptions{
@@ -1410,8 +1377,8 @@ console.log(manifest);
 	}
 
 	got := string(res.OutputFiles[0].Contents)
-	wantImport := `import { escape, upcase, join } from "` + builtinsPath + `";`
-	wantMap := "var manifest_default = { escape, upcase, join };"
+	wantImport := `import { escape, capitalize, json } from "` + builtinsPath + `";`
+	wantMap := "var manifest_default = { escape, capitalize, json };"
 	if !strings.Contains(got, wantImport) {
 		t.Errorf("bundle missing virtual manifest import\nwant: %s\ngot:\n%s", wantImport, got)
 	}

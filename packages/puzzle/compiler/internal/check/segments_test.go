@@ -41,7 +41,7 @@ func TestResolvedPrefixSegmentsPreserveExpressionColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 	b.WriteString("void (")
-	codegen.WriteCheckValue(b, n, nil, nil)
+	codegen.WriteCheckValue(b, n, nil)
 	b.WriteString(");\n")
 	if !strings.Contains(b.String(), "__d.café.missing") {
 		t.Fatalf("lowered %q, want __d.café.missing", b.String())

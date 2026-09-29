@@ -69,40 +69,39 @@ func TestI18nManifestModule(t *testing.T) {
 
 // TestScanUsageTranslateKeys: `t` use is recorded even though it is not a
 // manifest builtin, and every string-literal key handed straight to it — a
-// `t('key')` call anywhere an expression is, or the TEMPORARY piped
-// `'key' | t` — is collected per file: in text, quoted and brace-only
-// attributes, conditions, handler arguments, inline ifs, and skeletons. The
-// key is the literal's cooked value, escapes included. Runtime-built keys and
-// `t` later in a chain are not checkable and are skipped, and a view handler
+// `t('key')` call anywhere an expression is — is collected per file: in text,
+// quoted and brace-only attributes, conditions, handler arguments, inline ifs,
+// and skeletons. The key is the literal's cooked value, escapes included.
+// Runtime-built keys are not checkable and are skipped, and a view handler
 // named `t` is not the function.
 func TestScanUsageTranslateKeys(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view>
-  <h1>{ 'home.title' | t }</h1>
-  <p title="{ "home.hint" | t }">{ 'items' | t({ count: n }) }</p>
-  <p>{ ('status.' + s) | t }</p>
-  <p>{ 'x' | upcase | t }</p>
-  <p>{ 'it\'s' | t }</p>
-  {#if a}<b>{ 'in.if' | t }</b>{/if}
-  <input placeholder={ 'search.hint' | t } />
+  <h1>{ t('home.title') }</h1>
+  <p title="{ t("home.hint") }">{ t('items', { count: n }) }</p>
+  <p>{ t(('status.' + s)) }</p>
+  <p>{ t('x'.toUpperCase()) }</p>
+  <p>{ t('it\'s') }</p>
+  {#if a}<b>{ t('in.if') }</b>{/if}
+  <input placeholder={ t('search.hint') } />
   <p>{ t('call.text', { n }) } { t('status.' + s) }</p>
   {#if t('call.cond') == ''}<b>x</b>{/if}
   <button @click={ save(t('call.handler')) }>a</button>
   <button @click={ t('not.a.key') }>b</button>
 </puzzle-view>
-<puzzle-skeleton><p>{ 'loading' | t }</p></puzzle-skeleton>
+<puzzle-skeleton><p>{ t('loading') }</p></puzzle-skeleton>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
 </script>
 `,
-		"app/views/Other.pzl": `<puzzle-view><p>{ 'home.title' | t }</p></puzzle-view>
+		"app/views/Other.pzl": `<puzzle-view><p>{ t('home.title') }</p></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Other extends PuzzleView {}
 </script>
 `,
-		"app/views/Plain.pzl": `<puzzle-view><p>{ name | upcase }</p></puzzle-view>
+		"app/views/Plain.pzl": `<puzzle-view><p>{ name.toUpperCase() }</p></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Plain extends PuzzleView {}
@@ -139,7 +138,7 @@ export default class Plain extends PuzzleView {}
 		t.Fatalf("TKeys = %v\nwant %v", usage.TKeys, want)
 	}
 
-	plain := writeApp(t, map[string]string{"app/views/Plain.pzl": `<puzzle-view><p>{ name | upcase }</p></puzzle-view>
+	plain := writeApp(t, map[string]string{"app/views/Plain.pzl": `<puzzle-view><p>{ name.toUpperCase() }</p></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Plain extends PuzzleView {}

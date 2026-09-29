@@ -6,27 +6,25 @@ import (
 )
 
 // row_facts_test.go — which reads reach a list block's render facts (D170).
-// A value handed to a formatter is opaque whether it is the pipe base or an
-// argument; a handler argument is read at fire time off the live row scope and
-// records no render fact at all.
+// A value handed to a library function is opaque; a handler argument is read
+// at fire time off the live row scope and records no render fact at all.
 
-// A whole record passed as a formatter ARGUMENT reaches whatever the formatter
-// reads off it (`byline` reading post.author.name), exactly as the pipe base
-// does, so the site must be conservative — in every value position that takes a
-// chain.
-func TestRowFactsFormatterArgumentIsOpaque(t *testing.T) {
+// A whole record passed as a function ARGUMENT reaches whatever the function
+// reads off it (`byline` reading post.author.name), so the site must be
+// conservative — in every value position.
+func TestRowFactsFunctionArgumentIsOpaque(t *testing.T) {
 	cases := []struct {
 		name     string
 		body     string
 		wantDeep bool
 	}{
-		{"text interpolation", "<p>{ 'by' | byline(post) }</p>", true},
-		{"brace-only attribute", "<p title={ 'by' | byline(post) }>x</p>", true},
-		{"quoted attribute", `<p title="a { 'by' | byline(post) }">x</p>`, true},
-		{"component prop", "<Row label={ 'by' | byline(post) } />", true},
-		{"markup chain", "<p>{ 'by' | byline(post) | raw }</p>", true},
+		{"text interpolation", "<p>{ byline('by', post) }</p>", true},
+		{"brace-only attribute", "<p title={ byline('by', post) }>x</p>", true},
+		{"quoted attribute", `<p title="a { byline('by', post) }">x</p>`, true},
+		{"component prop", "<Row label={ byline('by', post) } />", true},
+		{"markup call", "<p>{ raw(byline('by', post)) }</p>", true},
 		// A depth-one member as an argument stays a field read.
-		{"member argument", "<p>{ 'by' | byline(post.title) }</p>", false},
+		{"member argument", "<p>{ byline('by', post.title) }</p>", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

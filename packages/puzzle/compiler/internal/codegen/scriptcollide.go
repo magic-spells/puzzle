@@ -416,9 +416,6 @@ func reservedBindingEmission(name string) (verb, what, why string) {
 		return "imports", "PORTAL_TAG", "this template contains a <Portal>"
 	case "__s":
 		return "imports", "the display helper as __s", "this template coerces an interpolation for display"
-	case "__z":
-		// TEMPORARY until the corpus migrates to `.length` (P4: remove).
-		return "imports", "the `.size` helper as __z", "this template reads `.size`, the count of a list or string"
 	case "__l":
 		return "imports", "listRows as __l", "this template has an item-form {#for} lowered to a persistent list block"
 	case "__e":

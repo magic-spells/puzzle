@@ -7,8 +7,8 @@ import (
 
 // markup_call_test.go — the call form of the D174 markup functions
 // (DESIGN-expr-v2 §6): `raw`/`newline_to_br` as the outermost call of a text
-// interpolation lowers to the live-HTML vnode exactly as the last pipe link
-// does, and every other placement is a positioned compile error.
+// interpolation lowers to the live-HTML vnode, and every other placement is a
+// positioned compile error.
 
 func TestMarkupCallLowersToLiveHTML(t *testing.T) {
 	got, err := compileMarkup(t, `<puzzle-view>
@@ -43,7 +43,6 @@ func TestMarkupCallPlacementErrors(t *testing.T) {
 	}{
 		{"inside another call", `<puzzle-view><p>{ truncate(raw(body), 5) }</p></puzzle-view>`, "T.pzl:1:28: `raw` must be the outermost call of a text interpolation"},
 		{"an operand", `<puzzle-view><p>{ raw(body) + 'x' }</p></puzzle-view>`, "T.pzl:1:19: `raw` must be the outermost call"},
-		{"before a pipe", `<puzzle-view><p>{ raw(body) | truncate(5) }</p></puzzle-view>`, "`raw` must be the outermost call"},
 		{"inside its own argument", `<puzzle-view><p>{ raw(newline_to_br(body)) }</p></puzzle-view>`, "`newline_to_br` must be the outermost call"},
 		{"brace-only attribute", `<puzzle-view><p title={ raw(body) }>x</p></puzzle-view>`, "not an attribute value"},
 		{"quoted attribute", `<puzzle-view><p title="a { raw(body) }">x</p></puzzle-view>`, "not an attribute value"},

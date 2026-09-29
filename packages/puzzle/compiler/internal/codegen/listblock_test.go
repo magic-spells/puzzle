@@ -214,10 +214,10 @@ func TestListBlockFieldsAndDeep(t *testing.T) {
 		{"depth one", "<li>{ todo.text } { todo.author }</li>", "fields: ['author', 'text']", false},
 		{"sorted distinct", "<li>{ todo.b } { todo.a } { todo.b }</li>", "fields: ['a', 'b']", false},
 		{"deep path", "<li>{ todo.author.name }</li>", "", true},
-		{"count of the item", "<li>{ todo.size }</li>", "fields: ['size']", false},
-		{"count of a member", "<li>{ todo.tags.size }</li>", "", true},
+		{"a size field of the item", "<li>{ todo.size }</li>", "fields: ['size']", false},
+		{"count of a member", "<li>{ todo.tags.length }</li>", "", true},
 		{"dynamic member", "<li>{ todo[key] }</li>", "", true},
-		{"item into a formatter", "<li>{ todo | byline }</li>", "", true},
+		{"item into a function", "<li>{ byline(todo) }</li>", "", true},
 		{"whole item as a prop", "<Row todo={ todo } />", "", false},
 		{"whole item as a handler arg", "<li @click={ del(todo) }>x</li>", "", false},
 	}
@@ -606,14 +606,14 @@ func TestListMetaOpaqueRecordReads(t *testing.T) {
 		body     string
 		wantDeep bool
 	}{
-		{"formatter pipe", "<li>{ post | authorName }</li>", true},
+		{"function call", "<li>{ authorName(post) }</li>", true},
 		{"parenthesised member access", "<li>{ (post).author.name }</li>", true},
-		{"formatter argument", "<li>{ 'by' | byline(post) }</li>", true},
+		{"function argument", "<li>{ byline('by', post) }</li>", true},
 		{"operand of a larger expression", "<li>{ 'by ' + post }</li>", true},
 		{"deep path", "<li>{ post.author.name }</li>", true},
 		{"display of the record", "<li>{ post }</li>", false},
 		{"depth-one member", "<li>{ post.title }</li>", false},
-		{"formatted member", "<li>{ post.title | upcase }</li>", false},
+		{"function over a member", "<li>{ capitalize(post.title) }</li>", false},
 		{"whole record as a prop", "<Row post={ post } />", false},
 		{"whole record as a handler arg", "<li @click={ del(post) }>x</li>", false},
 	}
@@ -632,17 +632,15 @@ func TestListMetaOpaqueRecordReads(t *testing.T) {
 // `volatile` is the escape hatch for a body the compiler's dependency model
 // cannot see through: a value that can change with no data mutation makes
 // every row dirty on every pass. The expression language reaches no mutable
-// global (DESIGN-expr-v2 §1: no window, document, Date, or Math.random) and no
-// view instance, so a name like `window` is a data field, tracked through the
-// roots mask like any other; the Math globals it has are pure.
+// global (DESIGN-expr-v2 §1: no Date or Math.random, and a browser global such
+// as `window` read as a value is a compile error) and no view instance; the
+// Math globals it has are pure.
 func TestListMetaVolatileGlobals(t *testing.T) {
 	cases := []struct {
 		name         string
 		body         string
 		wantVolatile bool
 	}{
-		{"window is data", "<li>{ window.location.hash }{ todo.text }</li>", false},
-		{"document is data", "<li>{ document.title }{ todo.text }</li>", false},
 		{"Math.PI stays pure", "<li>{ Math.PI * todo.a }</li>", false},
 		{"Math.round stays pure", "<li>{ Math.round(todo.a) }</li>", false},
 		{"timeago call", "<li>{ timeago(todo.createdAt) }</li>", true},
@@ -663,15 +661,15 @@ func TestListMetaVolatileGlobals(t *testing.T) {
 	}
 }
 
-// A built-in formatter that reads the clock is not a pure function of its input,
-// so a cached row would freeze its output at "1 second ago".
-func TestListMetaClockFormatterIsVolatile(t *testing.T) {
-	got := compileSrc(t, listSrc("  {#for todo in todos}<li>{ todo.createdAt | timeago }</li>{/for}"))
+// A library function that reads the clock is not a pure function of its
+// input, so a cached row would freeze its output at "1 second ago".
+func TestListMetaClockFunctionIsVolatile(t *testing.T) {
+	got := compileSrc(t, listSrc("  {#for todo in todos}<li>{ timeago(todo.createdAt) }</li>{/for}"))
 	if !strings.Contains(got, "volatile: true") {
-		t.Errorf("a row piping through timeago must be volatile:\n%s", got)
+		t.Errorf("a row calling timeago must be volatile:\n%s", got)
 	}
-	// Every other shipped built-in is a pure function of its input.
-	pure := compileSrc(t, listSrc("  {#for todo in todos}<li>{ todo.createdAt | date }</li>{/for}"))
+	// Every other shipped function is a pure function of its input.
+	pure := compileSrc(t, listSrc("  {#for todo in todos}<li>{ date(todo.createdAt) }</li>{/for}"))
 	if strings.Contains(pure, "volatile: true") {
 		t.Errorf("a pure built-in must not make the site volatile:\n%s", pure)
 	}
