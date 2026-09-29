@@ -99,10 +99,12 @@ notes:
       `packages/puzzle-lang/expr`, a method table as the boundary, functions instead of pipes
       (D174's library is 19 standard functions plus PuzzleKit-only `link` and `timeago`; the
       `formatters` config key keeps its name), `.length` the count, evaluated natively in Go by
-      Sites; `this` stays rejected. P1–P3 are merged into `release/0.8.0`, P4 (the corpus migration
-      and the removal of pipes and `.size`) is PR #171, and P1b, P5 and P6 are planned; the 0.8.0
-      tag waits for P1–P5. D173–D176, DOC-LANGUAGE-CORE and the docs, FILE and TEST cards describe
-      the P4 state. **The next free decision number is D177.**
+      Sites; `this` stays rejected. P1–P4 are merged into `release/0.8.0` (P4, the corpus migration
+      and the removal of pipes and `.size`, as 4eee9917); P1b, the parser's markup fixes, is PR #172
+      awaiting merge; P5 is open — the eslint/prettier ports of P1b (PR #173) and the editor-grammar
+      sweep; P6, the Go evaluator in Sites, follows the tag. The 0.8.0 tag waits for P1b and P5.
+      D173–D176, DOC-LANGUAGE-CORE and the docs, FILE and TEST cards describe the merged P4 state.
+      **The next free decision number is D177.**
 connected_repos:
   - name: puzzle-lang
     path: ../puzzle-lang
