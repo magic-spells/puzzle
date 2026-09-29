@@ -31,6 +31,13 @@ the `conformance` package that embeds the shared tables both hosts run
   `expr/methods.go` and `expr/print.go`; and TEST-COMPILER-PARSER for the
   module's `go test` suite. Paths are relative to this module root, so
   `stale_report` here tracks real drift.
+- **`jsident` holds the shared identifier rules** (no FILE card of its own):
+  `IsIDStart`/`IsIDContinue` — JavaScript's `ID_Start`/`ID_Continue` from Go's
+  `unicode` tables — and `IsReservedBindingIdentifier`. `expr`'s lexer and
+  `IsIdentifier`, the template lexer's tag names (`parser/lexer.go`, described
+  on FILE-PARSER) and PuzzleKit's `<script>` scan all call them, so a name a
+  `.pzl` spells reads the same way in every scan (DECISION-D176 rule 8,
+  DECISION-D167). `textutil` has no FILE card either.
 - The language's **behavioral contract** stays in the framework plan
   (`repo=puzzle`): COMPONENT-TEMPLATE-PARSER, DECISION-D176-EXPRESSION-LANGUAGE,
   the template-grammar decision cards (D172, D173, and every earlier grammar

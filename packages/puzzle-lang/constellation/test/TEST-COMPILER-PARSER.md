@@ -73,6 +73,15 @@ What they guarantee:
   case/when, loops, interpolation, template comments, inline SVG, element refs,
   the raw block, composition markers, Portal, snippets, and dotted component
   family tags.
+- **component tags follow the D167 tag-name rule** (`TestParseComponentNamesD167`,
+  `parser_test.go`): `Straßenkarte`, `Übersicht`, `概要`, `Frame.Übersicht`,
+  `Übersicht.Kopf`, `ärmel` and `_x` parse as components (an ASCII-only tag
+  lexer read `<Straßenkarte>` as `<Stra>` with an attribute `ßenkarte` and
+  `<Übersicht>` as text), `straße-karte` stays an element beside
+  `my-element`, `<Über-sicht>` and `<Frame.٣x>` are the positioned
+  not-an-identifier errors beside `<Frame-x>`, `<Frame:Wrapper>` and
+  `<Slot.Foo>`, and `under <$50` stays text because `$` never starts a tag
+  name.
 - **HTML void elements close at their start tag** (`TestParseVoidElements`):
   `<br>`, `<br/>` and `<br />` build the same tree, children after `<br>`
   belong to the parent, every void name is covered, `<input value={ x }
@@ -167,7 +176,11 @@ codegen side of the `event` rule — a template that reads `event` as data and
 also uses it in a handler is an error — is PuzzleKit's
 `TestEventAsDataAndInAHandlerIsAnError` and
 `TestEventOutsideAHandlerIsDataPzlCompile`
-(`packages/puzzle/compiler/internal/codegen/expr_test.go`).
+(`packages/puzzle/compiler/internal/codegen/expr_test.go`). The codegen side
+of the Unicode names — compiled tags and class names pass `node --check` — is
+PuzzleKit's `TestCompileUnicodeComponentTags` and
+`TestCompileUnicodeClassName`
+(`packages/puzzle/compiler/internal/codegen/classname_test.go`).
 
 ## Contracts it pins (in the connected `puzzle` plan)
 

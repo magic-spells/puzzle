@@ -392,10 +392,11 @@ Date(). we'll have limited support."
   `jsident.IsIDStart`/`IsIDContinue` (`packages/puzzle-lang/jsident`) decide
   `ID_Start`/`ID_Continue` with Go's `unicode` package, and every scan that
   reads a name calls them: `expr`'s lexer, the template lexer's tag names
-  (D167), PuzzleKit's `<script>` scan — the class name (`extractClassName`,
+  (D167), and PuzzleKit's `<script>` scan — the class name (`extractClassName`,
   and `classNameFromFilename` for a script-less file, so `Übersicht.pzl` is
-  class `Übersicht`), the import bindings and the `__d.` collision scan — and
-  `puzzle check`'s read-back of the class name. A component class may
+  class `Übersicht`), the import bindings and the `__d.` collision scan.
+  (`puzzle check` reads the class name back from the render tail codegen
+  wrote, where every byte ≥ 0x80 belongs to the name.) A component class may
   therefore carry any JavaScript identifier name (`Übersicht`, `概要`,
   `Straßenkarte`). A class name the scan cannot read to its end — a `\u`
   escape inside it, or a character JavaScript accepts that the tables predate
@@ -644,10 +645,11 @@ repo. The 0.8.0 tag waits for the last piece of P5: the editor grammars.
 7. **Unicode names — Built** (PR #177, merged as 87c0e5e1). The identifier
    rules move from `expr/ident.go` to `jsident` as `IsIDStart`/`IsIDContinue`,
    and the compiler's `<script>` scan (`tokenizeJS`, the class name, the `__d.`
-   collision scan), `classNameFromFilename` and `puzzle check`'s class-name
-   read-back use them; a component tag takes the same names (D167: any tag
-   whose first character is not `a`–`z` is a component); a class name the
-   scan cannot read to its end is a positioned error (rule 8).
+   collision scan) and `classNameFromFilename` use them, while `puzzle check`
+   reads a non-ASCII class name back from the render tail; a component tag
+   takes the same names (D167: any tag whose first character is not `a`–`z`
+   is a component); a class name the scan cannot read to its end is a
+   positioned error (rule 8).
 8. **P5 — Open.** The eslint and prettier ports and the pieces demo's
    highlighter moved to the expression language in PR #170; the ports' P1b
    `{#raw}` case landed in PR #173 (merged as ed9245cb) and their copy of
