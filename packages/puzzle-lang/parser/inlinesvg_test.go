@@ -151,6 +151,23 @@ func TestScanSVGFile(t *testing.T) {
 		}
 	})
 
+	// Some .NET and Visual Studio exports lead with a UTF-8 BOM, which browsers
+	// accept; it is an encoding marker, not content before the root.
+	t.Run("leading BOM skipped, with and without a prolog", func(t *testing.T) {
+		for _, src := range []string{
+			"\xEF\xBB\xBF<svg viewBox=\"0 0 24 24\"><path d=\"M1 2\"/></svg>",
+			"\xEF\xBB\xBF<?xml version=\"1.0\"?>\n<svg viewBox=\"0 0 24 24\"><path d=\"M1 2\"/></svg>",
+		} {
+			attrs, inner, err := ScanSVGFile([]byte(src), "bom.svg")
+			if err != nil {
+				t.Fatalf("%q: unexpected error: %v", src, err)
+			}
+			if inner != `<path d="M1 2"/>` || staticAttr(attrs, "viewBox") != "0 0 24 24" {
+				t.Errorf("%q: got inner %q, attrs %#v", src, inner, attrs)
+			}
+		}
+	})
+
 	t.Run("error position after prolog stripping points into svg", func(t *testing.T) {
 		src := "<?xml version=\"1.0\"?>\n<div>not an svg</div>"
 		_, _, err := ScanSVGFile([]byte(src), "bad.svg")

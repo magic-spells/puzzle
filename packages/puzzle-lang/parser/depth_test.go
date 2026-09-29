@@ -25,6 +25,10 @@ func TestOverNestingDepthCountsElementsAndBlocks(t *testing.T) {
 	}{
 		{"flat siblings never nest", "<p>a</p><p>b</p><p>c</p>", 2, false},
 		{"self-closing tags do not push", "<br/><br/><br/><br/>", 1, false},
+		// A void element's start tag is the whole element, slash or not.
+		{"void tags do not push", strings.Repeat(`<br><input type="text"><img src="a.png">`, 100), 1, false},
+		{"a void tag sits at its parent's depth", "<div><p>a<br>b</p></div>", 2, false},
+		{"a stray void closer pops nothing", "<div></br><span><b>x</b></span></div>", 2, true},
 		{"exactly at the limit passes", "<div><span>x</span></div>", 2, false},
 		{"one past the limit trips", "<div><span><b>x</b></span></div>", 2, true},
 		{"blocks count as a level", "{#if ready}<div><span>x</span></div>{/if}", 2, true},

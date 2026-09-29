@@ -1085,6 +1085,11 @@ func TestParseElseIfErrors(t *testing.T) {
 			wantSubstr: "{:else} must be the last clause",
 		},
 		{
+			name:       "a second else is named, not reported as unclosed",
+			content:    "{#if a}x{:else}y{:else}z{/if}",
+			wantSubstr: "a second {:else} in {#if} opened at 1:14 — {:else} must be the last clause",
+		},
+		{
 			name:       "bare else-if requires a condition",
 			content:    "{#if a}x{:else if}y{/if}",
 			wantSubstr: "{:else if} requires a condition",
@@ -1142,6 +1147,11 @@ func TestParseUnlessErrors(t *testing.T) {
 			name:       "unless without a condition",
 			content:    "{#unless}x{/unless}",
 			wantSubstr: "{#unless} requires a condition",
+		},
+		{
+			name:       "a second else in unless",
+			content:    "{#unless a}x{:else}y{:else}z{/unless}",
+			wantSubstr: "a second {:else} in {#unless} opened at 1:14",
 		},
 	}
 	for _, tc := range tests {
@@ -1297,6 +1307,11 @@ func TestParseCaseErrors(t *testing.T) {
 			name:       "when after else",
 			content:    "{#case s}{:when 'a'}x{:else}d{:when 'b'}y{/case}",
 			wantSubstr: "{:when} after {:else}",
+		},
+		{
+			name:       "a second else in case",
+			content:    "{#case s}{:when 'a'}x{:else}d{:else}e{/case}",
+			wantSubstr: "a second {:else} in {#case} opened at 1:14",
 		},
 		{
 			name:       "else-if inside case",
@@ -2044,6 +2059,109 @@ func TestParseErrorPositions(t *testing.T) {
 	}
 	if pe.File != "Home.pzl" {
 		t.Errorf("file: got %q", pe.File)
+	}
+
+	// A second {:else} is reported where it stands, not at the {#if}.
+	src = "<puzzle-view>\n{#if a}x{:else}y\n  {:else}z{/if}</puzzle-view>\n<script></script>"
+	_, err = Parse([]byte(src), "Home.pzl")
+	if pe, ok = err.(*ParseError); !ok || pe.Line != 3 || pe.Col != 3 {
+		t.Errorf("second {:else}: got %v, want the error at 3:3", err)
+	}
+}
+
+// TestParseVoidElements: an HTML void element's start tag is the whole
+// element, as in HTML — `<br>`, `<br/>` and `<br />` parse alike, and what
+// follows `<br>` belongs to the parent.
+func TestParseVoidElements(t *testing.T) {
+	t.Run("the slash is optional", func(t *testing.T) {
+		want := serializeNodes(parseContent(t, `<p>a<br/>b</p>`).Children)
+		for _, content := range []string{`<p>a<br>b</p>`, `<p>a<br />b</p>`} {
+			if got := serializeNodes(parseContent(t, content).Children); got != want {
+				t.Errorf("%s:\n got %s\nwant %s", content, got, want)
+			}
+		}
+	})
+
+	t.Run("children after a void tag belong to the parent", func(t *testing.T) {
+		root := parseContent(t, `<label>Name <input type="text" name="name"> required</label>`)
+		label := root.Children[0].(*Element)
+		if got := serializeNodes(label.Children); got != "text(Name );el:input[];text( required);" {
+			t.Fatalf("label children: %s", got)
+		}
+	})
+
+	t.Run("every void element", func(t *testing.T) {
+		root := parseContent(t, `<div><area><base><br><col><embed><hr><img src="a.png"><input><link><meta><source><track><wbr><span>x</span></div>`)
+		div := root.Children[0].(*Element)
+		if len(div.Children) != 14 {
+			t.Fatalf("div has %d children, want 14: %s", len(div.Children), serializeNodes(div.Children))
+		}
+		for _, n := range div.Children[:13] {
+			if el := n.(*Element); len(el.Children) != 0 {
+				t.Errorf("<%s> has children: %s", el.Tag, serializeNodes(el.Children))
+			}
+		}
+		if last := div.Children[13].(*Element); last.Tag != "span" {
+			t.Errorf("last child: <%s>, want <span>", last.Tag)
+		}
+	})
+
+	// The DOC-TEMPLATE-SYNTAX example for opting a form value out of two-way
+	// binding.
+	t.Run("input with a dynamic value and a bare readonly", func(t *testing.T) {
+		root := parseContent(t, `<input value={ x } readonly><p>after</p>`)
+		if got := serializeNodes(root.Children); got != "el:input[];el:p[text(after);];" {
+			t.Fatalf("children: %s", got)
+		}
+		input := root.Children[0].(*Element)
+		if len(input.Attrs) != 2 {
+			t.Fatalf("input attrs: %#v", input.Attrs)
+		}
+		if a, ok := input.Attrs[0].(*DynamicAttr); !ok || a.Name != "value" {
+			t.Errorf("attr 0: %#v", input.Attrs[0])
+		}
+		if a, ok := input.Attrs[1].(*StaticAttr); !ok || a.Name != "readonly" || !a.Valueless {
+			t.Errorf("attr 1: %#v", input.Attrs[1])
+		}
+	})
+
+	t.Run("inside {#raw}", func(t *testing.T) {
+		root := parseContent(t, `{#raw}<p>a<br>{ b }</p>{/raw}`)
+		if got := serializeNodes(root.Children); got != "el:p[text(a);el:br[];text({ b });];" {
+			t.Fatalf("children: %s", got)
+		}
+	})
+
+	t.Run("a capitalized tag is a component, never void", func(t *testing.T) {
+		root := parseContent(t, `<Input label="x">hint</Input>`)
+		if c, ok := root.Children[0].(*Component); !ok || len(c.Children) != 1 {
+			t.Fatalf("got %s", serializeNodes(root.Children))
+		}
+	})
+
+	errs := []struct {
+		name    string
+		content string
+		tag     string
+		line    int
+		col     int
+	}{
+		{"closing tag after the start tag", "\n  <input type=\"text\"></input>", "input", 2, 22},
+		{"closing tag after content", "\n  <p>a<br>b</br></p>", "br", 2, 12},
+		{"stray closing tag at the root", "\n</img>", "img", 2, 1},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte("<puzzle-view>"+tc.content+"\n</puzzle-view>\n<script></script>"), "Form.pzl")
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+			}
+			want := "<" + tc.tag + "> is a void element and has no closing tag — remove the </" + tc.tag + ">"
+			if pe.Message != want || pe.Line != tc.line || pe.Col != tc.col {
+				t.Errorf("got %d:%d %q, want %d:%d %q", pe.Line, pe.Col, pe.Message, tc.line, tc.col, want)
+			}
+		})
 	}
 }
 

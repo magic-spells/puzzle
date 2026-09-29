@@ -350,6 +350,12 @@ different.
     `__dirty`, `__rgen` or `__propRevs`, nor a static `__roots`. A `<script>`
     must not bind `__l`, `__e`, `__r` or `__L0`, `__L1`, and so on. Binding one
     of the script names is a compile error.
+17. **HTML void elements take no closing tag.** `<br>`, `<hr>`, `<input …>`,
+    `<img …>` and the rest of the void set (`area base br col embed hr img
+    input link meta source track wbr`) are legal without `/>`, and the
+    self-closed spelling still compiles to the same output. A closer such as
+    `</br>` or `</input>`, which 0.7 accepted, is a compile error naming the
+    void element: delete the closer.
 
 Two contracts that row caching makes visible, though neither is new: assign a
 record's fields through `update()` or a store path, never `todo.title = 'x'`,
@@ -831,6 +837,15 @@ checklist sent you.
 - **Docs: the Quick Start is `npm install -g @magic-spells/puzzle` then
   `puzzle init`.** The unpublished `create-puzzle-app` wrapper is retired
   (D77).
+- **`{#raw}` bodies no longer break section splitting.** The section splitter
+  skips a `{#raw}…{/raw}` span the way it skips comments, so a raw body whose
+  braces do not balance and whose text holds an apostrophe or backtick (a code
+  sample with `// it's`) no longer fails with "missing `</puzzle-view>`", a
+  literal `</puzzle-view>` inside a raw body is legal, and a 40 KB raw block
+  splits in under a millisecond instead of seconds. Alongside it: HTML void
+  elements need no closing tag (checklist item 17), a second `{:else}` is
+  reported at the stray one rather than at the block, and a `{#svg}` file may
+  start with a UTF-8 byte-order mark.
 
 ### Removed
 

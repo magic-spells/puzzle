@@ -250,9 +250,16 @@ func SplitSections(src, filename string) (*Sections, error) {
 // HTML comments. Brace groups reuse scanBraceGroup/LexSkip, so strings, JS
 // comments, regexes, and nested template literals inside an interpolation stay
 // opaque. D70 template comments use their raw scanners for the same reason the
-// lexer does. Returns the close tag's '<' index RELATIVE to `from`, or -1 when
-// none is found.
+// lexer does, and a D150 {#raw} span is stepped over whole, as the lexer does:
+// its body is never read, so its braces and quotes are inert and a literal
+// close tag inside it does not end the section. Returns the close tag's '<'
+// index RELATIVE to `from`, or -1 when none is found.
 func findTemplateClose(s string, from int, closeTag string) int {
+	// inRaw is the first close tag seen inside a skipped {#raw} span. It is the
+	// answer only when no close tag follows: a raw block missing its {/raw}
+	// (none at all, or the next one sits in a later section) still splits at
+	// the real close, and the lexer then reports the unterminated block.
+	inRaw := -1
 	for i := from; i < len(s); {
 		if strings.HasPrefix(s[i:], closeTag) {
 			return i - from
@@ -268,6 +275,15 @@ func findTemplateClose(s string, from int, closeTag string) int {
 			i += 4
 		case s[i] == '\\' && i+1 < len(s) && (s[i+1] == '{' || s[i+1] == '}'):
 			i += 2
+		case isBlockRawOpen(s, i):
+			_, _, end, err := scanBlockRaw(s, i)
+			if err != nil {
+				end = len(s) // unterminated: the lexer reports it at the opener
+			}
+			if k := strings.Index(s[i:end], closeTag); k >= 0 && inRaw < 0 {
+				inRaw = i + k - from
+			}
+			i = end
 		case s[i] == '{':
 			var end int
 			var err error
@@ -288,7 +304,7 @@ func findTemplateClose(s string, from int, closeTag string) int {
 			i++
 		}
 	}
-	return -1
+	return inRaw
 }
 
 // strayContentErr reports non-whitespace content that fell outside every

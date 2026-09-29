@@ -470,6 +470,120 @@ func TestSplitSectionsTemplateCloseAware(t *testing.T) {
 	}
 }
 
+// TestSplitSectionsRawBlockIsInert: a {#raw} body is literal source (D150), so
+// the section scan steps over the whole span the way the lexer does. Read as
+// brace groups instead, an unbalanced '{', a quote or a '//' in the body
+// carried the scan past </puzzle-view> into the script, where the parity of
+// the quotes in its imports and comments decided whether it ever came back:
+// "missing </puzzle-view>" for a file that has one. Every case below failed
+// that way with this script (drop one import or the "I'm" and they pass by
+// luck).
+func TestSplitSectionsRawBlockIsInert(t *testing.T) {
+	const script = `
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Avatar from './Avatar.pzl';
+import PageCard from './PageCard.pzl';
+
+export default class Docs extends PuzzleView {
+  data(params, props) {
+    // Pages I'm linking to (and not this one), newest first, capped at
+    // three. Filtering/sorting live here, not in the template.
+    const pages = this.ctx.store
+      .findMany('page', { filter: (p) => p.id !== 'docs' && !p.draft })
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 3);
+    return { pages };
+  }
+}
+</script>
+`
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"docs page", "<p>{#raw}Write { to open an interpolation — don't forget the }.{/raw}</p>"},
+		{"code sample with // it's", "<pre>{#raw}function greet(name) {\n  // it's a sample{/raw}</pre>"},
+		{"odd quote between balanced braces", "<p>{#raw}Use { user's name } here{/raw}</p>"},
+		{"unbalanced brace, no quote", "<p>{#raw}The brace { is special.{/raw}</p>"},
+		{"tolerant closer", "<p>{#raw}{ it's{/ raw }</p>"},
+		// A literal close tag inside the span does not end the section: the raw
+		// body is one span, as the lexer reads it, and the sample is markup.
+		{"literal close tag in the body", "<pre>{#raw}<puzzle-view>{ sample }</puzzle-view>{/raw}</pre>"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			template := "\n  " + tc.body + "\n"
+			src := "<puzzle-view>" + template + "</puzzle-view>" + script
+			sec, err := SplitSections(src, "Docs.pzl")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if sec.TemplateContent != template {
+				t.Fatalf("template body changed or truncated:\n got %q\nwant %q", sec.TemplateContent, template)
+			}
+			if !strings.Contains(sec.Scripts, "class Docs") {
+				t.Fatalf("script body lost: %q", sec.Scripts)
+			}
+			if _, err := ParseTemplate(sec, "Docs.pzl"); err != nil {
+				t.Fatalf("template does not parse: %v", err)
+			}
+		})
+	}
+
+	t.Run("skeleton body", func(t *testing.T) {
+		skeleton := "<p>{#raw}Write { to open — don't forget.{/raw}</p>"
+		src := "<puzzle-view><p>x</p></puzzle-view>\n<puzzle-skeleton>" + skeleton + "</puzzle-skeleton>" + script
+		sec, err := SplitSections(src, "Docs.pzl")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if sec.Skeleton != skeleton {
+			t.Fatalf("skeleton body changed or truncated:\n got %q\nwant %q", sec.Skeleton, skeleton)
+		}
+	})
+}
+
+// TestSplitSectionsUnterminatedRawBlock: a {#raw} with no {/raw} of its own
+// must not hide the section's real close tag, whether no closer follows at
+// all or the next one sits in a later section. The file splits, and the lexer
+// reports the unterminated block at its opener.
+func TestSplitSectionsUnterminatedRawBlock(t *testing.T) {
+	cases := []struct {
+		name     string
+		src      string
+		template string
+	}{
+		{
+			name:     "no closer anywhere",
+			src:      "<puzzle-view>\n<p>{#raw}{ it's</p>\n</puzzle-view>\n<script>\n// the view's script\n</script>\n",
+			template: "\n<p>{#raw}{ it's</p>\n",
+		},
+		{
+			name:     "next closer in the skeleton",
+			src:      "<puzzle-view>\n<p>{#raw}{ it's</p>\n</puzzle-view>\n<puzzle-skeleton><pre>{#raw}{ x }{/raw}</pre></puzzle-skeleton>\n<script></script>\n",
+			template: "\n<p>{#raw}{ it's</p>\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sec, err := SplitSections(tc.src, "F.pzl")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if sec.TemplateContent != tc.template {
+				t.Fatalf("template body:\n got %q\nwant %q", sec.TemplateContent, tc.template)
+			}
+			_, err = ParseTemplate(sec, "F.pzl")
+			pe, ok := err.(*ParseError)
+			if !ok || pe.Line != 2 || pe.Col != 4 || !strings.Contains(pe.Message, "unterminated {#raw}") {
+				t.Fatalf("error: got %v, want the unterminated {#raw} at 2:4", err)
+			}
+		})
+	}
+}
+
 // TestSplitSectionsSkeletonCloseAware asserts the <puzzle-skeleton> body uses the
 // full template scanner (SPEC §16), so a literal </puzzle-skeleton> inside a
 // template comment, interpolation string, or HTML comment does NOT truncate the
