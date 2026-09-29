@@ -398,13 +398,14 @@ checklist sent you.
   with the replacement, so convert pipes rather than rename them.
 - **Prerendered pages format numbers and dates on the build machine.**
   `output: 'static'` and `output: 'hybrid'` pages print
-  `number_with_delimiter`, `pluralize`, `compact_number`, `date`, `time` and
-  `datetime` in the build machine's locale (`LANG`) and time zone (`TZ`) —
-  the locale is the default one instead when the app configures `i18n` — and
-  the browser then re-renders them in the viewer's. The dates behaved this
-  way in 0.7; the three number functions follow the locale only since 0.8
-  (0.7's `| number_with_delimiter` always used `,`). For deterministic HTML,
-  pin `LANG` and `TZ` on the build machine, or set the locale through `i18n`.
+  `number_with_delimiter`, `pluralize`, `compact_number`, `date`, `time`,
+  `datetime` and `timeago` in the build machine's locale (`LANG`, or
+  `LC_ALL` when set) and time zone (`TZ`) — the locale is `i18n.defaultLocale`
+  instead when the app configures `i18n`, but the time zone still follows
+  `TZ` — and the browser then re-renders them in the viewer's. The dates
+  behaved this way in 0.7; the three number functions follow the locale only
+  since 0.8 (0.7's `| number_with_delimiter` always used `,`). For
+  deterministic HTML, pin the locale and `TZ` on the build machine.
 
 ### Added
 

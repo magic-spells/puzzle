@@ -503,6 +503,8 @@ export function in_timezone(v, tz = 'UTC') {
 	// offset differs, making a calendar date render differently per viewer — the
 	// exact TZ dependence D114 removed from `date`/`timeago`.
 	if (isCalendarDate(d)) return d;
+	// No zone (an unset `user.timezone`) is not a typo: nothing to re-express.
+	if (tz == null || tz === '') return d;
 	// An unknown time-zone identifier throws RangeError at DateTimeFormat
 	// construction, and formatToParts throws on an invalid date — fail soft to the
 	// un-shifted date so a bad tz/date never crashes the render.
