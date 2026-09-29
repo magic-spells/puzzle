@@ -10,6 +10,7 @@ import (
 
 	runtimeformatters "github.com/magic-spells/puzzle/client-runtime/formatters"
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
@@ -51,23 +52,25 @@ type Usage struct {
 	HasPortal   bool
 	HasRawAt    bool
 	HasSnippets bool
-	// HasRawHTML: a text interpolation ends in `raw` or `newline_to_br` (D174),
-	// which keeps the live-HTML node and the sanitizer in the bundle.
+	// HasRawHTML: a template calls `raw` or `newline_to_br` (D174) — as a text
+	// interpolation's outermost call, or at the end of its TEMPORARY pipe
+	// chain — which keeps the live-HTML node and the sanitizer in the bundle.
 	HasRawHTML bool
-	// HasRawSanitize: one of those chains ends in `raw` itself, which keeps the
-	// sanitizer; an app that only uses `newline_to_br` does not ship it.
+	// HasRawSanitize: one of those is `raw` itself, which keeps the sanitizer;
+	// an app that only uses `newline_to_br` does not ship it.
 	HasRawSanitize bool
 	// HasLazy is the one bit that does NOT come from a template: lazy() route
 	// views (D163) are declared in the app's JavaScript/TypeScript, so the walk
 	// reads those files too (see scanScriptUsage).
 	HasLazy bool
-	// TKeys maps each string-literal key piped straight into `t` (D175) to the
-	// app-relative files that use it, for the build's missing-key warning. It is
-	// diagnostics only and never feeds a define.
+	// TKeys maps each string-literal key handed straight to `t` (D175) —
+	// `t('cart.title')`, or the TEMPORARY piped `'cart.title' | t` — to the
+	// app-relative files that use it, for the build's missing-key warning. It
+	// is diagnostics only and never feeds a define.
 	TKeys map[string][]string
 }
 
-// UsesT reports whether any template pipes a value into the `t` formatter.
+// UsesT reports whether any template calls the `t` function.
 func (u Usage) UsesT() bool {
 	return u.Formatters[TranslateFormatter]
 }
@@ -104,8 +107,9 @@ func (u Usage) Features() Features {
 // ScanUsage walks scanRoot for first-party source usage that controls runtime
 // tree-shaking. Two kinds of file contribute:
 //
-//   - .pzl templates are fully parsed for formatter chains, flip attributes,
-//     Portal nodes, and raw blocks — all TEMPLATE facts.
+//   - .pzl templates are fully parsed for library function calls (and the
+//     TEMPORARY formatter pipes), flip attributes, Portal nodes, and raw
+//     blocks — all TEMPLATE facts.
 //   - .js/.mjs/.cjs/.jsx/.ts/.mts/.cts/.tsx modules are read as TEXT and pattern-
 //     matched for lazy() route views (D163). That is a SCRIPT fact — `lazy()` is
 //     called from routes.js, never from a template — so it is the one bit a
@@ -255,7 +259,7 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		if hasFlipAttr(node.Attrs) {
 			usage.HasFlip = true
 		}
-		collectAttrFormatters(node.Attrs, usage.Formatters, allow)
+		collectAttrCalls(node.Attrs, usage, allow)
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
 		}
@@ -270,17 +274,17 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		if hasFlipAttr(node.Props) {
 			usage.HasFlip = true
 		}
-		collectAttrFormatters(node.Props, usage.Formatters, allow)
+		collectAttrCalls(node.Props, usage, allow)
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Slot:
 		if len(node.Args) > 0 {
 			usage.HasSnippets = true
-			collectAttrFormatters(node.Args, usage.Formatters, allow)
+			collectAttrCalls(node.Args, usage, allow)
 		}
 		// Fallback bodies compile through the ordinary child-emission path, so
-		// build-wide formatter/feature discovery must descend into them too.
+		// build-wide function/feature discovery must descend into them too.
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
 		}
@@ -296,19 +300,9 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Interpolation:
-		// A markup formatter anywhere in a text chain keeps the live-HTML runtime
-		// (D174). Codegen rejects every chain where it is not the last link, so
-		// only a file that fails to compile can over-include here.
-		for _, call := range node.Formatters {
-			if codegen.IsMarkupFormatter(call.Name) {
-				usage.HasRawHTML = true
-				if call.Name == "raw" {
-					usage.HasRawSanitize = true
-				}
-			}
-		}
-		collectFormatterCalls(node.Formatters, usage.Formatters, allow)
+		collectInterpCalls(node, usage, allow)
 	case *parser.If:
+		collectExprCalls(node.CondAST, nil, usage, allow)
 		for _, child := range node.Then {
 			collectUsage(child, usage, allow)
 		}
@@ -316,7 +310,11 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Case:
+		collectExprCalls(node.ExprAST, nil, usage, allow)
 		for _, clause := range node.Clauses {
+			for _, v := range clause.ValuesAST {
+				collectExprCalls(v, nil, usage, allow)
+			}
 			for _, child := range clause.Body {
 				collectUsage(child, usage, allow)
 			}
@@ -325,6 +323,9 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.For:
+		for _, e := range []expr.Node{node.CollectionAST, node.RangeFromAST, node.RangeToAST} {
+			collectExprCalls(e, nil, usage, allow)
+		}
 		for _, child := range node.Body {
 			collectUsage(child, usage, allow)
 		}
@@ -355,57 +356,123 @@ func hasFlipAttr(attrs []parser.Attr) bool {
 	return false
 }
 
-func collectAttrFormatters(attrs []parser.Attr, used, allow map[string]bool) {
+func collectAttrCalls(attrs []parser.Attr, usage *Usage, allow map[string]bool) {
 	for _, attr := range attrs {
 		switch a := attr.(type) {
 		case *parser.MixedAttr:
-			collectPartFormatters(a.Parts, used, allow)
+			collectPartCalls(a.Parts, usage, allow)
 		case *parser.DynamicAttr:
 			// A brace-only attribute, prop or marker argument (D173 V1).
-			collectFormatterCalls(a.Formatters, used, allow)
+			collectExprCalls(a.ExprAST, nil, usage, allow)
+			collectFormatterCalls(a.Formatters, usage, allow)
+		case *parser.EventAttr:
+			// The handler's own call names a view handler, never the library
+			// (§9 c); calls inside its arguments and its condition are library
+			// calls, compiled into render().
+			collectExprCalls(a.ExprAST, handlerOwnCalls(a.ExprAST), usage, allow)
 		}
 	}
 }
 
-func collectPartFormatters(parts []parser.Part, used, allow map[string]bool) {
+// handlerOwnCalls returns the calls of an @event value that name a view
+// handler: the whole value, or either branch of a handler-valued conditional.
+func handlerOwnCalls(n expr.Node) map[*expr.Call]bool {
+	own := map[*expr.Call]bool{}
+	forms := []expr.Node{n}
+	if cond, ok := n.(*expr.Conditional); ok {
+		forms = []expr.Node{cond.Consequent, cond.Alternate}
+	}
+	for _, f := range forms {
+		if call, ok := f.(*expr.Call); ok {
+			own[call] = true
+		}
+	}
+	return own
+}
+
+func collectPartCalls(parts []parser.Part, usage *Usage, allow map[string]bool) {
 	for _, part := range parts {
 		switch p := part.(type) {
 		case *parser.InterpPart:
 			if p.Interp != nil {
-				collectFormatterCalls(p.Interp.Formatters, used, allow)
+				collectInterpCalls(p.Interp, usage, allow)
 			}
 		case *parser.InlineIfPart:
-			collectPartFormatters(p.Then, used, allow)
-			collectPartFormatters(p.Else, used, allow)
+			collectExprCalls(p.CondAST, nil, usage, allow)
+			collectPartCalls(p.Then, usage, allow)
+			collectPartCalls(p.Else, usage, allow)
 		}
 	}
 }
 
-func collectFormatterCalls(calls []parser.FormatterCall, used, allow map[string]bool) {
+// collectInterpCalls records an interpolation's calls: its expression and its
+// TEMPORARY pipe chain (P4: remove).
+func collectInterpCalls(in *parser.Interpolation, usage *Usage, allow map[string]bool) {
+	collectExprCalls(in.ExprAST, nil, usage, allow)
+	collectFormatterCalls(in.Formatters, usage, allow)
+}
+
+// collectExprCalls records every library function a tree calls — a Call whose
+// callee is a bare name, skipping the calls in skip (an event handler's own
+// call). A markup function anywhere keeps the live-HTML runtime (D174): codegen
+// rejects every placement but the outermost call of a text interpolation, so
+// only a file that fails to compile can over-include here.
+func collectExprCalls(n expr.Node, skip map[*expr.Call]bool, usage *Usage, allow map[string]bool) {
+	if n == nil {
+		return
+	}
+	expr.Walk(n, func(n expr.Node) bool {
+		call, ok := n.(*expr.Call)
+		if !ok || skip[call] {
+			return true
+		}
+		if id, ok := call.Callee.(*expr.Identifier); ok {
+			noteFunction(id.Name, usage, allow)
+		}
+		return true
+	})
+}
+
+// collectFormatterCalls records a TEMPORARY pipe chain's formatter names
+// (P4: remove) and every call inside their arguments.
+func collectFormatterCalls(calls []parser.FormatterCall, usage *Usage, allow map[string]bool) {
 	for _, call := range calls {
-		// The markup pair never reaches the registry: codegen lowers it to the
-		// live-HTML node (D174), so it has no place in the formatter manifest.
-		if codegen.IsMarkupFormatter(call.Name) {
-			continue
-		}
-		// `t` is service-bound (D175), never a manifest builtin, but the build still
-		// needs to know it is used: `t` without i18n configured is a build warning.
-		// The manifest only ever emits allowlisted names, so recording it is inert
-		// there.
-		if allow[call.Name] || call.Name == TranslateFormatter {
-			used[call.Name] = true
+		noteFunction(call.Name, usage, allow)
+		for _, a := range call.ArgsAST {
+			collectExprCalls(a, nil, usage, allow)
 		}
 	}
 }
 
-// TranslateFormatter is the D175 translation formatter's name.
+// noteFunction records one library function name.
+func noteFunction(name string, usage *Usage, allow map[string]bool) {
+	// The markup pair never reaches the registry: codegen lowers it to the
+	// live-HTML node (D174), so it has no place in the function manifest.
+	if codegen.IsMarkupFormatter(name) {
+		usage.HasRawHTML = true
+		if name == "raw" {
+			usage.HasRawSanitize = true
+		}
+		return
+	}
+	// `t` is service-bound (D175), never a manifest builtin, but the build
+	// still needs to know it is used: `t` without i18n configured is a build
+	// warning. The manifest only ever emits allowlisted names, so recording it
+	// is inert there.
+	if allow[name] || name == TranslateFormatter {
+		usage.Formatters[name] = true
+	}
+}
+
+// TranslateFormatter is the D175 translation function's name.
 const TranslateFormatter = "t"
 
-// collectTKeys records every STRING-LITERAL key that is piped straight into `t`
-// (`{ 'cart.title' | t }`), for the build's "key missing from the default
-// locale" warning (D175). Runtime-built keys (`('status.' + s) | t`) are not
-// checkable and are skipped. It is its own walk rather than a thread through
-// collectUsage so the formatter-union walk keeps its narrow shape.
+// collectTKeys records every STRING-LITERAL key handed straight to `t` —
+// `t('cart.title')`, or the TEMPORARY `{ 'cart.title' | t }` — for the build's
+// "key missing from the default locale" warning (D175). Runtime-built keys
+// (`t('status.' + s)`) are not checkable and are skipped. It is its own walk
+// rather than a thread through collectUsage so the function-union walk keeps
+// its narrow shape.
 func collectTKeys(nodes []parser.Node, keys map[string]bool) {
 	for _, n := range nodes {
 		switch node := n.(type) {
@@ -423,16 +490,24 @@ func collectTKeys(nodes []parser.Node, keys map[string]bool) {
 		case *parser.Portal:
 			collectTKeys(node.Children, keys)
 		case *parser.Interpolation:
-			noteTKey(node.Expr, node.Formatters, keys)
+			noteTKeys(node, keys)
 		case *parser.If:
+			exprTKeys(node.CondAST, keys)
 			collectTKeys(node.Then, keys)
 			collectTKeys(node.Else, keys)
 		case *parser.Case:
+			exprTKeys(node.ExprAST, keys)
 			for _, clause := range node.Clauses {
+				for _, v := range clause.ValuesAST {
+					exprTKeys(v, keys)
+				}
 				collectTKeys(clause.Body, keys)
 			}
 			collectTKeys(node.Else, keys)
 		case *parser.For:
+			for _, e := range []expr.Node{node.CollectionAST, node.RangeFromAST, node.RangeToAST} {
+				exprTKeys(e, keys)
+			}
 			collectTKeys(node.Body, keys)
 		}
 	}
@@ -444,9 +519,9 @@ func collectAttrTKeys(attrs []parser.Attr, keys map[string]bool) {
 		case *parser.MixedAttr:
 			collectPartTKeys(a.Parts, keys)
 		case *parser.DynamicAttr:
-			// A brace-only attribute runs its formatter chain (D173 V1):
-			// `placeholder={ 'search.hint' | t }`.
-			noteTKey(a.Expr, a.Formatters, keys)
+			noteChainTKeys(a.ExprAST, a.Formatters, keys)
+		case *parser.EventAttr:
+			exprTKeysSkipping(a.ExprAST, handlerOwnCalls(a.ExprAST), keys)
 		}
 	}
 }
@@ -456,33 +531,55 @@ func collectPartTKeys(parts []parser.Part, keys map[string]bool) {
 		switch p := part.(type) {
 		case *parser.InterpPart:
 			if p.Interp != nil {
-				noteTKey(p.Interp.Expr, p.Interp.Formatters, keys)
+				noteTKeys(p.Interp, keys)
 			}
 		case *parser.InlineIfPart:
+			exprTKeys(p.CondAST, keys)
 			collectPartTKeys(p.Then, keys)
 			collectPartTKeys(p.Else, keys)
 		}
 	}
 }
 
-// noteTKey records expr when it is a plain quoted string and the chain's FIRST
-// formatter is `t`. A quote of the same kind inside the literal (or a backslash)
-// means it is not a simple literal, and it is skipped rather than guessed at.
-func noteTKey(expr string, calls []parser.FormatterCall, keys map[string]bool) {
-	if len(calls) == 0 || calls[0].Name != TranslateFormatter {
+func noteTKeys(in *parser.Interpolation, keys map[string]bool) {
+	noteChainTKeys(in.ExprAST, in.Formatters, keys)
+}
+
+// noteChainTKeys records the keys of a value position: every `t('key')` call
+// in it, and — TEMPORARY until P4 — a string literal piped first into `t`.
+func noteChainTKeys(n expr.Node, fmts []parser.FormatterCall, keys map[string]bool) {
+	exprTKeys(n, keys)
+	for _, fc := range fmts {
+		for _, a := range fc.ArgsAST {
+			exprTKeys(a, keys)
+		}
+	}
+	if len(fmts) > 0 && fmts[0].Name == TranslateFormatter {
+		if lit, ok := n.(*expr.Literal); ok && lit.Kind == expr.LitString {
+			keys[lit.Str] = true
+		}
+	}
+}
+
+func exprTKeys(n expr.Node, keys map[string]bool) { exprTKeysSkipping(n, nil, keys) }
+
+// exprTKeysSkipping records the string-literal first argument of every `t`
+// call in n, skipping the calls in skip (an event handler's own call).
+func exprTKeysSkipping(n expr.Node, skip map[*expr.Call]bool, keys map[string]bool) {
+	if n == nil {
 		return
 	}
-	s := strings.TrimSpace(expr)
-	if len(s) < 2 {
-		return
-	}
-	q := s[0]
-	if (q != '\'' && q != '"') || s[len(s)-1] != q {
-		return
-	}
-	body := s[1 : len(s)-1]
-	if strings.IndexByte(body, q) >= 0 || strings.IndexByte(body, '\\') >= 0 {
-		return
-	}
-	keys[body] = true
+	expr.Walk(n, func(n expr.Node) bool {
+		call, ok := n.(*expr.Call)
+		if !ok || skip[call] || len(call.Args) == 0 {
+			return true
+		}
+		if id, ok := call.Callee.(*expr.Identifier); !ok || id.Name != TranslateFormatter {
+			return true
+		}
+		if lit, ok := call.Args[0].(*expr.Literal); ok && lit.Kind == expr.LitString {
+			keys[lit.Str] = true
+		}
+		return true
+	})
 }
