@@ -572,10 +572,10 @@ describe('FormatterRegistry', () => {
 			f.in_timezone(at, 'Mars/Olympus');
 			f.in_timezone(at, 'Asia/Tokyo');
 			f.in_timezone('total garbage', 'Asia/Tokyo');
-			// A missing zone (an unset user.timezone) is not a typo: no error.
+			// A null or empty zone (an unset user.timezone) is not a typo: no
+			// error, un-shifted. (An omitted zone still means the UTC default.)
 			expect(f.in_timezone(at, null).getTime()).toBe(new Date(at).getTime());
 			expect(f.in_timezone(at, '').getTime()).toBe(new Date(at).getTime());
-			expect(f.in_timezone(at, undefined).getTime()).toBe(new Date(at).getTime());
 			expect(spy).toHaveBeenCalledTimes(2);
 			expect(spy.mock.calls[1][0]).toContain('"Mars/Olympus"');
 			spy.mockRestore();
