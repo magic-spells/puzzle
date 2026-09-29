@@ -52,6 +52,13 @@ they mean in HTML, with these rules:
   comments. A lone `}` in text is literal. This includes the bodies of a
   `<script>` or `<style>` element written inside a template: `.a { color: red }`
   there is an interpolation, so escape the braces or wrap the body in `{#raw}`.
+- **Void elements take no closing tag**, as in HTML. The void elements are
+  `area`, `base`, `br`, `col`, `embed`, `hr`, `img`, `input`, `link`, `meta`,
+  `source`, `track` and `wbr`. Each one ends at its start tag: `<br>`, `<br/>`
+  and `<br />` mean the same thing, `<input type="text">` needs no slash, and
+  what follows a `<br>` belongs to the parent. A closing tag such as `</input>`
+  or `</br>` is a positioned compile error that names the void element. Only
+  the lowercase names are void: `<Input>` is a component.
 - **Text is not entity-decoded.** Write the character you mean. `&amp;` in
   template text or in a static attribute value displays as the five characters
   `&amp;`, not as `&`.
@@ -73,6 +80,7 @@ they mean in HTML, with these rules:
 
 ```html
 <p>Price: \{ not an interpolation \}</p>
+<label>Name <input type="text" name="name"></label>
 ```
 
 ## Interpolation and functions
