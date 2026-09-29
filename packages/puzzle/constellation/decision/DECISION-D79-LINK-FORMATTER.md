@@ -1,5 +1,5 @@
 ---
-name: 'D79 — Path-shaped template links: `router.url()` + the router-bound `link` formatter (v1.46)'
+name: 'D79 — Path-shaped template links: `router.url()` + the router-bound `link` function (v1.46)'
 status: verified
 connections:
   - COMPONENT-ROUTER
@@ -32,12 +32,12 @@ notes:
     sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
-# D79 — Path-shaped template links: `router.url()` + the router-bound `link` formatter (v1.46)
+# D79 — Path-shaped template links: `router.url()` + the router-bound `link` function (v1.46)
 
 Template hrefs become path-shaped and mode-agnostic: `router.url(path)` encodes
 a path-shaped route into the mode-appropriate href (`/x` history with base
 prefix, `#/x` hash with in-fragment base, unchanged in memory), and a built-in
-`link` formatter — `href="{ '/collections/' + c.id | link }"` — exposes it to
+`link` function — `href="{ link('/collections/' + c.id) }"` — exposes it to
 templates. Closes the one seam where [[DECISION-D34-HASH-ROUTING]]'s "no `#`
 ever appears in app code" was not yet true. See [[DOC-SPEC]] §6, §9, §15.
 
@@ -58,7 +58,7 @@ on a static host 404s no matter what the interceptor does with a left-click.
 ## Decision
 
 **A runtime-only pair: a `Router.url(path)` primitive plus a built-in `link`
-formatter registered by `PuzzleApp` at mount, after the router exists.**
+function registered by `PuzzleApp` at mount, after the router exists.**
 Sub-decisions, each with its rejected alternative:
 
 - **`router.url(path)` is the render-time inverse of the interceptor/URL
@@ -70,12 +70,12 @@ Sub-decisions, each with its rejected alternative:
   navigate-away links stays free. Non-string input is a `[puzzle]` throw
   (fail-fast API); query/anchor suffixes ride along by construction (pure
   prefixing, symmetric with `#currentPath`).
-- **A formatter, not a `Link` component.** A component that exists to compute
-  one attribute needs import ceremony in every `.pzl`, attr/class passthrough,
-  and slot forwarding — and the interceptor already owns the click side.
-  `{ path | link }` parses in attribute values today (the attribute
-  mini-grammar shares `parseInterpolationExpr`), is explicit at the use site,
-  and composes with plain JS expressions. **Rejected.**
+- **A library function, not a `Link` component.** A component that exists to
+  compute one attribute needs import ceremony in every `.pzl`, attr/class
+  passthrough, and slot forwarding — and the interceptor already owns the
+  click side. `href="{ link(path) }"` is an ordinary function call in any
+  attribute value, is explicit at the use site, and takes any expression as
+  its argument. **Rejected.**
 - **Not a compile-time rewrite.** The Go build does load the config, but
   rewriting hrefs at codegen would make compiled output mode-dependent
   (forking golden files, `pzlc` single-file compiles, and pre-compiled
@@ -84,16 +84,16 @@ Sub-decisions, each with its rejected alternative:
   mode-agnostic; the mode is resolved at render time. **Rejected.**
 - **Registered by the app, not shipped as a pure built-in.** Built-ins are
   pure named exports fed through the D31 tree-shake manifest; `link` needs the
-  live router. `PuzzleApp.mount()` registers it while wiring the formatter
+  live router. `PuzzleApp.mount()` registers it while wiring the function
   registry, one step before the Router is constructed — **only if absent**, so
   a user-supplied `link` in `config.formatters` wins (the same if-absent idiom
   as the required built-ins). The closure reads `this.router` off the app
   lazily, so the ordering is immaterial and unmount/re-mount never strands a
   stale router. The D31 scanner ignores the name (not on the built-ins
-  allowlist — same handling as any custom formatter), and the D43 guard means
-  templates using `| link` on an older runtime degrade to pass-through with
-  one console.error instead of crashing.
-- **Formatter body is fail-soft, per formatter convention.** Nullish → `''`,
+  allowlist — same handling as any app-registered function), and the D43
+  guard means a template calling `link()` where no `link` is registered
+  degrades to pass-through with one console.error instead of crashing.
+- **The function body is fail-soft, per library convention.** Nullish → `''`,
   non-strings coerced via `String()` then passed through `url()` (a coerced
   non-path like `'5'` doesn't start with `/` and passes through). The throw
   lives only on the direct `router.url()` API.
@@ -108,19 +108,19 @@ Sub-decisions, each with its rejected alternative:
   `routerBase` become one-line config changes with **no template edits** —
   D34's §15 claim ("no `#` ever appears in app code") now covers hrefs too,
   and D51's base-prefixing chore in path mode disappears behind the same
-  formatter.
+  function.
 - SSG inherits the behavior for free: prerender runs the same
   `PuzzleApp.mount()` wiring, so static HTML gets correctly-shaped hrefs from
   the app's real config.
 - No compiler change of any kind; no config-surface change (§2 untouched).
   Amends §6 (built-in formatter list), §9 (router surface), §15 (link
   seam) — additive, v1.46.
-- `examples/music` (the hash-mode acceptance example) is converted to
-  `| link` links and is now mode-portable, serving as the acceptance case.
+- `examples/music` (the hash-mode acceptance example) writes its links as
+  `link()` calls and is mode-portable, serving as the acceptance case.
 
 ## Alternatives rejected
 
-- `Link` component — 10x the surface of a formatter for one attribute; fights
+- `Link` component — 10x the surface of a function for one attribute; fights
   Puzzle's plain-HTML ethos.
 - Compile-time href rewriting — mode-dependent compiled output; cannot
   classify in-app vs navigate-away links; forks goldens/`pzlc`.
