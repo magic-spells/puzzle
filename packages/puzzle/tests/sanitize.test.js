@@ -7,7 +7,7 @@
 // nothing, and the rich-text rows keep their structure.
 import { describe, expect, it } from 'vitest';
 import { sanitizeHtml, newlineToBr } from '../client-runtime/sanitize.js';
-import conformance from '../../puzzle-lang/conformance/formatters.json';
+import conformance from '../../puzzle-lang/conformance/functions.json';
 
 const rawRows = conformance.cases.filter((c) => c.name === 'raw');
 

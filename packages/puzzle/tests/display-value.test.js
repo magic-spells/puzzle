@@ -264,13 +264,13 @@ describe('value printing (D173 V6)', () => {
 		}
 	});
 
-	it('prints a Date as nothing and steers to the date formatters in development', () => {
+	it('prints a Date as nothing and steers to the date functions in development', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		try {
 			expect(displayValue(new Date(0), 'v6.date')).toBe('');
 			expect(warn).toHaveBeenCalledTimes(1);
 			expect(warn).toHaveBeenCalledWith(
-				'[puzzle] Date template value for "v6.date"; rendering nothing — format it with | date (or | datetime, | time)'
+				'[puzzle] Date template value for "v6.date"; rendering nothing — format it with date() (or datetime(), time())'
 			);
 		} finally {
 			warn.mockRestore();

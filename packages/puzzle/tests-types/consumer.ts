@@ -45,6 +45,8 @@ import type {
 	LazyView,
 	PuzzleViewConstructor,
 	PuzzleI18n,
+	LibraryFunctions,
+	DatePreset,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -209,6 +211,8 @@ class TodoListView extends PuzzleView {
 			this.setData('draft', '');
 		},
 		selectAll: () => this.setData({ filter: 'all', selectedId: null }),
+		// `@click={ rename(todo.id, draft) }`: a handler takes the call's arguments.
+		rename: (id: string, title: string) => this.ctx.store.findOne('todo', id)?.update({ title }),
 	};
 
 	async data(params?: Record<string, string>, props?: any): Promise<object> {
@@ -734,6 +738,95 @@ async function translatedTests(): Promise<void> {
 	void active;
 }
 void translatedTests;
+
+// ---------------------------------------------------------------------------
+// Library signatures (D176 §4): each function with the arity it takes, and
+// with one argument too many or a required argument missing.
+// ---------------------------------------------------------------------------
+
+function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: string[]): void {
+	const texts: string[] = [
+		lib.link('/about'),
+		lib.t('cart.title'),
+		lib.t('cart.items', { count: tags.length }),
+		lib.t(404, null),
+		// A boolean key converts and looks up, like a number (D175).
+		lib.t(true),
+		lib.currency(price),
+		lib.currency(price, '€', 0),
+		lib.percentage(12.5, 1),
+		lib.number_with_delimiter(1234.5),
+		lib.number_with_delimiter(1234.5, ' '),
+		lib.compact_number(3400000),
+		lib.pluralize(tags.length, 'tag'),
+		lib.pluralize(2, 'person', 'people'),
+		lib.date(when),
+		lib.date(when, 'long', 'en-US'),
+		lib.time(when),
+		lib.time(when, 'iso'),
+		lib.datetime(when),
+		lib.datetime(when, 'short', ['de-DE', 'en']),
+		lib.timeago(when),
+		lib.truncate('long text', 4),
+		lib.truncate('long text', 4, '...'),
+		lib.capitalize('iPhone'),
+		lib.strip_html('<b>x</b>'),
+		lib.strip_newlines('a\nb'),
+		lib.escape('<b>'),
+		lib.raw('<b>x</b>'),
+		lib.newline_to_br('a\nb'),
+		lib.json({ b: 1, a: 2 }),
+		// Deprecated, still typed (D176 §4).
+		lib.upcase('a'),
+		lib.downcase('A'),
+		lib.trim(' a '),
+		lib.strip(' a '),
+		lib.replace('a-b', '-', '+'),
+		lib.join(tags, ' / '),
+	];
+	const numbers: number[] = [lib.round(1.005, 2), lib.round(2.5), lib.abs(-1), lib.ceil(1.2), lib.floor(1.8)];
+	const shifted: Date | '' = lib.in_timezone(when, 'Asia/Tokyo');
+	const preset: DatePreset = 'medium';
+	lib.date(when, preset);
+
+	// @ts-expect-error currency takes (value, symbol?, places?) — four is one too many.
+	lib.currency(price, '$', 2, 'extra');
+	// @ts-expect-error currency needs the value.
+	lib.currency();
+	// @ts-expect-error pluralize needs the singular word.
+	lib.pluralize(3);
+	// @ts-expect-error capitalize takes one argument.
+	lib.capitalize('a', 'b');
+	// @ts-expect-error truncate takes (value, length?, ellipsis?).
+	lib.truncate('a', 1, '…', true);
+	// @ts-expect-error an unknown preset.
+	lib.date(when, 'fancy');
+	// @ts-expect-error time takes (value, preset?, locale?).
+	lib.time(when, 'short', 'en', 'extra');
+	// @ts-expect-error t takes the key first; the variables are the second argument.
+	lib.t({ count: 2 });
+	// @ts-expect-error t takes (key, vars?).
+	lib.t('key', {}, 'extra');
+	// @ts-expect-error round takes (value, places?).
+	lib.round(1.5, 0, 'extra');
+	// @ts-expect-error round returns a number, not text.
+	const roundedText: string = lib.round(1.5);
+	// @ts-expect-error json takes one argument.
+	lib.json({}, 2);
+	// @ts-expect-error link takes one argument.
+	lib.link('/a', '/b');
+	// @ts-expect-error raw takes one argument.
+	lib.raw('<b>', true);
+	// @ts-expect-error timeago takes one argument.
+	lib.timeago(when, 'short');
+	// @ts-expect-error not a library function: sort left with the list formatters.
+	lib.sort(tags);
+	void texts;
+	void numbers;
+	void shifted;
+	void roundedText;
+}
+void libraryCalls;
 
 // ---------------------------------------------------------------------------
 // Error shapes (§20, §22)

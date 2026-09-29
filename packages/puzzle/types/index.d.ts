@@ -361,21 +361,118 @@ export interface Router {
 // FormatterRegistry (constellation/doc/DOC-SPEC.md §6)
 // ----------------------------------------------------------------------------
 
-/** A template formatter — a display-only value transform. */
+/**
+ * A library function — a display-only value transform a template calls as
+ * `name(value, …args)` (D176 §4). An app registers its own through the
+ * `formatters` config map.
+ */
 export type Formatter = (...args: any[]) => any;
 
 /**
- * The formatter registry (constellation/doc/DOC-SPEC.md §6). Reachable in views
- * as `this.ctx.formatters`; rarely touched directly by app code.
+ * The function library's registry (constellation/doc/DOC-SPEC.md §6). Reachable
+ * in views as `this.ctx.formatters`; rarely touched directly by app code.
  */
 export declare class FormatterRegistry {
 	constructor(seedMap?: Record<string, Formatter>);
-	/** Register (or overwrite) a formatter by name. */
+	/** Register (or overwrite) a function by name. */
 	register(name: string, fn: Formatter): void;
-	/** Look up a formatter by name (returns a pass-through for unknown names). */
+	/** Look up a function by name (returns a pass-through for unknown names). */
 	get(name: string): Formatter;
 	/** The raw name → function map handed to compiled render code. */
 	getAll(): Record<string, Formatter>;
+}
+
+// ----------------------------------------------------------------------------
+// Library signatures (D176 §4)
+// ----------------------------------------------------------------------------
+
+/**
+ * A `date`/`time`/`datetime` preset: the three Intl styles, in the viewer's (or
+ * the active) locale and time zone, and the locale-free RFC 3339 `iso` form.
+ * Leaving the preset out renders the function's default.
+ */
+export type DatePreset = 'short' | 'medium' | 'long' | 'iso';
+
+/** A locale argument Intl accepts: a BCP 47 tag or a list of them. */
+export type LocaleArgument = string | readonly string[];
+
+/**
+ * library signatures — every built-in function a template calls as
+ * `name(args)` (D176 §4), with the arguments the runtime takes. `puzzle check`
+ * types a template's library calls against this interface, so it moves with
+ * the runtime (client-runtime/formatters/builtins.js, plus the registry-built
+ * `link` and the i18n service's `t`). A value parameter is `unknown` because
+ * every function coerces what it is given and prints a missing value as
+ * nothing. Functions an app registers through the `formatters` config map are
+ * not listed here.
+ */
+export interface LibraryFunctions {
+	/** The URL for an app path in the active routing mode (D79). */
+	link(path: unknown): string;
+	/**
+	 * The translation for `key` in the active locale (D175), `{name}`
+	 * placeholders filled from `vars`, a `count` choosing the plural form; a
+	 * missing key prints itself, and a number or boolean key is converted to
+	 * text and looked up. Present when the app configures `i18n`.
+	 */
+	t(key: string | number | boolean | null | undefined, vars?: TranslationVars | null): string;
+	/** `$1,234.50`: thousands grouped, the sign before the symbol, half away from zero. */
+	currency(value: unknown, symbol?: string, places?: number): string;
+	/** `12.5%`: the number as written, not a ratio. */
+	percentage(value: unknown, places?: number): string;
+	/** The whole part grouped: the locale's way, or by an explicit delimiter. */
+	number_with_delimiter(value: unknown, delimiter?: string): string;
+	/** `1.2K`, `3.4M` in the locale. */
+	compact_number(value: unknown): string;
+	/** The count and the word: `1 comment`, `3 comments`, `2 people`. */
+	pluralize(count: unknown, singular: string, plural?: string): string;
+	/** Half away from zero on the decimal value; negative places round to tens. */
+	round(value: unknown, places?: number): number;
+	/** Default `medium`: `Sep 24, 2026`. */
+	date(value: unknown, preset?: DatePreset, locale?: LocaleArgument): string;
+	/** Default `short`: `3:04 PM`. */
+	time(value: unknown, preset?: DatePreset, locale?: LocaleArgument): string;
+	/** Default: the medium date with the short time, `Sep 24, 2026, 3:04 PM`. */
+	datetime(value: unknown, preset?: DatePreset, locale?: LocaleArgument): string;
+	/** `2 hours ago`, `in 3 days`, in the locale. */
+	timeago(value: unknown): string;
+	/** The instant re-expressed as the wall clock in an IANA zone; a calendar date unchanged. */
+	in_timezone(value: unknown, timeZone?: string): Date | '';
+	/** At most `length` code points, the ellipsis included (default 100, `…`). */
+	truncate(value: unknown, length?: number, ellipsis?: string): string;
+	/** The first character upper-cased, the rest left alone. */
+	capitalize(value: unknown): string;
+	strip_html(value: unknown): string;
+	strip_newlines(value: unknown): string;
+	/** The value as text (a text interpolation is already escaped). */
+	escape(value: unknown): string;
+	/** Sanitized markup; in a template, only as a whole text interpolation. */
+	raw(html: unknown): string;
+	/** The escaped text with a `<br>` per line break; placed like `raw`. */
+	newline_to_br(value: unknown): string;
+	/** JSON with object keys sorted by code point. */
+	json(value: unknown): string;
+	/** @deprecated D176 §4 — use `.toUpperCase()`. */
+	upcase(value: unknown): string;
+	/** @deprecated D176 §4 — use `.toLowerCase()`. */
+	downcase(value: unknown): string;
+	/** @deprecated D176 §4 — use `.trim()`. */
+	trim(value: unknown): string;
+	/** @deprecated D176 §4 — use `.trim()`. */
+	strip(value: unknown): string;
+	/**
+	 * @deprecated D176 §4 — for plain strings use `.replaceAll(search, replacement)`;
+	 * this was `.split(search).join(replacement)`, which is the exact equivalent.
+	 */
+	replace(value: unknown, search: unknown, replacement?: unknown): string;
+	/** @deprecated D176 §4 — use `.join(', ')`. */
+	join(list: unknown, separator?: string): string;
+	/** @deprecated D176 §4 — use `Math.abs()`. */
+	abs(value: unknown): number;
+	/** @deprecated D176 §4 — use `Math.ceil()`. */
+	ceil(value: unknown): number;
+	/** @deprecated D176 §4 — use `Math.floor()`. */
+	floor(value: unknown): number;
 }
 
 // ----------------------------------------------------------------------------
@@ -410,7 +507,7 @@ export type TranslationVars = object;
 /**
  * The translation service (D175) — `this.ctx.i18n` and `app.i18n` when
  * `i18n: { locales, defaultLocale }` is configured in `puzzle.config.js`.
- * The `t` formatter calls the same `t`.
+ * The template's `t(key, vars)` library function calls the same `t`.
  */
 export interface PuzzleI18n {
 	/** The active locale tag. */
@@ -508,10 +605,13 @@ export declare class PuzzleView {
 	refresh(): void | Promise<void>;
 
 	/**
-	 * Event handlers referenced from the template (`@click={ handler }`).
-	 * A class field of arrow functions.
+	 * Event handlers referenced from the template: `@click={ handler }` passes
+	 * the DOM event, and `@click={ save(item.id, event) }` passes whatever the
+	 * call lists, so a handler takes any arguments (D176 §4). A class field of
+	 * arrow functions. A handler named like a library function draws a
+	 * development warning at mount.
 	 */
-	events: Record<string, (event?: any) => void>;
+	events: Record<string, (...args: any[]) => void>;
 
 	/** Declarative enter/leave animations (v1.1, D28). */
 	animations?: Animations;
@@ -693,7 +793,10 @@ export interface PuzzleAppConfig {
 	routes?: Route[];
 	/** Type name → model class registry. */
 	models?: Record<string, any>;
-	/** App-level template formatters (override built-ins). */
+	/**
+	 * The app's own library functions (D176 §4), called bare from templates —
+	 * `{ specialFormat(product.title) }`. One named like a built-in overrides it.
+	 */
 	formatters?: Record<string, Formatter>;
 	/** Base URL for the server read/write path. */
 	apiURL?: string;
