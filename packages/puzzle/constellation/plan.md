@@ -215,9 +215,11 @@ decision cards explain why the contract has its current shape.
   with sanitized `raw`, D175 translations (`t(key, vars)`, v1.81), D176 the
   expression language (JavaScript-shaped template expressions: one closed
   grammar parsed by `packages/puzzle-lang/expr`, a method table, functions
-  instead of pipes, `.length` the count; P1–P3 merged, P4 — the corpus
-  migration and the removal of pipes and `.size` — in PR #171, and P5, the
-  eslint/prettier ports and grammar sweeps, still to land before the tag), and
+  instead of pipes, `.length` the count; P1–P4 are merged, P1b — the parser's
+  `{#raw}` splitter skip, HTML void elements and two diagnostics — is PR #172
+  awaiting merge, and P5 — the eslint/prettier ports of P1b, PR #173, and the
+  editor-grammar sweep — is open; both land before the tag, and the Sites
+  evaluator, P6, follows it), and
   D168 rewritten as the merged whitespace rule. Heavily breaking for
   templates; the CHANGELOG opens with an "Upgrading from 0.7" checklist. The
   never-published `0.7.1` ([[RELEASE-V0-7-1]] — Quick Start via
