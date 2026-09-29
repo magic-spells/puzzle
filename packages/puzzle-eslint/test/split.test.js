@@ -405,3 +405,62 @@ describe('splitSections — 0.7.0 template grammar', () => {
 		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe(sections.scripts.content);
 	});
 });
+
+// 0.8.0 template values (D173 formatter chains in every value position, D174
+// standard formatters, D176 data language, object-literal formatter arguments).
+// The splitter never parses a template value — sections.go does not either — so
+// these pin only that the new shapes cannot desync a section boundary, and that
+// values the compiler now rejects still carve cleanly so the <script> is linted.
+describe('splitSections — 0.8.0 template values', () => {
+	const wrap = (tpl, tail = '<script>\nexport default 1;\n</script>\n') =>
+		`<puzzle-view>${tpl}</puzzle-view>\n${tail}`;
+
+	it('carves formatter chains in attributes and props, and object-literal arguments', () => {
+		const tpl =
+			"<Frame.Wrapper title={ name | trim | truncate(20) } class=\"card { tone ?? 'plain' }\">" +
+			"{ 'cart.count' | t({ count: items.size, unit }) }</Frame.Wrapper>";
+		const { sections, errors } = splitSections(wrap(tpl), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nexport default 1;\n');
+	});
+
+	it('skips a brace string inside an object-literal argument', () => {
+		// A misread '}' string closes the interpolation early; a misread '{' runs
+		// it away. Either way the regex in <script> would land the boundary wrong.
+		const tpl = "<p>{ 'k' | t({ close: '}', open: '{' }) }</p>";
+		const { sections, errors } = splitSections(wrap(tpl, '<script>\nconst re = /}/;\n</script>\n'), 'x.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe(tpl);
+		expect(sections.scripts.content).toBe('\nconst re = /}/;\n');
+	});
+
+	it('carves template values the compiler rejects without an opinion', () => {
+		// `.length`, method calls, arrows, a nested pipe, a pipe in a condition
+		// header and a leading object literal are positioned COMPILE errors
+		// (D173, D176), one stage later than the splitter.
+		for (const tpl of [
+			'{ items.length }',
+			'{ draft.trim() }',
+			'{ items.filter((i) => i.done).size }',
+			'{ (a | b) }',
+			'{#if tags | size}x{/if}',
+			'{ {a: 1} }',
+		]) {
+			const { sections, errors } = splitSections(wrap(`<p>${tpl}</p>`), 'x.pzl');
+			expect(errors, tpl).toEqual([]);
+			expect(sections.scripts.content, tpl).toBe('\nexport default 1;\n');
+		}
+	});
+
+	it('splits the 0.8.0 fixture with zero structural errors', () => {
+		const src = fixture('grammar-0-8.pzl');
+		const { sections, errors } = splitSections(src, 'grammar-0-8.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toContain('<Frame.Wrapper title={ name | trim | truncate(20) }');
+		expect(sections.view.content).toContain('<pre>\n    keep   these\n\tbytes exactly\n  </pre>');
+		expect(sections.styles.scoped).toBe(true);
+		expect(sections.scripts.content).toContain('export default class GrammarSpecimen');
+		expect(src.slice(sections.scripts.contentStart, sections.scripts.contentEnd)).toBe(sections.scripts.content);
+	});
+});

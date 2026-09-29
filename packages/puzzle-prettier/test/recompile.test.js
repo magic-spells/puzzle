@@ -122,12 +122,14 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 	it('compiles the formatted output for every fixture the compiler accepts', async () => {
 		const scratch = mkdtempSync(join(tmpdir(), 'pzlc-fix-'));
 		let checked = 0;
+		const compiled = [];
 		const regressions = [];
 
 		for (const file of listPzl(FIXTURES_DIR)) {
 			const outOrig = join(scratch, 'orig.js');
 			if (!compile(pzlc, 'view', file, outOrig, '').ok) continue; // out of scope
 			checked++;
+			compiled.push(file.slice(file.lastIndexOf('/') + 1));
 			const fmtIn = join(scratch, 'formatted.pzl');
 			writeFileSync(fmtIn, await format(readFileSync(file, 'utf8')), 'utf8');
 			const outFmt = join(scratch, 'formatted.js');
@@ -145,6 +147,33 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 					'new ViewNode(Frame.Footer',
 					'A literal { stays a brace }, and {',
 				]) {
+					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);
+					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
+				}
+			}
+			if (file.endsWith('grammar-0-8.pzl')) {
+				// 0.8.0 template values reach codegen identically before and after
+				// formatting: formatter chains in attributes and props, an
+				// object-literal formatter argument, `.size`, and the D168
+				// whitespace — the space before an inline element, and the
+				// <pre>/<textarea> bodies exactly as written.
+				for (const literal of [
+					'new ViewNode(Frame.Wrapper',
+					'(__f["truncate"] || __f.__missing("truncate"))((__f["trim"] || __f.__missing("trim"))(__d.name), 20)',
+					'label: (__f["compact_number"] || __f.__missing("compact_number"))(__d.followers)',
+					"('cart.count', { count: __z(__d.items), unit: __d.unit })",
+					"{ value: 'tokens — ' }",
+					"{ value: 'Posted by ' }",
+					"{ value: '    keep   these\\n\\tbytes exactly\\n  ' }",
+					"{ value: '    indented body\\n  ' }",
+				]) {
+					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);
+					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
+				}
+			}
+			if (file.endsWith('gnarly-template.pzl')) {
+				// Brace strings inside interpolations and an object-literal argument.
+				for (const literal of ["__d.name === '}' ? 'yes' : 'no'", "('k', { close: '}', count: __z(__d.items) })"]) {
 					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);
 					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
 				}
@@ -167,5 +196,10 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 			throw new Error(`formatted fixtures failed to compile:\n${regressions.join('\n')}`);
 		}
 		expect(checked).toBeGreaterThan(0);
+		// The fixtures with literal assertions above must actually compile, or
+		// their checks silently drop out of scope.
+		expect(compiled).toEqual(
+			expect.arrayContaining(['grammar-0-7.pzl', 'grammar-0-8.pzl', 'gnarly-template.pzl', 'raw-block.pzl']),
+		);
 	}, 120_000);
 });

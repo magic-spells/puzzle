@@ -1,9 +1,9 @@
 <puzzle-view class="gnarly">
   <!-- HTML comment with a fake </puzzle-view> that must be preserved -->
   {#if currentFilter === 'all'}
-    <div class="all">{ /}/.test(name) ? 'yes' : 'no' }</div>
+    <div class="all">{ name === '}' ? 'yes' : 'no' }</div>
   {:else if x > 0 && y < 10}
-    <div>{ items.filter(i => i.id === '}').length }</div>
+    <div title={ '{' + name + '}' | truncate(8) }>{ 'k' | t({ close: '}', count: items.size }) }</div>
   {/if}
 
   {## an inline template comment with an apostrophe: don't break }

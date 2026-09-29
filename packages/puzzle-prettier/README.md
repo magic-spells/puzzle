@@ -16,7 +16,9 @@ Both bodies honor your Prettier options (`singleQuote`, `useTabs`, `tabWidth`, `
 Template reformatting is **deliberately deferred to a future version.** In this v1 release the following are preserved **byte-for-byte**:
 
 - `<puzzle-view>` and `<puzzle-skeleton>` template bodies — including `{#raw}` … `{/raw}` blocks, which are never reindented or rewrapped
-- the 0.7.0 grammar additions: D167 dotted family tags (`<Frame.Header>`), the `\{` / `\}` brace escape, and both `{#for}` range spellings. A capitalized name the compiler rejects (`<Frame-x>`, `<Slot.Foo>`) still formats — a formatter is not a validator
+- every template value exactly as written — formatter chains in text, attributes and props (`title={ name | trim | truncate(20) }`), object-literal formatter arguments (`{ 'cart.count' | t({ count: items.size }) }`), and their spacing. The plugin does not parse template values, so it never respaces `a|b` or rewraps a long chain
+- dotted family tags (`<Frame.Header>`), the `\{` / `\}` brace escape, and both `{#for}` range spellings
+- template code the compiler rejects — a method call or `.length` in a template value (D176), a nested pipe or a pipe in a condition header (D173), a name like `<Frame-x>` or `<Slot.Foo>` — still formats, untouched. A formatter is not a validator; `puzzle build` reports those with positions
 - every section's opening/closing tags and attributes
 - top-level HTML comments and all inter-section whitespace
 
