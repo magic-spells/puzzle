@@ -5,11 +5,16 @@
 // and reports section-structure errors, plus a `recommended` flat-config array
 // that wires it up.
 
+import { createRequire } from 'node:module';
 import { processor } from './processor.js';
 
+// meta comes from package.json so the version a plugin reports (ESLint uses it
+// in cache keys and --print-config) always matches the published package.
+const pkg = createRequire(import.meta.url)('../package.json');
+
 const meta = {
-	name: '@magic-spells/eslint-plugin-puzzle',
-	version: '0.1.0',
+	name: pkg.name,
+	version: pkg.version,
 };
 
 // The plugin object. `configs.recommended` is attached below so it can reference
