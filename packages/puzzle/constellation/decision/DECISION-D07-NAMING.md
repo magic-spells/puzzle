@@ -1,5 +1,5 @@
 ---
-name: "D7 — Naming: `PuzzleApp`, `app.mount()`, \"formatters\""
+name: 'D7 — Naming: `PuzzleApp`, `app.mount()`, the `formatters` config key'
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -9,22 +9,15 @@ connections:
   - DOC-SPEC-ANATOMY
 ---
 
-# D7 — Naming: `PuzzleApp`, `app.mount()`, "formatters"
+# D7 — Naming: `PuzzleApp`, `app.mount()`, the `formatters` config key
 
-Settled per [[DOC-SPEC-ANATOMY]] §1, §2, §10. The application class is `PuzzleApp`, apps start with `app.mount()`, and the transformation registry is called **formatters** everywhere.
-
-## Context
-The prototype used various names: the `Puzzle` name was taken by the app, apps started with `app.run()`, and the template transformation registry was called "filters".
+Enforced by [[DOC-SPEC-ANATOMY]] §1–2.
 
 ## Decision
-- The application class is `PuzzleApp` (frees the `Puzzle` name for the schema-builder namespace).
-- Apps start with `app.mount()`; `app.run()` is removed.
-- The template transformation registry is called **formatters** everywhere (config key, `ctx.formatters`, compiler-emitted references).
+- The application class is `PuzzleApp`, which leaves the `Puzzle` name to the schema-builder namespace ([[DECISION-D05-SCHEMA-BUILDERS]]).
+- An app starts with `app.mount()` and stops with `app.unmount()`.
+- The app's template function library is registered through the `formatters` config key and reaches compiled code as `ctx.formatters` (`__f`). Templates call these as functions, `name(value, …)` ([[DECISION-D176-EXPRESSION-LANGUAGE]], [[DECISION-D174-STANDARD-FORMATTERS]]); the config key keeps its name.
 
 ## Alternatives rejected
-- Naming the app class `Puzzle` — rejected to free the `Puzzle` name for the schema-builder namespace (D5).
-- `app.run()` — removed in favor of `app.mount()`.
-- The prototype's "filters" naming — retired; `client-runtime/filters.js` gets renamed in Phase 1.
-
-## Consequences
-The "filters" naming is retired everywhere in favor of "formatters"; `client-runtime/filters.js` is renamed in Phase 1.
+- Naming the app class `Puzzle` — collides with the builder namespace.
+- `app.run()` — `mount()`/`unmount()` pair more clearly.

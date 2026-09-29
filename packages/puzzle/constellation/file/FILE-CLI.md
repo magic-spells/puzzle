@@ -6,18 +6,18 @@ language: go
 summary: Cobra root, build/dev commands, version surface, and error handling.
 connections:
   - COMPONENT-COMPILER-CLI
+  - DECISION-D160-SPA-CODE-SPLITTING
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
-      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
-      one — the path moved, the code did not. No content was re-checked, and none needed to be.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/cmd/puzzle/main.go`.
-[[DECISION-D160-SPA-CODE-SPLITTING]] has the build command pass a metafile sink
-into `build.Build` and hand it to `printBuildSummary`, which is what feeds the
-banner's per-dependency composition breakdown and its 200 KB warning.
+# main.go (puzzle)
+
+The Cobra root: build/dev commands, the version surface, and error handling;
+other commands self-register from their own files. Intent:
+[[COMPONENT-COMPILER-CLI]].
+
+The build command passes a metafile sink into `build.Build` and hands it to
+`printBuildSummary`, which feeds the banner's per-dependency composition
+breakdown and its 200 KB single-dependency warning
+([[DECISION-D160-SPA-CODE-SPLITTING]]).

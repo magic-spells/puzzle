@@ -1,5 +1,5 @@
 ---
-name: 'D82 — Compiler accessibility warnings: five conservative template diagnostics (v1.48)'
+name: 'D82 — Compiler accessibility warnings: five conservative template diagnostics'
 status: verified
 connections:
   - COMPONENT-CODEGEN
@@ -7,81 +7,44 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
   - FILE-CODEGEN
-  - FEATURE-V1-48-A11Y-WARNINGS
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
-      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
-      one — the path moved, the code did not. No content was re-checked, and none needed to be.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
-# D82 — Compiler accessibility warnings: five conservative template diagnostics (v1.48)
+# D82 — Compiler accessibility warnings: five conservative template diagnostics
 
-The compiler emits **positioned, non-fatal warnings** for five common template
-accessibility mistakes. Zero runtime bytes, zero change to generated
-JavaScript — the diagnostics ride the existing out-of-band `Result.Warnings`
-channel. See [[DOC-SPEC-TEMPLATE]] §43.
-
-## Context
-
-Puzzle owns a compiler, so it can catch markup mistakes at the exact source
-position for free — one of the highest-value things Svelte's compiler does.
-A 2026-07 framework-gap review surfaced this as the cheapest borrowable idea
-on the table. The infrastructure already exists: `Result.Warnings` with
-positioned `Warning{File, Line, Col, Message}` structs and one precedent
-warning (the D-series script-import collision diagnostic), already printed to
-stderr by the esbuild plugin and `pzlc`. The parser AST carries `Pos` on every
-element and distinguishes static, dynamic, and mixed attributes — everything a
-presence check needs.
+The compiler emits positioned, non-fatal warnings for five common template
+accessibility mistakes through the existing `Result.Warnings` channel
+(printed by the esbuild plugin and `pzlc`). Generated JavaScript is unchanged.
+Spec: [[DOC-SPEC-TEMPLATE]] §43.
 
 ## Decision
 
-**A read-only AST walk in codegen (`a11y.go`) appending to the existing
-warnings slice, run over the template AND skeleton ASTs.** Exactly five rules
-in v1, chosen for near-zero false-positive rates:
+A read-only AST walk in codegen (`a11y.go`, `collectA11yWarnings`) over the
+template and skeleton ASTs, descending into control-flow bodies, component
+call-site children and fallbacks. Exactly five rules, chosen for near-zero false
+positives:
 
-- `<img>` without `alt` (explicit `alt=""` is valid — decorative images)
+- `<img>` without `alt` (`alt=""` is valid — decorative)
 - `<input type="image">` without `alt` (only when `type` is statically `image`)
 - `<iframe>` without `title`
 - `<a>` without `href`
 - a statically positive `tabindex`
 
-Presence is satisfied by ANY attribute node — static, valueless, dynamic
-(`alt={description}`), or mixed — so the rules never guess about runtime
-values. Dynamic/mixed `type` and `tabindex` never warn. The walk descends into
-`{#if}`/`{#for}`/`{#case}` bodies, component call-site children, and slot
-fallbacks.
+Any attribute node satisfies presence — static, valueless, dynamic or mixed —
+so rules never guess at runtime values; a dynamic `type`/`tabindex` never warns.
 
-Deliberate boundaries, each with its rejected alternative:
+## Alternatives
 
-- **Warnings, never errors.** Accessibility diagnostics on existing apps must
-  not break builds. **Rejected:** a strict mode flag — config surface for a
-  hypothetical need.
-- **No suppression syntax, no warning IDs.** Five conservative rules should
-  not need silencing; a suppression language is real grammar cost for noise
-  that should not exist. Revisit only if a rule proves noisy in practice.
-- **No ARIA role matrix, no click-without-keyboard heuristics.** Those rule
-  families are where a11y linters generate false positives; a short reliable
-  list beats a large engine. **Rejected** for v1.
-- **Lives in codegen, not the parser.** The parser API keeps its single
-  error-shaped surface; codegen already owns the warnings channel (the
-  script-import precedent).
+- **Errors or a strict-mode flag** — rejected: must never break existing builds.
+- **Suppression syntax / warning IDs** — rejected: grammar cost for noise that
+  five conservative rules shouldn't produce; revisit only if one proves noisy.
+- **ARIA role matrix, click-without-keyboard heuristics** — rejected: where a11y
+  linters generate false positives.
+- **Parser-side, a separate lint command, or runtime dev checks** — rejected:
+  codegen owns the warnings channel; the build already sees the AST with
+  positions.
 
 ## Consequences
 
-- Developers get file:line:col a11y feedback in every `puzzle dev`/`build`
-  with no new output plumbing and no opt-in.
-- Generated JS is byte-identical; golden tests are untouched by construction.
-- The rule list is additive — future rules are new walk cases plus tests, no
-  contract change beyond a SPEC list amendment.
-
-## Alternatives rejected
-
-- A separate lint tool/command — a second binary surface for what the build
-  already sees; the compiler is the natural (and only positioned) home.
-- Runtime dev-mode checks — costs bundle bytes, fires after the fact, and
-  cannot point at source positions.
+New rules are new walk cases plus tests and a SPEC list amendment.

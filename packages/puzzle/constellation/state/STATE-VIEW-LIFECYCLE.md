@@ -130,21 +130,14 @@ connections:
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
 verified_at: '2026-08-24T18:49:30.658Z'
 verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
-notes:
-  - kind: verified
-    text: >-
-      Restore show-bracket truthed in body and in the leaving→mounted transition, against
-      _restoreFromLeaving's viewWillShow/viewDidShow pair in PuzzleView.js.
-    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # PuzzleView lifecycle machine
 
-One instance, from construction to teardown. Views, layouts, and reusable
-components all run this machine — the only difference is who owns the instance:
-the router for a routed view or layout, a parent's patch for a component, the
-static kernel for a prerendered page root. Ownership decides the failure
-outcome, not the phases.
+One instance, construction to teardown. Views, layouts and components all run it; only
+the owner differs (router for routed views/layouts, a parent's patch for components, the
+static kernel for a prerendered root), and ownership decides failure outcomes, not phases.
+Implementation: [[COMPONENT-PUZZLE-VIEW]].
 
 ```mermaid
 stateDiagram-v2
@@ -171,102 +164,42 @@ stateDiagram-v2
   destroyed --> [*]
 ```
 
-## Two layers of state, one machine
+## Phase notes
 
-`data()` owns the model layer and replaces it wholesale on every successful
-commit — keys an earlier run returned and this one omits disappear. `setData()`
-owns a persistent local layer that wins over the model until the next model
-commit, and it schedules a render *without* re-running `data()`. That is why
-`updating` is reachable two ways that look identical from the DOM and are not
-identical from the instance: one re-ran `data()` and re-derived its
-subscriptions, one did not. The full re-render trigger table lives in
-[[FLOW-REACTIVITY]].
-
-Subscriptions reset on every `data()` run, so an instance is subscribed to
-exactly what its latest run actually queried.
-
-## `preloaded` is what makes the navigation commit atomic
-
-A routed instance runs `created()` and `data()` with no ViewManager at all —
-there is nothing to render into, and the render inside the refresh no-ops. The
-later mount is therefore synchronous, which is the whole point: the router's
-commit window cannot contain an await. A component mounted by a parent patch
-takes the ordinary asynchronous path instead and reserves its position with a
-comment anchor so sibling insertion references stay valid.
-
-`mounted()` is gated on a real first render, not on the mount call returning. If
-a parent prop update supersedes the initial async `data()`, mount completion —
-and any pending enter animation — defers to the commit that actually renders,
-so the hook never receives the comment anchor.
-
-## `preparing` exists so a failed navigation has nothing to roll back
-
-A reused ancestor is already on screen. During a gated navigation its `data()`
-must run against the *destination* — that is how it gates the URL, and how
-`this.route` names the navigation being gated — while its committed params,
-snapshot, model, DOM and live subscription set stay exactly as they are. The
-prepared run's scope is visible only to that evaluation; a store-change refresh
-landing in the same window still reads committed state.
-
-The handle is idempotent and is discarded unconditionally on the way out, which
-is the only thing that covers a throw escaping the router's synchronous commit
-block. An unreleased hold fences the ancestor's keys in the store for the rest
-of the session.
-
-## `leaving` is inert, and reversible exactly once
-
-`playOut()` unsubscribes the instance immediately and ignores every later
-delivery — refresh, setData, store change, parent update. A fading element must
-not re-render. The element stays in the DOM for the whole out animation; the
-caller removes it.
-
-The one path back is router recovery: when a navigation fails *after* starting
-the leave, the outgoing unit is restored — the retained out effect is
-cancelled and a refresh re-establishes the subscription. The out sequence stays
-spent, so a later navigation away swaps the unit out instantly with no second
-animation.
-
-**The restore fires the show bracket.** `playOut()` already fired
-`viewWillHide()`, so a unit put back on screen has been told it is hiding and
-must be told it is showing again: the restore fires `viewWillShow()` then
-`viewDidShow()` at zero duration. Hooks are lifecycle, not animation callbacks
-(D28) — without the bracket, a view that starts something in `viewDidShow` and
-stops it in `viewWillHide` stayed stopped while fully visible. A throwing hook
-is reported, never raised into the router's synchronous failure window, and a
-throw in `viewWillShow` does not skip `viewDidShow` — that hook owns the restart
-the pairing depends on.
-
-## `failed` describes a position, not a live instance
-
-Reaching `failed` means `destroy()` has already run on this instance. What
-survives is the position: a placeholder planted before teardown, holding either
-the app `errorView` — an ordinary compiled view receiving `error`, `info`, and
-`retry` — or an invisible recovery marker when no error view is configured.
-Parent, siblings, and the surrounding layout keep their state.
-
-Retry never returns *this* instance to `mounted`. It rebuilds through the
-position's normal owner: the router forces a same-location replace with the
-chain marked non-reusable, or a parent's ordinary refresh remounts a fresh
-child. Either way a brand-new instance enters this machine at `constructed`.
-The face is held for the whole rebuild and released only by something that
-immediately refills the position, so a retry can never leave a blank.
-
-The error view itself failing reports once with `phase: 'error-view'` and
-stops — the runtime never mounts an error view for an error view.
+- **updating** is reached two ways that look the same in the DOM: a `data()` re-run
+  (model layer replaced, subscriptions re-derived to exactly what the run queried) or
+  `setData()` (local layer only, no re-run). Trigger table: [[FLOW-REACTIVITY]].
+- **preloaded** makes the navigation commit atomic: `created()` + `data()` run with no
+  ViewManager, so the later mount is synchronous (the commit window can't await). A
+  parent-mounted component instead reserves its position with a comment anchor.
+  `mounted()` waits for a real first render — if a prop update supersedes the initial async
+  `data()`, completion (and any enter) defers to the render that commits.
+- **preparing** (D146) runs `data()` against the destination while committed params,
+  snapshot, model, DOM and subscriptions stay untouched; a store-change refresh in the same
+  window still reads committed state. The handle is idempotent and discarded
+  unconditionally on the way out (the only cover for a throw escaping the commit block); an
+  unreleased hold fences the ancestor's store keys for the session.
+- **leaving** is inert: `playOut()` unsubscribes and ignores every later delivery; the
+  element stays until the caller removes it. It is reversible once — router recovery
+  cancels the retained out effect, refreshes to resubscribe, and fires `viewWillShow()` →
+  `viewDidShow()` at zero duration to re-open the show bracket `playOut()` closed (hooks are
+  lifecycle, D28). The out stays spent, so a later navigation swaps instantly. A throwing
+  restore hook is reported, never raised into the router's window, and a `viewWillShow`
+  throw doesn't skip `viewDidShow`.
+- **failed** is a position, not a live instance: `destroy()` already ran; a placeholder
+  holds the app `errorView` (`{ error, info, retry }`) or an invisible marker. Retry never
+  revives this instance — the router's same-location replace or a parent refresh builds a
+  new one from `constructed`, and the face is held until something refills the position.
+  An error view failing reports once as `phase: 'error-view'` and stops.
 
 ## Gotchas
 
-- The `loaded` latch never resets. A skeleton is a first-load affordance, not a
-  spinner: later refreshes keep the current content on screen until new data
-  commits.
-- A `mounted()` throw resolves by owner. A component-owned instance is
-  destroyed and its position held for the next parent patch; a router-owned one
-  stays committed, because the URL already moved atomically and tearing the view
-  down would strand a committed URL over an empty container.
-- `destroy()` is synchronous, instant, and idempotent, and a throwing
-  `destroyed()` hook is caught — the teardown cascade above it must always
-  complete.
-- An enter animation with a visible trigger holds the element at its `from`
-  keyframe and defers the whole show bracket to the reveal. `mounted()` timing
-  is unchanged, and every degradation path lands on plain mount behavior so
-  content is never stranded hidden.
+- The `loaded` latch never resets: a skeleton is a first-load affordance; later refreshes
+  keep current content until new data commits.
+- A `mounted()` throw resolves by owner: a component is destroyed and its position held for
+  the next parent patch; a routed view stays committed (the URL already moved atomically).
+- `destroy()` is synchronous, instant and idempotent; a throwing `destroyed()` is caught so
+  the cascade completes.
+- A visible-trigger enter holds the element at `from` and defers the show bracket to the
+  reveal; `mounted()` timing is unchanged and every degradation path falls back to plain
+  mount.

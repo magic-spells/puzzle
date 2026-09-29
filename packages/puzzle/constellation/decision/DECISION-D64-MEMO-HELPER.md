@@ -7,7 +7,6 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC
   - DOC-USER-GUIDE
-  - FEATURE-V1-29-COMPOSITION-FIXES
 code_refs:
   - client-runtime/views/PuzzleView.js
 ---
@@ -16,69 +15,43 @@ code_refs:
 
 ## Context
 
-Object-valued props must be built in `data()` (inline object literals are a
-positioned compile error — the expression resolver would mangle their keys),
-but props are compared with `shallowEqual`, so an object prop compares **by
-reference**. That leaves authors a trap with no blessed exit:
-
-- return a **fresh** object every `data()` run → the child sees a changed prop
-  on every unrelated store change and re-runs its `data()` (for the
-  tarot-puzzle wrapper: spurious `updateOptions()` on every card tap);
-- **cache** the object → you must hand-roll invalidation with private instance
-  fields (the demo's `#optsCache`/`#optsCacheEffect` pattern), which requires
-  knowing shallowEqual semantics, `data()` re-run timing, and the
-  instance-field escape hatch all at once.
-
-D62 fixes handler identity at the compiler; this fixes *data* identity at the
-authoring layer.
+Props compare shallowly (`!==` per key), so an object or array prop compares by
+reference. A template expression can't *start* with an object literal
+(`:opts={ { a: 1 } }` is a positioned compile error, SPEC §6), so object props
+are built in `data()` — and a fresh object every `data()` run makes the child
+see a changed prop on every unrelated store change.
 
 ## Decision
 
-Add one method to `PuzzleView`:
+`PuzzleView.memo(key, deps, factory)`: a per-instance `Map` keyed by `key`.
+Returns the cached value while `deps` matches the previous call positionally by
+`Object.is` (a length change is a miss); otherwise runs `factory()`, stores
+`{ deps, value }` and returns it. Synchronous, no reactivity of its own — only
+reference stability.
 
 ```js
-memo(key, deps, factory)
-```
-
-Per-instance `Map` keyed by `key` (string). Returns the cached value while
-`deps` (an array) matches the previous call positionally by `Object.is` (length
-change = miss); otherwise calls `factory()`, stores `{ deps, value }`, returns
-the fresh value. Synchronous, no reactivity semantics of its own — purely
-reference stability for values returned from `data()`:
-
-```js
-data(params, props) {
+data() {
   const { effect = 'carousel' } = this.getData();
-  return {
-    carouselOptions: this.memo('opts', [effect], () => ({
-      effect, loop: true, slidesPerView: 2,
-    })),
-  };
+  return { carouselOptions: this.memo('opts', [effect], () => ({ effect, loop: true })) };
 }
 ```
 
-Declared in `types/index.d.ts` as
-`memo<T>(key: string, deps: unknown[], factory: () => T): T`.
+Typed in `types/index.d.ts`. The two-way-binding warning for a bound path whose
+parent object is rebuilt every `data()` run points authors here too.
 
 ## Alternatives
 
-- **Compiler-cached inline object literals** (lift the template ban and emit
-  D62-style per-site caches keyed by ingredient values) — deferred, not
-  rejected: it means the Go compiler parsing object-literal structure, and the
-  memo helper covers the need at zero grammar cost. Revisit if demand appears.
-- **Deep-compare auto-memo inside shallowEqual** — rejected: hidden per-patch
-  cost and surprising identity semantics; `===` on props is a load-bearing
-  simplicity.
-- **Documentation-only (bless the instance-field idiom)** — rejected as
-  insufficient: the idiom takes four pieces of framework internals to derive;
-  a 15-line helper removes the whole derivation.
+- **Compiler-cached inline object literals** (D62-style per-site caches) —
+  deferred, not rejected; revisit on demand.
+- **Deep-compare props** — rejected: hidden per-patch cost; `!==` on props is
+  load-bearing simplicity (D62's bailout test pins it).
+- **Document a private-field cache idiom** — rejected: it needs four pieces of
+  framework internals to derive.
 
 ## Consequences
 
 - The blessed pattern for object/array props: build in `data()`, wrap in
-  `this.memo(...)` keyed by the ingredients. Combined with D62, a child whose
-  props are all static/cached/memoized re-runs `data()` only on real changes.
-- `memo` becomes a reserved method name on `PuzzleView` (documented; user
-  subclasses overriding it break themselves, same class as `refresh`).
-- Cache lives for the instance lifetime; entries are small ({deps, value})
-  and bounded by distinct keys the author writes.
+  `this.memo(...)` keyed by the ingredients. With D62, a child whose props are
+  all static, cached or memoized re-runs `data()` only on real changes.
+- `memo` is a reserved `PuzzleView` method name. The cache lives for the
+  instance and is bounded by the keys the author writes.

@@ -1,5 +1,5 @@
 ---
-name: D158 — Adapters are per-model fetch functions; REST conventions are the shorthand (v1.73)
+name: D158 — Adapters are per-model fetch functions; REST conventions are the shorthand
 status: verified
 connections:
   - DECISION-D157-ADAPTER-SUBPATH
@@ -12,290 +12,84 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-notes:
-  - kind: gotcha
-    text: >-
-      The write-response guards are STRICTER than 0.5.0, which accepted a non-object 2xx body
-      (text/plain "OK", JSON `true`) and marked the record synced. Enforcing the contract is the
-      decision; the migration hazard is real and is CHANGELOG'd as breaking. The shape to remember:
-      a rejected write leaves _synced false, so on create the row exists server-side while the next
-      save() dispatches POST again and duplicates it. A server that acknowledges without echoing the
-      record needs a create/update function that returns nothing.
-  - kind: gotcha
-    text: >-
-      adapter.js `responsePk == null && pk in body` (~line 569) looks unreachable after the pk guard
-      above it and is NOT — the guard and this branch read body[pk] separately, so an unstable
-      accessor (a getter returning a value then null) reaches it. It protects pk-index integrity (a
-      blanked local pk while the type map still keys the old id). Do not delete it.
-  - kind: verified
-    text: >-
-      All contract claims confirmed: loadAll guards at all four sites (production-loud), Response
-      convenience, read-failure normalization + loadOne pk guard, write-return enforcement, defaults
-      context/identity, dispatch precedence gating tracked faults. Clarified in place: D125/D138
-      revision-guard attribution, and the defaults() context endpoint being the raw model value (not
-      apiURL-prefixed).
-    sha: 516f7d62ef156359eab7170d68103dc78e6bbb8f
-  - kind: verified
-    text: >-
-      Re-verified against current code and corrected: at least one claim on this card no longer
-      matched the runtime, and the card was rewritten to state what the code actually does. Verified
-      at this sha with the framework suite green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
-  - kind: decision
-    text: >-
-      Only the GENERATED transport can vouch that a collection response was exhaustive (0.7.0). D161
-      read state used one "complete" set for two different facts, and marked it on any successful
-      no-options `loadMany` — including an authored one. But an authored `loadMany` is opaque by
-      this card's own design: returning a paginated first page is a perfectly good implementation of
-      the verb, and the framework has no way to know it was one. The consequence was a real record
-      reported as missing — a tracked `findOne` on an off-page id committed `null` with no request.
-      The facts are now split: LOADED (the collection request ran, so a tracked `findMany` stops
-      re-faulting) is earned by any successful no-options load; EXHAUSTIVE (a `findOne` miss owes no
-      detail request) only when the endpoint-derived REST transport made the request, i.e. the model
-      declares an `endpoint`, names no function for the verb, and no `adapter.defaults()` dialect
-      supplies one either. A dialect counts as authored for this purpose: it says HOW the app talks
-      to its server, not that its responses are whole collections. Simply not marking anything for
-      authored loads was not an option — every tracked `findMany` would then re-request the
-      collection on every settle pass, trading a wrong answer for a request loop; hence two sets
-      rather than one. Adding an opt-in verb flag was rejected as new API for a rule the framework
-      can derive.
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/datastore/adapter.js
 ---
 
-A model's `static adapter` object is a set of **fetch functions** the store
-calls for server work. `endpoint` is shorthand that generates the standard
-REST five; any function the author writes wins over its generated default, and
-an adapter made *only* of author functions is fully legal — no `endpoint`, no
-assumed dialect:
+## Context
+
+Most real servers deviate from any one REST dialect (EmberData's chronic "write a custom adapter" pain). TanStack Query won by making the transport *your fetch function*. Puzzle wants that transport contract while keeping what a query cache does not give: a normalized identity-keyed store, validation, reactivity and the D50 write-safety machinery.
+
+## Decision
+
+A model's `static adapter` is a set of **fetch functions**. `endpoint` is shorthand that generates the REST five; an author function always wins over its generated default, and an adapter of only author functions (no `endpoint`) is legal.
 
 ```js
-// standard REST — the shorthand generates all five verbs
-static adapter = { endpoint: '/api/posts' };
-
-// nonstandard URL, standard JSON — return the Response, Puzzle reads it
-static adapter = {
-  loadMany: (fetch) => fetch('/v2/posts?include=all'),
-};
-
-// envelope API — you unwrap, because you know the shape
+static adapter = { endpoint: '/api/posts' };                 // generated REST
+static adapter = { loadMany: (fetch) => fetch('/v2/posts') }; // return the Response
 static adapter = {
   endpoint: '/api/posts',
-  async loadMany(fetch) {
-    const res = await fetch('/api/posts');
-    return (await res.json()).data;
-  },
+  async loadMany(fetch) { return (await (await fetch('/api/posts')).json()).data; },
   publish: (fetch, id) => fetch(`/api/posts/${id}/publish`, { method: 'PATCH' }),
 };
 ```
 
-Author functions receive **`fetch`** — same signature and `Response` return as
-`window.fetch`, with two additions baked in: the app's D91 `beforeRequest`
-hook runs first (auth applies to custom transports automatically), and the
-call routes through the `_network` seam (the `/fixtures` mock intercepts it).
-This is SvelteKit's `load({ fetch })` move: the argument IS the platform
-primitive, arriving pre-wired. Any fetch snippet from anywhere drops in
-unchanged and gains auth + mocking. A function that declares no parameter and
-uses global `fetch` gets exactly what it wrote — documented plainly: the
-global bypasses the auth hook and the mocks, and the parameter list is where
-a reviewer can see which is in play.
+**`fetch` argument.** Same signature and `Response` as `window.fetch`, but the D91 `beforeRequest` hook runs first and the call goes through the `_network` seam (so `/fixtures` mocks it). A function that uses global `fetch` bypasses auth and mocks — the parameter list shows which is in play.
 
-The design deliberately triangulates two ecosystem lessons. EmberData assumed
-a strict dialect (JSON:API) and made deviation a subclassing ceremony —
-since most real servers deviate, "write a custom adapter" became the
-community's chronic pain. TanStack Query won React by inverting it: *define
-your fetch function*, the library owns caching and state. Puzzle takes
-TanStack's contract for transport — the adapter is your fetch functions,
-written in the model, no standards assumed — while keeping what a query cache
-does not give: a normalized identity-keyed store, validation, reactivity, and
-the D50 write-safety machinery, all applied to whatever those functions
-return.
+**Five verbs**, signature `(fetch, ...args)`; generated defaults exist only with `endpoint`:
 
-## The contract
-
-**Five verbs the store calls.** Signature `(fetch, ...args)`; each has a
-generated REST default only when `endpoint` is present:
-
-| verb | called by | default (with `endpoint`) | must return |
+| verb | called by | default | must return |
 |---|---|---|---|
-| `loadMany(fetch, options?)` | `store.loadMany(type, options?)` and a tracked `findMany` fault ([[DECISION-D161-AUTO-FETCHING-FINDS]]) | `GET endpoint`, options serialized as the query string, naked array | records array — or a `Response` |
-| `loadOne(fetch, id)` | `store.loadOne(type, id)` and a tracked `findOne` fault | `GET endpoint/id`, naked object | one record object — or a `Response` |
-| `create(fetch, record)` | `record.save()` (never synced) | `POST endpoint`, record JSON | the server's record (pk required — server-assigned ids arrive here), nullish for "no echo" — or a `Response` |
-| `update(fetch, record)` | `record.save()` (synced) | `PUT endpoint/pk`, record JSON | same as create |
-| `delete(fetch, record)` | `record.delete()` | `DELETE endpoint/pk`; 404 = already gone | nothing — or a `Response` (status checked) |
+| `loadMany(fetch, options?)` | `store.loadMany`, tracked `findMany` fault (D161) | `GET endpoint?options` | array, or a `Response` |
+| `loadOne(fetch, id)` | `store.loadOne`, tracked `findOne` fault | `GET endpoint/id` | record object, or a `Response` |
+| `create(fetch, record)` | `save()` on never-synced | `POST endpoint` | record with pk, nullish ("no echo"), or a `Response` |
+| `update(fetch, record)` | `save()` on synced | `PUT endpoint/pk` | same as create |
+| `delete(fetch, record)` | `record.delete()` | `DELETE endpoint/pk`, 404 = gone | nothing, or a `Response` |
 
-The read verbs are named for cardinality like the finds they serve —
-One/Many is the framework's naming pair. The pre-0.7.0 spelling `loadAll`
-throws with one message naming `loadMany` everywhere it can appear:
-`store.loadAll()` (a throwing trap), a model adapter carrying an own
-`loadAll` key (caught at Store init, before navigation), an
-`adapter.defaults({ loadAll })` call, and the verb-binding loop in
-`store.adapter(type)`. The guard is loud in production too, because the
-silent alternative — the unknown key being ignored and dispatch falling
-through to generated REST — would quietly hit different URLs.
+- **`Response` convenience:** returning the `Response` makes Puzzle ok-check it (non-OK → `PuzzleAdapterError` with status + body) and JSON-parse before the shape guards.
+- **Read failures normalize** to `PuzzleAdapterError`; D161's negative cache keys on exactly `status === 404`, anything else stays retryable. On the implicit fault path a `loadOne` response whose pk differs from the requested id (under `recordKey`) rejects before upsert; explicit `store.loadOne()` stays permissive (slug lookups).
+- **Write returns are enforced, not coerced:** a 2xx body that is a primitive, array, `{}` or pk-less object throws a plain `Error` (the HTTP conversation succeeded, so no `PuzzleAdapterError`). `_synced` stays false, so a retried `save()` re-POSTs — a duplicate row if the first POST landed. That is the accepted cost; a server that acknowledges without echoing needs a `create`/`update` that returns nothing.
+- **Framework owns everything after the return:** upsert by pk, D125/D138 revision guards, `_synced` flip, pk adoption/re-keying, per-record write chain, persistence, notification. Generated and author verbs behave identically downstream.
+- **Custom keys** (`publish`, `search`) are never called by the framework. `store.adapter(type)` returns the adapter with the enhanced `fetch` pre-bound (generated verbs included), so `store.adapter('post').publish(7)` works and composes with `store.upsert`.
+- **`loadAll` is a hard error everywhere** (model adapter key at Store init, `adapter.defaults({ loadAll })`, `store.loadAll()`, the verb-binding loop), production included — silently ignoring it would fall through to generated REST.
 
-**The `Response` convenience:** an author function may return the `Response`
-from its fetch instead of parsed data — Puzzle then does the ok-check
-(non-OK → `PuzzleAdapterError` with status and body) and JSON-parses the body
-before applying the normal shape guards. That makes the
-"nonstandard URL, standard payload" case a one-liner
-(`loadMany: (fetch) => fetch('/v2/posts')`) with no helper API — the
-convenience is carried by the platform type, not a new vocabulary.
-
-**Read failures are normalized, and `loadOne` responses must be the record
-asked for.** Generated read transports take the same response path as writes
-and author `Response` returns, so a non-OK GET throws `PuzzleAdapterError`
-(status + body) rather than a plain `Error` — the D161 negative cache keys
-off exactly `status === 404`, and everything else stays a retryable failure
-that poisons nothing. A `loadOne` response whose primary key differs from the
-requested id under `recordKey` normalization rejects **before** upsert on the
-implicit fault path only — an implicit fault would otherwise re-miss every
-settle round until the cap; an explicit `store.loadOne()` stays permissive so
-it can resolve a non-primary key such as a slug.
-
-**Write returns are enforced, not coerced.** `create`/`update` must resolve to
-an object carrying the primary key, or to nullish for "no echo". Any other 2xx
-body — a primitive, an array, `{}`, or an object missing the pk — throws;
-Puzzle does not guess which of "the server echoed nothing useful" and "the
-server echoed a record" it is looking at. The alternative is worse than a
-throw: silently treating an unusable body as success flips `_synced` on a
-record the store never reconciled, and a server-assigned id arriving in a shape
-Puzzle skipped is a record permanently keyed under its client-side id. Because
-the throw leaves `_synced` false, the write is reported failed and a retried
-`save()` re-dispatches `create` — correct when the POST failed, a duplicate row
-when it succeeded and only the body was unusable. That is the accepted cost of
-enforcement, and it is why the fix for such a server is a `create` function
-returning nothing rather than a tolerated body shape. These throw plain
-`Error`, not `PuzzleAdapterError`: the HTTP conversation succeeded, so status
-and response-body fields would be meaningless — the same reasoning the
-pk-collision guard states inline.
-
-**Returns feed the framework-owned pipeline, which no adapter reimplements:**
-upsert by primary key, the D125/D138 revision guards protecting in-flight
-edits (writes and load responses respectively), the `_synced` provenance
-flip, atomic pk adoption/re-keying, the per-record write chain, persistence,
-and subscriber notification. An adapter function owns the HTTP conversation
-only; after the return, the store's semantics are identical for generated and
-author verbs — a tracked fault and an explicit load run the same function.
-Throwing (or returning a non-OK `Response`) marks the operation failed; local
-state stays consistent and the error rethrows to the caller.
-
-**Custom methods.** Any other function key (`publish`, `findBySlug`,
-`search`) is outside the store's contract — never called by the framework.
-`store.adapter(type)` returns the model's adapter with the enhanced `fetch`
-bound as the first argument (generated defaults included), so
-`store.adapter('post').publish(7)` works and custom reads compose with
-`store.upsert` for merging.
-
-**App-wide dialects: `adapter.defaults(verbs)`.** Most nonstandard APIs are
-nonstandard everywhere — the `{ data }` envelope wraps every endpoint, not one
-model's. The capability carries the app's dialect, conventionally written in
-its own `app/adapter.js` so `app.js` stays a wiring manifest:
+**App-wide dialect: `adapter.defaults(verbs)`**, conventionally in `app/adapter.js`:
 
 ```js
-// app/adapter.js — the app's server dialect
-import { adapter } from '@magic-spells/puzzle/adapter';
-
 export default adapter.defaults({
-  loadOne: async (fetch, id, { endpoint }) => {
-    const res = await fetch(`${endpoint}/${id}`);
-    return (await res.json()).data;
-  },
+  loadOne: async (fetch, id, { endpoint }) => (await (await fetch(`${endpoint}/${id}`)).json()).data,
 });
-
-// app/app.js
-import adapter from './adapter.js';
-new PuzzleApp({ target: '#app', routes, models, adapter });
 ```
 
-Writing the dialect inline in `app.js` is equally supported. The one place the
-split is visible is `output: 'static'`, where each page's generated entry has to
-import the exact capability value the prerender used: `app/adapter.js` is a
-module a page can import on its own, while an inline dialect makes the page
-import the app entry to reach it (D157's three tiers — same behavior, heavier
-pages, and the build says so).
+- Dispatch precedence: model function → app default → endpoint-generated REST.
+- App functions get a trailing `{ type, endpoint }`; `endpoint` is the raw model value (not `apiURL`-prefixed — only generated transports prepend `apiURL`).
+- Only verb keys with function values are valid; others warn in dev (`loadAll` throws).
+- Returns a new recognized capability, so two apps on a page can carry different dialects.
+- **This is the last tier** — no `buildURL`/`handleResponse` hooks, per-group defaults or serializers. What three tiers cannot express is written as whole verb functions.
+- Under `output: 'static'`, a dialect in `app/adapter.js` can be imported by each page entry alone; an inline one forces pages to import the app entry (D157 tiers).
 
-Dispatch precedence, most-specific wins: the model's own function → the app
-default → the endpoint-generated REST transport. **Automatic fault eligibility
-is narrower than dispatch.** A tracked find faults only when the MODEL itself
-declares server intent — its own function for that verb, or an `endpoint`. The
-app-default tier supplies the DIALECT for a model that already qualifies; it
-does not by itself make a model server-backed, or every local-only model in a
-dialect app would fault to `GET undefined` (D161). Explicit `store.loadOne` /
-`store.loadMany` and all three write verbs still dispatch through the full
-precedence unchanged — only the automatic path is gated. App-level functions
-receive `{ type, endpoint }` as a trailing context argument (they serve many
-models, so unlike a per-model function they cannot close over their URL;
-`endpoint` is undefined for models without one). It is the raw model value, not
-`apiURL`-prefixed — only the generated transports prepend `apiURL`, so an app
-with a base URL prefixes `endpoint` itself. Defaults apply to the five verbs
-only — keys that are not verb names warn in dev (except `loadAll`, which
-throws). `adapter.defaults()` returns a new recognized capability (the
-identity check accepts every capability the module created, so configured and
-bare capabilities validate alike); the defaults ride the capability value
-into each store, so two apps in one page can carry different dialects. **This
-is the LAST tier.** Sub-verb hooks (`buildURL`, `handleResponse` — Ember's
-concept explosion), per-group defaults, and serializer-style transforms are
-out of scope permanently; a dialect the three tiers cannot express is written
-as whole verb functions, which fully own their conversation.
+**Automatic fault eligibility is narrower than dispatch.** A tracked find faults only when the *model* declares server intent (its own verb function or `endpoint`); an app default supplies the dialect but does not make a local-only model server-backed. Explicit loads and writes use the full precedence.
 
-**`endpoint` is required only by what needs it.** A verb the app invokes with
-neither an author function nor an `endpoint` to generate a default from is
-the existing "no adapter declared" error, now phrased per-verb. Config
-validation stays dev-loud: keys that are neither functions nor one of the two
-declarative keys — `endpoint` and the D95 `mock` block — warn once per model.
+**LOADED vs EXHAUSTIVE.** Any successful no-options `loadMany` marks the type LOADED (a tracked `findMany` stops re-faulting). Only the endpoint-generated transport (endpoint declared, no model function, no dialect function for the verb) marks it EXHAUSTIVE, so a `findOne` miss owes no detail request. An authored `loadMany` may return a paginated first page; marking it exhaustive would report real records as missing.
 
-D157 is unchanged: the capability passed to `PuzzleApp` is still what ships
-and installs the module; models with no `adapter` object remain purely local;
-dispatch and the enhanced-fetch builder cost a few hundred raw bytes inside
-the adapter module only.
+`endpoint` is required only by a verb that needs it (per-verb "no adapter declared" error). Unknown non-function keys other than `endpoint` and D95 `mock` warn once per model in dev.
 
-## Alternatives rejected
+Gotcha: in adapter.js, `responsePk == null && pk in body` looks unreachable after the pk guard but is not (the two read `body[pk]` separately, so an unstable getter reaches it); it protects pk-index integrity. Don't delete it.
 
-- **A fixed dialect with bypass-only escape (the pre-D158 state)** — an
-  envelope response or a POST-for-update API forfeited all five conventions
-  and rewrote the transport on `request()`/`upsert()`. EmberData's lesson is
-  that "most servers deviate" is the norm, so partial override is the primary
-  path, not an edge case.
-- **Class-based adapters (`RESTAdapter.extend`)** — the Ember ceremony this
-  design exists to avoid; a plain object of functions in the model file is
-  the whole surface.
-- **Serializer/normalizer hooks (`normalizeResponse`) instead of verb
-  functions** — solves envelopes but not verbs, URLs, methods, or batch
-  shapes; fetch functions subsume it (unwrapping is one line inside the
-  function).
-- **An app-level adapter registry (`adapters: { post: {...} }`)** — moves the
-  fetch logic away from the model it serves; the model file is where schema,
-  relationships, and server shape belong together.
-- **Full TanStack (the query cache owning transport, caching, and state
-  wholesale)** — adopted for the transport contract only. The normalized
-  identity-keyed store, validation, and framework-owned reconciliation stay;
-  D161's tracked fault-in drives these same verbs rather than installing a
-  parallel query-cache layer with its own keys and staleness vocabulary.
-- **A `request` helper object (`request.get/post/patch` returning parsed
-  bodies, axios-shaped)** — tidy one-liners for the common overrides, but a
-  permanent second HTTP vocabulary to document and learn, with
-  almost-familiar semantics (returns bodies, not `Response`s) and an
-  abstraction ceiling — headers, status branching, `FormData`, streaming all
-  force a fetch fallback, leaving two idioms in the wild. The escape path
-  optimizes for the platform primitive; the `Response`-return rule recovers
-  the one-liner without any new API. (Also collides with the name of the D50
-  `store.request()` escape hatch.)
-- **Calling the argument `ctx`** — collides with the view-side `this.ctx`
-  (store/router context): one small framework must not carry two unrelated
-  objects under one name.
-- **App-wide overrides via static-object assignment from app.js** (a loop
-  mutating each `Model.adapter` before construction) — works, but it is
-  order-sensitive mutation at a distance, invisible to TypeScript, and reads
-  as a patch rather than a feature ("a nasty hack — dirty"). `adapter.defaults()`
-  states the same intent declaratively on the capability.
-- **A shared per-model factory as the ONLY app-wide answer**
-  (`static adapter = api('/api/posts')`) — still a fine complementary idiom,
-  but as the only mechanism it edits every model file to express an app-level
-  fact; the dialect belongs on the capability.
-- **Keeping `loadAll` alongside `loadMany`, or a deprecation alias** — a
-  framework whose read pair is One/Many cannot teach a transport pair that is
-  One/All; an alias is a second spelling to document forever, and pre-1.0 is
-  the last cheap moment for the rename.
+## Alternatives
+
+- Fixed dialect with bypass-only escape — most servers deviate, so partial override must be the main path.
+- Class-based adapters (`RESTAdapter.extend`) — Ember ceremony; a plain object in the model is the whole surface.
+- Serializer/normalizer hooks — solve envelopes but not verbs, URLs or methods; unwrapping is one line in a fetch function.
+- App-level adapter registry — separates transport from the model it serves.
+- Full TanStack query cache — adopted for transport only; the normalized store stays.
+- A `request.get/post` helper — a second HTTP vocabulary with an abstraction ceiling; the `Response` return gives the one-liner without new API.
+- Naming the argument `ctx` — collides with the app's `ctx` (store/router context).
+- Mutating `Model.adapter` from app.js for app-wide overrides — order-sensitive mutation at a distance; `adapter.defaults()` is declarative.
+- An opt-in "exhaustive" verb flag — new API for a rule the framework can derive.
+
+## Consequences
+
+Any fetch snippet drops into an adapter unchanged and gains auth and mocking. Stricter write guards reject servers that answered "OK" or `true`. Dispatch and the enhanced-fetch builder live in the adapter module only (D157).

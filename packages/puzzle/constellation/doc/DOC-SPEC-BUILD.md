@@ -12,482 +12,197 @@ connections:
   - DECISION-D153-PUZZLE-SCRATCH-DIR
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
-      census); §N numbers unchanged
-    sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
-  - kind: verified
-    text: >-
-      Re-verified against current code and corrected: at least one claim on this card no longer
-      matched the runtime, and the card was rewritten to state what the code actually does. Verified
-      at this sha with the framework suite green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
-  - kind: state
-    text: >-
-      `puzzle add piece` installs COMPOUND pieces (0.7.0, alongside D167 component families). A
-      piece manifest whose `files` entries carry a directory — e.g. "NavigationMenu/Item.pzl",
-      "NavigationMenu/index.js", sourced from registry/ui/<name>/NavigationMenu/… — is a family: the
-      members are copied PATH-PRESERVING under the manifest's targetDir
-      (app/components/ui/NavigationMenu/Item.pzl), intermediate directories created. The directory
-      in `files` is the ONLY signal: no `family: true` manifest field, and registry.json's schema
-      `version: 1` is not bumped (the CLI is lockstep with the registry's major.minor, so no old CLI
-      ever reads a compound manifest).
-
-
-      Path preservation already worked before this change — planWrites joined targetDir with the
-      manifest entry as-is, and all three sources (dirFetcher, httpFetcher, npm tarball at
-      package/registry/ui/<name>/<rel>) key by the same registry-relative slash path. What changed
-      is validateManifestPath, which was only rejecting absolute and `..` paths: a manifest path
-      must now be a CLEAN slash-separated relative path — no backslashes, no `.` segments (so no
-      leading `./`), no empty segments (doubled or trailing `/`), not empty. The rules apply to
-      `files`, `targetDir`, the registry `theme`, and `lib/` registryDependencies alike; the error
-      names the piece, the field, and the entry, and fires before any write. Rejecting instead of
-      silently path.Clean-ing keeps the manifest entry, the destination path, and the pieces.lock
-      key one and the same string — a lock key that no longer matches the manifest is exactly what a
-      future diff/update cannot recover from.
-
-
-      pieces.lock and the overwrite pre-flight needed no change: both were already per-file and
-      keyed by the full app-root-relative slash path, so a nested member locks as
-      app/components/ui/NavigationMenu/Item.pzl and a conflict on one member refuses the whole
-      family by that full path. RenderSummary is unchanged too — it prints one ✓ line per unit with
-      a file count, no file list and no import hints, so a family reads as one unit with N files.
-  - kind: state
-    text: >-
-      Translations build output (v1.81, §66 in DOC-SPEC-TEMPLATE, [[DECISION-D175-TRANSLATIONS]]).
-      Only when `puzzle.config.js` declares `i18n`: the compiler (package
-      `compiler/internal/locales`) loads every configured `app/locales/<tag>.json`, validates
-      (positioned errors: bad value type by key path, flatten collision, plural entry without
-      `other`, `_` in a file name, a configured locale without a file), flattens nesting to dotted
-      keys (plural entries stay objects), fills each locale's missing keys from `defaultLocale` (one
-      warning per locale, plus one for keys only a non-default locale has), and writes minified
-      sorted-key `dist/locales/<tag>.<HASH8>.json` (sha256 → base32, first 8, the D160 chunk-name
-      shape) into staging before the passes. `locales/` is a reserved public output name while
-      `i18n` is on (`ValidatePublic` takes the flag). The manifest is the virtual module
-      `@magic-spells/puzzle/i18n/manifest` (`{ defaultLocale, locales: { tag:
-      'locales/<tag>.<hash>.json' } }`, config order), fresh on every rebuild; package `exports` map
-      it to a `null` default for vitest/raw imports. `__PUZZLE_HAS_I18N__` is a config-fact define
-      on every pass; without `i18n` nothing ships and bundles are byte-identical (hello-world 67082
-      / todos 79495 raw, unchanged). Build warnings: `t` used without `i18n`; `app/locales/` without
-      `i18n`; a literal `t('key')` missing from the default table (did-you-mean). Prerender
-      (`--hybrid`, `--static`): pages render in `defaultLocale` from the staged default file, and
-      every page carries `<script type="application/json" data-puzzle-locale="<tag">`
-      (escapeScriptJson) at the shell's `</body>` anchor — static `prerender:false` pages too; a
-      hybrid `prerender:false` page is the verbatim shell and fetches. Dev: `puzzle dev` (SPA)
-      re-emits locale files on an `app/locales/**` edit, refreshes the manifest, rebuilds and
-      reloads, pruning superseded hashed files after a successful build; static dev classifies a
-      locale edit as render-wide (D155's one-off edge, like `{#svg}`) on the warm staging swap.
 ---
 
-The frozen v1 contract for the toolchain: the CLI surface, dev HMR and build-error reporting, the `hybrid`/`static` output modes, update notification and `puzzle upgrade`, interactive `puzzle init`, the `/testing` utilities, the `--fixtures` switch, and the DevTools bridge. See [[DOC-SPEC]] for the section index and the rest of the contract.
+The contract for the toolchain: the CLI surface, dev HMR and build-error reporting, the `hybrid`/`static` output modes, update notification and `puzzle upgrade`, interactive `puzzle init`, the `/testing` utilities, the `--fixtures` switch, the DevTools bridge, code splitting, and `puzzle check`. See [[DOC-SPEC]] for the section index.
 
-## 13. CLI tooling (v1.4)
+## 13. CLI tooling
 
+Commands live in `compiler/cmd/puzzle`: `init`, `generate`, `add`, `dev`, `build`, `preview`, `check` (§63), `upgrade` (§41), `doctor`, `info`, `--version`.
 
-The scaffolding and diagnostics commands SPEC §11 left for later. Shipped in v1.4 (D32); the CLI is no longer just `dev` + `build`. Additive — no change to `dev`/`build`, the compiler, or the runtime.
+- **`dev`/`build` flags.** `build --mode production|development`, `--static`/`--hybrid` (§36), `--fixtures` (§54). `dev --port N` (default 3000, scans upward when busy — D90) and `--strict-port`. `--profile-build` on both (or `PUZZLE_PROFILE_BUILD=1`) prints phase tables to stderr for the one-shot build and for dev startup and every rebuild in SPA, hybrid and static dev (D156); it never changes stdout, artifacts, rebuild selection or failure behavior.
+- **`puzzle init <app-name> [--template default|todos] [--typescript] [--dir <parent>]`** scaffolds a Tailwind-first app (`app/` with an `app/app.js` entry, or `app/app.ts` with `--typescript`; `puzzle.config.js`; `index.html`) from an embedded template tree. Non-interactive on a non-TTY (zero args errors, nothing can hang); on a TTY it prompts for what flags left out (§42). App names are validated npm-safe; a non-empty target directory is refused.
+- **`puzzle generate <component|view|layout|model> <Name> [--path <dir>] [--force] [--family <Members>]`** (alias `g`) writes a stub into `app/components|views|layouts|models`, finding the root by walking up for `package.json`/`puzzle.config.js`. `.pzl` names are PascalCase, model names lowercase. `--family` (components only) scaffolds a family directory plus an `index.js` barrel (D167). **A `tsconfig.json` at the project root makes every stub TypeScript** (D54): `<script lang="ts">` with typed props and `data()`, `app/models/<name>.ts`, an `index.ts` barrel, and a model hint naming `app/models/index.ts`. JavaScript stubs are otherwise byte-identical.
+- **`puzzle add tailwind`** writes the canonical `puzzle.config.js` + `app/styles/styles.css` when absent.
+- **`puzzle add piece <name…> [--registry <path|url|npm:pkg[@version]>] [--pieces-version <v>] [--overwrite] [--dir]`** copies pieces from the puzzle-pieces registry: resolves `registry.json`, pulls `registryDependencies` transitively (piece names and `lib/*.js` utils), copies files **verbatim** under each manifest's `targetDir` (default `app/components/ui/`; libs to `app/lib/`), and records sha256 hashes in `pieces.lock` (per file, keyed by the app-root-relative slash path). Existing files are refused unless `--overwrite` — an all-or-nothing pre-flight. The registry theme is copied to `app/styles/pieces.css` when absent (locked like a piece). It **prints** the accumulated `npm install` line and the `@import './pieces.css';` advisory rather than running or rewriting anything. When pieces declare different version floors for one npm dependency (D169), the highest floor is printed; a bare name loses to any floor. Registry source: `--registry` → `PUZZLE_PIECES_REGISTRY` → the `@magic-spells/puzzle-pieces` npm package at the newest release matching the CLI's major.minor (`--pieces-version` pins exactly).
+  - **Compound pieces (families).** A manifest `files` entry carrying a directory (`NavigationMenu/Item.pzl`) is copied path-preserving under `targetDir`, intermediate directories created. The directory in `files` is the only signal — no `family` field, no registry schema bump.
+  - **Manifest paths must be clean** (`validateManifestPath`): slash-separated, relative, non-empty, no backslashes, no `.`/`..` or empty segments. Applies to `files`, `targetDir`, the registry `theme`, and `lib/` dependencies; the error names piece, field and entry and fires before any write. Rejecting rather than cleaning keeps the manifest entry, destination path and lock key one string.
+- **`puzzle add theme [name…]`** (D171): with no names, lists the registry palettes and this app's install state. With names, copies each palette — the default one to `app/styles/pieces.css`, others to `app/styles/themes/<name>.css` — and locks it. A palette `styles.css` already imports from `@magic-spells/puzzle-pieces/themes/` is skipped. It never edits `styles.css`; the `@import` and `data-scheme` switch are printed. An unmodified older copy (still matching its lock hash) is refreshed; a locally modified one is refused without `--overwrite`.
+- **`puzzle add skills [--overwrite] [--skill-root <dir>…]`** (alias `skill`; D78/D97/D99) installs the CLI's `go:embed`ed agent skill into `<root>/skills/puzzle/` for each detected config dir (`~/.claude`, `~/.codex`, `~/.cursor`). TTY: checkbox multi-select, all pre-selected; non-TTY installs to all detected targets without prompting. No targets is a friendly exit 0. `--skill-root` (repeatable) pins the roots, skips the prompt, and must name existing dirs. Every install writes `<dest>/.puzzle-skill-version` (missing/blank reads as unknown). Existing destinations classify as: **missing** → install; **stamp matches** → skip as up to date; **stale/unstamped** → yes/no confirm (default yes) naming the version delta — declining skips only conflicts; **symlink** → one `!` line, never written through. On a non-TTY a stale destination refuses with the `--overwrite` message and writes nothing; up-to-date is not a conflict, so the command is idempotent in CI. `--overwrite` writes every selected target, symlinks included. A reinstall **replaces** the tree (removed, then copied) so dropped files cannot linger — except through a symlink, which is written in place.
+- **`puzzle upgrade skills`** refreshes from this binary's embedded payload (no registry check, no re-exec). It refreshes only config dirs that already carry a skill, skips symlinked ones, prints the `--overwrite` hint when all are current, and on a non-TTY installs without prompting — the command names the clobber.
+- **`puzzle preview [dir] [--port N] [--strict-port]`** (D148) serves an existing `dist/` the way the production host will, by output mode: SPA → history fallback to the shell; `hybrid` → the route's prerendered page, else the shell; `static` → clean URLs (`/about` → `about/index.html`) and a real 404 serving `404.html`, never the shell. No watcher, SSE, reload injection or `dev.proxy`. Default port 4000 (dev is 3000) with the same scan. A missing/empty `dist/` is an error naming `puzzle build`. An explicit config `output` wins; otherwise the artifact's marker (`data-puzzle-static` / `data-puzzle-ssg` in `dist/index.html`) identifies the mode, and a config/artifact or `app.js`-shape disagreement warns rather than guesses. URL→file resolution is one resolver (`compiler/internal/serve`) shared with `dev`.
+- **`puzzle doctor [dir]`** — ✓/✘/! checks (node on PATH, the build entry by the rule below — both present fails — `index.html`, config loads, Tailwind CLI resolves, runtime package present); exit 1 on any failure. **`puzzle info [dir]`** prints version, platform, node version, project root, source/output dirs and the styles pipeline.
 
-**D156 profiling amendment.** `--profile-build` on both `puzzle build` and
-`puzzle dev` prints an opt-in phase table to stderr — for the one-shot build,
-and for startup and every rebuild in SPA, hybrid, and static dev.
-`PUZZLE_PROFILE_BUILD=1` enables the same tables without the flag. Profiling
-never changes stdout, generated artifacts, rebuild selection, or failure
-behavior.
+**The build entry (D54).** Every bundling path — `build` in all three modes, `dev` (SPA and static), the prerender passes, `--fixtures` — and `doctor` use one rule: `app/app.ts` when it exists, else `app/app.js`. Both present is a hard error naming both; neither is "entry point not found". `dev` re-resolves each rebuild and asks for a restart if the answer changed. Output is `dist/app.js` either way; `puzzle.config.js` stays JavaScript.
 
-- **`puzzle init <app-name> [--template default|todos] [--dir <parent>]`** — scaffolds a complete Tailwind-first app (`app/` source with an `app/app.js` entry — `app/app.ts` with `--typescript`, see §42 — `puzzle.config.js`, `index.html`) from an embedded template tree. `default` is a minimal starter; `todos` is the todos example app. **Non-interactive by design** — flags and defaults only, so it stays scriptable (CI, `npx`); the one exception (D32 amendment) is a bare `puzzle init` on a TTY, which prompts for the missing app name (zero args on a non-TTY still errors, so pipes/CI never hang). *(v1.44/D77 widens the TTY exception: template and TypeScript prompts when those flags are absent — see §42; non-TTY behavior is unchanged.)* App names are validated npm-safe; a non-empty target directory is refused.
-- **`puzzle generate <component|view|layout|model> <Name> [--path <dir>] [--force] [--family <Members>]`** (alias `g`) — writes a stub into `app/components|views|layouts|models`, finding the project root by walking up for `package.json`/`puzzle.config.js`. `.pzl` type names are PascalCase, model names lowercase. **In a TypeScript app — a `tsconfig.json` at the project root, the one rule (D54) — every stub is TypeScript:** `<script lang="ts">` components, views and layouts with typed props and a typed `data()` model; `app/models/<name>.ts` with a fields interface and record type; a family's `index.ts` barrel; and a model hint naming `app/models/index.ts`. A JavaScript app's stubs are unchanged byte for byte.
-- **`puzzle add tailwind`** — writes the canonical `puzzle.config.js` + `app/styles/styles.css` when absent.
-- **`puzzle add piece <name…> [--registry <path|url|npm:pkg[@version]>] [--pieces-version <v>] [--overwrite] [--dir]`** (D32 amendment, 2026-07-17) — copies copy-in UI pieces from the puzzle-pieces registry into the app: resolves `registry.json`, pulls `registryDependencies` transitively (piece names and `lib/*.js` utils), copies files VERBATIM to each manifest's `targetDir` (default `app/components/ui/`; libs to `app/lib/`), refuses existing files unless `--overwrite` (all-or-nothing pre-flight), records sha256 content hashes in `pieces.lock` (the version story — enables a future `diff`/`update`), auto-copies the registry theme to `app/styles/pieces.css` when the app lacks it (locked like a piece), and PRINTS the accumulated `npm install` line + the one-line `@import './pieces.css';` advisory rather than running/rewriting anything (styles.css is user-owned — D3). Registry source: `--registry` flag → `PUZZLE_PIECES_REGISTRY` env → the `@magic-spells/puzzle-pieces` npm package, resolved to the newest release matching the CLI's major.minor (`--pieces-version` pins the release exactly).
-- **`puzzle add skills [--overwrite]`** (alias `skill`; D78, 2026-07-22) — installs the CLI's embedded Puzzle agent skill (`skills/puzzle/` in-repo, `go:embed` at build time so the payload always matches the CLI version) into every detected agent config dir: a target is offered iff `~/.claude` / `~/.codex` / `~/.cursor` exists, destination `<root>/skills/puzzle/` (created as needed). On a TTY: huh checkbox multi-select, all targets pre-selected; non-TTY installs to all detected targets silently (never prompts, never hangs). No detected targets is a friendly no-op, exit 0. `--skill-root <dir>` (repeatable; D97, 2026-07-24) pins the config dirs instead of detecting them and skips the target prompt even on a TTY — the root must already exist (a missing one is an error, never created). `puzzle upgrade` uses it to hand the freshly installed binary the exact roots the user confirmed (§41).
+**No-JS-rewriting rule (D3).** `add` and `generate` never parse or rewrite user JavaScript: `generate model` does not edit `app/models/index.js`/`.ts`, `add tailwind` never rewrites an existing config, and `add piece`/`add theme` never edit `styles.css`. When wiring is needed they print the exact snippet. Generated `.pzl` stubs are compile-checked in tests.
 
-  **Existing destinations (D99, 2026-07-24)** — re-running the command after a CLI upgrade IS the refresh mechanism (the payload is embedded), so an existing install asks rather than aborting. Every install writes `<dest>/.puzzle-skill-version` holding the CLI version; missing or blank reads as *unknown*, never an error. Selected targets classify four ways: **missing** → installed; **stamp matches this CLI** → skipped as up to date; **real but stale/unstamped** → a huh yes/no confirm (default yes) whose lines name the version delta; **symlink** → one `!` line, never offered and never written through (a dev-checkout link, per §41). Declining skips only the conflicts — targets with no skill are still installed, since the pre-flight was all-or-nothing only because it produced an *error*. On a **non-TTY a stale destination still refuses** with the `--overwrite` message and writes nothing; an up-to-date one is no longer a conflict, so `puzzle add skills` is idempotent in CI. `--overwrite` bypasses the whole classification and writes every selected target, symlinks included. Reinstalling **replaces** the destination tree (removed, then copied) so a file the newer payload dropped cannot linger and contradict the current release — except through a symlink, which is written through in place because `os.RemoveAll` on a link deletes the link itself.
-- **`puzzle upgrade skills`** (D99, 2026-07-24) — refreshes the agent skill from THIS binary's embedded payload: no registry check, no re-exec, since nothing was upgraded and the running CLI already holds the matching bytes (the mirror image of §41's post-upgrade path, which must re-exec precisely because its process holds the OLD skill). Refreshes only config dirs that already carry a skill — first installs belong to `add skills` — reports and skips symlinked ones, and prints the `--overwrite` hint when everything is already current. Unlike `add skills`, a **non-TTY installs without prompting**: the command names the clobber, so it is the request rather than a side effect.
-- **`puzzle preview [dir] [--port N] [--strict-port]`** (D148, v1.69) — serves an existing `dist/` the way the production host will, keyed off the resolved output mode: SPA → history-API fallback to the shell; `hybrid` → the route's prerendered page when one exists, shell otherwise; `static` → clean-URL resolution (`/about` → `about/index.html`) and a REAL 404 serving the built `404.html`, never the shell — the mismatch this command exists to expose. No watcher, no SSE, no reload injection, no `dev.proxy`: the artifact is served exactly as it sits on disk. Default port 4000 (deliberately not dev's 3000, so both run side by side) with the §13 `dev`-style D90 scan and `--strict-port`. A missing/empty `dist/` is a hard error naming `puzzle build`. Mode resolution: an explicit config `output` wins; when the config is silent (the mode came from a build *flag*), the artifact identifies itself via its own marker (`data-puzzle-static` / `data-puzzle-ssg` in `dist/index.html`) and preview says so; a config/artifact disagreement — or an `app.js` shape mismatch — warns instead of guessing. URL→file resolution is one shared resolver (`compiler/internal/serve`) used by both `dev` and `preview`, so the two cannot drift.
-- **`puzzle doctor [dir]`** — ✓/✘/! checks (node on PATH, the build entry — `app/app.ts` or `app/app.js` by the build's own rule, with both present a failure — `index.html`, config loads, Tailwind CLI resolves, runtime package present); exits 1 on any failure. **`puzzle info [dir]`** — prints puzzle version, platform, node version, project root, source/output dirs, and the declared styles pipeline. `puzzle --version` reports the CLI version.
+**Translations build (D175; template side is §66).** Only when `puzzle.config.js` declares `i18n`: `compiler/internal/locales` loads every configured `app/locales/<tag>.json`, validates with positioned errors (bad value type by key path, flatten collision, plural entry without `other`, `_` in a file name, a configured locale without a file), flattens nesting to dotted keys (plural entries stay objects), fills each locale's missing keys from `defaultLocale` (one warning per locale, plus one for keys only a non-default locale has), and writes minified sorted-key `dist/locales/<tag>.<HASH8>.json` (sha256 → base32, first 8) into staging before the passes. `locales/` is a reserved public output name while `i18n` is on. The manifest is the virtual module `@magic-spells/puzzle/i18n/manifest` (`{ defaultLocale, locales: { tag: 'locales/<tag>.<hash>.json' } }`, config order), regenerated each rebuild; outside a Puzzle build it resolves to `null` (no translations). `__PUZZLE_HAS_I18N__` is a config-fact define; without `i18n` nothing ships. Warnings: `t` used without `i18n`; `app/locales/` without `i18n`; a literal `t('key')` missing from the default table (did-you-mean). Prerender renders in `defaultLocale` and every page carries `<script type="application/json" data-puzzle-locale="<tag>">` at the shell's `</body>` (static `prerender:false` pages too; a hybrid `prerender:false` page is the verbatim shell and fetches). SPA dev re-emits locale files on an `app/locales/**` edit, refreshes the manifest, rebuilds and reloads, pruning superseded hashed files after success; static dev treats a locale edit as render-wide (D155).
 
-**The build entry (D54).** Every command that bundles the app — `build` (all three output modes), `dev` (SPA and static watchers), the prerender passes, `--fixtures` — and `doctor` resolve the entry through one rule: `app/app.ts` when it exists, otherwise `app/app.js`. Both present is a hard error naming both files (the build never guesses); neither is "entry point not found". A `dev` session re-resolves on every rebuild and asks for a restart if the answer changed. The output is `dist/app.js` either way; `puzzle.config.js` stays JavaScript.
+## 27. Dev HMR: state-preserving reload
 
-**No-JS-rewriting rule (D3).** `add` and `generate` never parse or rewrite the user's JavaScript: `generate model` does not edit `app/models/index.js` (or `index.ts`), and `add tailwind` never rewrites an existing `puzzle.config.js`. When wiring is needed they **print the exact snippet** (registration line / config block + install command) for the author to paste. Generated `.pzl` stubs are compile-checked against the compiler in tests, so they cannot drift from the grammar.
+`puzzle dev`'s reload preserves app state across rebuilds (D57). Zero production cost: every branch sits behind `__PUZZLE_DEV__`.
 
-## 27. Dev HMR: state-preserving reload (v1.25)
+- **Reload + transplant, not module swap.** Each rebuild runs the fresh bundle via `location.reload()`. Just before, the injected SSE client calls `window.__PUZZLE_APP__.__devSnapshot()`, which writes a one-shot `sessionStorage` blob (`__puzzleHMR`). The rebooted app restores in two phases (§35): the store transplants after `beforeMount` and **before navigation #0** (so the first `data()` sees restored records), then view-local state restores once the chain has mounted.
+- **What survives:** store contents (the `_persist()` wire shape, hydrated validation-exempt in identity-preserving replace mode, so the snapshot beats configured `storage` on pk conflicts), §61 read state, each mounted view's **local layer only** (`setData` + `created()` state, through a JSON-safe walk that drops functions and DOM nodes — `data()`-derived values are recomputed, never snapshotted), the URL, and scroll (§14).
+- **View identity** is `${class name}:${per-class mount index}` — deterministic because the same URL mounts the same chain in order. A mismatch cold-starts that view. The edited component's own state is restored too; a shape mismatch self-heals on the next edit.
+- **Bounds:** one-shot (deleted on read), expires after ~10 s so a manual F5 cold-starts; memory mode is exempt; focus/selection are lost; DOM islands (§17) re-seed. Every restore step is fail-soft — never a crash.
 
-`puzzle dev`'s live reload preserves app state across rebuilds. Shipped in v1.25 (D57); dev server client + runtime dev hooks, **zero production cost** (the `__PUZZLE_DEV__` build define is `false` in production builds and every guarded branch is minified away). Editing a `.pzl` mid-flow — modal open, form half-filled, deep in a nested route — no longer resets the app.
+## 36. Static output — `output: 'hybrid' | 'static'`
 
-- **Mechanism: reload + transplant, not module swap.** Every rebuild still runs the fresh full bundle via `location.reload()` (no stale closures, no partial module graphs). Immediately before reloading, the injected SSE client calls the dev-published `window.__PUZZLE_APP__.__devSnapshot()`, which writes a one-shot `sessionStorage` blob (`__puzzleHMR`); the freshly booted app restores it **in two phases (§35)**: the store transplants after `beforeMount` but **before navigation #0** (so the initial route's `data()` queries see the restored records on first paint — restoring after `start()`, as v1.25 did, left store-derived views empty until the next mutation), then view-local state restores once the chain has mounted.
-- **What survives:** store contents (serialized in the `_persist()` wire shape, hydrated validation-exempt and — since §35 — in identity-preserving **replace mode**, so the snapshot wins over user-configured `storage` on pk conflicts while subscribers' record references stay valid), every mounted view's **local layer only** (`setData` + `created()`-seeded state, filtered through a conservative JSON-safe walk — functions and DOM nodes are dropped; since the §35 two-layer split, `data()`-derived model values are deliberately *not* snapshotted and are recomputed against the transplanted store), the route (the URL itself), and scroll (§14/v1.10 already persists it).
-- **View-state identity:** `${class name}:${per-class mount index}` — deterministic across the reload because the same URL mounts the same chain in the same order. A mismatch simply cold-starts that view (fail-soft).
-- **The edited component's state survives too** (restore-all — keeping a form's state while editing that form's template is the point); a shape mismatch self-heals on the next edit.
-- **Bounds:** the blob is one-shot (deleted on read) and expires after ~10s, so a manual F5 cold-starts; memory mode is exempt; focus/text-selection are lost across the reload; DOM islands (§17) re-seed. Every restore step is fail-soft — corrupt blob, missing view, storage error → cold start, never a crash.
+Two build modes that prerender every static route to its own HTML file. No SSR server and no hydration protocol; compiled `.pzl` output is environment-agnostic ViewNode data. Both share one serializer, one prerender orchestrator and one chain assembler (`client-runtime/ssg/assemble.js`).
 
-## 36. Static output — `output: 'hybrid' | 'static'` (v1.33; amended v1.47/D81)
+- **`hybrid`**: prerendered pages **plus** the shared `/app.js` SPA bundle; the router replaces the prerendered DOM at navigation #0 and the site is the SPA thereafter.
+- **`static`** (D81): true static pages — **no router, no takeover, no history API**, no `app.js` in `dist/`. Navigation is plain page loads; each page ships a per-page module that mounts only its own components.
 
-An additive build OUTPUT mode that prerenders every static route to its own HTML file. It amends D1's scope, not its architecture: there is still no SSR server and no hydration protocol, and the Go parser/codegen are untouched (compiled `.pzl` output was already environment-agnostic ViewNode-tree data). **D81 splits this into two output modes** that share one serializer, one prerender orchestrator, and one chain assembler (`client-runtime/ssg/assemble.js`):
+**Activation:** `--static` / `--hybrid`, or `output: 'static' | 'hybrid'` in `puzzle.config.js` (any other value is a config error). The flags are mutually exclusive and must agree with the config. No `output` means SPA.
 
-- **`hybrid`** (D67, formerly spelled `static` — behavior byte-identical): prerendered pages **plus** the shared `/app.js` SPA bundle; the browser runtime replaces the prerendered DOM at navigation #0 and the site is the same SPA thereafter (morph, transitions, routing unchanged after takeover).
-- **`static`** (D81): a **true static site** — prerendered pages with **no router, no SPA takeover, and no history API** in the output. Navigation is plain `<a>` page loads and `dist/` contains no `app.js`; each page ships a small per-page module that mounts only its own components.
+**Dev serving (D148/D154).** `puzzle dev` runs the SPA loop for plain and `hybrid` projects (dev prerenders nothing for hybrid). An `output: 'static'` project gets the real pipeline: every rebuild runs the full static build (bundle + Tailwind + prerender + per-page modules) into staging with an atomic swap, so a failed compile or prerender keeps the last good pages serving, served with static-host semantics — clean URLs, full-page navigations, a real 404 (`404.html`, else a minimal dev 404). The reload client is injected at **serve time** into every HTML page (`dist/` stays production-clean), so reload and the §50 overlay reach static pages, and a 404 self-heals when its route appears. Rebuilds are warm: three persistent esbuild contexts (app pass, node prerender bundle, multi-entry page pass), the long-lived `tailwindcss --watch` child, a session compile memo and an incremental usage scan; each still composes a complete tree, so the artifact is byte-identical to `puzzle build --static`. The node prerender stays a fresh subprocess per rebuild, and nothing writes into served `dist/` out-of-band (a Tailwind rewrite drives a debounced rebuild). `--fixtures` is rejected (§54). Verify either mode's artifact with `puzzle build` + `puzzle preview`.
 
-**Activation:** `puzzle build --static` / `--hybrid`, or `output: 'static'` / `'hybrid'` in `puzzle.config.js` (those are the only two legal values; anything else is a config error). The two flags are mutually exclusive, and a flag disagreeing with the config value is an error. Either flag or config key is sufficient. A plain `puzzle build` (no `output`) stays SPA.
+**Prerender pipeline.** After the normal bundle + Tailwind + `public/` copy into staging, the CLI bundles a node-platform entry (same `.pzl` plugin, `__PUZZLE_DEV__=false`, `__PUZZLE_TAKEOVER__=false`) that imports the app entry's **default-exported PuzzleApp** (`export default app` is required) plus `@magic-spells/puzzle/ssg`, and runs it under `node` once. A prerender failure fails the build; the staging swap keeps the last good `dist/`. The summary (pages, skipped routes, warnings) rides the `__PUZZLE_SSG_JSON__` stdout sentinel.
 
-**Dev serving (D148, v1.69).** `puzzle dev` serves the SPA dev loop for plain and `hybrid` projects — a hybrid site IS the SPA bundle after takeover, so the loop already shows what ships, and dev prerenders nothing for it. A project with `output: 'static'`, though, gets the REAL pipeline in dev: every rebuild runs the full static build (bundle + Tailwind + prerender + per-page modules, staging dir + atomic swap, so a failed compile OR prerender keeps the last good pages serving), and the result is served with static-host semantics — clean URLs, genuine full-page navigations, and a real 404 (the built `404.html`, else a minimal dev 404 page). The live-reload client is injected at **serve time** into every HTML page (`dist/` on disk stays production-clean), so reload and the §50 build-error overlay reach static pages through the normal SSE channel, and a 404 self-heals when its route appears. Those rebuilds are WARM (D154, v1.70): the session holds three persistent esbuild contexts — the app pass, the node prerender bundle, and the multi-entry per-page pass — plus the same long-lived `tailwindcss --watch` child the SPA loop uses since §27/D27, a session-long compile memo, and an incremental usage scan. Each rebuild still composes a complete tree and swaps it atomically, so the artifact is byte-for-byte what `puzzle build --static` produces and the last-good guarantee is unchanged; what is no longer paid per save is the cold re-parse of the project, the Tailwind cold start, and the three cold esbuild passes. Two things stay per-rebuild by design: the node prerender is a fresh subprocess (a persistent render worker is a separate, larger question), and nothing writes into the served `dist/` out-of-band — in static mode `styles.css` belongs to the prerendered tree, so a Tailwind rewrite drives a debounced rebuild rather than an in-place recompose. `--fixtures` is rejected at startup per §54. Verifying the prerendered artifact of *either* mode without a watcher is `puzzle build` + `puzzle preview` (§13).
+**Output paths.** Directory-style in both modes: `/` → `dist/index.html`, `/components/badge` → `dist/components/badge/index.html`. Each page is the shell with the rendered markup injected into the required empty `#id`-form `config.target` and the first `<title>` replaced by the route's resolved `meta.title` (§45). Pages link absolute paths. **A page may not overwrite a copied `public/` asset** (D126) — a collision is a build error naming route and asset; the one exemption is `/` writing `index.html`, the shell itself. Separately, `app.js`, `app.js.map` and `styles.css` are reserved root-level public names (files only, root only).
 
-**Shared prerender pipeline:** after the normal bundle + Tailwind + `public/` copy into the staging dir, the CLI bundles a second node-platform entry (same `.pzl` plugin, `__PUZZLE_DEV__=false`, and `__PUZZLE_TAKEOVER__=false` since it generates markup and never adopts it — D130) that imports the app's **default-exported PuzzleApp** from the app entry (`app/app.ts` or `app/app.js`, §13) (required convention: `export default app`) plus `@magic-spells/puzzle/ssg`, and runs it under `node` once (with the mode passed through). A prerender failure fails the build; the staging swap guarantees the last good `dist/` is untouched. The summary (pages written, skipped routes, warnings) rides a stdout JSON sentinel (`__PUZZLE_SSG_JSON__`), same pattern as the config loader.
+**Render semantics** (`client-runtime/ssg/`). Each route's layout + view chain is assembled and loaded via `preload()` — `created()` + awaited `data()` with `this.route` populated, `lazy()` positions (§62) awaited first — so **no `mounted()`, animations or DOM** run at build time; `data()` runs once per page under Node (module-scope browser globals must be guarded). `render()` always, never `renderSkeleton()`. The serializer mirrors the ViewManager: same `expandSlots`, `@event`/`key`/`island`/`ref`/`flip` dropped, boolean props as bare attrs, `{#svg}` seeds verbatim, scoped-style stamps kept. Principled differences: `value` serializes as an attribute; `<script>`/`<style>` are RAWTEXT (D113) — never entity-escaped; JSON-typed scripts (`application/json` or `+json`) emit `<` as its JSON unicode escape (breakout-proof, like the data islands); other script/style content is raw, and the build **fails** on `</script`/`</style` (case-insensitive) or the `<!--` + `<script` pair. `config.beforeMount` is awaited once with a `{ store, config }` facade — build-time only in both modes.
 
-**Prerendered output may not overwrite a `public/` asset (D126).** `app/public/` is copied into staging before the prerender pass, and a route page whose output path collides with a copied asset is a **build error** naming both the route and the asset — previously the page silently won and the public file's contents were lost. The likely case is `public/404.html` plus a `*` catch-all. Exactly one collision is exempt: route `/` writing `index.html`, which *is* the copied SPA shell and is read into memory before the write loop, so rewriting it is a byte no-op. This is separate from the root-level reserved-name check (`app.js`, `app.js.map`, `styles.css`), which stays files-only and root-only — nested `public/vendor/app.js` remains legal.
+**Hybrid takeover (router).** The target is stamped `data-puzzle-ssg`; pages link `/app.js` + `/styles.css`. On navigation #0 a marked mount container is cleared (`replaceChildren`) inside the commit window after the data gate, the marker removed, and the incoming top view's enter suppressed (`skipEnter()`) — no flash, no duplication. If the mount rejects, the snapshotted prerendered nodes and marker are restored exactly (D140), so the next mount re-runs the takeover clear; a configured `errorView` renders first (§60).
 
-**Per-route output** is directory-style in both modes: `/` → `dist/index.html`, `/components/badge` → `dist/components/badge/index.html`. Each page is the `public/index.html` shell with the rendered markup injected into the (required, empty, `#id`-form `config.target`) element and the first `<title>` replaced by the route's `meta.title` (nearest-defined leaf → root; shell title kept when absent). Pages link absolute paths, so they work at any depth.
+**Static pages (per-page modules, D81).** The target is stamped `data-puzzle-static`. Codegen stamps each class with `Class.__pzlModule` (app-relative source path); `compiler/internal/build/prerender_pages.go` emits one ES module per page, `dist/_puzzle/<slug>.js` (`/`→`index`, `*`→`404`, else `/`→`--`, collisions `-2`, `-3`…), importing `mountStatic` from `@magic-spells/puzzle/static` plus exactly that page's classes (a `lazy()` position contributes its **resolved** class). esbuild splitting factors shared code into `dist/_puzzle/chunks/`. Each page's store is serialized into `<script type="application/json" data-puzzle-static-data>` (plus the §61 read-state island); the shell's `/app.js` tag becomes the page module and `staging/app.js` is dropped. `mountStatic` wires the build-time ctx (Store + function registry; `ctx.router` is a link stub — `url()`/`current` work, every navigation method throws), rehydrates the islands (replace mode), assembles and preloads via `assembleChain`, `skipEnter()`s everything, then `replaceChildren()` + mounts over identical markup. On a marked page a rejected mount restores the prerendered nodes and destroys the failed root (D140). The stub's mode is **always path-shaped** (D117): `routerMode` is ignored with a build warning (a hash href is a dead link on a static file); `routerBase` applies.
+- Models load from `app/models/index.js|ts` and app functions from `app/formatters.js|ts` when present; models or functions registered only in the app entry warn (build-time only, missing client-side).
+- **The adapter capability (D157/D158) is bound by identity.** The bare capability is re-imported from `@magic-spells/puzzle/adapter`; a configured one that is the default export of `app/adapter.js|ts` is imported from there (the prerender checks the module equals `config.adapter`, else bypasses it); a capability configured inline in the app entry makes the page module import the app entry and read `app.config.adapter`, with `app.mount()` inert for that pass. The inline form works but costs page weight and prints an advisory naming `app/adapter.js` — never an error.
 
-**Render semantics** (`client-runtime/ssg/`, both modes): each route's layout + view chain is instantiated and loaded via `preload()` — `created()` + awaited `data()`, with `this.route` populated — so **no `mounted()`, no animations, no DOM runs at build time**; `data()` executes once per page under Node (global `fetch` serves adapters; browser globals in module scope must be guarded). A chain position declared with `lazy()` (§62, D163) is awaited by this pass before the chain is assembled, exactly as the browser router awaits it. `render()` always, never `renderSkeleton()`. The serializer mirrors the ViewManager byte-for-byte where it matters: slot expansion is the SAME `expandSlots`, `@event`/`key`/`island` attrs are dropped, boolean props emit bare attrs, `{#svg}` island seeds emit verbatim, scoped-style `data-<scopeId>` stamps pass through. Principled difference: `value` serializes as an attribute (pre-JS display) where the browser assigns a property. Second principled difference (D113): `<script>`/`<style>` are RAWTEXT — their text is **not** entity-escaped, because the HTML parser never entity-decodes it. JSON-typed scripts (`type` of `application/json` or any `+json` suffix) emit `<` as its JSON unicode escape (backslash-`u003c`) — the same JSON-transparent, breakout-proof rule as the static data island; all other script/style content emits raw, and the build **fails** if it contains `</script`/`</style` (case-insensitive) or the `<!--` + `<script` double-escaped pair, since the parser would end (or refuse to end) the element mid-content. `config.beforeMount` is awaited once with a `{ store, config }` facade — **build-time only in both modes** (the Astro-frontmatter policy).
+**Route matching (all modes):** a single trailing `/` is not significant (`/docs/` matches `/docs`; a `:param` never swallows it), since static hosts serve directory URLs.
 
-**Hybrid takeover contract (router):** the target is stamped `data-puzzle-ssg` and pages link the shared `/app.js` + `/styles.css`. On navigation #0, a mount container carrying `data-puzzle-ssg` is cleared (`replaceChildren`), the marker removed, and the incoming top view's enter animation suppressed (`skipEnter()`) — the swap happens inside the commit window after the data gate, with identical markup, so there is no flash and no duplication. Containers without the marker behave byte-identically to v1.32. *(Amended, D140: the prerendered child nodes + marker are snapshotted before the clear and restored exactly when the mount promise rejects — a `render()`/`mounted()` throw no longer leaves a blank page; the restored marker makes the next container mount (including a layout swap) re-run the takeover clear.)*
+**404.** The top-level catch-all (`path: '*'`) renders to `dist/404.html` with the same treatment (`prerender: false` on its chain writes the plain shell). No catch-all → an advisory warning. In hybrid the live router also serves it for unmatched paths; in static the file is all there is. The `init` templates ship a `NotFound.pzl` catch-all.
 
-**Static contract (per-page modules, D81):** the target is stamped `data-puzzle-static` (never taken over by a router). Codegen stamps every compiled class with `Class.__pzlModule` (its app-root-relative source path); the build (`compiler/internal/build/prerender_pages.go`) generates one per-page ES module `dist/_puzzle/<slug>.js` (slug: `/`→`index`, `*`→`404`, else path `/`→`--`, collisions suffixed `-2`,`-3`…) importing `mountStatic` from `@magic-spells/puzzle/static` plus exactly that page's view/layout/component classes; esbuild code-splitting factors shared components + the router-free view-layer runtime into `dist/_puzzle/chunks/`. A `lazy()` position contributes its **resolved** class's stamp, so a lazily referenced view ships in its page bundle like any eager one — static output has no router and therefore no runtime laziness (§62). Each page's context store is serialized (`store._serializeAll()`) into an inline `<script type="application/json" data-puzzle-static-data>` island; the shell's `/app.js` tag is swapped for the page's module and `staging/app.js` is dropped. `mountStatic` wires the same build-time ctx (Store + FormatterRegistry; `ctx.router` is the D79 link stub — `url()`/`current` work so `{ link(path) }` resolves, navigation methods throw), rehydrates the data island (replace mode), assembles + preloads the chain via the shared `assembleChain`, `skipEnter()`s every instance, then `replaceChildren()` + mounts over the prerendered markup — flash-free because it re-renders identically. *(Amended, D140: on a marked page the prerendered nodes are snapshotted first and restored exactly — with the failed root destroyed — when the mount rejects; `prerender: false` pages keep the original path byte-for-byte.)* *(Amended, D117: the stub's mode is forced to `'history'` on BOTH sides — prerender and kernel — regardless of `routerMode`, which static output ignores with a build warning: static pages are path-shaped files with no click interception, so a hash-shaped href is a dead link. `routerBase` still applies.)* `models` load from `app/models/index.js` and `formatters` from `app/formatters.js` when those files exist; app functions registered only in the app.js `formatters` config warn (available at build time, missing client-side). **The adapter capability (D157/D158) is bound by identity, not by convention**, since a configured one holds functions no summary can carry: the bare capability is re-imported from `@magic-spells/puzzle/adapter`; a configured one that IS the default export of `app/adapter.js`/`.ts` is imported from there (the prerender compares the module to `config.adapter` — a module holding anything else is bypassed, never trusted); and a capability configured inline in `app.js` makes the page entry import the app entry and read `app.config.adapter`, with `app.mount()` compiled inert for that pass. The third form builds and works like the others, costs page weight (the route table and every view join the shared page chunk), and prints an advisory line naming the `app/adapter.js` fix. Configuring the adapter inline is never a build error.
+**Boundaries.** Dynamic routes (`:param`, any non-catch-all `*`) are skipped with a warning in both modes. `prerender: false` anywhere in a chain writes the plain shell at that path — an SPA island in hybrid, a client-rendered island (data island + entry module, no marker) in static. Not supported: a `staticPaths()` enumeration hook, DOM-adoption hydration, a zero-JS static opt-out, link preloading, and flat `name.html` output.
 
-**Route matching amendment (all modes):** a single trailing `/` is no longer significant — `/docs/` matches the `/docs` route and a `:param` capture never swallows the slash. Static hosts serve directory URLs (`/components/badge/`), so the prerendered pages' own load paths must match their routes.
+## 41. CLI update notification + `puzzle upgrade`
 
-**404 (v1.34):** the top-level catch-all route (`path: '*'`, D19) renders to `dist/404.html` — the file static hosts (GitHub Pages, Netlify, Render, Cloudflare) serve for unknown paths — with the same preload/serialize/title/marker treatment as any page (`prerender: false` on its chain writes the plain shell there instead). A build with NO catch-all emits an advisory warning that unknown URLs will get the host's default 404. In `hybrid` mode the live router additionally serves this view for unmatched client paths; in `static` mode there is no client router, so the file is what serves unknown URLs. The `puzzle init` templates (default and todos) ship a `NotFound.pzl` view wired as the catch-all.
+The CLI reports newer releases and upgrades itself through the user's package manager (D76). npm owns installation; the binary never replaces its own files.
 
-**Boundaries:** dynamic routes (`:param`, and any non-catch-all `*` pattern) are skipped with a build warning in both modes (a static build has no way to run them client-side either — dynamic content in static mode awaits `staticPaths()` or a `prerender: false` runtime-fetch island). `prerender: false` anywhere in a route chain writes the plain shell at that path — an SPA island in hybrid mode, a client-rendered island (data island + entry module, no marker) in static mode. Deferred on top: a `staticPaths()` enumeration hook, ~~a head-management API (per-route meta/og)~~ (shipping in v1.50, §45/D84), DOM-adoption hydration, a true zero-JS per-route opt-out for static mode, ~~lazy route views~~ (~~code splitting~~ shipped in v1.75 as the opt-in `build.splitting` — §59/D160; route-level laziness shipped in v1.77 as `lazy()` — §62/D163, awaited by this prerender pass in both modes; **link preloading** remains deferred on top of both), ~~`puzzle preview`~~ (shipped in v1.69, §13/D148), and flat `name.html` output as a config knob.
+**Passive notice (`build`, `dev`).**
+- One dim line — `✨ puzzle <latest> available (current <v>) — run puzzle upgrade` — after the build summary, or from `dev`'s `OnReady` hook after the ready banner.
+- **Skipped entirely** when `CI` or `PUZZLE_NO_UPDATE_CHECK` is non-empty or stdout is not a terminal; the gates run before any check, so scripted runs never touch the network.
+- **Never waits on the network.** `CheckPassive` reads the cache and returns; there is no foreground fetch.
+- Cache: `<os.UserCacheDir()>/puzzle/update-check.json` (`checked_at` RFC3339, `latest`, optional `failed_at`), TTL **1 hour**. Writes are atomic (temp file + rename, retried briefly on Windows sharing violations).
+- A stale or missing answer starts a **detached background refresh** that writes for the next run. It is a separate process, not a goroutine (a `build` exits too fast): the CLI re-execs `os.Executable()` as the hidden **`puzzle update-check`** subcommand — 3 s timeout, writes the cache or `failed_at`, prints nothing, exits 0 — with null stdio, its own session (`Setsid`; `DETACHED_PROCESS|CREATE_NEW_PROCESS_GROUP` on Windows), and a `Wait()` goroutine to reap it. A failed spawn is silent. The helper re-checks `CI`/`PUZZLE_NO_UPDATE_CHECK` and never spawns another helper.
+- **Failure backoff 15 minutes:** a failed refresh stamps `failed_at` (leaving `latest`/`checked_at`), and no helper spawns until it expires; success clears it.
+- Endpoint: `GET <registry>/@magic-spells/puzzle/latest` with `Accept: application/json` — never the abbreviated install-v1 format, which 406s on version endpoints (D80). `<registry>` defaults to `https://registry.npmjs.org`; `PUZZLE_REGISTRY` overrides.
 
-## 41. CLI update notification + `puzzle upgrade` (v1.43)
+**`puzzle upgrade [--check]`.**
+- Fetches latest synchronously (5 s; failure is an error). Current ≥ latest prints `✓ … is up to date`. `--check` reports and changes nothing.
+- **Install context is a property of the running executable, never of the cwd** — the command upgrades the CLI that was invoked, so the compared version, the written install and the success line describe one install.
+- Resolve `os.Executable()` through symlinks. **Manual/`go install`** (no `node_modules` above the binary) → print the `go install …@latest` instruction, exit 0. Otherwise the **owning directory** is the parent of the outermost `node_modules` segment, classified in order:
+  - **pnpm-global** — the owner has pnpm's global-root shape `<pnpm home>/global/<n>` (home named `pnpm`/`pnpm@<v>` or `$PNPM_HOME`) → `pnpm add -g`. Checked first, from the owner path only, because pnpm's global root is itself a package declaring every global install. The full shape is required so `~/pnpm/app` is not misread.
+  - **Project** — the owner's `package.json` lists `@magic-spells/puzzle` in `dependencies`/`devDependencies` → package manager from its lockfile (`pnpm-lock.yaml`, `yarn.lock`, `bun.lock`/`bun.lockb`, else npm), dependency field preserved (`--save-dev`/`-D`/`-d`), run in that directory.
+  - **Workspace root** — the owner is workspace-managed (`workspaces` field or `pnpm-workspace.yaml`) but does not declare the CLI → explain, naming the owner and the `npm install …@<latest> -w <member>` shape, exit 0 without running anything.
+  - **Global** — anything else → `npm install -g`.
+- Installs the exact fetched version (`@magic-spells/puzzle@<latest>`), streams child output, propagates a non-zero exit naming the command. Platform binaries follow as exact-pinned `optionalDependencies`.
+- **Success is confirmed**: `node_modules/@magic-spells/puzzle/package.json` under the owner (or walking up from the binary for unlinked global layouts) must report the target version. Then `✓ upgraded the global CLI <old> → <new>` or `✓ upgraded @magic-spells/puzzle <old> → <new> in <dir>` prints and the update cache is written.
 
-The CLI reports newer published releases and can upgrade itself through the user's own package manager (D76). Two surfaces: a passive one-line notice on `build`/`dev`, and an explicit `puzzle upgrade` command. npm remains the owner of installation — the binary never replaces its own files.
+**Agent-skill refresh** (success path only; D97/D99):
+- Refresh, not first install: a target qualifies only when `<root>/skills/puzzle/` already exists as a real directory under a detected config dir. None qualifying is a silent no-op; a symlinked one gets one `!` line.
+- TTY: yes/no confirm (default yes) listing destinations. Non-TTY: one `!` hint naming them plus `puzzle upgrade skills`, no writes.
+- The install **re-execs the newly installed binary** (the running one embeds the old skill). Candidates per shape (project: `node_modules/@magic-spells/puzzle-<platform>/bin/puzzle`, then `node_modules/.bin/puzzle`; global: `PATH`, then the running executable) must answer `--version` with exactly the target, else the manual command is printed. The child runs `add skills --overwrite --skill-root <root>…`. Nothing here fails the upgrade — errors print and exit 0.
 
-**Passive notice (`puzzle build`, `puzzle dev`):**
-- Prints one dim line — `✨ puzzle <latest> available (current <v>) — run puzzle upgrade` — after the build summary (`build`) or the ready banner (`dev`).
-- **Entirely skipped** when `CI` or `PUZZLE_NO_UPDATE_CHECK` is non-empty, or stdout is not a terminal. Piped/scripted invocations never touch the network — the gates are evaluated before the check runs.
-- **The check never waits on the network.** `CheckPassive` reads the cache and returns; the notice is printed from the recorded answer, or not at all. There is no foreground fetch and no timeout on this path, so no command can be delayed by the registry under any conditions.
-- Cache: `<os.UserCacheDir()>/puzzle/update-check.json` (`checked_at` RFC3339 + `latest`, plus an optional `failed_at`; a file written without that field still loads), TTL **1 hour**. Writes are **atomic** — a temp file in the same directory then a rename, retried briefly on Windows where replacing a file another process holds open is a sharing violation — because concurrent commands each start their own refresh and a reader must never see a partial file.
-- **A recorded answer older than the TTL — or none at all — starts a detached background refresh** and the command answers from what the cache already held. The refresh writes for the *next* run, so a release published since the last check is mentioned on the run after the refresh lands, not on the run that noticed.
-- **The refresh is a separate process, not a goroutine**, because `puzzle build` exits milliseconds after printing the notice and would kill an in-process fetch. The CLI re-execs itself via `os.Executable()` as **`puzzle update-check`** — a hidden (`Hidden: true`) subcommand that fetches with a **3 s** timeout, writes the cache on success or the `failed_at` stamp on failure, prints nothing and exits 0. It is started with null stdin/stdout/stderr, its own session (`Setsid` on unix) or `DETACHED_PROCESS|CREATE_NEW_PROCESS_GROUP` on Windows, and `Start()` followed by a `Wait()` in a goroutine — the goroutine reaps the helper so a long-running `dev` is not left holding a zombie; a short-lived `build` exits first and init reaps it. A spawn that fails is silent. `dev` uses the same mechanism as `build` — one path, not two.
-- The helper re-evaluates `CI` and `PUZZLE_NO_UPDATE_CHECK` itself (the subcommand is reachable from a shell) and refuses to spawn a helper of its own, so the path cannot recurse.
-- **Failure backoff — 15 minutes.** A failed refresh stamps `failed_at` in the cache file, leaving `latest`/`checked_at` exactly as they were, and while `now < failed_at + 15m` no helper is spawned at all. Without it a failed fetch — which writes no `checked_at` — would leave the cache permanently stale and start a doomed process on every single command. Any successful refresh clears `failed_at`.
-- On `dev` the notice is printed from the `OnReady` hook, which fires after the ready banner with the listener already accepting in its own goroutine.
-- Registry endpoint: `GET <registry>/@magic-spells/puzzle/latest` with an `application/json` Accept header — never the abbreviated `application/vnd.npm.install-v1+json` format, which npm serves for packuments only and answers with 406 on version endpoints (D80). `<registry>` defaults to `https://registry.npmjs.org`; `PUZZLE_REGISTRY` overrides it (mirrors, tests).
+Semver comparison is a minimal in-repo `x.y.z[-pre]` implementation (SemVer §11 prerelease ordering); no new Go dependencies.
 
-**`puzzle upgrade [--check]`:**
-- Fetches the latest version synchronously (5s timeout; a failure here IS an error, unlike the passive path). Current ≥ latest short-circuits with `✓ … is up to date`. `--check` reports current vs latest and changes nothing.
-- **Install-context detection is a property of the running executable, never of the current directory.** The command upgrades the CLI that was invoked and nothing else; a project the user happens to be standing in is never touched, because bumping a project's dependency belongs to npm. This is also what keeps the command coherent: the version compared against the registry, the install the package manager writes, and the `<old>` in the success line are the same install by construction, so a confirmed success cannot describe a package the command never wrote.
-- Resolve `os.Executable()` through symlinks, then: **Manual/`go install`** — no `node_modules` segment anywhere above the binary: print the `go install …@latest` instruction and exit 0. Otherwise the **owning directory** is the parent of the **outermost** (leftmost) `node_modules` segment — the root under every layout, since the binary always sits several levels in (`<root>/node_modules/@magic-spells/puzzle-<platform>/bin/puzzle` hoisted, `<root>/node_modules/.pnpm/<pkg>@<v>/node_modules/…` under pnpm). Classify that directory: **pnpm-global** — the owner has pnpm's global-root *shape*, `<pnpm home>/global/<n>` where the home is a directory named `pnpm`/`pnpm@<v>` or wherever `$PNPM_HOME` points (e.g. `~/Library/pnpm/global/5`, `~/.local/share/pnpm/global/5`): `pnpm add -g`. This test comes first and reads the owner path only, never the executable path below it: pnpm's global root is itself a package directory declaring every global install as a dependency, so the project test cannot tell it apart. The full shape is required — matching any `pnpm` path segment would misclassify a project that merely lives under a directory named pnpm (`~/pnpm/app`) and run `pnpm add -g` against it. (`.pnpm` never needs handling here: it only ever lives inside `node_modules`, so it is never part of an owner path.) **Project** — the owner's `package.json` lists `@magic-spells/puzzle` in `dependencies`/`devDependencies`: package manager from that directory's lockfile (`pnpm-lock.yaml`→pnpm, `yarn.lock`→yarn, `bun.lock`/`bun.lockb`→bun, else npm), dependency field preserved (devDependencies → `--save-dev`/`-D`/`-d`), and the package manager runs in that directory. **Workspace root** — the owner does not declare the CLI but is workspace-managed (a `workspaces` field, or a `pnpm-workspace.yaml` beside it): the dependency belongs to a member package that the root hoisted the binary out of. Neither a global install nor a root install would touch that member, and picking one for the user is a guess, so the command explains — naming the owner and the `npm install …@<latest> -w <member>` shape — and exits 0 without running anything, like the manual branch. **Global** — anything else (`/usr/local/lib`, `/opt/homebrew/lib`, an owner with no or an unrelated `package.json`): `npm install -g`, run in whatever directory the user happens to be standing in, which `-g` ignores.
-- The exact fetched version is installed (`@magic-spells/puzzle@<latest>`, not the `latest` tag), child output streams through, and a non-zero exit propagates with the failed command named. The platform binaries follow automatically — they are exact-pinned `optionalDependencies` of the root package (§35).
-- Success is **confirmed**, not assumed: the installed `node_modules/@magic-spells/puzzle/package.json` under the owning directory must report the target version (a global layout that does not link the package there falls back to walking up from the binary). Then the success line prints — `✓ upgraded the global CLI <old> → <new>`, or `✓ upgraded @magic-spells/puzzle <old> → <new> in <dir>` for a project — and the update cache is written so the passive notice does not re-fire. The line names the scope because the two installs are easy to confuse from the outside: the reader has to be able to tell which one moved.
+## 42. Interactive `puzzle init` prompts
 
-**Agent-skill refresh (D97, 2026-07-24)** — reached only on that success path, never from `--check`, the up-to-date short-circuit, or the manual/`go install` branch:
-- **Refresh, not first install**: a target qualifies iff `<root>/skills/puzzle/` already exists as a real directory under a detected config dir (§13). Config dirs without a skill are left to `puzzle add skills`. No qualifying target is a silent no-op.
-- A **symlinked** `<root>/skills/puzzle` is a dev-checkout link: one `!` line names it and nothing is written through it.
-- On a TTY: a huh yes/no confirm (default yes) listing the exact destinations. On a non-TTY: one `!` hint line naming them plus `puzzle upgrade skills` (D99; was `puzzle add skills --overwrite`), and no writes — the never-prompt/never-hang rule from §13.
-- The install is performed by **re-executing the binary npm just installed**, not by this process: the skill payload is `go:embed`-ed, so the running binary holds only the OLD skill. Candidates are tried per install shape (project: `node_modules/@magic-spells/puzzle-<platform>/bin/puzzle`, then `node_modules/.bin/puzzle`; global: `PATH` lookup, then the running executable) and each must answer `--version` with **exactly** the target version before it is used. If none verifies, the manual command is printed instead — a stale skill is never installed.
-- The child is invoked as `add skills --overwrite --skill-root <root>…` with the confirmed roots, so what runs matches what was asked. Nothing in this step can fail the upgrade: the package is already installed, so every error prints and exits 0.
+On a TTY, `puzzle init` prompts for choices not given as flags (D77); on a non-TTY there are no prompts, silent defaults, and a missing app name is an error.
 
-Semver comparison is a minimal in-repo `x.y.z[-pre]` implementation (prerelease sorts before its release, dot-separated identifiers per SemVer §11) — no new Go dependencies.
+- Order: app name (only when the argument is absent) → template → TypeScript.
+- **Template** (only without `--template`): embedded names in menu order (`default`, `todos`); empty selects `default`; invalid re-prompts.
+- **TypeScript** (`Use TypeScript? [y/N]`, only without `--typescript`): y/yes/n/no case-insensitive, empty = No, invalid re-prompts. Yes equals `--typescript`: `<script lang="ts">` components, `.ts` modules with the app configured in `app/app.ts`, a strict `tsconfig.json`, and `typescript` plus `"check": "puzzle check"` in `package.json` ([[DOC-SPEC-ANATOMY]] §25); the next-steps summary adds `npm run check`.
+- An explicitly passed flag is never re-asked. Prompts only gather inputs; the scaffold for a (name, template, typescript) triple is fixed.
 
-## 42. Interactive `puzzle init` prompts (v1.44)
+## 50. Dev build-error reporting
 
+A failed `puzzle dev` build is shown **in the browser** as well as the terminal (D92). Dev server only.
 
-`puzzle init` prompts for the choices that were not given as flags, on a TTY only (D77). Amends §13's "non-interactive by design" clause; every other command is untouched.
+- **Typed SSE events:** `reload`, `builderror`, `clear`. Client buffers are size-1, non-blocking and **last-write-wins** (a newer message replaces a pending one). Payloads are JSON-encoded, since SSE `data:` cannot carry raw newlines.
+- **`builderror` is never debounced** — the D27 reload coalescing does not apply to errors.
+- **Retained state.** The server holds the current error and replays it on connect. The SSE handler registers with the hub **before** reading it, so a racing transition can duplicate a frame but never drop one.
+- **First-run shell.** When the index would 404 and an error is retained, the server answers **503** with a self-contained page: the escaped diagnostic rendered server-side, the reload client injected (self-heals on the next good build), and the overlay node adopted by id so the replay does not stack a second overlay. Without a retained error the 404 path is unchanged.
+- Diagnostics (positioned `.pzl` errors, esbuild messages) pass through verbatim.
 
-- **Gate:** the same TTY check the D32 app-name prompt already uses. On a non-TTY (pipes, CI, scripts) behavior is byte-identical to v1.4: no prompts, silent defaults, and a missing app-name argument is still an error — nothing can hang.
-- **Prompt order:** app name (existing, only when the argument is absent) → template → TypeScript.
-- **Template prompt** — asked only when `--template` was not explicitly passed: offers the embedded template names in menu order (`default`, `todos`); empty input selects `default`; invalid input re-prompts.
-- **TypeScript prompt** (`Use TypeScript? [y/N]`) — asked only when `--typescript` was not explicitly passed: y/N, empty input means No; accepts y/yes/n/no case-insensitively; invalid input re-prompts. Yes is the same switch as `--typescript`: the template's TypeScript variant (`<script lang="ts">` components, `.ts` modules with the app configured and mounted in the `app/app.ts` entry, a strict `tsconfig.json`, and `typescript` plus a `"check": "puzzle check"` script in `package.json` — D54, [[DOC-SPEC-ANATOMY]] §25), and the next-steps summary adds `npm run check`.
-- **Flags win:** an explicitly-passed flag is never re-asked, so `puzzle init my-app --template todos --typescript` stays fully scripted even on a TTY.
-- The scaffolded output for a given (name, template, typescript) triple is unchanged — prompts only gather inputs; scaffolding semantics stay §13's.
+## 53. App-author test utilities: `@magic-spells/puzzle/testing`
 
-## 50. Dev build-error reporting (v1.55)
+Exports `mountView`, `createTestApp`, `settled`, `type`, `measureRenders`, `installFakeAnimate`, `installFakeObserver`, and re-exports `installFixtures` (§52) — `const uninstall = installFixtures({ seed })` in setup, `uninstall()` in teardown (D94/D98/D121).
 
-A failed `puzzle dev` build is reported **in the browser**, not only on the terminal (D92). Dev-server only — `puzzle build` and both prerender paths are untouched, matching how `dev.proxy` is scoped.
+- **`mountView(ViewClass, opts)`** mounts one view on a detached container with a full ctx; the handle exposes `element`/`find`/`findAll`/`click`/`type`/`setProps`/`destroy`. **`createTestApp(config)`** boots a real app under memory routing so `visit(path)` drives the real guard → load → commit pipeline. It imports `memoryRouter` itself and overrides `routerMode` and `target`; `routerInitialPath` is its own option, handed to the memory mode. Both accept `i18n: { locale, strings }` to install the real translation service over an in-memory table (D175); the page-wide locale slots are restored when the last such handle is destroyed.
+- **`type(target, text)`** replaces a control's value, fires the events a real edit-then-leave produces, and awaits settlement — the sanctioned way to drive a two-way bound field. Also a method on the handles.
+- **`settled()`** drains to a fixed point: store `flush()`, rAF-scheduled `setData` renders, and current `data()`/navigation promises, repeating until two microtask-stable passes add no work. **Bounded** (`settled({ maxPasses })`, default 100) and **throws** on exhaustion, naming the churn sources.
+- **`measureRenders(handle, callback)`** installs a temporary §56 sink, runs and awaits the callback, awaits `settled()`, and detaches in `finally`. Its deeply frozen report is `{ renders, wastedRenders, domMutations, rendersByView, causes, maxRecursiveDepth, storeNotifications }`. A render is an entry into `ViewManager.render`; it is wasted when its DOM-mutation delta is zero.
+- **Boundaries are contract:** `settled()` does not advance user timers or `min-duration` holds, resolve promises `data()`/navigation never awaited, fire IntersectionObserver callbacks, or finish CSS/fire-and-forget enter animations. An awaited navigation's outgoing animation stays unsettled until the test finishes or cancels it.
+- The shipped module **must not import `vitest`**.
 
-- **Typed reload events.** The SSE channel that already drives §27's state-preserving reload now carries `reload`, `builderror`, and `clear`. Client buffers stay size-1 and non-blocking (a slow client never blocks a rebuild) but are **last-write-wins**: a newer message replaces a stale pending one, because an error arriving behind a queued reload must supersede it. Payloads are **JSON-encoded** — SSE `data:` fields cannot carry raw newlines and every real diagnostic is multi-line.
-- **`builderror` is never coalesced.** The D27 reload debounce (one `.pzl` edit → esbuild rebuild + Tailwind rescan → one reload) does not apply to errors; they broadcast immediately.
-- **Retained state.** The server holds the current build error and replays it to each client on connect, so refreshing or opening a new tab while the build is broken still shows the error. The SSE handler registers with the hub **before** reading the retained error, so a build transition racing a new connection can duplicate a frame but never drop one.
-- **First-run shell.** When the index path would 404 **and** an error is retained (no `dist/index.html` has ever been written), the server answers **503** with a self-contained shell: the diagnostic HTML-escaped and rendered server-side, the reload client injected so the page self-heals on the next successful build, and the overlay node adopted by id by the client script so the SSE replay does not stack a second overlay. With no retained error the 404 path is byte-identical.
-- **Diagnostics pass through verbatim.** Positioned `.pzl` compiler errors and esbuild messages are already the high-quality artifact; the transport does not reformat them.
+## 54. The `--fixtures` build switch
 
-## 53. App-author test utilities: `@magic-spells/puzzle/testing` (v1.58)
+`puzzle dev --fixtures` and `puzzle build --fixtures` (D98) wire §52's module into the bundle; without the flag nothing references it, so exclusion holds by construction.
 
+- Requires `app/fixtures.js` (or `.ts`), whose default export is §52's `{ seed, mock, setup }`; missing is a clear error.
+- The compiler generates a **two-module wrapper entry** under `<root>/.puzzle/` — a wiring module running `installFixtures(config)` imported **before** the real app entry (§13 rule), because only a dependency module's body is guaranteed to run before the entry mounts. Output stays `dist/app.js`.
+- `.puzzle/` is the compiler's self-ignoring scratch root (its own `*` `.gitignore`; the usage scan skips dot-dirs). It also holds transient build dirs (`tmp/staging-*`, `tmp/dist-old-*`), swept by age at startup — [[DECISION-D153-PUZZLE-SCRATCH-DIR]]. The wrapper is removed after one-shot builds and kept for a `dev` process's life.
+- The flag is constant per process; watch rebuilds never re-decide it.
+- **Rejected** with `--static`/`--hybrid` or a config `output`. There is no config-file equivalent — the CLI switch is the real-API vs fakes toggle.
 
-A dedicated export subpath (D94, amended by D121) — `mountView`, `createTestApp`, `settled`, `type`, `measureRenders`, `installFakeAnimate`, `installFakeObserver`.
+**Build defines** (`compiler/internal/build/options.go`). Usage facts from the scan: `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__`, `__PUZZLE_HAS_SNIPPETS__`, `__PUZZLE_HAS_RAW_HTML__`, `__PUZZLE_HAS_RAW_SANITIZE__` (read from `.pzl` templates) and `__PUZZLE_HAS_LAZY__` (read from the app's `.js`/`.ts` scripts, since `lazy()` is called in `routes.js`). Config fact: `__PUZZLE_HAS_I18N__`. Build facts: `__PUZZLE_DEV__`, `__PUZZLE_TAKEOVER__`, `__PUZZLE_CAPTURE__`. The runtime probes each as `typeof X === 'undefined' || X`, so an unbundled consumer keeps every path. There is no managed-head define (D111).
 
-- **`mountView(ViewClass, opts)`** mounts one view against a detached container with the three-service ctx; the handle exposes `element`/`find`/`findAll`/`click`/`type`/`setProps`/`destroy`. **`createTestApp(config)`** runs a real app under memory routing so `visit(path)` drives the real load-then-commit pipeline, guards, and lifecycle. The helper imports `memoryRouter` and builds the mode itself — `routerMode` and `target` from the supplied config are deliberately overridden, and a mode **string** is a constructor throw (D159), so a test never spells the mode by name.
-- **`type(target, text)`** replaces a form control's value, fires the events a real edit-then-leave produces, and awaits settlement — the sanctioned way to drive a two-way bound field (§58). Available both as a standalone export and as a method on the mounted handles.
-- **`settled()`** drains to a fixed point: stores through the public idempotent `flush()`, rAF-scheduled `setData` renders, and the current last-wins `data()`/navigation promises — repeating until two microtask-stable passes add no work (two, so work created by a promise continuation is caught without depending on rAF or §31's fallback timer).
-- **It is bounded** (`settled({ maxPasses })`, default 100) and **throws** on exhaustion, naming the churn sources. Unbounded, a `data()` → store-write → `data()` cycle hangs until the runner's global timeout and reports nothing.
-- **`measureRenders(handle, callback)`** installs a temporary §56 performance sink, runs and awaits the callback, then awaits `settled()` before detaching in `finally`. Its deeply frozen report is `{ renders, wastedRenders, domMutations, rendersByView, causes, maxRecursiveDepth, storeNotifications }`. A render means an entry into `ViewManager.render`, not a `refresh()` call; a render is wasted only when its DOM-mutation delta is zero. The helper is assertion-library-neutral and does not mutate the supplied handle.
-- **Its boundaries are contract, not omission.** `settled()` does not advance arbitrary user timers or `min-duration` holds, resolve promises `data()`/navigation never awaited, fire IntersectionObserver callbacks, or finish CSS/fire-and-forget enter animations. An outgoing animation *is* part of an awaited navigation, so that navigation stays unsettled until the test finishes or cancels it.
-- The shipped module **must not import `vitest`** — a published package cannot depend on a test runner.
-- `/testing` also re-exports `installFixtures` from the §52 module (v1.61, D98), so a test file needs one import for helpers *and* fixtures; the canonical pairing is `const uninstall = installFixtures({ seed })` in setup, `uninstall()` in teardown.
+## 55. The DevTools bridge and wire protocol
 
-## 54. The `--fixtures` build switch (v1.61)
+The Chrome extension lives at `packages/puzzle-devtools` (D162); the framework ships only a **dev-only runtime bridge** (D100), and this section is the contract between them. Zero config surface, zero production bytes: the extension injects `window.__PUZZLE_DEVTOOLS_HOOK__` at `document_start` and the bridge registers into it when present. No hook → every touchpoint is a no-op; production → the bridge is DCE'd (`__PUZZLE_DEV__`, pinned by a build test).
 
+**Envelope:** `{ puzzle: 1, v: <protocolVersion>, type, payload }`, protocol version 1, exchanged in `hello`; the extension must show a mismatch state rather than misrender.
 
-`puzzle dev --fixtures` and `puzzle build --fixtures` (D98) wire §52's module into the bundle; without the flag **nothing references it**, so exclusion holds by construction with any compiler version. (This replaces v1.59's `__PUZZLE_HAS_FIXTURES__`/`__PUZZLE_HAS_MOCK__` usage-scan defines — D96, superseded. The D89 scan mechanism itself is unchanged; its live defines are now `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__`, and `__PUZZLE_HAS_LAZY__` — D111 retired the managed-head half. The first three are template facts read from `.pzl`; the lazy bit is a script fact, so the walk also reads the app's `.js`/`.ts`-family modules as text.)
+**Events (runtime → extension, `hook.emit`):** `hello { protocolVersion, frameworkVersion }` · `app-mounted` / `app-unmounted` · `view-mounted { id, name, module }` / `view-destroyed { id }` · `flush { keys, notified }` (one per store flush batch) · `route-commit { pathname, query, params, chain, title }` (post-mount, pre-paint) · `perf-warning { kind, viewId, name, detail, count }` (only when a §56 guard trips).
 
-- The flag requires `app/fixtures.js` (or `.ts`); missing is a clear error. Its default export is §52's install config: `{ seed, mock, setup }`.
-- The compiler generates a **two-module wrapper entry** under `<root>/.puzzle/` and swaps the esbuild entry point: a wiring module (`installFixtures(config)` in its body) imported **before** the real app entry (`app/app.ts` or `app/app.js`, §13's rule). Two modules because static imports hoist — only a dependency module's body is guaranteed to run before the app entry constructs and mounts. The wrapper keeps the `dist/app.js` output name.
-- `.puzzle/` is the compiler's self-ignoring scratch root (it carries a `*` `.gitignore`, and the usage scan already prunes dot-dirs). The fixtures wrapper lives there, and since D153 so does every transient build directory (`tmp/staging-*`, `tmp/dist-old-*`), swept by age at build/dev startup — see [[DECISION-D153-PUZZLE-SCRATCH-DIR]]. The wrapper is removed after one-shot builds and kept for the life of a `puzzle dev` process.
-- The flag is constant per process, so watch rebuilds never re-decide it — none of the define-staleness machinery applies.
-- `--fixtures` with `--static`/`--hybrid` (or a config `output`) is **rejected**; prerender + fixtures interplay is deferred. A `puzzle.config.js` equivalent of the flag is also deferred — the explicit CLI switch *is* the dev-vs-real-API toggle.
-- Use cases: `puzzle dev` against the real API, `puzzle dev --fixtures` against fakes, `puzzle build --fixtures` for a shareable preview with baked-in data.
+There is **no per-render event**: the page hook buffers 500 pre-attach messages and the panel ring holds 200, so a render firehose would evict everything else. Render data is pulled via `snapshot:profile` while recording.
 
-## 55. The DevTools bridge and wire protocol (v1.63)
+**Requests (extension → runtime, `hook.onRequest`):** `snapshot:views` (recursive `{ id, name, module, children }`, roots found by walking live views' vnode trees, never router internals) · `inspect:view { id }` → `{ name, module, params, props, model, local }` with model and `setData()` layers separate, JSON-safe · `snapshot:records { type? }` · `snapshot:subscriptions` → `{ byKey, byView, held }` (function subscribers merged as `'fn'`; `held` lists keys a prepared-but-uncommitted `data()` run added, D146, also present in `byKey`/`byView`) · `snapshot:route` → `{ path, pathname, query, hash, params, route, routes, chain, title }` (patterns and view names, never live objects) · `edit:record { type, id, patch }` through the real `record.update()` (§20 applies; a throw returns `{ error }`) · `highlight:view { id, on }` · `log:view` / `log:record` (binds `window.$p`) · `perf:start` / `perf:stop` → `{ ok: true }` · `snapshot:profile` → `{ recording, durationMs, totals, views[], flushes[], warnings[] }`.
 
-The Puzzle DevTools Chrome extension lives at `packages/puzzle-devtools` in this
-monorepo (D162); the framework ships only a **dev-only runtime bridge** (D100),
-and this section is the contract between the two packages. This is NOT
-the D60-rejected app-config devtools hook: there is zero config surface and
-zero production bytes — the extension injects `window.__PUZZLE_DEVTOOLS_HOOK__`
-at `document_start`, and the bridge registers into it when present. No hook →
-every touchpoint is a no-op. Production build → the bridge does not exist
-(`__PUZZLE_DEV__` DCE, pinned by the same build test as `__PUZZLE_APP__`).
+**Additive growth without a version bump:** unknown events fall into the extension's ring and unknown requests fail per call with `{ error }`. A `PROTOCOL_VERSION` bump forces every published app into `MISMATCH`.
 
-**Envelope.** Every message is `{ puzzle: 1, v: <protocolVersion>, type,
-payload }`. Protocol version 1. Versions are exchanged in `hello`; the
-extension supports a range and must show a clear mismatch state rather than
-misrender.
-
-**Events (runtime → extension, via `hook.emit`):** `hello { protocolVersion,
-frameworkVersion }` · `app-mounted` / `app-unmounted` · `view-mounted { id,
-name, module }` / `view-destroyed { id }` · `flush { keys, notified }` (one
-per store flush batch — rides D63's scheduling, no extra throttling) ·
-`route-commit { pathname, query, params, chain, title }` (emitted in the same
-post-mount pre-paint window as scroll/focus) · `perf-warning { kind, viewId,
-name, detail, count }` (D122 — fired only when a §56 loop guard trips, never
-per render).
-
-There is deliberately **no per-render event**. The page hook buffers 500
-messages pre-attach and the panel ring holds 200, so a render firehose would
-evict the events every other panel depends on; render data is PULLED via
-`snapshot:profile` while recording and not at all otherwise.
-
-**Requests (extension → runtime, via `hook.onRequest` handler):**
-`snapshot:views` (recursive `{ id, name, module, children }` tree; roots
-derived by walking live views' vnode trees — never the router's private
-state) · `inspect:view { id }` → `{ name, module, params, props, model,
-local }` with the **model layer and `setData()` local layer reported
-separately**, JSON-safe filtered · `snapshot:records { type? }` ·
-`snapshot:subscriptions` → `{ byKey, byView, held }` (both directions, view
-ids; function subscribers labeled `'fn'` — one merged bucket, no per-function
-identity; `held` lists the keys a PREPARED but uncommitted `data()` run added
-per D146 — genuinely live, so they also appear in `byKey`/`byView`, but split
-out so an open navigation does not read as a leak) ·
-`snapshot:route` → a JSON-safe projection `{ path, pathname, query, hash,
-params, route, routes, chain, title }` — `route`/`routes` are path PATTERNS and
-`chain` is the committed view NAMES, never the live entry objects ·
-`edit:record { type, id, patch }` —
-applied through the real `record.update()`, so §20 validation applies and a
-throw returns `{ error }` · `highlight:view { id, on }` (page overlay) ·
-`log:view` / `log:record` (logs the live object and binds `window.$p`) ·
-`perf:start` / `perf:stop` → `{ ok: true }` · `snapshot:profile` → `{ recording,
-durationMs, totals, views[], flushes[], warnings[] }` (D122).
-
-**Additive growth.** The message set grows WITHOUT a `PROTOCOL_VERSION` bump:
-unknown events fall through the extension's `receive()` default into the ring
-and unknown requests fail per-call with `{ error }`, so both ends already
-tolerate names they do not know. A bump forces every published app into the hard
-`MISMATCH` state and blanks every panel.
-
-**Profile aggregation lives in the bridge, not in the §56 collector**, so rows
-carry the bridge's own view ids (the panel cross-links into `snapshot:views` by
-them) and a recording retains no view references — otherwise a long recording
-would pin every view destroyed during it.
-
-**Identity.** View ids are session-scoped integers (WeakMap-assigned); `name`
-is the compiled class name (dev builds are unminified), `module` is the
-codegen `__pzlModule` stamp (app-relative `.pzl` path).
+**Profile aggregation lives in the bridge**, not the §56 collector, so rows carry bridge view ids and a recording retains no view references. **Identity:** view ids are session-scoped integers (WeakMap); `name` is the class name (dev builds are unminified); `module` is the `__pzlModule` stamp. `FRAMEWORK_VERSION` in `client-runtime/devtools.js` is a literal `release:prep` asserts.
 
 ## 56. Dev-only runtime performance profiling + render assertions
 
-Development builds instrument the render/data/Store pipeline through one
-collector module (D121). Production builds contain **zero bytes** from that
-module: every class-method call site uses the inline positive
-`typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__` probe, module-scope
-functions may use the equivalent module constant, and esbuild syntax folding
-must remove every importer before tree-shaking. Undefined means enabled for
-unbundled tests. No profiler state is stored on PuzzleView, ViewManager, Store,
-or Router; per-view identity, counters, causes, and rolling windows live in
-WeakMaps in the collector.
-The enforced regression oracle is attribution, not artifact identity (D131,
-correcting the original D121 consequence): a production build's esbuild
-metafile must attribute zero `bytesInOutput` to `client-runtime/devperf.js`,
-and the bundle must be free of the profiler sentinel and bridge request
-strings. Identity to a remembered build is NOT the contract — unrelated work
-legitimately moves the bundle, and minified-identifier allocation can shift
-gzip output by a few bytes with zero retained instrumentation.
+Development builds instrument render/data/Store through one collector, `client-runtime/devperf.js` (D121). **Production contains zero bytes of it**: class-method call sites use the inline `typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__` probe (module-scope functions may use an equivalent constant) so esbuild folding removes every importer. No profiler state lives on PuzzleView, ViewManager, Store or Router — identity, counters, causes and windows are collector WeakMaps. The regression oracle is attribution (D131): the production metafile attributes zero `bytesInOutput` to `devperf.js` and the bundle carries no profiler sentinel or bridge request strings. Byte-identity to a remembered build is not the contract.
 
-- A render record is one entry into `ViewManager.render`. It times the owning
-  view's tree build separately from diff/patch, and its mutation delta counts
-  actual text/property/attribute writes plus node insert/remove/move operations.
-  Delta zero means a **wasted render**. Refresh requests are not renders because
-  they may coalesce.
-- `data()` records wall time and sync/async shape. Component reuse records
-  shallow-props bailouts versus data reruns; slot-only updates and
-  `memo(key, ...)` hits/misses are attributed per view/key. Store flush records
-  whole-flush time, pending-key count, and unique notified subscribers.
-  Serialized async tracking records every head-of-line deferral and its wait
-  time so concurrent async `data()` serialization is visible rather than folded
-  into generic data latency.
-- A causal token follows Store write/flush → view refresh → render → writes and
-  framework work scheduled by those steps. Per-view execution depth resets only
-  when that chain is quiescent. The two loop guards over that token are
-  deliberately asymmetric:
-  - **Recursive, per chain — stops.** At 100 executions of one view inside a
-    single non-quiescent chain the view is reported (`console.error`) and its
-    further renders in that chain are suppressed. That many executions in one
-    causal chain is proof of a loop, and stopping it rather than hanging the tab
-    is the point.
-  - **Cross-frame, rolling one second — warns only.** A view that renders at
-    least 60 times in a rolling second with at least 90% of those renders making
-    zero DOM mutations, and no recorded cause being animation or morph work, is
-    reported (`console.warn`) and nothing more. It **must not** suppress the
-    render. That threshold is a heuristic about waste, not proof of a loop, and
-    ordinary framework behaviour reaches it: a route ancestor renders `depth + 2`
-    times per navigation and most of those renders legitimately mutate nothing,
-    so a five-level route tree crosses 60-per-second at roughly 8.6 navigations
-    per second. When this guard did suppress, the tripped ancestor stopped
-    re-rendering its `<Slot/>` and the routed child never mounted. A
-    development-only instrument may not change what the app does. The warning
-    therefore describes the waste and never claims the framework intervened.
-- The development collector exposes temporary event sinks for §53's
-  `measureRenders`; no test framework is imported. Production DCE is proved by a
-  dev-only sentinel scan and an esbuild metafile assertion that attributes zero
-  production `bytesInOutput` to `client-runtime/devperf.js`.
+- A render record is one `ViewManager.render` entry, timing the tree build separately from diff/patch; its mutation delta counts text/property/attribute writes and node insert/remove/move. Delta zero is a **wasted render**. Refresh requests are not renders.
+- `data()` records wall time and sync/async shape. Component reuse records shallow-props bailouts vs data reruns; slot-only updates and `memo()` hits/misses are attributed per view/key. Store flushes record time, pending keys and unique notified subscribers. Serialized async `data()` records each head-of-line deferral and wait.
+- A causal token follows store write/flush → refresh → render → work those schedule; per-view depth resets only when the chain is quiescent. Two deliberately asymmetric loop guards:
+  - **Recursive, per chain — stops.** At 100 executions of one view in one non-quiescent chain, `console.error` and suppress its further renders in that chain.
+  - **Cross-frame, rolling one second — warns only.** ≥ 60 renders in a second with ≥ 90% zero-mutation and no animation/morph cause → `console.warn`. It **must not** suppress: ordinary navigation reaches that rate (a route ancestor renders `depth + 2` times per navigation), and suppressing once stopped a routed child mounting. A dev instrument may not change app behavior.
+- The collector exposes temporary event sinks for §53's `measureRenders`; no test framework is imported.
 
-## 59. Opt-in SPA code splitting — `build.splitting` (v1.75)
+## 59. Opt-in SPA code splitting — `build.splitting`
 
+`build: { splitting: true }` builds the SPA bundle with esbuild splitting: each dynamic `import()` becomes a lazy chunk under `dist/chunks/` ([[DECISION-D160-SPA-CODE-SPLITTING]]).
 
-`build: { splitting: true }` in `puzzle.config.js` builds the SPA browser bundle
-with esbuild code splitting: every dynamic `import()` becomes a lazy chunk under
-`dist/chunks/` that the browser fetches when that code path runs, instead of
-being inlined into `app.js`. Shipped in v1.75 ([[DECISION-D160-SPA-CODE-SPLITTING]]).
+- **Opt-in; unset is off** — exactly one `dist/app.js`. `null` is unset; a non-boolean is a config error naming the key.
+- **The entry name is stable** (`app.js`, so the shell is unchanged). Chunks are `chunks/<name>-<hash>.js` and import each other as native ESM (no loader runtime).
+- **Static imports are untouched**; authors choose split points by writing `import()`.
+- **`chunks/` is a reserved output name while on** — a root-level `public/chunks` fails the build, case-folded.
+- **`output: 'static'` forces it off** (its `app.js` is deleted; per-page bundles already split, §36). `hybrid` splits like the SPA.
+- **`puzzle dev` splits and prunes**: the dev builder deletes the previous rebuild's outputs this one did not produce; only paths it wrote are candidates.
+- **Size banner:** `puzzle build` prints per-dependency emitted bytes (metafile `bytesInOutput`, grouped by the innermost `node_modules/` package; the rest is `app`) and warns in production for any dependency over 200 KB, naming `import()` + `build.splitting`. App code and the framework runtime are listed, never advised.
+- Route-level laziness is `lazy()` (§62), an ordinary consumer: its `import()` becomes a chunk when this flag is on and is inlined otherwise.
 
-- **Opt-in, and unset means off.** With the key absent the build emits exactly
-  the single `dist/app.js` it always has. `null` is unset, not `false`, like the
-  other `build.*` scalars (§13); a non-boolean is a config error naming the key.
-- **The entry name is stable.** Splitting never renames `app.js`, so the shell
-  HTML (`<script type="module" src="/app.js">`) is unchanged. Chunks carry a
-  content hash (`chunks/<name>-<hash>.js`) and import each other as native ESM —
-  esbuild's ESM splitting emits no chunk-loader runtime, so total shipped bytes
-  do not grow.
-- **Static imports are untouched.** An app with no dynamic `import()` builds to
-  one file with the flag on. Authors choose split points by writing `import()`;
-  there is no per-view or per-component fragmentation.
-- **`chunks/` is a reserved output name while the flag is on.** A root-level
-  `public/chunks` entry fails the build up front, case-folded, exactly as
-  `app.js` / `app.js.map` / `styles.css` do (§13). With the flag off that name
-  belongs to the app again.
-- **`output: 'static'` forces it off.** That mode's `app.js` is deleted before
-  the staging swap, so splitting it would ship chunks nothing imports; its
-  per-page bundles already split on their own (§36). `hybrid` splits like the
-  SPA — its bundle is the shipped runtime after takeover.
-- **`puzzle dev` splits too**, and prunes: the dev builder writes the pass's
-  outputs itself and deletes the previous rebuild's outputs that this one did
-  not produce, so an edited lazy module's re-hashed chunk replaces its
-  predecessor instead of accumulating in a warm `dist/`. Pruning only ever
-  considers paths that builder wrote — the public mirror and `app.js` are never
-  candidates.
-- **The build size banner reports composition.** `puzzle build` prints
-  per-dependency emitted bytes (esbuild metafile `bytesInOutput`, grouped by the
-  package under the innermost `node_modules/`; everything else is `app`), and
-  warns for any single dependency over 200 KB, naming `import()` +
-  `build.splitting` as the fix. The threshold describes MINIFIED bytes, so the
-  warning is production-only; the app's own code and the framework runtime are
-  listed but never advised, since neither can move behind a dynamic `import()`.
-- **Route-level laziness is §62, not this section.** This flag is
-  *dependency*-driven: it splits whatever the author already wrote as an
-  `import()`. `lazy()` (v1.77, D163) is the route-driven counterpart, and it is
-  an ordinary consumer of this machinery — the loader's `import()` becomes a
-  chunk when this flag is on, and is inlined (still working) when it is off.
+## 63. `puzzle check`: type-checking `.pzl` with the app's own tsc
 
-## 63. `puzzle check`: type-checking `.pzl` with the app's own tsc (v1.78)
-
-`puzzle check [dir]` type-checks an app's `.pzl` files — script bodies **and**
-template expressions — and reports every diagnostic at its authored `.pzl` line
-and column. Shipped in v1.78 ([[DECISION-D165-PUZZLE-CHECK]]). It is a separate,
-opt-in command: `puzzle build` and `puzzle dev` remain transpile-only (§25/D54),
-and nothing about compilation or output changes.
+`puzzle check [dir]` type-checks `.pzl` script bodies **and** template expressions and reports each diagnostic at its authored `.pzl` line:column ([[DECISION-D165-PUZZLE-CHECK]]). Opt-in: `build`/`dev` stay transpile-only.
 
 ```
 $ puzzle check
 app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
 ```
 
-- **The app's own TypeScript does the checking.** The command resolves the app's
-  `node_modules/typescript/bin/tsc` — the JavaScript entry every `.bin` shim
-  points at — and runs it as `node <that path> --noEmit --pretty false …`, the
-  same invocation on every OS (no platform shell, so a project path containing a
-  space is fine). Puzzle never installs a compiler and never links against a
-  TypeScript API: a missing install is the message
-  `puzzle check needs TypeScript: npm install -D typescript`, a missing `node`
-  on `PATH` is `puzzle check needs Node.js on PATH: it runs the app's TypeScript
-  compiler`, and a directory with no `app/` is reported as "not a Puzzle
-  project" **before** the TypeScript check, so a wrong working directory is
-  never reported as a missing dependency.
-- **Virtual files under `.puzzle/check/`** (§13's scratch dir) mirror the `app/`
-  tree and are rebuilt from scratch each run, so a deleted `.pzl` leaves no
-  ghost. A `lang="ts"` component emits one `.pzl.ts`: its script bytes verbatim,
-  followed by a generated function — never executed — whose body re-states every
-  template expression as typed statements, lowered from the same expression
-  tree the build compiles (D176). `{#if}`/`{#case}` become `if`/`switch`,
-  `{#for}` becomes a declared visitor call whose item type is destructured out
-  of the collection, a standard function call goes through the shim's
-  `__puzzle_fn.name(…)` and is checked against its signature, any other bare
-  call — an app-registered function — goes through
-  `__puzzle_app_fn("name")(…)`, declared
-  `(name: string) => (...args: any[]) => any` (a call, not an index signature
-  on `__PuzzleFunctions`, so it type-checks under `noUncheckedIndexedAccess`),
-  a method is checked as the same JavaScript method, and each
-  `@event` binding is assigned to a handler-typed const. The emitter keeps the
-  author's spelling where the render target adds safety: no `?.` guards and no
-  `?? {}` default on `Object.keys`/`values`/`entries` (TypeScript 5.6+ reports
-  a `??` whose left side can never be nullish). The shim references
-  the ES2016–ES2023 string, array and object lib files the method table needs
-  whatever the app's `target`. The root `<puzzle-view>` tag's own attributes
-  and the `<puzzle-skeleton>` body are checked like any others.
-- **A JavaScript component emits a pair**: an unchecked `.pzl.script.js` mirror
-  of the script body plus the checked `.pzl.ts` template wrapper that imports
-  it. Plain JavaScript is never silently promoted into `checkJs`. (`--js`, which
-  would check JS script bodies too, is reserved and errors as not implemented.)
-  Its handlers take any arguments: their parameters are only what TypeScript
-  infers from untyped JS, so `@click={ play(event) }` against `play: () => {}`
-  is not an arity error. Handler names are checked against the keys of the
-  `events` field, so a misspelled handler is reported — and so is one attached
-  at runtime rather than declared there (`this.events.play = …` in the
-  constructor or `created()`). The argument expressions are still checked; a
-  `lang="ts"` component's handler calls stay fully checked.
-- **Positions are byte-exact.** Each virtual file carries a `.segments.json`
-  sidecar pairing emitted ranges with the source ranges they were copied from;
-  generated scaffolding and inserted data prefixes carry no segment, so they
-  can never be mistaken for authored code. Remapping uses the run's own
-  in-memory tables and the bytes it emitted, never a re-read of the sidecars or
-  the `.pzl` — a save while TypeScript is running cannot shift a reported
-  position. The sidecars are written for inspection. Diagnostics whose position
-  cannot be mapped are passed through unrewritten rather than relocated.
-- **The generated tsconfig extends the app's** when one exists, so the app's
-  `strict`/`lib`/`paths` settings are what get enforced — with the options that
-  would break the generated workspace overridden (`rootDir`, `composite`,
-  `skipLibCheck`, the `noUnused*` pair), the input extensions spelled out rather
-  than globbed, and `exclude` forced empty. It is also **version-aware**: the
-  runner probes `tsc --version` once and, on TypeScript 6 and up, clears
-  `baseUrl` and `moduleResolution` (removed in 7, deprecated in 6) while keeping
-  the proven node-resolution pair below 6, with `module` pinned to `ESNext` so
-  an app's `nodenext` module is not a TS5109 error (and
-  `allowSyntheticDefaultImports` on, keeping the default-import interop
-  `nodenext` implied). `paths` is written, not inherited: the app tsconfig's
-  own entries are merged beside the `@/*` alias, which wins a clash as it does
-  in the build, with their targets rewritten to resolve from `.puzzle/check/`
-  (its `extends` chain is not followed). With no app tsconfig, `strict` and
-  `noImplicitAny` are off. Verified against tsc 4.9, 5.2, 5.7, 5.9, 6.0, and
-  7.0.
-- **Scope.** Template expressions are checked against the component class's
-  declared fields; values produced by `data()` fall through an index signature
-  (the scope is `InstanceType<typeof Class> & Record<string, any>`) and are not
-  typed. Cross-file inference of `data()` shapes is deliberately out of scope.
-  Known gap, not fixed: under an app's `noPropertyAccessFromIndexSignature`, a
-  dotted read of a `data()`-only field is itself a diagnostic, because it
-  resolves through that index signature.
-- **One unparsable `.pzl` does not abort the run.** It is reported as its own
-  positioned diagnostic and skipped; every other file still checks, because the
-  virtual files do not link to each other. A file that fails to compile is
-  reported the same way, since the emitter runs the build's codegen — a
-  template that reads `event` as data and also uses it in a handler
-  (DOC-SPEC-TEMPLATE §5) is that error here too.
+- **The app's TypeScript does the checking.** It runs `node node_modules/typescript/bin/tsc --noEmit --pretty false -p .puzzle/check` — the same on every OS, no shell. Puzzle never installs or links a compiler. Messages: `puzzle check needs TypeScript: npm install -D typescript`; `puzzle check needs Node.js on PATH: it runs the app's TypeScript compiler`; a directory with no `app/` is "not a Puzzle project", reported first.
+- **Virtual files under `.puzzle/check/`** mirror `app/`, rebuilt from scratch each run. A `lang="ts"` component emits one `.pzl.ts`: its script bytes verbatim, then a never-executed function re-stating every template expression as typed statements, lowered from the same expression tree the build compiles (D176). `{#if}`/`{#case}` become `if`/`switch`; `{#for}` becomes a declared visitor whose item type is destructured from the collection; a standard function call goes through `__puzzle_fn.name(…)` and is checked against its signature; any other bare call (an app-registered function) goes through `__puzzle_app_fn("name")(…)`, declared `(name: string) => (...args: any[]) => any` so it checks under `noUncheckedIndexedAccess`; a method is checked as the JavaScript method; each `@event` binding is assigned to a handler-typed const. The author's spelling is kept where the runtime adds safety — no inserted `?.` and no `?? {}` on `Object.keys`/`values`/`entries` (TS 5.6+ flags a never-nullish `??`). The shim references the ES2016–ES2023 string/array/object libs the method table needs. The root tag's attributes and the `<puzzle-skeleton>` body are checked too.
+- **A JavaScript component emits a pair:** an unchecked `.pzl.script.js` mirror plus the checked `.pzl.ts` template wrapper; JS is never promoted into `checkJs` (`--js` is reserved and errors). **JS handler arity is not checked** — handler parameters are whatever TS infers from untyped JS, so `@click={ play(event) }` against `play: () => {}` is not an error. Handler **names** are checked against the keys of the `events` field, so a misspelled handler is reported — and so is one attached at runtime (`this.events.play = …` in the constructor or `created()`). Argument expressions are still checked; `lang="ts"` handler calls are fully checked.
+- **Positions are byte-exact.** Each virtual file has a `.segments.json` sidecar pairing emitted and source ranges; scaffolding carries no segment. Remapping uses the run's in-memory tables, never a re-read, so a save mid-run cannot shift a position. Unmappable diagnostics pass through unrewritten.
+- **The generated tsconfig extends the app's** when present, overriding what breaks the workspace (`rootDir`, `composite: false`, `skipLibCheck: true`, `noUnusedLocals/Parameters: false`), spelling `include` extensions out, and forcing `exclude: []`. It is **version-aware** (one `tsc --version` probe): on **TypeScript 6 and 7** it clears `baseUrl` and `moduleResolution` (removed in 7, deprecated in 6) and resolves the `@/*` alias from the config's own directory; **below 6** it pins `baseUrl`, `moduleResolution: node`, `module: ESNext` (so an app's `nodenext` is not TS5109) and `allowSyntheticDefaultImports`. `paths` is always written, never inherited: the app's entries are merged with targets rewritten to resolve from `.puzzle/check/` (its `extends` chain is not followed), and `@/*` wins a clash as in the build. With no app tsconfig: `target: ES2020`, `module: ESNext`, `strict` and `noImplicitAny` off (TS 6+ would otherwise default strict on). Supported from tsc 4.9 through 7.
+- **Scope.** Expressions check against the class's declared fields; `data()` values fall through an index signature (`InstanceType<typeof Class> & Record<string, any>`) and are untyped — cross-file inference of `data()` shapes is out of scope. Known gap: under `noPropertyAccessFromIndexSignature` a dotted read of a `data()`-only field is itself a diagnostic.
+- **One unparsable or uncompilable `.pzl` does not abort the run** — it is its own positioned diagnostic and every other file still checks. The emitter runs the build's codegen, so a template that reads `event` as data and also uses the DOM `event` in a handler (DOC-SPEC-TEMPLATE §5) is an error here too.

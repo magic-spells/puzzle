@@ -15,12 +15,37 @@ connections:
   - TEST-COMPILER-CODEGEN
 ---
 
-Source binding for the owning component card. Behavioral intent stays in [[COMPONENT-CODEGEN]] and [[DECISION-D176-EXPRESSION-LANGUAGE]] (rule 8, the hosts); this card anchors that plan to `compiler/internal/codegen/lower.go`.
+# lower.go
 
-The file header carries **the lowering table** — AST node → emitted JavaScript — and the handler-value forms; read it there rather than restating it here. What a reader needs before touching the file:
+Lowers every template expression's AST to JavaScript (render target) or
+TypeScript (`puzzle check` target). Intent: [[COMPONENT-CODEGEN]] and
+[[DECISION-D176-EXPRESSION-LANGUAGE]] (rule 8, the hosts). The file header
+carries **the lowering table** — AST node → emitted JavaScript — and the
+handler-value forms; read it there rather than restating it here. Before touching
+the file:
 
-- **Nothing reads an expression's source string.** Names resolve from the tree: an arrow parameter shadows a template binding, which shadows the handler's `event`; every other name is `__d.<name>`. A binding that a persistent list row rewrites (`todo` → `s.item`, the counter → `s.i`) comes from the scope map threaded through emission.
-- **Every member step, index step and method call is guarded** (`?.`), handler arguments included; a library call lowers to `(__f["name"] || __f.__missing("name"))(…)` (the D43 guard); a method stays the same JavaScript method; `Math.*` and the other allowed globals stay verbatim, except that `Object.keys`, `values` and `entries` take their first argument as `(<arg> ?? {})` (`objectGlobalArgs`), so a missing value yields `[]`; a free `event` chain in a handler is emitted as written.
-- **One tree, two targets.** The check target (`WriteCheckValue`/`WriteCheckEvent`, used by `puzzle check`) emits TypeScript with no added guards and no `?? {}` default on the `Object` globals (TypeScript 5.6+ reports a `??` whose left side can never be nullish), a standard library call as the shim's `__puzzle_fn.name(…)`, any other bare call — an app function — as `__puzzle_app_fn("name")(…)`, and a method call with an arrow argument taking its receiver through `__puzzle_check_list(…)`.
-- **Render facts come from the tree** (`exprFacts`): which parent data roots a loop body reads, which members it reads off the row item, and whether it is volatile (a `timeago` call) — the inputs to D170's list blocks — and the D62 cacheability verdict of a handler (a library call in a handler argument makes it non-cacheable).
-- There is no pipe lowering, no `.size` helper and no token-scanning resolver; `presets.go` checks literal date-function arguments at the same call sites.
+- **Nothing reads an expression's source string.** Names resolve from the tree:
+  an arrow parameter shadows a template binding, which shadows the handler's
+  `event`; every other name is `__d.<name>`. A binding a persistent list row
+  rewrites (`todo` → `s.item`, the counter → `s.i`) comes from the scope map
+  threaded through emission.
+- **Every member step, index step and method call is guarded** (`?.`), handler
+  arguments included. A library call lowers to
+  `(__f["name"] || __f.__missing("name"))(…)` (the D43 guard); a method stays the
+  same JavaScript method; `Math.*` and the other allowed globals stay verbatim,
+  except `Object.keys`/`values`/`entries` take their first argument as
+  `(<arg> ?? {})` (`objectGlobalArgs`) so a missing value yields `[]`; a free
+  `event` chain in a handler is emitted as written.
+- **One tree, two targets.** The check target (`WriteCheckValue`/`WriteCheckEvent`)
+  emits TypeScript with no added guards and no `?? {}` on the `Object` globals
+  (TypeScript 5.6+ reports a `??` whose left side can never be nullish), a
+  standard library call as the shim's `__puzzle_fn.name(…)`, any other bare call
+  (an app function) as `__puzzle_app_fn("name")(…)`, and a method call with an
+  arrow argument taking its receiver through `__puzzle_check_list(…)`.
+- **Render facts come from the same tree** (`exprFacts`): which parent data roots
+  a loop body reads, which members it reads off the row item, and whether it is
+  volatile (a `timeago` call) — the inputs to D170 list blocks — plus the D62
+  cacheability verdict of a handler (a library call in a handler argument makes
+  it non-cacheable).
+- Literal date-function arguments are checked at the same call sites by
+  [[FILE-CODEGEN-PRESETS]].

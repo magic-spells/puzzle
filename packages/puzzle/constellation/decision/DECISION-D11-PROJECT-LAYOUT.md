@@ -10,16 +10,12 @@ connections:
 
 # D11 — Project layout: `app/` source, `dist/` output
 
-Settled; enforced by [[DOC-SPEC-ANATOMY]] §11. The entry point is `app/app.js`, build output goes to `dist/`, and `examples/todos/` is the canonical reference application.
-
-## Context
-The prototype defaulted its source directory to `./src`.
+Enforced by [[DOC-SPEC-ANATOMY]] §11.
 
 ## Decision
-- Entry point is `app/app.js`.
-- CLI defaults updated accordingly (away from the prototype's `./src`).
-- `examples/todos/` is the canonical reference application.
+- App source lives in `app/`; the entry is `app/app.js`, or `app/app.ts` in a TypeScript app ([[DECISION-D54-TYPESCRIPT-SCRIPTS]]).
+- Build output goes to `dist/`.
+- `examples/todos/` is the canonical reference application; its hand-compiled fixture is golden file #1 ([[FILE-TESTS-FIXTURES-TODOS-HOME-COMPILED]]).
 
-## Consequences
-
-`example-app/` has since been removed — replaced by `examples/blog/`.
+## Alternatives rejected
+- `./src` (the prototype default) — `app/` groups views, layouts, components, models and styles under one app-shaped root.

@@ -1,5 +1,5 @@
 ---
-name: 'D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown (v1.64)'
+name: D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown
 status: verified
 connections:
   - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
@@ -13,115 +13,71 @@ connections:
   - FILE-VIEW-MANAGER
 verified_at: '2026-08-24T05:28:08.520Z'
 verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
-notes:
-  - kind: verified
-    text: >-
-      Restore now fires the show bracket (viewWillShow → viewDidShow) instead of leaving it dangling
-      — PR #84.
-    sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
-  - kind: gotcha
-    text: >-
-      §3 leave inertness applies to a never-mounted view, but the hide bracket does not: a leave on
-      a view whose first data() is still pending makes it inert and fires nothing, because hooks and
-      the out animation pair with a completed mount (D28). Inertness is about what a leaving view
-      may still do; the bracket is about whether it was ever shown.
 ---
 
-# D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown (v1.64)
+# D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown
 
-Four lifecycle containments (D118's sequel), from C2/C3/I5/I10 of the
-2026-07-27 pass-2 review. Change A — an anchor-race superseded first mount
-resolves `mount()` early — is PRESERVED throughout; what changes is what
-happens around it.
+## Context
 
-## 1. Deferred enter (`#enterPending`)
+An anchor-race first mount (skeleton path) resolves `mount()` early while the
+view still sits on a comment anchor (`#pendingMountHook` set). That early
+resolve stays. Four gaps around it and around leaving views needed containment,
+extending D115/D118.
 
-`playIn()` invoked while `#pendingMountHook` is set no longer burns the
-one-shot `#playedIn` against the comment anchor (which fired
-`viewWillShow`/`viewDidShow` BEFORE `mounted()` and lost the enter animation
-forever). It records `#enterPending` and returns; the landing commit's
-`#swapLoaded` runs `#completeMount()` first (`mounted()` on the real root),
-then replays `playIn()` fire-and-forget. The documented order — `mounted()` →
-`viewWillShow` → in-animation → `viewDidShow` — now holds on the real element
-for anchor-race mounts. `skipEnter()` clears the pending flag too (a deferred
-enter must still be suppressible by the router's one-animator rule).
+## Decision
 
-**Rejected:** keeping `mount()` pending until first paint — it changes the
-skeleton contract (mount deliberately resolves early there) and risks
-deadlocking callers that await mount inside commit windows.
+**1. Deferred enter (`#enterPending`).** `playIn()` while `#pendingMountHook` is
+set records `#enterPending` and returns instead of spending `#playedIn` on the
+anchor. `#swapLoaded` runs `#completeMount()` (`mounted()` on the real root),
+then replays `playIn()`. Order holds: `mounted()` → `viewWillShow` →
+in-animation → `viewDidShow`. `skipEnter()` clears the flag (router
+one-animator rule).
 
-## 2. Anchor-race failure recovery
+**2. Anchor-race failure recovery.** A fire-and-forget refresh failure (parent
+prop update or store change, sync or async) while `#pendingMountHook` is set
+means the first render can never commit. The shared D145 failure path asks the
+view's manager to plant a position marker and destroys the instance. Without
+an app error view, the next parent patch mounts a fresh instance (D115); with
+one, the error view holds the position until retry or owner replacement.
+Routed retry is recognized from Router state.
 
-A fire-and-forget refresh failure (parent prop update or store-change, sync
-or async) that lands while `#pendingMountHook` is set means the first render
-can never commit — previously a permanently blank comment, invisible to
-ViewManager recovery because the mount promise had already resolved.
-Now the shared D145 failure path asks the view's manager to plant the exact
-position marker and destroys the instance. The normal parent reference is
-enough for component retry; routed retry is recognized from Router state.
-With no app error view, the next parent patch mounts a FRESH instance as D115
-requires. With one, a fresh error view occupies the marker until explicit retry
-or owner replacement. Deliberately eager: deterministic owner-driven recovery
-beats waiting for a hypothetical later refresh to succeed.
+**3. Leave inertness.** A leaving view is inert from `playOut()` start:
+- It unsubscribes from the store immediately, and `refresh()`, `setData()`,
+  `onStoreChange()`, `applyParentUpdate()`, `#commit()`, `#swapLoaded()` and
+  `#completeMount()` early-return on `#leaving` beside `#destroyed`. The
+  render/mount guards matter because a component with hide hooks but no
+  `animations.out` also goes through `destroyAnimated()`, so removal is async.
+- `#leaving` is set BEFORE `viewWillHide` fires, so the guards cover the hook
+  window and a re-entrant `playOut()` memoizes. DOM listeners stay attached.
+- Two fields, two lifetimes: `#outTask` marks the out animation spent forever
+  (a later leave swaps out instantly); `#leaving` is only the current inert
+  interval. A later real leave re-arms a fresh `#leaving` and unsubscribes again.
+- A navigation that fails mid-leave restores the view via
+  `_restoreFromLeaving()`: clears `#leaving`, cancels the animation fill, fires
+  `viewWillShow` then `viewDidShow` (each contained separately, reported as
+  phase `enter`), and refreshes once to re-track subscriptions.
+- Hooks are not spent with the animation (D28): the spent-`#outTask` branch
+  runs its own zero-duration `viewWillHide → viewDidHide` as an async task
+  (`#startOverlapLeave` feeds `playOut()` into `Promise.all`, so a sync throw
+  would escape). `viewDidHide()` is guarded on `#leaving` still set, so a
+  cancelled leave never announces a hide.
+- A leave on a never-mounted view (first `data()` pending) makes it inert but
+  fires no hide bracket — hooks pair with a completed mount.
 
-## 3. Leave inertness
+**4. `router.start()` abort parity.** `PuzzleApp.mount()` claims `_mounted`
+before awaiting `router.start()`. A rejected start (navigation #0 commit
+failure) runs the `beforeMount` abort pattern: epoch-guarded `#teardown()`,
+rethrow. Router-owned post-commit `render()`/`mounted()` failures are reported
+and replaced locally under D145 and do not reject `start()`.
 
-A leaving view is inert from `playOut()` start: it unsubscribes from the
-store immediately (not at post-animation `destroy()`), and `refresh()`,
-`setData()`, `onStoreChange()`, `applyParentUpdate()`, `#commit()`,
-`#swapLoaded()`, and `#completeMount()` gain a `#leaving` early-return beside
-their `#destroyed` guard. Previously a store flush mid-leave re-ran `data()`
-and re-rendered the fading element (resurrected content, double-action clicks
-on deleted records); the three render/mount guards matter because a component
-declaring only hide HOOKS — no `animations.out` — now also routes through
-`destroyAnimated()`, so ordinary removal became asynchronous and an async
-`data()` could otherwise land `mounted()` and a render after the parent had
-already removed the child. `#leaving` is installed BEFORE `viewWillHide` fires
-so the guards cover the hook window and a re-entrant `playOut()` memoizes. DOM
-listeners stay attached — pointer-events on a fading element are an app-level
-concern.
+## Alternatives
 
-Inertness lasts for the leave, not for the instance. A navigation can FAIL
-mid-leave (a guard blocks it, its `data()` rejects) while this view is still the
-committed one, and the router then restores it — so the state `playOut()` set has
-to be undoable. Two fields carry the two different lifetimes: `#outTask` marks the
-out sequence SPENT forever, so a later navigation away swaps the restored unit out
-instantly with no second animation, while `#leaving` names only the CURRENT inert
-interval. `_restoreFromLeaving()` clears `#leaving`, cancels the animation fill,
-and refreshes once to re-track the store subscriptions `playOut()` dropped.
+- Keep `mount()` pending until first paint — breaks the skeleton contract and
+  can deadlock callers awaiting mount inside commit windows.
+- Unsubscribe at post-animation `destroy()` — a mid-leave store flush re-renders
+  the fading element (resurrected content, clicks on deleted records).
 
-A later real leave takes the spent-`#outTask` branch: it builds `#leaving` a
-FRESH promise (it is not re-armed from `#outTask`, which only ever records that
-the animation is spent) and unsubscribes again. Without that second arming a
-restored view would leave while still reactive — inertness is a property of
-leaving, not of having left once.
+## Consequences
 
-The HOOKS are not spent with the animation. `viewWillHide`/`viewDidHide` are
-lifecycle, not animation callbacks (D28), so the spent branch carries its own
-zero-duration `viewWillHide → viewDidHide` bracket — the same treatment a view
-declaring the hooks and no animation already gets. It runs as an async task, not
-bare calls, because `#startOverlapLeave` passes `playOut()` straight into a
-`Promise.all()` where a synchronous hook throw would escape the `.catch`.
-Symmetrically, `viewDidHide()` is guarded on `#leaving` still being set, so a
-view whose leave was CANCELLED by a restore does not announce a hide while it is
-visible, live and re-subscribed.
-
-`_restoreFromLeaving()` also fires the show bracket: `viewWillShow()` then
-`viewDidShow()`, zero-duration, each hook contained separately so a throwing
-`viewWillShow` still lets `viewDidShow` fire and neither can reject the
-router's navigation promise or skip the refresh that follows. A view pulled
-back onto screen resumes exactly as it would on a fresh show — its eventual
-real leave still fires the full `viewWillHide → viewDidHide` pair through the
-spent-`#outTask` branch above.
-
-## 4. `router.start()` abort parity
-
-`PuzzleApp.mount()` claims `_mounted` before the awaited `router.start()`; a
-rejected start (navigation #0 failing its commit) previously left the app
-claiming mounted with live listeners while `mount()` rejected. The await now
-carries the exact `beforeMount` abort pattern: epoch-guarded `#teardown()`,
-rethrow. Router-owned post-commit `render()`/`mounted()` failures are observed,
-reported, and locally replaced under D145; they do NOT reject `start()`. Only
-genuine navigation-#0 commit rejections reach this path.
-
-Amends SPEC §12/§34 (inline notes) and the D115/D118 contracts it extends.
+Amends SPEC §12/§34 and the D115/D118 contracts. Pointer events on a fading
+element are an app concern.

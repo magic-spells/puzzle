@@ -1,9 +1,10 @@
 ---
-name: 'D84 — Route head management: reserved `meta` fields, SSG-first (v1.50)'
+name: 'D84 — Route head management: reserved meta fields; managed tags are build-time only'
 status: verified
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
+  - COMPONENT-ESBUILD-PLUGIN
   - DOC-SPEC
   - DOC-SPEC-ROUTER
   - DOC-ROUTER
@@ -11,141 +12,74 @@ connections:
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D61-ATOMIC-LOCATION-COMMIT
   - DECISION-D42-MEMORY-MODE
+  - DECISION-D89-FEATURE-USAGE-TREESHAKE
   - FILE-ROUTER
   - FILE-SSG-RUNTIME
-  - FEATURE-V1-50-HEAD-MANAGEMENT
+  - FILE-HEAD-TAGS
+  - TEST-PRERENDER-OUTPUT
+  - FLOW-PRERENDER
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: decision
-    text: >-
-      Title-null suppression re-affirmed in code (2026-07-24). A 0.2.0 pre-release hardening pass
-      briefly regressed `meta.title: null` back to INHERIT (a review verifier checked git history,
-      not §45); reverted so all four reserved head fields share ONE uniform posture —
-      `undefined`/omit inherits, explicit `null` STOPS the walk and suppresses (head.js
-      resolveField: `value !== undefined`). A resolved-null title still leaves document.title / the
-      shell <title> as-is (leave-alone, never blank). MIGRATION 0.1.x→0.2.0: pre-D84 #setTitle used
-      `meta.title != null`, so a child/layout `title: null` INHERITED the parent title; under D84 it
-      now SUPPRESSES. Apps relying on the old inherit-on-null must switch to `undefined`/omit.
-    sha: d9591d6
-  - kind: verified
-    text: >-
-      Title-null uniform suppression re-verified in head.js at d9591d6 (the batch-1 inherit
-      regression is reverted); tests/ssg-head.test.js asserts suppression + the undefined-inherits
-      case.
-    sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
-  - kind: verified
-    text: >-
-      Re-verified at 1400ec6 to cover the D89 amendment (head.js/headTags.js module split, syncTitle
-      always-in + syncTags gated) appended to this card's body — prior stamp (d9591d6) predated that
-      section. Confirmed syncTitle/syncTags exist as described.
-    sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+code_refs:
+  - client-runtime/head.js
+  - client-runtime/headTags.js
+  - compiler/internal/build/route_head_warning.go
 ---
 
-# D84 — Route head management: reserved `meta` fields, SSG-first (v1.50)
+# D84 — Route head management: reserved `meta` fields; managed tags are build-time only
 
-Route `meta` grows four reserved head fields — `title` (existing),
-`description`, `canonical`, `socialImage` — resolved per-field leaf→root, with
-`document.title` assigned on every SPA navigation and the managed
-`og:`/`twitter:`/description/canonical tags baked into each prerendered page at
-build time. One metadata contract, no second head DSL. Closes the
-"head-management API (per-route meta/og)" entry on §36's deferred list. See
+Route `meta` carries four reserved head fields — `title`, `description`,
+`canonical`, `socialImage`. The prerender modes bake the managed tags into each
+page's HTML; the browser only keeps `document.title` in sync. Spec:
 [[DOC-SPEC-ROUTER]] §45.
-
-## Context
-
-SSG output without this gets a `<title>` and nothing else: no description, no
-social card, no canonical URL. `meta.title` was the only consumed key. Real
-sites need crawler-visible metadata in the generated HTML, and the SPA side
-needs the tab title kept true across client navigation.
 
 ## Decision
 
-**Extend the existing route `meta` object — no second head DSL — with static
-resolution rules and identity-marked managed tags.**
-
-- **Fields (v1):** `title`, `description`, `canonical`, `socialImage`. Values
-  are static strings or `null`. Each field resolves INDEPENDENTLY walking the
-  destination chain leaf→root (the `meta.title` walk); `undefined`
-  inherits, `null` explicitly suppresses. No functions, no view/data-derived
-  values, no raw HTML, no tag arrays. Custom `meta` keys remain untouched.
-  Canonical is emitted as provided (callers supply absolute URLs).
-  **Trimmed from the prompting proposal:** `robots` and `themeColor` — both
-  are almost always shell-level constants; additive later if demanded.
+- **Values** are static strings or `null`. Each field resolves independently
+  (`resolveHeadField` in `head.js`), walking the destination chain leaf → root:
+  `undefined`/omitted inherits, explicit `null` stops the walk and suppresses. A
+  resolved-null title leaves `document.title` / the shell `<title>` as they are
+  (never blanked). No functions, data-derived values, raw HTML or tag arrays;
+  other `meta` keys are untouched. Canonical is emitted as given (supply
+  absolute URLs).
 - **Generated tags:** `title` → `<title>` + `og:title` + `twitter:title`;
-  `description` → standard + `og:description` + `twitter:description`;
-  `canonical` → `<link rel="canonical">` + `og:url`; `socialImage` →
-  `og:image` + `twitter:image` + `twitter:card=summary_large_image`. Every
-  managed tag carries `data-puzzle-head="<field>"` as its ownership marker —
-  the framework only ever creates/updates/removes tags bearing it.
-- **One resolver, two disjoint deliveries** (`client-runtime/head.js`): the
-  SSG pass resolves and string-injects the managed tags into the shell
-  (escaped; replace same-identity tags, insert the rest before `</head>`;
-  narrow deterministic surgery, no HTML parser — the existing injectShell
-  posture). The browser assigns `document.title` at the same commit-window
-  point the pre-D84 title sync occupied, so head atomicity is inherited from
-  D61: a failed or superseded navigation never touches it. The browser does
-  **not** sync managed tags in any output mode — see the delivery section below.
-- **Title semantics preserved byte-for-byte** for title-only apps: no title
-  resolved anywhere → `document.title` untouched; memory mode remains a full
-  document no-op (D42 — an embed must not touch the host page's head).
+  `description` → `description` + `og:`/`twitter:description`; `canonical` →
+  `<link rel="canonical">` + `og:url`; `socialImage` → `og:image` +
+  `twitter:image` + `twitter:card=summary_large_image`. Each managed tag carries
+  `data-puzzle-head="<field>"`; the framework only touches tags bearing it.
+- **Build time** (`ssg/index.js` + `headTags.js`'s `MANAGED_TAGS`): the SSG
+  resolves all fields (`resolveHead`) and string-injects the escaped tags into
+  the shell — replace same-identity tags, insert the rest before `</head>`, no
+  HTML parser. `headTags.js`, `resolveHead` and `HEAD_FIELDS` never reach a
+  browser bundle (plain tree-shaking, no define).
+- **Browser:** the router's `#syncHead` is
+  `syncTitle(resolveHeadField(entry.chain, 'title'))` inside the D61 commit
+  window, so a failed or superseded navigation never touches it. Ungated, every
+  navigation, every mode except memory (D42 — an embed never touches the host's
+  head). No title resolved → `document.title` untouched.
+- **Crawlers never client-navigate**, so the baked per-page tags are what they
+  read. After a client navigation in hybrid, managed tags in the live DOM keep
+  navigation zero's values — pinned by `tests/router-head.test.js`. SEO is what
+  the prerender modes are for.
+- **Under `output: 'spa'`** `description`/`canonical`/`socialImage` are inert;
+  `warnDeadSPARouteMeta` (`route_head_warning.go`) warns with file:line:col. It
+  lexes only `app/**/routes.{js,ts}` (comment/string/regex/template aware,
+  key-position match inside a `meta: { … }` object), so prose never trips it.
 
-## Consequences
+Root routes should set defaults so children can't inherit stale values
+(guidance, not enforced).
 
-- Crawler- and unfurler-visible metadata lands in hybrid AND static output
-  before any JS runs.
-- Apps using managed fields should define root-route defaults so child routes
-  can't leave stale inherited values — documented guidance, not enforced.
-- `PrerenderedPage` gains `head` (existing `title` kept for compatibility);
-  shell injectors accept it.
+## Alternatives
 
-## Alternatives rejected
-
-- A component-level `<Head>`/`<svelte:head>` equivalent — pulls head state
-  into render trees, needs dedup/priority rules, and can't serve the SSG-first
-  goal without running every component; route-level static data is the honest
-  scope.
-- Data-derived head values (functions of `data()`) — dynamic routes are
-  skipped by SSG v1 anyway (no `staticPaths()` yet); a function surface would
-  promise browser-only metadata that bots never see. Deferred with
-  `staticPaths()`.
-- Per-network override structures (og vs twitter variants) — YAGNI; the
-  derived-tag mapping covers the 95% case.
-- Arbitrary raw head HTML — an escaping/injection footgun with no resolution
-  semantics.
-- A browser-side managed-tag sync, gated by a build define on feature usage —
-  see the delivery section: crawlers never client-navigate, so the runtime
-  loop removed nothing anyone could read, while costing per-navigation DOM
-  probes and a coarse source scan to decide whether to ship it.
-
-## Delivery: managed tags are build-time only
-
-The feature is split across two modules on a real seam. `head.js` holds the
-pure resolver (`resolveHead`/`resolveHeadField`, the uniform null-suppression
-walk above) plus the one-line `syncTitle(title)`, and is the only half the
-browser runs. `headTags.js` owns the `MANAGED_TAGS` table, and its sole
-consumer is the SSG string injector (`ssg/index.js`), which reads it under Node
-at prerender time
-([[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]], [[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
-The router's `#syncHead` therefore does exactly
-`syncTitle(resolveHeadField(entry.chain, 'title'))` and nothing more — only
-`title` is resolved in the browser, one chain walk per navigation, so
-`resolveHead` and `HEAD_FIELDS` are reachable only from the SSG and drop out of
-app bundles — and no browser bundle in any output mode contains `headTags.js`:
-plain tree-shaking, no build gate.
-
-The reason there is one delivery path rather than two: crawlers and unfurlers
-GET each URL fresh and never client-navigate, so the tags baked into a page are
-always the copy they read. Only an in-page consumer querying
-`document.head` AFTER a client navigation could observe a runtime rewrite, and
-that is explicitly out of scope. Under `output: 'spa'`, which has no prerender
-pass, `description`/`canonical`/`socialImage` are accepted but inert.
-
-Everything above about resolution, null suppression, and the leaf→root walk is
-unchanged by the split; only the delivery is single-pathed.
+- **A `<Head>` component** — rejected: pulls head state into render trees,
+  needs dedup rules, and can't serve SSG without running every component.
+- **Data-derived head values** — deferred with `staticPaths()`: SSG skips
+  dynamic routes, so bots would never see them.
+- **Browser-side managed-tag sync, gated by a build-time usage scan** —
+  removed: the substring scan was wrong both ways (`title`-derived `og:title`
+  missed; a model field named `description` tripped it), and the sync served
+  only in-page readers after client navigation, which are unsupported.
+- **Suppress SSG tag injection when unused** — rejected: strips the tags
+  crawlers actually read.
+- **Per-network overrides, raw head HTML, `robots`/`themeColor`** — rejected
+  (YAGNI / injection footgun / shell-level constants).

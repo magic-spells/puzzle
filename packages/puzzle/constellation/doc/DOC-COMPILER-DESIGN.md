@@ -1,7 +1,6 @@
 ---
 name: Compiler design
-status: verified
-verified_at: '2026-08-24T21:39:23.520Z'
+status: built
 connections:
   - DOC-SPEC
   - DOC-COMPILATION-FLOW
@@ -12,116 +11,83 @@ connections:
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
   - FILE-ESBUILD-PLUGIN
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Re-verified against current code and corrected: at least one claim on this card no longer
-      matched the runtime, and the card was rewritten to state what the code actually does. Verified
-      at this sha with the framework suite green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Compiler design
 
-The compiler translates `.pzl` component modules into ordinary JavaScript
-modules for esbuild. Its central constraint is D3: user `<script>` is real
-JavaScript and the Go compiler never rewrites its semantics.
+The compiler turns `.pzl` modules into ordinary JavaScript modules for
+esbuild. Central constraint (D3): the user's `<script>` is real JavaScript,
+and Go never parses or rewrites its semantics.
 
-## Section extraction
+## Sections and template parser
 
-A file contains one `<puzzle-view>`, optional `<script>` and `<style>`,
-and an optional `<puzzle-skeleton>`. The section scanner is aware of quoted
-strings, comments, regular expressions, and template literals so tag-like text
-inside JavaScript does not end a section early.
 
-The parser reports source positions from the original file. Duplicate, missing,
-or malformed top-level sections fail compilation; section order is deliberately
-not constrained.
+[[COMPONENT-TEMPLATE-PARSER]] lives in `packages/puzzle-lang`. Every file
+holds one `<puzzle-view>` section (the template), optional `<script>` and
+`<style>`, and an optional `<puzzle-skeleton>`; order is free, and a
+duplicate, missing or malformed section fails with a source position. In
+view mode `<puzzle-view>` becomes the render root with its attributes; in
+component mode it renders nothing and its content must be one root. The
+section splitter is aware of strings, comments, regexes, template literals
+and `{#raw}` spans, so tag-like text inside them never ends a section.
 
-## Template parser
-
-[[COMPONENT-TEMPLATE-PARSER]] produces an AST for host/component tags,
-attributes, interpolation/formatter expressions, control-flow blocks, events,
-composition markers, inline SVG, comments, islands, and refs.
-
-Balanced scans are quote/paren/brace aware. Block closure is structural, so
-closing text inside strings or nested expressions is not mistaken for template
-syntax. Attribute values have their own mixed-text/interpolation/conditional
-grammar; an inline `{#if}` there may not contain elements or `{#for}` (parse
-error).
-
-The parser validates the boundaries that are cheapest to enforce structurally:
-legal marker spelling/placement, static ref/slot/island names, component/event
-forms, and directive nesting; single-root arity is a codegen gate.
+The parser builds an AST of host and component tags, attributes,
+interpolations, control-flow blocks, events, composition markers, `{#svg}`,
+`{#raw}`, islands and refs. Every expression is parsed by the closed
+expression grammar in `packages/puzzle-lang/expr` (D176). Block closure is
+structural. Attribute values have their own mixed text/interpolation grammar;
+an inline `{#if}` there may not contain elements or `{#for}`. The parser
+enforces marker spelling and placement, static ref/slot/island names,
+component and event forms, and directive nesting; single-root arity is a
+codegen gate.
 
 ## Code generation
 
+[[COMPONENT-CODEGEN]] keeps the script body byte-for-byte and appends
+`Name.prototype.render = function () { … }` (plus `renderSkeleton`). The
+class name is the first real `export default class X extends …` in the
+string/comment/regex-aware token stream; an anonymous default export or a
+missing `extends` is a build error. Render code builds ViewNode trees and
+resolves identifiers against loop and event scope before component data.
 
-[[COMPONENT-CODEGEN]] preserves the user's script body, discovers the exported
-class name without parsing JavaScript, and appends a prototype render
-assignment. The name comes from the first REAL
-`export default class X extends …` keyword sequence in the shared
-string/comment/regex-aware token stream, so an anonymous default export and a
-missing `extends` are both build errors, and a commented-out declaration at
-column 0 is not a candidate. Generated render code constructs ViewNode trees and
-resolves identifiers against lexical loop/event scope before falling back to
-component data.
+Emission contracts:
 
-Notable emission contracts:
-
-- the appended import makes a small set of module-scope names compiler-owned in
-  a `.pzl` script: `ViewNode`, `SLOT_TAG` (when a composition marker is
-  present), `PORTAL_TAG` (when a `<Portal>` is), the `__s`
-  display alias (when display coercion is compiled), and `__svg_N` (SVG-dedup
-  mode). Codegen's function-scope scratch names (`__d`, `__f`, `__ev`, `__i`,
-  …) are NOT reserved — a module-scope binding is merely shadowed inside the
-  render body. A script that binds a reserved name at module scope fails as a
-  **positioned compile error at the offending declaration** (D133): the
-  scriptcollide tokenizer's conservative top-level-declaration scan checks the
-  exact per-file emitted set without parsing the script (the never-parse
-  contract above holds — this is the same token walk behind the import-shadow
-  warning). Scan misses — destructuring patterns, expression-position class
-  names — fall through to esbuild's duplicate-binding error, still loud at
-  build time. An alias allocator stays rejected; the names are reserved.
-- `const __f = this.ctx.formatters.getAll()` is emitted only when a non-empty
-  formatter chain was compiled (`usesFormatters`, module-wide across render and
-  skeleton), mirroring the `usesDisplayValue` gate on the `__s` import —
-  formatter-free views carry no dead registry read.
-- text interpolation routes through the runtime's `displayValue` helper, emitted
-  as `__s(...)` and imported only when a module actually contains one (D127).
-  The runtime, not the compiler, owns the coercion rule, so quoted and
-  brace-only attributes agree: `null` and `undefined` render as an empty string —
-  never the literal words — while `0`, `false`, `''`, `NaN`, and objects coerce
-  exactly as `String` would. `undefined` also warns once in development, since
-  it almost always means a mistyped or missing field, and that diagnostic folds
-  out of production builds entirely. DOM text nodes provide structural injection
-  safety;
-- formatter calls use the tree-shaken runtime map and the missing-formatter
-  guard;
-- data-independent handlers and ref setters are cached per instance;
-- list records receive primary-key-aware automatic keys unless an explicit
-  `key` overrides them;
-- conditional branches emit placeholders where needed to keep sibling arity
-  stable;
-- component children, named slots, and router outlets share vnode composition
-  machinery while keeping distinct source spellings;
-- skeleton render functions reuse the component scope/root contract.
+- **Reserved module-scope names.** The appended imports and declarations make
+  these names compiler-owned in a script: `ViewNode`; `SLOT_TAG`,
+  `SNIPPET_TAG`, `PORTAL_TAG` (when used); `__s` (display coercion); `__l`
+  (list blocks), `__L<n>` (list-block metadata), `__e` / `__r` (loop guards);
+  `__svg_N` (shared `{#svg}` assets). Binding one at module scope is a
+  positioned compile error (D133), found by a conservative top-level
+  declaration scan that never parses the script; misses fall through to
+  esbuild's duplicate-binding error. Function-scope scratch names (`__d`,
+  `__f`, `__ev`, `__i`, …) are not reserved — they only shadow. An alias
+  allocator stays rejected.
+- **Library calls.** `const __f = this.ctx.formatters.getAll()` is emitted only
+  when a template calls a library function; each call goes through
+  `(__f["name"] || __f.__missing("name"))` (the D43 guard).
+- **Display coercion.** Interpolations route through the runtime's
+  `displayValue` as `__s(…)` (D127): the runtime owns the rule, `null` and
+  `undefined` print empty, and `undefined` warns once in development only.
+  Text nodes give structural injection safety.
+- **Caching (D170).** Data-independent handlers and ref setters are cached per
+  instance; an item-form `{#for}` lowers to a persistent list block with
+  row-scoped handler caches; maximal static subtrees are allocated once.
+- List rows get primary-key-aware automatic keys unless `key` overrides.
+- Conditionals emit placeholders to keep sibling arity stable.
+- Component children, named slots, snippets and router outlets share one
+  composition mechanism under distinct spellings.
 
 ## Bundler boundary
 
-[[COMPONENT-ESBUILD-PLUGIN]] owns JavaScript/TypeScript parsing, imports,
-`@/` alias resolution, runtime aliases, source maps, minification, console
-stripping, CSS collection/scoping, formatter manifests, and dependency graph
-discovery. The Go template compiler does not duplicate those jobs.
+[[COMPONENT-ESBUILD-PLUGIN]] owns JavaScript/TypeScript parsing, imports, the
+`@/` alias, runtime aliases, source maps, minification, console stripping, CSS
+collection and scoping, the function manifest, and dependency discovery. The
+Go template compiler duplicates none of it.
 
 ## Errors and proof
 
-Parser and codegen errors include file, line, column, and an actionable
-message, then surface as esbuild errors. Compilation never substitutes partial
-output.
-
-Go table tests cover scanner/parser/codegen behavior; golden fixtures prove
-byte-level emission where shape matters. Vitest compiled-fixture suites prove
-that generated modules behave like real Puzzle views. Example smoke builds
-exercise the complete plugin and build lane.
+Parser and codegen errors carry file, line, column and an actionable message,
+surface as esbuild errors, and never produce partial output. Go table tests
+cover the scanner, parser and codegen; golden fixtures pin byte-level
+emission; Vitest compiled-fixture suites prove generated modules behave like
+real views; example smoke builds exercise the whole lane.

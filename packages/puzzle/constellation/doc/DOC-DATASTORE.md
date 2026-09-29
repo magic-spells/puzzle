@@ -1,231 +1,81 @@
 ---
 name: Puzzle datastore
-status: verified
-verified_at: '2026-08-24T05:28:11.795Z'
+status: built
 connections:
   - DOC-SPEC
+  - DOC-SPEC-DATA
   - DOC-MODELS
   - FLOW-REACTIVITY
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-ADAPTER
+  - DECISION-D50-ADAPTER-WRITE-SYNC
+  - DECISION-D112-STORE-ID-KEY-NORMALIZATION
   - DECISION-D161-AUTO-FETCHING-FINDS
+  - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - FILE-STORE
   - FILE-PUZZLE-MODEL
-verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
-notes:
-  - kind: verified
-    text: 'Store API''s identity-guard sentence narrowed to the automatic fault path — PR #84.'
-    sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+  - FILE-ADAPTER
 ---
 
 # Puzzle datastore
 
-Puzzle's data layer combines schema-backed model instances, a per-app store,
-tracked queries that fetch what they're missing, optional browser persistence,
-and explicit HTTP writes.
-See [[DOC-MODELS]] for field-builder details and [[FLOW-REACTIVITY]] for the
-render path.
-
-## Models and records
-
-Register `PuzzleModel` subclasses in the app's `models` config. A model may
-declare:
-
-- `static schema` with `Puzzle.string()`, `number()`, `boolean()`,
-  `date()`, `object()`, `array()`, `belongsTo()`, and `hasMany()`;
-- modifiers `primary`, `required`, `default`, `min`, `max`,
-  `oneOf`, and custom validation;
-- optional server sync via a bare `static adapter` object of fetch functions;
-  `{ endpoint: '/api/posts' }` generates the standard REST five, while author
-  verbs override individual transports or replace them without an endpoint.
-  The app imports the capability from `@magic-spells/puzzle/adapter` and passes
-  it once to `new PuzzleApp({ ..., adapter })`; an app-wide dialect instead
-  passes `adapter.defaults({ ...verbs })`, with model functions still winning;
-- ordinary getters and instance methods.
-
-A stored record is an instance of that model class. Primary keys are immutable.
-Server upserts retain object identity so existing references and relationships
-remain valid.
+The per-app store at runtime: queries, identity, auto-fetching finds, merge and write-sync semantics, subscriptions and persistence. Declaring models, validation, relationships and adapters is [[DOC-MODELS]]; the render path is [[FLOW-REACTIVITY]].
 
 ## Store API
 
-Views access the store as `this.ctx.store`.
-
-The local methods are core. The server methods shown below are installed only
-when the app passes the `/adapter` capability to `PuzzleApp`.
+Views reach the store as `this.ctx.store`. `createRecord`, the finds and `flush` are core; the rest exist only with the `/adapter` capability. Records returned by any read are the live instances, mutated in place.
 
 | API | Behavior |
 | --- | --- |
-| `createRecord(type, data)` | Apply defaults, generate/validate the primary key, validate all fields, insert, and notify. |
-| `findOne(type, id)` | Return one record or `null`; tracked inside `data()`. Number/string-insensitive on `id` (D112). A tracked miss with a resolvable `loadOne` queues the fetch — the view's settle loop re-runs `data()` and commits the warm pass (D161) — unless the type is known EXHAUSTIVE, where the miss is the answer. |
-| `findMany(type, { filter }?)` | Return local records, optionally filtered (`filter` always runs locally); tracked at collection level. First tracked read of a type with a resolvable `loadMany` queues one collection fetch and marks the type loaded on success, so later runs don't re-request it. |
-| `loadOne(type, id)` | Run the model's one-record transport and identity-preserving upsert. Bypasses the D161 negative cache — the force-refresh escape hatch. Warns in dev when called through the view's own handle during that view's `data()` run. |
-| `loadMany(type, options?)` | Run the collection transport, forwarding pagination options, and upsert every returned record. No-options success marks the type loaded, and exhaustive as well when the generated REST transport made the request; options-bearing loads stay partial. Warns in dev when called through the view's own handle during that view's `data()` run. `loadAll` — the pre-0.7.0 spelling — throws naming this method. |
-| `adapter(type)` | Return the memoized adapter with enhanced fetch bound to all standard and custom functions. |
-| `upsert(type, objectOrArray)` | Apply server-authoritative object(s) by explicit primary key, preserving identity and marking records synchronized. |
-| `request(type, path?, options?)` | Custom adapter request with method/body/headers; 204/empty responses map to `null`. |
+| `createRecord(type, data)` | Defaults, pk, validation, insert, notify ([[DOC-MODELS]]). |
+| `findOne(type, id)` | One record or `null`; subscribes the record key. May fetch (below). |
+| `findMany(type, { filter }?)` | Records in insertion order; `filter` always runs locally; subscribes the collection key. May fetch (below). |
+| `flush()` | Deliver pending notifications and write pending persistence now. |
+| `loadOne(type, id)` | Always requests and upserts. Bypasses the negative cache (the force-refresh hatch); accepts whatever record the server returns (a slug-resolving endpoint works) and clears the requested id's absence on success. |
+| `loadMany(type, options?)` | Always requests and upserts every record. No options: marks the type loaded (and exhaustive when the generated REST verb made the request). With options (`{}` included): a partial page that accumulates and marks nothing. |
+| `upsert(type, objectOrArray)` | Apply server-authoritative object(s): update in place by pk or instantiate synced. Every object needs a non-null pk; arrays are shape-checked in full before any element applies. |
+| `adapter(type)`, `request(...)` | Custom adapter actions ([[DOC-MODELS]]). |
 
-**Record identity is number/string-insensitive (D112).** The store indexes
-number primary keys by their string form, so `findOne('todo', id)` returns the
-same record whether `id` is `7` or `'7'` — which matters because route params are
-always strings while JSON payloads usually carry numbers. `belongsTo`/`hasMany`
-FK comparison uses the same rule. Only numbers normalize: `null` and objects keep
-strict identity, and there is no numeric parsing, so `'01'` and `1` stay
-distinct. A record's own primary-key field keeps its original type; a
-type-variant duplicate is a duplicate (`createRecord` throws, `upsert` updates in
-place).
+## Record identity (D112)
 
-**Auto-fetching finds (D161).** Inside a tracked `data()` run, a find that
-misses returns its local value (`null`/locals) and queues the model's read
-transport when D158 dispatch resolves one; the view does not commit that pass —
-it awaits the batch and re-runs `data()`, committing the first pass whose reads
-all come up warm. Committed `null` therefore always means "does not exist,"
-never "still loading." Requests dedup by `recordKey` identity; a normalized 404
-lands in a per-store negative cache (1000-entry LRU, never persisted) so
-re-runs don't refire; ten rounds throw naming the view. Reads outside `data()`
-never fetch — event handlers get local snapshots and use `refresh()` — and
-apps without the capability or a resolvable read verb see pure-local behavior
-exactly as before.
+Number primary keys index by their string form, so `findOne('todo', 7)` and `findOne('todo', '7')` find the same record — route params are strings while JSON usually carries numbers. Relationship FK matching, pk-immutability checks and save reconciliation use the same rule. Only numbers normalize: `null` and objects keep strict identity and there is no numeric parsing (`'01'` ≠ `1`). A record's own pk field keeps its original type; a type-variant duplicate is a duplicate (`createRecord` throws, `upsert` updates in place).
 
-**Loaded vs exhaustive collections (D161/D158).** A successful no-options
-`loadMany` always marks the type LOADED: the collection request has run, so a
-tracked `findMany` stops re-faulting it. It marks the type EXHAUSTIVE — a
-`findOne` miss answers `null` with no detail request — only when the framework
-built the request itself, from the model's `endpoint`. An authored `loadMany`
-(on the model, or from an `adapter.defaults()` dialect) is opaque to the
-framework: returning a paginated first page is a perfectly good implementation
-and says nothing about the ids it left out, so a later miss on an off-page id
-still fetches rather than reporting a real record as missing.
+## Auto-fetching finds (D161)
 
-**Transport functions (D158).** Standard verbs receive enhanced fetch first:
-`loadMany(fetch, options?)`, `loadOne(fetch, id)`, `create(fetch, record)`,
-`update(fetch, record)`, and `delete(fetch, record)`. It is platform-shaped —
-URL plus init in, `Response` out, with no prefixing or JSON magic — and adds the
-D91 hook plus fixtures interception. A framework verb may return its Response
-for Puzzle to status-check and parse, or return parsed data directly. In both
-cases Puzzle applies the same primary-key/shape guards and framework-owned
-reconciliation. On the automatic fault path, the D158 identity guard rejects a
-`loadOne` response whose pk differs from the requested id before mutation, so
-an implicit fault can never miss forever; an explicit `store.loadOne` accepts
-whatever record the server returns (a slug-resolving endpoint, say) and clears
-the requested id's negative entry on success. Non-OK reads throw
-`PuzzleAdapterError` (generated transports included); a custom `loadOne`
-signals not-found with `new Response(null, { status: 404 })` — returning `null`
-is a shape error. Global fetch is legal but bypasses the hook and mock seam.
-Dispatch is model function → app default → endpoint-generated REST. App-default
-functions receive a trailing `{ type, endpoint }` context (with `endpoint`
-undefined when absent); per-model function signatures are unchanged.
+Only a read through a view's own `this.ctx.store`, during that view's own `data()` run, can fetch. Event handlers, model methods, timers, relationship traversals and a captured `app.store` get local snapshots.
 
-The endpoint-generated `loadMany` serializes non-nullish option values with
-`URLSearchParams`; authored transports receive the exact options object. Pages
-accumulate in the identity map rather than replacing the collection, and an
-options-bearing load marks the type neither loaded nor exhaustive.
+- **Eligibility.** A tracked `findOne` miss or first tracked `findMany` queues the model's read verb only when the model's own `static adapter` declares an `endpoint` or an authored function for that verb. An `adapter.defaults()` dialect alone never turns a local model into a fetching one (explicit `loadOne`/`loadMany` still dispatch through it).
+- **Settle loop.** A pass that queued requests does not commit: the view awaits the batch and re-runs `data()`, committing the first pass whose reads all came up warm and adopting only that pass's subscriptions. Reads discovered in one pass fetch in parallel; dependent reads (post → `post.authorId` → author) settle across rounds. Ten rounds throw naming the view. A committed `null` therefore means "does not exist", never "still loading".
+- **Dedup and absence.** Identical in-flight requests are joined. A 404 on `loadOne` records the identity absent in a per-store negative cache (1000-entry LRU, never persisted), so re-runs don't refire; any other failure fails the run and stays retryable. A local `destroy()` or confirmed `delete()` also marks the identity absent; `createRecord`, any upsert and hydration clear it.
+- **Loaded vs exhaustive.** A successful no-options `loadMany` marks the type LOADED, so `findMany` stops faulting it. It marks the type EXHAUSTIVE — a `findOne` miss answers `null` with no request — only when the framework built the request from `endpoint`; an authored `loadMany` may have returned page one, so an off-page id still fetches.
+- **Identity guard.** On the automatic path a `loadOne` response whose pk differs from the requested id is rejected before mutation, so a fault can never miss forever.
+- Calling `loadMany`/`loadOne` through the view's handle inside its own `data()` warns in dev (use the finds). Fetch-all-once per type is the policy; there are no server-side query keys on `findMany`.
 
-## Validation boundaries
+## Merges and read ordering
 
-Local authoring operations validate before mutation and throw on failure.
-`Model.validate(data, { fields }?)` and `record.validate()` support non-throwing
-form UX. Static validation mirrors `createRecord`: it omits the `required` error
-for an omitted/null primary field the store will generate, while preserving the
-error for `''`; `{ fields }` limits validation to an edited field subset.
+Every server path preserves object identity, so references and relationships stay valid. Reads are ordered by dispatch (D138): a response older than a read or save that already landed on the record does not merge, and a removal after dispatch wins over the response. Load responses skip fields the app edited locally after the request went out.
 
-Server reads, public `upsert`, and storage hydration are authoritative recovery
-paths and do not enforce local authoring rules. They still reject unsafe
-assignment keys, framework-owned internals, and primary-key collisions that
-would corrupt record identity.
+## Write sync (D50)
 
-## Relationships
+`record.save()` (validated first) sends `create` (POST) if the record was never synced and `update` (PUT) otherwise. `_synced` is server provenance: set by loads, upserts, hydration and successful saves; never by `createRecord`.
 
-`belongsTo(type, { key? })` reads the foreign key on the current record and
-queries the related type. `hasMany(type, { key? })` queries the related
-collection using the conventional or configured foreign key.
+- **Per-record write chain.** Saves and deletes on one record serialize; each reads the record's state when it reaches the front (a double-click POSTs once, then PUTs; a queued delete uses the pk the save adopted).
+- **Response merge.** A JSON-object response merges validation-exempt, preserving fields edited after dispatch (D125); 204/empty keeps local state; either way the record is synced. On a first save a different server pk is adopted and the record re-keyed (a pk already owned by another record rejects); on an update-save a pk change warns and is ignored.
+- **No resurrection.** If the record was removed or replaced at its key while the request was in flight, nothing reconciles. A queued save whose record was removed rejects without sending.
+- **Failure.** A non-OK response rejects with `PuzzleAdapterError` and keeps local state; retry by calling again.
+- `record.delete()` sends DELETE, then removes locally on success; a never-synced record is removed locally with no request. `record.destroy()` is local-only.
 
-Relationships are lazy getters backed by the same store. Reading them inside
-`data()` participates in normal record/collection dependency tracking, but a
-traversal never fetches (D49/D161) — `post.author` across a list cannot become
-N requests. When a related record is missing, add one more tracked find in
-`data()` and the settle loop fetches it.
+## Subscriptions
 
-## Custom transports and endpoint responses
+Inside `data()`, `findOne` subscribes `type id` and `findMany` subscribes `type`; each run replaces the prior dependency set (D146 holds a prepared run's keys until commit), and destroy unsubscribes. Creates, updates, upserts and removals notify both levels. Notifications batch to one delivery per flush on `requestAnimationFrame`, with a 220 ms fallback timer and a direct timer when the tab is hidden (D63). Subscriber errors are isolated. A notification arriving while a view's settle loop runs coalesces into one more pass.
 
-Custom adapter methods are never called by the framework. Invoke them through
-`store.adapter(type)`, which binds enhanced fetch as their first argument, and
-merge returned records explicitly:
-
-```js
-static adapter = {
-  endpoint: '/api/posts',
-  async publish(fetch, id) {
-    return (await fetch(`/api/posts/${id}/publish`, { method: 'PATCH' })).json();
-  },
-};
-
-const post = store.upsert('post', await store.adapter('post').publish(id));
-```
-
-`store.request()` returns parsed response data without changing the Store. When
-a custom action returns fresh records, apply them explicitly with
-`store.upsert()` instead of throwing the response away and issuing follow-up
-`loadOne()` requests:
-
-```js
-async checkIn() {
-  const payload = await this._store.request('habit', `/${this.id}/check-ins`, {
-    method: 'POST'
-  });
-  return {
-    habit: this._store.upsert('habit', payload.habit),
-    checkin: this._store.upsert('checkin', payload.checkin)
-  };
-}
-```
-
-`upsert` is server-authoritative and validation-exempt. It retains an existing
-record's identity or instantiates a synced record under the server-provided
-primary key, notifies subscribers, and schedules persistence once per call.
-Every object must carry a non-null primary key; arrays are shape/key-checked in
-full before any element is applied. Envelope responses stay explicit as above.
-
-## Reactive subscriptions
-
-The store records queries while a view's `data()` is evaluating:
-
-- `findOne` subscribes to a record key;
-- `findMany` subscribes to a collection key;
-- reevaluation replaces the prior dependency set — during a D161 settle, only
-  the final warm pass's subscriptions commit;
-- destroy unsubscribes the view.
-
-Creates, updates, upserts, and destroys mark affected keys dirty. Notifications
-are batched; requestAnimationFrame is primary, with a hidden-tab fallback so
-backgrounded apps do not freeze. Subscriber errors are isolated. A view whose
-settle loop is mid-run coalesces matching notifications into one more pass
-instead of starting a competing refresh.
-
-Records mutate in place. A child receiving only a record prop will not see its
-internal changes through shallow prop comparison; pass identity and query the
-record inside the child's own `data()` when it needs a live subscription.
+Every notification stamps the record's render revision (D170), so a child given a record prop refreshes when that record changes through `update()` or any store path. A related record's fields, a computed getter's inputs and direct field assignment advance no revision — a child that needs those re-queries by id in its own `data()`.
 
 ## Persistence
 
-When app config supplies storage, the store hydrates at startup and persists
-JSON snapshots after dirty flushes. Persistence is fail-soft: unavailable or
-malformed browser storage does not prevent the app from mounting. Persisted
-records carry a `__synced` provenance marker; old-format blobs without it
-hydrate as synced (the pre-marker behavior). D161 read state (collection
-completeness, negative entries) is never persisted here — it rides only the
-dev HMR snapshot and the static build's read island.
+`new PuzzleApp({ storage: localStorage })` hydrates at construction (key `'puzzle-store'`, silently and validation-exempt) and writes one JSON snapshot per flush after delivery. Fail-soft: unavailable, full or corrupt storage never blocks mounting; a duplicate pk keeps the first record. Each record carries a `__synced` marker (a blob without it hydrates as synced). Page `pagehide` and app teardown flush pending writes. D161 read state is never persisted — it rides only the dev HMR snapshot and the static build's read island.
 
-A flush serializes once for all dirty keys. App teardown forces pending
-persistence before records are discarded.
+## Non-goals
 
-## Explicit non-goals
-
-The release does not include implicit write-through on `update()` (writes stay
-explicit verbs — `save()`/`delete()`), server-side query/pagination keys on
-`findMany` (fetch-all-once per type is the policy; `{ query }` pass-through is
-deferred until a real wall), TTL or a public `reload(type)` invalidation API,
-request cancellation, offline queues, conflict resolution, or a background
-synchronization engine. Applications compose those policies around the
-explicit store and adapter methods.
+No automatic write-through on `update()`, server-side query or pagination keys on `findMany`, TTL or a public invalidation API, request cancellation, offline queues, conflict resolution, or background sync. Apps compose those around the explicit store and adapter methods.

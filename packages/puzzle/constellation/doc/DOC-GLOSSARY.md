@@ -1,7 +1,6 @@
 ---
 name: Puzzle glossary
-status: verified
-verified_at: '2026-07-22T00:04:05.621Z'
+status: built
 connections:
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
@@ -14,96 +13,95 @@ connections:
 
 # Puzzle glossary
 
-Current terms used by Puzzle documentation. [[DOC-SPEC]] remains authoritative.
+Current terms. [[DOC-SPEC]] is authoritative.
 
-**adapter** — A model's remote-data definition. Built-in store reads and writes
-use its endpoint; custom `request` calls share the adapter boundary.
+**adapter** — The opt-in server sync capability (`@magic-spells/puzzle/adapter`)
+plus each model's per-verb fetch functions or `endpoint` shorthand.
 
-**app root** — The project directory containing `app/`,
-`puzzle.config.js`, and package metadata.
+**app root** — The directory holding `app/`, `puzzle.config.js` and
+`package.json`.
 
 **collection key / record key** — Store subscription identities for a whole
 model type or one primary-keyed record.
 
-**component** — A reusable `.pzl` class rendered inline as a component vnode.
-It has props and call-site children but no `<puzzle-view>` DOM wrapper.
+**component** — A reusable `.pzl` class rendered inline. It has props and
+call-site children; its `<puzzle-view>` section renders no wrapper element. A
+tag is a component when its first character is not `a`–`z`; a dotted tag
+(`<Frame.Wrapper>`) names a family member.
 
-**controlled property** — Form/boolean properties such as `value`, `checked`,
-`selected`, or `disabled` synchronized as DOM properties during patches and
-compared against the live DOM, so the per-keystroke echo writes nothing. On
-plain form controls a path-shaped `value=`/`checked=` is two-way (D147): the
-compiler synthesizes the write-back handler, and an author `@input`/`@change`
-suppresses the synthesis and owns the write.
+**controlled property** — `value`, `checked`, `selected`, `disabled` and the
+like, set as DOM properties and compared against the live DOM. On a plain form
+control a path-shaped `value=`/`checked=` is two-way; an author
+`@input`/`@change` replaces the synthesized write-back.
 
-**data layer** — The model values returned by the latest successful `data()`.
-It is replaced on refresh and sits below persistent local state.
+**data layer** — The values returned by the latest successful `data()`;
+replaced on refresh, below the local layer.
 
-**default children** — Content written inside a component invocation and placed
-by the child with `<Children/>`. Lowercase `<children>`/`<slot>` spellings are
-compile errors.
+**default children** — Content inside a component invocation, placed by the
+child with `<Children/>`.
 
-**development-state transfer** — One-shot session snapshot/restore used by
-`puzzle dev` full-page reloads for store records and JSON-safe local view data.
-It is not per-module hot replacement.
+**development-state transfer** — The one-shot snapshot/restore `puzzle dev`
+uses across full reloads for store records and JSON-safe local view data. Not
+per-module hot replacement.
 
-**function** — A display transform a template calls by bare name, value first:
-`{ currency(price) }`, `{ truncate(title, 40) }` (D176). The library is the 19
-standard functions shared with Sites plus PuzzleKit's `link` and `timeago`.
-Built-ins are tree-shaken from template use; apps register their own under the
-`formatters` config key, which keeps the name these had when they were applied
-with a `|` pipe (before 0.8.0).
+**function** — A display transform a template calls by name, value first:
+`{ currency(price) }`, `{ truncate(title, 40) }`. The library is 19 standard
+functions plus PuzzleKit's `link` and `timeago`, tree-shaken to what templates
+call; apps register their own under the `formatters` config key. Never call
+one a filter or a pipe.
 
-**island** — A host element whose children become browser/third-party-owned
-after mount. Puzzle continues patching the island element but not its subtree.
+**island** — A host element whose children belong to the browser or a
+third-party library after mount; its own attributes and listeners still patch.
 
-**layout** — A routed PuzzleView wrapping a route chain. `<Slot/>` marks the
-router outlet.
+**layout** — A routed view wrapping a route chain; `<Slot/>` marks the outlet.
 
-**local layer** — Persistent component state changed by `setData()`. It
-overrides same-named model values and renders without rerunning `data()`.
+**list block** — The persistent per-key row state behind an item-form
+`{#for}`; an unchanged row returns its cached vnode subtree.
+
+**local layer** — Persistent component state set by `setData()`; overrides
+same-named data-layer values and renders without rerunning `data()`.
 
 **model / record** — A `PuzzleModel` subclass defines schema and behavior; a
-record is a stable instance stored by type and primary key.
+record is its stable instance, stored by type and primary key.
 
-**morph** — Optional shared-element transition integration identified by
-`data-puzzle-morph*` attributes. It complements, rather than replaces, router
-transitions.
+**morph** — Optional shared-element transitions keyed by `data-puzzle-morph*`
+attributes, complementing router transitions.
 
-**named slot** — A child insertion point declared with `<Slot name=\"…\"/>` and
-filled by a direct call-site child carrying a static `slot=\"…\"`; it renders
-nothing when unfilled.
+**named slot** — `<Slot name="…"/>` in a component, filled by a call-site child
+with a static `slot="…"`; renders its fallback body or nothing when unfilled.
 
-**navigation token** — Monotonic router identity preventing stale async loads or
+**navigation token** — Monotonic router identity that stops stale loads or
 transitions from committing over a newer navigation.
 
-**prerender / static build** — Build-time execution and serialization of static
-routes to per-route HTML (D67/D81); never request-time SSR or hydration. Two
-output modes: `output: 'hybrid'` ships the prerendered pages plus the normal SPA
-bundle the router takes over at navigation zero; `output: 'static'` ships true
-static pages — no router, no `app.js` — with a per-page `mountStatic` module that
-wakes each page's own components.
+**prerender** — Build-time execution and serialization of routes to HTML;
+never request-time SSR or hydration. `output: 'hybrid'` ships the pages plus
+the SPA, which takes over at navigation zero; `output: 'static'` ships pages
+with no router or `app.js`, each woken by a per-page `mountStatic` module.
 
-**PuzzleApp** — Application owner for configuration, shared context, router
-startup, lifecycle, and teardown.
+**PuzzleApp / PuzzleView / PuzzleModel** — The app owner (config, context,
+router startup, lifecycle, teardown); the plain base class for views, layouts
+and components; the base class for schema-backed records.
 
-**PuzzleModel** — Base class for schema-backed records.
+**render revision** — A record's last notification sequence, compared when a
+record is passed as a prop, so a child refreshes on that record's mutations.
 
-**PuzzleView** — Plain component/view/layout base class with props, route
-snapshot, data/local layers, lifecycle, refs, memoization, and render hooks.
+**router outlet** — Bare `<Slot/>`, where a routed child mounts.
 
-**router outlet** — Capitalized bare `<Slot/>`, where a routed child mounts.
+**scoped styles** — `<style scoped>`, wrapped in native `@scope` and anchored
+by a compiler-generated root attribute.
 
-**scoped styles** — A `<style scoped>` block wrapped in native `@scope` and
-anchored by a stable compiler-generated root attribute.
+**skeleton** — Optional first-load placeholder in `<puzzle-skeleton>`, with an
+optional minimum duration.
 
-**skeleton** — Optional first-load placeholder declared with
-`<puzzle-skeleton>`, with an optional minimum duration.
+**snippet** — `<Snippet fits="name" params…>` at a call site: a parameterized
+body the component stamps per item through its own markers.
 
-**store** — Per-app record registry, query/subscription engine, adapter
-orchestrator, and optional persistence owner.
+**store** — Per-app record registry, query and subscription engine, and
+persistence owner; with the adapter capability, it also fetches and syncs.
 
-**ViewNode / ViewManager** — The virtual-node representation and the runtime
-that mounts, diffs, patches, composes, and destroys it.
+**ViewNode / ViewManager** — The virtual node, and the runtime that mounts,
+diffs, patches, composes and destroys ViewNode trees.
 
-**write sync** — Explicit `save()`, `delete()`, or adapter `request()`
-operations. Local writes validate first; reads upsert authoritative server data.
+**write sync** — Explicit `save()` and `delete()` on a record of an
+adapter-backed app; `destroy()` only removes locally. Local writes validate
+first; reads upsert authoritative server data.

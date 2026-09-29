@@ -1,5 +1,5 @@
 ---
-name: "D50 — Adapter write path: explicit save()/delete() verbs, local-first, validate-before-sync (v1.18)"
+name: 'D50 — Adapter write path: explicit `save()`/`delete()` verbs, local-first, validate before sync'
 status: verified
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
@@ -7,97 +7,30 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
-  - FEATURE-ADAPTER-WRITE-SYNC
   - DOC-DATASTORE
   - DOC-MODELS
   - DOC-SPEC
   - DOC-SPEC-DATA
   - FILE-ADAPTER
 verified_at: '2026-08-24T21:39:15.808Z'
-notes:
-  - kind: verified
-    text: >-
-      Decision implemented as written and verified at the merged main sha (480 vitest green); no
-      deviations from the recorded contract.
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
-# D50 — Adapter write path: explicit `save()`/`delete()` verbs, local-first, validate-before-sync (v1.18)
+# D50 — Adapter write path: explicit `save()`/`delete()` verbs, local-first
 
-Completes the [[DECISION-D21-ADAPTER-READ-PATH]] adapter story on the write side. The
-same bare `static adapter = { endpoint }` declaration now drives `record.save()` (create +
-update sync), `record.delete()` (confirmed server delete), and `store.request()` (the
-custom-endpoint escape hatch). See [[DOC-SPEC-DATA]] §22.
-
-## Context
-v1 shipped reads only; every app hand-rolled save logic — the largest gap between
-Puzzle and a usable CRUD framework. Open questions: optimistic vs confirmed writes,
-custom adapter methods' shape, whether query fault-in rides along, and dev-server API
-mocks.
+The model's `static adapter = { endpoint }` drives `record.save()`, `record.delete()` and `store.request()`, installed by the opt-in `/adapter` module ([[DECISION-D157-ADAPTER-SUBPATH]]). Reads are [[DECISION-D21-ADAPTER-READ-PATH]]. See [[DOC-SPEC-DATA]] §22.
 
 ## Decision
-
-- **Local mutations keep their exact v1 semantics; sync is a separate, explicit verb.**
-  `createRecord`/`update`/`destroy` stay local-and-instant (the app is optimistic by
-  construction); `save()`/`delete()` ship state to the server. This answers
-  optimistic-vs-confirmed without a rollback engine: **saves are local-first** (the
-  data is already on screen; a failed `save()` keeps the dirty local state and rejects
-  for the component to surface — retry is calling it again), **deletes are confirmed**
-  (DELETE first, local remove on ack — no resurrection machinery; on failure the
-  record stays visible). (Rejected: automatic write-through on every `update()` —
-  implicit network in a hot local path, debounce policy questions, and D21 chose
-  explicit verbs for exactly this reason; rejected: optimistic delete with restore —
-  resurrection through the subscription pipeline for marginal UX.)
-- **`record.save()`**: D48-validates the full record first — invalid rejects with
-  `PuzzleValidationError`, **no request made**. Then POST `apiURL+endpoint` for a
-  never-synced record, PUT `endpoint/:id` otherwise — the endpoint-generated
-  transports (a non-enumerable synced flag: set by `loadMany`/`loadOne`/upserts and
-  successful saves, and carried out-of-band through persistence so a hydrated record
-  keeps its real provenance; PUT-to-missing surfaces as an error the app can handle).
-  A 2xx JSON-object response merges via the exempt upsert
-  path (server-computed fields); empty/204 keeps local state. **Server pk adoption:**
-  on a first save whose response carries a different primary key, the store re-keys
-  its index atomically (the one sanctioned pk change, performed by the store itself);
-  on an update-save a differing response pk warns and is ignored.
-- **`record.delete()`**: DELETE `endpoint/:id`; 2xx **or 404** (already gone —
-  idempotent, a tolerance the generated transport owns) removes locally via the normal
-  notify path; other failures reject and keep the record. A never-synced record has no
-  server row, so it is removed locally and nothing is sent. `record.destroy()` is
-  untouched — local-only, exactly as shipped.
-- **`store.request(type, path, { method, body, headers })`** is the custom-endpoint
-  surface: prefixes `apiURL + adapter.endpoint`, JSON-encodes/decodes, normalizes
-  errors. The documented idiom wraps it in model instance methods
-  (`publish() { return this._store.request('post', \`/\${this.id}/publish\`, { method: 'POST' }) }`).
-  (Rejected: a declarative `adapter.methods` map — codegen-ish surface for something a
-  three-line instance method states more clearly.)
-- **Failures reject with `PuzzleAdapterError`** (`.status`, `.statusText`, `.body`
-  when parseable) — exported from `@magic-spells/puzzle/adapter`. Reads share the
-  structured shape ([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]] normalizes every
-  generated transport through it — the
-  [[DECISION-D161-AUTO-FETCHING-FINDS]] negative cache keys off `status`).
-- **Writes are verbs, reads are queries.** The write side stays explicit —
-  `save()`/`delete()` are commands with failure semantics an app must own, so
-  implicit network in a hot local path stays rejected. The read side faults in
-  transparently through tracked `findOne`/`findMany`
-  ([[DECISION-D161-AUTO-FETCHING-FINDS]]), which kept the sync, pure-local return
-  the tracking machinery depends on: a tracked miss still returns its local value
-  synchronously; the settle loop re-runs `data()` and commits the warm pass.
+- **Writes are verbs, reads are queries.** `createRecord`/`update`/`destroy` stay local and instant; `save()`/`delete()` ship state to the server. No implicit network in the hot local path.
+- **`record.save()` is local-first.** It validates the whole record first ([[DECISION-D48-SCHEMA-VALIDATION]]) — invalid rejects with `PuzzleValidationError` and sends nothing. Then POST `apiURL + endpoint` for a never-synced record, PUT `endpoint/:id` otherwise. "Synced" is a non-enumerable flag set by loads, upserts and successful saves, carried through persistence so a hydrated record keeps its provenance. A 2xx JSON-object response merges via the exempt upsert path; an empty/204 response keeps local state. A failed save keeps the dirty local state and rejects; retry is calling it again.
+- **Server pk adoption:** on a first save whose response carries a different primary key, the store re-keys its index atomically (the one sanctioned pk change). On an update-save a differing pk warns and is ignored.
+- **`record.delete()` is confirmed.** DELETE `endpoint/:id`; 2xx **or 404** (already gone) removes locally through the normal notify path; other failures reject and keep the record. A never-synced record is removed locally with no request. `record.destroy()` stays local-only.
+- **`store.request(type, path, { method, body, headers })`** is the custom-endpoint surface: prefixes `apiURL + adapter.endpoint`, JSON-encodes and decodes, normalizes errors. Idiom: wrap it in a model instance method (`publish() { return this._store.request('post', \`/${this.id}/publish\`, { method: 'POST' }) }`).
+- **Failures reject with `PuzzleAdapterError`** (`.status`, `.statusText`, `.body` when parseable), exported from `@magic-spells/puzzle/adapter`. Reads normalize through the same shape ([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]); the D161 negative cache keys off `status`.
+- The synced flag is provenance only — no dirty tracking or changesets.
 
 ## Alternatives rejected
-Covered inline above (write-through, optimistic delete, adapter.methods map).
-Also rejected: `record.destroy()` growing a `{ server: true }` option —
-mutating shipped semantics behind a flag; a distinct verb is honest.
-
-## Consequences
-Runtime-only in the opt-in `/adapter` module, which installs the verbs on the
-core model/store prototypes ([[DECISION-D157-ADAPTER-SUBPATH]]). Acceptance: a todos app persists
-create/toggle/delete to a REST endpoint with **no hand-written fetch** —
-tracked finds fault the data in, `todo.save()` after create/toggle, `todo.delete()` on remove.
-Validation composes (D48): nothing invalid leaves the client. The synced flag is
-provenance-only — no dirty-tracking/changeset layer (would be its own decision).
+- Automatic write-through on every `update()` — implicit network, debounce policy questions.
+- Optimistic delete with restore — resurrection through the subscription pipeline for marginal UX.
+- A declarative `adapter.methods` map — a three-line instance method states it more clearly.
+- `record.destroy({ server: true })` — a flag that changes shipped semantics; a distinct verb is honest.

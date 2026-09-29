@@ -6,146 +6,40 @@ connections:
   - DECISION-D100-DEVTOOLS-BRIDGE
   - DECISION-D120-TARBALL-PUBLISH
   - DOC-RELEASE-SURFACE
-notes:
-  - kind: gotcha
-    text: >-
-      There are deliberately NO npm workspaces: each package keeps its own install and lockfile, so
-      editing any package.json dependency means regenerating that package's lockfile or its `npm ci`
-      hard-fails. Runtime resolution for sibling packages: the compiler's in-repo walk (FindRuntime,
-      compiler/internal/build/options.go) checks ANCESTORS only, so it serves apps under
-      packages/puzzle (the examples); the sibling packages (pieces demo, devtools) resolve through
-      their file: links via the node_modules walk (FindInstalledRuntime) — do not break either path.
-      The pack pipeline (pin injection, verify:pack, tarball-only publish, D120) runs unchanged
-      inside packages/puzzle; the root shell only delegates.
-  - kind: verified
-    text: >-
-      Merged to release/0.7.0 via PR #79 at c911154. Every Decision claim checked live: both subtree
-      imports carry full history (pieces @ 51d2403, devtools @ 60706aa); root suites unchanged
-      post-import (1742 vitest, go test, verify:pack — 57 tarball files, no packages/ leak;
-      test:types); pieces 85/85 + demo built by the in-repo CLI; devtools 271/271 against the
-      in-progress 0.7.0 runtime with the panel compiled through build.mjs's monorepo-binary default.
-      release:prep train asserts and publish-order lines exercised by parse + review,
-      fire-at-release by design (root still 0.6.0 mid-flight). Push-protection footnote: the
-      imported pieces history carries a fabricated sk_live_-shaped doc sample in old commits/bundles
-      — allowed once as a false positive; the live tree now says testKey, so the detector can never
-      re-fire on new content.
-    sha: c9111541b03cb8ee4528617cabddb8b92ed58a67
-  - kind: verified
-    text: >-
-      Final shape merged via PR #80 at 1d9ce9f: private root shell (named plain `puzzle`), framework
-      git-mv'd to packages/puzzle (go.mod moved, module path unchanged), plugins imported + brought
-      current (eslint 48/48, prettier 46/46 — both ports also gained the LexSkip ++/-- case, BOM
-      skip, misnamed-section steering, EOF clamps; both corpus sweeps un-deadened). Release pipeline
-      proven from the new layout pre-merge: full release:prep dry run (four 0.7.0 binaries staged,
-      tarball pins verified), test:e2e-pack, verify:pack (57 files), framework vitest + go test,
-      pieces 85/85 + demo build, devtools 271/271. Go floor raised to 1.24: dyld on current macOS
-      aborts binaries without LC_UUID, which the pre-fix CI pieces job demonstrated and which
-      silently applies to the published 0.6.0 darwin CLIs — 0.7.0 shipping is the fix. Demo/devtools
-      build with the compiler binary, not `go run` (module context ends at packages/puzzle).
-    sha: 1d9ce9fa1a905467382cdc0ef8f43e9f1993ea99
 verified_at: '2026-08-23T23:41:18.496Z'
 verified_sha: 1d9ce9fa1a905467382cdc0ef8f43e9f1993ea99
 ---
 
-# D162 — Monorepo `packages/`: one repo, one release train
+## Context
+
+Separate satellite repos manufactured coordination work and failed at it: pieces had an unenforced "publish at or before the CLI" rule, the devtools panel broke against a framework release with no suite noticing, the lint/format plugins fell a grammar generation behind, and everything ran on hand-rolled workspace substitutes.
 
 ## Decision
 
-The repo root is a **private shell** (named plain `puzzle`, `private: true`,
-version 0.0.0, never published) whose scripts delegate into the framework
-package. Everything that versions in lockstep lives under `packages/`, and
-every package in the train carries the framework's version:
+The repo root is a **private shell** (`"name": "puzzle"`, `private: true`, `0.0.0`, never published) whose scripts delegate into `packages/puzzle`. Everything that versions in lockstep lives under `packages/`, and every npm package in the train carries the framework version (`release:prep` asserts the stamps):
 
-- **`packages/puzzle`** — the framework itself: `@magic-spells/puzzle`
-  (runtime, Go compiler, CLI, examples, release scripts, and this
-  constellation). The Go module path is unchanged
-  (`module github.com/magic-spells/puzzle` — declared, not path-derived), and
-  the whole release pipeline runs from this directory exactly as it always
-  has. The absorbed satellites were imported with full history
-  (`git subtree add`); the framework itself moved here by `git mv`, so
-  `git log --follow` crosses the move.
-- **`packages/puzzle-lang`** — the Puzzle template language as its own Go
-  module, `github.com/magic-spells/puzzle/packages/puzzle-lang`
-  ([[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]]): the `parser` package (section
-  splitter, lexer, AST, positioned errors) plus the `jsident` and `textutil`
-  helpers the compiler shares. Unlike the framework's module, this path IS
-  directory-derived: another module can import it only because it sits outside
-  `internal/` and its path matches `packages/puzzle-lang`. The compiler
-  requires it at `v0.0.0` and `replace`s it with `../puzzle-lang`, so it
-  always builds from the working tree. Outside consumers resolve a version
-  through a `packages/puzzle-lang/vX.Y.Z` tag (the Go convention for a module
-  in a subdirectory), created by hand next to `vX.Y.Z`. It is no npm package
-  and nothing in `release:prep` stamps it.
-- **`packages/puzzle-pieces`** — the `@magic-spells/puzzle-pieces` npm
-  transport: registry, node test suites, demo app, and its own constellation
-  root. Pieces resolve to the CLI's major.minor (D32), so the version must
-  equal the framework's exactly; `release:prep` asserts package.json,
-  demo/package.json, and the demo header badge, and prints the pieces publish
-  in the release order — a directory publish, safe here because pieces has no
-  pin injection. Published versions carry
-  `repository.directory: "packages/puzzle-pieces"`.
-- **`packages/puzzle-devtools`** — the Chrome DevTools extension (D100). Its
-  `@magic-spells/puzzle` dependency is a `file:../puzzle` link, so the vitest
-  suite and panel build always run against the working-tree runtime; CI runs
-  the suite unconditionally, so a framework breaking change fails the build
-  the day it lands. `private: true` forever — "publishing" is always the
-  extension zip (`npm run build:compiler`, then `build.mjs`, which defaults
-  to the monorepo binary `../puzzle/puzzle`), never npm.
-- **`packages/puzzle-eslint` / `packages/puzzle-prettier`** — the `.pzl`
-  lint/format plugins (`@magic-spells/eslint-plugin-puzzle`,
-  `@magic-spells/prettier-plugin-puzzle`). Both vendor JS ports of the
-  section splitter/lexer in `packages/puzzle-lang/parser`, so grammar changes
-  must land in them too — CI runs their suites on every push. Train-versioned
-  and release-prep-asserted; their first npm publish is a separate decision.
+- **`packages/puzzle`** — `@magic-spells/puzzle`: runtime, Go compiler, CLI, examples, release scripts, this constellation. Go module path `github.com/magic-spells/puzzle` is declared, not path-derived. The whole pack/release pipeline (pin injection, `verify:pack`, tarball-only publish, D120) runs from this directory.
+- **`packages/puzzle-lang`** — the language as its own Go module, `github.com/magic-spells/puzzle/packages/puzzle-lang` (D172): `parser` plus the shared `jsident`/`textutil` helpers. This path IS directory-derived. The compiler requires it at `v0.0.0` with `replace => ../puzzle-lang`; outside consumers need a hand-made `packages/puzzle-lang/vX.Y.Z` tag. Not an npm package; `release:prep` doesn't stamp it.
+- **`packages/puzzle-pieces`** — the pieces registry, demo and its own constellation root. Version must equal the framework's (pieces resolve to the CLI's major.minor, D32); `release:prep` asserts package.json, demo/package.json and the demo badge, and prints the pieces publish (a directory publish — no pin injection). The demo depends on `file:../../puzzle` and runs the monorepo binary `../../puzzle/puzzle` (it sits outside the Go module, so `go run` can't work).
+- **`packages/puzzle-devtools`** — the Chrome extension (D100), `private: true` forever; ships as a zip via `npm run build:compiler` then `scripts/build.mjs` (defaults to the monorepo binary). Its framework dep is `file:../puzzle`, and CI runs its suite unconditionally, so a breaking framework change fails the day it lands.
+- **`packages/puzzle-eslint` / `packages/puzzle-prettier`** — the `.pzl` plugins. Both vendor JS ports of the `puzzle-lang/parser` splitter/lexer, so grammar changes must land in them too; CI runs their suites on every push.
 
-The pieces demo's framework dep is `file:../../puzzle` and its scripts run
-the monorepo compiler binary (`../../puzzle/puzzle` — `go run` needs module
-context, and the demo sits outside the Go module). No published-version range
-exists inside the train, so there is no release-window state where `npm ci`
-cannot resolve.
+No published-version range exists inside the train, so there is no release-window state where `npm ci` can't resolve.
 
-**What stays out.** The three editor grammars (puzzle-vscode / puzzle-sublime
-/ puzzle-zed) stay in separate repos: their distribution channels are
-repo-shaped — Zed's extension registry submodules the extension repo and pins
-the grammar by repo+commit, and Package Control reads git tags as versions,
-which would collide with this repo's release tags. Their forcing function is
-the release checklist sweep (and the grammar repos' example parse-sweeps),
-not co-location.
+**No npm workspaces.** Each package keeps its own install and lockfile; editing any package.json dependency means regenerating that lockfile or `npm ci` hard-fails.
 
-**Archive, never delete.** Absorbed repos are archived on GitHub after a
-final pointer-README commit: published npm metadata links to them, PR/issue
-history lives only in GitHub's copy, and an archived name cannot be squatted.
+**Runtime resolution.** `FindRuntime` (`compiler/internal/build/build.go`) walks ANCESTORS for the in-repo runtime, which serves apps under `packages/puzzle` (the examples); sibling packages resolve through their `file:` links via `FindInstalledRuntime`'s `node_modules` walk. Don't break either path.
 
-## Why
+**Editor grammars stay out** (puzzle-vscode / sublime / zed): separate repos, dev-installed per README and versioned independently; editor extension tooling keys on standalone repos and git tags, which would collide with this repo's release tags. The release checklist sweeps them.
 
-The separate repos manufactured coordination work and then failed at it:
-pieces publishing had a timing rule ("at or before the CLI release, or
-zero-config `add piece` breaks") enforced by nothing; the devtools panel sat
-hard-broken against a framework release for a week because no suite ran when
-the framework moved; the lint/format plugins sat a full grammar generation
-behind with zero commits; and the satellites ran on hand-rolled workspace
-substitutes (a `PUZZLE_PIECES_REGISTRY` shell override, a hand-made
-`node_modules` symlink). Co-location plus `release:prep` asserts plus
-unconditional CI turns all of that into machine-checked properties of one
-branch. The private-shell root keeps the published
-manifest inside the package that owns it, so the delicate pack pipeline never
-interacts with repo-level tooling.
+**Archive, never delete** absorbed repos: npm metadata links to them, PR/issue history lives there, and an archived name can't be squatted.
 
-## Alternatives rejected
+## Alternatives
 
-- **Framework at the repo root, satellites under `packages/`** — keeps the
-  published manifest at the repo root, which forces the no-workspaces
-  rationale onto the whole repo and leaves the layout asymmetric (four
-  packages down, one up). The uniform shape costs only path churn, all of it
-  verifiable by the existing suites and a full `release:prep` dry run.
-- **Grammars in the monorepo too** — npm-distributed packages don't care
-  where they live, but Zed and Sublime distribution is keyed to standalone
-  repos and tag namespaces; two of three grammars can't move, and moving only
-  vscode would split one uniform family across two workflows.
-- **npm workspaces** — see the note; per-package installs are self-contained
-  and already proven, and hoisting is a new variable the release pipeline
-  does not need.
-- **Keeping the pieces GitHub Pages demo deploy** — the site's
-  `/puzzle-pieces` page is the live catalog; a second deployment of the same
-  content from CI is maintenance with no audience. The archived repo keeps
-  serving its last deploy until taken down.
+- Framework at the repo root, satellites under `packages/` — the published manifest at the root forces the no-workspaces rule onto the whole repo, and the layout is asymmetric.
+- Editor grammars in the monorepo — their tooling is repo- and tag-shaped; moving only vscode splits one family across two workflows.
+- npm workspaces — hoisting is a new variable the release pipeline doesn't need.
+
+## Consequences
+
+Co-location, `release:prep` asserts and unconditional CI make train consistency a machine-checked property of one branch. The Go floor is 1.24 (binaries built earlier lack `LC_UUID` and are aborted by dyld on current macOS).

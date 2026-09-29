@@ -1,5 +1,5 @@
 ---
-name: "D51 — One routerBase, applied at the path-shape boundary: pathname prefix (history), in-fragment prefix (hash), inert (memory) (v1.19)"
+name: D51 — One `routerBase`, applied at the path-shape boundary in every mode
 status: verified
 connections:
   - DECISION-D34-HASH-ROUTING
@@ -7,78 +7,28 @@ connections:
   - DECISION-D42-MEMORY-MODE
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
-  - FEATURE-ROUTER-BASE-PATH
   - DOC-ROUTER
   - DOC-SPEC
   - DOC-SPEC-ROUTER
 verified_at: '2026-07-12T00:15:00.443Z'
-notes:
-  - kind: verified
-    text: >-
-      Decision implemented as written and verified at the merged main sha (480 vitest green); no
-      deviations from the recorded contract.
-  - kind: state
-    text: >-
-      Round-3 fix (fix/code-review-round3): click interception now also accepts the exact '#'+base
-      fragment (→ push('/')), matching what #currentPath always accepted for initial/pop parsing.
-      The "only #<base>/... fragments are routes" wording predates this — a hand-authored app-root
-      link (href="#/myapp", the same shareable URL the parse path deliberately supports) no longer
-      bypasses the router.
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/router/modes.js
   - client-runtime/app.js
 ---
 
-# D51 — One `routerBase`, applied at the path-shape boundary: pathname prefix (history), in-fragment prefix (hash), inert (memory) (v1.19)
+# D51 — One `routerBase`, applied at the path-shape boundary
 
-The remaining half of the old router-modes follow-up (its memory half shipped as D42).
-`routerBase: '/myapp'` in the PuzzleApp config serves the app under a sub-path in both
-URL-carrying modes while route definitions, `push()`, `router.current`, `params`, and
-`this.route` stay base-free. See [[DOC-SPEC-ROUTER]] §23.
-
-## Context
-Path mode assumed root deployment; D42 deliberately deferred base support because
-deciding it for hash mode meant deciding it for path mode too. The router already
-funnels ALL URL contact through three seams: `#currentPath()` (read), the commit's
-pushState (write), and the click interceptor.
+`routerBase: '/myapp'` serves the app under a sub-path while route definitions, `push()`, `router.current`, params and `this.route` stay base-free. See [[DOC-SPEC-ROUTER]] §23.
 
 ## Decision
-- **One config, applied at the path-shape boundary — mode-agnostic by construction.**
-  Reads strip the base after the mode-specific raw read; writes prefix the base before
-  the mode-specific encoding. History: `location.pathname` carries `/myapp/user/1`.
-  Hash: the fragment carries it — `#/myapp/user/1` (the mode-translation rule stays
-  exact: the entire path-shaped surface moves into the fragment, base included), and
-  the D41 anchor convention composes untouched (`#/myapp/docs#faq` → strip base →
-  `/docs#faq` → existing anchor split). Memory: no URL exists, so `routerBase` is
-  **inert** (like `scrollBehavior` there) — one config object works across all modes
-  in tests. (Rejected: mode-specific options; throwing in memory mode — D42's
-  `routerInitialPath` throw guards a *meaningless* option, whereas an inert base lets
-  the same app config run under the test mode.)
-- **App code is base-free; hrefs are not.** `push('/user/1')`, matching, `current`,
-  `params`, `this.route` never see the base. But an `<a href>` is a REAL document URL
-  — middle-click, copy-link, open-in-new-tab must work — so hrefs carry the base
-  (`href="/myapp/user/1"`, or relative). The path-mode interceptor intercepts only
-  same-origin URLs **under the base** (stripping it on push); links outside the base
-  fall through to the browser — a real navigation away from the app, which is *more*
-  correct than today's intercept-everything. Hash mode mirrors it: with a base set,
-  only `#<base>/...` fragments are routes; other `#/...` fragments are left to the
-  browser like any non-route fragment. (Rejected: base-free hrefs rewritten at
-  intercept time — breaks middle-click/new-tab, the whole point of an href.)
-- **Normalization + fail-fast:** leading `/` ensured, trailing `/` trimmed, `''`/`'/'`
-  → no base (default, zero behavior change); a base containing `#` or `?` is a
-  constructor throw (config error posture, like unknown mode). Multi-segment bases
-  work.
-- **Loaded outside the configured base (path mode):** warn once and pass the
-  pathname through un-stripped — typically the catch-all: visible and debuggable, not
-  silent misrouting.
+- **One config, applied where the router touches the URL.** Reads strip the base after the mode's raw read; writes add it before the mode's encoding. History mode: `location.pathname` = `/myapp/user/1`. Hash mode: the fragment carries it, `#/myapp/user/1`, and the anchor convention composes (`#/myapp/docs#faq` → `/docs#faq`, [[DECISION-D41-SCROLL-ANCHORS-PERSISTENCE]]). Memory mode: **inert** ([[DECISION-D42-MEMORY-MODE]]), so one app config runs under tests.
+- **App code is base-free; hrefs are not.** An `<a href>` is a real document URL (middle-click, copy link, new tab), so it carries the base (`/myapp/user/1`, or relative). The path-mode interceptor takes only same-origin URLs **under the base** and strips it on push; links outside fall through to a real navigation. Hash mode mirrors this: with a base set, only `#<base>/…` fragments and the exact `#<base>` (→ `/`) are routes.
+- **Normalization:** a leading `/` is ensured and a trailing `/` trimmed; `''` or `'/'` means no base. A base containing `#` or `?` throws at construction. Multi-segment bases work.
+- **Loaded outside the base (path mode):** warn once and route the pathname un-stripped — usually the catch-all, visible rather than silently misrouted.
+- Scroll keys ride `history.state`, not the URL, so they are unaffected.
 
 ## Alternatives rejected
-Covered above. Also rejected: reading the base from `<base href>` — implicit config
-the router can't validate, and hash mode has no sane `<base>` story.
-
-## Consequences
-Router + config passthrough only (`routerBase` joins the §2 surface exactly as
-`scrollBehavior`/`routerMode` did — passed through only when set). No compiler,
-store, or view changes. Base-less apps byte-identical. Scroll keys (D41) are
-unaffected — they ride `history.state`, not the URL.
+- Mode-specific base options, or throwing in memory mode — one config should work in every mode.
+- Base-free hrefs rewritten at intercept time — breaks middle-click and new-tab.
+- Reading the base from `<base href>` — implicit config the router cannot validate, with no sane hash-mode story.

@@ -1,133 +1,32 @@
 ---
-name: "D58 — List keying: pk-aware auto-key, explicit key override, null-key warning"
+name: 'D58 — List keying: pk-aware auto-key, explicit key override, dev null-key warning'
 status: verified
 connections:
-  - FEATURE-V1-26-LIST-KEYING
   - DECISION-D29-LOOP-COUNTER
-  - DECISION-D43-FORMATTER-MISSING-GUARD
+  - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - COMPONENT-CODEGEN
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-PUZZLE-MODEL
   - DOC-SPEC
   - TEST-TODOS-INTEGRATION
 verified_at: '2026-07-14T07:07:57.217Z'
-notes:
-  - kind: verified
-    text: >-
-      Verified at ship: contract implemented as written (ViewNode.keyOf emission, hasKeyAttr
-      override suppression, warn-once null path); goldens + hand-written fixture updated
-      fixture-first; Go +6 codegen tests, vitest +4 incl. custom-pk reorder-by-move; 540 vitest +
-      all Go green.
-  - kind: state
-    text: >-
-      The null-key and duplicate-key warnings are dev-only since the 0.7.0 size cleanups: both call
-      sites sit behind the inline `__PUZZLE_DEV__` probe, so the warnings and their module-level
-      once-state tree-shake out of production; in development they still warn at most once per
-      session, exactly as described above.
-  - kind: state
-    text: >-
-      Where the key expression lives moved with D170's list blocks; the semantics on this card did
-      not change. An item-form `{#for}` no longer prepends `key: ViewNode.keyOf(item)` to the row
-      root — the synthetic key is the site meta's key function, `key: (item) =>
-      ViewNode.keyOf(item)`, hoisted to the module-scope `const __L<n>`, and the row root carries
-      the block's resolved `key: s.k`. An explicit `key={ … }` becomes `(item) => <expr>` (or
-      `(item, i) => …`) in the same meta, with the loop locals left bare as the arrow's own
-      parameters — but only when it reads nothing that lives inside `render()`; a key touching
-      `__d`, `__f` or `this` cannot become a module-scope arrow, so the whole site keeps today's
-      `.map(…)` emission and this card's original prepend/suppress behaviour verbatim. Range loops
-      and loops inside a `<Snippet>` body also keep `.map`. `keyOf` itself, the explicit-key
-      override, the null-key warn-once and positional fallback, and the duplicate-key warning are
-      all unchanged; the block adds one more dev warning of its own when two rows collide on a key
-      in a single pass, because a shared key would otherwise alias two logical rows onto one row
-      state.
-    sha: ff9454a1857e785d8c8590e5d47f2a6030f107e8
 ---
 
 # D58 — List keying: pk-aware auto-key, explicit key override, null-key warning
 
-Settled (v1.26). `{#for}` list keying stops assuming `.id` and stops colliding
-with user intent: the compiler emits a **runtime key resolver** instead of the
-hardcoded `item.id`, an **explicit `key={ … }` on the body root replaces** the
-synthetic key instead of silently duplicating it, and a row whose key resolves
-to null/undefined **warns once** in dev instead of silently dropping the list
-to positional diffing.
-
-## Context
-
-Three defects shared one root — the synthetic `key: item.id` the compiler
-prepends to every item-form `{#for}` body root (codegen `forBody`):
-
-1. **The `.id` assumption contradicts the model layer.** `.primary()` has been
-   honored by the store since v1 — records index, dedupe, and save by
-   `Model.primaryKey()`. But the compiler can't see models (a loop collection
-   is just an expression), so a model with `main_id: Puzzle.string().primary()`
-   got `key: item.id` → `undefined` → every key null → **silent positional
-   diffing**. The two halves of the framework disagreed about identity.
-2. **Explicit keys doubled.** Muscle memory from React/Vue writes
-   `key={ todo.id }` on the row root. The compiler prepended its synthetic key
-   anyway, emitting a duplicate `key:` property in the attrs literal —
-   accepted JS (last wins) with observed rendered-list doubling
-   ([[TEST-TODOS-INTEGRATION]] recorded it as "NO explicit key or it
-   doubles"). Do the thing every other framework taught you → broken list,
-   zero diagnostics.
-3. **Null keys were silent.** `attrs.key = undefined` → `ViewNode.key = null`
-   → the keyed path never engages. No warning existed (the existing
-   duplicate-key warning fires only when keys EXIST and collide).
-
-The plan carried this as a "compile warning" paper-cut item; working it
-through upgraded it to fixing the actual inconsistency.
-
 ## Decision
+- **Runtime-resolved auto-key: `ViewNode.keyOf(item)`.** An item-form `{#for}` keys each row through this static helper, which resolves when the real object is in hand:
+  - a store record (`item instanceof PuzzleModel`) → `item[item.constructor.primaryKey()]`, so template keying agrees with `.primary()`;
+  - anything else → `item?.id`;
+  - null/undefined → a dev-only warn-once naming the item, and `null` (positional fallback, now diagnosed).
+- **Explicit key wins.** A `key` attribute (static or dynamic) on the `{#for}` body root replaces the synthetic key; `keyOf` is not applied to it. This is the override for non-record data with other identity fields. Keys must be stable and unique.
+- **Range loops** key on the generated number — unique by construction.
+- **Where the key lives** ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]): for a list block, the key function sits in the hoisted site meta (`const __L<n> = { key: (item) => ViewNode.keyOf(item), … }`) and the row root carries the block's resolved key; an explicit key becomes `(item) => <expr>` (or `(item, i) => …`) there. A key that reads render-scope state (`__d`, `__f`, `this`) cannot be a module-scope arrow, so that site — like range loops and loops inside a `<Snippet>` body — keeps the `.map(…)` emission with the key on the row root.
+- **Warnings are dev-only** (`__PUZZLE_DEV__`): the null-key and duplicate-key warnings each fire once per session; a list block also warns when two rows collide on a key in one pass, since a shared key would alias two rows onto one row state.
+- `keyOf` rides the already-imported `ViewNode` and is documented as internal (like `SLOT_TAG`).
 
-- **Runtime-resolved auto-key: `ViewNode.keyOf(item)`.** Item-form `{#for}`
-  emits `key: ViewNode.keyOf(item)` instead of `key: item.id`. The static
-  helper resolves at render time, when the real object is in hand:
-  - store record (`item instanceof PuzzleModel`) → `item[item.constructor.primaryKey()]`
-    — template keying automatically agrees with whatever `.primary()` says;
-  - anything else → `item?.id` (v1 behavior, unchanged for the common case);
-  - resolved null/undefined → **warn once** (dev-visible; production builds
-    already drop `console.*`) naming the item, and return null (positional
-    fallback, now diagnosed instead of silent).
-- **Riding on `ViewNode`, not a new export.** The helper is a static on the
-  already-imported `ViewNode` — the emitted import line is byte-identical, no
-  new public name in the package surface. Same posture as D43's
-  `__f.__missing` (ride an object the emitted code already holds).
-- **Explicit key wins.** If the `{#for}` body root (element or component)
-  carries a `key` attribute — static or dynamic — the compiler **skips the
-  synthetic prepend entirely** and the author's attribute stands, in both item
-  and range forms. This converts the collision into the sanctioned override
-  for non-record data with other identity fields (raw API rows, `main_id`
-  before it's modeled, computed rows). Keys must be stable and unique;
-  `keyOf` is NOT applied to the override (the author said what identity is).
-- **Range form unchanged.** Range/counter keys are the generated numbers —
-  unique by construction; no resolver call, byte-identical emission.
-- **Keys elsewhere unchanged.** `key` on non-root elements (e.g. the grimoire
-  island title's replace-on-change key) already passed through untouched and
-  still does.
-
-## Rejected alternatives
-
-- **Compile warning only** (the original plan item): teaches the convention
-  but leaves defect 1 — custom-pk models still silently lose keyed
-  reconciliation, and no-`.id` data has no escape hatch.
-- **Compile-time pk resolution:** the compiler reading `models/` to infer the
-  loop collection's type. Rejected: the compiler never parses JS (SPEC §4),
-  collections are arbitrary expressions, and the coupling would be wrong the
-  moment a computed array crosses a model boundary.
-- **`__key` as a new named export:** works, but grows the public surface and
-  churns the emitted import line in every file with a loop; the ViewNode
-  static costs nothing.
-- **Duck-typing (`typeof item?.constructor?.primaryKey === 'function'`)
-  instead of `instanceof`:** avoids the model import in ViewNode.js but
-  false-positives on user classes with a same-named static; the real import
-  is cycle-free (model.js imports nothing from views/).
-
-## Consequences
-
-- Emitted code changes for every item-form loop → per-construct goldens
-  regenerated; the hand-written todos fixture (the byte-contract — "the
-  fixture wins") updated first, compiler matched to it.
-- `ViewNode.keyOf` is technically reachable by users; documented as internal
-  (like `SLOT_TAG`).
-- The null-key warn-once set is module-level (matches `warnDuplicateKey`);
-  warns at most once per model type/shape encounter to stay quiet in loops.
+## Alternatives rejected
+- A compile warning only — custom-pk models would still silently lose keyed reconciliation, and non-`.id` data would have no override.
+- Compile-time pk resolution from `models/` — the compiler never parses JS, and collections are arbitrary expressions.
+- A new `__key` export — grows the public surface and churns every emitted import line.
+- Duck-typing `primaryKey` instead of `instanceof` — false positives on user classes with a same-named static; the real import is cycle-free.

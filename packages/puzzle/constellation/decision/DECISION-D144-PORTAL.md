@@ -17,112 +17,76 @@ code_refs:
   - client-runtime/app.js
   - client-runtime/static/index.js
   - client-runtime/ssg/serialize.js
-notes:
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # D144 — Portal (scoped v1)
 
-`<Portal>…</Portal>` (v1.66) teleports its children's DOM to a framework-created
-outlet at the app root while the subtree stays in the owner's component tree —
-same props, data flow, lifecycle, and teardown. The use case is overlays that
-must escape ancestor CSS (containing blocks from `transform`/`filter`/`contain`,
-`overflow` clipping, stacking contexts): modal panels, full-screen views, and
-the [[DOC-THIRD-PARTY-DOM]] reactive-foreign-container gap.
+## Context
 
-## Grammar
+Overlays must escape ancestor CSS — containing blocks from
+`transform`/`filter`/`contain`, `overflow` clipping, stacking contexts — for
+full-screen panels, non-modal overlays, and reactive content in foreign
+containers ([[DOC-THIRD-PARTY-DOM]]). `<dialog>.showModal()` stays the
+recommended tool for focus-trapped modals (native top layer, focus trap,
+Escape).
 
-A reserved capitalized marker in the D134 family, recognized before component
-resolution. Paired-only — a self-closing `<Portal/>` is a positioned compile
-error (a portal exists to carry children). Attribute-free: `to`/`name` are
-positioned compile errors reserved for future named outlets; lowercase
-`<portal>` gets the D134 steering error. Rejected inside a marker fallback body
-(D141 rule) and inside an island (an unreconciled subtree would never mount or
-tear down the portal). Also rejected as a COMPONENT template's root: the D20
-inline root is where call-site attributes merge and where the D59 scope stamp
-lands, and a portal keeps only a comment placeholder locally, so there is no
-element to do either job — the steering error names the wrapper idiom
-(`<div style="display: contents">` around the `<Portal>`). Portal-only
-components (toast stacks, slide-overs) hit this on the first try, so the error
-message carries the fix. A portal-only VIEW is legal — views keep their
-`<puzzle-view>` root. Portal-in-portal is allowed. `PORTAL_TAG` is a reserved
-binding and loop-variable name like `SLOT_TAG`.
+## Decision
 
-## Runtime contract
+`<Portal>…</Portal>` moves its children's DOM to a framework-created outlet at
+the app root while the subtree stays in the owner's component tree — same
+props, data flow, lifecycle and teardown.
 
-- Portal state and operations live in `client-runtime/views/portal.js`, a real
-  module seam gated by D89's `__PUZZLE_HAS_PORTAL__` usage define. Every
-  import-holding call site uses the full inline probe; undefined means enabled
-  for unbundled consumers and Vitest. With an explicit false define, a Portal
-  vnode leaves an inert local comment and warns once in development. Production
-  remains non-throwing, and `@event:outside` falls back to physical
-  `el.contains` containment.
-- ONE outlet (`<div data-puzzle-portal>`) appended beside the app mount
-  container (host set by `PuzzleApp.mount()` / `mountStatic`; `<body>`
-  fallback), created lazily on the first portal mount, removed when the last
-  portal unmounts and on app unmount. No user-placed outlets, so no outlet
-  registry lifecycle and no teardown-ordering races.
-- The portal vnode keeps a comment placeholder at its local position (sibling
-  insertion refs and conditional arity untouched); children mount into a
-  per-portal comment-bracketed range in the outlet, so multiple live portals
-  never contend over one childNodes list. Reconciliation threads a `tail`
-  insertion ref so appended children stay inside their range.
+**Grammar.** A reserved capitalized marker, recognized before component
+resolution. Positioned compile errors: self-closing `<Portal/>`; any attribute
+(`to`/`name` reserved for future named outlets, `ref` rejected); lowercase
+`<portal>`; inside a marker fallback body; inside an island (never reconciled,
+so the portal would never mount or tear down); as a COMPONENT template root
+(the root is where call-site attributes merge and the scope stamp lands — the
+error names the fix, `<div style="display: contents">` around the portal). A
+portal-only VIEW is legal (`<puzzle-view>` root). Portal-in-portal is allowed.
+`PORTAL_TAG` is a reserved binding and loop-variable name.
+
+**Runtime (`client-runtime/views/portal.js`).**
+- Gated by the `__PUZZLE_HAS_PORTAL__` usage define (D89): the build-wide walk
+  marks any `*parser.Portal` as `HasPortal`, so apps without Portal drop the
+  module. Undefined means enabled (unbundled, Vitest). With the define false, a
+  Portal vnode leaves an inert comment and warns once in dev; `:outside` falls
+  back to physical `el.contains`.
+- ONE outlet, `<div data-puzzle-portal>`, appended beside the app mount
+  container (host from `PuzzleApp.mount()`/`mountStatic` via
+  `setPortalHost`, `<body>` fallback), created on first portal mount, removed
+  when the last portal unmounts and on app unmount. An element mid-leave keeps
+  it alive until the next release (removal is guarded on emptiness).
+- The portal vnode keeps a comment placeholder locally (sibling refs and arity
+  unchanged); children mount into a per-portal comment-bracketed range in the
+  outlet, and reconciliation threads a `tail` ref to keep appends inside it.
 - Teardown is EXPLICIT on every removal shape (patch-replace, keyed removal,
-  `clear()`, router teardown, `releaseSubtree` descent) — the teleported
-  children are not under `vnode.el`, so nothing cascades to them; skipping this
-  leaks component instances and document-level `outside` listeners.
-- `@event:outside` (D86) uses LOGICAL containment: a target physically inside
-  the outlet resolves to its owning portal's local placeholder and containment
-  re-tests there (iterating for nested portals), so content portaled by a
-  descendant of the bound element counts as inside. Zero cost with no live
-  portals.
-- An element mid-leave-animation keeps the outlet alive until the next release
-  or app unmount (outlet removal is guarded on emptiness, not just count).
+  `clear()`, router teardown, `releaseSubtree`) — teleported children are not
+  under `vnode.el`; skipping it leaks instances and document listeners.
+- `@event:outside` (D86) uses logical containment (`portalAwareContains`): a
+  target in the outlet resolves to its portal's placeholder and re-tests there,
+  iterating for nested portals. Zero cost with no live portals.
 
-## Prerender and transitions
+**Compiler walkers** all recurse into `*parser.Portal` except loop-key roots,
+`buildTextRun`, and `condStaticLen` (counts a Portal as one vnode — its
+placeholder).
 
-- SSG/static: `PORTAL_TAG` serializes to `''` — portals emit nothing in
-  prerendered HTML; content appears at takeover/`mountStatic`. Fine for
-  overlays; wrong for content meant to be crawlable — don't portal that.
-- Router overlap transitions: portaled content of an outgoing view is not under
-  the pinned root, so it unmounts rather than fades. Morph never scans the
-  outlet. Both are documented behavior, not defects.
+## Alternatives
 
-## Scope notes
+- Raw DOM targets (`to="body"`) — bypass framework lifecycle and SSG.
+- User-placed outlets in v1 — outlet registry, deferred-mount queues and
+  teardown-order races with no v1 use case. `<PortalOutlet name>` + `to="…"`
+  remains the compatible extension; the reserved-attribute errors hold the
+  space.
+- No Portal (native top layer only) — answers modals, not reactive content in
+  overlay containers.
 
-Portal state (host, outlet, range table, count) is module-scoped, not per-app:
-two simultaneous `PuzzleApp` instances on one page would share one outlet — a
-later mount retargets it for both, and either unmount tears down the other
-app's live portals. Multiple apps on a page are **not a supported shape**; the
-dev build warns when `setPortalHost()` would stomp live portal state. Scoping
-the state to ctx is the compatible upgrade if a real embedding case ever
-funds it.
+## Consequences
 
-The build-wide usage walk marks any `*parser.Portal` as `HasPortal` before
-recursing into its children, so apps without Portal drop `portal.js` entirely.
-Other compiler tree walkers all recurse into `*parser.Portal` except three that are
-deliberately exempt: loop-key roots (contractually elements/components),
-`buildTextRun` (receives pre-filtered text runs only), and `condStaticLen`
-(counts a Portal as one fixed vnode without descending — its local
-placeholder occupies exactly one position).
-
-`<dialog>.showModal()` remains the recommended tool for focus-trapped modals —
-the native top layer gives focus trap and Escape handling for free; Portal
-covers non-modal overlays, full-screen panels, and reactive content in foreign
-containers. User-placed named outlets (`<PortalOutlet name>` + `to="…"`) are
-the compatible future extension; the reserved attribute errors hold the space.
-
-## Alternatives rejected
-
-- **Raw DOM targets** (`to="body"`): bypasses framework lifecycle and SSG; the
-  framework-owned outlet keeps every portal inside the managed tree.
-- **User-placed outlets in v1**: outlet registry, deferred-mount queues, and
-  teardown-ordering races for no v1 use case.
-- **Keeping the full deferral**: the native top layer answers modals but not
-  reactive content in foreign/overlay containers, and deep `position: fixed`
-  overlays stay hostage to the §26 containing-block contract in practice.
+- Prerender: `PORTAL_TAG` serializes to `''`; portal content appears at
+  takeover/`mountStatic`. Don't portal content meant to be crawlable.
+- Router overlap transitions: portaled content of an outgoing view unmounts
+  instead of fading; morph never scans the outlet.
+- Portal state is module-scoped, not per app: multiple `PuzzleApp` instances on
+  one page are unsupported (dev warns when `setPortalHost()` would stomp live
+  portals). Scoping it to ctx is the upgrade path if needed.

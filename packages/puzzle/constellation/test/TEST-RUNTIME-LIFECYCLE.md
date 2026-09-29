@@ -22,30 +22,29 @@ connections:
   - DOC-TESTING
 ---
 
-
 # App and view lifecycle suite
 
-Proves the two lifecycle owners in jsdom: [[COMPONENT-PUZZLE-APP]] construction
-through unmount, and [[COMPONENT-PUZZLE-VIEW]] mount through destroy.
+Proves the two lifecycle owners in jsdom: [[COMPONENT-PUZZLE-APP]] from
+construction through unmount, and [[COMPONENT-PUZZLE-VIEW]] from mount through
+destroy. Suites under `tests/` include `app`, `app-lifecycle-hooks`,
+`app-mount-epoch`, `error-boundaries`, `view`, `memo`, `element-refs`,
+`skeleton-antiflash`, `render-null-clears-dom`, `teardown-hook-guards`,
+`refresh-ownership`, `view-prepare-scope-overlap` and
+`soft-launch-runtime-fixes`.
 
-App side: boot order and service wiring, pre-mount store access failing loudly,
-formatter and model registration, target resolution, `beforeMount` / `mounted` /
-`beforeUnmount` contracts and their validation, repeated mount/unmount cycles,
-and the mount-generation guard that makes an unmount landing mid-`beforeMount`
-safe. The app-level `errorView` funnel is proven here too: replacement,
-retry re-running the real navigation pipeline, terminal failure defaults, and
-cleanup of the replaced position.
-
-View side: the two-layer `data()` / `setData()` split, tracked store reactivity
-across the full subscription loop, `refresh()`, memoized derived values,
-skeleton loading with the anti-flash minimum hold, element refs across the
-lifecycle, `render()` returning null clearing the mounted DOM without
-disturbing the skeleton path, and teardown guards — a throwing `destroyed()`
-hook must not wedge the cascade or leave the app half-unmounted.
-
-One file in this group is a cross-cutting hardening set rather than a single
-subject: it pins unified safe-assign skip sets, snapshot iteration of the
-subscriber set, batched persistence in `flush()`, observed abandoned tracking
-promises, refs nulled after destroy, and the `pagehide` flush.
-
-Covers 11 files under `tests/`.
+- **App:** boot order and service wiring, pre-mount store access failing loudly,
+  formatter and model registration, target resolution, the `beforeMount` /
+  `mounted` / `beforeUnmount` contracts and their validation, repeated
+  mount/unmount cycles, and the mount-generation guard that makes an unmount
+  landing mid-`beforeMount` safe. The `errorView` funnel: replacement, retry
+  re-running the real navigation pipeline, terminal failure defaults, cleanup of
+  the replaced position.
+- **View:** the two-layer `data()` / `setData()` split, tracked store reactivity
+  across the full subscription loop, `refresh()`, `memo()`, skeleton loading
+  with the `min-duration` hold, element refs, `render()` returning null clearing
+  the mounted DOM without disturbing the skeleton path, and teardown guards — a
+  throwing `destroyed()` must not wedge the cascade or half-unmount the app.
+- `soft-launch-runtime-fixes` is a cross-cutting hardening set: unified
+  safe-assign skip sets, snapshot iteration of the subscriber set, batched
+  persistence in `flush()`, observed abandoned tracking promises, refs nulled
+  after destroy, and the `pagehide` flush.

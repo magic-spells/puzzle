@@ -4,69 +4,32 @@ status: verified
 verified_at: '2026-08-24T18:51:09.019Z'
 connections:
   - COMPONENT-ESBUILD-PLUGIN
-  - DECISION-D12-TAILWIND-FIRST
+  - DECISION-D26-TAILWIND-PIPELINE
 code_refs:
   - compiler/internal/config/config.go
   - compiler/internal/build/build.go
   - compiler/internal/build/prerender_pages.go
 verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
-notes:
-  - kind: verified
-    text: Claims re-verified against the current Go compiler code; no drift found.
-    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
-# D60 — build.dropConsole: production console-strip becomes opt-out
-
-## Context
-
-The round-1 correctness pass made production builds set esbuild
-`Drop: api.DropConsole` unconditionally (~570 B gzip saved on examples/todos;
-framework advisory warnings became dev-mode-only by design). A later external
-review (Codex, 2026-07-14) flagged the sharp edge: esbuild's drop:console
-removes the ENTIRE call expression, so a user app's `console.log(sideEffect())`
-loses the side effect too — and the stripping applies to user code, not just
-framework diagnostics, with no way out.
+# D60 — `build.dropConsole`: production console stripping is opt-out
 
 ## Decision
-
-`puzzle.config.js` gains a `build` block with one key:
+Production builds set esbuild `Drop: api.DropConsole` by default. esbuild removes the **entire** call expression, so `console.log(sideEffect())` loses its side effect too, and it applies to user code. `puzzle.config.js` offers the way out:
 
 ```js
 export default { build: { dropConsole: false } }
 ```
 
-- Absent key / no config file → UNCHANGED default: production strips console
-  (the size win and all existing apps keep their behavior).
+- Key absent or no config → production strips `console.*`.
 - `dropConsole: false` → user console calls survive production builds.
-- Dev builds never drop console, regardless of the setting.
-- Non-boolean values are rejected at config load with a message naming
-  `build.dropConsole` (same posture as the styles.use validation).
+- Dev builds never drop console.
+- A non-boolean value is rejected at config load, naming `build.dropConsole`. Unknown keys inside `build` are ignored.
+- The config is loaded once per `Build()` ([[DECISION-D26-TAILWIND-PIPELINE]]), so a malformed config surfaces before the stale-`dist` prune.
 
-Config is loaded ONCE per `Build()` (hoisted out of runTailwind — one node
-invocation per build), which as a side effect surfaces a malformed config
-BEFORE the stale-dist prune instead of after.
+The framework's own warnings are dev-only by design (`__PUZZLE_DEV__`), so stripping only ever affects app code. `build` is the home for future build toggles.
 
-## Alternatives
-
-- **Flip the default to keep console** — rejected for now: silently changing
-  every existing app's production output (and un-earning the measured size win)
-  for a footgun that only bites side-effectful console arguments. Revisit at
-  npm-publish time if user feedback warrants.
-- **CLI flag (`puzzle build --keep-console`)** — rejected: this is app
-  configuration, not a per-invocation choice; puzzle.config.js is the home for
-  it (D12), and a flag would drift from CI scripts.
-- **Remove stripping entirely** (Codex's proposal) — rejected: the framework's
-  own warn-once diagnostics are deliberately dev-only, and the default is a
-  real bundle-size win; an escape hatch answers the criticism without paying
-  that cost.
-
-## Consequences
-
-- First occupant of the `build` block in puzzle.config.js — future build
-  toggles have a home. Unknown keys inside `build` stay ignored (permissive,
-  matching top-level posture).
-- Apps that rely on production console output (client-side error reporting via
-  console hooks, etc.) now have a sanctioned path.
-- CLAUDE.md / card claims that "production drops console.* by design" must say
-  "by default" — see the COMPONENT-ESBUILD-PLUGIN card notes.
+## Alternatives rejected
+- Keeping console by default — silently changes every app's production output and gives up the size win (~570 B gzip on examples/todos).
+- A `puzzle build --keep-console` flag — this is app configuration, and a flag drifts from CI scripts.
+- Removing stripping entirely — the default is a real size win; an escape hatch answers the side-effect concern.

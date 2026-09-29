@@ -1,311 +1,96 @@
 ---
 name: USER_GUIDE.md — application building guide
-status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+status: built
 connections:
   - DOC-SPEC
   - DOC-PUZZLE-FILE
   - DOC-DATASTORE
   - DOC-COMPILATION-FLOW
+  - DOC-TEMPLATE-SYNTAX
+  - DOC-MODELS
+  - DOC-ROUTER
 ---
 
-End-to-end app-building guide, worked against the in-repo `examples/blog` reference app: project structure (app/ source, dist/ output), app entry, models with builders, views/components, event handling, and the two data() gotchas. Every example is valid JS per [[DOC-SPEC]] §4.
+End-to-end app-building guide, worked against the in-repo `examples/blog` reference app ("Puzzle Press"). It walks the path an app author takes and links the reference cards for detail: [[DOC-TEMPLATE-SYNTAX]] (template grammar), [[DOC-MODELS]] and [[DOC-DATASTORE]] (data), [[DOC-ROUTER]] (routing), [[DOC-EVENTS]] (events), and the enforceable contract in [[DOC-SPEC]] and its `DOC-SPEC-*` chapters.
 
 # Puzzle User Guide
 
-Complete guide to building applications with the Puzzle Framework - from project structure to deployment.
+## Quick start
 
----
-
-## Quick Start
-
-
-Install the `puzzle` CLI once — a prebuilt Go binary, no JavaScript toolchain
-needed:
+The CLI is a prebuilt Go binary shipped through npm; no JavaScript toolchain is needed to run it.
 
 ```bash
 npm install -g @magic-spells/puzzle
+puzzle init my-app            # --template default|todos, --typescript
+cd my-app && npm install
+puzzle dev                    # watch + live reload
+puzzle build                  # production build
 ```
 
-Then scaffold and run a new app:
+`puzzle init` is the only onboarding path; there is no `npx create-*` wrapper ([[DECISION-D77-INIT-PROMPTS]]). The generated app depends on `@magic-spells/puzzle` locally, so collaborators only need `npm install`. To add Puzzle to an existing project, `npm install -D @magic-spells/puzzle` gives both the client runtime and the CLI.
 
-```bash
-puzzle init my-app
-cd my-app
-npm install
+`--typescript` scaffolds `<script lang="ts">` components, `.ts` modules and entry `app/app.ts`, a strict `tsconfig.json`, and a `check` script (`puzzle check`). The build starts from `app/app.ts` when it exists, otherwise `app/app.js`, and refuses an app with both. It strips types without checking them; `puzzle check` is the type check. In an app with a `tsconfig.json`, `puzzle generate` writes TypeScript stubs.
 
-puzzle dev     # develop with live reload
-puzzle build   # build for production
-```
-
-> `puzzle init` (v1.4, D32 — see [[DOC-SPEC]] §13) is the **only** onboarding
-> path; `--template default` or `--template todos` picks the starter. There is
-> no `npx` wrapper: [[DECISION-D77-INIT-PROMPTS]] rejected a separate
-> `create-puzzle-app` package, and the local draft was deleted 2026-09-09.
-> To work against the framework's own reference apps instead, use
-> `examples/todos/` or `examples/blog/` and run `puzzle dev` inside one.
-
-To add Puzzle to an existing project, one dev dependency gives you both the
-client runtime and the CLI:
-
-```bash
-npm install -D @magic-spells/puzzle
-```
-
----
-
-## Project Structure
-
-The worked example throughout this guide is **`examples/blog/`** ("Puzzle Press"),
-one of the two in-repo v1 reference apps. It has this structure:
+## Project structure
 
 ```
-examples/blog/
-├── package.json              # Dependencies & scripts
-└── app/                      # Application source
-    ├── app.js                # App init, adapter capability, formatters
-    ├── routes.js             # Route definitions
-    ├── models/               # Data models
-    │   ├── index.js          # Model registry
-    │   ├── user.js           # User model + adapter endpoint
-    │   ├── post.js           # Post model + adapter endpoint
-    │   └── comment.js        # Comment model (no adapter)
-    ├── views/                # Page components (.pzl files)
-    │   ├── Home.pzl          # Home page
-    │   ├── Posts.pzl         # All-posts page (tag filter)
-    │   ├── PostDetail.pzl    # Single post + comments (/posts/:id)
-    │   ├── About.pzl         # About page
-    │   └── NotFound.pzl      # '*' catch-all page
-    ├── components/           # Reusable UI components (.pzl files)
-    │   ├── Button.pzl        # Button (props + <Children/> + callback prop)
-    │   ├── PostCard.pzl      # Post summary card
-    │   └── CommentItem.pzl   # Single comment row
-    ├── layouts/              # Layout components (.pzl files)
-    │   └── Default.pzl       # Default layout (nav + <Slot/> + footer + base styles)
-    └── public/               # Static assets & HTML
-        ├── index.html        # Main HTML file
-        └── api/              # Static JSON the adapter endpoints read
-            ├── users.json
-            └── posts.json
-# dist/ (build output from `puzzle build`) is generated and git-ignored
+my-app/
+├── app/
+│   ├── app.js | app.ts   # PuzzleApp config + mount
+│   ├── routes.js         # route table
+│   ├── models/           # PuzzleModel classes + index.js registry
+│   ├── views/            # routed .pzl views (subfolders allowed)
+│   ├── components/       # reusable .pzl components
+│   ├── layouts/          # route layouts with <Slot/>
+│   ├── assets/           # source assets, incl. {#svg} files
+│   ├── locales/          # <tag>.json translation files (optional)
+│   ├── styles/           # Tailwind entry + global CSS
+│   └── public/           # index.html + static files (copied to dist/)
+├── puzzle.config.js      # styles, i18n, dev proxy, output, build options
+└── package.json          # dist/ is build output, git-ignored
 ```
 
-Styling here is done with per-file `<style>` blocks — no `puzzle.config.js`, no
-Tailwind. The companion `examples/todos/` shows the Tailwind pipeline instead.
+`@` is a built-in alias for `app/` in every module import (`import PostCard from '@/components/PostCard.pzl'`), from any depth, mixing freely with relative imports. `puzzle init` writes the matching `paths` entry (`"@/*": ["./app/*"]`) into `jsconfig.json`/`tsconfig.json` for editors; an older app adds it by hand. It applies to module imports only: `{#svg '…'}` paths already resolve against `app/assets/`, and CSS `@import`s are unaffected.
 
-## File Organization
+Styling is either per-file `<style>` blocks (optionally `scoped`) or the Tailwind pipeline: `puzzle add tailwind` wires `styles: { use: ['tailwindcss'] }` in `puzzle.config.js`, and `puzzle dev`/`build` run it automatically. `puzzle add theme` lists and installs registry palettes. `examples/blog` uses Tailwind.
 
-### .pzl Files (UI Components)
-- **Views** - Page components that represent routes (`/views/*.pzl`)
-- **Components** - Reusable UI components (`/components/**/*.pzl`)
-- **Layouts** - Wrapper components for pages (`/layouts/*.pzl`)
-
-### .js Files (Application Logic)
-- **App.js** - Main application initialization and configuration
-- **Routes.js** - Route definitions and navigation logic
-- **Models** - Data models with schema, computed properties, and validation rules (`/models/*.js`)
-
-### Importing with `@` (v1.42, D75)
-
-`@` is a built-in alias for your `app/` directory, so an import can name a file
-by where it lives in the project instead of by how many directories up it is:
-
-```js
-import ChirpCard from '@/components/ChirpCard.pzl';   // app/components/ChirpCard.pzl
-import User from '@/models/user.js';                   // app/models/user.js
-```
-
-It works from any depth and in any bundled file — `.pzl` `<script>` blocks,
-`app.js`, `routes.js`, models — which makes it worth reaching for once views
-live in subfolders and relative imports start climbing `../../`. Relative
-imports keep working exactly as before; the two spellings mix freely.
-
-`@` is always on and needs no configuration. `puzzle init` also writes the
-matching `paths` entry into `jsconfig.json` (or `tsconfig.json` with
-`--typescript`) so editors resolve `@/…` for go-to-definition; an existing app
-adds it by hand:
-
-```json
-{ "compilerOptions": { "paths": { "@/*": ["./app/*"] } } }
-```
-
-Note the alias is for **module imports only** — `{#svg '…'}` paths are already
-resolved against `app/assets/`, and CSS `@import`s are unaffected.
-
----
-
-## App Entry Point
-
-### app/app.js
+## App entry
 
 ```javascript
+// app/app.js
 import { PuzzleApp } from '@magic-spells/puzzle';
 import { adapter } from '@magic-spells/puzzle/adapter';
 import routes from './routes.js';
 import models from './models/index.js';
 
-// Create and configure the Puzzle app.
-// The v1 config surface is intentionally small: target, routes, models,
-// formatters, apiURL — see [[DOC-SPEC]] §2.
 const app = new PuzzleApp({
-  // Where the app mounts
   target: '#app',
-
-  // Routes configuration
   routes,
-
-  // Models registration
   models,
-
-  // Install server sync once for every model with a static adapter config.
-  // With it installed, store.findOne()/store.findMany() inside a view's data()
-  // fetch whatever the store is missing and settle before the view commits
-  // (D161, SPEC §61) — no app has to seed anything by hand.
-  adapter,
-
-  // Base URL for the server read path. Adapter endpoints are joined onto this,
-  // so `findMany('post')` GETs /api/posts.json — a static JSON file copied from
-  // app/public/api/ into dist/api/ at build time.
-  apiURL: '/api',
-
-  // App functions, called by name in every template: { byline(author.name) }
-  // (display transformation only — logic belongs in data())
-  formatters: {
+  adapter,          // opt-in server sync; tracked finds fetch on miss (D161)
+  apiURL: '/api',   // adapter endpoints join onto this
+  formatters: {     // app display functions, called by name in templates
     byline: (name) => (name ? `By ${name}` : 'By an unknown author')
   }
 });
 
 app.mount();
-
 export default app;
 ```
 
-The v1 config surface is `target`, `routes`, `models`, `formatters`, and `apiURL`, plus optional capabilities and amendments (`adapter`, `scrollBehavior`, `routerMode`, the v1.31 lifecycle hooks `beforeMount`/`mounted`/`beforeUnmount`, …) — see [[DOC-SPEC]] §2 and §34. There is no seeding step: tracked finds fault their own data in (D161, [[DOC-SPEC-DATA]] §61); see [Two data() gotchas](#two-data-gotchas) for the rules that keep that automatic.
+The core config is `target`, `routes`, `models`, `formatters`, `apiURL`, plus optional capabilities and hooks (`adapter`, `scrollBehavior`, `routerMode`, `beforeMount`/`mounted`/`beforeUnmount`, `onError`, …); see [[DOC-SPEC-ANATOMY]] §2 and [[DOC-SPEC-VIEW]] §34/§60. There is no seeding step.
 
-### app/routes.js
+## Routes
+
+`app/routes.js` exports an array of `{ path, name, view, layout?, meta? }` entries (`{ path: '/posts/:id', name: 'post', view: PostDetailView, layout: DefaultLayout }`). A `:id` segment arrives as `params.id` in `data(params, props)`; `'*'` is matched last and renders the 404 view. A layout renders the routed view at `<Slot/>`. Nested routes, guards, lazy views, query, head tags, scroll and focus behavior are in [[DOC-ROUTER]].
+
+## Models
+
 ```javascript
-import HomeView from './views/Home.pzl';
-import PostsView from './views/Posts.pzl';
-import PostDetailView from './views/PostDetail.pzl';
-import AboutView from './views/About.pzl';
-import NotFoundView from './views/NotFound.pzl';
-import DefaultLayout from './layouts/Default.pzl';
-
-export default [
-  {
-    path: '/',
-    name: 'home',
-    view: HomeView,
-    layout: DefaultLayout,
-    meta: {
-      title: 'Puzzle Press'
-    }
-  },
-  {
-    path: '/posts',
-    name: 'posts',
-    view: PostsView,
-    layout: DefaultLayout,
-    meta: {
-      title: 'All Posts · Puzzle Press'
-    }
-  },
-  {
-    path: '/posts/:id',
-    name: 'post',
-    view: PostDetailView,
-    layout: DefaultLayout,
-    meta: {
-      title: 'Post · Puzzle Press'
-    }
-  },
-  {
-    path: '/about',
-    name: 'about',
-    view: AboutView,
-    layout: DefaultLayout,
-    meta: {
-      title: 'About · Puzzle Press'
-    }
-  },
-  {
-    path: '*',
-    name: 'not-found',
-    view: NotFoundView,
-    layout: DefaultLayout,
-    meta: {
-      title: 'Not Found · Puzzle Press'
-    }
-  }
-];
-```
-
-A `:id` segment (`/posts/:id`) lands in `params` for the view's `data(params, props)`; the `'*'` catch-all is always matched last and renders the 404 view (D19).
-
----
-
-## Data Models
-
-Models define your data structure with `Puzzle` schema field builders, plus computed properties and validation rules:
-
-### models/user.js
-```javascript
-import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-
-export default class User extends PuzzleModel {
-  // Schema definition — see [[DOC-SPEC]] §7. String ids so the server-loaded
-  // records upsert stably by primary key.
-  static schema = {
-    id:       Puzzle.string().primary(),
-    name:     Puzzle.string().required(),
-    email:    Puzzle.string(),
-    role:     Puzzle.string().default('author'),
-    bio:      Puzzle.string().default(''),
-    joinedAt: Puzzle.date()
-  };
-
-  // Computed properties — plain getters ([[DOC-SPEC]] §7).
-  // Server-loaded dates arrive as ISO strings, so coerce defensively.
-  get initials() {
-    return String(this.name)
-      .trim()
-      .split(/\s+/)
-      .map((part) => part.charAt(0))
-      .join('')
-      .slice(0, 2)
-      .toUpperCase();
-  }
-
-  get memberSince() {
-    return new Date(this.joinedAt);
-  }
-
-  // Server location (D21/D158): `findMany('user')` GETs /api/users.json.
-  static adapter = {
-    endpoint: '/users.json',
-
-    // Same static-file mapping as Post — see models/post.js for why the
-    // generated per-record GET does not fit this demo's "server".
-    async loadOne(fetch, id) {
-      const res = await fetch('/api/users.json');
-      if (!res.ok) return res;
-      const users = await res.json();
-      return (
-        users.find((user) => String(user.id) === String(id)) ??
-        new Response(null, { status: 404 })
-      );
-    }
-  };
-}
-```
-
-### models/post.js
-```javascript
+// app/models/post.js
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
 
 export default class Post extends PuzzleModel {
-  // Schema definition — see [[DOC-SPEC]] §7. authorId cross-references a User;
-  // tags is an array that defaults to empty so a partial record still renders.
   static schema = {
     id:          Puzzle.string().primary(),
     title:       Puzzle.string().required(),
@@ -313,542 +98,147 @@ export default class Post extends PuzzleModel {
     authorId:    Puzzle.string(),
     tags:        Puzzle.array().default(() => []),
     publishedAt: Puzzle.date(),
-
-    // Relationships ([[DOC-SPEC]] §21, D49) — lazy store-backed getters.
-    // `author` infers the FK 'authorId'; `comments` infers 'postId' from this
-    // owner's registry type. Traverse them inside data() to subscribe.
-    author:      Puzzle.belongsTo('user'),
-    comments:    Puzzle.hasMany('comment')
+    author:      Puzzle.belongsTo('user'),    // FK 'authorId' inferred
+    comments:    Puzzle.hasMany('comment')    // FK 'postId' inferred
   };
 
-  // Computed properties — plain getters ([[DOC-SPEC]] §7).
-  // Server-loaded dates arrive as ISO strings, so coerce defensively.
-  get publishedDate() {
-    return new Date(this.publishedAt);
-  }
+  // Computed properties are plain getters (the blog also defines readingTime).
+  // Server dates arrive as ISO strings, so coerce.
+  get publishedDate() { return new Date(this.publishedAt); }
 
-  get excerpt() {
-    const text = String(this.body);
-    return text.length > 160 ? text.slice(0, 160).trimEnd() + '…' : text;
-  }
-
-  get readingTime() {
-    const words = String(this.body).trim().split(/\s+/).length;
-    return Math.max(1, Math.round(words / 200));
-  }
-
-  // Server location (D21/D158). The endpoint is all the generated REST reads
-  // need: `findMany('post')` GETs apiURL + endpoint — /api/posts.json.
   static adapter = {
-    endpoint: '/posts.json',
-
-    // The generated `loadOne` would GET /api/posts.json/3, and this demo's
-    // "server" is a static file per collection — there are no per-record URLs.
-    // A model can replace any single verb with its own fetch function (D158),
-    // so map the per-record read onto the collection file instead: read it,
-    // pick the record out, and hand back a 404 Response for an id that is not
-    // in it. The framework normalizes a non-OK Response into a
-    // PuzzleAdapterError, and a 404 on the auto-fetch path becomes the
-    // committed `null` that PostDetail's "Post not found" branch tests (D161).
+    endpoint: '/posts.json',   // findMany('post') GETs /api/posts.json
+    // Any single verb can be replaced by a fetch function. The static demo
+    // "server" has no per-record URLs, so loadOne reads the collection file.
     async loadOne(fetch, id) {
       const res = await fetch('/api/posts.json');
       if (!res.ok) return res;
       const posts = await res.json();
-      return (
-        posts.find((post) => String(post.id) === String(id)) ??
-        new Response(null, { status: 404 })
-      );
+      return posts.find((p) => String(p.id) === String(id)) ?? new Response(null, { status: 404 });
     }
   };
 }
 ```
 
-### models/comment.js
-```javascript
-import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+`models/index.js` exports `{ user: User, post: Post, comment: Comment }`. A model with no `adapter` (the blog's browser-created `Comment`) keeps every find a local read.
 
-export default class Comment extends PuzzleModel {
-  // Comments are created in the browser (createRecord), never server-loaded,
-  // so this model declares NO adapter — with no resolvable read verb, tracked
-  // finds for 'comment' stay pure local reads (D161).
-  static schema = {
-    id:        Puzzle.string().primary(),
-    postId:    Puzzle.string(),
-    author:    Puzzle.string().default('Anonymous'),
-    text:      Puzzle.string().required(),
-    createdAt: Puzzle.date().default(() => new Date())
-  };
-}
-```
+- `endpoint` generates the REST transports; a fetch function overrides one verb, or several form a no-endpoint adapter. A non-OK `Response` becomes a `PuzzleAdapterError`; a 404 on the auto-fetch path commits `null`.
+- Passing `adapter` to `PuzzleApp` installs `loadMany`/`loadOne`, `upsert`/`request`, record `save()`/`delete()` and auto-fetching finds; without it none of that runtime ships. `record.destroy()` is always local-only.
+- Validation is core: `createRecord` and `update` throw `PuzzleValidationError`; `Model.validate(data, { fields })` returns `{ valid, errors }` for form UX.
 
-### models/index.js
-```javascript
-import User from './user.js';
-import Post from './post.js';
-import Comment from './comment.js';
+Builders, relationships, write sync, fixtures and the mock adapter: [[DOC-MODELS]], [[DOC-DATASTORE]], [[DOC-SPEC-DATA]].
 
-export const models = {
-  user: User,
-  post: Post,
-  comment: Comment
-};
+## Views
 
-export default models;
-```
-
-**The adapter capability drives both read and write paths.** Keep each model's
-config bare: `endpoint` generates the REST transports, while author fetch
-functions override individual verbs or form a no-endpoint adapter. Then import `adapter` from
-`@magic-spells/puzzle/adapter` in `app.js` and pass it once to `PuzzleApp`. The
-capability installs `loadMany`/`loadOne`, `adapter`/`upsert`/`request`, record
-`save`/`delete`, and the auto-fetch behavior itself: a `findOne`/`findMany`
-miss inside a view's `data()` runs the model's read verb and the view commits
-once everything settles (D161). A model with no adapter simply opts out, and
-an app that never passes the capability ships none of that runtime.
-`record.destroy()` stays local-only. Validation remains core: `createRecord` and
-`update` throw `PuzzleValidationError`, while `validate()` returns a renderable
-result. See [[DOC-SPEC]] §20/§22/§58/§61 and D21/D48/D50/D157/D158/D161.
-
----
-
-## Building Views
-
-Views are page components that load and display data. The pattern is simple:
-
-### views/Home.pzl
+A view is a `.pzl` file: a `<puzzle-view>` template, a `<script>` exporting a `PuzzleView` subclass, and an optional `<style>`. Anatomy and the full component reference: [[DOC-PUZZLE-FILE]].
 
 ```html
-<puzzle-view class="home">
-  <section class="hero">
-    <h1 class="hero__title">Notes on building Puzzle</h1>
-    <p class="hero__lead">
-      A running blog about the framework itself — single-file components, the Go
-      compiler, the formatter system, and the reactive data layer.
-    </p>
-    <Button variant="primary" @press={ goToPosts }>Browse all posts</Button>
-  </section>
-
-  <section class="home-latest">
-    <h2 class="home-latest__title">Latest posts</h2>
-
-    {#if hasPosts}
-      <div class="post-list">
-        {#for post in recentPosts}
-          <PostCard post={ post }></PostCard>
-        {/for}
-      </div>
-    {:else}
-      <div class="empty">
-        <p>No posts yet.</p>
-      </div>
-    {/if}
-  </section>
-</puzzle-view>
-
-<script>
-import { PuzzleView } from '@magic-spells/puzzle';
-import Button from '../components/Button.pzl';
-import PostCard from '../components/PostCard.pzl';
-
-export default class HomeView extends PuzzleView {
-  // data() reads the store and derives the three newest posts. There is no
-  // loading code and nothing seeds the store first: `findMany('post')` in a
-  // tracked data() run fetches the collection when the store does not have it
-  // and the view commits only once every read came up warm (D161). So an empty
-  // `recentPosts` here means the blog has no posts, not that they are on the
-  // way — the {:else} branch says exactly that.
-  data(params, props) {
-    const posts = this.ctx.store.findMany('post');
-    const recentPosts = [...posts]
-      .sort((a, b) => b.publishedDate - a.publishedDate)
-      .slice(0, 3);
-
-    return {
-      recentPosts,
-      hasPosts: posts.length > 0
-    };
-  }
-
-  events = {
-    goToPosts: () => {
-      this.ctx.router.push('/posts');
-    }
-  };
-}
-</script>
-
-<style>
-.hero {
-  text-align: center;
-  padding: 1.5rem 0 2.5rem;
-}
-
-.hero__title {
-  margin: 0 0 0.75rem;
-  font-size: 2.25rem;
-  color: #1f2933;
-}
-
-.hero__lead {
-  max-width: 34rem;
-  margin: 0 auto 1.5rem;
-  color: #52606d;
-  font-size: 1.05rem;
-}
-
-.home-latest__title {
-  font-size: 1.35rem;
-  color: #1f2933;
-  margin: 0 0 1rem;
-}
-
-.post-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.empty {
-  padding: 2rem;
-  text-align: center;
-  color: #7b8794;
-  background: #fff;
-  border: 1px dashed #cbd2d9;
-  border-radius: 12px;
-}
-</style>
-```
-
-`@press` on the `<Button>` tag is a **callback prop** (D16): the compiler hands the child a function on `this.props.press`, and the child's own `@click` handler invokes it. `<PostCard>` renders each summary as a real `<a href>` that the router intercepts for SPA navigation. Note the data story: no seeding, no loading flag — the tracked `findMany` fetches on miss and the view renders once, settled (D161), so the `{:else}` branch honestly means "no posts".
-
-### views/PostDetail.pzl
-
-This is the view for the `/posts/:id` route. It reads `params.id`, joins the post
-to its author and comments, and hosts a comment form. Views receive **only route
-params and props** in `data(params, props)` — the router does not inject a
-"current user" or any other ambient value; props flow strictly parent → child.
-
-```html
+<!-- app/views/PostDetail.pzl (abridged) -->
 <puzzle-view class="detail">
   {#if post}
-    <article class="post">
-      <div class="post__tags">
-        {#for tag in post.tags}
-          <span class="post__tag">{ tag }</span>
-        {/for}
-      </div>
-      <h1 class="post__title">{ post.title }</h1>
-      <div class="post__meta">
-        {#if author}
-          <span class="post__author">{ byline(author.name) }</span>
-          <span class="post__dot">·</span>
-        {/if}
-        <span>{ date(post.publishedAt, 'long') }</span>
-        <span class="post__dot">·</span>
-        <span>{ post.readingTime } min read</span>
-      </div>
-      <p class="post__body">{ post.body }</p>
-    </article>
+    <h1>{ post.title }</h1>
+    <p>
+      {#if author}{ byline(author.name) } · {/if}
+      { date(post.publishedAt, 'long') } · { post.readingTime } min read
+    </p>
+    <p>{ post.body }</p>
 
-    <section class="comments">
-      <h2 class="comments__title">
-        { pluralize(comments.length, 'comment') }
-      </h2>
+    <h2>{ pluralize(comments.length, 'comment') }</h2>
+    {#for comment in comments}
+      <CommentItem comment={ comment } @remove={ removeComment(comment) }></CommentItem>
+    {/for}
 
-      {#if comments.length > 0}
-        <ul class="comment-list">
-          {#for comment in comments}
-            <CommentItem comment={ comment } @remove={ removeComment(comment) }></CommentItem>
-          {/for}
-        </ul>
-      {:else}
-        <p class="comments__empty">Be the first to comment.</p>
-      {/if}
-
-      <form class="comment-form" @submit={ addComment(event) }>
-        <!-- value={ … } on a bare local key is the whole binding (D147): each
-             keystroke lands in local state and re-runs data(), so disabled=
-             below stays honest. -->
-        <input
-          class="comment-form__name"
-          type="text"
-          placeholder="Your name"
-          value={ authorName } />
-        <textarea
-          class="comment-form__text"
-          placeholder="Write a comment…"
-          value={ commentText }></textarea>
-        <button class="btn btn--primary" type="submit" disabled={ !canComment }>
-          Add comment
-        </button>
-      </form>
-    </section>
+    <form @submit={ addComment(event) }>
+      <input type="text" placeholder="Your name" value={ authorName } />
+      <textarea value={ commentText }></textarea>
+      <button type="submit" disabled={ !canComment }>Add comment</button>
+    </form>
   {:else}
-    <!-- A committed `post` of null means the id does not exist — never "still
-         loading". The view only commits once its data() settled (D161), so
-         this branch needs no loaded/pending flag to disambiguate. -->
-    <div class="empty">
-      <h1 class="empty__title">Post not found</h1>
-      <p>That post does not exist. <a href="/posts">Back to all posts</a>.</p>
-    </div>
+    <h1>Post not found</h1>
   {/if}
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import CommentItem from '../components/CommentItem.pzl';
+import CommentItem from '@/components/CommentItem.pzl';
 
 export default class PostDetailView extends PuzzleView {
   created() {
-    // Local form state — seeded here so data() can read it back on first run.
-    this.setData({
-      commentText: '',
-      authorName: ''
-    });
+    this.setData({ commentText: '', authorName: '' });   // local form state
   }
 
   data(params, props) {
     const store = this.ctx.store;
     const local = this.getData();
-
     const post = store.findOne('post', params.id);
-
-    // `post.author` is a relationship, and relationships never fetch
-    // (D49/D161) — a 50-row list must not turn into 50 GETs. Where a view
-    // genuinely needs the related record, it asks for it: one more tracked
-    // find on the foreign key faults the user in, and the record is then in
-    // the store for `post.author` and every other consumer.
+    // Relationships never fetch; a view that needs the related record asks
+    // for it with one more tracked find on the foreign key.
     const author = post ? store.findOne('user', post.authorId) : null;
-
-    // Comments are browser-created and their model declares no adapter, so
-    // this stays a pure local read no matter how it is reached.
-    const comments = post
-      ? [...post.comments].sort((a, b) => a.createdAt - b.createdAt)
-      : [];
-
+    const comments = post ? [...post.comments].sort((a, b) => a.createdAt - b.createdAt) : [];
     return {
-      post,
-      author,
-      comments,
+      post, author, comments,
       commentText: local.commentText,
       authorName: local.authorName,
-      // A named flag keeps the rule in data(), where view logic lives (the
-      // template could spell `!commentText.trim()`, but it never reaches the
-      // view instance). The two-way binds re-run data() on every keystroke,
-      // so it stays current.
       canComment: (local.commentText ?? '').trim() !== ''
     };
   }
 
   events = {
-    // No handlers for the two fields — their value={ … } bindings write them.
-    // What is left is the work binding cannot do: creating the record, and
-    // clearing the draft afterwards.
     addComment: (event) => {
       event.preventDefault();
       const { commentText, authorName } = this.getData();
-      const text = commentText.trim();
-      if (!text) return;
-
+      if (!commentText.trim()) return;
       this.ctx.store.createRecord('comment', {
-        postId: this.params.id,
-        author: authorName.trim() || 'Anonymous',
-        text
+        postId: this.params.id, author: authorName.trim() || 'Anonymous', text: commentText.trim()
       });
-
       this.setData({ commentText: '', authorName: '' });
-      this.refresh(); // canComment is derived in data() from the draft
+      this.refresh();
     },
-
-    removeComment: (comment) => {
-      comment.destroy();
-    }
+    removeComment: (comment) => comment.destroy()   // the parent owns the mutation
   };
 }
 </script>
-
-<style>
-.post__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.75rem;
-}
-
-.post__tag {
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: #4c6ef5;
-  background: #eef2ff;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-}
-
-.post__title {
-  margin: 0 0 0.6rem;
-  font-size: 2rem;
-  color: #1f2933;
-}
-
-.post__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  color: #7b8794;
-  font-size: 0.85rem;
-  margin-bottom: 1.5rem;
-}
-
-.post__body {
-  font-size: 1.08rem;
-  color: #3e4c59;
-}
-
-.comment-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  background: #fff;
-  border: 1px solid #e4e9f0;
-  border-radius: 12px;
-  padding: 1.25rem;
-}
-
-.empty {
-  padding: 2.5rem;
-  text-align: center;
-  color: #7b8794;
-  background: #fff;
-  border: 1px dashed #cbd2d9;
-  border-radius: 12px;
-}
-</style>
 ```
 
-Notes on this view:
-- **`params.id`** comes from the `/posts/:id` route; `data()` re-runs when it changes.
-- **The data story is D161 end-to-end:** the tracked `findOne('post', …)` faults the post in (round 1), the follow-up `findOne('user', post.authorId)` faults the author (round 2), and the view commits once settled — so the `{:else}` branch means a genuine 404 (the model's custom `loadOne` returns a 404 Response for unknown ids), never "still loading". No seed, no loading flag.
-- **`post.comments` is a relationship traversal** — reactive, local-only, never a request; sorting happens in `data()` like any query.
-- The comment form carries **no field handlers at all**: `value={ authorName }` and `value={ commentText }` are two-way bindings on bare local keys (D147), so `events` only has to `createRecord('comment', …)` on submit and clear the draft.
-- **Display transforms are function calls** (D176): `byline(author.name)` is the app function registered in `app.js`, and `date(…, 'long')` and `pluralize(comments.length, 'comment')` come from the standard library. **`comments.length`** is the count, and **`canComment` is a `data()` field**: the template could test `!commentText.trim()` inline (`.trim()` is in the method table), but a template never reaches the view instance (`this` is not a template name), so view logic lives in `data()` and the template reads the named flag. The two-way binds refresh on every keystroke, and `addComment` calls `this.refresh()` after clearing the draft, so the flag follows the text.
-- `<CommentItem @remove={ removeComment(comment) }>` is a **callback prop** carrying the loop variable; the child reports intent and the **parent owns the mutation** (`comment.destroy()`).
-- The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see the D27 decision card), so this section no longer mirrors that file verbatim.
+What this shows:
 
-### Form idioms (v1.68, D147)
+- **`data(params, props)`** receives only route params and props; nothing ambient is injected, and props flow parent to child. It may be `async`, runs on mount, on param/prop change and when a store read it made changes, and auto-subscribes to every store query it runs.
+- **Auto-fetch (D161):** with the adapter installed, a tracked `findOne`/`findMany` miss runs the model's read verb, and the view commits only once every read settles (here: the post in round 1, the author in round 2). A committed `null` means "does not exist", never "still loading", so the `{:else}` branch needs no loading flag.
+- **Display functions are calls** (D176): `byline` is the app function from `app.js`; `date` and `pluralize` are standard. The count is `.length`.
+- **Templates never reach the instance**: `this` is a compile error in a template, so view logic lives in `data()` and the template reads named fields like `canComment`.
+- **Components are any tag whose first character is not `a-z`** (D167): `<CommentItem>`, or a dotted family member like `<Frame.Content>`, resolved against the script's imports.
 
-`value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>`, or
-`<select>` bind **two ways** — the compiler writes the write-back handler, so
-most form fields need nothing in `events`. One rule decides the rest: **bind the
-path you want written.**
-
-**A local draft — bind a bare key.** Text the view owns until submit: search
-boxes, filters, the comment form above.
+### Template essentials
 
 ```html
-<input type="text" placeholder="Your name" value={ authorName } />
+{#if user.isLoggedIn}<p>Welcome, { user.name }!</p>{:else}<p>Please log in</p>{/if}
+{#for post in posts, i}<div>{ i + 1 }. { post.title }</div>{/for}
+{ capitalize(user.name) }  { currency(price, '$', 2) }  { tags.join(', ') }
+{ t('cart.items', { count: cart.count }) }
+{ raw(post.bodyHtml) }
 ```
 
-The write is `setData` plus `refresh`, so anything `data()` derives from that key
-recomputes while the user types — a bound filter field narrows its own list
-keystroke by keystroke. Seed the key in `created()` and read it back in `data()`
-(as `PostDetail` does with `this.getData()`) so it survives store-driven re-runs.
+Expressions are JavaScript-shaped from a closed table: operators, `??`, optional chaining, arrow callbacks, `Math.*`, and allowlisted string/array methods (`.trim()`, `.toUpperCase()`, `.filter(…)`, `.toSorted(…)`, `.at(-1)`, `.join(…)`). Display functions are the 19-function standard library plus browser-only `link` and `timeago`, plus the app's own `formatters`; an app function reusing a standard name wins with a dev warning, and an unregistered name passes the value through with one `console.error`. `raw` and `newline_to_br` must be the outermost call of a text interpolation; `raw` always sanitizes. Grammar, the function list, markup-function rules, `{#svg}`, `{#raw}`, snippets and whitespace: [[DOC-TEMPLATE-SYNTAX]] and [[DOC-SPEC-TEMPLATE]].
 
-**A record field — bind a one-member path.** An edit form over a record already
-in the store writes straight through:
+Translations: `i18n: { locales, defaultLocale }` in `puzzle.config.js`, one `app/locales/<tag>.json` per locale, `{ t('key', { name }) }` in templates (a numeric `count` picks the plural form, a missing key prints the key), and `this.ctx.i18n.setLocale('es')` to switch. See [[DECISION-D175-TRANSLATIONS]].
+
+## Form binding (D147)
+
+`value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>` or `<select>` bind both ways when the expression is a bare key or a one-member path; the compiler writes the handler. **Bind the path you want written:**
+
+- **Local draft, bare key** (`value={ authorName }`): the write is `setData` + `refresh`, so everything `data()` derives from the key recomputes as the user types. Seed the key in `created()` and read it back in `data()` with `this.getData()` so it survives store-driven re-runs.
+- **Record field, one-member path** (`checked={ profile.subscribed }`): each edit goes through `record.update()`, so validation runs and every subscribed view re-renders. Bind the record path rather than copying the field into a local key: a local key `data()` also derives from the record is overwritten on the next commit (dev warns once per key).
+- **Constrained field, draft + submit:** a bound record path validates every keystroke, so a `required()` field could never be emptied and a `min(3)` rule rejects mid-word. Bind a local draft, check it with `Model.validate({ text: draft }, { fields: ['text'] })` on submit, then `record.update(...)`. A rejected `update()` throws and changes nothing; when a bind triggers the rejection, `onError` receives `phase: 'bind'`.
+- **Opting out:** your own `@input`/`@change` suppresses the synthesized write; a non-path expression (`value={ name ?? '' }`) or a static `readonly` does not bind. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind, so a bound field is never an abandonable edit buffer; use the non-path form when Escape must revert.
+
+`@magic-spells/puzzle/testing` ships `mountView` and `type()`: `await view.type('.name', 'Ada')` replaces the value, fires the events a real edit produces, and waits for the view to settle. See [[DOC-TESTING]] and [[DOC-SPEC-BUILD]] §53.
+
+## Components
+
+A reusable component renders inline: its `<puzzle-view>` carries no attributes and wraps a single root element (attributes on it are a compile error; put them on the root). Default child content is projected through `<Children/>`; named regions are `<Slot name="header"/>`, filled by a direct child with a static `slot="header"`.
 
 ```html
-<input type="text" value={ profile.name } />
-<input type="checkbox" checked={ profile.subscribed } />
-```
-
-Each edit goes through `record.update()`, so schema validation runs, the store
-notifies, and every view subscribed to that record re-renders. Bind the record
-path rather than copying the field into a local key first: a local key that
-`data()` also derives from the record is overwritten on the next commit, and
-Puzzle warns once per key in development when it catches that happening.
-
-**A constrained field — bind a draft, commit on submit.** A bound record path
-validates on *every* commit, which is wrong for a field with a rule the user must
-type *through*. `Comment.text` is `required()`, so a directly-bound
-`value={ comment.text }` could never be emptied — the clearing write is rejected
-and the record keeps its old value. A `min(3)` rule has the same problem in the
-middle of a word. Bind a local draft and commit once:
-
-```html
-<form @submit={ save(event) }>
-  <textarea value={ textDraft }></textarea>
-  {#if textError}<p class="field-error">{ textError }</p>{/if}
-  <button type="submit">Save</button>
-</form>
-```
-
-```javascript
-import Comment from '../models/comment.js'; // at the top of the <script> block
-
-events = {
-  save: (event) => {
-    event.preventDefault();
-    const { textDraft } = this.getData();
-
-    // validate() reports without throwing — the form-UX half of the pair.
-    const { valid, errors } = Comment.validate({ text: textDraft }, { fields: ['text'] });
-    if (!valid) {
-      this.setData('textError', errors[0].message);
-      return;
-    }
-
-    this.props.comment.update({ text: textDraft });
-    this.setData('textError', null);
-  }
-};
-```
-
-`update()` throws on a rejected write and changes nothing — no render, no
-re-assert, and the text the user typed stays on screen. When a *bind* triggers
-that rejection, the error reaches your `onError` hook with `phase: 'bind'`.
-
-**Opting a field out.** Three escapes, all ordinary syntax: write your own
-`@input` or `@change` (either one suppresses the synthesized write entirely),
-use a non-path expression (`value={ name ?? '' }` — only a bare key or a
-one-member path binds), or add a
-static `readonly`. Handlers on other events — `@blur`, `@keydown:enter` —
-coexist with the bind rather than replacing it, so a field wired as
-`value={ name }` with only a `@keydown:enter` commit handler is **not** an
-abandonable edit buffer: every keystroke has already landed in `name`. Use the
-non-path form when Escape needs something to revert to.
-
-**Testing a bound field.** `@magic-spells/puzzle/testing` ships `type()`, which
-replaces a control's value, fires the events a real edit-then-leave produces, and
-waits for the view to settle. The mounted handles expose it as a method:
-
-```javascript
-import { mountView } from '@magic-spells/puzzle/testing';
-import PostDetailView from '../app/views/PostDetail.pzl';
-
-const view = await mountView(PostDetailView, { params: { id: 'p1' } });
-await view.type('.comment-form__name', 'Ada');
-
-expect(view.instance.getData().authorName).toBe('Ada');
-```
-
-The standalone `type(element, text)` export does the same for an element you
-already hold. See [[DOC-TEMPLATE-SYNTAX]] for the exact trigger conditions and
-the per-control event matrix.
-
----
-
-## Building Components
-
-Reusable components render **inline** (D20): their `<puzzle-view>` carries **no
-attributes** and wraps a **single root element** — attributes on a component's
-`<puzzle-view>` are a compile error. Put them on your root element instead. Class
-names are prefixed (`.btn`, `.post-card`, …) so the global stylesheet stays tidy.
-
-### components/Button.pzl
-```html
+<!-- app/components/Button.pzl -->
 <puzzle-view>
   <button class="btn btn--{ variant }" type={ type } disabled={ disabled } @click={ handleClick }>
     <Children/>
@@ -858,20 +248,10 @@ names are prefixed (`.btn`, `.post-card`, …) so the global stylesheet stays ti
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// A reusable button. Component-mode files render inline, so <puzzle-view> is
-// just the template delimiter — it carries no attributes and wraps a single
-// root element (D20). Label content is projected through <Children/>.
 export default class Button extends PuzzleView {
   data(params, props) {
-    return {
-      variant: props.variant || 'primary',
-      type: props.type || 'button',
-      disabled: props.disabled || false
-    };
+    return { variant: props.variant || 'primary', type: props.type || 'button', disabled: props.disabled || false };
   }
-
-  // `press` is a callback prop: the parent passes @press={ handler } and the
-  // compiler hands the child a function on this.props.press (D16).
   events = {
     handleClick: (event) => {
       if (this.getData().disabled) return;
@@ -881,366 +261,70 @@ export default class Button extends PuzzleView {
   };
 }
 </script>
-
-<style>
-.btn {
-  display: inline-block;
-  padding: 0.6rem 1.25rem;
-  border: 0;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease, opacity 0.15s ease;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn--primary {
-  background: #4c6ef5;
-  color: #fff;
-}
-
-.btn--primary:hover:not(:disabled) {
-  background: #3b5bdb;
-}
-
-.btn--ghost {
-  background: transparent;
-  color: #4c6ef5;
-  box-shadow: inset 0 0 0 1px #c3cfe6;
-}
-
-.btn--ghost:hover:not(:disabled) {
-  background: #eef2ff;
-}
-</style>
 ```
 
-Key points: the `<button>` (not `<puzzle-view>`) carries the attributes; the label
-is projected through **`<Children/>`** (the default marker, D16/D134 — the same
-primitive layouts spell `<Slot/>` as the router outlet); and `@click` here is a **real DOM listener**
-on the child's own `<button>`. The `press` callback prop is guarded before it's
-called — `this.$emit` does not exist in v1.
+The parent writes `<Button variant="primary" @press={ goToPosts }>Browse</Button>`. `@press` on a component tag is a **callback prop** (D16): the child receives a function on `this.props.press` and calls it from its own DOM listener. There is no `$emit`; the child reports intent and the parent owns mutations. Related components can ship as a family: a directory with a JS barrel (`export default Object.assign(Frame, { Wrapper, Content })`), used as `<Frame.Wrapper>`; `puzzle generate component Frame --family Wrapper,Content` scaffolds it.
 
-### components/PostCard.pzl
+## Key patterns
 
-```html
-<puzzle-view>
-  <a class="post-card" href="/posts/{ post.id }">
-    <div class="post-card__tags">
-      {#for tag in post.tags}
-        <span class="post-card__tag">{ tag }</span>
-      {/for}
-    </div>
-    <h3 class="post-card__title">{ post.title }</h3>
-    <p class="post-card__excerpt">{ truncate(post.body, 140) }</p>
-    <div class="post-card__meta">
-      <span>{ post.readingTime } min read</span>
-      <span class="post-card__dot">·</span>
-      <span>{ timeago(post.publishedAt) }</span>
-    </div>
-  </a>
-</puzzle-view>
+### data() rules
 
-<script>
-import { PuzzleView } from '@magic-spells/puzzle';
-
-// Renders a single post summary. The whole card is an <a>, so a plain click is
-// intercepted by the router for instant SPA navigation to /posts/:id.
-export default class PostCard extends PuzzleView {
-  data(params, props) {
-    return {
-      post: props.post
-    };
-  }
-}
-</script>
-
-<style>
-.post-card {
-  display: block;
-  padding: 1.25rem 1.5rem;
-  background: #fff;
-  border: 1px solid #e4e9f0;
-  border-radius: 12px;
-  color: inherit;
-}
-</style>
-```
-
-`PostCard` takes an **object prop** (`post={ post }`) and renders a real
-`<a href="/posts/{ post.id }">`; the router intercepts the click for SPA
-navigation. The `<style>` block is abridged here to illustrate the feature;
-the shipped `examples/blog/app/components/PostCard.pzl` now uses Tailwind
-utilities instead (see the D27 decision card).
-
-### components/CommentItem.pzl
-
-```html
-<puzzle-view>
-  <li class="comment-item">
-    <div class="comment-item__head">
-      <span class="comment-item__author">{ comment.author }</span>
-      <span class="comment-item__time">{ timeago(comment.createdAt) }</span>
-    </div>
-    <p class="comment-item__text">{ comment.text }</p>
-    <button class="comment-item__remove" type="button" @click={ handleRemove }>Delete</button>
-  </li>
-</puzzle-view>
-
-<script>
-import { PuzzleView } from '@magic-spells/puzzle';
-
-// A single comment. The mutation is parent-owned: this component only reports
-// intent through the @remove callback prop, and the parent decides what to do.
-export default class CommentItem extends PuzzleView {
-  data(params, props) {
-    return {
-      comment: props.comment
-    };
-  }
-
-  events = {
-    handleRemove: (event) => {
-      const { remove } = this.props;
-      if (typeof remove === 'function') remove(event);
-    }
-  };
-}
-</script>
-```
-
-`CommentItem`'s `<button>` fires a DOM `@click`, which invokes the `remove`
-callback prop the parent passed as `@remove={ removeComment(comment) }`. The child
-never mutates the record itself — that's the parent-owned-mutation pattern.
-
----
-
-## Key Patterns
-
-### Data Loading Pattern
-```javascript
-data(params, props) {
-  const store = this.ctx.store;
-
-  return {
-    user: store.findOne('user', params.id),  // Single record by id
-    posts: store.findMany('post'),           // All posts
-    loading: false                           // Local state
-  };
-}
-```
-
-**The `data()` method:**
-- Runs on component mount and when subscribed store data changes
-- Supports async/await for fetching data
-- Auto-subscribes to any store queries
-- Returns the component's model/state object
-
-### Two data() gotchas
-
-**Don't call `store.loadMany` (or `loadOne`) inside `data()` — the finds already
-fetch.** With the adapter capability installed, a tracked `findOne`/`findMany`
-miss runs the model's read verb itself and the view commits once everything
-settles (D161, [[DOC-SPEC-DATA]] §61) — a committed `null` means the record
-does not exist, never "still loading". Adding an explicit load on top is
-redundant network work, and development warns when it happens. The explicit
-loads remain as escape hatches *outside* tracked runs — `store.loadOne` in an
-event handler is the force-refresh idiom (it bypasses the negative cache):
+- **Never call `store.loadMany`/`loadOne` inside `data()`**: tracked finds already fetch, and dev warns about the redundant load. The explicit loads are escape hatches outside tracked runs; `store.loadOne` in an event handler is the force-refresh idiom (it bypasses the negative cache).
+- **Relationships never fetch** (`post.author`), which keeps a 50-row list from firing 50 GETs; write the tracked find on the foreign key when a view needs the record.
+- **`setData()` does not re-run `data()`** (D23). When `data()` derives something from local state (a filtered list, a flag), follow `setData(...)` with `this.refresh()`:
 
 ```javascript
-// A view needing a related record asks for it with one more tracked find —
-// the settle loop fetches the post in round 1 and the author in round 2:
-data(params, props) {
-  const store = this.ctx.store;
-  const post = store.findOne('post', params.id);
-  const author = post ? store.findOne('user', post.authorId) : null;
-  return { post, author, notFound: post === null };
-}
-```
-
-Relationships (`post.author`) never fetch — that is what keeps a 50-row list
-from firing 50 GETs — so when a view genuinely needs the related record, it
-writes the tracked find on the foreign key as above. Event handlers read local
-snapshots and call `this.refresh()` when server-backed state should update.
-
-**Derived lists computed in `data()` need `setData(...)` + `this.refresh()` (D23).**
-`setData()` updates local state but does *not* re-run `data()`, so a list derived
-from that local state won't recompute on its own. Call `this.refresh()` to re-run
-`data()` explicitly:
-
-```javascript
-// From Posts.pzl — the tag filter is derived in data() from local activeTag
 events = {
   setTag: (tag) => {
-    this.setData('activeTag', tag);  // local UI state — does not re-run data()
-    this.refresh();                   // re-run data() so the filtered list updates
+    this.setData('activeTag', tag);
+    this.refresh();   // re-run data() so the filtered list follows
   }
 };
 ```
 
-### Object props: keep references stable with `this.memo()` (v1.29, D64)
+### Stable object props: `this.memo()`
 
-Props are compared with a shallow `===` check, so an **object or array prop compares by reference**. An object literal cannot start a template expression, so an object prop is built in `data()`, and a list built in the template (`items={ todos.filter(t => !t.done) }`) is a fresh array on every render. If `data()` builds a *fresh* object on every run, the child sees a "changed" prop on every unrelated store change and re-runs its own `data()` (and a wrapper component may push spurious updates into whatever it wraps). Wrap derived objects in `this.memo(key, deps, factory)` — the same reference comes back until a dependency actually changes:
+Props compare with shallow `===`, so an object or array prop compares by reference. If `data()` builds a fresh object every run, the child re-runs its `data()` on every unrelated change. Wrap derived objects in `this.memo(key, deps, factory)`; the cached value returns until an entry of `deps` differs by `Object.is`:
 
 ```javascript
-data(params, props) {
+data() {
   const { effect = 'carousel' } = this.getData();
-  return {
-    // Same object reference until `effect` changes — the child's data()
-    // only re-runs on a real options change.
-    carouselOptions: this.memo('opts', [effect], () => ({
-      effect,
-      loop: true,
-      slidesPerView: 2,
-    })),
-  };
+  return { carouselOptions: this.memo('opts', [effect], () => ({ effect, loop: true })) };
 }
 ```
 
-`deps` is an array compared positionally by `Object.is`; when any entry differs, the factory runs once and the new value is cached. It's purely about identity — no reactivity of its own. (Plain string/number/boolean props don't need this; `===` already does the right thing. Callback props don't either — since v1.29 data-independent handlers are automatically cached by the compiler, see [[DOC-EVENTS]], which also documents the `@ready` callback-ref idiom for reaching a child's imperative API.)
+Primitive props need no memo, and data-independent callback props are cached by the compiler. See [[DOC-SPEC-VIEW]] §32.
 
-### Event Handling Pattern
+### Events
 
-`events` is a class field of arrow functions. A bare identifier in the template (`@click={ handleClick }`) receives the DOM `event`; a call expression (`@submit={ handleSubmit(formData) }`) passes exactly the arguments written, evaluated at event time with `event` in scope.
+`events` is a class field of arrow functions. A bare identifier (`@click={ handleClick }`) receives the DOM `event`; a call (`@submit={ addComment(event) }`) passes exactly the arguments written, evaluated at event time with `event` in scope. Modifiers stack: `@keydown:enter`, `@keydown:escape:prevent`, `@click:once`, `@click:outside`. Full rules, cached handlers and the `@ready` callback-ref idiom: [[DOC-EVENTS]].
 
-```javascript
-events = {
-  handleClick: (event) => {
-    // Bare identifier in template: @click={ handleClick }
-    this.ctx.router.push('/somewhere');
-  },
+### Animations
 
-  handleSubmit: (formData) => {
-    // Call expression in template: @submit={ handleSubmit(formData) }
-    const store = this.ctx.store;
-    store.createRecord('post', formData);
-  }
+An `animations` class field on any view, layout or component animates it in and out via the Web Animations API. `in`/`out` are `{ from, to, duration, easing?, delay? }`:
+
+```js
+animations = {
+  in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' }, duration: 260, easing: 'ease-out' },
+  out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 160 }
 };
 ```
 
-### Template Patterns
+- The target is the instance's root element, and `to` must equal its resting style (enter styles are released when it finishes). Height cannot animate to `auto`; use explicit `px` or a `grid-template-rows: 0fr → 1fr` wrapper.
+- Views animate on route change (old `out`, then new `in`); components animate when added to or removed from a list. `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` bracket the phases even with no `animations` field. `prefers-reduced-motion: reduce` zeroes durations; a malformed spec warns once and is skipped.
+- `trigger: 'visible'` holds the element at `from` until it scrolls into view, then plays once per mount. `triggerOffset` (px or `'%'`) raises the trigger line above the viewport bottom; `triggerAnchor: '.section'` reveals when a matching ancestor enters, so siblings fire together and stagger by `delay`. Without `IntersectionObserver`, or under reduced motion, content shows immediately. Keep above-the-fold content on the default mount trigger.
 
-```html
-<!-- Conditionals -->
-{#if user.isLoggedIn}
-  <p>Welcome, { user.name }!</p>
-{:else}
-  <p>Please log in</p>
-{/if}
-
-<!-- Loops -->
-{#for post in posts}
-  <div>{ post.title }</div>
-{/for}
-
-<!-- Functions and methods (D176) -->
-{ capitalize(user.name) }
-{ timeago(post.publishedAt) }
-{ currency(price, '$', 2) }
-{ tags.join(', ') }
-
-<!-- Callback prop on a component tag (D16) -->
-<Button @press={ handleClick } variant="primary">
-  Click me
-</Button>
-```
-
-### Animations (v1.1)
-
-Add an `animations` class field to any view, layout, or component to animate it in and out via the Web Animations API. Each of `in`/`out` is `{ from, to, duration, easing?, delay? }` — WAAPI keyframes plus timing. The animation target is the instance's root element (no wrapper is added), so the `to` keyframe must equal the element's natural resting style — the enter animation's inline styles are released once it finishes.
-
-```js
-// components/TodoItem.pzl
-export default class TodoItem extends PuzzleView {
-  animations = {
-    in:  { from: { height: '0px', opacity: 0, transform: 'scale(0.96)' },
-           to:   { height: '44px', opacity: 1, transform: 'scale(1)' },
-           duration: 200, easing: 'ease-out' },
-    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 150 },
-  };
-}
-```
-
-Notes:
-
-- Height can't animate to `auto` under WAAPI — animate between explicit `px` values (here the row wraps its content in a fixed 44px inner element).
-- Views animate on route transitions: the old view plays `out`, then the new view plays `in` (sequential). Components animate when added to / removed from a list.
-- Four optional lifecycle hooks bracket the phases — `viewWillShow()`/`viewDidShow()` around the enter, `viewWillHide()`/`viewDidHide()` around the leave — and fire even when no `animations` field is declared.
-- `prefers-reduced-motion: reduce` zeroes all durations automatically. A malformed spec warns once and is skipped.
-
-### Scroll-triggered reveals (v1.40)
-
-By default the `in` animation plays the moment the component mounts — which means below-the-fold sections on a long page animate before anyone sees them. Add `trigger: 'visible'` to the `in` spec and the enter instead **waits until the element scrolls into the viewport**: the element mounts held at its `from` keyframe (no flash), then plays once when it comes into view.
-
-```js
-// components/FeatureSection.pzl
-export default class FeatureSection extends PuzzleView {
-  animations = {
-    in: {
-      from: { opacity: 0, transform: 'translateY(24px)' },
-      to:   { opacity: 1, transform: 'translateY(0)' },
-      duration: 500, easing: 'ease-out',
-      trigger: 'visible',
-      triggerOffset: '15%', // optional: fire when the element is 15% above the viewport bottom
-    },
-  };
-}
-```
-
-Notes:
-
-- `triggerOffset` is a px number or a `'%'` string — the distance of the trigger line above the bottom edge of the viewport. Omit it to fire as soon as any part of the element is visible.
-- The reveal plays **once per mount** — scrolling away and back does not replay it. `viewWillShow()`/`viewDidShow()` fire around the actual reveal; `mounted()` still fires at mount.
-- Give consecutive sections their own components and they stagger naturally — each reveals as it crosses the trigger line ( `delay` also still applies per spec).
-- **Group reveals:** add `triggerAnchor: '.feature-section'` (a CSS selector matched against the component's **ancestors**) and the component reveals when that ancestor scrolls into view instead of its own root — so a heading and three cards anchored to the same section fire together the moment the *section* crosses the line, with each child's `delay` providing the choreography. No match falls back to the component's own root (and warns once).
-- It degrades safely: browsers without `IntersectionObserver` and users with `prefers-reduced-motion` get the content immediately (no hold), exactly like `trigger: 'mount'`.
-- Use the default mount trigger for hero/above-the-fold content — a `'visible'` hold on content that is already on screen just delays it by a frame.
-
----
+FLIP reorders, cross-view morphs, skeletons and refs: [[DOC-SPEC-VIEW]].
 
 ## Backends in dev
 
-Point a same-origin path at a local backend in `puzzle.config.js`:
-
 ```javascript
-export default {
-  dev: {
-    proxy: { '/api': 'http://localhost:3091' },
-  },
-};
+// puzzle.config.js
+export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };
 ```
 
-`puzzle dev` now forwards `/api` and `/api/*` requests to that backend with the
-path unchanged. The app can use `apiURL: ''`, so development requests stay
-same-origin and need no CORS setup. Restart the dev server after changing the
-proxy config; production builds are unaffected.
+`puzzle dev` forwards `/api` and `/api/*` with the path unchanged, so the app can use `apiURL: ''` and stay same-origin with no CORS. A prefix must start with `/` and cannot be the root. Restart the dev server after changing it; production builds ignore it.
 
----
+## Commands
 
-## Development Commands
-
-```bash
-# Development server with watch + live reload
-npm run dev
-
-# Production build
-npm run build
-```
-
----
-
-## Next Steps
-
-- Read [[DOC-SPEC]] for the frozen v1 specification
-- Read [[DOC-PUZZLE-FILE]] for complete component reference
-- Read [[DOC-DATASTORE]] for data management details
-- Read [[DOC-COMPILATION-FLOW]] for build process info
-
----
-
-This structure gives you a **complete, production-ready application template** with clear separation between UI components (`.pzl`) and application logic (`.js`)! 🎯
+`puzzle dev`, `puzzle build` (`--static`, `--hybrid` for prerendered output), `puzzle preview`, `puzzle check`, `puzzle generate`, `puzzle add tailwind|theme|piece|skills`, `puzzle doctor`, `puzzle info`, `puzzle upgrade`. Flags, output modes and the dev loop: [[DOC-SPEC-BUILD]] and [[DOC-COMPILATION-FLOW]].

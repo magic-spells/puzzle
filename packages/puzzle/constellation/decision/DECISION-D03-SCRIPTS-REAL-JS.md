@@ -12,20 +12,16 @@ connections:
 
 # D3 — `<script>` blocks are real JavaScript
 
-Settled per [[DOC-SPEC-ANATOMY]] §4 — the most consequential decision in the project. `.pzl` scripts must be standard JavaScript, so the Go compiler never parses JS.
-
-## Context
-Older examples used an object-literal dialect inside class bodies (`events: {...},` with commas between members) that does not parse as JavaScript.
+Enforced by [[DOC-SPEC-ANATOMY]] §4 — the most consequential decision in the project.
 
 ## Decision
-`.pzl` scripts must be standard JS — `events` and `animations` are class fields (`events = {...};`), no commas between members.
-
-## Alternatives rejected
-- The object-literal dialect inside class bodies (`events: {...},` with commas between members) — rejected because it does not parse as JavaScript.
-- Method-shorthand handlers — rejected because method shorthand would mis-bind `this`; the compiler rejects it at build time (handlers must be arrow functions).
+A `.pzl` `<script>` is standard JavaScript (or TypeScript, [[DECISION-D54-TYPESCRIPT-SCRIPTS]]). `events` and `animations` are class fields (`events = {…};`), with no commas between members. The Go compiler **never parses the script** — it hands it to esbuild untouched and only reads its token stream for narrow lookups (the class name, [[DECISION-D24-CLASS-NAME-EXTRACTION]]).
 
 ## Consequences
-- The Go compiler **never parses JavaScript** — `<script>` is handed to esbuild untouched.
-- Editors, ESLint, Prettier, and (future) TypeScript work with zero special tooling.
-- Handlers in `events` must be **arrow functions**: class-field initializers evaluate during construction with `this` bound to the instance, so arrows permanently capture the component. Method shorthand would mis-bind `this`; the compiler rejects it at build time.
-- The base class must never read `this.events` in its constructor (fields initialize after `super()` returns); the runtime reads it lazily at mount time.
+- Editors, ESLint, Prettier and TypeScript work with no special tooling.
+- Handlers in `events` must be **arrow functions**: a class-field initializer runs during construction with `this` bound to the instance, so an arrow captures the component. Method shorthand parses, but the runtime calls it as `this.events.name(…)`, so `this` is the events object. Nothing checks this at compile time — the compiler cannot see the script.
+- The base class must never read `this.events` in its constructor (fields initialize after `super()` returns); the runtime reads it lazily at mount.
+- Tooling that would need to rewrite user JS (auto-wiring in `puzzle add`/`generate`) prints a snippet instead ([[DECISION-D32-CLI-TOOLING]]).
+
+## Alternatives rejected
+- An object-literal dialect in class bodies (`events: {…},`) — does not parse as JavaScript.
