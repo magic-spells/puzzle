@@ -178,7 +178,7 @@ Also translations (`t`, D175), sanitized `raw`, the pieces theme system with
 `puzzle add theme`, and 100 pieces. The never-published 0.7.1 notes (registry
 version floors, the background update notice) are folded in here.
 
-Production sizes: hello-world **21.9 KB gzip**, todos **25.9 KB gzip** (from
+Production sizes: hello-world **21.9 KB gzip**, todos **26.0 KB gzip** (from
 20.8 / 23.8 in 0.7.0). Apps that configure no translations and use no `raw`
 pay nothing for either.
 
@@ -1146,6 +1146,18 @@ checklist sent you.
   added after `tseslint.configs.recommended`, gives them the setup the JS
   blocks get. The README's "extra rules" example targeted `**/*.pzl`, which
   never reaches the `<script>` body; it now uses `**/*.pzl/*_scripts.js`.
+- **A render or `afterUpdate` throw at the end of a skeleton `min-duration`
+  hold reaches `onError` and the error view.** The held swap runs on a timer,
+  so the throw escaped as an uncaught exception and left the skeleton on
+  screen. It now reports as phase `mount` and the error view replaces the view
+  in place, as it does without a hold. (Pre-existing since before 0.7.0.)
+- **A `<script>` whose string or regex runs past `</script>` points at where
+  it starts.** The compiler reported "missing `</script>` for `<script>`" at
+  the tag. It now reports the line and column where the string or regex
+  began, and says to brace the body when a regex follows an unbraced
+  `if`/`while`/`for` (`if (text) /["']/.test(text);` reads the `/` as
+  division, so the quote opens a string). The eslint and prettier plugins
+  keep their own message. (Pre-existing.)
 
 ## 0.7.0 — 2026-09-09
 

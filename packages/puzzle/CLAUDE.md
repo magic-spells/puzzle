@@ -254,7 +254,7 @@ enforced, not merely advised.
   version floors, the D76 background update notice, and the runtime preflight.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
   "Upgrading from 0.7" checklist. Production sizes: hello-world **21.9 KB
-  gzip**, todos **25.9 KB gzip** (measured after #180; the README banner
+  gzip**, todos **26.0 KB gzip** (measured after the review-fix PR; the README banner
   matches). Cards truthed through D176; the next free
   decision number is **D177**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
